@@ -43,9 +43,6 @@ mod condition;
 mod error;
 mod value;
 
-use std::fmt::Debug;
-use std::str::FromStr;
-
 pub use condition::{parse_condition, parse_to, Condition};
 use condition::{parse_exists, parse_not_exists};
 use error::{cut_with_err, ExpectedValueKind, NomErrorExt};
@@ -59,6 +56,8 @@ use nom::number::complete::recognize_float;
 use nom::sequence::{delimited, preceded, terminated, tuple};
 use nom::Finish;
 use nom_locate::LocatedSpan;
+use std::fmt::Debug;
+use std::str::FromStr;
 pub(crate) use value::parse_value;
 use value::word_exact;
 
@@ -388,422 +387,211 @@ pub mod tests {
     fn parse() {
         use FilterCondition as Fc;
 
-        let test_case = [
-            // simple test
-            (
-                "colour IN[]",
-                Fc::In {
-                    fid: rtok("", "colour"),
-                    els: vec![]
-                }
-            ),
-            (
-                "colour IN[green]",
-                Fc::In {
-                    fid: rtok("", "colour"),
-                    els: vec![rtok("colour IN[", "green")]
-                }
-            ),
-            (
-                "colour IN[green,]",
-                Fc::In {
-                    fid: rtok("", "colour"),
-                    els: vec![rtok("colour IN[", "green")]
-                }
-            ),
-            (
-                "colour IN[green,blue]",
-                Fc::In {
-                    fid: rtok("", "colour"),
-                    els: vec![
-                        rtok("colour IN[", "green"),
-                        rtok("colour IN[green, ", "blue"),
-                    ]
-                }
-            ),
-            (
-                "colour NOT IN[green,blue]",
-                Fc::Not(Box::new(Fc::In {
-                    fid: rtok("", "colour"),
-                    els: vec![
-                        rtok("colour NOT IN[", "green"),
-                        rtok("colour NOT IN[green, ", "blue"),
-                    ]
-                }))
-            ),
-            (
-                " colour IN [  green , blue , ]",
-                Fc::In {
-                    fid: rtok(" ", "colour"),
-                    els: vec![
-                        rtok("colour IN [  ", "green"),
-                        rtok("colour IN [  green , ", "blue"),
-                    ]
-                }
-            ),
-            (
-                "channel = Ponce",
-                Fc::Condition {
-                    fid: rtok("", "channel"),
-                    op: Condition::Equal(rtok("channel = ", "Ponce")),
-                },
-            ),
-            (
-                "subscribers = 12",
-                Fc::Condition {
-                    fid: rtok("", "subscribers"),
-                    op: Condition::Equal(rtok("subscribers = ", "12")),
-                },
-            ),
-            // test all the quotes and simple quotes
-            (
-                "channel = 'Mister Mv'",
-                Fc::Condition {
-                    fid: rtok("", "channel"),
-                    op: Condition::Equal(rtok("channel = '", "Mister Mv")),
-                },
-            ),
-            (
-                "channel = \"Mister Mv\"",
-                Fc::Condition {
-                    fid: rtok("", "channel"),
-                    op: Condition::Equal(rtok("channel = \"", "Mister Mv")),
-                },
-            ),
-            (
-                "'dog race' = Borzoi",
-                Fc::Condition {
-                    fid: rtok("'", "dog race"),
-                    op: Condition::Equal(rtok("'dog race' = ", "Borzoi")),
-                },
-            ),
-            (
-                "\"dog race\" = Chusky",
-                Fc::Condition {
-                    fid: rtok("\"", "dog race"),
-                    op: Condition::Equal(rtok("\"dog race\" = ", "Chusky")),
-                },
-            ),
-            (
-                "\"dog race\" = \"Bernese Mountain\"",
-                Fc::Condition {
-                    fid: rtok("\"", "dog race"),
-                    op: Condition::Equal(rtok("\"dog race\" = \"", "Bernese Mountain")),
-                },
-            ),
-            (
-                "'dog race' = 'Bernese Mountain'",
-                Fc::Condition {
-                    fid: rtok("'", "dog race"),
-                    op: Condition::Equal(rtok("'dog race' = '", "Bernese Mountain")),
-                },
-            ),
-            (
-                "\"dog race\" = 'Bernese Mountain'",
-                Fc::Condition {
-                    fid: rtok("\"", "dog race"),
-                    op: Condition::Equal(rtok("\"dog race\" = \"", "Bernese Mountain")),
-                },
-            ),
-            // test all the operators
-            (
-                "channel != ponce",
-                Fc::Condition {
-                    fid: rtok("", "channel"),
-                    op: Condition::NotEqual(rtok("channel != ", "ponce")),
-                },
-            ),
-            (
-                "NOT channel = ponce",
-                Fc::Not(Box::new(Fc::Condition {
-                    fid: rtok("NOT ", "channel"),
-                    op: Condition::Equal(rtok("NOT channel = ", "ponce")),
-                })),
-            ),
-            (
-                "subscribers < 1000",
-                Fc::Condition {
-                    fid: rtok("", "subscribers"),
-                    op: Condition::LowerThan(rtok("subscribers < ", "1000")),
-                },
-            ),
-            (
-                "subscribers > 1000",
-                Fc::Condition {
-                    fid: rtok("", "subscribers"),
-                    op: Condition::GreaterThan(rtok("subscribers > ", "1000")),
-                },
-            ),
-            (
-                "subscribers <= 1000",
-                Fc::Condition {
-                    fid: rtok("", "subscribers"),
-                    op: Condition::LowerThanOrEqual(rtok("subscribers <= ", "1000")),
-                },
-            ),
-            (
-                "subscribers >= 1000",
-                Fc::Condition {
-                    fid: rtok("", "subscribers"),
-                    op: Condition::GreaterThanOrEqual(rtok("subscribers >= ", "1000")),
-                },
-            ),
-            (
-                "NOT subscribers < 1000",
-                Fc::Not(Box::new(Fc::Condition {
-                    fid: rtok("NOT ", "subscribers"),
-                    op: Condition::LowerThan(rtok("NOT subscribers < ", "1000")),
-                })),
-            ),
-            (
-                "NOT subscribers > 1000",
-                Fc::Not(Box::new(Fc::Condition {
-                    fid: rtok("NOT ", "subscribers"),
-                    op: Condition::GreaterThan(rtok("NOT subscribers > ", "1000")),
-                })),
-            ),
-            (
-                "NOT subscribers <= 1000",
-                Fc::Not(Box::new(Fc::Condition {
-                    fid: rtok("NOT ", "subscribers"),
-                    op: Condition::LowerThanOrEqual(rtok("NOT subscribers <= ", "1000")),
-                })),
-            ),
-            (
-                "NOT subscribers >= 1000",
-                Fc::Not(Box::new(Fc::Condition {
-                    fid: rtok("NOT ", "subscribers"),
-                    op: Condition::GreaterThanOrEqual(rtok("NOT subscribers >= ", "1000")),
-                })),
-            ),
-            (
-                "subscribers EXISTS",
-                Fc::Condition {
-                    fid: rtok("", "subscribers"),
-                    op: Condition::Exists,
-                },
-            ),
-            (
-                "NOT subscribers EXISTS",
-                Fc::Not(Box::new(Fc::Condition {
-                    fid: rtok("NOT ", "subscribers"),
-                    op: Condition::Exists,
-                })),
-            ),
-            (
-                "subscribers NOT EXISTS",
-                Fc::Not(Box::new(Fc::Condition {
-                    fid: rtok("", "subscribers"),
-                    op: Condition::Exists,
-                })),
-            ),
-            (
-                "NOT subscribers NOT EXISTS",
-                Fc::Not(Box::new(Fc::Not(Box::new(Fc::Condition {
-                    fid: rtok("NOT ", "subscribers"),
-                    op: Condition::Exists,
-                })))),
-            ),
-            (
-                "subscribers NOT   EXISTS",
-                Fc::Not(Box::new(Fc::Condition {
-                    fid: rtok("", "subscribers"),
-                    op: Condition::Exists,
-                })),
-            ),
-            (
-                "subscribers 100 TO 1000",
-                Fc::Condition {
-                    fid: rtok("", "subscribers"),
-                    op: Condition::Between {
-                        from: rtok("subscribers ", "100"),
-                        to: rtok("subscribers 100 TO ", "1000"),
-                    },
-                },
-            ),
-            (
-                "NOT subscribers 100 TO 1000",
-                Fc::Not(Box::new(Fc::Condition {
-                    fid: rtok("NOT ", "subscribers"),
-                    op: Condition::Between {
-                        from: rtok("NOT subscribers ", "100"),
-                        to: rtok("NOT subscribers 100 TO ", "1000"),
-                    },
-                })),
-            ),
-            (
-                "_geoRadius(12, 13, 14)",
-                Fc::GeoLowerThan {
-                    point: [rtok("_geoRadius(", "12"), rtok("_geoRadius(12, ", "13")],
-                    radius: rtok("_geoRadius(12, 13, ", "14"),
-                },
-            ),
-            (
-                "NOT _geoRadius(12, 13, 14)",
-                Fc::Not(Box::new(Fc::GeoLowerThan {
-                    point: [rtok("NOT _geoRadius(", "12"), rtok("NOT _geoRadius(12, ", "13")],
-                    radius: rtok("NOT _geoRadius(12, 13, ", "14"),
-                })),
-            ),
-            // test simple `or` and `and`
-            (
-                "channel = ponce AND 'dog race' != 'bernese mountain'",
-                Fc::And(vec![
-                    Fc::Condition {
-                        fid: rtok("", "channel"),
-                        op: Condition::Equal(rtok("channel = ", "ponce")),
-                    }
-                    .into(),
-                    Fc::Condition {
-                        fid: rtok("channel = ponce AND '", "dog race"),
-                        op: Condition::NotEqual(rtok(
-                            "channel = ponce AND 'dog race' != '",
-                            "bernese mountain",
-                        )),
-                    }
-                    .into(),
-                ]),
-            ),
-            (
-                "channel = ponce OR 'dog race' != 'bernese mountain'",
-                Fc::Or(vec![
-                    Fc::Condition {
-                        fid: rtok("", "channel"),
-                        op: Condition::Equal(rtok("channel = ", "ponce")),
-                    }
-                    .into(),
-                    Fc::Condition {
-                        fid: rtok("channel = ponce OR '", "dog race"),
-                        op: Condition::NotEqual(rtok(
-                            "channel = ponce OR 'dog race' != '",
-                            "bernese mountain",
-                        )),
-                    }
-                    .into(),
-                ]),
-            ),
-            (
-                "channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000",
-                Fc::Or(vec![
-                    Fc::And(vec![
-                        Fc::Condition {
-                            fid: rtok("", "channel"),
-                            op: Condition::Equal(rtok("channel = ", "ponce")),
-                        }
-                        .into(),
-                        Fc::Condition {
-                            fid: rtok("channel = ponce AND '", "dog race"),
-                            op: Condition::NotEqual(rtok(
-                                "channel = ponce AND 'dog race' != '",
-                                "bernese mountain",
-                            )),
-                        }
-                        .into(),
-                    ])
-                    .into(),
-                    Fc::Condition {
-                        fid: rtok(
-                            "channel = ponce AND 'dog race' != 'bernese mountain' OR ",
-                            "subscribers",
-                        ),
-                        op: Condition::GreaterThan(rtok(
-                            "channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > ",
-                            "1000",
-                        )),
-                    }
-                    .into(),
-                ]),
-            ),
-            // test parenthesis
-            (
-                    "channel = ponce AND ( 'dog race' != 'bernese mountain' OR subscribers > 1000 )",
-                    Fc::And(vec![
-                        Fc::Condition { fid: rtok("", "channel"), op: Condition::Equal(rtok("channel = ", "ponce")) }.into(),
-                        Fc::Or(vec![
-                          Fc::Condition { fid: rtok("channel = ponce AND ( '", "dog race"), op: Condition::NotEqual(rtok("channel = ponce AND ( 'dog race' != '", "bernese mountain"))}.into(),
-                            Fc::Condition { fid: rtok("channel = ponce AND ( 'dog race' != 'bernese mountain' OR ", "subscribers"), op: Condition::GreaterThan(rtok("channel = ponce AND ( 'dog race' != 'bernese mountain' OR subscribers > ", "1000")) }.into(),]
-                    ).into()]),
-            ),
-            (
-                "(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000) AND _geoRadius(12, 13, 14)",
-                Fc::And(vec![
-                    Fc::Or(vec![
-                        Fc::And(vec![
-                            Fc::Condition { fid: rtok("(", "channel"), op: Condition::Equal(rtok("(channel = ", "ponce")) }.into(),
-                            Fc::Condition { fid: rtok("(channel = ponce AND '", "dog race"), op: Condition::NotEqual(rtok("(channel = ponce AND 'dog race' != '", "bernese mountain")) }.into(),
-                        ]).into(),
-                        Fc::Condition { fid: rtok("(channel = ponce AND 'dog race' != 'bernese mountain' OR ", "subscribers"), op: Condition::GreaterThan(rtok("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > ", "1000")) }.into(),
-                    ]).into(),
-                    Fc::GeoLowerThan { point: [rtok("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000) AND _geoRadius(", "12"), rtok("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000) AND _geoRadius(12, ", "13")], radius: rtok("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000) AND _geoRadius(12, 13, ", "14") }.into()
-                ])
-            )
-            // (
-            //     ("channel = ponce AND'dog' != 'bernese mountain'", ),
-            //     ("channel = ponce AND('dog' != 'bernese mountain')", ),
-            // )
-        ];
-
-        for (input, expected) in test_case {
-            let result = Fc::parse(input);
-
-            assert!(
-                result.is_ok(),
-                "Filter `{:?}` was supposed to be parsed but failed with the following error: `{}`",
-                expected,
-                result.unwrap_err()
-            );
-            let filter = result.unwrap();
-            assert_eq!(filter, Some(expected), "Filter `{}` failed.", input);
+        macro_rules! p {
+            ($s:literal) => {
+                Fc::parse($s).unwrap().unwrap()
+            };
         }
+
+        // Test equal
+        insta::assert_display_snapshot!(p!("channel = Ponce"), @"{channel} = {Ponce}");
+        insta::assert_display_snapshot!(p!("subscribers = 12"), @"{subscribers} = {12}");
+        insta::assert_display_snapshot!(p!("channel = 'Mister Mv'"), @"{channel} = {Mister Mv}");
+        insta::assert_display_snapshot!(p!("channel = \"Mister Mv\""), @"{channel} = {Mister Mv}");
+        insta::assert_display_snapshot!(p!("'dog race' = Borzoi"), @"{dog race} = {Borzoi}");
+        insta::assert_display_snapshot!(p!("\"dog race\" = Chusky"), @"{dog race} = {Chusky}");
+        insta::assert_display_snapshot!(p!("\"dog race\" = \"Bernese Mountain\""), @"{dog race} = {Bernese Mountain}");
+        insta::assert_display_snapshot!(p!("'dog race' = 'Bernese Mountain'"), @"{dog race} = {Bernese Mountain}");
+        insta::assert_display_snapshot!(p!("\"dog race\" = 'Bernese Mountain'"), @"{dog race} = {Bernese Mountain}");
+
+        // Test IN
+        insta::assert_display_snapshot!(p!("colour IN[]"), @"{colour} IN[]");
+        insta::assert_display_snapshot!(p!("colour IN[green]"), @"{colour} IN[{green}, ]");
+        insta::assert_display_snapshot!(p!("colour IN[green,]"), @"{colour} IN[{green}, ]");
+        insta::assert_display_snapshot!(p!("colour NOT IN[green,blue]"), @"NOT ({colour} IN[{green}, {blue}, ])");
+        insta::assert_display_snapshot!(p!(" colour IN [  green , blue , ]"), @"{colour} IN[{green}, {blue}, ]");
+
+        // Test conditions
+        insta::assert_display_snapshot!(p!("channel != ponce"), @"{channel} != {ponce}");
+        insta::assert_display_snapshot!(p!("NOT channel = ponce"), @"NOT ({channel} = {ponce})");
+        insta::assert_display_snapshot!(p!("subscribers < 1000"), @"{subscribers} < {1000}");
+        insta::assert_display_snapshot!(p!("subscribers > 1000"), @"{subscribers} > {1000}");
+        insta::assert_display_snapshot!(p!("subscribers <= 1000"), @"{subscribers} <= {1000}");
+        insta::assert_display_snapshot!(p!("subscribers >= 1000"), @"{subscribers} >= {1000}");
+        insta::assert_display_snapshot!(p!("subscribers <= 1000"), @"{subscribers} <= {1000}");
+        insta::assert_display_snapshot!(p!("subscribers 100 TO 1000"), @"{subscribers} {100} TO {1000}");
+
+        // Test NOT + EXISTS
+        insta::assert_display_snapshot!(p!("subscribers EXISTS"), @"{subscribers} EXISTS");
+        insta::assert_display_snapshot!(p!("NOT subscribers < 1000"), @"NOT ({subscribers} < {1000})");
+        insta::assert_display_snapshot!(p!("NOT subscribers EXISTS"), @"NOT ({subscribers} EXISTS)");
+        insta::assert_display_snapshot!(p!("subscribers NOT EXISTS"), @"NOT ({subscribers} EXISTS)");
+        insta::assert_display_snapshot!(p!("NOT subscribers NOT EXISTS"), @"NOT (NOT ({subscribers} EXISTS))");
+        insta::assert_display_snapshot!(p!("subscribers NOT   EXISTS"), @"NOT ({subscribers} EXISTS)");
+        insta::assert_display_snapshot!(p!("NOT subscribers 100 TO 1000"), @"NOT ({subscribers} {100} TO {1000})");
+
+        // Test geo radius
+        insta::assert_display_snapshot!(p!("_geoRadius(12, 13, 14)"), @"_geoRadius({12}, {13}, {14})");
+        insta::assert_display_snapshot!(p!("NOT _geoRadius(12, 13, 14)"), @"NOT (_geoRadius({12}, {13}, {14}))");
+
+        // Test OR + AND
+        insta::assert_display_snapshot!(p!("channel = ponce AND 'dog race' != 'bernese mountain'"), @"AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ]");
+        insta::assert_display_snapshot!(p!("channel = ponce OR 'dog race' != 'bernese mountain'"), @"OR[{channel} = {ponce}, {dog race} != {bernese mountain}, ]");
+        insta::assert_display_snapshot!(p!("channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000"), @"OR[AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ], {subscribers} > {1000}, ]");
+        insta::assert_display_snapshot!(
+        p!("channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000 OR colour = red OR colour = blue AND size = 7"),
+        @"OR[AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ], {subscribers} > {1000}, {colour} = {red}, AND[{colour} = {blue}, {size} = {7}, ], ]"
+        );
+
+        // test parentheses
+        insta::assert_display_snapshot!(p!("channel = ponce AND ( 'dog race' != 'bernese mountain' OR subscribers > 1000 )"), @"AND[{channel} = {ponce}, OR[{dog race} != {bernese mountain}, {subscribers} > {1000}, ], ]");
+        insta::assert_display_snapshot!(p!("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000) AND _geoRadius(12, 13, 14)"), @"AND[OR[AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ], {subscribers} > {1000}, ], _geoRadius({12}, {13}, {14}), ]");
     }
 
     #[test]
     fn error() {
         use FilterCondition as Fc;
 
-        let test_case = [
-            // simple test
-            ("channel = Ponce = 12", "Found unexpected characters at the end of the filter: `= 12`. You probably forgot an `OR` or an `AND` rule."),
-            ("channel =    ", "Was expecting a value but instead got nothing."),
-            ("channel = 🐻", "Was expecting a value but instead got `🐻`."),
-            ("channel = 🐻 AND followers < 100", "Was expecting a value but instead got `🐻`."),
-            ("'OR'", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `\\'OR\\'`."),
-            ("OR", "Was expecting a value but instead got `OR`, which is a reserved keyword. To use `OR` as a field name or a value, surround it by quotes."),
-            ("channel Ponce", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `channel Ponce`."),
-            ("channel = Ponce OR", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` but instead got nothing."),
-            ("_geoRadius", "The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`."),
-            ("_geoRadius = 12", "The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`."),
-            ("_geoPoint(12, 13, 14)", "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance) built-in rule to filter on `_geo` coordinates."),
-            ("position <= _geoPoint(12, 13, 14)", "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance) built-in rule to filter on `_geo` coordinates."),
-            ("position <= _geoRadius(12, 13, 14)", "The `_geoRadius` filter is an operation and can't be used as a value."),
-            ("channel = 'ponce", "Expression `\\'ponce` is missing the following closing delimiter: `'`."),
-            ("channel = \"ponce", "Expression `\\\"ponce` is missing the following closing delimiter: `\"`."),
-            ("channel = mv OR (followers >= 1000", "Expression `(followers >= 1000` is missing the following closing delimiter: `)`."),
-            ("channel = mv OR followers >= 1000)", "Found unexpected characters at the end of the filter: `)`. You probably forgot an `OR` or an `AND` rule."),
-            ("colour NOT EXIST", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `colour NOT EXIST`."),
-            ("subscribers 100 TO1000", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `subscribers 100 TO1000`."),
-            ("channel = ponce ORdog != 'bernese mountain'", "Found unexpected characters at the end of the filter: `ORdog != \\'bernese mountain\\'`. You probably forgot an `OR` or an `AND` rule."),
-            ("colour IN blue, green]", "Expected `[` after `IN` keyword."),
-            ("colour IN [blue, green, 'blue' > 2]", "Expected only comma-separated field names inside `IN[..]` but instead found `> 2]`"),
-            ("colour IN [blue, green, AND]", "Expected only comma-separated field names inside `IN[..]` but instead found `AND]`"),
-            ("colour IN [blue, green", "Expected matching `]` after the list of field names given to `IN[`"),
-            ("colour IN ['blue, green", "Expression `\\'blue, green` is missing the following closing delimiter: `'`."),
-            ("x = EXISTS", "Was expecting a value but instead got `EXISTS`, which is a reserved keyword. To use `EXISTS` as a field name or a value, surround it by quotes."),
-            ("AND = 8", "Was expecting a value but instead got `AND`, which is a reserved keyword. To use `AND` as a field name or a value, surround it by quotes."),
-        ];
-
-        for (input, expected) in test_case {
-            let result = Fc::parse(input);
-
-            assert!(
-                result.is_err(),
-                "Filter `{}` wasn't supposed to be parsed but it did with the following result: `{:?}`",
-                input,
-                result.unwrap()
-            );
-            let filter = result.unwrap_err().to_string();
-            assert!(filter.starts_with(expected), "Filter `{:?}` was supposed to return the following error:\n{}\n, but instead returned\n{}\n.", input, expected, filter);
+        macro_rules! p {
+            ($s:literal) => {
+                Fc::parse($s).unwrap_err().to_string()
+            };
         }
+
+        insta::assert_display_snapshot!(p!("channel = Ponce = 12"), @r###"
+        Found unexpected characters at the end of the filter: `= 12`. You probably forgot an `OR` or an `AND` rule.
+        17:21 channel = Ponce = 12
+        "###);
+
+        insta::assert_display_snapshot!(p!("channel =    "), @r###"
+        Was expecting a value but instead got nothing.
+        14:14 channel =    
+        "###);
+
+        insta::assert_display_snapshot!(p!("channel = 🐻"), @r###"
+        Was expecting a value but instead got `🐻`.
+        11:12 channel = 🐻
+        "###);
+
+        insta::assert_display_snapshot!(p!("channel = 🐻 AND followers < 100"), @r###"
+        Was expecting a value but instead got `🐻`.
+        11:12 channel = 🐻 AND followers < 100
+        "###);
+
+        insta::assert_display_snapshot!(p!("'OR'"), @r###"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `\'OR\'`.
+        1:5 'OR'
+        "###);
+
+        insta::assert_display_snapshot!(p!("OR"), @r###"
+        Was expecting a value but instead got `OR`, which is a reserved keyword. To use `OR` as a field name or a value, surround it by quotes.
+        1:3 OR
+        "###);
+
+        insta::assert_display_snapshot!(p!("channel Ponce"), @r###"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `channel Ponce`.
+        1:14 channel Ponce
+        "###);
+
+        insta::assert_display_snapshot!(p!("channel = Ponce OR"), @r###"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` but instead got nothing.
+        19:19 channel = Ponce OR
+        "###);
+
+        insta::assert_display_snapshot!(p!("_geoRadius"), @r###"
+        The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`.
+        1:11 _geoRadius
+        "###);
+
+        insta::assert_display_snapshot!(p!("_geoRadius = 12"), @r###"
+        The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`.
+        1:16 _geoRadius = 12
+        "###);
+
+        insta::assert_display_snapshot!(p!("_geoPoint(12, 13, 14)"), @r###"
+        `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance) built-in rule to filter on `_geo` coordinates.
+        1:22 _geoPoint(12, 13, 14)
+        "###);
+
+        insta::assert_display_snapshot!(p!("position <= _geoPoint(12, 13, 14)"), @r###"
+        `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance) built-in rule to filter on `_geo` coordinates.
+        13:34 position <= _geoPoint(12, 13, 14)
+        "###);
+
+        insta::assert_display_snapshot!(p!("position <= _geoRadius(12, 13, 14)"), @r###"
+        The `_geoRadius` filter is an operation and can't be used as a value.
+        13:35 position <= _geoRadius(12, 13, 14)
+        "###);
+
+        insta::assert_display_snapshot!(p!("channel = 'ponce"), @r###"
+        Expression `\'ponce` is missing the following closing delimiter: `'`.
+        11:17 channel = 'ponce
+        "###);
+
+        insta::assert_display_snapshot!(p!("channel = \"ponce"), @r###"
+        Expression `\"ponce` is missing the following closing delimiter: `"`.
+        11:17 channel = "ponce
+        "###);
+
+        insta::assert_display_snapshot!(p!("channel = mv OR (followers >= 1000"), @r###"
+        Expression `(followers >= 1000` is missing the following closing delimiter: `)`.
+        17:35 channel = mv OR (followers >= 1000
+        "###);
+
+        insta::assert_display_snapshot!(p!("channel = mv OR followers >= 1000)"), @r###"
+        Found unexpected characters at the end of the filter: `)`. You probably forgot an `OR` or an `AND` rule.
+        34:35 channel = mv OR followers >= 1000)
+        "###);
+
+        insta::assert_display_snapshot!(p!("colour NOT EXIST"), @r###"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `colour NOT EXIST`.
+        1:17 colour NOT EXIST
+        "###);
+
+        insta::assert_display_snapshot!(p!("subscribers 100 TO1000"), @r###"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `subscribers 100 TO1000`.
+        1:23 subscribers 100 TO1000
+        "###);
+
+        insta::assert_display_snapshot!(p!("channel = ponce ORdog != 'bernese mountain'"), @r###"
+        Found unexpected characters at the end of the filter: `ORdog != \'bernese mountain\'`. You probably forgot an `OR` or an `AND` rule.
+        17:44 channel = ponce ORdog != 'bernese mountain'
+        "###);
+
+        insta::assert_display_snapshot!(p!("colour IN blue, green]"), @r###"
+        Expected `[` after `IN` keyword.
+        11:23 colour IN blue, green]
+        "###);
+
+        insta::assert_display_snapshot!(p!("colour IN [blue, green, 'blue' > 2]"), @r###"
+        Expected only comma-separated field names inside `IN[..]` but instead found `> 2]`.
+        32:36 colour IN [blue, green, 'blue' > 2]
+        "###);
+
+        insta::assert_display_snapshot!(p!("colour IN [blue, green, AND]"), @r###"
+        Expected only comma-separated field names inside `IN[..]` but instead found `AND]`.
+        25:29 colour IN [blue, green, AND]
+        "###);
+
+        insta::assert_display_snapshot!(p!("colour IN [blue, green"), @r###"
+        Expected matching `]` after the list of field names given to `IN[`
+        23:23 colour IN [blue, green
+        "###);
+
+        insta::assert_display_snapshot!(p!("colour IN ['blue, green"), @r###"
+        Expression `\'blue, green` is missing the following closing delimiter: `'`.
+        12:24 colour IN ['blue, green
+        "###);
+
+        insta::assert_display_snapshot!(p!("x = EXISTS"), @r###"
+        Was expecting a value but instead got `EXISTS`, which is a reserved keyword. To use `EXISTS` as a field name or a value, surround it by quotes.
+        5:11 x = EXISTS
+        "###);
+
+        insta::assert_display_snapshot!(p!("AND = 8"), @r###"
+        Was expecting a value but instead got `AND`, which is a reserved keyword. To use `AND` as a field name or a value, surround it by quotes.
+        1:4 AND = 8
+        "###);
     }
 
     #[test]
@@ -819,5 +607,61 @@ pub mod tests {
         let filter = FilterCondition::parse("account_ids=1 OR account_ids=2 AND account_ids=3 OR account_ids=4 AND account_ids=5 OR account_ids=6").unwrap().unwrap();
         assert!(filter.token_at_depth(2).is_some());
         assert!(filter.token_at_depth(3).is_none());
+    }
+}
+
+impl<'a> std::fmt::Display for FilterCondition<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FilterCondition::Not(filter) => {
+                write!(f, "NOT ({filter})")
+            }
+            FilterCondition::Condition { fid, op } => {
+                write!(f, "{fid} {op}")
+            }
+            FilterCondition::In { fid, els } => {
+                write!(f, "{fid} IN[")?;
+                for el in els {
+                    write!(f, "{el}, ")?;
+                }
+                write!(f, "]")
+            }
+            FilterCondition::Or(els) => {
+                write!(f, "OR[")?;
+                for el in els {
+                    write!(f, "{el}, ")?;
+                }
+                write!(f, "]")
+            }
+            FilterCondition::And(els) => {
+                write!(f, "AND[")?;
+                for el in els {
+                    write!(f, "{el}, ")?;
+                }
+                write!(f, "]")
+            }
+            FilterCondition::GeoLowerThan { point, radius } => {
+                write!(f, "_geoRadius({}, {}, {})", point[0], point[1], radius)
+            }
+        }
+    }
+}
+impl<'a> std::fmt::Display for Condition<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Condition::GreaterThan(token) => write!(f, "> {token}"),
+            Condition::GreaterThanOrEqual(token) => write!(f, ">= {token}"),
+            Condition::Equal(token) => write!(f, "= {token}"),
+            Condition::NotEqual(token) => write!(f, "!= {token}"),
+            Condition::Exists => write!(f, "EXISTS"),
+            Condition::LowerThan(token) => write!(f, "< {token}"),
+            Condition::LowerThanOrEqual(token) => write!(f, "<= {token}"),
+            Condition::Between { from, to } => write!(f, "{from} TO {to}"),
+        }
+    }
+}
+impl<'a> std::fmt::Display for Token<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{{}}}", self.value())
     }
 }

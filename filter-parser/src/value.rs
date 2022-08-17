@@ -3,7 +3,7 @@ use nom::bytes::complete::{take_till, take_while, take_while1};
 use nom::character::complete::{char, multispace0};
 use nom::combinator::cut;
 use nom::sequence::{delimited, terminated};
-use nom::{error, InputIter, InputLength, InputTake, Slice};
+use nom::{InputIter, InputLength, InputTake, Slice};
 
 use crate::error::{ExpectedValueKind, NomErrorExt};
 use crate::{parse_geo_point, parse_geo_radius, Error, ErrorKind, IResult, Span, Token};
