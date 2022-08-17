@@ -5,6 +5,7 @@ pub mod analytics;
 pub mod task;
 #[macro_use]
 pub mod extractors;
+pub mod metrics;
 pub mod option;
 pub mod route_metrics;
 pub mod routes;
