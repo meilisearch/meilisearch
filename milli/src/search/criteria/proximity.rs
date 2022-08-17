@@ -6,8 +6,8 @@ use log::debug;
 use roaring::RoaringBitmap;
 
 use super::{
-    query_docids, query_pair_proximity_docids, resolve_query_tree, Context, Criterion,
-    CriterionParameters, CriterionResult,
+    query_docids, query_pair_proximity_docids, resolve_phrase, resolve_query_tree, Context,
+    Criterion, CriterionParameters, CriterionResult,
 };
 use crate::search::query_tree::{maximum_proximity, Operation, Query, QueryKind};
 use crate::search::{build_dfa, WordDerivationsCache};
@@ -192,22 +192,9 @@ fn resolve_candidates<'t>(
                     let most_right = words
                         .last()
                         .map(|w| Query { prefix: false, kind: QueryKind::exact(w.clone()) });
-                    let mut candidates = None;
-                    for slice in words.windows(2) {
-                        let (left, right) = (&slice[0], &slice[1]);
-                        match ctx.word_pair_proximity_docids(left, right, 1)? {
-                            Some(pair_docids) => match candidates.as_mut() {
-                                Some(candidates) => *candidates &= pair_docids,
-                                None => candidates = Some(pair_docids),
-                            },
-                            None => {
-                                candidates = None;
-                                break;
-                            }
-                        }
-                    }
-                    match (most_left, most_right, candidates) {
-                        (Some(l), Some(r), Some(c)) => vec![(l, r, c)],
+
+                    match (most_left, most_right) {
+                        (Some(l), Some(r)) => vec![(l, r, resolve_phrase(ctx, &words)?)],
                         _otherwise => Default::default(),
                     }
                 } else {
