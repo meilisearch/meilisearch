@@ -23,7 +23,6 @@ mod tasks;
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::scope("/tasks").configure(tasks::configure))
         .service(web::resource("/health").route(web::get().to(get_health)))
-        .service(web::resource("/metrics").route(web::get().to(get_metrics)))
         .service(web::scope("/keys").configure(api_key::configure))
         .service(web::scope("/dumps").configure(dump::configure))
         .service(web::resource("/stats").route(web::get().to(get_stats)))
