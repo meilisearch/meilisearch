@@ -12,9 +12,8 @@ use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Setting
 use milli::Index;
 use serde_json::{Map, Value};
 
-#[cfg(target_os = "linux")]
 #[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 /// reads json from input and write an obkv batch to writer.
 pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<usize> {

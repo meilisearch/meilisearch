@@ -5,9 +5,8 @@ use criterion::{criterion_group, criterion_main};
 use milli::update::Settings;
 use utils::Conf;
 
-#[cfg(target_os = "linux")]
 #[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 fn base_conf(builder: &mut Settings) {
     let displayed_fields =

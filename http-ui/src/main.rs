@@ -42,9 +42,8 @@ use warp::Filter;
 
 use self::update_store::UpdateStore;
 
-#[cfg(target_os = "linux")]
 #[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 static GLOBAL_CONFIG: OnceCell<IndexerConfig> = OnceCell::new();
 

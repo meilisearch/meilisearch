@@ -13,6 +13,7 @@ crossbeam-channel = "0.5.2"
 heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.1" }
 memmap2 = "0.5.3"
 milli = { path = "../milli" }
+mimalloc = { version = "0.1.29", default-features = false }
 once_cell = "1.10.0"
 rayon = "1.5.1"
 structopt = { version = "0.3.26", default-features = false, features = ["wrap_help"] }
@@ -32,18 +33,16 @@ tokio-stream = { version = "0.1.8", default-features = false, features = ["sync"
 warp = "0.3.2"
 
 # logging
+fst = "0.4.7"
 log = "0.4.14"
 stderrlog = "0.5.1"
-fst = "0.4.7"
 
 # Temporary fix for bitvec, remove once fixed. (https://github.com/bitvecto-rs/bitvec/issues/105)
-funty = "2.0.0"
 bimap = "0.6.2"
 csv = "1.1.6"
+funty = "2.0.0"
 
 [dev-dependencies]
 maplit = "1.0.2"
 serde_test = "1.0.136"
 
-[target.'cfg(target_os = "linux")'.dependencies]
-jemallocator = "0.3.2"

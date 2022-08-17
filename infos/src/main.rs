@@ -11,9 +11,8 @@ use milli::{FieldId, Index};
 use structopt::StructOpt;
 use Command::*;
 
-#[cfg(target_os = "linux")]
 #[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 const ALL_DATABASE_NAMES: &[&str] = &[
     MAIN,

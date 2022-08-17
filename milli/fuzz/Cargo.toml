@@ -16,9 +16,7 @@ serde_json = { version = "1.0.62", features = ["preserve_order"] }
 anyhow = "1.0"
 tempfile = "3.3"
 arbitrary-json = "0.1.0"
-
-[target.'cfg(target_os = "linux")'.dependencies]
-jemallocator = "0.3.2"
+mimalloc = { version = "0.1.29", default-features = false }
 
 [dependencies.milli]
 path = ".."

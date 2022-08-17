@@ -14,9 +14,8 @@ use rand::seq::SliceRandom;
 use rand_chacha::rand_core::SeedableRng;
 use roaring::RoaringBitmap;
 
-#[cfg(target_os = "linux")]
 #[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 const BENCHMARK_ITERATION: usize = 10;
 
