@@ -407,7 +407,7 @@ where
         // We write the external documents ids into the main database.
         self.index.put_external_documents_ids(self.wtxn, &external_documents_ids)?;
 
-        let all_documents_ids = index_documents_ids | new_documents_ids | replaced_documents_ids;
+        let all_documents_ids = index_documents_ids | new_documents_ids;
         self.index.put_documents_ids(self.wtxn, &all_documents_ids)?;
 
         self.execute_prefix_databases(

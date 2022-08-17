@@ -249,11 +249,10 @@ impl<'a, 'i> Transform<'a, 'i> {
                         None => self.flattened_sorter.insert(docid.to_be_bytes(), base_obkv)?,
                     }
                 }
-            } else {
-                self.new_documents_ids.insert(docid);
             }
 
             if !skip_insertion {
+                self.new_documents_ids.insert(docid);
                 // We use the extracted/generated user id as the key for this document.
                 self.original_sorter.insert(&docid.to_be_bytes(), obkv_buffer.clone())?;
 
