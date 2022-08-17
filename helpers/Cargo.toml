@@ -9,7 +9,6 @@ publish = false
 [dependencies]
 anyhow = "1.0.56"
 byte-unit = { version = "4.0.14", default-features = false, features = ["std"] }
-heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.1" }
 milli = { path = "../milli" }
 mimalloc = { version = "0.1.29", default-features = false }
 stderrlog = "0.5.1"

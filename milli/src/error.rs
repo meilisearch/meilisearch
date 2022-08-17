@@ -116,6 +116,8 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
         }
     )]
     InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String> },
+    #[error("{}", HeedError::BadOpenOptions)]
+    InvalidLmdbOpenOptions,
     #[error("The sort ranking rule must be specified in the ranking rules settings to use the sort parameter at search time.")]
     SortRankingRuleMissing,
     #[error("The database file is in an invalid state.")]
@@ -244,6 +246,7 @@ impl From<HeedError> for Error {
             HeedError::Decoding => InternalError(Serialization(Decoding { db_name: None })),
             HeedError::InvalidDatabaseTyping => InternalError(InvalidDatabaseTyping),
             HeedError::DatabaseClosing => InternalError(DatabaseClosing),
+            HeedError::BadOpenOptions => UserError(InvalidLmdbOpenOptions),
         }
     }
 }

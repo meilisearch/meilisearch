@@ -17,8 +17,8 @@ use byte_unit::Byte;
 use either::Either;
 use flate2::read::GzDecoder;
 use futures::{stream, FutureExt, StreamExt};
-use heed::EnvOpenOptions;
 use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
+use milli::heed::EnvOpenOptions;
 use milli::tokenizer::TokenizerBuilder;
 use milli::update::UpdateIndexingStep::*;
 use milli::update::{

@@ -278,27 +278,30 @@ where
         let stop_words = self.index.stop_words(self.wtxn)?;
         let exact_attributes = self.index.exact_attributes_ids(self.wtxn)?;
 
+        let pool_params = GrenadParameters {
+            chunk_compression_type: self.indexer_config.chunk_compression_type,
+            chunk_compression_level: self.indexer_config.chunk_compression_level,
+            max_memory: self.indexer_config.max_memory,
+            max_nb_chunks: self.indexer_config.max_nb_chunks, // default value, may be chosen.
+        };
+        let documents_chunk_size =
+            self.indexer_config.documents_chunk_size.unwrap_or(1024 * 1024 * 4); // 4MiB
+        let max_positions_per_attributes = self.indexer_config.max_positions_per_attributes;
+
         // Run extraction pipeline in parallel.
         pool.install(|| {
-            let params = GrenadParameters {
-                chunk_compression_type: self.indexer_config.chunk_compression_type,
-                chunk_compression_level: self.indexer_config.chunk_compression_level,
-                max_memory: self.indexer_config.max_memory,
-                max_nb_chunks: self.indexer_config.max_nb_chunks, // default value, may be chosen.
-            };
-
             // split obkv file into several chunks
             let original_chunk_iter = grenad_obkv_into_chunks(
                 original_documents,
-                params.clone(),
-                self.indexer_config.documents_chunk_size.unwrap_or(1024 * 1024 * 4), // 4MiB
+                pool_params.clone(),
+                documents_chunk_size,
             );
 
             // split obkv file into several chunks
             let flattened_chunk_iter = grenad_obkv_into_chunks(
                 flattened_documents,
-                params.clone(),
-                self.indexer_config.documents_chunk_size.unwrap_or(1024 * 1024 * 4), // 4MiB
+                pool_params.clone(),
+                documents_chunk_size,
             );
 
             let result = original_chunk_iter
@@ -308,14 +311,14 @@ where
                     extract::data_from_obkv_documents(
                         original_chunk,
                         flattened_chunk,
-                        params,
+                        pool_params,
                         lmdb_writer_sx.clone(),
                         searchable_fields,
                         faceted_fields,
                         primary_key_id,
                         geo_fields_ids,
                         stop_words,
-                        self.indexer_config.max_positions_per_attributes,
+                        max_positions_per_attributes,
                         exact_attributes,
                     )
                 });

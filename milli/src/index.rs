@@ -223,6 +223,16 @@ impl Index {
         self.env.path()
     }
 
+    /// Returns the size used by the index without the cached pages.
+    pub fn used_size(&self) -> Result<u64> {
+        Ok(self.env.non_free_pages_size()?)
+    }
+
+    /// Returns the real size used by the index.
+    pub fn on_disk_size(&self) -> Result<u64> {
+        Ok(self.env.real_disk_size()?)
+    }
+
     pub fn copy_to_path<P: AsRef<Path>>(&self, path: P, option: CompactionOption) -> Result<File> {
         self.env.copy_to_path(path, option).map_err(Into::into)
     }

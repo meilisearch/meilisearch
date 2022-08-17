@@ -6,6 +6,7 @@ use std::sync::Arc;
 use crossbeam_channel::Sender;
 use heed::types::{ByteSlice, DecodeIgnore, OwnedType, SerdeJson};
 use heed::{Database, Env, EnvOpenOptions};
+use milli::heed;
 use serde::{Deserialize, Serialize};
 
 pub type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
