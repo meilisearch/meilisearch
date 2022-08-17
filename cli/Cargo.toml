@@ -19,4 +19,3 @@ bimap = "0.6.2"
 csv = "1.1.6"
 stderrlog = "0.5.1"
 mimalloc = { version = "0.1.29", default-features = false }
-
