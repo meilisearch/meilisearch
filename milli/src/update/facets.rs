@@ -165,11 +165,15 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
         }
     }
 
+    /// The number of elements from the level below that are represented by a single element in the level above
+    ///
+    /// This setting is always greater than or equal to 2.
     pub fn level_group_size(&mut self, value: NonZeroUsize) -> &mut Self {
         self.level_group_size = NonZeroUsize::new(cmp::max(value.get(), 2)).unwrap();
         self
     }
 
+    /// The minimum number of elements that a level is allowed to have.
     pub fn min_level_size(&mut self, value: NonZeroUsize) -> &mut Self {
         self.min_level_size = value;
         self
@@ -252,6 +256,12 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
     }
 }
 
+/// Compute the content of the database levels from its level 0 for the given field id.
+///
+/// ## Returns:
+/// 1. a vector of grenad::Reader. The reader at index `i` corresponds to the elements of level `i + 1`
+/// that must be inserted into the database.
+/// 2. a roaring bitmap of all the document ids present in the database
 fn compute_facet_number_levels<'t>(
     rtxn: &'t heed::RoTxn,
     db: heed::Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
@@ -316,6 +326,12 @@ fn compute_facet_number_levels<'t>(
     }
 }
 
+/// Compute the content of the database levels from its level 0 for the given field id.
+///
+/// ## Returns:
+/// 1. a vector of grenad::Reader. The reader at index `i` corresponds to the elements of level `i + 1`
+/// that must be inserted into the database.
+/// 2. a roaring bitmap of all the document ids present in the database
 fn compute_facet_strings_levels<'t>(
     rtxn: &'t heed::RoTxn,
     db: heed::Database<FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec>,
@@ -401,7 +417,7 @@ will contain the new levels
 * `level_0_range` : equivalent to `level_0_start..`
 * `level_0_size` : the number of elements in level 0
 * `level_group_size` : the number of elements from the level below that are represented by a
-* single element of the new level
+single element of the new level
 * `computed_group_bitmap` : a callback that is called whenever at most `level_group_size` elements
 from the level below were read/created. Its arguments are:
     0. the list of bitmaps from each read/created element of the level below
