@@ -146,8 +146,8 @@ pub struct Opt {
     #[clap(long, env = "MEILI_LOG_LEVEL", default_value = "info")]
     pub log_level: String,
 
-    // Enables Prometheus metrics and /metrics route.
-    #[clap(long, requires = "enable-metrics-route")]
+    /// Enables Prometheus metrics and /metrics route.
+    #[clap(long)]
     pub enable_metrics_route: bool,
 
     #[serde(flatten)]
