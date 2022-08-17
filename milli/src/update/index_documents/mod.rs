@@ -903,7 +903,7 @@ mod tests {
             ]))
             .unwrap();
 
-        // Check that there is **always** 3 documents.
+        // Check that there is **always** 6 documents.
         let rtxn = index.read_txn().unwrap();
         let count = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(count, 6);
