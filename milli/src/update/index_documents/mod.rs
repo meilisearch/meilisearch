@@ -654,6 +654,9 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let count = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(count, 3);
+        let count = index.all_documents(&rtxn).unwrap().count();
+        assert_eq!(count, 3);
+
         drop(rtxn);
     }
 
@@ -888,12 +891,26 @@ mod tests {
         index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         index
-            .add_documents(documents!([{
-                "id": 2,
-                "author": "J. Austen",
-                "date": "1813"
-            }]))
+            .add_documents(documents!([
+                {"id":4,"title":"Harry Potter and the Half-Blood Princess"},
+                {"id":456,"title":"The Little Prince"}
+            ]))
             .unwrap();
+
+        index
+            .add_documents(documents!([
+                { "id": 2, "author": "J. Austen", "date": "1813" }
+            ]))
+            .unwrap();
+
+        // Check that there is **always** 3 documents.
+        let rtxn = index.read_txn().unwrap();
+        let count = index.number_of_documents(&rtxn).unwrap();
+        assert_eq!(count, 6);
+        let count = index.all_documents(&rtxn).unwrap().count();
+        assert_eq!(count, 6);
+
+        drop(rtxn);
     }
 
     #[test]
