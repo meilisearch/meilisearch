@@ -52,7 +52,7 @@ use error::{cut_with_err, ExpectedValueKind, NomErrorExt};
 pub use error::{Error, ErrorKind};
 use nom::branch::alt;
 use nom::bytes::complete::tag;
-use nom::character::complete::{char, multispace0, multispace1};
+use nom::character::complete::{char, multispace0};
 use nom::combinator::{cut, eof, map, opt};
 use nom::multi::{many0, separated_list1};
 use nom::number::complete::recognize_float;
@@ -60,6 +60,7 @@ use nom::sequence::{delimited, preceded, terminated, tuple};
 use nom::Finish;
 use nom_locate::LocatedSpan;
 pub(crate) use value::parse_value;
+use value::word_exact;
 
 pub type Span<'a> = LocatedSpan<&'a str, &'a str>;
 
@@ -183,7 +184,7 @@ fn parse_value_list<'a>(input: Span<'a>) -> IResult<Vec<Token<'a>>> {
 /// in = value "IN" "[" value_list "]"
 fn parse_in(input: Span) -> IResult<FilterCondition> {
     let (input, value) = parse_value(input)?;
-    let (input, _) = ws(tag("IN"))(input)?;
+    let (input, _) = ws(word_exact("IN"))(input)?;
 
     // everything after `IN` can be a failure
     let (input, _) =
@@ -215,9 +216,8 @@ fn parse_in(input: Span) -> IResult<FilterCondition> {
 /// in = value "NOT" WS* "IN" "[" value_list "]"
 fn parse_not_in(input: Span) -> IResult<FilterCondition> {
     let (input, value) = parse_value(input)?;
-    let (input, _) = tag("NOT")(input)?;
-    let (input, _) = multispace1(input)?;
-    let (input, _) = ws(tag("IN"))(input)?;
+    let (input, _) = word_exact("NOT")(input)?;
+    let (input, _) = ws(word_exact("IN"))(input)?;
 
     // everything after `IN` can be a failure
     let (input, _) =
@@ -241,8 +241,7 @@ fn parse_not_in(input: Span) -> IResult<FilterCondition> {
 fn parse_or(input: Span) -> IResult<FilterCondition> {
     let (input, first_filter) = parse_and(input)?;
     // if we found a `OR` then we MUST find something next
-    let (input, mut ors) =
-        many0(preceded(ws(tuple((tag("OR"), multispace1))), cut(parse_and)))(input)?;
+    let (input, mut ors) = many0(preceded(ws(word_exact("OR")), cut(parse_and)))(input)?;
 
     let filter = if ors.is_empty() {
         first_filter
@@ -258,8 +257,7 @@ fn parse_or(input: Span) -> IResult<FilterCondition> {
 fn parse_and(input: Span) -> IResult<FilterCondition> {
     let (input, first_filter) = parse_not(input)?;
     // if we found a `AND` then we MUST find something next
-    let (input, mut ands) =
-        many0(preceded(ws(tuple((tag("AND"), multispace1))), cut(parse_not)))(input)?;
+    let (input, mut ands) = many0(preceded(ws(word_exact("AND")), cut(parse_not)))(input)?;
 
     let filter = if ands.is_empty() {
         first_filter
@@ -276,9 +274,7 @@ fn parse_and(input: Span) -> IResult<FilterCondition> {
 /// If we parse a `NOT` we MUST parse something behind.
 fn parse_not(input: Span) -> IResult<FilterCondition> {
     alt((
-        map(preceded(ws(tuple((tag("NOT"), multispace1))), cut(parse_not)), |e| {
-            FilterCondition::Not(Box::new(e))
-        }),
+        map(preceded(ws(word_exact("NOT")), cut(parse_not)), |e| FilterCondition::Not(Box::new(e))),
         parse_primary,
     ))(input)
 }
@@ -288,7 +284,7 @@ fn parse_not(input: Span) -> IResult<FilterCondition> {
 fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
     // we want to allow space BEFORE the _geoRadius but not after
     let parsed = preceded(
-        tuple((multispace0, tag("_geoRadius"))),
+        tuple((multispace0, word_exact("_geoRadius"))),
         // if we were able to parse `_geoRadius` and can't parse the rest of the input we return a failure
         cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
     )(input)
@@ -741,6 +737,10 @@ pub mod tests {
                     Fc::GeoLowerThan { point: [rtok("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000) AND _geoRadius(", "12"), rtok("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000) AND _geoRadius(12, ", "13")], radius: rtok("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000) AND _geoRadius(12, 13, ", "14") }.into()
                 ])
             )
+            // (
+            //     ("channel = ponce AND'dog' != 'bernese mountain'", ),
+            //     ("channel = ponce AND('dog' != 'bernese mountain')", ),
+            // )
         ];
 
         for (input, expected) in test_case {
@@ -770,7 +770,7 @@ pub mod tests {
             ("'OR'", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `\\'OR\\'`."),
             ("OR", "Was expecting a value but instead got `OR`, which is a reserved keyword. To use `OR` as a field name or a value, surround it by quotes."),
             ("channel Ponce", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `channel Ponce`."),
-            ("channel = Ponce OR", "Found unexpected characters at the end of the filter: `OR`. You probably forgot an `OR` or an `AND` rule."),
+            ("channel = Ponce OR", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` but instead got nothing."),
             ("_geoRadius", "The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`."),
             ("_geoRadius = 12", "The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`."),
             ("_geoPoint(12, 13, 14)", "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance) built-in rule to filter on `_geo` coordinates."),
@@ -783,7 +783,6 @@ pub mod tests {
             ("colour NOT EXIST", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `colour NOT EXIST`."),
             ("subscribers 100 TO1000", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `subscribers 100 TO1000`."),
             ("channel = ponce ORdog != 'bernese mountain'", "Found unexpected characters at the end of the filter: `ORdog != \\'bernese mountain\\'`. You probably forgot an `OR` or an `AND` rule."),
-            ("channel = ponce AND'dog' != 'bernese mountain'", "Found unexpected characters at the end of the filter: `AND\\'dog\\' != \\'bernese mountain\\'`. You probably forgot an `OR` or an `AND` rule."),
             ("colour IN blue, green]", "Expected `[` after `IN` keyword."),
             ("colour IN [blue, green, 'blue' > 2]", "Expected only comma-separated field names inside `IN[..]` but instead found `> 2]`"),
             ("colour IN [blue, green, AND]", "Expected only comma-separated field names inside `IN[..]` but instead found `AND]`"),
