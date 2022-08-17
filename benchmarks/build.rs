@@ -80,13 +80,22 @@ fn main() -> anyhow::Result<()> {
         }
         let url = format!("{}/{}.{}.gz", BASE_URL, dataset, extension);
         eprintln!("downloading: {}", url);
-        let bytes = download_dataset(url.clone())?;
+        let bytes = retry(|| download_dataset(url.clone()), 10)?;
         eprintln!("{} downloaded successfully", url);
         eprintln!("uncompressing in {}", out_file.display());
         uncompress_in_file(bytes, &out_file)?;
     }
 
     Ok(())
+}
+
+fn retry<Ok, Err>(fun: impl Fn() -> Result<Ok, Err>, times: usize) -> Result<Ok, Err> {
+    for _ in 0..times {
+        if let ok @ Ok(_) = fun() {
+            return ok;
+        }
+    }
+    fun()
 }
 
 fn download_dataset<U: IntoUrl>(url: U) -> anyhow::Result<Cursor<Bytes>> {
