@@ -293,13 +293,13 @@ impl<'t> CriteriaBuilder<'t> {
     }
 }
 
-pub fn resolve_query_tree<'t>(
-    ctx: &'t dyn Context,
+pub fn resolve_query_tree(
+    ctx: &dyn Context,
     query_tree: &Operation,
     wdcache: &mut WordDerivationsCache,
 ) -> Result<RoaringBitmap> {
-    fn resolve_operation<'t>(
-        ctx: &'t dyn Context,
+    fn resolve_operation(
+        ctx: &dyn Context,
         query_tree: &Operation,
         wdcache: &mut WordDerivationsCache,
     ) -> Result<RoaringBitmap> {
@@ -342,7 +342,7 @@ pub fn resolve_query_tree<'t>(
     resolve_operation(ctx, query_tree, wdcache)
 }
 
-pub fn resolve_phrase<'t>(ctx: &'t dyn Context, phrase: &[String]) -> Result<RoaringBitmap> {
+pub fn resolve_phrase(ctx: &dyn Context, phrase: &[String]) -> Result<RoaringBitmap> {
     let mut candidates = RoaringBitmap::new();
     let mut first_iter = true;
     let winsize = phrase.len().min(7);
