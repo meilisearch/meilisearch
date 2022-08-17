@@ -407,7 +407,7 @@ where
         // We write the external documents ids into the main database.
         self.index.put_external_documents_ids(self.wtxn, &external_documents_ids)?;
 
-        let all_documents_ids = index_documents_ids | new_documents_ids | replaced_documents_ids;
+        let all_documents_ids = index_documents_ids | new_documents_ids;
         self.index.put_documents_ids(self.wtxn, &all_documents_ids)?;
 
         self.execute_prefix_databases(
@@ -654,6 +654,9 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let count = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(count, 3);
+        let count = index.all_documents(&rtxn).unwrap().count();
+        assert_eq!(count, 3);
+
         drop(rtxn);
     }
 
@@ -888,12 +891,26 @@ mod tests {
         index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         index
-            .add_documents(documents!([{
-                "id": 2,
-                "author": "J. Austen",
-                "date": "1813"
-            }]))
+            .add_documents(documents!([
+                {"id":4,"title":"Harry Potter and the Half-Blood Princess"},
+                {"id":456,"title":"The Little Prince"}
+            ]))
             .unwrap();
+
+        index
+            .add_documents(documents!([
+                { "id": 2, "author": "J. Austen", "date": "1813" }
+            ]))
+            .unwrap();
+
+        // Check that there is **always** 6 documents.
+        let rtxn = index.read_txn().unwrap();
+        let count = index.number_of_documents(&rtxn).unwrap();
+        assert_eq!(count, 6);
+        let count = index.all_documents(&rtxn).unwrap().count();
+        assert_eq!(count, 6);
+
+        drop(rtxn);
     }
 
     #[test]
