@@ -576,6 +576,28 @@ pub fn write_into_lmdb_database_without_merging(
     Ok(())
 }
 
+/** A prefix trie. Used to iterate quickly over the prefixes of a word that are
+within a set.
+
+## Structure
+The trie is made of nodes composed of:
+1. a byte character (e.g. 'a')
+2. whether the node is an end node or not
+3. a list of children nodes, sorted by their byte character
+
+For example, the trie that stores the strings `[ac, ae, ar, ch, cei, cel, ch, r, rel, ri]`
+is drawn below. Nodes with a double border are "end nodes".
+
+┌──────────────────────┐ ┌──────────────────────┐ ╔══════════════════════╗
+│          a           │ │          c           │ ║          r           ║
+└──────────────────────┘ └──────────────────────┘ ╚══════════════════════╝
+╔══════╗╔══════╗╔══════╗ ┌─────────┐  ╔═════════╗ ┌─────────┐ ╔══════════╗
+║  c   ║║  e   ║║  r   ║ │    e    │  ║    h    ║ │    e    │ ║    i     ║
+╚══════╝╚══════╝╚══════╝ └─────────┘  ╚═════════╝ └─────────┘ ╚══════════╝
+                         ╔═══╗ ╔═══╗                 ╔═══╗
+                         ║ i ║ ║ l ║                 ║ l ║
+                         ╚═══╝ ╚═══╝                 ╚═══╝
+*/
 #[derive(Default, Debug)]
 struct PrefixTrieNode {
     children: Vec<(PrefixTrieNode, u8)>,
