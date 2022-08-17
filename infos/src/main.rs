@@ -1152,6 +1152,7 @@ fn word_pair_proximities_docids(
     prefix.extend_from_slice(word1.as_bytes());
     prefix.push(0);
     prefix.extend_from_slice(word2.as_bytes());
+    prefix.push(0);
 
     let db = index.word_pair_proximity_docids.as_polymorph();
     let iter = db.prefix_iter::<_, ByteSlice, RoaringBitmapCodec>(rtxn, &prefix)?;

@@ -15,4 +15,4 @@ pub use self::roaring_bitmap_length::{
     BoRoaringBitmapLenCodec, CboRoaringBitmapLenCodec, RoaringBitmapLenCodec,
 };
 pub use self::str_beu32_codec::StrBEU32Codec;
-pub use self::str_str_u8_codec::StrStrU8Codec;
+pub use self::str_str_u8_codec::{StrStrU8Codec, UncheckedStrStrU8Codec};

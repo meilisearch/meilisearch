@@ -142,6 +142,7 @@ fn document_word_positions_into_sorter<'b>(
         key_buffer.extend_from_slice(w1.as_bytes());
         key_buffer.push(0);
         key_buffer.extend_from_slice(w2.as_bytes());
+        key_buffer.push(0);
         key_buffer.push(prox as u8);
 
         word_pair_proximity_docids_sorter.insert(&key_buffer, &document_id.to_ne_bytes())?;
