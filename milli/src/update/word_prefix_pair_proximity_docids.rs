@@ -165,7 +165,7 @@ inputs described above, which come from different places:
     present in the newly added documents
 
     2. `word_pairs_db`, which is the list of word pairs from the database.
-    This list includes all elements in `new_word_pairs`** since `new_word_pairs`
+    This list includes all elements in `new_word_pairs` since `new_word_pairs`
     was added to the database prior to calling the `WordPrefixPairProximityDocIds::execute`
     function.
 
@@ -380,10 +380,10 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
 /// 3. a closure to describe how to handle the new computed (word1, prefix, proximity) elements
 ///
 /// For more information about what this function does, read the module documentation.
-fn execute_on_word_pairs_and_prefixes<Iter>(
-    iter: &mut Iter,
+fn execute_on_word_pairs_and_prefixes<I>(
+    iter: &mut I,
     mut next_word_pair_proximity: impl for<'a> FnMut(
-        &'a mut Iter,
+        &'a mut I,
     ) -> Result<
         Option<((&'a [u8], &'a [u8], u8), &'a [u8])>,
     >,
