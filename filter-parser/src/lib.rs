@@ -48,7 +48,7 @@ use std::str::FromStr;
 
 pub use condition::{parse_condition, parse_to, Condition};
 use condition::{parse_exists, parse_not_exists};
-use error::{cut_with_err, NomErrorExt};
+use error::{cut_with_err, ExpectedValueKind, NomErrorExt};
 pub use error::{Error, ErrorKind};
 use nom::branch::alt;
 use nom::bytes::complete::tag;
@@ -166,11 +166,6 @@ fn ws<'a, O>(inner: impl FnMut(Span<'a>) -> IResult<O>) -> impl FnMut(Span<'a>) 
 
 /// value_list = (value ("," value)* ","?)?
 fn parse_value_list<'a>(input: Span<'a>) -> IResult<Vec<Token<'a>>> {
-    // TODO: here, I should return a failure with a clear explanation whenever possible
-    // for example:
-    // * expected the name of a field, but got `AND`
-    // * expected closing square bracket, but got `AND`
-
     let (input, first_value) = opt(parse_value)(input)?;
     if let Some(first_value) = first_value {
         let value_list_el_parser = preceded(ws(tag(",")), parse_value);
@@ -203,7 +198,14 @@ fn parse_in(input: Span) -> IResult<FilterCondition> {
         if eof::<_, ()>(input).is_ok() {
             Error::new_from_kind(input, ErrorKind::InClosingBracket)
         } else {
-            Error::new_from_kind(input, ErrorKind::InExpectedValue)
+            let expected_value_kind = match parse_value(input) {
+                Err(nom::Err::Error(e)) => match e.kind() {
+                    ErrorKind::ReservedKeyword(_) => ExpectedValueKind::ReservedKeyword,
+                    _ => ExpectedValueKind::Other,
+                },
+                _ => ExpectedValueKind::Other,
+            };
+            Error::new_from_kind(input, ErrorKind::InExpectedValue(expected_value_kind))
         }
     })(input)?;
 
@@ -319,6 +321,21 @@ fn parse_geo_point(input: Span) -> IResult<FilterCondition> {
     Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoPoint"))))
 }
 
+fn parse_error_reserved_keyword(input: Span) -> IResult<FilterCondition> {
+    match parse_condition(input) {
+        Ok(result) => Ok(result),
+        Err(nom::Err::Error(inner) | nom::Err::Failure(inner)) => match inner.kind() {
+            ErrorKind::ExpectedValue(ExpectedValueKind::ReservedKeyword) => {
+                return Err(nom::Err::Failure(inner));
+            }
+            _ => return Err(nom::Err::Error(inner)),
+        },
+        Err(e) => {
+            return Err(e);
+        }
+    }
+}
+
 /// primary        = (WS* "(" WS* expression WS* ")" WS*) | geoRadius | condition | exists | not_exists | to
 fn parse_primary(input: Span) -> IResult<FilterCondition> {
     alt((
@@ -339,6 +356,7 @@ fn parse_primary(input: Span) -> IResult<FilterCondition> {
         parse_to,
         // the next lines are only for error handling and are written at the end to have the less possible performance impact
         parse_geo_point,
+        parse_error_reserved_keyword,
     ))(input)
     // if the inner parsers did not match enough information to return an accurate error
     .map_err(|e| e.map_err(|_| Error::new_from_kind(input, ErrorKind::InvalidPrimary)))
@@ -376,13 +394,6 @@ pub mod tests {
 
         let test_case = [
             // simple test
-            (
-                "x = AND",
-                Fc::Not(Box::new(Fc::Not(Box::new(Fc::In {
-                    fid: rtok("NOT NOT", "colour"),
-                    els: vec![]
-                }))))
-            ),
             (
                 "colour IN[]",
                 Fc::In {
@@ -756,8 +767,8 @@ pub mod tests {
             ("channel =    ", "Was expecting a value but instead got nothing."),
             ("channel = 🐻", "Was expecting a value but instead got `🐻`."),
             ("channel = 🐻 AND followers < 100", "Was expecting a value but instead got `🐻`."),
-            ("OR", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `OR`."),
-            ("AND", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `AND`."),
+            ("'OR'", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `\\'OR\\'`."),
+            ("OR", "Was expecting a value but instead got `OR`, which is a reserved keyword. To use `OR` as a field name or a value, surround it by quotes."),
             ("channel Ponce", "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `channel Ponce`."),
             ("channel = Ponce OR", "Found unexpected characters at the end of the filter: `OR`. You probably forgot an `OR` or an `AND` rule."),
             ("_geoRadius", "The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`."),
@@ -778,6 +789,8 @@ pub mod tests {
             ("colour IN [blue, green, AND]", "Expected only comma-separated field names inside `IN[..]` but instead found `AND]`"),
             ("colour IN [blue, green", "Expected matching `]` after the list of field names given to `IN[`"),
             ("colour IN ['blue, green", "Expression `\\'blue, green` is missing the following closing delimiter: `'`."),
+            ("x = EXISTS", "Was expecting a value but instead got `EXISTS`, which is a reserved keyword. To use `EXISTS` as a field name or a value, surround it by quotes."),
+            ("AND = 8", "Was expecting a value but instead got `AND`, which is a reserved keyword. To use `AND` as a field name or a value, surround it by quotes."),
         ];
 
         for (input, expected) in test_case {

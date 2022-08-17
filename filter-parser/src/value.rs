@@ -5,7 +5,7 @@ use nom::combinator::cut;
 use nom::sequence::{delimited, terminated};
 use nom::{InputIter, InputLength, InputTake, Slice};
 
-use crate::error::NomErrorExt;
+use crate::error::{ExpectedValueKind, NomErrorExt};
 use crate::{parse_geo_point, parse_geo_radius, Error, ErrorKind, IResult, Span, Token};
 
 /// This function goes through all characters in the [Span] if it finds any escaped character (`\`).
@@ -103,7 +103,17 @@ pub fn parse_value<'a>(input: Span<'a>) -> IResult<Token<'a>> {
     )(input)
     // if we found nothing in the alt it means the user specified something that was not recognized as a value
     .map_err(|e: nom::Err<Error>| {
-        e.map_err(|_| Error::new_from_kind(error_word(input).unwrap().1, ErrorKind::ExpectedValue))
+        e.map_err(|error| {
+            let expected_value_kind = if matches!(error.kind(), ErrorKind::ReservedKeyword(_)) {
+                ExpectedValueKind::ReservedKeyword
+            } else {
+                ExpectedValueKind::Other
+            };
+            Error::new_from_kind(
+                error_word(input).unwrap().1,
+                ErrorKind::ExpectedValue(expected_value_kind),
+            )
+        })
     })
     .map_err(|e| {
         e.map_fail(|failure| {

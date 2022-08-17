@@ -49,17 +49,23 @@ pub struct Error<'a> {
 }
 
 #[derive(Debug)]
+pub enum ExpectedValueKind {
+    ReservedKeyword,
+    Other,
+}
+
+#[derive(Debug)]
 pub enum ErrorKind<'a> {
     ReservedGeo(&'a str),
     Geo,
     MisusedGeo,
     InvalidPrimary,
     ExpectedEof,
-    ExpectedValue,
+    ExpectedValue(ExpectedValueKind),
     MalformedValue,
     InOpeningBracket,
     InClosingBracket,
-    InExpectedValue,
+    InExpectedValue(ExpectedValueKind),
     ReservedKeyword(String),
     MissingClosingDelimiter(char),
     Char(char),
@@ -118,8 +124,14 @@ impl<'a> Display for Error<'a> {
         let escaped_input = input.escape_debug();
 
         match &self.kind {
-            ErrorKind::ExpectedValue if input.trim().is_empty() => {
+            ErrorKind::ExpectedValue(_) if input.trim().is_empty() => {
                 writeln!(f, "Was expecting a value but instead got nothing.")?
+            }
+            ErrorKind::ExpectedValue(ExpectedValueKind::ReservedKeyword) => {
+                writeln!(f, "Was expecting a value but instead got `{escaped_input}`, which is a reserved keyword. To use `{escaped_input}` as a field name or a value, surround it by quotes.")?
+            }
+            ErrorKind::ExpectedValue(ExpectedValueKind::Other) => {
+                writeln!(f, "Was expecting a value but instead got `{}`.", escaped_input)?
             }
             ErrorKind::MalformedValue => {
                 writeln!(f, "Malformed value: `{}`.", escaped_input)?
@@ -127,9 +139,7 @@ impl<'a> Display for Error<'a> {
             ErrorKind::MissingClosingDelimiter(c) => {
                 writeln!(f, "Expression `{}` is missing the following closing delimiter: `{}`.", escaped_input, c)?
             }
-            ErrorKind::ExpectedValue => {
-                writeln!(f, "Was expecting a value but instead got `{}`.", escaped_input)?
-            }
+            
             ErrorKind::InvalidPrimary if input.trim().is_empty() => {
                 writeln!(f, "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` but instead got nothing.")?
             }
@@ -157,8 +167,11 @@ impl<'a> Display for Error<'a> {
             ErrorKind::InClosingBracket => {
                 writeln!(f, "Expected matching `]` after the list of field names given to `IN[`")?
             }
-            ErrorKind::InExpectedValue => {
-                writeln!(f, "Expected only comma-separated field names inside `IN[..]` but instead found `{escaped_input}`")?
+            ErrorKind::InExpectedValue(ExpectedValueKind::ReservedKeyword) => {
+                writeln!(f, "Expected only comma-separated field names inside `IN[..]` but instead found `{escaped_input}`, which is a keyword. To use `{escaped_input}` as a field name or a value, surround it by quotes.")?
+            }
+            ErrorKind::InExpectedValue(ExpectedValueKind::Other) => {
+                writeln!(f, "Expected only comma-separated field names inside `IN[..]` but instead found `{escaped_input}`.")?
             }
             ErrorKind::Char(c) => {
                 panic!("Tried to display a char error with `{}`", c)
