@@ -158,7 +158,14 @@ pub async fn delete_index(
 pub async fn get_index_stats(
     meilisearch: GuardedData<ActionPolicy<{ actions::STATS_GET }>, MeiliSearch>,
     path: web::Path<String>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    analytics.publish(
+        "Stats Seen".to_string(),
+        json!({ "per_index_uid": true }),
+        Some(&req),
+    );
     let response = meilisearch.get_index_stats(path.into_inner()).await?;
 
     debug!("returns: {:?}", response);
