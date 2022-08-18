@@ -8,3 +8,6 @@ publish = false
 [dependencies]
 nom = "7.1.0"
 nom_locate = "4.0.0"
+
+[dev-dependencies]
+insta = "1.18.2"

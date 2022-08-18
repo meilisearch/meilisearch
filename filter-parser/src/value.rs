@@ -5,7 +5,7 @@ use nom::combinator::cut;
 use nom::sequence::{delimited, terminated};
 use nom::{InputIter, InputLength, InputTake, Slice};
 
-use crate::error::NomErrorExt;
+use crate::error::{ExpectedValueKind, NomErrorExt};
 use crate::{parse_geo_point, parse_geo_radius, Error, ErrorKind, IResult, Span, Token};
 
 /// This function goes through all characters in the [Span] if it finds any escaped character (`\`).
@@ -48,6 +48,35 @@ fn quoted_by(quote: char, input: Span) -> IResult<Token> {
     ))
 }
 
+// word           = (alphanumeric | _ | - | .)+    except for reserved keywords
+pub fn word_not_keyword<'a>(input: Span<'a>) -> IResult<Token<'a>> {
+    let (input, word): (_, Token<'a>) =
+        take_while1(is_value_component)(input).map(|(s, t)| (s, t.into()))?;
+    if is_keyword(word.value()) {
+        return Err(nom::Err::Error(Error::new_from_kind(
+            input,
+            ErrorKind::ReservedKeyword(word.value().to_owned()),
+        )));
+    }
+    Ok((input, word))
+}
+
+// word           = {tag}
+pub fn word_exact<'a, 'b: 'a>(tag: &'b str) -> impl Fn(Span<'a>) -> IResult<'a, Token<'a>> {
+    move |input| {
+        let (input, word): (_, Token<'a>) =
+            take_while1(is_value_component)(input).map(|(s, t)| (s, t.into()))?;
+        if word.value() == tag {
+            Ok((input, word))
+        } else {
+            Err(nom::Err::Error(Error::new_from_kind(
+                input,
+                ErrorKind::InternalError(nom::error::ErrorKind::Tag),
+            )))
+        }
+    }
+}
+
 /// value          = WS* ( word | singleQuoted | doubleQuoted) WS+
 pub fn parse_value<'a>(input: Span<'a>) -> IResult<Token<'a>> {
     // to get better diagnostic message we are going to strip the left whitespaces from the input right now
@@ -71,11 +100,6 @@ pub fn parse_value<'a>(input: Span<'a>) -> IResult<Token<'a>> {
         _ => (),
     }
 
-    // word           = (alphanumeric | _ | - | .)+
-    let word = |input: Span<'a>| -> IResult<Token<'a>> {
-        take_while1(is_value_component)(input).map(|(s, t)| (s, t.into()))
-    };
-
     // this parser is only used when an error is encountered and it parse the
     // largest string possible that do not contain any “language” syntax.
     // If we try to parse `name = 🦀 AND language = rust` we want to return an
@@ -85,17 +109,27 @@ pub fn parse_value<'a>(input: Span<'a>) -> IResult<Token<'a>> {
     // when we create the errors from the output of the alt we have spaces everywhere
     let error_word = take_till::<_, _, Error>(is_syntax_component);
 
-    terminated(
+    let (input, value) = terminated(
         alt((
             delimited(char('\''), cut(|input| quoted_by('\'', input)), cut(char('\''))),
             delimited(char('"'), cut(|input| quoted_by('"', input)), cut(char('"'))),
-            word,
+            word_not_keyword,
         )),
         multispace0,
     )(input)
     // if we found nothing in the alt it means the user specified something that was not recognized as a value
     .map_err(|e: nom::Err<Error>| {
-        e.map_err(|_| Error::new_from_kind(error_word(input).unwrap().1, ErrorKind::ExpectedValue))
+        e.map_err(|error| {
+            let expected_value_kind = if matches!(error.kind(), ErrorKind::ReservedKeyword(_)) {
+                ExpectedValueKind::ReservedKeyword
+            } else {
+                ExpectedValueKind::Other
+            };
+            Error::new_from_kind(
+                error_word(input).unwrap().1,
+                ErrorKind::ExpectedValue(expected_value_kind),
+            )
+        })
     })
     .map_err(|e| {
         e.map_fail(|failure| {
@@ -107,7 +141,9 @@ pub fn parse_value<'a>(input: Span<'a>) -> IResult<Token<'a>> {
                 failure
             }
         })
-    })
+    })?;
+
+    Ok((input, value))
 }
 
 fn is_value_component(c: char) -> bool {
@@ -116,6 +152,10 @@ fn is_value_component(c: char) -> bool {
 
 fn is_syntax_component(c: char) -> bool {
     c.is_whitespace() || ['(', ')', '=', '<', '>', '!'].contains(&c)
+}
+
+fn is_keyword(s: &str) -> bool {
+    matches!(s, "AND" | "OR" | "IN" | "NOT" | "TO" | "EXISTS" | "_geoRadius")
 }
 
 #[cfg(test)]

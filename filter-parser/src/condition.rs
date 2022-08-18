@@ -21,30 +21,12 @@ pub enum Condition<'a> {
     Equal(Token<'a>),
     NotEqual(Token<'a>),
     Exists,
-    NotExists,
     LowerThan(Token<'a>),
     LowerThanOrEqual(Token<'a>),
     Between { from: Token<'a>, to: Token<'a> },
 }
 
-impl<'a> Condition<'a> {
-    /// This method can return two operations in case it must express
-    /// an OR operation for the between case (i.e. `TO`).
-    pub fn negate(self) -> (Self, Option<Self>) {
-        match self {
-            GreaterThan(n) => (LowerThanOrEqual(n), None),
-            GreaterThanOrEqual(n) => (LowerThan(n), None),
-            Equal(s) => (NotEqual(s), None),
-            NotEqual(s) => (Equal(s), None),
-            Exists => (NotExists, None),
-            NotExists => (Exists, None),
-            LowerThan(n) => (GreaterThanOrEqual(n), None),
-            LowerThanOrEqual(n) => (GreaterThan(n), None),
-            Between { from, to } => (LowerThan(from), Some(GreaterThan(to))),
-        }
-    }
-}
-/// condition      = value ("=" | "!=" | ">" | ">=" | "<" | "<=") value
+/// condition      = value ("==" | ">" ...) value
 pub fn parse_condition(input: Span) -> IResult<FilterCondition> {
     let operator = alt((tag("<="), tag(">="), tag("!="), tag("<"), tag(">"), tag("=")));
     let (input, (fid, op, value)) = tuple((parse_value, operator, cut(parse_value)))(input)?;
@@ -73,7 +55,10 @@ pub fn parse_not_exists(input: Span) -> IResult<FilterCondition> {
     let (input, key) = parse_value(input)?;
 
     let (input, _) = tuple((tag("NOT"), multispace1, tag("EXISTS")))(input)?;
-    Ok((input, FilterCondition::Condition { fid: key.into(), op: NotExists }))
+    Ok((
+        input,
+        FilterCondition::Not(Box::new(FilterCondition::Condition { fid: key.into(), op: Exists })),
+    ))
 }
 
 /// to             = value value "TO" WS+ value

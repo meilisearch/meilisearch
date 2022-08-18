@@ -49,17 +49,28 @@ pub struct Error<'a> {
 }
 
 #[derive(Debug)]
+pub enum ExpectedValueKind {
+    ReservedKeyword,
+    Other,
+}
+
+#[derive(Debug)]
 pub enum ErrorKind<'a> {
     ReservedGeo(&'a str),
     Geo,
     MisusedGeo,
     InvalidPrimary,
     ExpectedEof,
-    ExpectedValue,
+    ExpectedValue(ExpectedValueKind),
     MalformedValue,
+    InOpeningBracket,
+    InClosingBracket,
+    InExpectedValue(ExpectedValueKind),
+    ReservedKeyword(String),
     MissingClosingDelimiter(char),
     Char(char),
     InternalError(error::ErrorKind),
+    DepthLimitReached,
     External(String),
 }
 
@@ -109,23 +120,25 @@ impl<'a> ParseError<Span<'a>> for Error<'a> {
 impl<'a> Display for Error<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let input = self.context.fragment();
-
         // When printing our error message we want to escape all `\n` to be sure we keep our format with the
         // first line being the diagnostic and the second line being the incriminated filter.
         let escaped_input = input.escape_debug();
 
-        match self.kind {
-            ErrorKind::ExpectedValue if input.trim().is_empty() => {
+        match &self.kind {
+            ErrorKind::ExpectedValue(_) if input.trim().is_empty() => {
                 writeln!(f, "Was expecting a value but instead got nothing.")?
+            }
+            ErrorKind::ExpectedValue(ExpectedValueKind::ReservedKeyword) => {
+                writeln!(f, "Was expecting a value but instead got `{escaped_input}`, which is a reserved keyword. To use `{escaped_input}` as a field name or a value, surround it by quotes.")?
+            }
+            ErrorKind::ExpectedValue(ExpectedValueKind::Other) => {
+                writeln!(f, "Was expecting a value but instead got `{}`.", escaped_input)?
             }
             ErrorKind::MalformedValue => {
                 writeln!(f, "Malformed value: `{}`.", escaped_input)?
             }
             ErrorKind::MissingClosingDelimiter(c) => {
                 writeln!(f, "Expression `{}` is missing the following closing delimiter: `{}`.", escaped_input, c)?
-            }
-            ErrorKind::ExpectedValue => {
-                writeln!(f, "Was expecting a value but instead got `{}`.", escaped_input)?
             }
             ErrorKind::InvalidPrimary if input.trim().is_empty() => {
                 writeln!(f, "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` but instead got nothing.")?
@@ -145,9 +158,28 @@ impl<'a> Display for Error<'a> {
             ErrorKind::MisusedGeo => {
                 writeln!(f, "The `_geoRadius` filter is an operation and can't be used as a value.")?
             }
+            ErrorKind::ReservedKeyword(word) => {
+                writeln!(f, "`{word}` is a reserved keyword and thus cannot be used as a field name unless it is put inside quotes. Use \"{word}\" or \'{word}\' instead.")?
+            }
+            ErrorKind::InOpeningBracket => {
+                writeln!(f, "Expected `[` after `IN` keyword.")?
+            }
+            ErrorKind::InClosingBracket => {
+                writeln!(f, "Expected matching `]` after the list of field names given to `IN[`")?
+            }
+            ErrorKind::InExpectedValue(ExpectedValueKind::ReservedKeyword) => {
+                writeln!(f, "Expected only comma-separated field names inside `IN[..]` but instead found `{escaped_input}`, which is a keyword. To use `{escaped_input}` as a field name or a value, surround it by quotes.")?
+            }
+            ErrorKind::InExpectedValue(ExpectedValueKind::Other) => {
+                writeln!(f, "Expected only comma-separated field names inside `IN[..]` but instead found `{escaped_input}`.")?
+            }
             ErrorKind::Char(c) => {
                 panic!("Tried to display a char error with `{}`", c)
             }
+            ErrorKind::DepthLimitReached => writeln!(
+                f,
+                "The filter exceeded the maximum depth limit. Try rewriting the filter so that it contains fewer nested conditions."
+            )?,
             ErrorKind::InternalError(kind) => writeln!(
                 f,
                 "Encountered an internal `{:?}` error while parsing your filter. Please fill an issue", kind
