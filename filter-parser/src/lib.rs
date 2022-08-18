@@ -267,7 +267,10 @@ fn parse_and(input: Span) -> IResult<FilterCondition> {
 /// If we parse a `NOT` we MUST parse something behind.
 fn parse_not(input: Span) -> IResult<FilterCondition> {
     alt((
-        map(preceded(ws(word_exact("NOT")), cut(parse_not)), |e| FilterCondition::Not(Box::new(e))),
+        map(preceded(ws(word_exact("NOT")), cut(parse_not)), |e| match e {
+            FilterCondition::Not(e) => *e,
+            _ => FilterCondition::Not(Box::new(e)),
+        }),
         parse_primary,
     ))(input)
 }
@@ -429,9 +432,13 @@ pub mod tests {
         insta::assert_display_snapshot!(p!("NOT subscribers < 1000"), @"NOT ({subscribers} < {1000})");
         insta::assert_display_snapshot!(p!("NOT subscribers EXISTS"), @"NOT ({subscribers} EXISTS)");
         insta::assert_display_snapshot!(p!("subscribers NOT EXISTS"), @"NOT ({subscribers} EXISTS)");
-        insta::assert_display_snapshot!(p!("NOT subscribers NOT EXISTS"), @"NOT (NOT ({subscribers} EXISTS))");
+        insta::assert_display_snapshot!(p!("NOT subscribers NOT EXISTS"), @"{subscribers} EXISTS");
         insta::assert_display_snapshot!(p!("subscribers NOT   EXISTS"), @"NOT ({subscribers} EXISTS)");
         insta::assert_display_snapshot!(p!("NOT subscribers 100 TO 1000"), @"NOT ({subscribers} {100} TO {1000})");
+
+        // Test nested NOT
+        insta::assert_display_snapshot!(p!("NOT NOT NOT NOT x = 5"), @"{x} = {5}");
+        insta::assert_display_snapshot!(p!("NOT NOT (NOT NOT x = 5)"), @"{x} = {5}");
 
         // Test geo radius
         insta::assert_display_snapshot!(p!("_geoRadius(12, 13, 14)"), @"_geoRadius({12}, {13}, {14})");
