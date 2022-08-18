@@ -180,9 +180,8 @@ fn parse_value_list<'a>(input: Span<'a>) -> IResult<Vec<Token<'a>>> {
     }
 }
 
-/// in = value "IN" "[" value_list "]"
-fn parse_in(input: Span) -> IResult<FilterCondition> {
-    let (input, value) = parse_value(input)?;
+/// "IN" "[" value_list "]"
+fn parse_in_body(input: Span) -> IResult<Vec<Token>> {
     let (input, _) = ws(word_exact("IN"))(input)?;
 
     // everything after `IN` can be a failure
@@ -194,7 +193,7 @@ fn parse_in(input: Span) -> IResult<FilterCondition> {
     let (input, content) = cut(parse_value_list)(input)?;
 
     // everything after `IN` can be a failure
-    let (input, _) = cut_with_err(tag("]"), |_| {
+    let (input, _) = cut_with_err(ws(tag("]")), |_| {
         if eof::<_, ()>(input).is_ok() {
             Error::new_from_kind(input, ErrorKind::InClosingBracket)
         } else {
@@ -209,28 +208,23 @@ fn parse_in(input: Span) -> IResult<FilterCondition> {
         }
     })(input)?;
 
+    Ok((input, content))
+}
+
+/// in = value "IN" "[" value_list "]"
+fn parse_in(input: Span) -> IResult<FilterCondition> {
+    let (input, value) = parse_value(input)?;
+    let (input, content) = parse_in_body(input)?;
+
     let filter = FilterCondition::In { fid: value, els: content };
     Ok((input, filter))
 }
+
 /// in = value "NOT" WS* "IN" "[" value_list "]"
 fn parse_not_in(input: Span) -> IResult<FilterCondition> {
     let (input, value) = parse_value(input)?;
     let (input, _) = word_exact("NOT")(input)?;
-    let (input, _) = ws(word_exact("IN"))(input)?;
-
-    // everything after `IN` can be a failure
-    let (input, _) =
-        cut_with_err(tag("["), |_| Error::new_from_kind(input, ErrorKind::InOpeningBracket))(
-            input,
-        )?;
-
-    let (input, content) = cut(parse_value_list)(input)?;
-
-    // everything after `IN` can be a failure
-    let (input, _) =
-        cut_with_err(tag("]"), |_| Error::new_from_kind(input, ErrorKind::InClosingBracket))(
-            input,
-        )?;
+    let (input, content) = parse_in_body(input)?;
 
     let filter = FilterCondition::Not(Box::new(FilterCondition::In { fid: value, els: content }));
     Ok((input, filter))
@@ -355,9 +349,6 @@ fn parse_primary(input: Span) -> IResult<FilterCondition> {
     ))(input)
     // if the inner parsers did not match enough information to return an accurate error
     .map_err(|e| e.map_err(|_| Error::new_from_kind(input, ErrorKind::InvalidPrimary)))
-
-    // TODO: if the filter starts with a reserved keyword that is not NOT, then we should return the reserved keyword error
-    // TODO: if the filter is x = reserved, idem
 }
 
 /// expression     = or
@@ -410,6 +401,18 @@ pub mod tests {
         insta::assert_display_snapshot!(p!("colour IN[green,]"), @"{colour} IN[{green}, ]");
         insta::assert_display_snapshot!(p!("colour NOT IN[green,blue]"), @"NOT ({colour} IN[{green}, {blue}, ])");
         insta::assert_display_snapshot!(p!(" colour IN [  green , blue , ]"), @"{colour} IN[{green}, {blue}, ]");
+
+        // Test IN + OR/AND/()
+        insta::assert_display_snapshot!(p!(" colour IN [green, blue]  AND color = green "), @"AND[{colour} IN[{green}, {blue}, ], {color} = {green}, ]");
+        insta::assert_display_snapshot!(p!("NOT (colour IN [green, blue])  AND color = green "), @"AND[NOT ({colour} IN[{green}, {blue}, ]), {color} = {green}, ]");
+        insta::assert_display_snapshot!(p!("x = 1 OR NOT (colour IN [green, blue]  OR color = green) "), @"OR[{x} = {1}, NOT (OR[{colour} IN[{green}, {blue}, ], {color} = {green}, ]), ]");
+
+        // Test whitespace start/end
+        insta::assert_display_snapshot!(p!(" colour = green "), @"{colour} = {green}");
+        insta::assert_display_snapshot!(p!(" (colour = green OR colour = red) "), @"OR[{colour} = {green}, {colour} = {red}, ]");
+        insta::assert_display_snapshot!(p!(" colour IN [green, blue]  AND color = green "), @"AND[{colour} IN[{green}, {blue}, ], {color} = {green}, ]");
+        insta::assert_display_snapshot!(p!(" colour NOT  IN [green, blue] "), @"NOT ({colour} IN[{green}, {blue}, ])");
+        insta::assert_display_snapshot!(p!(" colour IN [green, blue] "), @"{colour} IN[{green}, {blue}, ]");
 
         // Test conditions
         insta::assert_display_snapshot!(p!("channel != ponce"), @"{channel} != {ponce}");
