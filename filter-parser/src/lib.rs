@@ -401,90 +401,88 @@ pub mod tests {
     fn parse() {
         use FilterCondition as Fc;
 
-        macro_rules! p {
-            ($s:literal) => {
-                Fc::parse($s).unwrap().unwrap()
-            };
+        fn p(s: &str) -> impl std::fmt::Display {
+            Fc::parse(s).unwrap().unwrap()
         }
 
         // Test equal
-        insta::assert_display_snapshot!(p!("channel = Ponce"), @"{channel} = {Ponce}");
-        insta::assert_display_snapshot!(p!("subscribers = 12"), @"{subscribers} = {12}");
-        insta::assert_display_snapshot!(p!("channel = 'Mister Mv'"), @"{channel} = {Mister Mv}");
-        insta::assert_display_snapshot!(p!("channel = \"Mister Mv\""), @"{channel} = {Mister Mv}");
-        insta::assert_display_snapshot!(p!("'dog race' = Borzoi"), @"{dog race} = {Borzoi}");
-        insta::assert_display_snapshot!(p!("\"dog race\" = Chusky"), @"{dog race} = {Chusky}");
-        insta::assert_display_snapshot!(p!("\"dog race\" = \"Bernese Mountain\""), @"{dog race} = {Bernese Mountain}");
-        insta::assert_display_snapshot!(p!("'dog race' = 'Bernese Mountain'"), @"{dog race} = {Bernese Mountain}");
-        insta::assert_display_snapshot!(p!("\"dog race\" = 'Bernese Mountain'"), @"{dog race} = {Bernese Mountain}");
+        insta::assert_display_snapshot!(p("channel = Ponce"), @"{channel} = {Ponce}");
+        insta::assert_display_snapshot!(p("subscribers = 12"), @"{subscribers} = {12}");
+        insta::assert_display_snapshot!(p("channel = 'Mister Mv'"), @"{channel} = {Mister Mv}");
+        insta::assert_display_snapshot!(p("channel = \"Mister Mv\""), @"{channel} = {Mister Mv}");
+        insta::assert_display_snapshot!(p("'dog race' = Borzoi"), @"{dog race} = {Borzoi}");
+        insta::assert_display_snapshot!(p("\"dog race\" = Chusky"), @"{dog race} = {Chusky}");
+        insta::assert_display_snapshot!(p("\"dog race\" = \"Bernese Mountain\""), @"{dog race} = {Bernese Mountain}");
+        insta::assert_display_snapshot!(p("'dog race' = 'Bernese Mountain'"), @"{dog race} = {Bernese Mountain}");
+        insta::assert_display_snapshot!(p("\"dog race\" = 'Bernese Mountain'"), @"{dog race} = {Bernese Mountain}");
 
         // Test IN
-        insta::assert_display_snapshot!(p!("colour IN[]"), @"{colour} IN[]");
-        insta::assert_display_snapshot!(p!("colour IN[green]"), @"{colour} IN[{green}, ]");
-        insta::assert_display_snapshot!(p!("colour IN[green,]"), @"{colour} IN[{green}, ]");
-        insta::assert_display_snapshot!(p!("colour NOT IN[green,blue]"), @"NOT ({colour} IN[{green}, {blue}, ])");
-        insta::assert_display_snapshot!(p!(" colour IN [  green , blue , ]"), @"{colour} IN[{green}, {blue}, ]");
+        insta::assert_display_snapshot!(p("colour IN[]"), @"{colour} IN[]");
+        insta::assert_display_snapshot!(p("colour IN[green]"), @"{colour} IN[{green}, ]");
+        insta::assert_display_snapshot!(p("colour IN[green,]"), @"{colour} IN[{green}, ]");
+        insta::assert_display_snapshot!(p("colour NOT IN[green,blue]"), @"NOT ({colour} IN[{green}, {blue}, ])");
+        insta::assert_display_snapshot!(p(" colour IN [  green , blue , ]"), @"{colour} IN[{green}, {blue}, ]");
 
         // Test IN + OR/AND/()
-        insta::assert_display_snapshot!(p!(" colour IN [green, blue]  AND color = green "), @"AND[{colour} IN[{green}, {blue}, ], {color} = {green}, ]");
-        insta::assert_display_snapshot!(p!("NOT (colour IN [green, blue])  AND color = green "), @"AND[NOT ({colour} IN[{green}, {blue}, ]), {color} = {green}, ]");
-        insta::assert_display_snapshot!(p!("x = 1 OR NOT (colour IN [green, blue]  OR color = green) "), @"OR[{x} = {1}, NOT (OR[{colour} IN[{green}, {blue}, ], {color} = {green}, ]), ]");
+        insta::assert_display_snapshot!(p(" colour IN [green, blue]  AND color = green "), @"AND[{colour} IN[{green}, {blue}, ], {color} = {green}, ]");
+        insta::assert_display_snapshot!(p("NOT (colour IN [green, blue])  AND color = green "), @"AND[NOT ({colour} IN[{green}, {blue}, ]), {color} = {green}, ]");
+        insta::assert_display_snapshot!(p("x = 1 OR NOT (colour IN [green, blue]  OR color = green) "), @"OR[{x} = {1}, NOT (OR[{colour} IN[{green}, {blue}, ], {color} = {green}, ]), ]");
 
         // Test whitespace start/end
-        insta::assert_display_snapshot!(p!(" colour = green "), @"{colour} = {green}");
-        insta::assert_display_snapshot!(p!(" (colour = green OR colour = red) "), @"OR[{colour} = {green}, {colour} = {red}, ]");
-        insta::assert_display_snapshot!(p!(" colour IN [green, blue]  AND color = green "), @"AND[{colour} IN[{green}, {blue}, ], {color} = {green}, ]");
-        insta::assert_display_snapshot!(p!(" colour NOT  IN [green, blue] "), @"NOT ({colour} IN[{green}, {blue}, ])");
-        insta::assert_display_snapshot!(p!(" colour IN [green, blue] "), @"{colour} IN[{green}, {blue}, ]");
+        insta::assert_display_snapshot!(p(" colour = green "), @"{colour} = {green}");
+        insta::assert_display_snapshot!(p(" (colour = green OR colour = red) "), @"OR[{colour} = {green}, {colour} = {red}, ]");
+        insta::assert_display_snapshot!(p(" colour IN [green, blue]  AND color = green "), @"AND[{colour} IN[{green}, {blue}, ], {color} = {green}, ]");
+        insta::assert_display_snapshot!(p(" colour NOT  IN [green, blue] "), @"NOT ({colour} IN[{green}, {blue}, ])");
+        insta::assert_display_snapshot!(p(" colour IN [green, blue] "), @"{colour} IN[{green}, {blue}, ]");
 
         // Test conditions
-        insta::assert_display_snapshot!(p!("channel != ponce"), @"{channel} != {ponce}");
-        insta::assert_display_snapshot!(p!("NOT channel = ponce"), @"NOT ({channel} = {ponce})");
-        insta::assert_display_snapshot!(p!("subscribers < 1000"), @"{subscribers} < {1000}");
-        insta::assert_display_snapshot!(p!("subscribers > 1000"), @"{subscribers} > {1000}");
-        insta::assert_display_snapshot!(p!("subscribers <= 1000"), @"{subscribers} <= {1000}");
-        insta::assert_display_snapshot!(p!("subscribers >= 1000"), @"{subscribers} >= {1000}");
-        insta::assert_display_snapshot!(p!("subscribers <= 1000"), @"{subscribers} <= {1000}");
-        insta::assert_display_snapshot!(p!("subscribers 100 TO 1000"), @"{subscribers} {100} TO {1000}");
+        insta::assert_display_snapshot!(p("channel != ponce"), @"{channel} != {ponce}");
+        insta::assert_display_snapshot!(p("NOT channel = ponce"), @"NOT ({channel} = {ponce})");
+        insta::assert_display_snapshot!(p("subscribers < 1000"), @"{subscribers} < {1000}");
+        insta::assert_display_snapshot!(p("subscribers > 1000"), @"{subscribers} > {1000}");
+        insta::assert_display_snapshot!(p("subscribers <= 1000"), @"{subscribers} <= {1000}");
+        insta::assert_display_snapshot!(p("subscribers >= 1000"), @"{subscribers} >= {1000}");
+        insta::assert_display_snapshot!(p("subscribers <= 1000"), @"{subscribers} <= {1000}");
+        insta::assert_display_snapshot!(p("subscribers 100 TO 1000"), @"{subscribers} {100} TO {1000}");
 
         // Test NOT + EXISTS
-        insta::assert_display_snapshot!(p!("subscribers EXISTS"), @"{subscribers} EXISTS");
-        insta::assert_display_snapshot!(p!("NOT subscribers < 1000"), @"NOT ({subscribers} < {1000})");
-        insta::assert_display_snapshot!(p!("NOT subscribers EXISTS"), @"NOT ({subscribers} EXISTS)");
-        insta::assert_display_snapshot!(p!("subscribers NOT EXISTS"), @"NOT ({subscribers} EXISTS)");
-        insta::assert_display_snapshot!(p!("NOT subscribers NOT EXISTS"), @"{subscribers} EXISTS");
-        insta::assert_display_snapshot!(p!("subscribers NOT   EXISTS"), @"NOT ({subscribers} EXISTS)");
-        insta::assert_display_snapshot!(p!("NOT subscribers 100 TO 1000"), @"NOT ({subscribers} {100} TO {1000})");
+        insta::assert_display_snapshot!(p("subscribers EXISTS"), @"{subscribers} EXISTS");
+        insta::assert_display_snapshot!(p("NOT subscribers < 1000"), @"NOT ({subscribers} < {1000})");
+        insta::assert_display_snapshot!(p("NOT subscribers EXISTS"), @"NOT ({subscribers} EXISTS)");
+        insta::assert_display_snapshot!(p("subscribers NOT EXISTS"), @"NOT ({subscribers} EXISTS)");
+        insta::assert_display_snapshot!(p("NOT subscribers NOT EXISTS"), @"{subscribers} EXISTS");
+        insta::assert_display_snapshot!(p("subscribers NOT   EXISTS"), @"NOT ({subscribers} EXISTS)");
+        insta::assert_display_snapshot!(p("NOT subscribers 100 TO 1000"), @"NOT ({subscribers} {100} TO {1000})");
 
         // Test nested NOT
-        insta::assert_display_snapshot!(p!("NOT NOT NOT NOT x = 5"), @"{x} = {5}");
-        insta::assert_display_snapshot!(p!("NOT NOT (NOT NOT x = 5)"), @"{x} = {5}");
+        insta::assert_display_snapshot!(p("NOT NOT NOT NOT x = 5"), @"{x} = {5}");
+        insta::assert_display_snapshot!(p("NOT NOT (NOT NOT x = 5)"), @"{x} = {5}");
 
         // Test geo radius
-        insta::assert_display_snapshot!(p!("_geoRadius(12, 13, 14)"), @"_geoRadius({12}, {13}, {14})");
-        insta::assert_display_snapshot!(p!("NOT _geoRadius(12, 13, 14)"), @"NOT (_geoRadius({12}, {13}, {14}))");
+        insta::assert_display_snapshot!(p("_geoRadius(12, 13, 14)"), @"_geoRadius({12}, {13}, {14})");
+        insta::assert_display_snapshot!(p("NOT _geoRadius(12, 13, 14)"), @"NOT (_geoRadius({12}, {13}, {14}))");
 
         // Test OR + AND
-        insta::assert_display_snapshot!(p!("channel = ponce AND 'dog race' != 'bernese mountain'"), @"AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ]");
-        insta::assert_display_snapshot!(p!("channel = ponce OR 'dog race' != 'bernese mountain'"), @"OR[{channel} = {ponce}, {dog race} != {bernese mountain}, ]");
-        insta::assert_display_snapshot!(p!("channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000"), @"OR[AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ], {subscribers} > {1000}, ]");
+        insta::assert_display_snapshot!(p("channel = ponce AND 'dog race' != 'bernese mountain'"), @"AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ]");
+        insta::assert_display_snapshot!(p("channel = ponce OR 'dog race' != 'bernese mountain'"), @"OR[{channel} = {ponce}, {dog race} != {bernese mountain}, ]");
+        insta::assert_display_snapshot!(p("channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000"), @"OR[AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ], {subscribers} > {1000}, ]");
         insta::assert_display_snapshot!(
-        p!("channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000 OR colour = red OR colour = blue AND size = 7"),
+        p("channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000 OR colour = red OR colour = blue AND size = 7"),
         @"OR[AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ], {subscribers} > {1000}, {colour} = {red}, AND[{colour} = {blue}, {size} = {7}, ], ]"
         );
 
         // Test parentheses
-        insta::assert_display_snapshot!(p!("channel = ponce AND ( 'dog race' != 'bernese mountain' OR subscribers > 1000 )"), @"AND[{channel} = {ponce}, OR[{dog race} != {bernese mountain}, {subscribers} > {1000}, ], ]");
-        insta::assert_display_snapshot!(p!("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000) AND _geoRadius(12, 13, 14)"), @"AND[OR[AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ], {subscribers} > {1000}, ], _geoRadius({12}, {13}, {14}), ]");
+        insta::assert_display_snapshot!(p("channel = ponce AND ( 'dog race' != 'bernese mountain' OR subscribers > 1000 )"), @"AND[{channel} = {ponce}, OR[{dog race} != {bernese mountain}, {subscribers} > {1000}, ], ]");
+        insta::assert_display_snapshot!(p("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000) AND _geoRadius(12, 13, 14)"), @"AND[OR[AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ], {subscribers} > {1000}, ], _geoRadius({12}, {13}, {14}), ]");
 
         // Test recursion
         // This is the most that is allowed
         insta::assert_display_snapshot!(
-            p!("(((((((((((((((((((((((((((((((((((((((((((((((((x = 1)))))))))))))))))))))))))))))))))))))))))))))))))"),
+            p("(((((((((((((((((((((((((((((((((((((((((((((((((x = 1)))))))))))))))))))))))))))))))))))))))))))))))))"),
             @"{x} = {1}"
         );
         insta::assert_display_snapshot!(
-            p!("NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1"),
+            p("NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1"),
             @"NOT ({x} = {1})"
         );
 
@@ -496,161 +494,159 @@ pub mod tests {
     fn error() {
         use FilterCondition as Fc;
 
-        macro_rules! p {
-            ($s:literal) => {
-                Fc::parse($s).unwrap_err().to_string()
-            };
+        fn p(s: &str) -> impl std::fmt::Display {
+            Fc::parse(s).unwrap_err().to_string()
         }
 
-        insta::assert_display_snapshot!(p!("channel = Ponce = 12"), @r###"
+        insta::assert_display_snapshot!(p("channel = Ponce = 12"), @r###"
         Found unexpected characters at the end of the filter: `= 12`. You probably forgot an `OR` or an `AND` rule.
         17:21 channel = Ponce = 12
         "###);
 
-        insta::assert_display_snapshot!(p!("channel =    "), @r###"
+        insta::assert_display_snapshot!(p("channel =    "), @r###"
         Was expecting a value but instead got nothing.
         14:14 channel =    
         "###);
 
-        insta::assert_display_snapshot!(p!("channel = 🐻"), @r###"
+        insta::assert_display_snapshot!(p("channel = 🐻"), @r###"
         Was expecting a value but instead got `🐻`.
         11:12 channel = 🐻
         "###);
 
-        insta::assert_display_snapshot!(p!("channel = 🐻 AND followers < 100"), @r###"
+        insta::assert_display_snapshot!(p("channel = 🐻 AND followers < 100"), @r###"
         Was expecting a value but instead got `🐻`.
         11:12 channel = 🐻 AND followers < 100
         "###);
 
-        insta::assert_display_snapshot!(p!("'OR'"), @r###"
+        insta::assert_display_snapshot!(p("'OR'"), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `\'OR\'`.
         1:5 'OR'
         "###);
 
-        insta::assert_display_snapshot!(p!("OR"), @r###"
+        insta::assert_display_snapshot!(p("OR"), @r###"
         Was expecting a value but instead got `OR`, which is a reserved keyword. To use `OR` as a field name or a value, surround it by quotes.
         1:3 OR
         "###);
 
-        insta::assert_display_snapshot!(p!("channel Ponce"), @r###"
+        insta::assert_display_snapshot!(p("channel Ponce"), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `channel Ponce`.
         1:14 channel Ponce
         "###);
 
-        insta::assert_display_snapshot!(p!("channel = Ponce OR"), @r###"
+        insta::assert_display_snapshot!(p("channel = Ponce OR"), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` but instead got nothing.
         19:19 channel = Ponce OR
         "###);
 
-        insta::assert_display_snapshot!(p!("_geoRadius"), @r###"
+        insta::assert_display_snapshot!(p("_geoRadius"), @r###"
         The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`.
         1:11 _geoRadius
         "###);
 
-        insta::assert_display_snapshot!(p!("_geoRadius = 12"), @r###"
+        insta::assert_display_snapshot!(p("_geoRadius = 12"), @r###"
         The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`.
         1:16 _geoRadius = 12
         "###);
 
-        insta::assert_display_snapshot!(p!("_geoPoint(12, 13, 14)"), @r###"
+        insta::assert_display_snapshot!(p("_geoPoint(12, 13, 14)"), @r###"
         `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance) built-in rule to filter on `_geo` coordinates.
         1:22 _geoPoint(12, 13, 14)
         "###);
 
-        insta::assert_display_snapshot!(p!("position <= _geoPoint(12, 13, 14)"), @r###"
+        insta::assert_display_snapshot!(p("position <= _geoPoint(12, 13, 14)"), @r###"
         `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance) built-in rule to filter on `_geo` coordinates.
         13:34 position <= _geoPoint(12, 13, 14)
         "###);
 
-        insta::assert_display_snapshot!(p!("position <= _geoRadius(12, 13, 14)"), @r###"
+        insta::assert_display_snapshot!(p("position <= _geoRadius(12, 13, 14)"), @r###"
         The `_geoRadius` filter is an operation and can't be used as a value.
         13:35 position <= _geoRadius(12, 13, 14)
         "###);
 
-        insta::assert_display_snapshot!(p!("channel = 'ponce"), @r###"
+        insta::assert_display_snapshot!(p("channel = 'ponce"), @r###"
         Expression `\'ponce` is missing the following closing delimiter: `'`.
         11:17 channel = 'ponce
         "###);
 
-        insta::assert_display_snapshot!(p!("channel = \"ponce"), @r###"
+        insta::assert_display_snapshot!(p("channel = \"ponce"), @r###"
         Expression `\"ponce` is missing the following closing delimiter: `"`.
         11:17 channel = "ponce
         "###);
 
-        insta::assert_display_snapshot!(p!("channel = mv OR (followers >= 1000"), @r###"
+        insta::assert_display_snapshot!(p("channel = mv OR (followers >= 1000"), @r###"
         Expression `(followers >= 1000` is missing the following closing delimiter: `)`.
         17:35 channel = mv OR (followers >= 1000
         "###);
 
-        insta::assert_display_snapshot!(p!("channel = mv OR followers >= 1000)"), @r###"
+        insta::assert_display_snapshot!(p("channel = mv OR followers >= 1000)"), @r###"
         Found unexpected characters at the end of the filter: `)`. You probably forgot an `OR` or an `AND` rule.
         34:35 channel = mv OR followers >= 1000)
         "###);
 
-        insta::assert_display_snapshot!(p!("colour NOT EXIST"), @r###"
+        insta::assert_display_snapshot!(p("colour NOT EXIST"), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `colour NOT EXIST`.
         1:17 colour NOT EXIST
         "###);
 
-        insta::assert_display_snapshot!(p!("subscribers 100 TO1000"), @r###"
+        insta::assert_display_snapshot!(p("subscribers 100 TO1000"), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `subscribers 100 TO1000`.
         1:23 subscribers 100 TO1000
         "###);
 
-        insta::assert_display_snapshot!(p!("channel = ponce ORdog != 'bernese mountain'"), @r###"
+        insta::assert_display_snapshot!(p("channel = ponce ORdog != 'bernese mountain'"), @r###"
         Found unexpected characters at the end of the filter: `ORdog != \'bernese mountain\'`. You probably forgot an `OR` or an `AND` rule.
         17:44 channel = ponce ORdog != 'bernese mountain'
         "###);
 
-        insta::assert_display_snapshot!(p!("colour IN blue, green]"), @r###"
+        insta::assert_display_snapshot!(p("colour IN blue, green]"), @r###"
         Expected `[` after `IN` keyword.
         11:23 colour IN blue, green]
         "###);
 
-        insta::assert_display_snapshot!(p!("colour IN [blue, green, 'blue' > 2]"), @r###"
+        insta::assert_display_snapshot!(p("colour IN [blue, green, 'blue' > 2]"), @r###"
         Expected only comma-separated field names inside `IN[..]` but instead found `> 2]`.
         32:36 colour IN [blue, green, 'blue' > 2]
         "###);
 
-        insta::assert_display_snapshot!(p!("colour IN [blue, green, AND]"), @r###"
+        insta::assert_display_snapshot!(p("colour IN [blue, green, AND]"), @r###"
         Expected only comma-separated field names inside `IN[..]` but instead found `AND]`.
         25:29 colour IN [blue, green, AND]
         "###);
 
-        insta::assert_display_snapshot!(p!("colour IN [blue, green"), @r###"
+        insta::assert_display_snapshot!(p("colour IN [blue, green"), @r###"
         Expected matching `]` after the list of field names given to `IN[`
         23:23 colour IN [blue, green
         "###);
 
-        insta::assert_display_snapshot!(p!("colour IN ['blue, green"), @r###"
+        insta::assert_display_snapshot!(p("colour IN ['blue, green"), @r###"
         Expression `\'blue, green` is missing the following closing delimiter: `'`.
         12:24 colour IN ['blue, green
         "###);
 
-        insta::assert_display_snapshot!(p!("x = EXISTS"), @r###"
+        insta::assert_display_snapshot!(p("x = EXISTS"), @r###"
         Was expecting a value but instead got `EXISTS`, which is a reserved keyword. To use `EXISTS` as a field name or a value, surround it by quotes.
         5:11 x = EXISTS
         "###);
 
-        insta::assert_display_snapshot!(p!("AND = 8"), @r###"
+        insta::assert_display_snapshot!(p("AND = 8"), @r###"
         Was expecting a value but instead got `AND`, which is a reserved keyword. To use `AND` as a field name or a value, surround it by quotes.
         1:4 AND = 8
         "###);
 
-        insta::assert_display_snapshot!(p!("((((((((((((((((((((((((((((((((((((((((((((((((((x = 1))))))))))))))))))))))))))))))))))))))))))))))))))"), @r###"
+        insta::assert_display_snapshot!(p("((((((((((((((((((((((((((((((((((((((((((((((((((x = 1))))))))))))))))))))))))))))))))))))))))))))))))))"), @r###"
         The filter exceeded the maximum depth limit. Try rewriting the filter so that it contains fewer nested conditions.
         51:106 ((((((((((((((((((((((((((((((((((((((((((((((((((x = 1))))))))))))))))))))))))))))))))))))))))))))))))))
         "###);
 
         insta::assert_display_snapshot!(
-            p!("NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1"),
+            p("NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1"),
             @r###"
         The filter exceeded the maximum depth limit. Try rewriting the filter so that it contains fewer nested conditions.
         797:802 NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1
         "###
         );
 
-        insta::assert_display_snapshot!(p!(r#"NOT OR EXISTS AND EXISTS NOT EXISTS"#), @r###"
+        insta::assert_display_snapshot!(p(r#"NOT OR EXISTS AND EXISTS NOT EXISTS"#), @r###"
         Was expecting a value but instead got `OR`, which is a reserved keyword. To use `OR` as a field name or a value, surround it by quotes.
         5:7 NOT OR EXISTS AND EXISTS NOT EXISTS
         "###);
