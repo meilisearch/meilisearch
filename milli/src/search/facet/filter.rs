@@ -361,10 +361,7 @@ impl<'a> Filter<'a> {
                 return Ok(all_ids - selected);
             }
             FilterCondition::In { fid, els } => {
-                // TODO: this could be optimised
-                let filterable_fields = index.filterable_fields(rtxn)?;
-
-                if crate::is_faceted(fid.value(), &filterable_fields) {
+                if crate::is_faceted(fid.value(), filterable_fields) {
                     let field_ids_map = index.fields_ids_map(rtxn)?;
 
                     if let Some(fid) = field_ids_map.id(fid.value()) {
@@ -382,7 +379,7 @@ impl<'a> Filter<'a> {
                 } else {
                     return Err(fid.as_external_error(FilterError::AttributeNotFilterable {
                         attribute: fid.value(),
-                        filterable_fields,
+                        filterable_fields: filterable_fields.clone(),
                     }))?;
                 }
             }
