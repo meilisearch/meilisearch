@@ -4,15 +4,12 @@ use std::str::FromStr;
 use std::write;
 
 use meilisearch_lib::index::{Settings, Unchecked};
-use meilisearch_lib::tasks::batch::BatchId;
 use meilisearch_lib::tasks::task::{
     DocumentDeletion, Task, TaskContent, TaskEvent, TaskId, TaskResult,
 };
 use meilisearch_types::error::ResponseError;
 use serde::{Deserialize, Serialize, Serializer};
 use time::{Duration, OffsetDateTime};
-
-use crate::AUTOBATCHING_ENABLED;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -230,8 +227,6 @@ pub struct TaskView {
     started_at: Option<OffsetDateTime>,
     #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
     finished_at: Option<OffsetDateTime>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    batch_uid: Option<BatchId>,
 }
 
 impl From<Task> for TaskView {
@@ -380,16 +375,6 @@ impl From<Task> for TaskView {
 
         let duration = finished_at.zip(started_at).map(|(tf, ts)| (tf - ts));
 
-        let batch_uid = AUTOBATCHING_ENABLED
-            .load(std::sync::atomic::Ordering::Relaxed)
-            .then(|| {
-                events.iter().find_map(|e| match e {
-                    TaskEvent::Batched { batch_id, .. } => Some(*batch_id),
-                    _ => None,
-                })
-            })
-            .flatten();
-
         Self {
             uid: id,
             index_uid,
@@ -401,7 +386,6 @@ impl From<Task> for TaskView {
             enqueued_at,
             started_at,
             finished_at,
-            batch_uid,
         }
     }
 }
