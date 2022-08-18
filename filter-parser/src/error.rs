@@ -70,6 +70,7 @@ pub enum ErrorKind<'a> {
     MissingClosingDelimiter(char),
     Char(char),
     InternalError(error::ErrorKind),
+    DepthLimitReached,
     External(String),
 }
 
@@ -176,6 +177,10 @@ impl<'a> Display for Error<'a> {
             ErrorKind::Char(c) => {
                 panic!("Tried to display a char error with `{}`", c)
             }
+            ErrorKind::DepthLimitReached => writeln!(
+                f,
+                "The filter exceeded the maximum depth limit. Try rewriting the filter so that it contains fewer nested conditions."
+            )?,
             ErrorKind::InternalError(kind) => writeln!(
                 f,
                 "Encountered an internal `{:?}` error while parsing your filter. Please fill an issue", kind

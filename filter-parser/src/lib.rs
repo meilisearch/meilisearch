@@ -65,6 +65,8 @@ pub type Span<'a> = LocatedSpan<&'a str, &'a str>;
 
 type IResult<'a, Ret> = nom::IResult<Span<'a>, Ret, Error<'a>>;
 
+const MAX_FILTER_DEPTH: usize = 200;
+
 #[derive(Debug, Clone, Eq)]
 pub struct Token<'a> {
     /// The token in the original input, it should be used when possible.
@@ -231,10 +233,14 @@ fn parse_not_in(input: Span) -> IResult<FilterCondition> {
 }
 
 /// or             = and ("OR" and)
-fn parse_or(input: Span) -> IResult<FilterCondition> {
-    let (input, first_filter) = parse_and(input)?;
+fn parse_or(input: Span, depth: usize) -> IResult<FilterCondition> {
+    if depth > MAX_FILTER_DEPTH {
+        return Err(nom::Err::Error(Error::new_from_kind(input, ErrorKind::DepthLimitReached)));
+    }
+    let (input, first_filter) = parse_and(input, depth + 1)?;
     // if we found a `OR` then we MUST find something next
-    let (input, mut ors) = many0(preceded(ws(word_exact("OR")), cut(parse_and)))(input)?;
+    let (input, mut ors) =
+        many0(preceded(ws(word_exact("OR")), cut(|input| parse_and(input, depth + 1))))(input)?;
 
     let filter = if ors.is_empty() {
         first_filter
@@ -247,10 +253,14 @@ fn parse_or(input: Span) -> IResult<FilterCondition> {
 }
 
 /// and            = not ("AND" not)*
-fn parse_and(input: Span) -> IResult<FilterCondition> {
-    let (input, first_filter) = parse_not(input)?;
+fn parse_and(input: Span, depth: usize) -> IResult<FilterCondition> {
+    if depth > MAX_FILTER_DEPTH {
+        return Err(nom::Err::Error(Error::new_from_kind(input, ErrorKind::DepthLimitReached)));
+    }
+    let (input, first_filter) = parse_not(input, depth + 1)?;
     // if we found a `AND` then we MUST find something next
-    let (input, mut ands) = many0(preceded(ws(word_exact("AND")), cut(parse_not)))(input)?;
+    let (input, mut ands) =
+        many0(preceded(ws(word_exact("AND")), cut(|input| parse_not(input, depth + 1))))(input)?;
 
     let filter = if ands.is_empty() {
         first_filter
@@ -265,13 +275,19 @@ fn parse_and(input: Span) -> IResult<FilterCondition> {
 /// not            = ("NOT" WS+ not) | primary
 /// We can have multiple consecutive not, eg: `NOT NOT channel = mv`.
 /// If we parse a `NOT` we MUST parse something behind.
-fn parse_not(input: Span) -> IResult<FilterCondition> {
+fn parse_not(input: Span, depth: usize) -> IResult<FilterCondition> {
+    if depth > MAX_FILTER_DEPTH {
+        return Err(nom::Err::Error(Error::new_from_kind(input, ErrorKind::DepthLimitReached)));
+    }
     alt((
-        map(preceded(ws(word_exact("NOT")), cut(parse_not)), |e| match e {
-            FilterCondition::Not(e) => *e,
-            _ => FilterCondition::Not(Box::new(e)),
-        }),
-        parse_primary,
+        map(
+            preceded(ws(word_exact("NOT")), cut(|input| parse_not(input, depth + 1))),
+            |e| match e {
+                FilterCondition::Not(e) => *e,
+                _ => FilterCondition::Not(Box::new(e)),
+            },
+        ),
+        |input| parse_primary(input, depth + 1),
     ))(input)
 }
 
@@ -329,12 +345,15 @@ fn parse_error_reserved_keyword(input: Span) -> IResult<FilterCondition> {
 }
 
 /// primary        = (WS* "(" WS* expression WS* ")" WS*) | geoRadius | condition | exists | not_exists | to
-fn parse_primary(input: Span) -> IResult<FilterCondition> {
+fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
+    if depth > MAX_FILTER_DEPTH {
+        return Err(nom::Err::Error(Error::new_from_kind(input, ErrorKind::DepthLimitReached)));
+    }
     alt((
         // if we find a first parenthesis, then we must parse an expression and find the closing parenthesis
         delimited(
             ws(char('(')),
-            cut(parse_expression),
+            cut(|input| parse_expression(input, depth + 1)),
             cut_with_err(ws(char(')')), |c| {
                 Error::new_from_kind(input, ErrorKind::MissingClosingDelimiter(c.char()))
             }),
@@ -355,13 +374,13 @@ fn parse_primary(input: Span) -> IResult<FilterCondition> {
 }
 
 /// expression     = or
-pub fn parse_expression(input: Span) -> IResult<FilterCondition> {
-    parse_or(input)
+pub fn parse_expression(input: Span, depth: usize) -> IResult<FilterCondition> {
+    parse_or(input, depth)
 }
 
 /// filter     = expression EOF
 pub fn parse_filter(input: Span) -> IResult<FilterCondition> {
-    terminated(parse_expression, eof)(input)
+    terminated(|input| parse_expression(input, 0), eof)(input)
 }
 
 #[cfg(test)]
@@ -453,9 +472,20 @@ pub mod tests {
         @"OR[AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ], {subscribers} > {1000}, {colour} = {red}, AND[{colour} = {blue}, {size} = {7}, ], ]"
         );
 
-        // test parentheses
+        // Test parentheses
         insta::assert_display_snapshot!(p!("channel = ponce AND ( 'dog race' != 'bernese mountain' OR subscribers > 1000 )"), @"AND[{channel} = {ponce}, OR[{dog race} != {bernese mountain}, {subscribers} > {1000}, ], ]");
         insta::assert_display_snapshot!(p!("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000) AND _geoRadius(12, 13, 14)"), @"AND[OR[AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ], {subscribers} > {1000}, ], _geoRadius({12}, {13}, {14}), ]");
+
+        // Test recursion
+        // This is the most that is allowed
+        insta::assert_display_snapshot!(
+            p!("(((((((((((((((((((((((((((((((((((((((((((((((((x = 1)))))))))))))))))))))))))))))))))))))))))))))))))"),
+            @"{x} = {1}"
+        );
+        insta::assert_display_snapshot!(
+            p!("NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1"),
+            @"NOT ({x} = {1})"
+        );
     }
 
     #[test]
@@ -602,6 +632,19 @@ pub mod tests {
         Was expecting a value but instead got `AND`, which is a reserved keyword. To use `AND` as a field name or a value, surround it by quotes.
         1:4 AND = 8
         "###);
+
+        insta::assert_display_snapshot!(p!("((((((((((((((((((((((((((((((((((((((((((((((((((x = 1))))))))))))))))))))))))))))))))))))))))))))))))))"), @r###"
+        The filter exceeded the maximum depth limit. Try rewriting the filter so that it contains fewer nested conditions.
+        51:106 ((((((((((((((((((((((((((((((((((((((((((((((((((x = 1))))))))))))))))))))))))))))))))))))))))))))))))))
+        "###);
+
+        insta::assert_display_snapshot!(
+            p!("NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1"),
+            @r###"
+        The filter exceeded the maximum depth limit. Try rewriting the filter so that it contains fewer nested conditions.
+        797:802 NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1
+        "###
+        );
     }
 
     #[test]
