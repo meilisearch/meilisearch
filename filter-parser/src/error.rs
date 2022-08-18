@@ -140,7 +140,6 @@ impl<'a> Display for Error<'a> {
             ErrorKind::MissingClosingDelimiter(c) => {
                 writeln!(f, "Expression `{}` is missing the following closing delimiter: `{}`.", escaped_input, c)?
             }
-            
             ErrorKind::InvalidPrimary if input.trim().is_empty() => {
                 writeln!(f, "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` but instead got nothing.")?
             }

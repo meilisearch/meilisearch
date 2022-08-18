@@ -43,6 +43,9 @@ mod condition;
 mod error;
 mod value;
 
+use std::fmt::Debug;
+use std::str::FromStr;
+
 pub use condition::{parse_condition, parse_to, Condition};
 use condition::{parse_exists, parse_not_exists};
 use error::{cut_with_err, ExpectedValueKind, NomErrorExt};
@@ -56,8 +59,6 @@ use nom::number::complete::recognize_float;
 use nom::sequence::{delimited, preceded, terminated, tuple};
 use nom::Finish;
 use nom_locate::LocatedSpan;
-use std::fmt::Debug;
-use std::str::FromStr;
 pub(crate) use value::parse_value;
 use value::word_exact;
 
@@ -182,7 +183,7 @@ fn parse_value_list<'a>(input: Span<'a>) -> IResult<Vec<Token<'a>>> {
     }
 }
 
-/// "IN" "[" value_list "]"
+/// "IN" WS* "[" value_list "]"
 fn parse_in_body(input: Span) -> IResult<Vec<Token>> {
     let (input, _) = ws(word_exact("IN"))(input)?;
 
