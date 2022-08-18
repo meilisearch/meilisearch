@@ -104,7 +104,7 @@ impl<'a> Filter<'a> {
                     if ors.len() > 1 {
                         ands.push(FilterCondition::Or(ors));
                     } else if ors.len() == 1 {
-                        ands.push(ors[0].clone());
+                        ands.push(ors.pop().unwrap());
                     }
                 }
                 Either::Right(rule) => {
@@ -117,7 +117,7 @@ impl<'a> Filter<'a> {
         let and = if ands.is_empty() {
             return Ok(None);
         } else if ands.len() == 1 {
-            ands[0].clone()
+            ands.pop().unwrap()
         } else {
             FilterCondition::And(ands)
         };
