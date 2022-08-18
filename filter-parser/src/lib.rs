@@ -401,7 +401,7 @@ pub mod tests {
     fn parse() {
         use FilterCondition as Fc;
 
-        fn p(s: &str) -> impl std::fmt::Display {
+        fn p<'a>(s: &'a str) -> impl std::fmt::Display + 'a {
             Fc::parse(s).unwrap().unwrap()
         }
 
@@ -487,14 +487,14 @@ pub mod tests {
         );
 
         // Confusing keywords
-        insta::assert_display_snapshot!(p!(r#"NOT "OR" EXISTS AND "EXISTS" NOT EXISTS"#), @"AND[NOT ({OR} EXISTS), NOT ({EXISTS} EXISTS), ]");
+        insta::assert_display_snapshot!(p(r#"NOT "OR" EXISTS AND "EXISTS" NOT EXISTS"#), @"AND[NOT ({OR} EXISTS), NOT ({EXISTS} EXISTS), ]");
     }
 
     #[test]
     fn error() {
         use FilterCondition as Fc;
 
-        fn p(s: &str) -> impl std::fmt::Display {
+        fn p<'a>(s: &'a str) -> impl std::fmt::Display + 'a {
             Fc::parse(s).unwrap_err().to_string()
         }
 
