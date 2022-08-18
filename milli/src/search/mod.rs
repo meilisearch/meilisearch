@@ -44,7 +44,7 @@ pub struct Search<'a> {
     offset: usize,
     limit: usize,
     sort_criteria: Option<Vec<AscDesc>>,
-    optional_words: bool,
+    optional_words: TermsMatchingStrategy,
     authorize_typos: bool,
     words_limit: usize,
     rtxn: &'a heed::RoTxn<'a>,
@@ -59,7 +59,7 @@ impl<'a> Search<'a> {
             offset: 0,
             limit: 20,
             sort_criteria: None,
-            optional_words: true,
+            optional_words: TermsMatchingStrategy::default(),
             authorize_typos: true,
             words_limit: 10,
             rtxn,
@@ -87,7 +87,7 @@ impl<'a> Search<'a> {
         self
     }
 
-    pub fn optional_words(&mut self, value: bool) -> &mut Search<'a> {
+    pub fn optional_words(&mut self, value: TermsMatchingStrategy) -> &mut Search<'a> {
         self.optional_words = value;
         self
     }
@@ -284,6 +284,28 @@ pub struct SearchResult {
     pub candidates: RoaringBitmap,
     // TODO those documents ids should be associated with their criteria scores.
     pub documents_ids: Vec<DocumentId>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TermsMatchingStrategy {
+    // remove last word first
+    Last,
+    // remove first word first
+    First,
+    // remove more frequent word first
+    Frequency,
+    // remove smallest word first
+    Size,
+    // only one of the word is mandatory
+    Any,
+    // all words are mandatory
+    All,
+}
+
+impl Default for TermsMatchingStrategy {
+    fn default() -> Self {
+        Self::Last
+    }
 }
 
 pub type WordDerivationsCache = HashMap<(String, bool, u8), Vec<(String, u8)>>;

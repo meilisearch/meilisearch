@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cmp::min;
 use std::{cmp, fmt, mem};
 
 use charabia::classifier::ClassifiedTokenIter;
@@ -8,6 +9,7 @@ use roaring::RoaringBitmap;
 use slice_group_by::GroupBy;
 
 use crate::search::matches::matching_words::{MatchingWord, PrimitiveWordId};
+use crate::search::TermsMatchingStrategy;
 use crate::{Index, MatchingWords, Result};
 
 type IsOptionalWord = bool;
@@ -62,6 +64,13 @@ impl Operation {
         if ops.len() == 1 {
             ops.pop().unwrap()
         } else {
+            let ops = ops
+                .into_iter()
+                .flat_map(|o| match o {
+                    Operation::Or(wb, children) if wb == word_branch => children,
+                    op => vec![op],
+                })
+                .collect();
             Self::Or(word_branch, ops)
         }
     }
@@ -153,7 +162,7 @@ trait Context {
 pub struct QueryTreeBuilder<'a> {
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
-    optional_words: bool,
+    optional_words: TermsMatchingStrategy,
     authorize_typos: bool,
     words_limit: Option<usize>,
     exact_words: Option<fst::Set<Cow<'a, [u8]>>>,
@@ -190,7 +199,7 @@ impl<'a> QueryTreeBuilder<'a> {
         Ok(Self {
             rtxn,
             index,
-            optional_words: true,
+            optional_words: TermsMatchingStrategy::default(),
             authorize_typos: true,
             words_limit: None,
             exact_words: index.exact_words(rtxn)?,
@@ -201,7 +210,7 @@ impl<'a> QueryTreeBuilder<'a> {
     /// generated forcing all query words to be present in each matching documents
     /// (the criterion `words` will be ignored).
     /// default value if not called: `true`
-    pub fn optional_words(&mut self, optional_words: bool) -> &mut Self {
+    pub fn optional_words(&mut self, optional_words: TermsMatchingStrategy) -> &mut Self {
         self.optional_words = optional_words;
         self
     }
@@ -323,7 +332,7 @@ fn synonyms(ctx: &impl Context, word: &[&str]) -> heed::Result<Option<Vec<Operat
 /// Main function that creates the final query tree from the primitive query.
 fn create_query_tree(
     ctx: &impl Context,
-    optional_words: bool,
+    optional_words: TermsMatchingStrategy,
     authorize_typos: bool,
     query: &[PrimitiveQueryPart],
 ) -> Result<Operation> {
@@ -363,6 +372,7 @@ fn create_query_tree(
         ctx: &impl Context,
         authorize_typos: bool,
         query: &[PrimitiveQueryPart],
+        any_words: bool,
     ) -> Result<Operation> {
         const MAX_NGRAM: usize = 3;
         let mut op_children = Vec::new();
@@ -415,57 +425,93 @@ fn create_query_tree(
                     }
 
                     if !is_last {
-                        let ngrams = ngrams(ctx, authorize_typos, tail)?;
+                        let ngrams = ngrams(ctx, authorize_typos, tail, any_words)?;
                         and_op_children.push(ngrams);
                     }
-                    or_op_children.push(Operation::and(and_op_children));
+
+                    if any_words {
+                        or_op_children.push(Operation::or(false, and_op_children));
+                    } else {
+                        or_op_children.push(Operation::and(and_op_children));
+                    }
                 }
             }
             op_children.push(Operation::or(false, or_op_children));
         }
 
-        Ok(Operation::and(op_children))
-    }
-
-    /// Create a new branch removing the last non-phrase query parts.
-    fn optional_word(
-        ctx: &impl Context,
-        authorize_typos: bool,
-        query: PrimitiveQuery,
-    ) -> Result<Operation> {
-        let number_phrases = query.iter().filter(|p| p.is_phrase()).count();
-        let mut operation_children = Vec::new();
-
-        let start = number_phrases + (number_phrases == 0) as usize;
-        for len in start..=query.len() {
-            let mut word_count = len - number_phrases;
-            let query: Vec<_> = query
-                .iter()
-                .filter(|p| {
-                    if p.is_phrase() {
-                        true
-                    } else if word_count != 0 {
-                        word_count -= 1;
-                        true
-                    } else {
-                        false
-                    }
-                })
-                .cloned()
-                .collect();
-
-            let ngrams = ngrams(ctx, authorize_typos, &query)?;
-            operation_children.push(ngrams);
+        if any_words {
+            Ok(Operation::or(false, op_children))
+        } else {
+            Ok(Operation::and(op_children))
         }
-
-        Ok(Operation::or(true, operation_children))
     }
 
-    if optional_words {
-        optional_word(ctx, authorize_typos, query.to_vec())
-    } else {
-        ngrams(ctx, authorize_typos, query)
+    let number_phrases = query.iter().filter(|p| p.is_phrase()).count();
+    let remove_count = query.len() - min(number_phrases, 1);
+    if remove_count == 0 {
+        return ngrams(ctx, authorize_typos, query, false);
     }
+
+    let mut operation_children = Vec::new();
+    let mut query = query.to_vec();
+    for _ in 0..remove_count {
+        let pos = match optional_words {
+            TermsMatchingStrategy::All => return ngrams(ctx, authorize_typos, &query, false),
+            TermsMatchingStrategy::Any => {
+                let operation = Operation::Or(
+                    true,
+                    vec![
+                        // branch allowing matching documents to contains any query word.
+                        ngrams(ctx, authorize_typos, &query, true)?,
+                        // branch forcing matching documents to contains all the query words,
+                        // keeping this documents of the top of the resulted list.
+                        ngrams(ctx, authorize_typos, &query, false)?,
+                    ],
+                );
+
+                return Ok(operation);
+            }
+            TermsMatchingStrategy::Last => query
+                .iter()
+                .enumerate()
+                .filter(|(_, part)| !part.is_phrase())
+                .last()
+                .map(|(pos, _)| pos),
+            TermsMatchingStrategy::First => {
+                query.iter().enumerate().find(|(_, part)| !part.is_phrase()).map(|(pos, _)| pos)
+            }
+            TermsMatchingStrategy::Size => query
+                .iter()
+                .enumerate()
+                .filter(|(_, part)| !part.is_phrase())
+                .min_by_key(|(_, part)| match part {
+                    PrimitiveQueryPart::Word(s, _) => s.len(),
+                    _ => unreachable!(),
+                })
+                .map(|(pos, _)| pos),
+            TermsMatchingStrategy::Frequency => query
+                .iter()
+                .enumerate()
+                .filter(|(_, part)| !part.is_phrase())
+                .max_by_key(|(_, part)| match part {
+                    PrimitiveQueryPart::Word(s, _) => {
+                        ctx.word_documents_count(s).unwrap_or_default().unwrap_or(u64::max_value())
+                    }
+                    _ => unreachable!(),
+                })
+                .map(|(pos, _)| pos),
+        };
+
+        // compute and push the current branch on the front
+        operation_children.insert(0, ngrams(ctx, authorize_typos, &query, false)?);
+        // remove word from query before creating an new branch
+        match pos {
+            Some(pos) => query.remove(pos),
+            None => break,
+        };
+    }
+
+    Ok(Operation::Or(true, operation_children))
 }
 
 /// Main function that matchings words used for crop and highlight.
@@ -750,7 +796,7 @@ mod test {
     impl TestContext {
         fn build<A: AsRef<[u8]>>(
             &self,
-            optional_words: bool,
+            optional_words: TermsMatchingStrategy,
             authorize_typos: bool,
             words_limit: Option<usize>,
             query: ClassifiedTokenIter<A>,
@@ -852,8 +898,10 @@ mod test {
         let query = "hey friends";
         let tokens = query.tokenize();
 
-        let (query_tree, _) =
-            TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default()
+            .build(TermsMatchingStrategy::All, true, None, tokens)
+            .unwrap()
+            .unwrap();
 
         insta::assert_debug_snapshot!(query_tree, @r###"
         OR
@@ -869,8 +917,10 @@ mod test {
         let query = "hey friends ";
         let tokens = query.tokenize();
 
-        let (query_tree, _) =
-            TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default()
+            .build(TermsMatchingStrategy::All, true, None, tokens)
+            .unwrap()
+            .unwrap();
 
         insta::assert_debug_snapshot!(query_tree, @r###"
         OR
@@ -886,8 +936,10 @@ mod test {
         let query = "hello world ";
         let tokens = query.tokenize();
 
-        let (query_tree, _) =
-            TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default()
+            .build(TermsMatchingStrategy::All, true, None, tokens)
+            .unwrap()
+            .unwrap();
 
         insta::assert_debug_snapshot!(query_tree, @r###"
         OR
@@ -911,8 +963,10 @@ mod test {
         let query = "new york city ";
         let tokens = query.tokenize();
 
-        let (query_tree, _) =
-            TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default()
+            .build(TermsMatchingStrategy::All, true, None, tokens)
+            .unwrap()
+            .unwrap();
 
         insta::assert_debug_snapshot!(query_tree, @r###"
         OR
@@ -932,12 +986,11 @@ mod test {
                 Exact { word: "city" }
               Tolerant { word: "newyork", max typo: 1 }
             Exact { word: "city" }
-          OR
-            Exact { word: "nyc" }
-            AND
-              Exact { word: "new" }
-              Exact { word: "york" }
-            Tolerant { word: "newyorkcity", max typo: 1 }
+          Exact { word: "nyc" }
+          AND
+            Exact { word: "new" }
+            Exact { word: "york" }
+          Tolerant { word: "newyorkcity", max typo: 1 }
         "###);
     }
 
@@ -946,8 +999,10 @@ mod test {
         let query = "n grams ";
         let tokens = query.tokenize();
 
-        let (query_tree, _) =
-            TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default()
+            .build(TermsMatchingStrategy::All, true, None, tokens)
+            .unwrap()
+            .unwrap();
 
         insta::assert_debug_snapshot!(query_tree, @r###"
         OR
@@ -963,8 +1018,10 @@ mod test {
         let query = "wordsplit fish ";
         let tokens = query.tokenize();
 
-        let (query_tree, _) =
-            TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default()
+            .build(TermsMatchingStrategy::All, true, None, tokens)
+            .unwrap()
+            .unwrap();
 
         insta::assert_debug_snapshot!(query_tree, @r###"
         OR
@@ -982,8 +1039,10 @@ mod test {
         let query = "\"hey friends\" \" \" \"wooop";
         let tokens = query.tokenize();
 
-        let (query_tree, _) =
-            TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default()
+            .build(TermsMatchingStrategy::All, true, None, tokens)
+            .unwrap()
+            .unwrap();
 
         insta::assert_debug_snapshot!(query_tree, @r###"
         AND
@@ -997,8 +1056,10 @@ mod test {
         let query = "\"hey friends. wooop wooop\"";
         let tokens = query.tokenize();
 
-        let (query_tree, _) =
-            TestContext::default().build(false, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default()
+            .build(TermsMatchingStrategy::All, true, None, tokens)
+            .unwrap()
+            .unwrap();
 
         insta::assert_debug_snapshot!(query_tree, @r###"
         AND
@@ -1012,8 +1073,10 @@ mod test {
         let query = "hey my friend ";
         let tokens = query.tokenize();
 
-        let (query_tree, _) =
-            TestContext::default().build(true, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default()
+            .build(TermsMatchingStrategy::default(), true, None, tokens)
+            .unwrap()
+            .unwrap();
 
         insta::assert_debug_snapshot!(query_tree, @r###"
         OR(WORD)
@@ -1043,8 +1106,10 @@ mod test {
         let query = "\"hey my\"";
         let tokens = query.tokenize();
 
-        let (query_tree, _) =
-            TestContext::default().build(true, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default()
+            .build(TermsMatchingStrategy::default(), true, None, tokens)
+            .unwrap()
+            .unwrap();
 
         insta::assert_debug_snapshot!(query_tree, @r###"
         PHRASE ["hey", "my"]
@@ -1056,8 +1121,10 @@ mod test {
         let query = r#""hey" my good "friend""#;
         let tokens = query.tokenize();
 
-        let (query_tree, _) =
-            TestContext::default().build(true, true, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default()
+            .build(TermsMatchingStrategy::default(), true, None, tokens)
+            .unwrap()
+            .unwrap();
 
         insta::assert_debug_snapshot!(query_tree, @r###"
         OR(WORD)
@@ -1084,8 +1151,10 @@ mod test {
         let query = "hey friends ";
         let tokens = query.tokenize();
 
-        let (query_tree, _) =
-            TestContext::default().build(false, false, None, tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default()
+            .build(TermsMatchingStrategy::All, false, None, tokens)
+            .unwrap()
+            .unwrap();
 
         insta::assert_debug_snapshot!(query_tree, @r###"
         OR
@@ -1101,8 +1170,10 @@ mod test {
         let query = "\"hey my\" good friend";
         let tokens = query.tokenize();
 
-        let (query_tree, _) =
-            TestContext::default().build(false, false, Some(2), tokens).unwrap().unwrap();
+        let (query_tree, _) = TestContext::default()
+            .build(TermsMatchingStrategy::All, false, Some(2), tokens)
+            .unwrap()
+            .unwrap();
 
         insta::assert_debug_snapshot!(query_tree, @r###"
         AND
@@ -1145,7 +1216,8 @@ mod test {
         let exact_words = fst::Set::from_iter(Some("goodbye")).unwrap().into_fst().into_inner();
         let exact_words = Some(fst::Set::new(exact_words).unwrap().map_data(Cow::Owned).unwrap());
         let context = TestContext { exact_words, ..Default::default() };
-        let (query_tree, _) = context.build(false, true, Some(2), tokens).unwrap().unwrap();
+        let (query_tree, _) =
+            context.build(TermsMatchingStrategy::All, true, Some(2), tokens).unwrap().unwrap();
 
         assert!(matches!(
             query_tree,

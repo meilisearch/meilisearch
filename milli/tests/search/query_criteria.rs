@@ -7,7 +7,7 @@ use itertools::Itertools;
 use maplit::hashset;
 use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
-use milli::{AscDesc, Criterion, Index, Member, Search, SearchResult};
+use milli::{AscDesc, Criterion, Index, Member, Search, SearchResult, TermsMatchingStrategy};
 use rand::Rng;
 use Criterion::*;
 
@@ -15,8 +15,8 @@ use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
 
 const ALLOW_TYPOS: bool = true;
 const DISALLOW_TYPOS: bool = false;
-const ALLOW_OPTIONAL_WORDS: bool = true;
-const DISALLOW_OPTIONAL_WORDS: bool = false;
+const ALLOW_OPTIONAL_WORDS: TermsMatchingStrategy = TermsMatchingStrategy::Last;
+const DISALLOW_OPTIONAL_WORDS: TermsMatchingStrategy = TermsMatchingStrategy::All;
 const ASC_DESC_CANDIDATES_THRESHOLD: usize = 1000;
 
 macro_rules! test_criterion {
@@ -359,7 +359,7 @@ fn criteria_mixup() {
         let SearchResult { documents_ids, .. } = search.execute().unwrap();
 
         let expected_external_ids: Vec<_> =
-            search::expected_order(&criteria, ALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, &[])
+            search::expected_order(&criteria, ALLOW_TYPOS, ALLOW_OPTIONAL_WORDS, &[])
                 .into_iter()
                 .map(|d| d.id)
                 .collect();

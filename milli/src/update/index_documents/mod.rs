@@ -613,6 +613,7 @@ mod tests {
     use super::*;
     use crate::documents::documents_batch_reader_from_objects;
     use crate::index::tests::TempIndex;
+    use crate::search::TermsMatchingStrategy;
     use crate::update::DeleteDocuments;
     use crate::BEU16;
 
@@ -1207,7 +1208,7 @@ mod tests {
         let mut search = crate::Search::new(&rtxn, &index);
         search.query("document");
         search.authorize_typos(true);
-        search.optional_words(true);
+        search.optional_words(TermsMatchingStrategy::default());
         // all documents should be returned
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids.len(), 4);
@@ -1313,7 +1314,7 @@ mod tests {
         let mut search = crate::Search::new(&rtxn, &index);
         search.query("document");
         search.authorize_typos(true);
-        search.optional_words(true);
+        search.optional_words(TermsMatchingStrategy::default());
         // all documents should be returned
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids.len(), 4);
@@ -1512,7 +1513,7 @@ mod tests {
         let mut search = crate::Search::new(&rtxn, &index);
         search.query("化妆包");
         search.authorize_typos(true);
-        search.optional_words(true);
+        search.optional_words(TermsMatchingStrategy::default());
 
         // only 1 document should be returned
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();

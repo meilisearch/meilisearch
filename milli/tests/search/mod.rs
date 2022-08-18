@@ -8,7 +8,7 @@ use heed::EnvOpenOptions;
 use maplit::{hashmap, hashset};
 use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
-use milli::{AscDesc, Criterion, DocumentId, Index, Member, Object};
+use milli::{AscDesc, Criterion, DocumentId, Index, Member, Object, TermsMatchingStrategy};
 use serde::{Deserialize, Deserializer};
 use slice_group_by::GroupBy;
 
@@ -96,7 +96,7 @@ pub fn internal_to_external_ids(index: &Index, internal_ids: &[DocumentId]) -> V
 pub fn expected_order(
     criteria: &[Criterion],
     authorize_typo: bool,
-    optional_words: bool,
+    optional_words: TermsMatchingStrategy,
     sort_by: &[AscDesc],
 ) -> Vec<TestDocument> {
     let dataset =
@@ -155,9 +155,9 @@ pub fn expected_order(
         groups = std::mem::take(&mut new_groups);
     }
 
-    if authorize_typo && optional_words {
+    if authorize_typo && optional_words == TermsMatchingStrategy::default() {
         groups.into_iter().flatten().collect()
-    } else if optional_words {
+    } else if optional_words == TermsMatchingStrategy::default() {
         groups.into_iter().flatten().filter(|d| d.typo_rank == 0).collect()
     } else if authorize_typo {
         groups.into_iter().flatten().filter(|d| d.word_rank == 0).collect()

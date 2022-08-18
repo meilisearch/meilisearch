@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use big_s::S;
 use milli::update::Settings;
-use milli::{Criterion, Search, SearchResult};
+use milli::{Criterion, Search, SearchResult, TermsMatchingStrategy};
 use Criterion::*;
 
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
@@ -28,24 +28,25 @@ macro_rules! test_distinct {
             search.query(search::TEST_QUERY);
             search.limit(EXTERNAL_DOCUMENTS_IDS.len());
             search.authorize_typos(true);
-            search.optional_words(true);
+            search.optional_words(TermsMatchingStrategy::default());
 
             let SearchResult { documents_ids, candidates, .. } = search.execute().unwrap();
 
             assert_eq!(candidates.len(), $n_res);
 
             let mut distinct_values = HashSet::new();
-            let expected_external_ids: Vec<_> = search::expected_order(&criteria, true, true, &[])
-                .into_iter()
-                .filter_map(|d| {
-                    if distinct_values.contains(&d.$distinct) {
-                        None
-                    } else {
-                        distinct_values.insert(d.$distinct.to_owned());
-                        Some(d.id)
-                    }
-                })
-                .collect();
+            let expected_external_ids: Vec<_> =
+                search::expected_order(&criteria, true, TermsMatchingStrategy::default(), &[])
+                    .into_iter()
+                    .filter_map(|d| {
+                        if distinct_values.contains(&d.$distinct) {
+                            None
+                        } else {
+                            distinct_values.insert(d.$distinct.to_owned());
+                            Some(d.id)
+                        }
+                    })
+                    .collect();
 
             let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
             assert_eq!(documents_ids, expected_external_ids);
