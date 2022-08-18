@@ -52,6 +52,51 @@ async fn add_documents_test_json_content_types() {
     assert_eq!(response["taskUid"], 1);
 }
 
+/// Here we try to send a single document instead of an array with a single document inside.
+#[actix_rt::test]
+async fn add_single_document_test_json_content_types() {
+    let document = json!({
+        "id": 1,
+        "content": "Bouvier Bernois",
+    });
+
+    // this is a what is expected and should work
+    let server = Server::new().await;
+    let app = test::init_service(create_app!(
+        &server.service.meilisearch,
+        &server.service.auth,
+        true,
+        &server.service.options,
+        analytics::MockAnalytics::new(&server.service.options).0
+    ))
+    .await;
+    // post
+    let req = test::TestRequest::post()
+        .uri("/indexes/dog/documents")
+        .set_payload(document.to_string())
+        .insert_header(("content-type", "application/json"))
+        .to_request();
+    let res = test::call_service(&app, req).await;
+    let status_code = res.status();
+    let body = test::read_body(res).await;
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+    assert_eq!(status_code, 202);
+    assert_eq!(response["taskUid"], 0);
+
+    // put
+    let req = test::TestRequest::put()
+        .uri("/indexes/dog/documents")
+        .set_payload(document.to_string())
+        .insert_header(("content-type", "application/json"))
+        .to_request();
+    let res = test::call_service(&app, req).await;
+    let status_code = res.status();
+    let body = test::read_body(res).await;
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+    assert_eq!(status_code, 202);
+    assert_eq!(response["taskUid"], 1);
+}
+
 /// any other content-type is must be refused
 #[actix_rt::test]
 async fn error_add_documents_test_bad_content_types() {
