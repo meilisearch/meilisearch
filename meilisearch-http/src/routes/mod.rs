@@ -1,8 +1,9 @@
 use actix_web::http::header::{self};
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 use log::debug;
 use serde::{Deserialize, Serialize};
 
+use serde_json::json;
 use time::OffsetDateTime;
 
 use meilisearch_lib::index::{Settings, Unchecked};
@@ -10,6 +11,7 @@ use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::star_or::StarOr;
 
+use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use prometheus::{Encoder, TextEncoder};
 
@@ -233,7 +235,14 @@ pub async fn running() -> HttpResponse {
 
 async fn get_stats(
     meilisearch: GuardedData<ActionPolicy<{ actions::STATS_GET }>, MeiliSearch>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    analytics.publish(
+        "Stats Seen".to_string(),
+        json!({ "per_index_uid": false }),
+        Some(&req),
+    );
     let search_rules = &meilisearch.filters().search_rules;
     let response = meilisearch.get_all_stats(search_rules).await?;
 

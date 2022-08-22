@@ -52,6 +52,51 @@ async fn add_documents_test_json_content_types() {
     assert_eq!(response["taskUid"], 1);
 }
 
+/// Here we try to send a single document instead of an array with a single document inside.
+#[actix_rt::test]
+async fn add_single_document_test_json_content_types() {
+    let document = json!({
+        "id": 1,
+        "content": "Bouvier Bernois",
+    });
+
+    // this is a what is expected and should work
+    let server = Server::new().await;
+    let app = test::init_service(create_app!(
+        &server.service.meilisearch,
+        &server.service.auth,
+        true,
+        &server.service.options,
+        analytics::MockAnalytics::new(&server.service.options).0
+    ))
+    .await;
+    // post
+    let req = test::TestRequest::post()
+        .uri("/indexes/dog/documents")
+        .set_payload(document.to_string())
+        .insert_header(("content-type", "application/json"))
+        .to_request();
+    let res = test::call_service(&app, req).await;
+    let status_code = res.status();
+    let body = test::read_body(res).await;
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+    assert_eq!(status_code, 202);
+    assert_eq!(response["taskUid"], 0);
+
+    // put
+    let req = test::TestRequest::put()
+        .uri("/indexes/dog/documents")
+        .set_payload(document.to_string())
+        .insert_header(("content-type", "application/json"))
+        .to_request();
+    let res = test::call_service(&app, req).await;
+    let status_code = res.status();
+    let body = test::read_body(res).await;
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+    assert_eq!(status_code, 202);
+    assert_eq!(response["taskUid"], 1);
+}
+
 /// any other content-type is must be refused
 #[actix_rt::test]
 async fn error_add_documents_test_bad_content_types() {
@@ -327,7 +372,7 @@ async fn error_add_malformed_json_documents() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The `json` payload provided is malformed. `Couldn't serialize document value: invalid type: string "0123456789012345678901234567...890123456789012345678901234567890123456789", expected a sequence at line 1 column 102`."#
+            r#"The `json` payload provided is malformed. `Couldn't serialize document value: data did not match any variant of untagged enum Either`."#
         )
     );
     assert_eq!(response["code"], json!("malformed_payload"));
@@ -350,7 +395,7 @@ async fn error_add_malformed_json_documents() {
     assert_eq!(status_code, 400);
     assert_eq!(
         response["message"],
-        json!("The `json` payload provided is malformed. `Couldn't serialize document value: invalid type: string \"0123456789012345678901234567...90123456789012345678901234567890123456789m\", expected a sequence at line 1 column 103`.")
+        json!("The `json` payload provided is malformed. `Couldn't serialize document value: data did not match any variant of untagged enum Either`.")
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));

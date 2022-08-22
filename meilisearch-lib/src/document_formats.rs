@@ -2,9 +2,12 @@ use std::borrow::Borrow;
 use std::fmt::{self, Debug, Display};
 use std::io::{self, BufReader, Read, Seek, Write};
 
+use either::Either;
 use meilisearch_types::error::{Code, ErrorCode};
 use meilisearch_types::internal_error;
 use milli::documents::{DocumentsBatchBuilder, Error};
+use milli::Object;
+use serde::Deserialize;
 
 type Result<T> = std::result::Result<T, DocumentFormatError>;
 
@@ -124,11 +127,18 @@ pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
     let mut builder = DocumentsBatchBuilder::new(writer);
     let reader = BufReader::new(input);
 
-    let objects: Vec<_> = serde_json::from_reader(reader)
+    #[derive(Deserialize, Debug)]
+    #[serde(transparent)]
+    struct ArrayOrSingleObject {
+        #[serde(with = "either::serde_untagged")]
+        inner: Either<Vec<Object>, Object>,
+    }
+
+    let content: ArrayOrSingleObject = serde_json::from_reader(reader)
         .map_err(Error::Json)
         .map_err(|e| (PayloadType::Json, e))?;
 
-    for object in objects {
+    for object in content.inner.map_right(|o| vec![o]).into_inner() {
         builder
             .append_json_object(&object)
             .map_err(Into::into)

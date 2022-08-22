@@ -15,7 +15,7 @@ clap = { version = "3.1.6", features = ["derive", "env"] }
 crossbeam-channel = "0.5.2"
 csv = "1.1.6"
 derivative = "2.2.0"
-either = "1.6.1"
+either = { version = "1.6.1", features = ["serde"] }
 flate2 = "1.0.22"
 fs_extra = "1.2.0"
 fst = "0.4.7"
