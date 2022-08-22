@@ -5,7 +5,9 @@ pub mod analytics;
 pub mod task;
 #[macro_use]
 pub mod extractors;
+pub mod metrics;
 pub mod option;
+pub mod route_metrics;
 pub mod routes;
 
 use std::sync::{atomic::AtomicBool, Arc};
@@ -140,22 +142,33 @@ pub fn dashboard(config: &mut web::ServiceConfig, _enable_frontend: bool) {
     config.service(web::resource("/").route(web::get().to(routes::running)));
 }
 
+pub fn configure_metrics_route(config: &mut web::ServiceConfig, enable_metrics_route: bool) {
+    if enable_metrics_route {
+        config.service(web::resource("/metrics").route(web::get().to(routes::get_metrics)));
+    }
+}
+
 #[macro_export]
 macro_rules! create_app {
     ($data:expr, $auth:expr, $enable_frontend:expr, $opt:expr, $analytics:expr) => {{
         use actix_cors::Cors;
+        use actix_web::dev::Service;
+        use actix_web::middleware::Condition;
         use actix_web::middleware::TrailingSlash;
         use actix_web::App;
         use actix_web::{middleware, web};
         use meilisearch_http::error::MeilisearchHttpError;
+        use meilisearch_http::metrics;
+        use meilisearch_http::route_metrics;
         use meilisearch_http::routes;
-        use meilisearch_http::{configure_data, dashboard};
+        use meilisearch_http::{configure_data, configure_metrics_route, dashboard};
         use meilisearch_types::error::ResponseError;
 
         App::new()
             .configure(|s| configure_data(s, $data.clone(), $auth.clone(), &$opt, $analytics))
             .configure(routes::configure)
             .configure(|s| dashboard(s, $enable_frontend))
+            .configure(|s| configure_metrics_route(s, $opt.enable_metrics_route))
             .wrap(
                 Cors::default()
                     .send_wildcard()
@@ -168,6 +181,10 @@ macro_rules! create_app {
             .wrap(middleware::Compress::default())
             .wrap(middleware::NormalizePath::new(
                 middleware::TrailingSlash::Trim,
+            ))
+            .wrap(Condition::new(
+                $opt.enable_metrics_route,
+                route_metrics::RouteMetrics,
             ))
     }};
 }
