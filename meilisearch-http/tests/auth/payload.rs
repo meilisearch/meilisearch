@@ -19,7 +19,7 @@ async fn error_api_key_bad_content_types() {
         &server.service.meilisearch,
         &server.service.auth,
         true,
-        &server.service.options,
+        server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0
     ))
     .await;
@@ -91,7 +91,7 @@ async fn error_api_key_empty_content_types() {
         &server.service.meilisearch,
         &server.service.auth,
         true,
-        &server.service.options,
+        server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0
     ))
     .await;
@@ -163,7 +163,7 @@ async fn error_api_key_missing_content_types() {
         &server.service.meilisearch,
         &server.service.auth,
         true,
-        &server.service.options,
+        server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0
     ))
     .await;
@@ -227,7 +227,7 @@ async fn error_api_key_empty_payload() {
         &server.service.meilisearch,
         &server.service.auth,
         true,
-        &server.service.options,
+        server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0
     ))
     .await;
@@ -283,7 +283,7 @@ async fn error_api_key_malformed_payload() {
         &server.service.meilisearch,
         &server.service.auth,
         true,
-        &server.service.options,
+        server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0
     ))
     .await;

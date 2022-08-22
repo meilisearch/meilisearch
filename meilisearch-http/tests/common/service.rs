@@ -18,7 +18,7 @@ impl Service {
             &self.meilisearch,
             &self.auth,
             true,
-            &self.options,
+            self.options,
             analytics::MockAnalytics::new(&self.options).0
         ))
         .await;
@@ -46,7 +46,7 @@ impl Service {
             &self.meilisearch,
             &self.auth,
             true,
-            &self.options,
+            self.options,
             analytics::MockAnalytics::new(&self.options).0
         ))
         .await;
@@ -72,7 +72,7 @@ impl Service {
             &self.meilisearch,
             &self.auth,
             true,
-            &self.options,
+            self.options,
             analytics::MockAnalytics::new(&self.options).0
         ))
         .await;
@@ -95,7 +95,7 @@ impl Service {
             &self.meilisearch,
             &self.auth,
             true,
-            &self.options,
+            self.options,
             analytics::MockAnalytics::new(&self.options).0
         ))
         .await;
@@ -118,7 +118,7 @@ impl Service {
             &self.meilisearch,
             &self.auth,
             true,
-            &self.options,
+            self.options,
             analytics::MockAnalytics::new(&self.options).0
         ))
         .await;
@@ -141,7 +141,7 @@ impl Service {
             &self.meilisearch,
             &self.auth,
             true,
-            &self.options,
+            self.options,
             analytics::MockAnalytics::new(&self.options).0
         ))
         .await;
