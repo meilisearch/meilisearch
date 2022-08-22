@@ -63,7 +63,7 @@ async fn error_json_bad_content_type() {
         &server.service.meilisearch,
         &server.service.auth,
         true,
-        &server.service.options,
+        server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0
     ))
     .await;
@@ -146,7 +146,7 @@ async fn extract_actual_content_type() {
         &server.service.meilisearch,
         &server.service.auth,
         true,
-        &server.service.options,
+        server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0
     ))
     .await;
