@@ -302,7 +302,7 @@ async fn error_add_malformed_json_documents() {
         &server.service.meilisearch,
         &server.service.auth,
         true,
-        &server.service.options,
+        server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0
     ))
     .await;
