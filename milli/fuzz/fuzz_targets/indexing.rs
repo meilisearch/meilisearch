@@ -5,11 +5,11 @@ use std::io::{BufWriter, Cursor, Read, Seek, Write};
 
 use anyhow::{bail, Result};
 use arbitrary_json::ArbitraryValue;
-use heed::EnvOpenOptions;
 use libfuzzer_sys::fuzz_target;
 use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
+use milli::heed::EnvOpenOptions;
 use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
-use milli::Index;
+use milli::{Index, Object};
 use serde_json::{Map, Value};
 
 #[global_allocator]
