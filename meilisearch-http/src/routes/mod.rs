@@ -1,5 +1,5 @@
 use actix_web::http::header::{self};
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 use log::debug;
 use serde::{Deserialize, Serialize};
 
