@@ -1,5 +1,5 @@
 use either::{Either, Left, Right};
-use milli::{Criterion, Filter, Search, SearchResult};
+use milli::{Criterion, Filter, Search, SearchResult, TermsMatchingStrategy};
 use Criterion::*;
 
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
@@ -19,16 +19,17 @@ macro_rules! test_filter {
             search.query(search::TEST_QUERY);
             search.limit(EXTERNAL_DOCUMENTS_IDS.len());
             search.authorize_typos(true);
-            search.optional_words(true);
+            search.terms_matching_strategy(TermsMatchingStrategy::default());
             search.filter(filter_conditions);
 
             let SearchResult { documents_ids, .. } = search.execute().unwrap();
 
             let filtered_ids = search::expected_filtered_ids($filter);
-            let expected_external_ids: Vec<_> = search::expected_order(&criteria, true, true, &[])
-                .into_iter()
-                .filter_map(|d| if filtered_ids.contains(&d.id) { Some(d.id) } else { None })
-                .collect();
+            let expected_external_ids: Vec<_> =
+                search::expected_order(&criteria, true, TermsMatchingStrategy::default(), &[])
+                    .into_iter()
+                    .filter_map(|d| if filtered_ids.contains(&d.id) { Some(d.id) } else { None })
+                    .collect();
 
             let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
             assert_eq!(documents_ids, expected_external_ids);

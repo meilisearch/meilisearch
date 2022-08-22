@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use heed::EnvOpenOptions;
 use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
-use milli::{Criterion, Index, Search};
+use milli::{Criterion, Index, Search, TermsMatchingStrategy};
 use serde_json::json;
 use tempfile::tempdir;
 use Criterion::*;
@@ -20,7 +20,7 @@ fn test_typo_tolerance_one_typo() {
         search.query("zeal");
         search.limit(10);
         search.authorize_typos(true);
-        search.optional_words(true);
+        search.terms_matching_strategy(TermsMatchingStrategy::default());
 
         let result = search.execute().unwrap();
         assert_eq!(result.documents_ids.len(), 1);
@@ -29,7 +29,7 @@ fn test_typo_tolerance_one_typo() {
         search.query("zean");
         search.limit(10);
         search.authorize_typos(true);
-        search.optional_words(true);
+        search.terms_matching_strategy(TermsMatchingStrategy::default());
 
         let result = search.execute().unwrap();
         assert_eq!(result.documents_ids.len(), 0);
@@ -47,7 +47,7 @@ fn test_typo_tolerance_one_typo() {
     search.query("zean");
     search.limit(10);
     search.authorize_typos(true);
-    search.optional_words(true);
+    search.terms_matching_strategy(TermsMatchingStrategy::default());
 
     let result = search.execute().unwrap();
     assert_eq!(result.documents_ids.len(), 1);
@@ -66,7 +66,7 @@ fn test_typo_tolerance_two_typo() {
         search.query("zealand");
         search.limit(10);
         search.authorize_typos(true);
-        search.optional_words(true);
+        search.terms_matching_strategy(TermsMatchingStrategy::default());
 
         let result = search.execute().unwrap();
         assert_eq!(result.documents_ids.len(), 1);
@@ -75,7 +75,7 @@ fn test_typo_tolerance_two_typo() {
         search.query("zealemd");
         search.limit(10);
         search.authorize_typos(true);
-        search.optional_words(true);
+        search.terms_matching_strategy(TermsMatchingStrategy::default());
 
         let result = search.execute().unwrap();
         assert_eq!(result.documents_ids.len(), 0);
@@ -93,7 +93,7 @@ fn test_typo_tolerance_two_typo() {
     search.query("zealemd");
     search.limit(10);
     search.authorize_typos(true);
-    search.optional_words(true);
+    search.terms_matching_strategy(TermsMatchingStrategy::default());
 
     let result = search.execute().unwrap();
     assert_eq!(result.documents_ids.len(), 1);
@@ -142,7 +142,7 @@ fn test_typo_disabled_on_word() {
         search.query("zealand");
         search.limit(10);
         search.authorize_typos(true);
-        search.optional_words(true);
+        search.terms_matching_strategy(TermsMatchingStrategy::default());
 
         let result = search.execute().unwrap();
         assert_eq!(result.documents_ids.len(), 2);
@@ -162,7 +162,7 @@ fn test_typo_disabled_on_word() {
     search.query("zealand");
     search.limit(10);
     search.authorize_typos(true);
-    search.optional_words(true);
+    search.terms_matching_strategy(TermsMatchingStrategy::default());
 
     let result = search.execute().unwrap();
     assert_eq!(result.documents_ids.len(), 1);
@@ -182,7 +182,7 @@ fn test_disable_typo_on_attribute() {
         search.query("antebelum");
         search.limit(10);
         search.authorize_typos(true);
-        search.optional_words(true);
+        search.terms_matching_strategy(TermsMatchingStrategy::default());
 
         let result = search.execute().unwrap();
         assert_eq!(result.documents_ids.len(), 1);
@@ -200,7 +200,7 @@ fn test_disable_typo_on_attribute() {
     search.query("antebelum");
     search.limit(10);
     search.authorize_typos(true);
-    search.optional_words(true);
+    search.terms_matching_strategy(TermsMatchingStrategy::default());
 
     let result = search.execute().unwrap();
     assert_eq!(result.documents_ids.len(), 0);
