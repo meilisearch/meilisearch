@@ -33,7 +33,7 @@ warp = "0.3.2"
 
 # logging
 fst = "0.4.7"
-log = "0.4.14"
+log = "0.4.17"
 stderrlog = "0.5.1"
 
 # Temporary fix for bitvec, remove once fixed. (https://github.com/bitvecto-rs/bitvec/issues/105)
