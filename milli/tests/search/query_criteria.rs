@@ -31,7 +31,7 @@ macro_rules! test_criterion {
             search.query(search::TEST_QUERY);
             search.limit(EXTERNAL_DOCUMENTS_IDS.len());
             search.authorize_typos($authorize_typos);
-            search.optional_words($optional_word);
+            search.terms_matching_strategy($optional_word);
             search.sort_criteria($sort_criteria);
 
             let SearchResult { documents_ids, .. } = search.execute().unwrap();
@@ -353,7 +353,7 @@ fn criteria_mixup() {
         let mut search = Search::new(&mut rtxn, &index);
         search.query(search::TEST_QUERY);
         search.limit(EXTERNAL_DOCUMENTS_IDS.len());
-        search.optional_words(ALLOW_OPTIONAL_WORDS);
+        search.terms_matching_strategy(ALLOW_OPTIONAL_WORDS);
         search.authorize_typos(ALLOW_TYPOS);
 
         let SearchResult { documents_ids, .. } = search.execute().unwrap();

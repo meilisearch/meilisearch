@@ -119,7 +119,7 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
                 b.iter(|| {
                     let rtxn = index.read_txn().unwrap();
                     let mut search = index.search(&rtxn);
-                    search.query(query).optional_words(TermsMatchingStrategy::default());
+                    search.query(query).terms_matching_strategy(TermsMatchingStrategy::default());
                     if let Some(filter) = conf.filter {
                         let filter = Filter::from_str(filter).unwrap().unwrap();
                         search.filter(filter);

@@ -44,7 +44,7 @@ pub struct Search<'a> {
     offset: usize,
     limit: usize,
     sort_criteria: Option<Vec<AscDesc>>,
-    optional_words: TermsMatchingStrategy,
+    terms_matching_strategy: TermsMatchingStrategy,
     authorize_typos: bool,
     words_limit: usize,
     rtxn: &'a heed::RoTxn<'a>,
@@ -59,7 +59,7 @@ impl<'a> Search<'a> {
             offset: 0,
             limit: 20,
             sort_criteria: None,
-            optional_words: TermsMatchingStrategy::default(),
+            terms_matching_strategy: TermsMatchingStrategy::default(),
             authorize_typos: true,
             words_limit: 10,
             rtxn,
@@ -87,8 +87,8 @@ impl<'a> Search<'a> {
         self
     }
 
-    pub fn optional_words(&mut self, value: TermsMatchingStrategy) -> &mut Search<'a> {
-        self.optional_words = value;
+    pub fn terms_matching_strategy(&mut self, value: TermsMatchingStrategy) -> &mut Search<'a> {
+        self.terms_matching_strategy = value;
         self
     }
 
@@ -119,7 +119,7 @@ impl<'a> Search<'a> {
         let (query_tree, primitive_query, matching_words) = match self.query.as_ref() {
             Some(query) => {
                 let mut builder = QueryTreeBuilder::new(self.rtxn, self.index)?;
-                builder.optional_words(self.optional_words);
+                builder.terms_matching_strategy(self.terms_matching_strategy);
 
                 builder.authorize_typos(self.is_typo_authorized()?);
 
@@ -259,7 +259,7 @@ impl fmt::Debug for Search<'_> {
             offset,
             limit,
             sort_criteria,
-            optional_words,
+            terms_matching_strategy,
             authorize_typos,
             words_limit,
             rtxn: _,
@@ -271,7 +271,7 @@ impl fmt::Debug for Search<'_> {
             .field("offset", offset)
             .field("limit", limit)
             .field("sort_criteria", sort_criteria)
-            .field("optional_words", optional_words)
+            .field("terms_matching_strategy", terms_matching_strategy)
             .field("authorize_typos", authorize_typos)
             .field("words_limit", words_limit)
             .finish()

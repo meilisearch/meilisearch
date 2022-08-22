@@ -28,7 +28,7 @@ macro_rules! test_distinct {
             search.query(search::TEST_QUERY);
             search.limit(EXTERNAL_DOCUMENTS_IDS.len());
             search.authorize_typos(true);
-            search.optional_words(TermsMatchingStrategy::default());
+            search.terms_matching_strategy(TermsMatchingStrategy::default());
 
             let SearchResult { documents_ids, candidates, .. } = search.execute().unwrap();
 

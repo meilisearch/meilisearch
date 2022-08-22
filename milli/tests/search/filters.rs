@@ -19,7 +19,7 @@ macro_rules! test_filter {
             search.query(search::TEST_QUERY);
             search.limit(EXTERNAL_DOCUMENTS_IDS.len());
             search.authorize_typos(true);
-            search.optional_words(TermsMatchingStrategy::default());
+            search.terms_matching_strategy(TermsMatchingStrategy::default());
             search.filter(filter_conditions);
 
             let SearchResult { documents_ids, .. } = search.execute().unwrap();

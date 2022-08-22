@@ -1208,7 +1208,7 @@ mod tests {
         let mut search = crate::Search::new(&rtxn, &index);
         search.query("document");
         search.authorize_typos(true);
-        search.optional_words(TermsMatchingStrategy::default());
+        search.terms_matching_strategy(TermsMatchingStrategy::default());
         // all documents should be returned
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids.len(), 4);
@@ -1314,7 +1314,7 @@ mod tests {
         let mut search = crate::Search::new(&rtxn, &index);
         search.query("document");
         search.authorize_typos(true);
-        search.optional_words(TermsMatchingStrategy::default());
+        search.terms_matching_strategy(TermsMatchingStrategy::default());
         // all documents should be returned
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids.len(), 4);
@@ -1513,7 +1513,7 @@ mod tests {
         let mut search = crate::Search::new(&rtxn, &index);
         search.query("化妆包");
         search.authorize_typos(true);
-        search.optional_words(TermsMatchingStrategy::default());
+        search.terms_matching_strategy(TermsMatchingStrategy::default());
 
         // only 1 document should be returned
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();

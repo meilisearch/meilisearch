@@ -162,7 +162,7 @@ trait Context {
 pub struct QueryTreeBuilder<'a> {
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
-    optional_words: TermsMatchingStrategy,
+    terms_matching_strategy: TermsMatchingStrategy,
     authorize_typos: bool,
     words_limit: Option<usize>,
     exact_words: Option<fst::Set<Cow<'a, [u8]>>>,
@@ -199,19 +199,22 @@ impl<'a> QueryTreeBuilder<'a> {
         Ok(Self {
             rtxn,
             index,
-            optional_words: TermsMatchingStrategy::default(),
+            terms_matching_strategy: TermsMatchingStrategy::default(),
             authorize_typos: true,
             words_limit: None,
             exact_words: index.exact_words(rtxn)?,
         })
     }
 
-    /// if `optional_words` is set to `false` the query tree will be
+    /// if `terms_matching_strategy` is set to `All` the query tree will be
     /// generated forcing all query words to be present in each matching documents
     /// (the criterion `words` will be ignored).
-    /// default value if not called: `true`
-    pub fn optional_words(&mut self, optional_words: TermsMatchingStrategy) -> &mut Self {
-        self.optional_words = optional_words;
+    /// default value if not called: `Last`
+    pub fn terms_matching_strategy(
+        &mut self,
+        terms_matching_strategy: TermsMatchingStrategy,
+    ) -> &mut Self {
+        self.terms_matching_strategy = terms_matching_strategy;
         self
     }
 
@@ -232,7 +235,7 @@ impl<'a> QueryTreeBuilder<'a> {
     }
 
     /// Build the query tree:
-    /// - if `optional_words` is set to `false` the query tree will be
+    /// - if `terms_matching_strategy` is set to `All` the query tree will be
     ///   generated forcing all query words to be present in each matching documents
     ///   (the criterion `words` will be ignored)
     /// - if `authorize_typos` is set to `false` the query tree will be generated
@@ -247,7 +250,7 @@ impl<'a> QueryTreeBuilder<'a> {
         if !primitive_query.is_empty() {
             let qt = create_query_tree(
                 self,
-                self.optional_words,
+                self.terms_matching_strategy,
                 self.authorize_typos,
                 &primitive_query,
             )?;
@@ -332,7 +335,7 @@ fn synonyms(ctx: &impl Context, word: &[&str]) -> heed::Result<Option<Vec<Operat
 /// Main function that creates the final query tree from the primitive query.
 fn create_query_tree(
     ctx: &impl Context,
-    optional_words: TermsMatchingStrategy,
+    terms_matching_strategy: TermsMatchingStrategy,
     authorize_typos: bool,
     query: &[PrimitiveQueryPart],
 ) -> Result<Operation> {
@@ -455,7 +458,7 @@ fn create_query_tree(
     let mut operation_children = Vec::new();
     let mut query = query.to_vec();
     for _ in 0..remove_count {
-        let pos = match optional_words {
+        let pos = match terms_matching_strategy {
             TermsMatchingStrategy::All => return ngrams(ctx, authorize_typos, &query, false),
             TermsMatchingStrategy::Any => {
                 let operation = Operation::Or(
@@ -796,15 +799,19 @@ mod test {
     impl TestContext {
         fn build<A: AsRef<[u8]>>(
             &self,
-            optional_words: TermsMatchingStrategy,
+            terms_matching_strategy: TermsMatchingStrategy,
             authorize_typos: bool,
             words_limit: Option<usize>,
             query: ClassifiedTokenIter<A>,
         ) -> Result<Option<(Operation, PrimitiveQuery)>> {
             let primitive_query = create_primitive_query(query, None, words_limit);
             if !primitive_query.is_empty() {
-                let qt =
-                    create_query_tree(self, optional_words, authorize_typos, &primitive_query)?;
+                let qt = create_query_tree(
+                    self,
+                    terms_matching_strategy,
+                    authorize_typos,
+                    &primitive_query,
+                )?;
                 Ok(Some((qt, primitive_query)))
             } else {
                 Ok(None)
