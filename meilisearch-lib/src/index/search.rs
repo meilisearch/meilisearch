@@ -62,9 +62,9 @@ pub struct SearchQuery {
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum MatchingStrategy {
-    // remove last word first
+    /// Remove query words from last to first
     Last,
-    // all words are mandatory
+    /// All query words are mandatory
     All,
 }
 
