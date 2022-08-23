@@ -47,6 +47,7 @@ log = "0.4.14"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
 meilisearch-lib = { path = "../meilisearch-lib" }
+mimalloc = { version = "0.1.29", default-features = false }
 mime = "0.3.16"
 num_cpus = "1.13.1"
 obkv = "0.2.0"
@@ -102,9 +103,6 @@ mini-dashboard = [
     "tempfile",
     "zip",
 ]
-
-[target.'cfg(target_os = "linux")'.dependencies]
-tikv-jemallocator = "0.4.3"
 
 [package.metadata.mini-dashboard]
 assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.1/build.zip"
