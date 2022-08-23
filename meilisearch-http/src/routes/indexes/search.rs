@@ -2,8 +2,8 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use log::debug;
 use meilisearch_auth::IndexSearchRules;
 use meilisearch_lib::index::{
-    SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
-    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
+    MatchingStrategy, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
 };
 use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::ResponseError;
@@ -45,6 +45,8 @@ pub struct SearchQueryGet {
     highlight_post_tag: String,
     #[serde(default = "DEFAULT_CROP_MARKER")]
     crop_marker: String,
+    #[serde(default)]
+    matching_strategy: MatchingStrategy,
 }
 
 impl From<SearchQueryGet> for SearchQuery {
@@ -76,6 +78,7 @@ impl From<SearchQueryGet> for SearchQuery {
             highlight_pre_tag: other.highlight_pre_tag,
             highlight_post_tag: other.highlight_post_tag,
             crop_marker: other.crop_marker,
+            matching_strategy: other.matching_strategy,
         }
     }
 }

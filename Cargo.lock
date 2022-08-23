@@ -285,9 +285,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.57"
+version = "1.0.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08f9b8508dccb7687a1d6c4ce66b2b0ecef467c94667de27d8d7fe1f8d2a9cdc"
+checksum = "1485d4d2cc45e7b201ee3767015c96faa5904387c9d87c6efdd0fb511f12d305"
 dependencies = [
  "backtrace",
 ]
@@ -644,9 +644,9 @@ dependencies = [
 
 [[package]]
 name = "charabia"
-version = "0.5.1"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ed19edcd98f5bf6572f48d6f5982d595cb8718e47c6f0066d942b280575ff02"
+checksum = "d1234c5cd955fb67f2b111b43855a0eabdedc35d9fb4e6a9d24030050e89b779"
 dependencies = [
  "character_converter",
  "cow-utils",
@@ -654,7 +654,6 @@ dependencies = [
  "fst",
  "jieba-rs",
  "lindera",
- "lindera-core",
  "once_cell",
  "slice-group-by",
  "unicode-segmentation",
@@ -673,23 +672,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "chunked_transfer"
-version = "1.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fff857943da45f546682664a79488be82e69e43c1a7a2307679ab9afb3a66d2e"
-
-[[package]]
 name = "clap"
-version = "3.1.18"
+version = "3.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2dbdf4bdacb33466e854ce889eee8dfd5729abf7ccd7664d0a2d60cd384440b"
+checksum = "29e724a68d9319343bb3328c9cc2dfde263f4b3142ee1059a9980580171c954b"
 dependencies = [
  "atty",
  "bitflags",
  "clap_derive",
  "clap_lex",
  "indexmap",
- "lazy_static",
+ "once_cell",
  "strsim",
  "termcolor",
  "textwrap",
@@ -697,9 +690,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "3.1.18"
+version = "3.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25320346e922cffe59c0bbc5410c8d8784509efb321488971081313cb1e1a33c"
+checksum = "13547f7012c01ab4a0e8f8967730ada8f9fdf419e8b6c792788f39cf4e46eefa"
 dependencies = [
  "heck",
  "proc-macro-error",
@@ -710,9 +703,9 @@ dependencies = [
 
 [[package]]
 name = "clap_lex"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a37c35f1112dad5e6e0b1adaff798507497a18fceeb30cceb3bae7d1427b9213"
+checksum = "2850f2f5a82cbf437dd5af4d49848fbdfc27c157c3d010345776f952765261c5"
 dependencies = [
  "os_str_bytes",
 ]
@@ -1126,8 +1119,8 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "0.32.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.32.0#e1bc610d2722a8010216c45d5a32cbe3db18468e"
+version = "0.33.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.0#a79ff8a1a98a807f40f970131c8de2ab11560de5"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1151,8 +1144,8 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "0.32.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.32.0#e1bc610d2722a8010216c45d5a32cbe3db18468e"
+version = "0.33.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.0#a79ff8a1a98a807f40f970131c8de2ab11560de5"
 dependencies = [
  "serde_json",
 ]
@@ -1438,8 +1431,8 @@ checksum = "2540771e65fc8cb83cd6e8a237f70c319bd5c29f78ed1084ba5d50eeac86f7f9"
 
 [[package]]
 name = "heed"
-version = "0.12.1"
-source = "git+https://github.com/meilisearch/heed?tag=v0.12.1#fc017cf3394af737f92fd71e16f0499a78b79d65"
+version = "0.12.2"
+source = "git+https://github.com/meilisearch/heed?tag=v0.12.3#076971765f4ce09591ed7e19e45ea817580a53e3"
 dependencies = [
  "byteorder",
  "heed-traits",
@@ -1456,12 +1449,12 @@ dependencies = [
 [[package]]
 name = "heed-traits"
 version = "0.7.0"
-source = "git+https://github.com/meilisearch/heed?tag=v0.12.1#fc017cf3394af737f92fd71e16f0499a78b79d65"
+source = "git+https://github.com/meilisearch/heed?tag=v0.12.3#076971765f4ce09591ed7e19e45ea817580a53e3"
 
 [[package]]
 name = "heed-types"
 version = "0.7.2"
-source = "git+https://github.com/meilisearch/heed?tag=v0.12.1#fc017cf3394af737f92fd71e16f0499a78b79d65"
+source = "git+https://github.com/meilisearch/heed?tag=v0.12.3#076971765f4ce09591ed7e19e45ea817580a53e3"
 dependencies = [
  "bincode",
  "heed-traits",
@@ -1664,8 +1657,8 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "0.32.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.32.0#e1bc610d2722a8010216c45d5a32cbe3db18468e"
+version = "0.33.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.0#a79ff8a1a98a807f40f970131c8de2ab11560de5"
 dependencies = [
  "serde_json",
 ]
@@ -1752,9 +1745,9 @@ dependencies = [
 
 [[package]]
 name = "lindera"
-version = "0.13.5"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d1c5db4b1d12637aa316dc1adb215f78fe79025080af750942516c5ff17d1a0"
+checksum = "4dddd011921cac0ec59025a6b6e26c2cd9af3adce384b56c753c31df71a07965"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1774,9 +1767,9 @@ dependencies = [
 
 [[package]]
 name = "lindera-cc-cedict-builder"
-version = "0.13.4"
+version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73a3509fb497340571d49feddb57e1db2ce5248c4d449f2548d0ee8cb745eb1e"
+checksum = "584491a91b758f92ef3202aaf969d837522f2c11390c4de0049a356d63bc0b0f"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1794,9 +1787,9 @@ dependencies = [
 
 [[package]]
 name = "lindera-core"
-version = "0.13.4"
+version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d20d1b2c085393aed58625d741beca69410e1143fc35bc67ebc35c9885f9f74"
+checksum = "c726ee1bf3282621a802d50f5e03d3f88aae41456815e1d0cb2271a538ff83ec"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1810,9 +1803,9 @@ dependencies = [
 
 [[package]]
 name = "lindera-decompress"
-version = "0.13.4"
+version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b96b8050cded13927a99bcb8cbb0987f89fc8f35429fc153b4bc05ddc7a53a44"
+checksum = "6f9df38ea9310a1256cdee64ff0ebe3f17c49314e3176e53d2213371729d6744"
 dependencies = [
  "anyhow",
  "lzma-rs",
@@ -1821,9 +1814,9 @@ dependencies = [
 
 [[package]]
 name = "lindera-dictionary"
-version = "0.13.4"
+version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5abe3dddc22303402957edb4472ab0c996e0d93b3b00643de3bee8b28c2f9297"
+checksum = "0a525b654642ff9f27927c5abba33f4c651e984b54a65e4f787c0b8c8e22e4a6"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1833,9 +1826,9 @@ dependencies = [
 
 [[package]]
 name = "lindera-ipadic"
-version = "0.13.4"
+version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8f4c111f6ad9eb9e015d02061af2ed36fc0255f29359294415c7c2f1ea5b5b6"
+checksum = "4797e016fc7dc0709ddb8c31da3b9e923e33e14043a4ff58431dd9c447ffacd2"
 dependencies = [
  "bincode",
  "byteorder",
@@ -1845,14 +1838,13 @@ dependencies = [
  "lindera-ipadic-builder",
  "once_cell",
  "tar",
- "ureq",
 ]
 
 [[package]]
 name = "lindera-ipadic-builder"
-version = "0.13.4"
+version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2b9893f22a4a7511ac70ff7d96cda9b8d7259b7d7121784183c73bc593ce6e7"
+checksum = "9bd3ecfb07e8810f5ba313fa836804b66120f0ea76c2d93948c2ddcf4f81fd90"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1870,9 +1862,9 @@ dependencies = [
 
 [[package]]
 name = "lindera-ko-dic-builder"
-version = "0.13.4"
+version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14282600ebfe7ab6fd4f3042143024ff9d74c09d58fd983d0c587839cf940d4a"
+checksum = "fc86f26560ea69e91413eecc078d8e13f39b3c1fdc5a242d79d7622f6fab3a83"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1890,9 +1882,9 @@ dependencies = [
 
 [[package]]
 name = "lindera-unidic-builder"
-version = "0.13.4"
+version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b20825d46c95854e47c532c3e548dfec07c8f187c1ed89383cb6c35790338088"
+checksum = "05c1bb8b7d38ffec7d949ee2c603b6ef96dfa7cf4937e91bad295a2d2b267b82"
 dependencies = [
  "anyhow",
  "bincode",
@@ -2203,8 +2195,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.32.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.32.0#e1bc610d2722a8010216c45d5a32cbe3db18468e"
+version = "0.33.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.0#a79ff8a1a98a807f40f970131c8de2ab11560de5"
 dependencies = [
  "bimap",
  "bincode",
@@ -3133,9 +3125,9 @@ checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 
 [[package]]
 name = "serde"
-version = "1.0.137"
+version = "1.0.144"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61ea8d54c77f8315140a05f4c7237403bf38b72704d031543aa1d16abbf517d1"
+checksum = "0f747710de3dcd43b88c9168773254e809d8ddbdf9653b84e2554ab219f17860"
 dependencies = [
  "serde_derive",
 ]
@@ -3151,9 +3143,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.137"
+version = "1.0.144"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f26faba0c3959972377d3b2d306ee9f71faee9714294e41bb777f83f88578be"
+checksum = "94ed3a816fb1d101812f83e789f888322c34e291f894f19590dc310963e87a00"
 dependencies = [
  "proc-macro2 1.0.39",
  "quote 1.0.18",
@@ -3162,9 +3154,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.81"
+version = "1.0.85"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b7ce2b32a1aed03c558dc61a5cd328f15aff2dbc17daad8fb8af04d2100e15c"
+checksum = "e55a28e3aaef9d5ce0506d0a14dbba8054ddc7e499ef522dd8b26859ec9d4a44"
 dependencies = [
  "indexmap",
  "itoa 1.0.2",
@@ -3668,22 +3660,6 @@ name = "untrusted"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
-
-[[package]]
-name = "ureq"
-version = "2.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9399fa2f927a3d327187cbd201480cee55bee6ac5d3c77dd27f0c6814cff16d5"
-dependencies = [
- "base64",
- "chunked_transfer",
- "log",
- "once_cell",
- "rustls",
- "url",
- "webpki",
- "webpki-roots",
-]
 
 [[package]]
 name = "url"

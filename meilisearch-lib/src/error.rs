@@ -24,6 +24,7 @@ impl ErrorCode for MilliError<'_> {
                 match error {
                     // TODO: wait for spec for new error codes.
                     UserError::SerdeJson(_)
+                    | UserError::InvalidLmdbOpenOptions
                     | UserError::DocumentLimitReached
                     | UserError::AccessingSoftDeletedDocument { .. }
                     | UserError::UnknownInternalDocumentId { .. } => Code::Internal,

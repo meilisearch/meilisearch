@@ -7,7 +7,7 @@ use either::Either;
 use milli::tokenizer::TokenizerBuilder;
 use milli::{
     AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, MatchBounds, MatcherBuilder, SortError,
-    DEFAULT_VALUES_PER_FACET,
+    TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -55,6 +55,32 @@ pub struct SearchQuery {
     pub highlight_post_tag: String,
     #[serde(default = "DEFAULT_CROP_MARKER")]
     pub crop_marker: String,
+    #[serde(default)]
+    pub matching_strategy: MatchingStrategy,
+}
+
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum MatchingStrategy {
+    /// Remove query words from last to first
+    Last,
+    /// All query words are mandatory
+    All,
+}
+
+impl Default for MatchingStrategy {
+    fn default() -> Self {
+        Self::Last
+    }
+}
+
+impl From<MatchingStrategy> for TermsMatchingStrategy {
+    fn from(other: MatchingStrategy) -> Self {
+        match other {
+            MatchingStrategy::Last => Self::Last,
+            MatchingStrategy::All => Self::All,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -90,6 +116,8 @@ impl Index {
         if let Some(ref query) = query.q {
             search.query(query);
         }
+
+        search.terms_matching_strategy(query.matching_strategy.into());
 
         let max_total_hits = self
             .pagination_max_total_hits(&rtxn)?

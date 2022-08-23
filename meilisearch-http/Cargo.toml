@@ -11,7 +11,7 @@ name = "meilisearch"
 path = "src/main.rs"
 
 [build-dependencies]
-anyhow = { version = "1.0.56", optional = true }
+anyhow = { version = "1.0.62", optional = true }
 cargo_toml = { version = "0.11.4", optional = true }
 hex = { version = "0.4.3", optional = true }
 reqwest = { version = "0.11.9", features = ["blocking", "rustls-tls"], default-features = false, optional = true }
@@ -25,7 +25,7 @@ zip = { version = "0.5.13", optional = true }
 actix-cors = "0.6.1"
 actix-web = { version = "4.0.1", default-features = false, features = ["macros", "compress-brotli", "compress-gzip", "cookies", "rustls"] }
 actix-web-static-files = { git = "https://github.com/kilork/actix-web-static-files.git", rev = "2d3b6160", optional = true }
-anyhow = { version = "1.0.56", features = ["backtrace"] }
+anyhow = { version = "1.0.62", features = ["backtrace"] }
 async-stream = "0.3.3"
 async-trait = "0.1.52"
 bstr = "0.2.17"
@@ -64,7 +64,7 @@ rustls-pemfile = "0.3.0"
 segment = { version = "0.2.0", optional = true }
 serde = { version = "1.0.136", features = ["derive"] }
 serde-cs = "0.2.3"
-serde_json = { version = "1.0.79", features = ["preserve_order"] }
+serde_json = { version = "1.0.85", features = ["preserve_order"] }
 sha2 = "0.10.2"
 siphasher = "0.3.10"
 slice-group-by = "0.3.0"
