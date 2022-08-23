@@ -112,7 +112,7 @@
             },
             "editorMode": "builder",
             "exemplar": true,
-            "expr": "meilisearch_database_size{job=\"meilisearch\", instance=\"$instance\"}",
+            "expr": "meilisearch_db_size_bytes{job=\"meilisearch\", instance=\"$instance\"}",
             "interval": "",
             "legendFormat": "",
             "range": true,
@@ -178,7 +178,7 @@
             },
             "editorMode": "builder",
             "exemplar": true,
-            "expr": "meilisearch_total_index{job=\"meilisearch\", instance=\"$instance\"}",
+            "expr": "meilisearch_index_count{job=\"meilisearch\", instance=\"$instance\"}",
             "interval": "",
             "legendFormat": "",
             "range": true,
@@ -239,7 +239,7 @@
               "uid": "1MRsknzVz"
             },
             "editorMode": "builder",
-            "expr": "meilisearch_docs_count{job=\"meilisearch\", index=\"$Index\", instance=\"$instance\"}",
+            "expr": "meilisearch_index_docs_count{job=\"meilisearch\", index=\"$Index\", instance=\"$instance\"}",
             "hide": false,
             "range": true,
             "refId": "A"
@@ -1000,7 +1000,7 @@
       ]
     },
     "timezone": "",
-    "title": "MeiliSearch",
+    "title": "Meilisearch",
     "uid": "7wcZ94dnz",
     "version": 47,
     "weekStart": ""
