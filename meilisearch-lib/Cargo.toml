@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 actix-web = { version = "4.0.1", default-features = false }
-anyhow = { version = "1.0.56", features = ["backtrace"] }
+anyhow = { version = "1.0.62", features = ["backtrace"] }
 async-stream = "0.3.3"
 async-trait = "0.1.52"
 atomic_refcell = "0.1.8"
@@ -28,7 +28,7 @@ lazy_static = "1.4.0"
 log = "0.4.14"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
-milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.32.0" }
+milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.33.0" }
 mime = "0.3.16"
 num_cpus = "1.13.1"
 obkv = "0.2.0"
@@ -43,7 +43,7 @@ reqwest = { version = "0.11.9", features = ["json", "rustls-tls"], default-featu
 roaring = "0.9.0"
 rustls = "0.20.4"
 serde = { version = "1.0.136", features = ["derive"] }
-serde_json = { version = "1.0.79", features = ["preserve_order"] }
+serde_json = { version = "1.0.85", features = ["preserve_order"] }
 siphasher = "0.3.10"
 slice-group-by = "0.3.0"
 sysinfo = "0.23.5"
