@@ -8,6 +8,10 @@ members = [
     "permissive-json-pointer",
 ]
 
+[profile.release]
+codegen-units = 1
+lto = "thin"
+
 [profile.dev.package.flate2]
 opt-level = 3
 
