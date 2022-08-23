@@ -784,8 +784,10 @@ async fn main() -> anyhow::Result<()> {
                 None => fields_ids_map.iter().map(|(_, name)| name).map(String::from).collect(),
             };
 
-            let mut matcher_builder =
-                MatcherBuilder::new(matching_words, TokenizerBuilder::default().build());
+            let mut matcher_builder = MatcherBuilder::new(
+                matching_words,
+                TokenizerBuilder::default().create_char_map(true).build(),
+            );
             matcher_builder.highlight_prefix("<mark>".to_string());
             matcher_builder.highlight_suffix("</mark>".to_string());
             let highlighter = Highlighter::new(matcher_builder);
