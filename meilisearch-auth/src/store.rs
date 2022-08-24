@@ -126,6 +126,9 @@ impl HeedAuthStore {
                 Action::StatsAll => {
                     actions.insert(Action::StatsGet);
                 }
+                Action::MetricsAll => {
+                    actions.insert(Action::MetricsGet);
+                }
                 other => {
                     actions.insert(*other);
                 }
