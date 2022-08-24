@@ -6,63 +6,63 @@ use std::hash::Hash;
 #[repr(u8)]
 pub enum Action {
     #[serde(rename = "*")]
-    All = actions::ALL,
+    All = 0,
     #[serde(rename = "search")]
-    Search = actions::SEARCH,
+    Search,
     #[serde(rename = "documents.*")]
-    DocumentsAll = actions::DOCUMENTS_ALL,
+    DocumentsAll,
     #[serde(rename = "documents.add")]
-    DocumentsAdd = actions::DOCUMENTS_ADD,
+    DocumentsAdd,
     #[serde(rename = "documents.get")]
-    DocumentsGet = actions::DOCUMENTS_GET,
+    DocumentsGet,
     #[serde(rename = "documents.delete")]
-    DocumentsDelete = actions::DOCUMENTS_DELETE,
+    DocumentsDelete,
     #[serde(rename = "indexes.*")]
-    IndexesAll = actions::INDEXES_ALL,
+    IndexesAll,
     #[serde(rename = "indexes.create")]
-    IndexesAdd = actions::INDEXES_CREATE,
+    IndexesAdd,
     #[serde(rename = "indexes.get")]
-    IndexesGet = actions::INDEXES_GET,
+    IndexesGet,
     #[serde(rename = "indexes.update")]
-    IndexesUpdate = actions::INDEXES_UPDATE,
+    IndexesUpdate,
     #[serde(rename = "indexes.delete")]
-    IndexesDelete = actions::INDEXES_DELETE,
+    IndexesDelete,
     #[serde(rename = "tasks.*")]
-    TasksAll = actions::TASKS_ALL,
+    TasksAll,
     #[serde(rename = "tasks.get")]
-    TasksGet = actions::TASKS_GET,
+    TasksGet,
     #[serde(rename = "settings.*")]
-    SettingsAll = actions::SETTINGS_ALL,
+    SettingsAll,
     #[serde(rename = "settings.get")]
-    SettingsGet = actions::SETTINGS_GET,
+    SettingsGet,
     #[serde(rename = "settings.update")]
-    SettingsUpdate = actions::SETTINGS_UPDATE,
+    SettingsUpdate,
     #[serde(rename = "stats.*")]
-    StatsAll = actions::STATS_ALL,
+    StatsAll,
     #[serde(rename = "stats.get")]
-    StatsGet = actions::STATS_GET,
+    StatsGet,
     #[serde(rename = "metrics.*")]
-    MetricsAll = actions::METRICS_ALL,
+    MetricsAll,
     #[serde(rename = "metrics.get")]
-    MetricsGet = actions::METRICS_GET,
+    MetricsGet,
     #[serde(rename = "dumps.*")]
-    DumpsAll = actions::DUMPS_ALL,
+    DumpsAll,
     #[serde(rename = "dumps.create")]
-    DumpsCreate = actions::DUMPS_CREATE,
+    DumpsCreate,
     #[serde(rename = "version")]
-    Version = actions::VERSION,
+    Version,
     #[serde(rename = "keys.create")]
-    KeysAdd = actions::KEYS_CREATE,
+    KeysAdd,
     #[serde(rename = "keys.get")]
-    KeysGet = actions::KEYS_GET,
+    KeysGet,
     #[serde(rename = "keys.update")]
-    KeysUpdate = actions::KEYS_UPDATE,
+    KeysUpdate,
     #[serde(rename = "keys.delete")]
-    KeysDelete = actions::KEYS_DELETE,
+    KeysDelete,
 }
 
 impl Action {
-    pub fn from_repr(repr: u8) -> Option<Self> {
+    pub const fn from_repr(repr: u8) -> Option<Self> {
         use actions::*;
         match repr {
             ALL => Some(Self::All),
@@ -96,66 +96,39 @@ impl Action {
         }
     }
 
-    pub fn repr(&self) -> u8 {
-        use actions::*;
-        match self {
-            Self::All => ALL,
-            Self::Search => SEARCH,
-            Self::DocumentsAll => DOCUMENTS_ALL,
-            Self::DocumentsAdd => DOCUMENTS_ADD,
-            Self::DocumentsGet => DOCUMENTS_GET,
-            Self::DocumentsDelete => DOCUMENTS_DELETE,
-            Self::IndexesAll => INDEXES_ALL,
-            Self::IndexesAdd => INDEXES_CREATE,
-            Self::IndexesGet => INDEXES_GET,
-            Self::IndexesUpdate => INDEXES_UPDATE,
-            Self::IndexesDelete => INDEXES_DELETE,
-            Self::TasksAll => TASKS_ALL,
-            Self::TasksGet => TASKS_GET,
-            Self::SettingsAll => SETTINGS_ALL,
-            Self::SettingsGet => SETTINGS_GET,
-            Self::SettingsUpdate => SETTINGS_UPDATE,
-            Self::StatsAll => STATS_ALL,
-            Self::StatsGet => STATS_GET,
-            Self::MetricsAll => METRICS_ALL,
-            Self::MetricsGet => METRICS_GET,
-            Self::DumpsAll => DUMPS_ALL,
-            Self::DumpsCreate => DUMPS_CREATE,
-            Self::Version => VERSION,
-            Self::KeysAdd => KEYS_CREATE,
-            Self::KeysGet => KEYS_GET,
-            Self::KeysUpdate => KEYS_UPDATE,
-            Self::KeysDelete => KEYS_DELETE,
-        }
+    pub const fn repr(&self) -> u8 {
+        *self as u8
     }
 }
 
 pub mod actions {
-    pub(crate) const ALL: u8 = 0;
-    pub const SEARCH: u8 = 1;
-    pub const DOCUMENTS_ALL: u8 = 2;
-    pub const DOCUMENTS_ADD: u8 = 3;
-    pub const DOCUMENTS_GET: u8 = 4;
-    pub const DOCUMENTS_DELETE: u8 = 5;
-    pub const INDEXES_ALL: u8 = 6;
-    pub const INDEXES_CREATE: u8 = 7;
-    pub const INDEXES_GET: u8 = 8;
-    pub const INDEXES_UPDATE: u8 = 9;
-    pub const INDEXES_DELETE: u8 = 10;
-    pub const TASKS_ALL: u8 = 11;
-    pub const TASKS_GET: u8 = 12;
-    pub const SETTINGS_ALL: u8 = 13;
-    pub const SETTINGS_GET: u8 = 14;
-    pub const SETTINGS_UPDATE: u8 = 15;
-    pub const STATS_ALL: u8 = 16;
-    pub const STATS_GET: u8 = 17;
-    pub const METRICS_ALL: u8 = 18;
-    pub const METRICS_GET: u8 = 19;
-    pub const DUMPS_ALL: u8 = 20;
-    pub const DUMPS_CREATE: u8 = 21;
-    pub const VERSION: u8 = 22;
-    pub const KEYS_CREATE: u8 = 23;
-    pub const KEYS_GET: u8 = 24;
-    pub const KEYS_UPDATE: u8 = 25;
-    pub const KEYS_DELETE: u8 = 26;
+    use super::Action::*;
+
+    pub(crate) const ALL: u8 = All.repr();
+    pub const SEARCH: u8 = Search.repr();
+    pub const DOCUMENTS_ALL: u8 = DocumentsAll.repr();
+    pub const DOCUMENTS_ADD: u8 = DocumentsAdd.repr();
+    pub const DOCUMENTS_GET: u8 = DocumentsGet.repr();
+    pub const DOCUMENTS_DELETE: u8 = DocumentsDelete.repr();
+    pub const INDEXES_ALL: u8 = IndexesAll.repr();
+    pub const INDEXES_CREATE: u8 = IndexesAdd.repr();
+    pub const INDEXES_GET: u8 = IndexesGet.repr();
+    pub const INDEXES_UPDATE: u8 = IndexesUpdate.repr();
+    pub const INDEXES_DELETE: u8 = IndexesDelete.repr();
+    pub const TASKS_ALL: u8 = TasksAll.repr();
+    pub const TASKS_GET: u8 = TasksGet.repr();
+    pub const SETTINGS_ALL: u8 = SettingsAll.repr();
+    pub const SETTINGS_GET: u8 = SettingsGet.repr();
+    pub const SETTINGS_UPDATE: u8 = SettingsUpdate.repr();
+    pub const STATS_ALL: u8 = StatsAll.repr();
+    pub const STATS_GET: u8 = StatsGet.repr();
+    pub const METRICS_ALL: u8 = MetricsAll.repr();
+    pub const METRICS_GET: u8 = MetricsGet.repr();
+    pub const DUMPS_ALL: u8 = DumpsAll.repr();
+    pub const DUMPS_CREATE: u8 = DumpsCreate.repr();
+    pub const VERSION: u8 = Version.repr();
+    pub const KEYS_CREATE: u8 = KeysAdd.repr();
+    pub const KEYS_GET: u8 = KeysGet.repr();
+    pub const KEYS_UPDATE: u8 = KeysUpdate.repr();
+    pub const KEYS_DELETE: u8 = KeysDelete.repr();
 }
