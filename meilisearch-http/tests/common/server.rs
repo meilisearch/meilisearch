@@ -162,6 +162,7 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
             max_indexing_memory: MaxMemory::unlimited(),
             ..Parser::parse_from(None as Option<&str>)
         },
+        enable_metrics_route: true,
         ..Parser::parse_from(None as Option<&str>)
     }
 }
