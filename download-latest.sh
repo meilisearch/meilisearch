@@ -79,33 +79,32 @@ get_latest() {
         curl -H "Authorization: token $GITHUB_PAT" -s 'https://api.github.com/repos/meilisearch/meilisearch/releases' > "$temp_file" || return 1
     fi
 
-    releases=$(cat "$temp_file" | \
-        grep -E '"tag_name":|"draft":|"prerelease":' \
+    releases=$(cat "$temp_file" | json_pp | \
+        grep -E '"tag_name" :|"draft" :|"prerelease" :' \
         | tr -d ',"' | cut -d ':' -f2 | tr -d ' ')
         # Returns a list of [tag_name draft_boolean prerelease_boolean ...]
         # Ex: v0.10.1 false false v0.9.1-rc.1 false true v0.9.0 false false...
-
     i=0
     latest=''
     current_tag=''
     for release_info in $releases; do
-        if [ $i -eq 0 ]; then # Checking tag_name
+        if [ $i -eq 2 ]; then # Checking tag_name
             if echo "$release_info" | grep -q "$GREP_SEMVER_REGEXP"; then # If it's not an alpha or beta release
                 current_tag=$release_info
             else
                 current_tag=''
             fi
+            i=0
+        elif [ $i -eq 0 ]; then # Checking draft boolean
+            if [ "$release_info" = 'true' ]; then
+                current_tag=''
+            fi
             i=1
-        elif [ $i -eq 1 ]; then # Checking draft boolean
+        elif [ $i -eq 1 ]; then # Checking prerelease boolean
             if [ "$release_info" = 'true' ]; then
                 current_tag=''
             fi
             i=2
-        elif [ $i -eq 2 ]; then # Checking prerelease boolean
-            if [ "$release_info" = 'true' ]; then
-                current_tag=''
-            fi
-            i=0
             if [ "$current_tag" != '' ]; then # If the current_tag is valid
                 if [ "$latest" = '' ]; then # If there is no latest yet
                     latest="$current_tag"
@@ -134,7 +133,7 @@ get_os() {
     'Linux')
         os='linux'
         ;;
-	'MINGW'*)
+    'MINGW'*)
         os='windows'
         ;;
     *)
