@@ -24,8 +24,12 @@
 Meilisearch helps you shape a delightful search experience in a snap, offering features that work out-of-the-box to speed up your workflow.
 
 <p align="center" name="demo">
-  <img src="assets/demo-light.gif#gh-light-mode-only" alt="A bright colored application for finding movies screening near the user">
-  <img src="assets/demo-dark.gif#gh-dark-mode-only" alt="A dark colored application for finding movies screening near the user">
+  <a href="https://where2watch.meilisearch.com/#gh-light-mode-only" target="_blank">
+    <img src="assets/demo-light.gif#gh-light-mode-only" alt="A bright colored application for finding movies screening near the user">
+  </a>
+  <a href="https://where2watch.meilisearch.com/#gh-dark-mode-only" target="_blank">
+    <img src="assets/demo-dark.gif#gh-dark-mode-only" alt="A dark colored application for finding movies screening near the user">
+  </a>
 </p>
 
 [**Try it!**](https://where2watch.meilisearch.com/)
