@@ -41,6 +41,10 @@ pub enum Action {
     StatsAll = actions::STATS_ALL,
     #[serde(rename = "stats.get")]
     StatsGet = actions::STATS_GET,
+    #[serde(rename = "metrics.*")]
+    MetricsAll = actions::METRICS_ALL,
+    #[serde(rename = "metrics.get")]
+    MetricsGet = actions::METRICS_GET,
     #[serde(rename = "dumps.*")]
     DumpsAll = actions::DUMPS_ALL,
     #[serde(rename = "dumps.create")]
@@ -79,6 +83,8 @@ impl Action {
             SETTINGS_UPDATE => Some(Self::SettingsUpdate),
             STATS_ALL => Some(Self::StatsAll),
             STATS_GET => Some(Self::StatsGet),
+            METRICS_ALL => Some(Self::MetricsAll),
+            METRICS_GET => Some(Self::MetricsGet),
             DUMPS_ALL => Some(Self::DumpsAll),
             DUMPS_CREATE => Some(Self::DumpsCreate),
             VERSION => Some(Self::Version),
@@ -111,6 +117,8 @@ impl Action {
             Self::SettingsUpdate => SETTINGS_UPDATE,
             Self::StatsAll => STATS_ALL,
             Self::StatsGet => STATS_GET,
+            Self::MetricsAll => METRICS_ALL,
+            Self::MetricsGet => METRICS_GET,
             Self::DumpsAll => DUMPS_ALL,
             Self::DumpsCreate => DUMPS_CREATE,
             Self::Version => VERSION,
@@ -141,11 +149,13 @@ pub mod actions {
     pub const SETTINGS_UPDATE: u8 = 15;
     pub const STATS_ALL: u8 = 16;
     pub const STATS_GET: u8 = 17;
-    pub const DUMPS_ALL: u8 = 18;
-    pub const DUMPS_CREATE: u8 = 19;
-    pub const VERSION: u8 = 20;
-    pub const KEYS_CREATE: u8 = 21;
-    pub const KEYS_GET: u8 = 22;
-    pub const KEYS_UPDATE: u8 = 23;
-    pub const KEYS_DELETE: u8 = 24;
+    pub const METRICS_ALL: u8 = 18;
+    pub const METRICS_GET: u8 = 19;
+    pub const DUMPS_ALL: u8 = 20;
+    pub const DUMPS_CREATE: u8 = 21;
+    pub const VERSION: u8 = 22;
+    pub const KEYS_CREATE: u8 = 23;
+    pub const KEYS_GET: u8 = 24;
+    pub const KEYS_UPDATE: u8 = 25;
+    pub const KEYS_DELETE: u8 = 26;
 }
