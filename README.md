@@ -32,7 +32,7 @@ Meilisearch helps you shape a delightful search experience in a snap, offering f
   </a>
 </p>
 
-[**Try it!**](https://where2watch.meilisearch.com/)
+🔥 [**Try it!**](https://where2watch.meilisearch.com/) 🔥
 
 ## ✨ Features
 
