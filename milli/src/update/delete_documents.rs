@@ -27,7 +27,7 @@ pub struct DeleteDocuments<'t, 'u, 'i> {
     external_documents_ids: ExternalDocumentsIds<'static>,
     to_delete_docids: RoaringBitmap,
     #[cfg(test)]
-    disable_soft_delete: bool,
+    disable_soft_deletion: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,13 +49,13 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             external_documents_ids,
             to_delete_docids: RoaringBitmap::new(),
             #[cfg(test)]
-            disable_soft_delete: false,
+            disable_soft_deletion: false,
         })
     }
 
     #[cfg(test)]
-    fn disable_soft_delete(&mut self, disable: bool) {
-        self.disable_soft_delete = disable;
+    fn disable_soft_deletion(&mut self, disable: bool) {
+        self.disable_soft_deletion = disable;
     }
 
     pub fn delete_document(&mut self, docid: u32) {
@@ -156,17 +156,17 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         //   We run the deletion.
         // - With 100Go of disk and 50Go used including 15Go of soft-deleted documents
         //   We run the deletion.
-        let disable_soft_delete = {
+        let disable_soft_deletion = {
             #[cfg(not(test))]
             {
                 false
             }
             #[cfg(test)]
             {
-                self.disable_soft_delete
+                self.disable_soft_deletion
             }
         };
-        if !disable_soft_delete
+        if !disable_soft_deletion
             && percentage_available > 10
             && percentage_used_by_soft_deleted_documents < 10
         {
@@ -634,7 +634,7 @@ mod tests {
 
     use super::*;
     use crate::index::tests::TempIndex;
-    use crate::Filter;
+    use crate::{db_snap, Filter};
 
     fn delete_documents<'t>(
         wtxn: &mut RwTxn<'t, '_>,
@@ -680,6 +680,10 @@ mod tests {
 
         wtxn.commit().unwrap();
 
+        db_snap!(index, documents_ids, @"[]");
+        db_snap!(index, word_docids, @"");
+        db_snap!(index, soft_deleted_documents_ids, @"[]");
+
         let rtxn = index.read_txn().unwrap();
 
         assert!(index.field_distribution(&rtxn).unwrap().is_empty());
@@ -688,6 +692,10 @@ mod tests {
     #[test]
     fn delete_documents_with_strange_primary_key() {
         let index = TempIndex::new();
+
+        index
+            .update_settings(|settings| settings.set_searchable_fields(vec!["name".to_string()]))
+            .unwrap();
 
         let mut wtxn = index.write_txn().unwrap();
         index
@@ -700,14 +708,32 @@ mod tests {
                 ]),
             )
             .unwrap();
+        wtxn.commit().unwrap();
+
+        db_snap!(index, documents_ids, @"[0, 1, 2, ]");
+        db_snap!(index, word_docids, @r###"
+        benoit           [2, ]
+        kevin            [0, ]
+        kevina           [1, ]
+        "###);
+        db_snap!(index, soft_deleted_documents_ids, @"[]");
+
+        let mut wtxn = index.write_txn().unwrap();
 
         // Delete not all of the documents but some of them.
         let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
         builder.delete_external_id("0");
         builder.delete_external_id("1");
         builder.execute().unwrap();
-
         wtxn.commit().unwrap();
+
+        db_snap!(index, documents_ids, @"[2, ]");
+        db_snap!(index, word_docids, @r###"
+        benoit           [2, ]
+        kevin            [0, ]
+        kevina           [1, ]
+        "###);
+        db_snap!(index, soft_deleted_documents_ids, @"[0, 1, ]");
     }
 
     #[test]
@@ -727,26 +753,29 @@ mod tests {
             .add_documents_using_wtxn(
                 &mut wtxn,
                 documents!([
-                    { "docid": "1_4",  "label": "sign" },
-                    { "docid": "1_5",  "label": "letter" },
-                    { "docid": "1_7",  "label": "abstract,cartoon,design,pattern" },
-                    { "docid": "1_36", "label": "drawing,painting,pattern" },
-                    { "docid": "1_37", "label": "art,drawing,outdoor" },
-                    { "docid": "1_38", "label": "aquarium,art,drawing" },
-                    { "docid": "1_39", "label": "abstract" },
-                    { "docid": "1_40", "label": "cartoon" },
-                    { "docid": "1_41", "label": "art,drawing" },
-                    { "docid": "1_42", "label": "art,pattern" },
-                    { "docid": "1_43", "label": "abstract,art,drawing,pattern" },
-                    { "docid": "1_44", "label": "drawing" },
-                    { "docid": "1_45", "label": "art" },
-                    { "docid": "1_46", "label": "abstract,colorfulness,pattern" },
-                    { "docid": "1_47", "label": "abstract,pattern" },
-                    { "docid": "1_52", "label": "abstract,cartoon" },
-                    { "docid": "1_57", "label": "abstract,drawing,pattern" },
-                    { "docid": "1_58", "label": "abstract,art,cartoon" },
-                    { "docid": "1_68", "label": "design" },
-                    { "docid": "1_69", "label": "geometry" }
+                    { "docid": "1_4",  "label": ["sign"] },
+                    { "docid": "1_5",  "label": ["letter"] },
+                    { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"] },
+                    { "docid": "1_36", "label": ["drawing","painting","pattern"] },
+                    { "docid": "1_37", "label": ["art","drawing","outdoor"] },
+                    { "docid": "1_38", "label": ["aquarium","art","drawing"] },
+                    { "docid": "1_39", "label": ["abstract"] },
+                    { "docid": "1_40", "label": ["cartoon"] },
+                    { "docid": "1_41", "label": ["art","drawing"] },
+                    { "docid": "1_42", "label": ["art","pattern"] },
+                    { "docid": "1_43", "label": ["abstract","art","drawing","pattern"] },
+                    { "docid": "1_44", "label": ["drawing"] },
+                    { "docid": "1_45", "label": ["art"] },
+                    { "docid": "1_46", "label": ["abstract","colorfulness","pattern"] },
+                    { "docid": "1_47", "label": ["abstract","pattern"] },
+                    { "docid": "1_52", "label": ["abstract","cartoon"] },
+                    { "docid": "1_57", "label": ["abstract","drawing","pattern"] },
+                    { "docid": "1_58", "label": ["abstract","art","cartoon"] },
+                    { "docid": "1_68", "label": ["design"] },
+                    { "docid": "1_69", "label": ["geometry"] },
+                    { "docid": "1_70", "label2": ["geometry", 1.2] },
+                    { "docid": "1_71", "label2": ["design", 2.2] },
+                    { "docid": "1_72", "label2": ["geometry", 1.2] }
                 ]),
             )
             .unwrap();
@@ -759,6 +788,86 @@ mod tests {
         assert!(results.documents_ids.is_empty());
 
         wtxn.commit().unwrap();
+
+        db_snap!(index, soft_deleted_documents_ids, @"[0, ]");
+        db_snap!(index, word_docids, @"e89cd44832e960519823e12b1e7e28af");
+        db_snap!(index, facet_id_f64_docids, @"");
+        db_snap!(index, facet_id_string_docids, @"720ee1ba8c18342f3714c5863bc6c1f5");
+    }
+    #[test]
+    fn facet_hard_deletion() {
+        let index = TempIndex::new();
+
+        let mut wtxn = index.write_txn().unwrap();
+
+        index
+            .update_settings_using_wtxn(&mut wtxn, |settings| {
+                settings.set_primary_key(S("docid"));
+                settings.set_filterable_fields(hashset! { S("label") });
+            })
+            .unwrap();
+
+        index
+            .add_documents_using_wtxn(
+                &mut wtxn,
+                documents!([
+                    { "docid": "1_4",  "label": ["sign"] },
+                    { "docid": "1_5",  "label": ["letter"] },
+                    { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"] },
+                    { "docid": "1_36", "label": ["drawing","painting","pattern"] },
+                    { "docid": "1_37", "label": ["art","drawing","outdoor"] },
+                    { "docid": "1_38", "label": ["aquarium","art","drawing"] },
+                    { "docid": "1_39", "label": ["abstract"] },
+                    { "docid": "1_40", "label": ["cartoon"] },
+                    { "docid": "1_41", "label": ["art","drawing"] },
+                    { "docid": "1_42", "label": ["art","pattern"] },
+                    { "docid": "1_43", "label": ["abstract","art","drawing","pattern"] },
+                    { "docid": "1_44", "label": ["drawing"] },
+                    { "docid": "1_45", "label": ["art"] },
+                    { "docid": "1_46", "label": ["abstract","colorfulness","pattern"] },
+                    { "docid": "1_47", "label": ["abstract","pattern"] },
+                    { "docid": "1_52", "label": ["abstract","cartoon"] },
+                    { "docid": "1_57", "label": ["abstract","drawing","pattern"] },
+                    { "docid": "1_58", "label": ["abstract","art","cartoon"] },
+                    { "docid": "1_68", "label": ["design"] },
+                    { "docid": "1_69", "label": ["geometry"] },
+                    { "docid": "1_70", "label2": ["geometry", 1.2] },
+                    { "docid": "1_71", "label2": ["design", 2.2] },
+                    { "docid": "1_72", "label2": ["geometry", 1.2] }
+                ]),
+            )
+            .unwrap();
+
+        // Delete not all of the documents but some of them.
+        let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
+        builder.disable_soft_deletion(true);
+        builder.delete_external_id("1_4");
+        builder.execute().unwrap();
+
+        wtxn.commit().unwrap();
+
+        db_snap!(index, soft_deleted_documents_ids, 1, @"[]");
+        db_snap!(index, word_docids, 1, @"999733c2461093d4873321902fc8dcd7");
+        db_snap!(index, facet_id_f64_docids, 1, @"");
+        db_snap!(index, facet_id_string_docids, 1, @"a12e80655ed5f0f8e869bb9c32af61e9");
+
+        let mut wtxn = index.write_txn().unwrap();
+
+        // Delete more than one document
+        let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
+        builder.disable_soft_deletion(true);
+        builder.delete_external_id("1_5");
+        builder.delete_external_id("1_7");
+        builder.delete_external_id("1_70");
+        builder.delete_external_id("1_72");
+        builder.execute().unwrap();
+
+        wtxn.commit().unwrap();
+
+        db_snap!(index, soft_deleted_documents_ids, 2, @"[]");
+        db_snap!(index, word_docids, 2, @"b892636eaff43c917d5aa8b09c107a02");
+        db_snap!(index, facet_id_f64_docids, 2, @"");
+        db_snap!(index, facet_id_string_docids, 2, @"b9946a9cb0ed2df40352e98d6836c8d0");
     }
 
     #[test]
@@ -814,6 +923,8 @@ mod tests {
         }
 
         wtxn.commit().unwrap();
+
+        db_snap!(index, soft_deleted_documents_ids, @"[0, ]");
     }
 
     #[test]
@@ -869,6 +980,8 @@ mod tests {
         }
 
         wtxn.commit().unwrap();
+
+        db_snap!(index, soft_deleted_documents_ids, @"[2, 15, ]");
     }
 
     #[test]
@@ -923,6 +1036,10 @@ mod tests {
         }
 
         wtxn.commit().unwrap();
+
+        db_snap!(index, soft_deleted_documents_ids, @"[4, 5, 6, 11, 16, 18, ]");
+        db_snap!(index, facet_id_f64_docids, @"20727a38c0b1e1a20a44526b85cf2cbc");
+        db_snap!(index, facet_id_string_docids, @"");
     }
 
     #[test]
@@ -995,6 +1112,8 @@ mod tests {
         }
 
         wtxn.commit().unwrap();
+
+        db_snap!(index, soft_deleted_documents_ids, @"[2, 15, ]");
     }
 
     #[test]
@@ -1045,5 +1164,7 @@ mod tests {
         assert_eq!(Some(&2), results.get("number"));
 
         wtxn.commit().unwrap();
+
+        db_snap!(index, soft_deleted_documents_ids, @"[2, 15, ]");
     }
 }
