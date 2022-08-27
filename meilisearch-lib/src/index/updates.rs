@@ -336,7 +336,6 @@ impl Index {
                         indexed_documents: count,
                         number_of_documents: count,
                     };
-                    info!("document addition done: {:?}", addition);
                     Ok(addition)
                 }
                 Err(e) => Err(IndexError::from(e)),
@@ -348,6 +347,7 @@ impl Index {
         if results.iter().any(Result::is_ok) {
             let _addition = builder.execute()?;
             txn.commit()?;
+            info!("document addition done: {:?}", _addition);
         }
 
         Ok(results)
