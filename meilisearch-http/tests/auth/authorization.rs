@@ -8,7 +8,7 @@ use time::{Duration, OffsetDateTime};
 
 pub static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'static str>>> =
     Lazy::new(|| {
-        hashmap! {
+        let mut authorizations = hashmap! {
             ("POST",    "/indexes/products/search") =>                         hashset!{"search", "*"},
             ("GET",     "/indexes/products/search") =>                         hashset!{"search", "*"},
             ("POST",    "/indexes/products/documents") =>                      hashset!{"documents.add", "documents.*", "*"},
@@ -45,7 +45,6 @@ pub static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'
             ("PUT",     "/indexes/products/settings/synonyms") =>              hashset!{"settings.update", "settings.*", "*"},
             ("GET",     "/indexes/products/stats") =>                          hashset!{"stats.get", "stats.*", "*"},
             ("GET",     "/stats") =>                                           hashset!{"stats.get", "stats.*", "*"},
-            ("GET",     "/metrics") =>                                         hashset!{"metrics.get", "metrics.*", "*"},
             ("POST",    "/dumps") =>                                           hashset!{"dumps.create", "dumps.*", "*"},
             ("GET",     "/version") =>                                         hashset!{"version", "*"},
             ("PATCH",   "/keys/mykey/") =>                                     hashset!{"keys.update", "*"},
@@ -53,7 +52,16 @@ pub static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'
             ("DELETE",  "/keys/mykey/") =>                                     hashset!{"keys.delete", "*"},
             ("POST",    "/keys") =>                                            hashset!{"keys.create", "*"},
             ("GET",     "/keys") =>                                            hashset!{"keys.get", "*"},
+        };
+
+        if cfg!(feature = "metrics") {
+            authorizations.insert(
+                ("GET", "/metrics"),
+                hashset! {"metrics.get", "metrics.*", "*"},
+            );
         }
+
+        authorizations
     });
 
 pub static ALL_ACTIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
