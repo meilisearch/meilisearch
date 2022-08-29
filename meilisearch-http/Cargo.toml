@@ -78,7 +78,7 @@ tokio = { version = "1.17.0", features = ["full"] }
 tokio-stream = "0.1.8"
 uuid = { version = "1.1.2", features = ["serde", "v4"] }
 walkdir = "2.3.2"
-prometheus = { version = "0.13.0", features = ["process"] }
+prometheus = { version = "0.13.0", features = ["process"], optional = true }
 lazy_static = "1.4.0"
 
 [dev-dependencies]
@@ -91,6 +91,7 @@ yaup = "0.2.0"
 
 [features]
 default = ["analytics", "mini-dashboard"]
+metrics = ["prometheus"]
 analytics = ["segment"]
 mini-dashboard = [
     "actix-web-static-files",

@@ -5,10 +5,13 @@ pub mod analytics;
 pub mod task;
 #[macro_use]
 pub mod extractors;
-pub mod metrics;
 pub mod option;
-pub mod route_metrics;
 pub mod routes;
+
+#[cfg(feature = "metrics")]
+pub mod metrics;
+#[cfg(feature = "metrics")]
+pub mod route_metrics;
 
 use std::sync::{atomic::AtomicBool, Arc};
 use std::time::Duration;
@@ -142,9 +145,12 @@ pub fn dashboard(config: &mut web::ServiceConfig, _enable_frontend: bool) {
     config.service(web::resource("/").route(web::get().to(routes::running)));
 }
 
+#[cfg(feature = "metrics")]
 pub fn configure_metrics_route(config: &mut web::ServiceConfig, enable_metrics_route: bool) {
     if enable_metrics_route {
-        config.service(web::resource("/metrics").route(web::get().to(routes::get_metrics)));
+        config.service(
+            web::resource("/metrics").route(web::get().to(crate::route_metrics::get_metrics)),
+        );
     }
 }
 
@@ -158,17 +164,21 @@ macro_rules! create_app {
         use actix_web::App;
         use actix_web::{middleware, web};
         use meilisearch_http::error::MeilisearchHttpError;
-        use meilisearch_http::metrics;
-        use meilisearch_http::route_metrics;
         use meilisearch_http::routes;
-        use meilisearch_http::{configure_data, configure_metrics_route, dashboard};
+        use meilisearch_http::{configure_data, dashboard};
+        #[cfg(feature = "metrics")]
+        use meilisearch_http::{configure_metrics_route, metrics, route_metrics};
         use meilisearch_types::error::ResponseError;
 
-        App::new()
+        let app = App::new()
             .configure(|s| configure_data(s, $data.clone(), $auth.clone(), &$opt, $analytics))
             .configure(routes::configure)
-            .configure(|s| dashboard(s, $enable_frontend))
-            .configure(|s| configure_metrics_route(s, $opt.enable_metrics_route))
+            .configure(|s| dashboard(s, $enable_frontend));
+
+        #[cfg(feature = "metrics")]
+        let app = app.configure(|s| configure_metrics_route(s, $opt.enable_metrics_route));
+
+        let app = app
             .wrap(
                 Cors::default()
                     .send_wildcard()
@@ -181,10 +191,14 @@ macro_rules! create_app {
             .wrap(middleware::Compress::default())
             .wrap(middleware::NormalizePath::new(
                 middleware::TrailingSlash::Trim,
-            ))
-            .wrap(Condition::new(
-                $opt.enable_metrics_route,
-                route_metrics::RouteMetrics,
-            ))
+            ));
+
+        #[cfg(feature = "metrics")]
+        let app = app.wrap(Condition::new(
+            $opt.enable_metrics_route,
+            route_metrics::RouteMetrics,
+        ));
+
+        app
     }};
 }

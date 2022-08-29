@@ -147,6 +147,7 @@ pub struct Opt {
     pub log_level: String,
 
     /// Enables Prometheus metrics and /metrics route.
+    #[cfg(feature = "metrics")]
     #[clap(long, env = "MEILI_ENABLE_METRICS_ROUTE")]
     pub enable_metrics_route: bool,
 
