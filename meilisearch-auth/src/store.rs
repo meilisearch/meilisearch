@@ -122,6 +122,7 @@ impl HeedAuthStore {
                 }
                 Action::TasksAll => {
                     actions.insert(Action::TasksGet);
+                    actions.insert(Action::TasksCancel);
                 }
                 Action::StatsAll => {
                     actions.insert(Action::StatsGet);
