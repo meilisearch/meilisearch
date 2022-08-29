@@ -88,6 +88,7 @@ pub enum TaskStatus {
     Enqueued,
     Processing,
     Succeeded,
+    Canceled,
     Failed,
 }
 
@@ -119,6 +120,8 @@ impl FromStr for TaskStatus {
             Ok(TaskStatus::Processing)
         } else if status.eq_ignore_ascii_case("succeeded") {
             Ok(TaskStatus::Succeeded)
+        } else if status.eq_ignore_ascii_case("canceled") {
+            Ok(TaskStatus::Canceled)
         } else if status.eq_ignore_ascii_case("failed") {
             Ok(TaskStatus::Failed)
         } else {
@@ -361,6 +364,8 @@ impl From<Task> for TaskView {
                 }
                 (TaskStatus::Failed, Some(error.clone()), Some(*timestamp))
             }
+            // TODO what should I do in here? Should I replace something or what?
+            TaskEvent::Canceled { timestamp } => (TaskStatus::Canceled, None, Some(*timestamp)),
         };
 
         let enqueued_at = match events.first() {

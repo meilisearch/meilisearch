@@ -58,6 +58,11 @@ pub enum TaskEvent {
         #[serde(with = "time::serde::rfc3339")]
         timestamp: OffsetDateTime,
     },
+    Canceled {
+        #[cfg_attr(test, proptest(strategy = "test::datetime_strategy()"))]
+        #[serde(with = "time::serde::rfc3339")]
+        timestamp: OffsetDateTime,
+    },
 }
 
 impl TaskEvent {
@@ -71,6 +76,12 @@ impl TaskEvent {
     pub fn failed(error: impl Into<ResponseError>) -> Self {
         Self::Failed {
             error: error.into(),
+            timestamp: OffsetDateTime::now_utc(),
+        }
+    }
+
+    pub fn canceled() -> Self {
+        Self::Canceled {
             timestamp: OffsetDateTime::now_utc(),
         }
     }
@@ -94,14 +105,21 @@ pub struct Task {
 
 impl Task {
     /// Return true when a task is finished.
-    /// A task is finished when its last state is either `Succeeded` or `Failed`.
+    /// A task is finished when its last state is either `Succeeded`, `Failed` or `Canceled`.
     pub fn is_finished(&self) -> bool {
         self.events.last().map_or(false, |event| {
             matches!(
                 event,
-                TaskEvent::Succeeded { .. } | TaskEvent::Failed { .. }
+                TaskEvent::Succeeded { .. } | TaskEvent::Failed { .. } | TaskEvent::Canceled { .. }
             )
         })
+    }
+
+    /// Return true when a task is being processed.
+    pub fn is_processing(&self) -> bool {
+        self.events
+            .last()
+            .map_or(false, |event| matches!(event, TaskEvent::Processing { .. }))
     }
 
     /// Return the content_uuid of the `Task` if there is one.

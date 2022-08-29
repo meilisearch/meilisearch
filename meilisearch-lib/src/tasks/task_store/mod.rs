@@ -123,6 +123,30 @@ impl TaskStore {
         }
     }
 
+    pub async fn cancel_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Task> {
+        let store = self.store.clone();
+        let task = tokio::task::spawn_blocking(move || -> Result<_> {
+            let mut txn = store.wtxn()?;
+            match store.get(&txn, id)? {
+                Some(mut task) if filter.map_or(true, |f| f.pass(&task)) => {
+                    if task.is_finished() || task.is_processing() {
+                        Err(TaskError::InvalidTaskCancellation(id))
+                    } else {
+                        task.events.push(TaskEvent::canceled());
+                        store.put(&mut txn, &task)?;
+                        txn.commit()?;
+                        Ok(Some(task))
+                    }
+                }
+                _ => Ok(None),
+            }
+        })
+        .await??
+        .ok_or(TaskError::UnexistingTask(id))?;
+
+        Ok(task)
+    }
+
     /// This methods takes a `Processing` which contains the next task ids to process, and returns
     /// the corresponding tasks along with the ownership to the passed processing.
     ///
@@ -324,6 +348,13 @@ pub mod test {
             match self {
                 Self::Real(s) => s.get_task(id, filter).await,
                 Self::Mock(m) => unsafe { m.get::<_, Result<Task>>("get_task").call((id, filter)) },
+            }
+        }
+
+        pub async fn cancel_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Task> {
+            match self {
+                Self::Real(s) => s.cancel_task(id, filter).await,
+                Self::Mock(_m) => todo!(),
             }
         }
 

@@ -20,7 +20,11 @@ const DEFAULT_LIMIT: fn() -> usize = || 20;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::get().to(SeqHandler(get_tasks))))
-        .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))));
+        .service(
+            web::resource("/{task_id}")
+                .route(web::get().to(SeqHandler(get_task)))
+                .route(web::delete().to(SeqHandler(cancel_task))),
+        );
 }
 
 #[derive(Deserialize, Debug)]
@@ -196,6 +200,37 @@ async fn get_task(
 
     let task: TaskView = meilisearch
         .get_task(task_id.into_inner(), filters)
+        .await?
+        .into();
+
+    Ok(HttpResponse::Ok().json(task))
+}
+
+async fn cancel_task(
+    meilisearch: GuardedData<ActionPolicy<{ actions::TASKS_CANCEL }>, MeiliSearch>,
+    task_id: web::Path<TaskId>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    analytics.publish(
+        "Tasks Cancel".to_string(),
+        json!({ "per_task_uid": true }),
+        Some(&req),
+    );
+
+    let search_rules = &meilisearch.filters().search_rules;
+    let filters = if search_rules.is_index_authorized("*") {
+        None
+    } else {
+        let mut filters = TaskFilter::default();
+        for (index, _policy) in search_rules.clone() {
+            filters.filter_index(index);
+        }
+        Some(filters)
+    };
+
+    let task: TaskView = meilisearch
+        .cancel_task(task_id.into_inner(), filters)
         .await?
         .into();
 

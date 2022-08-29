@@ -147,6 +147,7 @@ pub enum Code {
     NoSpaceLeftOnDevice,
     DumpNotFound,
     TaskNotFound,
+    InvalidTaskCancellation,
     PayloadTooLarge,
     RetrieveDocument,
     SearchDocuments,
@@ -232,6 +233,10 @@ impl Code {
                 ErrCode::authentication("missing_authorization_header", StatusCode::UNAUTHORIZED)
             }
             TaskNotFound => ErrCode::invalid("task_not_found", StatusCode::NOT_FOUND),
+            InvalidTaskCancellation => ErrCode::invalid(
+                "invalid_task_cancellation",
+                StatusCode::UNPROCESSABLE_ENTITY,
+            ),
             DumpNotFound => ErrCode::invalid("dump_not_found", StatusCode::NOT_FOUND),
             NoSpaceLeftOnDevice => {
                 ErrCode::internal("no_space_left_on_device", StatusCode::INTERNAL_SERVER_ERROR)

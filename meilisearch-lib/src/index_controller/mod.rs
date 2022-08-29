@@ -451,6 +451,11 @@ where
         Ok(task)
     }
 
+    pub async fn cancel_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Task> {
+        let task = self.scheduler.read().await.cancel_task(id, filter).await?;
+        Ok(task)
+    }
+
     pub async fn get_index_task(&self, index_uid: String, task_id: TaskId) -> Result<Task> {
         let creation_task_id = self
             .index_resolver

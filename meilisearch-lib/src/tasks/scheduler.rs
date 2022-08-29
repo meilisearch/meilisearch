@@ -316,6 +316,10 @@ impl Scheduler {
         self.store.get_task(id, filter).await
     }
 
+    pub async fn cancel_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Task> {
+        self.store.cancel_task(id, filter).await
+    }
+
     pub async fn list_tasks(
         &self,
         offset: Option<TaskId>,
