@@ -7,10 +7,8 @@ use roaring::RoaringBitmap;
 
 use crate::error::UserError;
 use crate::facet::FacetType;
-use crate::heed_codec::facet::{
-    FacetStringLevelZeroCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
-};
-use crate::search::facet::{FacetNumberIter, FacetNumberRange, FacetStringIter};
+use crate::heed_codec::facet::{FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec};
+// use crate::search::facet::FacetStringIter;
 use crate::{FieldId, Index, Result};
 
 /// The default number of values by facets that will
@@ -133,21 +131,22 @@ impl<'a> FacetDistribution<'a> {
         candidates: &RoaringBitmap,
         distribution: &mut BTreeMap<String, u64>,
     ) -> heed::Result<()> {
-        let iter =
-            FacetNumberIter::new_non_reducing(self.rtxn, self.index, field_id, candidates.clone())?;
+        todo!()
+        // let iter =
+        //     FacetNumberIter::new_non_reducing(self.rtxn, self.index, field_id, candidates.clone())?;
 
-        for result in iter {
-            let (value, mut docids) = result?;
-            docids &= candidates;
-            if !docids.is_empty() {
-                distribution.insert(value.to_string(), docids.len());
-            }
-            if distribution.len() == self.max_values_per_facet {
-                break;
-            }
-        }
+        // for result in iter {
+        //     let (value, mut docids) = result?;
+        //     docids &= candidates;
+        //     if !docids.is_empty() {
+        //         distribution.insert(value.to_string(), docids.len());
+        //     }
+        //     if distribution.len() == self.max_values_per_facet {
+        //         break;
+        //     }
+        // }
 
-        Ok(())
+        // Ok(())
     }
 
     fn facet_strings_distribution_from_facet_levels(
@@ -156,21 +155,22 @@ impl<'a> FacetDistribution<'a> {
         candidates: &RoaringBitmap,
         distribution: &mut BTreeMap<String, u64>,
     ) -> heed::Result<()> {
-        let iter =
-            FacetStringIter::new_non_reducing(self.rtxn, self.index, field_id, candidates.clone())?;
+        todo!()
+        // let iter =
+        //     FacetStringIter::new_non_reducing(self.rtxn, self.index, field_id, candidates.clone())?;
 
-        for result in iter {
-            let (_normalized, original, mut docids) = result?;
-            docids &= candidates;
-            if !docids.is_empty() {
-                distribution.insert(original.to_string(), docids.len());
-            }
-            if distribution.len() == self.max_values_per_facet {
-                break;
-            }
-        }
+        // for result in iter {
+        //     let (_normalized, original, mut docids) = result?;
+        //     docids &= candidates;
+        //     if !docids.is_empty() {
+        //         distribution.insert(original.to_string(), docids.len());
+        //     }
+        //     if distribution.len() == self.max_values_per_facet {
+        //         break;
+        //     }
+        // }
 
-        Ok(())
+        // Ok(())
     }
 
     /// Placeholder search, a.k.a. no candidates were specified. We iterate throught the
@@ -179,41 +179,43 @@ impl<'a> FacetDistribution<'a> {
         &self,
         field_id: FieldId,
     ) -> heed::Result<BTreeMap<String, u64>> {
-        let mut distribution = BTreeMap::new();
+        todo!()
+        // let mut distribution = BTreeMap::new();
 
-        let db = self.index.facet_id_f64_docids;
-        let range = FacetNumberRange::new(self.rtxn, db, field_id, 0, Unbounded, Unbounded)?;
+        // let db = self.index.facet_id_f64_docids;
+        // let range = FacetNumberRange::new(self.rtxn, db, field_id, 0, Unbounded, Unbounded)?;
 
-        for result in range {
-            let ((_, _, value, _), docids) = result?;
-            distribution.insert(value.to_string(), docids.len());
-            if distribution.len() == self.max_values_per_facet {
-                break;
-            }
-        }
+        // for result in range {
+        //     let ((_, _, value, _), docids) = result?;
+        //     distribution.insert(value.to_string(), docids.len());
+        //     if distribution.len() == self.max_values_per_facet {
+        //         break;
+        //     }
+        // }
 
-        let iter = self
-            .index
-            .facet_id_string_docids
-            .remap_key_type::<ByteSlice>()
-            .prefix_iter(self.rtxn, &field_id.to_be_bytes())?
-            .remap_key_type::<FacetStringLevelZeroCodec>();
+        // let iter = self
+        //     .index
+        //     .facet_id_string_docids
+        //     .remap_key_type::<ByteSlice>()
+        //     .prefix_iter(self.rtxn, &field_id.to_be_bytes())?
+        //     .remap_key_type::<FacetStringLevelZeroCodec>();
 
-        let mut normalized_distribution = BTreeMap::new();
-        for result in iter {
-            let ((_, normalized_value), (original_value, docids)) = result?;
-            normalized_distribution.insert(normalized_value, (original_value, docids.len()));
-            if normalized_distribution.len() == self.max_values_per_facet {
-                break;
-            }
-        }
+        // let mut normalized_distribution = BTreeMap::new();
+        // for result in iter {
+        //     let ((_, normalized_value), group_value) = result?;
+        //     normalized_distribution
+        //         .insert(normalized_value, (normalized_value, group_value.bitmap.len()));
+        //     if normalized_distribution.len() == self.max_values_per_facet {
+        //         break;
+        //     }
+        // }
 
-        let iter = normalized_distribution
-            .into_iter()
-            .map(|(_normalized, (original, count))| (original.to_string(), count));
-        distribution.extend(iter);
+        // let iter = normalized_distribution
+        //     .into_iter()
+        //     .map(|(_normalized, (original, count))| (original.to_string(), count));
+        // distribution.extend(iter);
 
-        Ok(distribution)
+        // Ok(distribution)
     }
 
     fn facet_values(&self, field_id: FieldId) -> heed::Result<BTreeMap<String, u64>> {

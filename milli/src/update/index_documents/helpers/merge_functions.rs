@@ -5,7 +5,7 @@ use std::result::Result as StdResult;
 use roaring::RoaringBitmap;
 
 use super::read_u32_ne_bytes;
-use crate::heed_codec::facet::{decode_prefix_string, encode_prefix_string};
+// use crate::heed_codec::facet::{decode_prefix_string, encode_prefix_string};
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::Result;
 
@@ -49,32 +49,32 @@ pub fn merge_roaring_bitmaps<'a>(_key: &[u8], values: &[Cow<'a, [u8]>]) -> Resul
     }
 }
 
-pub fn keep_first_prefix_value_merge_roaring_bitmaps<'a>(
-    _key: &[u8],
-    values: &[Cow<'a, [u8]>],
-) -> Result<Cow<'a, [u8]>> {
-    if values.len() == 1 {
-        Ok(values[0].clone())
-    } else {
-        let original = decode_prefix_string(&values[0]).unwrap().0;
-        let merged_bitmaps = values
-            .iter()
-            .map(AsRef::as_ref)
-            .map(decode_prefix_string)
-            .map(Option::unwrap)
-            .map(|(_, bitmap_bytes)| bitmap_bytes)
-            .map(RoaringBitmap::deserialize_from)
-            .map(StdResult::unwrap)
-            .reduce(|a, b| a | b)
-            .unwrap();
+// pub fn keep_first_prefix_value_merge_roaring_bitmaps<'a>(
+//     _key: &[u8],
+//     values: &[Cow<'a, [u8]>],
+// ) -> Result<Cow<'a, [u8]>> {
+//     if values.len() == 1 {
+//         Ok(values[0].clone())
+//     } else {
+//         let original = decode_prefix_string(&values[0]).unwrap().0;
+//         let merged_bitmaps = values
+//             .iter()
+//             .map(AsRef::as_ref)
+//             .map(decode_prefix_string)
+//             .map(Option::unwrap)
+//             .map(|(_, bitmap_bytes)| bitmap_bytes)
+//             .map(RoaringBitmap::deserialize_from)
+//             .map(StdResult::unwrap)
+//             .reduce(|a, b| a | b)
+//             .unwrap();
 
-        let cap = std::mem::size_of::<u16>() + original.len() + merged_bitmaps.serialized_size();
-        let mut buffer = Vec::with_capacity(cap);
-        encode_prefix_string(original, &mut buffer)?;
-        merged_bitmaps.serialize_into(&mut buffer)?;
-        Ok(Cow::Owned(buffer))
-    }
-}
+//         let cap = std::mem::size_of::<u16>() + original.len() + merged_bitmaps.serialized_size();
+//         let mut buffer = Vec::with_capacity(cap);
+//         encode_prefix_string(original, &mut buffer)?;
+//         merged_bitmaps.serialize_into(&mut buffer)?;
+//         Ok(Cow::Owned(buffer))
+//     }
+// }
 
 pub fn keep_first<'a>(_key: &[u8], values: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
     Ok(values[0].clone())

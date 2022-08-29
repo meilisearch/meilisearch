@@ -10,9 +10,7 @@ use time::OffsetDateTime;
 
 use super::ClearDocuments;
 use crate::error::{InternalError, SerializationError, UserError};
-use crate::heed_codec::facet::{
-    FacetLevelValueU32Codec, FacetStringLevelZeroValueCodec, FacetStringZeroBoundsValueCodec,
-};
+use crate::heed_codec::facet::FacetStringZeroBoundsValueCodec;
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::index::{db_name, main_key};
 use crate::{
@@ -442,11 +440,11 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         }
 
         // We delete the documents ids that are under the facet field id values.
-        remove_docids_from_facet_field_id_docids(
-            self.wtxn,
-            facet_id_f64_docids,
-            &self.to_delete_docids,
-        )?;
+        // TODO: remove_docids_from_facet_field_id_docids(
+        //     self.wtxn,
+        //     facet_id_f64_docids,
+        //     &self.to_delete_docids,
+        // )?;
         // We delete the documents ids that are under the facet field id values.
         remove_docids_from_facet_field_id_docids(
             self.wtxn,
@@ -587,57 +585,57 @@ fn remove_docids_from_facet_field_id_string_docids<'a, C, D>(
     db: &heed::Database<C, D>,
     to_remove: &RoaringBitmap,
 ) -> crate::Result<()> {
-    let db_name = Some(crate::index::db_name::FACET_ID_STRING_DOCIDS);
-    let mut iter = db.remap_types::<ByteSlice, ByteSlice>().iter_mut(wtxn)?;
-    while let Some(result) = iter.next() {
-        let (key, val) = result?;
-        match FacetLevelValueU32Codec::bytes_decode(key) {
-            Some(_) => {
-                // If we are able to parse this key it means it is a facet string group
-                // level key. We must then parse the value using the appropriate codec.
-                let (group, mut docids) =
-                    FacetStringZeroBoundsValueCodec::<CboRoaringBitmapCodec>::bytes_decode(val)
-                        .ok_or_else(|| SerializationError::Decoding { db_name })?;
+    // let db_name = Some(crate::index::db_name::FACET_ID_STRING_DOCIDS);
+    // let mut iter = db.remap_types::<ByteSlice, ByteSlice>().iter_mut(wtxn)?;
+    // while let Some(result) = iter.next() {
+    //     let (key, val) = result?;
+    //     match FacetLevelValueU32Codec::bytes_decode(key) {
+    //         Some(_) => {
+    //             // If we are able to parse this key it means it is a facet string group
+    //             // level key. We must then parse the value using the appropriate codec.
+    //             let (group, mut docids) =
+    //                 FacetStringZeroBoundsValueCodec::<CboRoaringBitmapCodec>::bytes_decode(val)
+    //                     .ok_or_else(|| SerializationError::Decoding { db_name })?;
 
-                let previous_len = docids.len();
-                docids -= to_remove;
-                if docids.is_empty() {
-                    // safety: we don't keep references from inside the LMDB database.
-                    unsafe { iter.del_current()? };
-                } else if docids.len() != previous_len {
-                    let key = key.to_owned();
-                    let val = &(group, docids);
-                    let value_bytes =
-                        FacetStringZeroBoundsValueCodec::<CboRoaringBitmapCodec>::bytes_encode(val)
-                            .ok_or_else(|| SerializationError::Encoding { db_name })?;
+    //             let previous_len = docids.len();
+    //             docids -= to_remove;
+    //             if docids.is_empty() {
+    //                 // safety: we don't keep references from inside the LMDB database.
+    //                 unsafe { iter.del_current()? };
+    //             } else if docids.len() != previous_len {
+    //                 let key = key.to_owned();
+    //                 let val = &(group, docids);
+    //                 let value_bytes =
+    //                     FacetStringZeroBoundsValueCodec::<CboRoaringBitmapCodec>::bytes_encode(val)
+    //                         .ok_or_else(|| SerializationError::Encoding { db_name })?;
 
-                    // safety: we don't keep references from inside the LMDB database.
-                    unsafe { iter.put_current(&key, &value_bytes)? };
-                }
-            }
-            None => {
-                // The key corresponds to a level zero facet string.
-                let (original_value, mut docids) =
-                    FacetStringLevelZeroValueCodec::bytes_decode(val)
-                        .ok_or_else(|| SerializationError::Decoding { db_name })?;
+    //                 // safety: we don't keep references from inside the LMDB database.
+    //                 unsafe { iter.put_current(&key, &value_bytes)? };
+    //             }
+    //         }
+    //         None => {
+    //             // The key corresponds to a level zero facet string.
+    //             let (original_value, mut docids) =
+    //                 FacetStringLevelZeroValueCodec::bytes_decode(val)
+    //                     .ok_or_else(|| SerializationError::Decoding { db_name })?;
 
-                let previous_len = docids.len();
-                docids -= to_remove;
-                if docids.is_empty() {
-                    // safety: we don't keep references from inside the LMDB database.
-                    unsafe { iter.del_current()? };
-                } else if docids.len() != previous_len {
-                    let key = key.to_owned();
-                    let val = &(original_value, docids);
-                    let value_bytes = FacetStringLevelZeroValueCodec::bytes_encode(val)
-                        .ok_or_else(|| SerializationError::Encoding { db_name })?;
+    //             let previous_len = docids.len();
+    //             docids -= to_remove;
+    //             if docids.is_empty() {
+    //                 // safety: we don't keep references from inside the LMDB database.
+    //                 unsafe { iter.del_current()? };
+    //             } else if docids.len() != previous_len {
+    //                 let key = key.to_owned();
+    //                 let val = &(original_value, docids);
+    //                 let value_bytes = FacetStringLevelZeroValueCodec::bytes_encode(val)
+    //                     .ok_or_else(|| SerializationError::Encoding { db_name })?;
 
-                    // safety: we don't keep references from inside the LMDB database.
-                    unsafe { iter.put_current(&key, &value_bytes)? };
-                }
-            }
-        }
-    }
+    //                 // safety: we don't keep references from inside the LMDB database.
+    //                 unsafe { iter.put_current(&key, &value_bytes)? };
+    //             }
+    //         }
+    //     }
+    // }
 
     Ok(())
 }

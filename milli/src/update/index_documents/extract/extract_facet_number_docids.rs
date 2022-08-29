@@ -6,7 +6,7 @@ use heed::{BytesDecode, BytesEncode};
 use super::helpers::{
     create_sorter, merge_cbo_roaring_bitmaps, sorter_into_reader, GrenadParameters,
 };
-use crate::heed_codec::facet::{FacetLevelValueF64Codec, FieldDocIdFacetF64Codec};
+use crate::heed_codec::facet::FieldDocIdFacetF64Codec;
 use crate::Result;
 
 /// Extracts the facet number and the documents ids where this facet number appear.
@@ -31,13 +31,14 @@ pub fn extract_facet_number_docids<R: io::Read + io::Seek>(
 
     let mut cursor = docid_fid_facet_number.into_cursor()?;
     while let Some((key_bytes, _)) = cursor.move_on_next()? {
-        let (field_id, document_id, number) =
-            FieldDocIdFacetF64Codec::bytes_decode(key_bytes).unwrap();
+        todo!()
+        // let (field_id, document_id, number) =
+        //     FieldDocIdFacetF64Codec::bytes_decode(key_bytes).unwrap();
 
-        let key = (field_id, 0, number, number);
-        let key_bytes = FacetLevelValueF64Codec::bytes_encode(&key).unwrap();
+        // let key = (field_id, 0, number, number);
+        // // let key_bytes = FacetLevelValueF64Codec::bytes_encode(&key).unwrap();
 
-        facet_number_docids_sorter.insert(key_bytes, document_id.to_ne_bytes())?;
+        // facet_number_docids_sorter.insert(key_bytes, document_id.to_ne_bytes())?;
     }
 
     sorter_into_reader(facet_number_docids_sorter, indexer)

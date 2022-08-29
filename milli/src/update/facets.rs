@@ -136,11 +136,12 @@ use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 
 use crate::error::InternalError;
-use crate::heed_codec::facet::{
-    FacetLevelValueF64Codec, FacetLevelValueU32Codec, FacetStringLevelZeroCodec,
-    FacetStringLevelZeroValueCodec, FacetStringZeroBoundsValueCodec,
+use crate::heed_codec::facet::new::ordered_f64_codec::OrderedF64Codec;
+use crate::heed_codec::facet::new::str_ref::StrRefCodec;
+use crate::heed_codec::facet::new::{
+    FacetGroupValue, FacetGroupValueCodec, FacetKey, FacetKeyCodec,
 };
-use crate::heed_codec::CboRoaringBitmapCodec;
+// use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::update::index_documents::{create_writer, write_into_lmdb_database, writer_into_reader};
 use crate::{FieldId, Index, Result};
 
@@ -187,16 +188,18 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
 
         debug!("Computing and writing the facet values levels docids into LMDB on disk...");
 
+        let mut nested_wtxn = self.index.env.nested_write_txn(self.wtxn).unwrap();
+
         for field_id in faceted_fields {
             // Clear the facet string levels.
-            clear_field_string_levels(
-                self.wtxn,
-                self.index.facet_id_string_docids.remap_types::<ByteSlice, DecodeIgnore>(),
-                field_id,
-            )?;
+            // clear_field_string_levels(
+            //     &mut nested_wtxn,
+            //     self.index.facet_id_string_docids.remap_types::<ByteSlice, DecodeIgnore>(),
+            //     field_id,
+            // )?;
 
             let (facet_string_levels, string_documents_ids) = compute_facet_strings_levels(
-                self.wtxn,
+                &mut nested_wtxn,
                 self.index.facet_id_string_docids,
                 self.chunk_compression_type,
                 self.chunk_compression_level,
@@ -206,13 +209,13 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
             )?;
 
             self.index.put_string_faceted_documents_ids(
-                self.wtxn,
+                &mut nested_wtxn,
                 field_id,
                 &string_documents_ids,
             )?;
             for facet_strings_level in facet_string_levels {
                 write_into_lmdb_database(
-                    self.wtxn,
+                    &mut nested_wtxn,
                     *self.index.facet_id_string_docids.as_polymorph(),
                     facet_strings_level,
                     |_, _| {
@@ -221,11 +224,11 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
                 )?;
             }
 
-            // Clear the facet number levels.
-            clear_field_number_levels(self.wtxn, self.index.facet_id_f64_docids, field_id)?;
+            // // Clear the facet number levels.
+            // clear_field_number_levels(&mut nested_wtxn, self.index.facet_id_f64_docids, field_id)?;
 
             let (facet_number_levels, number_documents_ids) = compute_facet_number_levels(
-                self.wtxn,
+                &mut nested_wtxn,
                 self.index.facet_id_f64_docids,
                 self.chunk_compression_type,
                 self.chunk_compression_level,
@@ -235,14 +238,14 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
             )?;
 
             self.index.put_number_faceted_documents_ids(
-                self.wtxn,
+                &mut nested_wtxn,
                 field_id,
                 &number_documents_ids,
             )?;
 
             for facet_number_level in facet_number_levels {
                 write_into_lmdb_database(
-                    self.wtxn,
+                    &mut nested_wtxn,
                     *self.index.facet_id_f64_docids.as_polymorph(),
                     facet_number_level,
                     |_, _| {
@@ -263,8 +266,8 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
 /// that must be inserted into the database.
 /// 2. a roaring bitmap of all the document ids present in the database
 fn compute_facet_number_levels<'t>(
-    rtxn: &'t heed::RoTxn,
-    db: heed::Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
+    rtxn: &'t mut heed::RwTxn,
+    db: heed::Database<FacetKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>,
     compression_type: CompressionType,
     compression_level: Option<u32>,
     level_group_size: NonZeroUsize,
@@ -277,7 +280,7 @@ fn compute_facet_number_levels<'t>(
         .remap_types::<DecodeIgnore, DecodeIgnore>()
         .fold(Ok(0usize), |count, result| result.and(count).map(|c| c + 1))?;
 
-    let level_0_start = (field_id, 0, f64::MIN, f64::MIN);
+    let level_0_start = FacetKey { field_id, level: 0, left_bound: f64::MIN };
 
     // Groups sizes are always a power of the original level_group_size and therefore a group
     // always maps groups of the previous level and never splits previous levels groups in half.
@@ -289,37 +292,31 @@ fn compute_facet_number_levels<'t>(
     let mut number_document_ids = RoaringBitmap::new();
 
     if let Some((top_level, _)) = group_size_iter.last() {
-        let subwriters =
-            recursive_compute_levels::<FacetLevelValueF64Codec, CboRoaringBitmapCodec, f64>(
-                rtxn,
-                db,
-                compression_type,
-                compression_level,
-                *top_level,
-                level_0_start,
-                &(level_0_start..),
-                first_level_size,
-                level_group_size,
-                &mut |bitmaps, _, _| {
-                    for bitmap in bitmaps {
-                        number_document_ids |= bitmap;
-                    }
-                    Ok(())
-                },
-                &|_i, (_field_id, _level, left, _right)| *left,
-                &|bitmap| bitmap,
-                &|writer, level, left, right, docids| {
-                    write_number_entry(writer, field_id, level.get(), left, right, &docids)?;
-                    Ok(())
-                },
-            )?;
+        let subwriters = recursive_compute_levels::<OrderedF64Codec>(
+            rtxn,
+            db,
+            compression_type,
+            compression_level,
+            field_id,
+            *top_level,
+            level_0_start,
+            &(level_0_start..),
+            first_level_size,
+            level_group_size,
+            &mut |bitmaps, _| {
+                for bitmap in bitmaps {
+                    number_document_ids |= bitmap;
+                }
+                Ok(())
+            },
+        )?;
 
         Ok((subwriters, number_document_ids))
     } else {
         let mut documents_ids = RoaringBitmap::new();
         for result in db.range(rtxn, &(level_0_start..))?.take(first_level_size) {
-            let (_key, docids) = result?;
-            documents_ids |= docids;
+            let (_key, group_value) = result?;
+            documents_ids |= group_value.bitmap;
         }
 
         Ok((vec![], documents_ids))
@@ -333,8 +330,8 @@ fn compute_facet_number_levels<'t>(
 /// that must be inserted into the database.
 /// 2. a roaring bitmap of all the document ids present in the database
 fn compute_facet_strings_levels<'t>(
-    rtxn: &'t heed::RoTxn,
-    db: heed::Database<FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec>,
+    rtxn: &'t mut heed::RwTxn,
+    db: heed::Database<FacetKeyCodec<StrRefCodec>, FacetGroupValueCodec>,
     compression_type: CompressionType,
     compression_level: Option<u32>,
     level_group_size: NonZeroUsize,
@@ -347,7 +344,7 @@ fn compute_facet_strings_levels<'t>(
         .remap_types::<DecodeIgnore, DecodeIgnore>()
         .fold(Ok(0usize), |count, result| result.and(count).map(|c| c + 1))?;
 
-    let level_0_start = (field_id, "");
+    let level_0_start = FacetKey { field_id, level: 0, left_bound: "" };
 
     // Groups sizes are always a power of the original level_group_size and therefore a group
     // always maps groups of the previous level and never splits previous levels groups in half.
@@ -359,30 +356,21 @@ fn compute_facet_strings_levels<'t>(
     let mut strings_document_ids = RoaringBitmap::new();
 
     if let Some((top_level, _)) = group_size_iter.last() {
-        let subwriters = recursive_compute_levels::<
-            FacetStringLevelZeroCodec,
-            FacetStringLevelZeroValueCodec,
-            (u32, &str),
-        >(
+        let subwriters = recursive_compute_levels::<StrRefCodec>(
             rtxn,
             db,
             compression_type,
             compression_level,
+            field_id,
             *top_level,
             level_0_start,
             &(level_0_start..),
             first_level_size,
             level_group_size,
-            &mut |bitmaps, _, _| {
+            &mut |bitmaps, _| {
                 for bitmap in bitmaps {
                     strings_document_ids |= bitmap;
                 }
-                Ok(())
-            },
-            &|i, (_field_id, value)| (i as u32, *value),
-            &|value| value.1,
-            &|writer, level, start_bound, end_bound, docids| {
-                write_string_entry(writer, field_id, level, start_bound, end_bound, docids)?;
                 Ok(())
             },
         )?;
@@ -391,8 +379,8 @@ fn compute_facet_strings_levels<'t>(
     } else {
         let mut documents_ids = RoaringBitmap::new();
         for result in db.range(rtxn, &(level_0_start..))?.take(first_level_size) {
-            let (_key, (_original_value, docids)) = result?;
-            documents_ids |= docids;
+            let (_key, group_value) = result?;
+            documents_ids |= group_value.bitmap;
         }
 
         Ok((vec![], documents_ids))
@@ -436,29 +424,26 @@ from the level below were read/created. Its arguments are:
 A vector of grenad::Reader. The reader at index `i` corresponds to the elements of level `i + 1`
 that must be inserted into the database.
 */
-fn recursive_compute_levels<'t, KeyCodec, ValueCodec, Bound>(
-    rtxn: &'t heed::RoTxn,
-    db: heed::Database<KeyCodec, ValueCodec>,
+fn recursive_compute_levels<'t, BoundCodec>(
+    rtxn: &'t mut heed::RwTxn,
+    db: heed::Database<FacetKeyCodec<BoundCodec>, FacetGroupValueCodec>,
     compression_type: CompressionType,
     compression_level: Option<u32>,
+    field_id: FieldId,
     level: u8,
-    level_0_start: <KeyCodec as BytesDecode<'t>>::DItem,
-    level_0_range: &'t RangeFrom<<KeyCodec as BytesDecode<'t>>::DItem>,
+    level_0_start: FacetKey<<BoundCodec as BytesEncode<'t>>::EItem>,
+    level_0_range: &'t RangeFrom<FacetKey<<BoundCodec as BytesEncode<'t>>::EItem>>,
     level_0_size: usize,
     level_group_size: NonZeroUsize,
-    computed_group_bitmap: &mut dyn FnMut(&[RoaringBitmap], Bound, Bound) -> Result<()>,
-    bound_from_db_key: &dyn for<'a> Fn(usize, &'a <KeyCodec as BytesDecode<'t>>::DItem) -> Bound,
-    bitmap_from_db_value: &dyn Fn(<ValueCodec as BytesDecode<'t>>::DItem) -> RoaringBitmap,
-    write_entry: &dyn Fn(&mut Writer<File>, NonZeroU8, Bound, Bound, RoaringBitmap) -> Result<()>,
+    computed_group_bitmap: &mut dyn FnMut(
+        &[RoaringBitmap],
+        <BoundCodec as BytesEncode<'t>>::EItem,
+    ) -> Result<()>,
 ) -> Result<Vec<Reader<File>>>
 where
-    KeyCodec: for<'a> BytesEncode<'a>
-        + for<'a> BytesDecode<'a, DItem = <KeyCodec as BytesEncode<'a>>::EItem>,
-    for<'a> <KeyCodec as BytesEncode<'a>>::EItem: Sized,
-    ValueCodec: for<'a> BytesEncode<'a>
-        + for<'a> BytesDecode<'a, DItem = <ValueCodec as BytesEncode<'a>>::EItem>,
-    for<'a> <ValueCodec as BytesEncode<'a>>::EItem: Sized,
-    Bound: Copy,
+    for<'a> BoundCodec:
+        BytesEncode<'a> + BytesDecode<'a, DItem = <BoundCodec as BytesEncode<'a>>::EItem>,
+    for<'a> <BoundCodec as BytesEncode<'a>>::EItem: Copy + Sized,
 {
     if level == 0 {
         // base case for the recursion
@@ -468,31 +453,32 @@ where
         // 2. fill the `bitmaps` vector to give it to level 1 once `level_group_size` elements were read
         let mut bitmaps = vec![];
 
-        let mut start_bound = bound_from_db_key(0, &level_0_start);
-        let mut end_bound = bound_from_db_key(0, &level_0_start);
+        let mut start_bound = level_0_start.left_bound;
+        // let mut end_bound = level_0_start.bound;
+
         let mut first_iteration_for_new_group = true;
         for (i, db_result_item) in db.range(rtxn, level_0_range)?.take(level_0_size).enumerate() {
             let (key, value) = db_result_item?;
 
-            let bound = bound_from_db_key(i, &key);
-            let docids = bitmap_from_db_value(value);
+            let bound = key.left_bound;
+            let docids = value.bitmap;
 
             if first_iteration_for_new_group {
                 start_bound = bound;
                 first_iteration_for_new_group = false;
             }
-            end_bound = bound;
+            // end_bound = bound;
             bitmaps.push(docids);
 
             if bitmaps.len() == level_group_size.get() {
-                computed_group_bitmap(&bitmaps, start_bound, end_bound)?;
+                computed_group_bitmap(&bitmaps, start_bound)?;
                 first_iteration_for_new_group = true;
                 bitmaps.clear();
             }
         }
         // don't forget to give the leftover bitmaps as well
         if !bitmaps.is_empty() {
-            computed_group_bitmap(&bitmaps, start_bound, end_bound)?;
+            computed_group_bitmap(&bitmaps, start_bound)?;
             bitmaps.clear();
         }
         // level 0 is already stored in the DB
@@ -516,48 +502,52 @@ where
             db,
             compression_type,
             compression_level,
+            field_id,
             level - 1,
             level_0_start,
             level_0_range,
             level_0_size,
             level_group_size,
-            &mut |sub_bitmaps: &[RoaringBitmap], start_range, end_range| {
+            &mut |sub_bitmaps: &[RoaringBitmap],
+                  start_range: <BoundCodec as BytesEncode<'t>>::EItem| {
                 let mut combined_bitmap = RoaringBitmap::default();
                 for bitmap in sub_bitmaps {
                     combined_bitmap |= bitmap;
                 }
-                range_for_bitmaps.push((start_range, end_range));
+                range_for_bitmaps.push(start_range);
 
                 bitmaps.push(combined_bitmap);
                 if bitmaps.len() == level_group_size.get() {
-                    let start_bound = range_for_bitmaps.first().unwrap().0;
-                    let end_bound = range_for_bitmaps.last().unwrap().1;
-                    computed_group_bitmap(&bitmaps, start_bound, end_bound)?;
-                    for (bitmap, (start_bound, end_bound)) in
-                        bitmaps.drain(..).zip(range_for_bitmaps.drain(..))
+                    let start_bound = range_for_bitmaps.first().unwrap();
+                    computed_group_bitmap(&bitmaps, *start_bound)?;
+                    for (bitmap, start_bound) in bitmaps.drain(..).zip(range_for_bitmaps.drain(..))
                     {
-                        write_entry(
+                        write_entry::<BoundCodec>(
                             &mut cur_writer,
+                            field_id,
                             NonZeroU8::new(level).unwrap(),
                             start_bound,
-                            end_bound,
                             bitmap,
                         )?;
                     }
                 }
                 Ok(())
             },
-            bound_from_db_key,
-            bitmap_from_db_value,
-            write_entry,
         )?;
+
         // don't forget to insert the leftover elements into the writer as well
         if !bitmaps.is_empty() {
-            let start_range = range_for_bitmaps.first().unwrap().0;
-            let end_range = range_for_bitmaps.last().unwrap().1;
-            computed_group_bitmap(&bitmaps, start_range, end_range)?;
-            for (bitmap, (left, right)) in bitmaps.drain(..).zip(range_for_bitmaps.drain(..)) {
-                write_entry(&mut cur_writer, NonZeroU8::new(level).unwrap(), left, right, bitmap)?;
+            let start_range = range_for_bitmaps.first().unwrap();
+            let end_range = range_for_bitmaps.last().unwrap();
+            computed_group_bitmap(&bitmaps, *start_range)?;
+            for (bitmap, bound) in bitmaps.drain(..).zip(range_for_bitmaps.drain(..)) {
+                write_entry(
+                    &mut cur_writer,
+                    field_id,
+                    NonZeroU8::new(level).unwrap(),
+                    bound,
+                    bitmap,
+                )?;
             }
         }
 
@@ -566,60 +556,25 @@ where
     }
 }
 
-fn clear_field_number_levels<'t>(
-    wtxn: &'t mut heed::RwTxn,
-    db: heed::Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
-    field_id: FieldId,
-) -> heed::Result<()> {
-    let left = (field_id, 1, f64::MIN, f64::MIN);
-    let right = (field_id, u8::MAX, f64::MAX, f64::MAX);
-    let range = left..=right;
-    db.delete_range(wtxn, &range).map(drop)
-}
-
-fn clear_field_string_levels<'t>(
-    wtxn: &'t mut heed::RwTxn,
-    db: heed::Database<ByteSlice, DecodeIgnore>,
-    field_id: FieldId,
-) -> heed::Result<()> {
-    let left = (field_id, NonZeroU8::new(1).unwrap(), u32::MIN, u32::MIN);
-    let right = (field_id, NonZeroU8::new(u8::MAX).unwrap(), u32::MAX, u32::MAX);
-    let range = left..=right;
-    db.remap_key_type::<FacetLevelValueU32Codec>().delete_range(wtxn, &range).map(drop)
-}
-
-fn write_number_entry(
-    writer: &mut Writer<File>,
-    field_id: FieldId,
-    level: u8,
-    left: f64,
-    right: f64,
-    ids: &RoaringBitmap,
-) -> Result<()> {
-    let key = (field_id, level, left, right);
-    let key = FacetLevelValueF64Codec::bytes_encode(&key).ok_or(Error::Encoding)?;
-    let data = CboRoaringBitmapCodec::bytes_encode(&ids).ok_or(Error::Encoding)?;
-    writer.insert(&key, &data)?;
-    Ok(())
-}
-fn write_string_entry(
+fn write_entry<BoundCodec>(
     writer: &mut Writer<File>,
     field_id: FieldId,
     level: NonZeroU8,
-    (left_id, left_value): (u32, &str),
-    (right_id, right_value): (u32, &str),
+    bound: <BoundCodec as BytesEncode<'_>>::EItem,
     docids: RoaringBitmap,
-) -> Result<()> {
-    let key = (field_id, level, left_id, right_id);
-    let key = FacetLevelValueU32Codec::bytes_encode(&key).ok_or(Error::Encoding)?;
-    let data = match level.get() {
-        1 => (Some((left_value, right_value)), docids),
-        _ => (None, docids),
-    };
-    let data = FacetStringZeroBoundsValueCodec::<CboRoaringBitmapCodec>::bytes_encode(&data)
-        .ok_or(Error::Encoding)?;
-    writer.insert(&key, &data)?;
-    Ok(())
+) -> Result<()>
+where
+    for<'a> BoundCodec: BytesEncode<'a>,
+    for<'a> <BoundCodec as BytesEncode<'a>>::EItem: Copy + Sized,
+{
+    todo!()
+    // let key = FacetKey { field_id, level: level.get(), left_bound: bound };
+    // let key_bytes = FacetKeyCodec::<BoundCodec>::bytes_encode(&key).ok_or(Error::Encoding)?;
+    // let value_bytes =
+    //     FacetGroupValueCodec::bytes_encode(&FacetGroupValue { size: 4, bitmap: docids })
+    //         .ok_or(Error::Encoding)?;
+    // writer.insert(&key_bytes, &value_bytes)?;
+    // Ok(())
 }
 
 #[cfg(test)]

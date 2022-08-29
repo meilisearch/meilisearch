@@ -1,16 +1,20 @@
 use std::collections::HashSet;
 use std::fmt::{Debug, Display};
 use std::ops::Bound::{self, Excluded, Included};
+use std::ops::RangeBounds;
 
 use either::Either;
 pub use filter_parser::{Condition, Error as FPError, FilterCondition, Span, Token};
 use heed::types::DecodeIgnore;
+use heed::LazyDecode;
 use log::debug;
 use roaring::RoaringBitmap;
 
-use super::FacetNumberRange;
+// use super::FacetNumberRange;
 use crate::error::{Error, UserError};
-use crate::heed_codec::facet::FacetLevelValueF64Codec;
+use crate::heed_codec::facet::new::ordered_f64_codec::OrderedF64Codec;
+use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKey, FacetKeyCodec};
+// use crate::heed_codec::facet::FacetLevelValueF64Codec;
 use crate::{
     distance_between_two_points, lat_lng_to_xyz, CboRoaringBitmapCodec, FieldId, Index, Result,
 };
@@ -144,18 +148,29 @@ impl<'a> Filter<'a> {
     }
 }
 
+fn explore_facet_number_levels(
+    rtxn: &heed::RoTxn,
+    db: heed::Database<FacetKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>,
+    field_id: FieldId,
+) {
+}
+
 impl<'a> Filter<'a> {
     /// Aggregates the documents ids that are part of the specified range automatically
     /// going deeper through the levels.
     fn explore_facet_number_levels(
         rtxn: &heed::RoTxn,
-        db: heed::Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
+        db: heed::Database<FacetKeyCodec<OrderedF64Codec>, CboRoaringBitmapCodec>,
         field_id: FieldId,
         level: u8,
         left: Bound<f64>,
         right: Bound<f64>,
         output: &mut RoaringBitmap,
     ) -> Result<()> {
+        // level must be > 0, I'll create a separate function for level 0
+        // if level == 0 {
+        //      call that function
+        //}
         match (left, right) {
             // If the request is an exact value we must go directly to the deepest level.
             (Included(l), Included(r)) if l == r && level > 0 => {
@@ -170,87 +185,121 @@ impl<'a> Filter<'a> {
             (Excluded(l), Included(r)) if l >= r => return Ok(()),
             (_, _) => (),
         }
-
-        let mut left_found = None;
-        let mut right_found = None;
-
-        // We must create a custom iterator to be able to iterate over the
-        // requested range as the range iterator cannot express some conditions.
-        let iter = FacetNumberRange::new(rtxn, db, field_id, level, left, right)?;
-
-        debug!("Iterating between {:?} and {:?} (level {})", left, right, level);
-
-        for (i, result) in iter.enumerate() {
-            let ((_fid, level, l, r), docids) = result?;
-            debug!("{:?} to {:?} (level {}) found {} documents", l, r, level, docids.len());
-            *output |= docids;
-            // We save the leftest and rightest bounds we actually found at this level.
-            if i == 0 {
-                left_found = Some(l);
-            }
-            right_found = Some(r);
-        }
-
-        // Can we go deeper?
-        let deeper_level = match level.checked_sub(1) {
-            Some(level) => level,
-            None => return Ok(()),
+        let range_start_key = FacetKey {
+            field_id,
+            level,
+            left_bound: match left {
+                Included(l) => l,
+                Excluded(l) => l,
+                Bound::Unbounded => f64::MIN,
+            },
         };
+        let mut range_iter = db
+            .remap_data_type::<LazyDecode<FacetGroupValueCodec>>()
+            .range(rtxn, &(range_start_key..))?;
 
-        // We must refine the left and right bounds of this range by retrieving the
-        // missing part in a deeper level.
-        match left_found.zip(right_found) {
-            Some((left_found, right_found)) => {
-                // If the bound is satisfied we avoid calling this function again.
-                if !matches!(left, Included(l) if l == left_found) {
-                    let sub_right = Excluded(left_found);
-                    debug!(
-                        "calling left with {:?} to {:?} (level {})",
-                        left, sub_right, deeper_level
-                    );
-                    Self::explore_facet_number_levels(
-                        rtxn,
-                        db,
-                        field_id,
-                        deeper_level,
-                        left,
-                        sub_right,
-                        output,
-                    )?;
-                }
-                if !matches!(right, Included(r) if r == right_found) {
-                    let sub_left = Excluded(right_found);
-                    debug!(
-                        "calling right with {:?} to {:?} (level {})",
-                        sub_left, right, deeper_level
-                    );
-                    Self::explore_facet_number_levels(
-                        rtxn,
-                        db,
-                        field_id,
-                        deeper_level,
-                        sub_left,
-                        right,
-                        output,
-                    )?;
-                }
-            }
-            None => {
-                // If we found nothing at this level it means that we must find
-                // the same bounds but at a deeper, more precise level.
-                Self::explore_facet_number_levels(
-                    rtxn,
-                    db,
-                    field_id,
-                    deeper_level,
-                    left,
-                    right,
-                    output,
-                )?;
-            }
+        let (mut previous_facet_key, mut previous_value) = range_iter.next().unwrap()?;
+        while let Some(el) = range_iter.next() {
+            let (facet_key, value) = el?;
+            let range = (Included(previous_facet_key.left_bound), Excluded(facet_key.left_bound));
+            // if the current range intersects with the query range, then go deeper
+            // what does it mean for two ranges to intersect?
+            let gte_left = match left {
+                Included(l) => previous_facet_key.left_bound >= l,
+                Excluded(l) => previous_facet_key.left_bound > l, // TODO: not true?
+                Bound::Unbounded => true,
+            };
+            let lte_right = match right {
+                Included(r) => facet_key.left_bound <= r,
+                Excluded(r) => facet_key.left_bound < r,
+                Bound::Unbounded => true,
+            };
         }
+        // at this point, previous_facet_key and previous_value are the last groups in the level
+        // we must also check whether we should visit this group
 
-        Ok(())
+        todo!();
+
+        // let mut left_found = None;
+        // let mut right_found = None;
+
+        // // We must create a custom iterator to be able to iterate over the
+        // // requested range as the range iterator cannot express some conditions.
+        // let iter = FacetNumberRange::new(rtxn, db, field_id, level, left, right)?;
+
+        // debug!("Iterating between {:?} and {:?} (level {})", left, right, level);
+
+        // for (i, result) in iter.enumerate() {
+        //     let ((_fid, level, l, r), docids) = result?;
+        //     debug!("{:?} to {:?} (level {}) found {} documents", l, r, level, docids.len());
+        //     *output |= docids;
+        //     // We save the leftest and rightest bounds we actually found at this level.
+        //     if i == 0 {
+        //         left_found = Some(l);
+        //     }
+        //     right_found = Some(r);
+        // }
+
+        // // Can we go deeper?
+        // let deeper_level = match level.checked_sub(1) {
+        //     Some(level) => level,
+        //     None => return Ok(()),
+        // };
+
+        // // We must refine the left and right bounds of this range by retrieving the
+        // // missing part in a deeper level.
+        // match left_found.zip(right_found) {
+        //     Some((left_found, right_found)) => {
+        //         // If the bound is satisfied we avoid calling this function again.
+        //         if !matches!(left, Included(l) if l == left_found) {
+        //             let sub_right = Excluded(left_found);
+        //             debug!(
+        //                 "calling left with {:?} to {:?} (level {})",
+        //                 left, sub_right, deeper_level
+        //             );
+        //             Self::explore_facet_number_levels(
+        //                 rtxn,
+        //                 db,
+        //                 field_id,
+        //                 deeper_level,
+        //                 left,
+        //                 sub_right,
+        //                 output,
+        //             )?;
+        //         }
+        //         if !matches!(right, Included(r) if r == right_found) {
+        //             let sub_left = Excluded(right_found);
+        //             debug!(
+        //                 "calling right with {:?} to {:?} (level {})",
+        //                 sub_left, right, deeper_level
+        //             );
+        //             Self::explore_facet_number_levels(
+        //                 rtxn,
+        //                 db,
+        //                 field_id,
+        //                 deeper_level,
+        //                 sub_left,
+        //                 right,
+        //                 output,
+        //             )?;
+        //         }
+        //     }
+        //     None => {
+        //         // If we found nothing at this level it means that we must find
+        //         // the same bounds but at a deeper, more precise level.
+        //         Self::explore_facet_number_levels(
+        //             rtxn,
+        //             db,
+        //             field_id,
+        //             deeper_level,
+        //             left,
+        //             right,
+        //             output,
+        //         )?;
+        //     }
+        // }
+
+        // Ok(())
     }
 
     fn evaluate_operator(
@@ -277,23 +326,27 @@ impl<'a> Filter<'a> {
                 return Ok(exist);
             }
             Condition::Equal(val) => {
-                let (_original_value, string_docids) = strings_db
-                    .get(rtxn, &(field_id, &val.value().to_lowercase()))?
+                let string_docids = strings_db
+                    .get(
+                        rtxn,
+                        &FacetKey { field_id, level: 0, left_bound: &val.value().to_lowercase() },
+                    )?
+                    .map(|v| v.bitmap)
                     .unwrap_or_default();
                 let number = val.parse::<f64>().ok();
                 let number_docids = match number {
                     Some(n) => {
                         let n = Included(n);
                         let mut output = RoaringBitmap::new();
-                        Self::explore_facet_number_levels(
-                            rtxn,
-                            numbers_db,
-                            field_id,
-                            0,
-                            n,
-                            n,
-                            &mut output,
-                        )?;
+                        // Self::explore_facet_number_levels(
+                        //     rtxn,
+                        //     numbers_db,
+                        //     field_id,
+                        //     0,
+                        //     n,
+                        //     n,
+                        //     &mut output,
+                        // )?;
                         output
                     }
                     None => RoaringBitmap::new(),
@@ -312,21 +365,32 @@ impl<'a> Filter<'a> {
         // that's fine if it don't, the value just before will be returned instead.
         let biggest_level = numbers_db
             .remap_data_type::<DecodeIgnore>()
-            .get_lower_than_or_equal_to(rtxn, &(field_id, u8::MAX, f64::MAX, f64::MAX))?
-            .and_then(|((id, level, _, _), _)| if id == field_id { Some(level) } else { None });
+            .get_lower_than_or_equal_to(
+                rtxn,
+                &FacetKey { field_id, level: u8::MAX, left_bound: f64::MAX },
+            )?
+            .and_then(
+                |(FacetKey { field_id: id, level, .. }, _)| {
+                    if id == field_id {
+                        Some(level)
+                    } else {
+                        None
+                    }
+                },
+            );
 
         match biggest_level {
             Some(level) => {
                 let mut output = RoaringBitmap::new();
-                Self::explore_facet_number_levels(
-                    rtxn,
-                    numbers_db,
-                    field_id,
-                    level,
-                    left,
-                    right,
-                    &mut output,
-                )?;
+                // Self::explore_facet_number_levels(
+                //     rtxn,
+                //     numbers_db,
+                //     field_id,
+                //     level,
+                //     left,
+                //     right,
+                //     &mut output,
+                // )?;
                 Ok(output)
             }
             None => Ok(RoaringBitmap::new()),

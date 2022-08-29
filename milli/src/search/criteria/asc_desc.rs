@@ -7,7 +7,7 @@ use roaring::RoaringBitmap;
 
 use super::{Criterion, CriterionParameters, CriterionResult};
 use crate::search::criteria::{resolve_query_tree, CriteriaBuilder};
-use crate::search::facet::{FacetNumberIter, FacetStringIter};
+// use crate::search::facet::FacetStringIter;
 use crate::search::query_tree::Operation;
 use crate::{FieldId, Index, Result};
 
@@ -186,23 +186,24 @@ fn facet_ordered<'t>(
             iterative_facet_string_ordered_iter(index, rtxn, field_id, is_ascending, candidates)?;
         Ok(Box::new(number_iter.chain(string_iter).map(Ok)) as Box<dyn Iterator<Item = _>>)
     } else {
-        let facet_number_fn = if is_ascending {
-            FacetNumberIter::new_reducing
-        } else {
-            FacetNumberIter::new_reverse_reducing
-        };
-        let number_iter = facet_number_fn(rtxn, index, field_id, candidates.clone())?
-            .map(|res| res.map(|(_, docids)| docids));
+        todo!()
+        // let facet_number_fn = if is_ascending {
+        //     FacetNumberIter::new_reducing
+        // } else {
+        //     FacetNumberIter::new_reverse_reducing
+        // };
+        // let number_iter = facet_number_fn(rtxn, index, field_id, candidates.clone())?
+        //     .map(|res| res.map(|(_, docids)| docids));
 
-        let facet_string_fn = if is_ascending {
-            FacetStringIter::new_reducing
-        } else {
-            FacetStringIter::new_reverse_reducing
-        };
-        let string_iter = facet_string_fn(rtxn, index, field_id, candidates)?
-            .map(|res| res.map(|(_, _, docids)| docids));
+        // let facet_string_fn = if is_ascending {
+        //     FacetStringIter::new_reducing
+        // } else {
+        //     FacetStringIter::new_reverse_reducing
+        // };
+        // let string_iter = facet_string_fn(rtxn, index, field_id, candidates)?
+        //     .map(|res| res.map(|(_, _, docids)| docids));
 
-        Ok(Box::new(number_iter.chain(string_iter)))
+        // Ok(Box::new(number_iter.chain(string_iter)))
     }
 }
 

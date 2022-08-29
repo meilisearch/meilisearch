@@ -13,9 +13,9 @@ pub use grenad_helpers::{
     writer_into_reader, GrenadParameters, MergeableReader,
 };
 pub use merge_functions::{
-    concat_u32s_array, keep_first, keep_first_prefix_value_merge_roaring_bitmaps, keep_latest_obkv,
-    merge_cbo_roaring_bitmaps, merge_obkvs, merge_roaring_bitmaps, merge_two_obkvs,
-    roaring_bitmap_from_u32s_array, serialize_roaring_bitmap, MergeFn,
+    concat_u32s_array, keep_first, keep_latest_obkv, merge_cbo_roaring_bitmaps, merge_obkvs,
+    merge_roaring_bitmaps, merge_two_obkvs, roaring_bitmap_from_u32s_array,
+    serialize_roaring_bitmap, MergeFn,
 };
 
 /// The maximum length a word can be

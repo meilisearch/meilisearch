@@ -4,11 +4,9 @@ use std::{io, str};
 
 use roaring::RoaringBitmap;
 
-use super::helpers::{
-    create_sorter, keep_first_prefix_value_merge_roaring_bitmaps, sorter_into_reader,
-    try_split_array_at, GrenadParameters,
-};
-use crate::heed_codec::facet::{encode_prefix_string, FacetStringLevelZeroCodec};
+use super::helpers::{create_sorter, sorter_into_reader, try_split_array_at, GrenadParameters};
+use crate::update::index_documents::merge_cbo_roaring_bitmaps;
+// use crate::heed_codec::facet::{encode_prefix_string, FacetStringLevelZeroCodec};
 use crate::{FieldId, Result};
 
 /// Extracts the facet string and the documents ids where this facet string appear.
@@ -24,7 +22,7 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
 
     let mut facet_string_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
-        keep_first_prefix_value_merge_roaring_bitmaps,
+        merge_cbo_roaring_bitmaps, // TODO: check
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -42,14 +40,16 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
         let original_value = str::from_utf8(original_value_bytes)?;
 
         key_buffer.clear();
-        FacetStringLevelZeroCodec::serialize_into(
-            field_id,
-            str::from_utf8(normalized_value_bytes)?,
-            &mut key_buffer,
-        );
+        // TODO
+        // FacetStringLevelZeroCodec::serialize_into(
+        //     field_id,
+        //     str::from_utf8(normalized_value_bytes)?,
+        //     &mut key_buffer,
+        // );
 
         value_buffer.clear();
-        encode_prefix_string(original_value, &mut value_buffer)?;
+        // TODO
+        // encode_prefix_string(original_value, &mut value_buffer)?;
         let bitmap = RoaringBitmap::from_iter(Some(document_id));
         bitmap.serialize_into(&mut value_buffer)?;
 
