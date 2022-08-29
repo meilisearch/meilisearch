@@ -35,9 +35,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-18.04, macos-latest, windows-latest]
+        os: [ubuntu-20.04, macos-latest, windows-latest]
         include:
-          - os: ubuntu-18.04
+          - os: ubuntu-20.04
             artifact_name: meilisearch
             asset_name: meilisearch-linux-amd64
           - os: macos-latest
@@ -72,7 +72,7 @@ jobs:
       matrix:
         include:
           - build: aarch64
-            os: ubuntu-18.04
+            os: ubuntu-20.04
             target: aarch64-unknown-linux-gnu
             linker: gcc-aarch64-linux-gnu
             use-cross: true
