@@ -1196,6 +1196,7 @@ pub(crate) mod tests {
     use tempfile::TempDir;
 
     use crate::documents::DocumentsBatchReader;
+    use crate::error::{Error, InternalError};
     use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
     use crate::update::{self, IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
     use crate::{db_snap, Index};
@@ -1285,6 +1286,40 @@ pub(crate) mod tests {
             builder.execute(drop, || false)?;
             Ok(())
         }
+    }
+
+    #[test]
+    fn aborting_indexation() {
+        use std::sync::atomic::AtomicBool;
+        use std::sync::atomic::Ordering::Relaxed;
+
+        let index = TempIndex::new();
+        let mut wtxn = index.inner.write_txn().unwrap();
+
+        let should_abort = AtomicBool::new(false);
+        let builder = IndexDocuments::new(
+            &mut wtxn,
+            &index.inner,
+            &index.indexer_config,
+            index.index_documents_config.clone(),
+            |_| (),
+            || should_abort.load(Relaxed),
+        )
+        .unwrap();
+
+        let (builder, user_error) = builder
+            .add_documents(documents!([
+                { "id": 1, "name": "kevin" },
+                { "id": 2, "name": "bob", "age": 20 },
+                { "id": 2, "name": "bob", "age": 20 },
+            ]))
+            .unwrap();
+        user_error.unwrap();
+
+        should_abort.store(true, Relaxed);
+        let err = builder.execute().unwrap_err();
+
+        assert!(matches!(err, Error::InternalError(InternalError::AbortedIndexation)));
     }
 
     #[test]
