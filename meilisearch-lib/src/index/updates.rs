@@ -331,13 +331,10 @@ impl Index {
             builder = new_builder;
 
             let user_result = match user_result {
-                Ok(count) => {
-                    let addition = DocumentAdditionResult {
-                        indexed_documents: count,
-                        number_of_documents: count,
-                    };
-                    Ok(addition)
-                }
+                Ok(count) => Ok(DocumentAdditionResult {
+                    indexed_documents: count,
+                    number_of_documents: count,
+                }),
                 Err(e) => Err(IndexError::from(e)),
             };
 
@@ -345,9 +342,9 @@ impl Index {
         }
 
         if results.iter().any(Result::is_ok) {
-            let _addition = builder.execute()?;
+            let addition = builder.execute()?;
             txn.commit()?;
-            info!("document addition done: {:?}", _addition);
+            info!("document addition done: {:?}", addition);
         }
 
         Ok(results)
