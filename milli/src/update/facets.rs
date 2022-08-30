@@ -64,7 +64,7 @@ impl<'i> Facets<'i> {
     }
 
     #[logging_timer::time("Facets::{}")]
-    pub fn execute(mut self, wtxn: &mut heed::RwTxn) -> Result<()> {
+    pub fn execute(self, wtxn: &mut heed::RwTxn) -> Result<()> {
         self.index.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
         // We get the faceted fields to be able to create the facet levels.
         let faceted_fields = self.index.faceted_fields_ids(wtxn)?.clone();
@@ -172,14 +172,14 @@ impl<'t> CreateFacetsAlgo<'t> {
             bitmaps.push(docids);
 
             if bitmaps.len() == self.level_group_size {
-                handle_group(&bitmaps, left_bound);
+                handle_group(&bitmaps, left_bound)?;
                 first_iteration_for_new_group = true;
                 bitmaps.clear();
             }
         }
         // don't forget to give the leftover bitmaps as well
         if !bitmaps.is_empty() {
-            handle_group(&bitmaps, left_bound);
+            handle_group(&bitmaps, left_bound)?;
             bitmaps.clear();
         }
         Ok(())
@@ -197,7 +197,7 @@ impl<'t> CreateFacetsAlgo<'t> {
         handle_group: &mut dyn FnMut(&[RoaringBitmap], &'t [u8]) -> Result<()>,
     ) -> Result<Vec<grenad::Reader<File>>> {
         if level == 0 {
-            self.read_level_0(handle_group);
+            self.read_level_0(handle_group)?;
             // Level 0 is already in the database
             return Ok(vec![]);
         }
