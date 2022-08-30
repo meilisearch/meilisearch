@@ -7,7 +7,6 @@ use either::Either;
 pub use filter_parser::{Condition, Error as FPError, FilterCondition, Span, Token};
 use heed::types::DecodeIgnore;
 use heed::LazyDecode;
-use log::debug;
 use roaring::RoaringBitmap;
 
 // use super::FacetNumberRange;

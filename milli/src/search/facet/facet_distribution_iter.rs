@@ -1,7 +1,7 @@
+use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice};
+use crate::Result;
 use roaring::RoaringBitmap;
 use std::ops::ControlFlow;
-
-use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice};
 
 use super::{get_first_facet_value, get_highest_level};
 
@@ -11,18 +11,19 @@ pub fn iterate_over_facet_distribution<'t, CB>(
     field_id: u16,
     candidates: &RoaringBitmap,
     callback: CB,
-) where
+) -> Result<()>
+where
     CB: FnMut(&'t [u8], u64) -> ControlFlow<()>,
 {
     let mut fd = FacetDistribution { rtxn, db, field_id, callback };
     let highest_level =
-        get_highest_level(rtxn, &db.remap_key_type::<FacetKeyCodec<MyByteSlice>>(), field_id);
+        get_highest_level(rtxn, &db.remap_key_type::<FacetKeyCodec<MyByteSlice>>(), field_id)?;
 
-    if let Some(first_bound) = get_first_facet_value::<MyByteSlice>(rtxn, db, field_id) {
+    if let Some(first_bound) = get_first_facet_value::<MyByteSlice>(rtxn, db, field_id)? {
         fd.iterate(candidates, highest_level, first_bound, usize::MAX);
-        return;
+        return Ok(());
     } else {
-        return;
+        return Ok(());
     }
 }
 
@@ -45,26 +46,26 @@ where
         candidates: &RoaringBitmap,
         starting_bound: &'t [u8],
         group_size: usize,
-    ) -> ControlFlow<()> {
+    ) -> Result<ControlFlow<()>> {
         let starting_key =
             FacetKey { field_id: self.field_id, level: 0, left_bound: starting_bound };
-        let iter = self.db.range(self.rtxn, &(starting_key..)).unwrap().take(group_size);
+        let iter = self.db.range(self.rtxn, &(starting_key..))?.take(group_size);
         for el in iter {
-            let (key, value) = el.unwrap();
+            let (key, value) = el?;
             // The range is unbounded on the right and the group size for the highest level is MAX,
             // so we need to check that we are not iterating over the next field id
             if key.field_id != self.field_id {
-                return ControlFlow::Break(());
+                return Ok(ControlFlow::Break(()));
             }
             let docids_in_common = value.bitmap.intersection_len(candidates);
             if docids_in_common > 0 {
                 match (self.callback)(key.left_bound, docids_in_common) {
                     ControlFlow::Continue(_) => {}
-                    ControlFlow::Break(_) => return ControlFlow::Break(()),
+                    ControlFlow::Break(_) => return Ok(ControlFlow::Break(())),
                 }
             }
         }
-        return ControlFlow::Continue(());
+        return Ok(ControlFlow::Continue(()));
     }
     fn iterate(
         &mut self,
@@ -72,7 +73,7 @@ where
         level: u8,
         starting_bound: &'t [u8],
         group_size: usize,
-    ) -> ControlFlow<()> {
+    ) -> Result<ControlFlow<()>> {
         if level == 0 {
             return self.iterate_level_0(candidates, starting_bound, group_size);
         }
@@ -84,34 +85,42 @@ where
             // The range is unbounded on the right and the group size for the highest level is MAX,
             // so we need to check that we are not iterating over the next field id
             if key.field_id != self.field_id {
-                return ControlFlow::Break(());
+                return Ok(ControlFlow::Break(()));
             }
             let docids_in_common = value.bitmap & candidates;
             if docids_in_common.len() > 0 {
-                let cf =
-                    self.iterate(&docids_in_common, level - 1, key.left_bound, value.size as usize);
+                let cf = self.iterate(
+                    &docids_in_common,
+                    level - 1,
+                    key.left_bound,
+                    value.size as usize,
+                )?;
                 match cf {
                     ControlFlow::Continue(_) => {}
-                    ControlFlow::Break(_) => return ControlFlow::Break(()),
+                    ControlFlow::Break(_) => return Ok(ControlFlow::Break(())),
                 }
             }
         }
 
-        return ControlFlow::Continue(());
+        return Ok(ControlFlow::Continue(()));
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{codec::U16Codec, Index};
     use heed::BytesDecode;
+    use rand::{rngs::SmallRng, Rng, SeedableRng};
     use roaring::RoaringBitmap;
     use std::ops::ControlFlow;
 
+    use crate::{
+        heed_codec::facet::new::ordered_f64_codec::OrderedF64Codec, search::facet::test::FacetIndex,
+    };
+
     use super::iterate_over_facet_distribution;
 
-    fn get_simple_index() -> Index<U16Codec> {
-        let index = Index::<U16Codec>::new(4, 8);
+    fn get_simple_index() -> FacetIndex<OrderedF64Codec> {
+        let index = FacetIndex::<OrderedF64Codec>::new(4, 8);
         let mut txn = index.env.write_txn().unwrap();
         for i in 0..256u16 {
             let mut bitmap = RoaringBitmap::new();
@@ -121,18 +130,19 @@ mod tests {
         txn.commit().unwrap();
         index
     }
-    fn get_random_looking_index() -> Index<U16Codec> {
-        let index = Index::<U16Codec>::new(4, 8);
+    fn get_random_looking_index() -> FacetIndex<OrderedF64Codec> {
+        let index = FacetIndex::<OrderedF64Codec>::new(4, 8);
         let mut txn = index.env.write_txn().unwrap();
 
-        let rng = fastrand::Rng::with_seed(0);
-        let keys = std::iter::from_fn(|| Some(rng.u32(..256))).take(128).collect::<Vec<u32>>();
+        let rng = rand::rngs::SmallRng::from_seed([0; 32]);
+        let keys =
+            std::iter::from_fn(|| Some(rng.gen_range(0..256))).take(128).collect::<Vec<u32>>();
 
         for (_i, key) in keys.into_iter().enumerate() {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(key);
-            bitmap.insert(key + 100);
-            index.insert(&mut txn, 0, &(key as u16), &bitmap);
+            bitmap.insert(key + 100.);
+            index.insert(&mut txn, 0, &(key as f64), &bitmap);
         }
         txn.commit().unwrap();
         index
@@ -156,7 +166,7 @@ mod tests {
                 0,
                 &candidates,
                 |facet, count| {
-                    let facet = U16Codec::bytes_decode(facet).unwrap();
+                    let facet = OrderedF64Codec::bytes_decode(facet).unwrap();
                     results.push_str(&format!("{facet}: {count}\n"));
                     ControlFlow::Continue(())
                 },
@@ -180,7 +190,7 @@ mod tests {
                 0,
                 &candidates,
                 |facet, count| {
-                    let facet = U16Codec::bytes_decode(facet).unwrap();
+                    let facet = OrderedF64Codec::bytes_decode(facet).unwrap();
                     if nbr_facets == 100 {
                         return ControlFlow::Break(());
                     } else {

@@ -1,10 +1,10 @@
 use std::ops::Bound;
 
-use roaring::RoaringBitmap;
-
 use crate::heed_codec::facet::new::{
     FacetGroupValue, FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice,
 };
+use crate::Result;
+use roaring::RoaringBitmap;
 
 use super::{get_first_facet_value, get_highest_level, get_last_facet_value};
 
@@ -13,21 +13,21 @@ fn descending_facet_sort<'t>(
     db: &'t heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
     field_id: u16,
     candidates: RoaringBitmap,
-) -> Box<dyn Iterator<Item = (&'t [u8], RoaringBitmap)> + 't> {
-    let highest_level = get_highest_level(rtxn, db, field_id);
-    if let Some(first_bound) = get_first_facet_value::<MyByteSlice>(rtxn, db, field_id) {
+) -> Result<Box<dyn Iterator<Item = Result<(&'t [u8], RoaringBitmap)>> + 't>> {
+    let highest_level = get_highest_level(rtxn, db, field_id)?;
+    if let Some(first_bound) = get_first_facet_value::<MyByteSlice>(rtxn, db, field_id)? {
         let first_key = FacetKey { field_id, level: highest_level, left_bound: first_bound };
-        let last_bound = get_last_facet_value::<MyByteSlice>(rtxn, db, field_id).unwrap();
+        let last_bound = get_last_facet_value::<MyByteSlice>(rtxn, db, field_id)?.unwrap();
         let last_key = FacetKey { field_id, level: highest_level, left_bound: last_bound };
-        let iter = db.rev_range(rtxn, &(first_key..=last_key)).unwrap().take(usize::MAX);
-        Box::new(DescendingFacetSort {
+        let iter = db.rev_range(rtxn, &(first_key..=last_key))?.take(usize::MAX);
+        Ok(Box::new(DescendingFacetSort {
             rtxn,
             db,
             field_id,
             stack: vec![(candidates, iter, Bound::Included(last_bound))],
-        })
+        }))
     } else {
-        return Box::new(std::iter::empty());
+        Ok(Box::new(std::iter::empty()))
     }
 }
 
@@ -43,7 +43,7 @@ struct DescendingFacetSort<'t> {
 }
 
 impl<'t> Iterator for DescendingFacetSort<'t> {
-    type Item = (&'t [u8], RoaringBitmap);
+    type Item = Result<(&'t [u8], RoaringBitmap)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         'outer: loop {
@@ -70,7 +70,7 @@ impl<'t> Iterator for DescendingFacetSort<'t> {
                     *documents_ids -= &bitmap;
 
                     if level == 0 {
-                        return Some((left_bound, bitmap));
+                        return Some(Ok((left_bound, bitmap)));
                     }
                     let starting_key_below = FacetKey { field_id, level: level - 1, left_bound };
 
@@ -89,14 +89,14 @@ impl<'t> Iterator for DescendingFacetSort<'t> {
                     };
                     let prev_right_bound = *right_bound;
                     *right_bound = Bound::Excluded(left_bound);
-                    let iter = self
-                        .db
-                        .rev_range(
-                            &self.rtxn,
-                            &(Bound::Included(starting_key_below), end_key_kelow),
-                        )
-                        .unwrap()
-                        .take(group_size as usize);
+                    let iter = match self.db.rev_range(
+                        &self.rtxn,
+                        &(Bound::Included(starting_key_below), end_key_kelow),
+                    ) {
+                        Ok(iter) => iter,
+                        Err(e) => return Some(Err(e.into())),
+                    }
+                    .take(group_size as usize);
 
                     self.stack.push((bitmap, iter, prev_right_bound));
                     continue 'outer;
@@ -110,16 +110,20 @@ impl<'t> Iterator for DescendingFacetSort<'t> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        codec::{MyByteSlice, U16Codec},
-        descending_facet_sort::descending_facet_sort,
-        display_bitmap, FacetKeyCodec, Index,
-    };
+
     use heed::BytesDecode;
+    use rand::Rng;
+    use rand::SeedableRng;
     use roaring::RoaringBitmap;
 
-    fn get_simple_index() -> Index<U16Codec> {
-        let index = Index::<U16Codec>::new(4, 8);
+    use crate::{
+        heed_codec::facet::new::{ordered_f64_codec::OrderedF64Codec, FacetKeyCodec, MyByteSlice},
+        search::facet::{facet_sort_descending::descending_facet_sort, test::FacetIndex},
+        snapshot_tests::display_bitmap,
+    };
+
+    fn get_simple_index() -> FacetIndex<OrderedF64Codec> {
+        let index = FacetIndex::<OrderedF64Codec>::new(4, 8);
         let mut txn = index.env.write_txn().unwrap();
         for i in 0..256u16 {
             let mut bitmap = RoaringBitmap::new();
@@ -129,18 +133,19 @@ mod tests {
         txn.commit().unwrap();
         index
     }
-    fn get_random_looking_index() -> Index<U16Codec> {
-        let index = Index::<U16Codec>::new(4, 8);
+    fn get_random_looking_index() -> FacetIndex<OrderedF64Codec> {
+        let index = FacetIndex::<OrderedF64Codec>::new(4, 8);
         let mut txn = index.env.write_txn().unwrap();
 
-        let rng = fastrand::Rng::with_seed(0);
-        let keys = std::iter::from_fn(|| Some(rng.u32(..256))).take(128).collect::<Vec<u32>>();
+        let rng = rand::rngs::SmallRng::from_seed([0; 32]);
+        let keys =
+            std::iter::from_fn(|| Some(rng.gen_range(0..256))).take(128).collect::<Vec<u32>>();
 
         for (_i, key) in keys.into_iter().enumerate() {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(key);
-            bitmap.insert(key + 100);
-            index.insert(&mut txn, 0, &(key as u16), &bitmap);
+            bitmap.insert(key + 100.);
+            index.insert(&mut txn, 0, &(key as f64), &bitmap);
         }
         txn.commit().unwrap();
         index
@@ -161,7 +166,7 @@ mod tests {
             let db = index.db.content.remap_key_type::<FacetKeyCodec<MyByteSlice>>();
             let iter = descending_facet_sort(&txn, &db, 0, candidates);
             for (facet, docids) in iter {
-                let facet = U16Codec::bytes_decode(facet).unwrap();
+                let facet = OrderedF64Codec::bytes_decode(facet).unwrap();
                 results.push_str(&format!("{facet}: {}\n", display_bitmap(&docids)));
             }
             insta::assert_snapshot!(format!("filter_sort_{i}_descending"), results);
