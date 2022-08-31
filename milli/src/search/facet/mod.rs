@@ -4,8 +4,6 @@ use heed::{BytesDecode, RoTxn};
 use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKeyCodec, MyByteSlice};
 
 pub use self::facet_distribution::{FacetDistribution, DEFAULT_VALUES_PER_FACET};
-// pub use self::facet_number::{FacetNumberIter, FacetNumberRange, FacetNumberRevRange};
-// pub use self::facet_string::FacetStringIter;
 pub use self::filter::Filter;
 
 mod facet_distribution;
@@ -14,7 +12,6 @@ mod facet_range_search;
 pub mod facet_sort_ascending;
 pub mod facet_sort_descending;
 mod filter;
-mod incremental_update;
 
 pub(crate) fn get_first_facet_value<'t, BoundCodec>(
     txn: &'t RoTxn,

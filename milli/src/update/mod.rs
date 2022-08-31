@@ -1,7 +1,7 @@
 pub use self::available_documents_ids::AvailableDocumentsIds;
 pub use self::clear_documents::ClearDocuments;
 pub use self::delete_documents::{DeleteDocuments, DocumentDeletionResult};
-pub use self::facets::Facets;
+pub use self::facet::bulk::FacetsUpdateBulk;
 pub use self::index_documents::{
     DocumentAdditionResult, DocumentId, IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod,
 };
@@ -16,7 +16,7 @@ pub use self::words_prefixes_fst::WordsPrefixesFst;
 mod available_documents_ids;
 mod clear_documents;
 mod delete_documents;
-mod facets;
+mod facet;
 mod index_documents;
 mod indexer_config;
 mod prefix_word_pairs;

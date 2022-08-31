@@ -37,8 +37,8 @@ use crate::error::UserError;
 use crate::heed_codec::facet::new::{FacetKeyCodec, MyByteSlice};
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
-    self, Facets, IndexerConfig, PrefixWordPairsProximityDocids, UpdateIndexingStep,
-    WordPrefixDocids, WordPrefixPositionDocids, WordsPrefixesFst,
+    self, FacetsUpdateBulk, IndexerConfig, UpdateIndexingStep, WordPrefixDocids,
+    PrefixWordPairsProximityDocids, WordPrefixPositionDocids, WordsPrefixesFst,
 };
 use crate::{Index, Result, RoaringBitmapCodec};
 
@@ -436,7 +436,7 @@ where
             (&self.index.facet_id_string_docids).remap_key_type::<FacetKeyCodec<MyByteSlice>>(),
             (&self.index.facet_id_f64_docids).remap_key_type::<FacetKeyCodec<MyByteSlice>>(),
         ] {
-            let mut builder = Facets::new(self.index, facet_db);
+            let mut builder = FacetsUpdateBulk::new(self.index, facet_db);
             builder.chunk_compression_type = self.indexer_config.chunk_compression_type;
             builder.chunk_compression_level = self.indexer_config.chunk_compression_level;
             if let Some(value) = self.config.facet_level_group_size {

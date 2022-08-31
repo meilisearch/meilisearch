@@ -1,12 +1,11 @@
 use crate::heed_codec::facet::new::{
     FacetGroupValue, FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice,
 };
+use crate::search::facet::get_highest_level;
 use crate::Result;
 use heed::Error;
 use heed::{types::ByteSlice, BytesDecode, RoTxn, RwTxn};
 use roaring::RoaringBitmap;
-
-use super::get_highest_level;
 
 enum InsertionResult {
     InPlace,
@@ -18,14 +17,14 @@ enum DeletionResult {
     Remove { prev: Option<Vec<u8>>, next: Option<Vec<u8>> },
 }
 
-struct IncrementalFacetUpdate<'i> {
-    db: &'i heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
+struct FacetUpdateIncremental {
+    db: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
     group_size: usize,
     min_level_size: usize,
     max_group_size: usize,
 }
-impl<'i> IncrementalFacetUpdate<'i> {
-    fn find_insertion_key_value<'a>(
+impl FacetUpdateIncremental {
+    fn find_insertion_key_value(
         &self,
         field_id: u16,
         level: u8,

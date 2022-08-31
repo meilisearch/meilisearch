@@ -1,23 +1,20 @@
-use std::cmp;
-use std::fs::File;
-use std::num::NonZeroUsize;
-
+use crate::error::InternalError;
+use crate::heed_codec::facet::new::{
+    FacetGroupValue, FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice,
+};
+use crate::update::index_documents::{create_writer, write_into_lmdb_database, writer_into_reader};
+use crate::{FieldId, Index, Result};
 use grenad::CompressionType;
 use heed::types::ByteSlice;
 use heed::{BytesEncode, Error, RoTxn};
 use log::debug;
 use roaring::RoaringBitmap;
+use std::cmp;
+use std::fs::File;
+use std::num::NonZeroUsize;
 use time::OffsetDateTime;
 
-use crate::error::InternalError;
-use crate::heed_codec::facet::new::{
-    FacetGroupValue, FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice,
-};
-// use crate::heed_codec::CboRoaringBitmapCodec;
-use crate::update::index_documents::{create_writer, write_into_lmdb_database, writer_into_reader};
-use crate::{FieldId, Index, Result};
-
-pub struct Facets<'i> {
+pub struct FacetsUpdateBulk<'i> {
     index: &'i Index,
     database: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
     pub(crate) chunk_compression_type: CompressionType,
@@ -26,12 +23,12 @@ pub struct Facets<'i> {
     min_level_size: usize,
 }
 
-impl<'i> Facets<'i> {
+impl<'i> FacetsUpdateBulk<'i> {
     pub fn new(
         index: &'i Index,
         database: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
-    ) -> Facets<'i> {
-        Facets {
+    ) -> FacetsUpdateBulk<'i> {
+        FacetsUpdateBulk {
             index,
             database,
             chunk_compression_type: CompressionType::None,
@@ -63,7 +60,7 @@ impl<'i> Facets<'i> {
         Ok(())
     }
 
-    #[logging_timer::time("Facets::{}")]
+    #[logging_timer::time("FacetsUpdateBulk::{}")]
     pub fn execute(self, wtxn: &mut heed::RwTxn) -> Result<()> {
         self.index.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
         // We get the faceted fields to be able to create the facet levels.
@@ -105,7 +102,7 @@ impl<'i> Facets<'i> {
         field_id: FieldId,
         txn: &RoTxn,
     ) -> Result<(Vec<grenad::Reader<File>>, RoaringBitmap)> {
-        let algo = CreateFacetsAlgo {
+        let algo = FacetsUpdateBulkAlgorithm {
             rtxn: txn,
             db: &self.database,
             field_id,
@@ -129,7 +126,7 @@ impl<'i> Facets<'i> {
     }
 }
 
-pub struct CreateFacetsAlgo<'t> {
+pub struct FacetsUpdateBulkAlgorithm<'t> {
     rtxn: &'t heed::RoTxn<'t>,
     db: &'t heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
     chunk_compression_type: CompressionType,
@@ -138,7 +135,7 @@ pub struct CreateFacetsAlgo<'t> {
     level_group_size: usize,
     min_level_size: usize,
 }
-impl<'t> CreateFacetsAlgo<'t> {
+impl<'t> FacetsUpdateBulkAlgorithm<'t> {
     fn read_level_0(
         &self,
         handle_group: &mut dyn FnMut(&[RoaringBitmap], &'t [u8]) -> Result<()>,

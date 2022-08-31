@@ -32,7 +32,7 @@ static LEVDIST2: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(2, true));
 
 mod criteria;
 mod distinct;
-mod facet;
+pub mod facet;
 mod fst_utils;
 mod matches;
 mod query_tree;

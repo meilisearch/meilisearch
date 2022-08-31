@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
 
-use super::{ClearDocuments, Facets};
+use super::{ClearDocuments, FacetsUpdateBulk};
 use crate::error::{InternalError, UserError};
 use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKeyCodec, MyByteSlice};
 use crate::heed_codec::CboRoaringBitmapCodec;
@@ -643,7 +643,7 @@ fn remove_docids_from_facet_id_docids<'a>(
     if !modified {
         return Ok(());
     }
-    let builder = Facets::new(index, db);
+    let builder = FacetsUpdateBulk::new(index, db);
     builder.execute(wtxn)?;
 
     Ok(())
