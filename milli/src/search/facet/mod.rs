@@ -20,7 +20,7 @@ pub(crate) fn get_first_facet_value<'t, BoundCodec>(
     txn: &'t RoTxn,
     db: &'t heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
     field_id: u16,
-) -> crate::Result<Option<BoundCodec::DItem>>
+) -> heed::Result<Option<BoundCodec::DItem>>
 where
     BoundCodec: BytesDecode<'t>,
 {
@@ -42,7 +42,7 @@ pub(crate) fn get_last_facet_value<'t, BoundCodec>(
     txn: &'t RoTxn,
     db: &'t heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
     field_id: u16,
-) -> crate::Result<Option<BoundCodec::DItem>>
+) -> heed::Result<Option<BoundCodec::DItem>>
 where
     BoundCodec: BytesDecode<'t>,
 {
@@ -65,7 +65,7 @@ pub(crate) fn get_highest_level<'t>(
     txn: &'t RoTxn<'t>,
     db: &'t heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
     field_id: u16,
-) -> crate::Result<u8> {
+) -> heed::Result<u8> {
     let field_id_prefix = &field_id.to_be_bytes();
     Ok(db
         .as_polymorph()

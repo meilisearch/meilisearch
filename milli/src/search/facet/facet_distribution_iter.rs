@@ -1,5 +1,5 @@
 use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice};
-use crate::Result;
+use heed::Result;
 use roaring::RoaringBitmap;
 use std::ops::ControlFlow;
 
@@ -20,7 +20,7 @@ where
         get_highest_level(rtxn, &db.remap_key_type::<FacetKeyCodec<MyByteSlice>>(), field_id)?;
 
     if let Some(first_bound) = get_first_facet_value::<MyByteSlice>(rtxn, db, field_id)? {
-        fd.iterate(candidates, highest_level, first_bound, usize::MAX);
+        fd.iterate(candidates, highest_level, first_bound, usize::MAX)?;
         return Ok(());
     } else {
         return Ok(());
