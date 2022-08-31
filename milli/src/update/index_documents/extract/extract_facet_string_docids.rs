@@ -1,13 +1,11 @@
-use std::fs::File;
-use std::iter::FromIterator;
-use std::{io, str};
-
-use roaring::RoaringBitmap;
-
 use super::helpers::{create_sorter, sorter_into_reader, try_split_array_at, GrenadParameters};
+use crate::heed_codec::facet::new::str_ref::StrRefCodec;
+use crate::heed_codec::facet::new::{FacetKey, FacetKeyCodec};
 use crate::update::index_documents::merge_cbo_roaring_bitmaps;
-// use crate::heed_codec::facet::{encode_prefix_string, FacetStringLevelZeroCodec};
 use crate::{FieldId, Result};
+use heed::BytesEncode;
+use std::fs::File;
+use std::io;
 
 /// Extracts the facet string and the documents ids where this facet string appear.
 ///
@@ -22,38 +20,26 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
 
     let mut facet_string_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
-        merge_cbo_roaring_bitmaps, // TODO: check
+        merge_cbo_roaring_bitmaps, // TODO: check that it is correct
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
         max_memory,
     );
 
-    let mut key_buffer = Vec::new();
-    let mut value_buffer = Vec::new();
     let mut cursor = docid_fid_facet_string.into_cursor()?;
-    while let Some((key, original_value_bytes)) = cursor.move_on_next()? {
+    while let Some((key, _original_value_bytes)) = cursor.move_on_next()? {
         let (field_id_bytes, bytes) = try_split_array_at(key).unwrap();
         let field_id = FieldId::from_be_bytes(field_id_bytes);
-        let (document_id_bytes, normalized_value_bytes) = try_split_array_at(bytes).unwrap();
-        let document_id = u32::from_be_bytes(document_id_bytes);
-        let original_value = str::from_utf8(original_value_bytes)?;
 
-        key_buffer.clear();
-        // TODO
-        // FacetStringLevelZeroCodec::serialize_into(
-        //     field_id,
-        //     str::from_utf8(normalized_value_bytes)?,
-        //     &mut key_buffer,
-        // );
+        let (document_id_bytes, normalized_value_bytes) =
+            try_split_array_at::<_, 4>(bytes).unwrap();
 
-        value_buffer.clear();
-        // TODO
-        // encode_prefix_string(original_value, &mut value_buffer)?;
-        let bitmap = RoaringBitmap::from_iter(Some(document_id));
-        bitmap.serialize_into(&mut value_buffer)?;
+        let normalised_value = std::str::from_utf8(normalized_value_bytes)?;
+        let key = FacetKey { field_id, level: 0, left_bound: normalised_value };
+        let key_bytes = FacetKeyCodec::<StrRefCodec>::bytes_encode(&key).unwrap();
 
-        facet_string_docids_sorter.insert(&key_buffer, &value_buffer)?;
+        facet_string_docids_sorter.insert(&key_bytes, &document_id_bytes)?;
     }
 
     sorter_into_reader(facet_string_docids_sorter, indexer)

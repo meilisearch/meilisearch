@@ -2,22 +2,20 @@ use std::collections::btree_map::Entry;
 
 use fst::IntoStreamer;
 use heed::types::{ByteSlice, Str};
-use heed::{BytesDecode, BytesEncode, Database};
-use obkv::Key;
+use heed::Database;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
 
 use super::{ClearDocuments, Facets};
-use crate::error::{InternalError, SerializationError, UserError};
-// use crate::heed_codec::facet::FacetStringZeroBoundsValueCodec;
+use crate::error::{InternalError, UserError};
 use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKeyCodec, MyByteSlice};
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::index::{db_name, main_key};
 use crate::{
-    fields_ids_map, DocumentId, ExternalDocumentsIds, FieldId, FieldIdMapMissingEntry,
-    FieldsIdsMap, Index, Result, RoaringBitmapCodec, SmallString32, BEU32,
+    DocumentId, ExternalDocumentsIds, FieldId, FieldIdMapMissingEntry, FieldsIdsMap, Index, Result,
+    RoaringBitmapCodec, SmallString32, BEU32,
 };
 
 pub struct DeleteDocuments<'t, 'u, 'i> {

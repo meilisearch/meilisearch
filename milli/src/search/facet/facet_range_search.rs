@@ -15,7 +15,7 @@ use super::get_last_facet_value;
 
 pub fn find_docids_of_facet_within_bounds<'t, BoundCodec>(
     rtxn: &'t heed::RoTxn<'t>,
-    db: &'t heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
+    db: &'t heed::Database<FacetKeyCodec<BoundCodec>, FacetGroupValueCodec>,
     field_id: u16,
     left: &'t Bound<<BoundCodec as BytesEncode<'t>>::EItem>,
     right: &'t Bound<<BoundCodec as BytesEncode<'t>>::EItem>,
@@ -48,13 +48,13 @@ where
         }
         Bound::Unbounded => Bound::Unbounded,
     };
-
+    let db = db.remap_key_type::<FacetKeyCodec<MyByteSlice>>();
     let mut docids = RoaringBitmap::new();
-    let mut f = FacetRangeSearch { rtxn, db, field_id, left, right, docids: &mut docids };
-    let highest_level = get_highest_level(rtxn, db, field_id)?;
+    let mut f = FacetRangeSearch { rtxn, db: &db, field_id, left, right, docids: &mut docids };
+    let highest_level = get_highest_level(rtxn, &db, field_id)?;
 
-    if let Some(first_bound) = get_first_facet_value::<MyByteSlice>(rtxn, db, field_id)? {
-        let last_bound = get_last_facet_value::<MyByteSlice>(rtxn, db, field_id)?.unwrap();
+    if let Some(first_bound) = get_first_facet_value::<MyByteSlice>(rtxn, &db, field_id)? {
+        let last_bound = get_last_facet_value::<MyByteSlice>(rtxn, &db, field_id)?.unwrap();
         f.run(highest_level, first_bound, Bound::Included(last_bound), usize::MAX)?;
         Ok(docids)
     } else {
