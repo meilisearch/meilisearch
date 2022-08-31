@@ -118,6 +118,8 @@ impl<W: Write> DocumentsBatchBuilder<W> {
                     AllowedType::Number => {
                         if value.trim().is_empty() {
                             to_writer(&mut self.value_buffer, &Value::Null)?;
+                        } else if let Ok(integer) = value.trim().parse::<i64>() {
+                            to_writer(&mut self.value_buffer, &integer)?;
                         } else {
                             match value.trim().parse::<f64>() {
                                 Ok(float) => {
@@ -359,7 +361,34 @@ mod test {
             json!({
                 "city": "Boston",
                 "country": "United States",
-                "pop": 4628910.0,
+                "pop": 4628910,
+            })
+        );
+    }
+
+    #[test]
+    fn integer_as_id() {
+        let csv_content = r#""id:number","title:string","comment:string"
+"1239","Pride and Prejudice","A great book""#;
+        let csv = csv::Reader::from_reader(Cursor::new(csv_content));
+
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_csv(csv).unwrap();
+        let vector = builder.into_inner().unwrap();
+
+        let (mut cursor, index) = DocumentsBatchReader::from_reader(Cursor::new(vector))
+            .unwrap()
+            .into_cursor_and_fields_index();
+
+        let doc = cursor.next_document().unwrap().unwrap();
+        let val = obkv_to_object(&doc, &index).map(Value::from).unwrap();
+
+        assert_eq!(
+            val,
+            json!({
+                "id": 1239,
+                "title": "Pride and Prejudice",
+                "comment": "A great book",
             })
         );
     }
