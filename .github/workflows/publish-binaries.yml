@@ -1,4 +1,6 @@
 on:
+  schedule:
+    - cron: '0 2 * * *' # Every day at 2:00am
   release:
     types: [published]
 
@@ -8,13 +10,14 @@ jobs:
   check-version:
     name: Check the version validity
     runs-on: ubuntu-latest
+    # No need to check the version for dry run (cron)
+    if: github.event_name != 'schedule'
     steps:
       - uses: actions/checkout@v2
       # Check if the tag has the v<nmumber>.<number>.<number> format.
       # If yes, it means we are publishing an official release.
       # If no, we are releasing a RC, so no need to check the version.
       - name: Check tag format
-        if: github.event_name != 'schedule'
         id: check-tag-format
         run: |
           escaped_tag=$(printf "%q" ${{ github.ref_name }})
@@ -54,7 +57,9 @@ jobs:
     - uses: actions/checkout@v3
     - name: Build
       run: cargo build --release --locked
+    # No need to upload binaries for dry run (cron)
     - name: Upload binaries to release
+      if: github.event_name != 'schedule'
       uses: svenstaro/upload-release-action@v1-release
       with:
         repo_token: ${{ secrets.PUBLISH_TOKEN }}
@@ -123,6 +128,8 @@ jobs:
         run: ls -lR ./target
 
       - name: Upload the binary to release
+        # No need to upload binaries for dry run (cron)
+        if: github.event_name != 'schedule'
         uses: svenstaro/upload-release-action@v1-release
         with:
           repo_token: ${{ secrets.PUBLISH_TOKEN }}
