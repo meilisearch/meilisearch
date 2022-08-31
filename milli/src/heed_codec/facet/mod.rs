@@ -2,7 +2,7 @@
 // mod facet_level_value_u32_codec;
 // mod facet_string_level_zero_codec;
 // mod facet_string_level_zero_value_codec;
-mod facet_string_zero_bounds_value_codec;
+// mod facet_string_zero_bounds_value_codec;
 mod field_doc_id_facet_f64_codec;
 mod field_doc_id_facet_string_codec;
 
@@ -16,7 +16,7 @@ use heed::types::OwnedType;
 // pub use self::facet_string_level_zero_value_codec::{
 //     decode_prefix_string, encode_prefix_string, FacetStringLevelZeroValueCodec,
 // };
-pub use self::facet_string_zero_bounds_value_codec::FacetStringZeroBoundsValueCodec;
+// pub use self::facet_string_zero_bounds_value_codec::FacetStringZeroBoundsValueCodec;
 pub use self::field_doc_id_facet_f64_codec::FieldDocIdFacetF64Codec;
 pub use self::field_doc_id_facet_string_codec::FieldDocIdFacetStringCodec;
 use crate::BEU16;

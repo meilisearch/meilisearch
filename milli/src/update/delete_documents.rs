@@ -10,7 +10,7 @@ use time::OffsetDateTime;
 
 use super::ClearDocuments;
 use crate::error::{InternalError, SerializationError, UserError};
-use crate::heed_codec::facet::FacetStringZeroBoundsValueCodec;
+// use crate::heed_codec::facet::FacetStringZeroBoundsValueCodec;
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::index::{db_name, main_key};
 use crate::{
