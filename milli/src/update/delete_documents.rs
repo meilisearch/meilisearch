@@ -3,19 +3,21 @@ use std::collections::btree_map::Entry;
 use fst::IntoStreamer;
 use heed::types::{ByteSlice, Str};
 use heed::{BytesDecode, BytesEncode, Database};
+use obkv::Key;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
 
-use super::ClearDocuments;
+use super::{ClearDocuments, Facets};
 use crate::error::{InternalError, SerializationError, UserError};
 // use crate::heed_codec::facet::FacetStringZeroBoundsValueCodec;
+use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKeyCodec, MyByteSlice};
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::index::{db_name, main_key};
 use crate::{
-    DocumentId, ExternalDocumentsIds, FieldId, FieldIdMapMissingEntry, Index, Result,
-    RoaringBitmapCodec, SmallString32, BEU32,
+    fields_ids_map, DocumentId, ExternalDocumentsIds, FieldId, FieldIdMapMissingEntry,
+    FieldsIdsMap, Index, Result, RoaringBitmapCodec, SmallString32, BEU32,
 };
 
 pub struct DeleteDocuments<'t, 'u, 'i> {
@@ -62,6 +64,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
     pub fn execute(mut self) -> Result<DocumentDeletionResult> {
         self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
+
         // We retrieve the current documents ids that are in the database.
         let mut documents_ids = self.index.documents_ids(self.wtxn)?;
         let mut soft_deleted_docids = self.index.soft_deleted_documents_ids(self.wtxn)?;
@@ -439,22 +442,24 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             self.index.put_geo_faceted_documents_ids(self.wtxn, &geo_faceted_doc_ids)?;
         }
 
+        remove_docids_from_facet_id_docids(
+            self.wtxn,
+            self.index,
+            facet_id_f64_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>(),
+            &self.to_delete_docids,
+            fields_ids_map.clone(),
+        )?;
+        remove_docids_from_facet_id_docids(
+            self.wtxn,
+            self.index,
+            facet_id_string_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>(),
+            &self.to_delete_docids,
+            fields_ids_map.clone(),
+        )?;
         // We delete the documents ids that are under the facet field id values.
-        // TODO: remove_docids_from_facet_field_id_docids(
-        //     self.wtxn,
-        //     facet_id_f64_docids,
-        //     &self.to_delete_docids,
-        // )?;
-        // We delete the documents ids that are under the facet field id values.
-        remove_docids_from_facet_field_id_docids(
+        remove_docids_from_facet_id_exists_docids(
             self.wtxn,
             facet_id_exists_docids,
-            &self.to_delete_docids,
-        )?;
-
-        remove_docids_from_facet_field_id_string_docids(
-            self.wtxn,
-            facet_id_string_docids,
             &self.to_delete_docids,
         )?;
 
@@ -580,67 +585,7 @@ where
     Ok(())
 }
 
-fn remove_docids_from_facet_field_id_string_docids<'a, C, D>(
-    wtxn: &'a mut heed::RwTxn,
-    db: &heed::Database<C, D>,
-    to_remove: &RoaringBitmap,
-) -> crate::Result<()> {
-    // let db_name = Some(crate::index::db_name::FACET_ID_STRING_DOCIDS);
-    // let mut iter = db.remap_types::<ByteSlice, ByteSlice>().iter_mut(wtxn)?;
-    // while let Some(result) = iter.next() {
-    //     let (key, val) = result?;
-    //     match FacetLevelValueU32Codec::bytes_decode(key) {
-    //         Some(_) => {
-    //             // If we are able to parse this key it means it is a facet string group
-    //             // level key. We must then parse the value using the appropriate codec.
-    //             let (group, mut docids) =
-    //                 FacetStringZeroBoundsValueCodec::<CboRoaringBitmapCodec>::bytes_decode(val)
-    //                     .ok_or_else(|| SerializationError::Decoding { db_name })?;
-
-    //             let previous_len = docids.len();
-    //             docids -= to_remove;
-    //             if docids.is_empty() {
-    //                 // safety: we don't keep references from inside the LMDB database.
-    //                 unsafe { iter.del_current()? };
-    //             } else if docids.len() != previous_len {
-    //                 let key = key.to_owned();
-    //                 let val = &(group, docids);
-    //                 let value_bytes =
-    //                     FacetStringZeroBoundsValueCodec::<CboRoaringBitmapCodec>::bytes_encode(val)
-    //                         .ok_or_else(|| SerializationError::Encoding { db_name })?;
-
-    //                 // safety: we don't keep references from inside the LMDB database.
-    //                 unsafe { iter.put_current(&key, &value_bytes)? };
-    //             }
-    //         }
-    //         None => {
-    //             // The key corresponds to a level zero facet string.
-    //             let (original_value, mut docids) =
-    //                 FacetStringLevelZeroValueCodec::bytes_decode(val)
-    //                     .ok_or_else(|| SerializationError::Decoding { db_name })?;
-
-    //             let previous_len = docids.len();
-    //             docids -= to_remove;
-    //             if docids.is_empty() {
-    //                 // safety: we don't keep references from inside the LMDB database.
-    //                 unsafe { iter.del_current()? };
-    //             } else if docids.len() != previous_len {
-    //                 let key = key.to_owned();
-    //                 let val = &(original_value, docids);
-    //                 let value_bytes = FacetStringLevelZeroValueCodec::bytes_encode(val)
-    //                     .ok_or_else(|| SerializationError::Encoding { db_name })?;
-
-    //                 // safety: we don't keep references from inside the LMDB database.
-    //                 unsafe { iter.put_current(&key, &value_bytes)? };
-    //             }
-    //         }
-    //     }
-    // }
-
-    Ok(())
-}
-
-fn remove_docids_from_facet_field_id_docids<'a, C>(
+fn remove_docids_from_facet_id_exists_docids<'a, C>(
     wtxn: &'a mut heed::RwTxn,
     db: &heed::Database<C, CboRoaringBitmapCodec>,
     to_remove: &RoaringBitmap,
@@ -662,6 +607,46 @@ where
             unsafe { iter.put_current(&bytes, &docids)? };
         }
     }
+
+    Ok(())
+}
+fn remove_docids_from_facet_id_docids<'a>(
+    wtxn: &'a mut heed::RwTxn,
+    index: &Index,
+    db: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
+    to_remove: &RoaringBitmap,
+    fields_ids_map: FieldsIdsMap,
+) -> Result<()> {
+    let mut modified = false;
+    for field_id in fields_ids_map.ids() {
+        let mut level0_prefix = vec![];
+        level0_prefix.extend_from_slice(&field_id.to_be_bytes());
+        level0_prefix.push(0);
+        let mut iter = db
+            .as_polymorph()
+            .prefix_iter_mut::<_, ByteSlice, FacetGroupValueCodec>(wtxn, &level0_prefix)?;
+
+        while let Some(result) = iter.next() {
+            let (bytes, mut value) = result?;
+            let previous_len = value.bitmap.len();
+            value.bitmap -= to_remove;
+            if value.bitmap.is_empty() {
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.del_current()? };
+                modified = true;
+            } else if value.bitmap.len() != previous_len {
+                let bytes = bytes.to_owned();
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.put_current(&bytes, &value)? };
+                modified = true;
+            }
+        }
+    }
+    if !modified {
+        return Ok(());
+    }
+    let builder = Facets::new(index, db);
+    builder.execute(wtxn)?;
 
     Ok(())
 }
