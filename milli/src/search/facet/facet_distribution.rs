@@ -138,7 +138,7 @@ impl<'a> FacetDistribution<'a> {
     ) -> heed::Result<()> {
         facet_distribution_iter::iterate_over_facet_distribution(
             self.rtxn,
-            &self.index.facet_id_f64_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>(),
+            self.index.facet_id_f64_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>(),
             field_id,
             candidates,
             |facet_key, nbr_docids| {
@@ -161,7 +161,7 @@ impl<'a> FacetDistribution<'a> {
     ) -> heed::Result<()> {
         facet_distribution_iter::iterate_over_facet_distribution(
             self.rtxn,
-            &self.index.facet_id_string_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>(),
+            self.index.facet_id_string_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>(),
             field_id,
             candidates,
             |facet_key, nbr_docids| {

@@ -11,14 +11,14 @@ pub use self::filter::Filter;
 mod facet_distribution;
 mod facet_distribution_iter;
 mod facet_range_search;
-mod facet_sort_ascending;
-mod facet_sort_descending;
+pub mod facet_sort_ascending;
+pub mod facet_sort_descending;
 mod filter;
 mod incremental_update;
 
 pub(crate) fn get_first_facet_value<'t, BoundCodec>(
     txn: &'t RoTxn,
-    db: &'t heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
+    db: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
     field_id: u16,
 ) -> heed::Result<Option<BoundCodec::DItem>>
 where
@@ -40,7 +40,7 @@ where
 }
 pub(crate) fn get_last_facet_value<'t, BoundCodec>(
     txn: &'t RoTxn,
-    db: &'t heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
+    db: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
     field_id: u16,
 ) -> heed::Result<Option<BoundCodec::DItem>>
 where
@@ -63,7 +63,7 @@ where
 }
 pub(crate) fn get_highest_level<'t>(
     txn: &'t RoTxn<'t>,
-    db: &'t heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
+    db: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
     field_id: u16,
 ) -> heed::Result<u8> {
     let field_id_prefix = &field_id.to_be_bytes();

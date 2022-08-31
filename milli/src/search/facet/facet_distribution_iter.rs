@@ -7,7 +7,7 @@ use super::{get_first_facet_value, get_highest_level};
 
 pub fn iterate_over_facet_distribution<'t, CB>(
     rtxn: &'t heed::RoTxn<'t>,
-    db: &'t heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
+    db: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
     field_id: u16,
     candidates: &RoaringBitmap,
     callback: CB,
@@ -17,7 +17,7 @@ where
 {
     let mut fd = FacetDistribution { rtxn, db, field_id, callback };
     let highest_level =
-        get_highest_level(rtxn, &db.remap_key_type::<FacetKeyCodec<MyByteSlice>>(), field_id)?;
+        get_highest_level(rtxn, db.remap_key_type::<FacetKeyCodec<MyByteSlice>>(), field_id)?;
 
     if let Some(first_bound) = get_first_facet_value::<MyByteSlice>(rtxn, db, field_id)? {
         fd.iterate(candidates, highest_level, first_bound, usize::MAX)?;
@@ -32,7 +32,7 @@ where
     CB: FnMut(&'t [u8], u64) -> ControlFlow<()>,
 {
     rtxn: &'t heed::RoTxn<'t>,
-    db: &'t heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
+    db: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
     field_id: u16,
     callback: CB,
 }

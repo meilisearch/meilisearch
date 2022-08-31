@@ -3,17 +3,17 @@ use std::ops::Bound;
 use crate::heed_codec::facet::new::{
     FacetGroupValue, FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice,
 };
-use crate::Result;
+use heed::Result;
 use roaring::RoaringBitmap;
 
 use super::{get_first_facet_value, get_highest_level, get_last_facet_value};
 
-fn descending_facet_sort<'t>(
+pub fn descending_facet_sort<'t>(
     rtxn: &'t heed::RoTxn<'t>,
-    db: &'t heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
+    db: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
     field_id: u16,
     candidates: RoaringBitmap,
-) -> Result<Box<dyn Iterator<Item = Result<(&'t [u8], RoaringBitmap)>> + 't>> {
+) -> Result<Box<dyn Iterator<Item = Result<RoaringBitmap>> + 't>> {
     let highest_level = get_highest_level(rtxn, db, field_id)?;
     if let Some(first_bound) = get_first_facet_value::<MyByteSlice>(rtxn, db, field_id)? {
         let first_key = FacetKey { field_id, level: highest_level, left_bound: first_bound };
@@ -33,7 +33,7 @@ fn descending_facet_sort<'t>(
 
 struct DescendingFacetSort<'t> {
     rtxn: &'t heed::RoTxn<'t>,
-    db: &'t heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
+    db: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
     field_id: u16,
     stack: Vec<(
         RoaringBitmap,
@@ -43,7 +43,7 @@ struct DescendingFacetSort<'t> {
 }
 
 impl<'t> Iterator for DescendingFacetSort<'t> {
-    type Item = Result<(&'t [u8], RoaringBitmap)>;
+    type Item = Result<RoaringBitmap>;
 
     fn next(&mut self) -> Option<Self::Item> {
         'outer: loop {
@@ -70,7 +70,7 @@ impl<'t> Iterator for DescendingFacetSort<'t> {
                     *documents_ids -= &bitmap;
 
                     if level == 0 {
-                        return Some(Ok((left_bound, bitmap)));
+                        return Some(Ok(bitmap));
                     }
                     let starting_key_below = FacetKey { field_id, level: level - 1, left_bound };
 
@@ -89,14 +89,15 @@ impl<'t> Iterator for DescendingFacetSort<'t> {
                     };
                     let prev_right_bound = *right_bound;
                     *right_bound = Bound::Excluded(left_bound);
-                    let iter = match self.db.rev_range(
-                        &self.rtxn,
-                        &(Bound::Included(starting_key_below), end_key_kelow),
-                    ) {
-                        Ok(iter) => iter,
-                        Err(e) => return Some(Err(e.into())),
-                    }
-                    .take(group_size as usize);
+                    let iter =
+                        match self.db.remap_key_type::<FacetKeyCodec<MyByteSlice>>().rev_range(
+                            &self.rtxn,
+                            &(Bound::Included(starting_key_below), end_key_kelow),
+                        ) {
+                            Ok(iter) => iter,
+                            Err(e) => return Some(Err(e.into())),
+                        }
+                        .take(group_size as usize);
 
                     self.stack.push((bitmap, iter, prev_right_bound));
                     continue 'outer;

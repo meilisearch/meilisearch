@@ -264,7 +264,7 @@ impl<'i> IncrementalFacetUpdate<'i> {
         }
         let group_size = self.group_size;
 
-        let highest_level = get_highest_level(&txn, &self.db, field_id)?;
+        let highest_level = get_highest_level(&txn, *self.db, field_id)?;
 
         let result =
             self.insert_in_level(txn, field_id, highest_level as u8, new_key, new_values)?;
@@ -413,7 +413,7 @@ impl<'i> IncrementalFacetUpdate<'i> {
         if self.db.get(txn, &FacetKey { field_id, level: 0, left_bound: key })?.is_none() {
             return Ok(());
         }
-        let highest_level = get_highest_level(&txn, &self.db, field_id)?;
+        let highest_level = get_highest_level(&txn, *self.db, field_id)?;
 
         // let key_bytes = BoundCodec::bytes_encode(&key).unwrap();
 
