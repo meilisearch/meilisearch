@@ -17,13 +17,18 @@ enum DeletionResult {
     Remove { prev: Option<Vec<u8>>, next: Option<Vec<u8>> },
 }
 
-struct FacetUpdateIncremental {
+pub struct FacetsUpdateIncremental {
     db: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
     group_size: usize,
     min_level_size: usize,
     max_group_size: usize,
 }
-impl FacetUpdateIncremental {
+impl FacetsUpdateIncremental {
+    pub fn new(db: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>) -> Self {
+        Self { db, group_size: 4, min_level_size: 5, max_group_size: 8 }
+    }
+}
+impl FacetsUpdateIncremental {
     fn find_insertion_key_value(
         &self,
         field_id: u16,
@@ -263,7 +268,7 @@ impl FacetUpdateIncremental {
         }
         let group_size = self.group_size;
 
-        let highest_level = get_highest_level(&txn, *self.db, field_id)?;
+        let highest_level = get_highest_level(&txn, self.db, field_id)?;
 
         let result =
             self.insert_in_level(txn, field_id, highest_level as u8, new_key, new_values)?;
@@ -412,7 +417,7 @@ impl FacetUpdateIncremental {
         if self.db.get(txn, &FacetKey { field_id, level: 0, left_bound: key })?.is_none() {
             return Ok(());
         }
-        let highest_level = get_highest_level(&txn, *self.db, field_id)?;
+        let highest_level = get_highest_level(&txn, self.db, field_id)?;
 
         // let key_bytes = BoundCodec::bytes_encode(&key).unwrap();
 

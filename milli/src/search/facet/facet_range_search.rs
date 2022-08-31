@@ -259,8 +259,9 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        heed_codec::facet::new::ordered_f64_codec::OrderedF64Codec,
-        search::facet::test::FacetIndex, snapshot_tests::display_bitmap,
+        heed_codec::facet::new::{ordered_f64_codec::OrderedF64Codec, FacetKeyCodec},
+        search::facet::test::FacetIndex,
+        snapshot_tests::display_bitmap,
     };
     use rand::{Rng, SeedableRng};
     use roaring::RoaringBitmap;
@@ -283,7 +284,7 @@ mod tests {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8);
         let mut txn = index.env.write_txn().unwrap();
 
-        let rng = rand::rngs::SmallRng::from_seed([0; 32]);
+        let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
         let keys =
             std::iter::from_fn(|| Some(rng.gen_range(0..256))).take(128).collect::<Vec<u32>>();
 
@@ -305,7 +306,7 @@ mod tests {
     #[test]
     fn filter_range_increasing() {
         let indexes = [get_simple_index(), get_random_looking_index()];
-        for (i, index) in indexes.into_iter().enumerate() {
+        for (i, index) in indexes.iter().enumerate() {
             let txn = index.env.read_txn().unwrap();
             let mut results = String::new();
             for i in 0..=255 {
@@ -314,7 +315,7 @@ mod tests {
                 let end = Bound::Included(i);
                 let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
-                    &index.db.content,
+                    index.db.content.remap_key_type::<FacetKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,
@@ -333,7 +334,7 @@ mod tests {
                 let end = Bound::Excluded(i);
                 let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
-                    &index.db.content,
+                    index.db.content.remap_key_type::<FacetKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,
@@ -351,7 +352,7 @@ mod tests {
     #[test]
     fn filter_range_decreasing() {
         let indexes = [get_simple_index(), get_random_looking_index()];
-        for (i, index) in indexes.into_iter().enumerate() {
+        for (i, index) in indexes.iter().enumerate() {
             let txn = index.env.read_txn().unwrap();
 
             let mut results = String::new();
@@ -362,7 +363,7 @@ mod tests {
                 let end = Bound::Included(255.);
                 let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
-                    &index.db.content,
+                    index.db.content.remap_key_type::<FacetKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,
@@ -384,7 +385,7 @@ mod tests {
                 let end = Bound::Excluded(255.);
                 let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
-                    &index.db.content,
+                    index.db.content.remap_key_type::<FacetKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,
@@ -404,7 +405,7 @@ mod tests {
     #[test]
     fn filter_range_pinch() {
         let indexes = [get_simple_index(), get_random_looking_index()];
-        for (i, index) in indexes.into_iter().enumerate() {
+        for (i, index) in indexes.iter().enumerate() {
             let txn = index.env.read_txn().unwrap();
 
             let mut results = String::new();
@@ -415,7 +416,7 @@ mod tests {
                 let end = Bound::Included(255. - i);
                 let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
-                    &index.db.content,
+                    index.db.content.remap_key_type::<FacetKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,
@@ -434,7 +435,7 @@ mod tests {
                 let end = Bound::Excluded(255. - i);
                 let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
-                    &index.db.content,
+                    index.db.content.remap_key_type::<FacetKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,

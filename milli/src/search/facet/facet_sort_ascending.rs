@@ -83,7 +83,6 @@ impl<'t, 'e> Iterator for AscendingFacetSort<'t, 'e> {
 
 #[cfg(test)]
 mod tests {
-    use heed::BytesDecode;
     use rand::Rng;
     use rand::SeedableRng;
     use roaring::RoaringBitmap;
@@ -100,7 +99,7 @@ mod tests {
         for i in 0..256u16 {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(i as u32);
-            index.insert(&mut txn, 0, &i, &bitmap);
+            index.insert(&mut txn, 0, &(i as f64), &bitmap);
         }
         txn.commit().unwrap();
         index
@@ -109,7 +108,7 @@ mod tests {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8);
         let mut txn = index.env.write_txn().unwrap();
 
-        let rng = rand::rngs::SmallRng::from_seed([0; 32]);
+        let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
         let keys =
             std::iter::from_fn(|| Some(rng.gen_range(0..256))).take(128).collect::<Vec<u32>>();
 
@@ -131,14 +130,14 @@ mod tests {
     #[test]
     fn filter_sort() {
         let indexes = [get_simple_index(), get_random_looking_index()];
-        for (i, index) in indexes.into_iter().enumerate() {
+        for (i, index) in indexes.iter().enumerate() {
             let txn = index.env.read_txn().unwrap();
             let candidates = (200..=300).into_iter().collect::<RoaringBitmap>();
             let mut results = String::new();
-            let iter = ascending_facet_sort(&txn, &index.db.content, 0, candidates);
-            for (facet, docids) in iter {
-                let facet = OrderedF64Codec::bytes_decode(facet).unwrap();
-                results.push_str(&format!("{facet}: {}\n", display_bitmap(&docids)));
+            let iter = ascending_facet_sort(&txn, index.db.content, 0, candidates).unwrap();
+            for el in iter {
+                let docids = el.unwrap();
+                results.push_str(&display_bitmap(&docids));
             }
             insta::assert_snapshot!(format!("filter_sort_{i}_ascending"), results);
 

@@ -109,7 +109,7 @@ where
 #[cfg(test)]
 mod tests {
     use heed::BytesDecode;
-    use rand::{rngs::SmallRng, Rng, SeedableRng};
+    use rand::{Rng, SeedableRng};
     use roaring::RoaringBitmap;
     use std::ops::ControlFlow;
 
@@ -125,7 +125,7 @@ mod tests {
         for i in 0..256u16 {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(i as u32);
-            index.insert(&mut txn, 0, &i, &bitmap);
+            index.insert(&mut txn, 0, &(i as f64), &bitmap);
         }
         txn.commit().unwrap();
         index
@@ -134,14 +134,14 @@ mod tests {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8);
         let mut txn = index.env.write_txn().unwrap();
 
-        let rng = rand::rngs::SmallRng::from_seed([0; 32]);
+        let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
         let keys =
             std::iter::from_fn(|| Some(rng.gen_range(0..256))).take(128).collect::<Vec<u32>>();
 
         for (_i, key) in keys.into_iter().enumerate() {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(key);
-            bitmap.insert(key + 100.);
+            bitmap.insert(key + 100);
             index.insert(&mut txn, 0, &(key as f64), &bitmap);
         }
         txn.commit().unwrap();
@@ -156,13 +156,13 @@ mod tests {
     #[test]
     fn filter_distribution_all() {
         let indexes = [get_simple_index(), get_random_looking_index()];
-        for (i, index) in indexes.into_iter().enumerate() {
+        for (i, index) in indexes.iter().enumerate() {
             let txn = index.env.read_txn().unwrap();
             let candidates = (0..=255).into_iter().collect::<RoaringBitmap>();
             let mut results = String::new();
             iterate_over_facet_distribution(
                 &txn,
-                &index.db.content,
+                index.db.content,
                 0,
                 &candidates,
                 |facet, count| {
@@ -170,7 +170,8 @@ mod tests {
                     results.push_str(&format!("{facet}: {count}\n"));
                     ControlFlow::Continue(())
                 },
-            );
+            )
+            .unwrap();
             insta::assert_snapshot!(format!("filter_distribution_{i}_all"), results);
 
             txn.commit().unwrap();
@@ -179,14 +180,14 @@ mod tests {
     #[test]
     fn filter_distribution_all_stop_early() {
         let indexes = [get_simple_index(), get_random_looking_index()];
-        for (i, index) in indexes.into_iter().enumerate() {
+        for (i, index) in indexes.iter().enumerate() {
             let txn = index.env.read_txn().unwrap();
             let candidates = (0..=255).into_iter().collect::<RoaringBitmap>();
             let mut results = String::new();
             let mut nbr_facets = 0;
             iterate_over_facet_distribution(
                 &txn,
-                &index.db.content,
+                index.db.content,
                 0,
                 &candidates,
                 |facet, count| {
@@ -200,7 +201,8 @@ mod tests {
                         ControlFlow::Continue(())
                     }
                 },
-            );
+            )
+            .unwrap();
             insta::assert_snapshot!(format!("filter_distribution_{i}_all_stop_early"), results);
 
             txn.commit().unwrap();

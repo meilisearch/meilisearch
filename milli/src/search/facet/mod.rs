@@ -78,9 +78,10 @@ pub(crate) fn get_highest_level<'t>(
 
 #[cfg(test)]
 mod test {
+    use crate::update::FacetsUpdateIncremental;
+    use heed::{BytesDecode, BytesEncode, Env, RwTxn};
+    use roaring::RoaringBitmap;
     use std::{fmt::Display, marker::PhantomData, rc::Rc};
-
-    use heed::{BytesDecode, BytesEncode, Env};
     use tempfile::TempDir;
 
     use crate::{
@@ -147,6 +148,17 @@ mod test {
                 env,
                 _phantom: PhantomData,
             }
+        }
+        pub fn insert<'a>(
+            &self,
+            rwtxn: &'a mut RwTxn,
+            field_id: u16,
+            key: &'a <BoundCodec as BytesEncode<'a>>::EItem,
+            docids: &RoaringBitmap,
+        ) {
+            let update = FacetsUpdateIncremental::new(self.db.content);
+            let key_bytes = BoundCodec::bytes_encode(&key).unwrap();
+            update.insert(rwtxn, field_id, &key_bytes, docids).unwrap();
         }
     }
 
