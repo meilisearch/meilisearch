@@ -6,6 +6,7 @@ use heed::types::ByteSlice;
 use heed::BytesDecode;
 use roaring::RoaringBitmap;
 
+use crate::heed_codec::facet::new::{FacetGroupValue, FacetKey};
 use crate::heed_codec::facet::FacetStringZeroBoundsValueCodec;
 use crate::{make_db_snap_from_iter, CboRoaringBitmapCodec, ExternalDocumentsIds, Index};
 
@@ -229,48 +230,22 @@ pub fn snap_word_prefix_position_docids(index: &Index) -> String {
     snap
 }
 pub fn snap_facet_id_f64_docids(index: &Index) -> String {
-    todo!()
-    // let snap = make_db_snap_from_iter!(index, facet_id_f64_docids, |(
-    //     (facet_id, level, left, right),
-    //     b,
-    // )| {
-    //     &format!("{facet_id:<3} {level:<2} {left:<6} {right:<6} {}", display_bitmap(&b))
-    // });
-    // snap
+    let snap = make_db_snap_from_iter!(index, facet_id_f64_docids, |(
+        FacetKey { field_id, level, left_bound },
+        FacetGroupValue { size, bitmap },
+    )| {
+        &format!("{field_id:<3} {level:<2} {left_bound:<6} {size:<2} {}", display_bitmap(&bitmap))
+    });
+    snap
 }
 pub fn snap_facet_id_string_docids(index: &Index) -> String {
-    todo!()
-    // let rtxn = index.read_txn().unwrap();
-    // let bytes_db = index.facet_id_string_docids.remap_types::<ByteSlice, ByteSlice>();
-    // let iter = bytes_db.iter(&rtxn).unwrap();
-    // let mut snap = String::new();
-
-    // for x in iter {
-    //     let (key, value) = x.unwrap();
-    //     if let Some((field_id, normalized_str)) = FacetStringLevelZeroCodec::bytes_decode(key) {
-    //         let (orig_string, docids) =
-    //             FacetStringLevelZeroValueCodec::bytes_decode(value).unwrap();
-    //         snap.push_str(&format!(
-    //             "{field_id:<3} {normalized_str:<8} {orig_string:<8} {}\n",
-    //             display_bitmap(&docids)
-    //         ));
-    //     } else if let Some((field_id, level, left, right)) =
-    //         FacetLevelValueU32Codec::bytes_decode(key)
-    //     {
-    //         snap.push_str(&format!("{field_id:<3} {level:<2} {left:<6} {right:<6} "));
-    //         let (bounds, docids) =
-    //             FacetStringZeroBoundsValueCodec::<CboRoaringBitmapCodec>::bytes_decode(value)
-    //                 .unwrap();
-    //         if let Some((left, right)) = bounds {
-    //             snap.push_str(&format!("{left:<8} {right:<8} "));
-    //         }
-    //         snap.push_str(&display_bitmap(&docids));
-    //         snap.push('\n');
-    //     } else {
-    //         panic!();
-    //     }
-    // }
-    // snap
+    let snap = make_db_snap_from_iter!(index, facet_id_string_docids, |(
+        FacetKey { field_id, level, left_bound },
+        FacetGroupValue { size, bitmap },
+    )| {
+        &format!("{field_id:<3} {level:<2} {left_bound:<12} {size:<2} {}", display_bitmap(&bitmap))
+    });
+    snap
 }
 pub fn snap_documents_ids(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
