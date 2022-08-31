@@ -44,7 +44,7 @@ impl Display for DocumentFormatError {
                     // The user input maybe insanely long. We need to truncate it.
                     let mut serde_msg = se.to_string();
                     let ellipsis = "...";
-                    if serde_msg.len() > 100 + ellipsis.len() {
+                    if serde_msg.len() > (50 + 85) + ellipsis.len() {
                         serde_msg.replace_range(50..serde_msg.len() - 85, ellipsis);
                     }
 
