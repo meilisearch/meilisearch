@@ -19,10 +19,20 @@ where
     async fn process_batch(&self, mut batch: Batch) -> Batch {
         match batch.content {
             BatchContent::DocumentsAdditionBatch(ref mut tasks) => {
-                self.process_document_addition_batch(tasks).await;
+                // We move the canceled tasks at the end of the slice just
+                // to be able to only give the tasks to process to the
+                // process_document_addition_batch function.
+                tasks.sort_by_key(|t| t.is_canceled());
+                let tasks_to_process = match tasks.iter().position(|t| t.is_canceled()) {
+                    Some(i) => &mut tasks[..i],
+                    None => tasks,
+                };
+                self.process_document_addition_batch(tasks_to_process).await;
             }
             BatchContent::IndexUpdate(ref mut task) => {
-                self.process_task(task).await;
+                if !task.is_canceled() {
+                    self.process_task(task).await;
+                }
             }
             _ => unreachable!(),
         }

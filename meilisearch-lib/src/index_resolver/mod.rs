@@ -99,88 +99,84 @@ mod real {
 
             let content_uuids = tasks.iter().map(get_content_uuid).collect::<Vec<_>>();
 
-            match tasks.first() {
-                Some(Task {
-                    id,
-                    content:
-                        TaskContent::DocumentAddition {
-                            merge_strategy,
-                            primary_key,
-                            allow_index_creation,
-                            index_uid,
-                            ..
-                        },
-                    ..
-                }) => {
-                    let primary_key = primary_key.clone();
-                    let method = *merge_strategy;
+            if let Some(Task {
+                id,
+                content:
+                    TaskContent::DocumentAddition {
+                        merge_strategy,
+                        primary_key,
+                        allow_index_creation,
+                        index_uid,
+                        ..
+                    },
+                ..
+            }) = tasks.first()
+            {
+                let primary_key = primary_key.clone();
+                let method = *merge_strategy;
 
-                    let index = if *allow_index_creation {
-                        self.get_or_create_index(index_uid.clone(), *id).await
-                    } else {
-                        self.get_index(index_uid.as_str().to_string()).await
-                    };
+                let index = if *allow_index_creation {
+                    self.get_or_create_index(index_uid.clone(), *id).await
+                } else {
+                    self.get_index(index_uid.as_str().to_string()).await
+                };
 
-                    // If the index doesn't exist and we are not allowed to create it with the first
-                    // task, we must fails the whole batch.
-                    let now = OffsetDateTime::now_utc();
-                    let index = match index {
-                        Ok(index) => index,
-                        Err(e) => {
-                            let error = ResponseError::from(e);
-                            for task in tasks.iter_mut() {
-                                task.events.push(TaskEvent::Failed {
-                                    error: error.clone(),
-                                    timestamp: now,
-                                });
-                            }
-
-                            return;
+                // If the index doesn't exist and we are not allowed to create it with the first
+                // task, we must fails the whole batch.
+                let now = OffsetDateTime::now_utc();
+                let index = match index {
+                    Ok(index) => index,
+                    Err(e) => {
+                        let error = ResponseError::from(e);
+                        for task in tasks.iter_mut() {
+                            task.events.push(TaskEvent::Failed {
+                                error: error.clone(),
+                                timestamp: now,
+                            });
                         }
-                    };
 
-                    let file_store = self.file_store.clone();
-                    let result = spawn_blocking(move || {
-                        index.update_documents(
-                            method,
-                            primary_key,
-                            file_store,
-                            content_uuids.into_iter(),
-                        )
-                    })
-                    .await;
+                        return;
+                    }
+                };
 
-                    match result {
-                        Ok(Ok(results)) => {
-                            for (task, result) in tasks.iter_mut().zip(results) {
-                                let event = match result {
-                                    Ok(addition) => {
-                                        TaskEvent::succeeded(TaskResult::DocumentAddition {
-                                            indexed_documents: addition.indexed_documents,
-                                        })
-                                    }
-                                    Err(error) => {
-                                        TaskEvent::failed(IndexResolverError::from(error))
-                                    }
-                                };
-                                task.events.push(event);
-                            }
+                let file_store = self.file_store.clone();
+                let result = spawn_blocking(move || {
+                    index.update_documents(
+                        method,
+                        primary_key,
+                        file_store,
+                        content_uuids.into_iter(),
+                    )
+                })
+                .await;
+
+                match result {
+                    Ok(Ok(results)) => {
+                        for (task, result) in tasks.iter_mut().zip(results) {
+                            let event = match result {
+                                Ok(addition) => {
+                                    TaskEvent::succeeded(TaskResult::DocumentAddition {
+                                        indexed_documents: addition.indexed_documents,
+                                    })
+                                }
+                                Err(error) => TaskEvent::failed(IndexResolverError::from(error)),
+                            };
+                            task.events.push(event);
                         }
-                        Ok(Err(e)) => {
-                            let event = TaskEvent::failed(e);
-                            for task in tasks.iter_mut() {
-                                task.events.push(event.clone());
-                            }
+                    }
+                    Ok(Err(e)) => {
+                        let event = TaskEvent::failed(e);
+                        for task in tasks.iter_mut() {
+                            task.events.push(event.clone());
                         }
-                        Err(e) => {
-                            let event = TaskEvent::failed(IndexResolverError::from(e));
-                            for task in tasks.iter_mut() {
-                                task.events.push(event.clone());
-                            }
+                    }
+                    Err(e) => {
+                        let event = TaskEvent::failed(IndexResolverError::from(e));
+                        for task in tasks.iter_mut() {
+                            task.events.push(event.clone());
                         }
                     }
                 }
-                _ => panic!("invalid batch!"),
             }
         }
 

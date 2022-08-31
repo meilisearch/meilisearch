@@ -110,9 +110,15 @@ impl Task {
         self.events.last().map_or(false, |event| {
             matches!(
                 event,
-                TaskEvent::Succeeded { .. } | TaskEvent::Failed { .. } | TaskEvent::Canceled { .. }
+                TaskEvent::Succeeded { .. } | TaskEvent::Failed { .. }
             )
         })
+    }
+
+    pub fn is_canceled(&self) -> bool {
+        self.events
+            .last()
+            .map_or(false, |event| matches!(event, TaskEvent::Canceled { .. }))
     }
 
     /// Return true when a task is being processed.
