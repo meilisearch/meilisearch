@@ -189,23 +189,14 @@ pub(crate) fn write_typed_chunk_into_index(
             }
         }
         TypedChunk::FieldIdFacetStringDocids(facet_id_string_docids) => {
-            append_entries_into_database(
-                facet_id_string_docids,
-                &index.facet_id_string_docids,
-                wtxn,
-                index_is_empty,
-                |value, _buffer| Ok(value),
-                |new_values, db_values, buffer| {
-                    todo!()
-                    // let (_, new_values) = decode_prefix_string(new_values).unwrap();
-                    // let new_values = RoaringBitmap::deserialize_from(new_values)?;
-                    // let (db_original, db_values) = decode_prefix_string(db_values).unwrap();
-                    // let db_values = RoaringBitmap::deserialize_from(db_values)?;
-                    // let values = new_values | db_values;
-                    // encode_prefix_string(db_original, buffer)?;
-                    // Ok(values.serialize_into(buffer)?)
-                },
-            )?;
+            // facet_id_string_docids contains the thing that the extractor put into it,
+            // so: (FacetKey { field id, level: 0, left_bound } , docids: RoaringBitmap )
+            // now we need to either:
+            // 1. incrementally add the keys/docids pairs into the DB
+            // 2. add the keys/docids into level 0 and then call Facets::execute
+            // the choice of solution should be determined by their performance
+            // characteristics
+
             is_merged_database = true;
         }
         TypedChunk::GeoPoints(geo_points) => {

@@ -43,8 +43,6 @@ impl<'i> IncrementalFacetUpdate<'i> {
             .prefix_iter::<_, MyByteSlice, FacetGroupValueCodec>(txn, &prefix.as_slice())?;
         if let Some(e) = prefix_iter.next() {
             let (key_bytes, value) = e?;
-            let key = FacetKeyCodec::<MyByteSlice>::bytes_decode(&key_bytes)
-                .ok_or(heed::Error::Encoding)?;
             Ok((
                 FacetKeyCodec::<MyByteSlice>::bytes_decode(&key_bytes)
                     .ok_or(Error::Encoding)?
