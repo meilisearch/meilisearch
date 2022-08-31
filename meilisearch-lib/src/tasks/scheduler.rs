@@ -317,7 +317,19 @@ impl Scheduler {
     }
 
     pub async fn cancel_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Task> {
-        self.store.cancel_task(id, filter).await
+        let (should_abort, task_processing) = match self.processing {
+            Processing::DocumentAddition(should_abort, tasks) => {
+                (should_abort, tasks.contains(&id))
+            }
+            Processing::IndexUpdate(should_abort, task) => (should_abort, task = id),
+            _ => false,
+        };
+
+        if task_processing {
+            should_abort.load(true, Relaxed);
+        } else {
+            self.store.cancel_task(id, filter).await
+        }
     }
 
     pub async fn list_tasks(
