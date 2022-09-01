@@ -103,15 +103,15 @@ pub struct Opt {
     /// Defines the path of the snapshot file to import.
     /// This option will, by default, stop the process if a database already exist or if no snapshot exists at
     /// the given path. If this option is not specified no snapshot is imported.
-    #[clap(long)]
+    #[clap(long, env = "MEILI_IMPORT_SNAPSHOT")]
     pub import_snapshot: Option<PathBuf>,
 
     /// The engine will ignore a missing snapshot and not return an error in such case.
-    #[clap(long, requires = "import-snapshot")]
+    #[clap(long, env = "MEILI_IGNORE_MISSING_SNAPSHOT", requires = "import-snapshot")]
     pub ignore_missing_snapshot: bool,
 
     /// The engine will skip snapshot importation and not return an error in such case.
-    #[clap(long, requires = "import-snapshot")]
+    #[clap(long, env = "MEILI_IGNORE_SNAPSHOT_IF_DB_EXISTS", requires = "import-snapshot")]
     pub ignore_snapshot_if_db_exists: bool,
 
     /// Defines the directory path where meilisearch will create snapshot each snapshot_time_gap.
@@ -127,15 +127,15 @@ pub struct Opt {
     pub snapshot_interval_sec: u64,
 
     /// Import a dump from the specified path, must be a `.dump` file.
-    #[clap(long, conflicts_with = "import-snapshot")]
+    #[clap(long, env = "MEILI_IMPORT_DUMP", conflicts_with = "import-snapshot")]
     pub import_dump: Option<PathBuf>,
 
     /// If the dump doesn't exists, load or create the database specified by `db-path` instead.
-    #[clap(long, requires = "import-dump")]
+    #[clap(long, env = "MEILI_IGNORE_MISSING_DUMP", requires = "import-dump")]
     pub ignore_missing_dump: bool,
 
     /// Ignore the dump if a database already exists, and load that database instead.
-    #[clap(long, requires = "import-dump")]
+    #[clap(long, env = "MEILI_IGNORE_DUMP_IF_DB_EXISTS", requires = "import-dump")]
     pub ignore_dump_if_db_exists: bool,
 
     /// Folder where dumps are created when the dump route is called.
