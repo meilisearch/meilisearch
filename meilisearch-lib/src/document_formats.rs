@@ -44,8 +44,15 @@ impl Display for DocumentFormatError {
                     // The user input maybe insanely long. We need to truncate it.
                     let mut serde_msg = se.to_string();
                     let ellipsis = "...";
-                    if serde_msg.len() > (50 + 85) + ellipsis.len() {
-                        serde_msg.replace_range(50..serde_msg.len() - 85, ellipsis);
+                    let trim_input_prefix_len = 50;
+                    let trim_input_suffix_len = 85;
+
+                    if serde_msg.len() > trim_input_prefix_len + trim_input_suffix_len + ellipsis.len()
+                    {
+                        serde_msg.replace_range(
+                            trim_input_prefix_len..serde_msg.len() - trim_input_suffix_len,
+                            ellipsis,
+                        );
                     }
 
                     write!(
@@ -136,9 +143,14 @@ pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
 
     let content: ArrayOrSingleObject = serde_json::from_reader(reader)
         .map_err(Error::Json)
-        .map_err(|e| (PayloadType::Json, e))?;
+        .map_err(|e| {
+            println!("Błąd o taki: {:#?}", e);
+            (PayloadType::Json, e)
+        })?;
 
+    println!("content o taki: {:#?}", content);
     for object in content.inner.map_right(|o| vec![o]).into_inner() {
+        println!("{:#?}", object);
         builder
             .append_json_object(&object)
             .map_err(Into::into)
@@ -146,6 +158,8 @@ pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
     }
 
     let count = builder.documents_count();
+    println!("{count}");
+
     let _ = builder
         .into_inner()
         .map_err(Into::into)
