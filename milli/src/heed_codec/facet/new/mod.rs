@@ -1,6 +1,9 @@
+use std::borrow::Cow;
+use std::convert::TryFrom;
+use std::marker::PhantomData;
+
 use heed::{BytesDecode, BytesEncode};
 use roaring::RoaringBitmap;
-use std::{borrow::Cow, convert::TryFrom, marker::PhantomData};
 
 pub mod ordered_f64_codec;
 pub mod str_ref;

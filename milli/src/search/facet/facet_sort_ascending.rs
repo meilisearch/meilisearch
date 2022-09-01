@@ -1,10 +1,10 @@
-use crate::heed_codec::facet::new::{
-    FacetGroupValue, FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice,
-};
 use heed::Result;
 use roaring::RoaringBitmap;
 
 use super::{get_first_facet_value, get_highest_level};
+use crate::heed_codec::facet::new::{
+    FacetGroupValue, FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice,
+};
 
 pub fn ascending_facet_sort<'t>(
     rtxn: &'t heed::RoTxn<'t>,
@@ -83,15 +83,14 @@ impl<'t, 'e> Iterator for AscendingFacetSort<'t, 'e> {
 
 #[cfg(test)]
 mod tests {
-    use crate::milli_snap;
-    use crate::{
-        heed_codec::facet::new::ordered_f64_codec::OrderedF64Codec,
-        search::facet::{facet_sort_ascending::ascending_facet_sort, test::FacetIndex},
-        snapshot_tests::display_bitmap,
-    };
-    use rand::Rng;
-    use rand::SeedableRng;
+    use rand::{Rng, SeedableRng};
     use roaring::RoaringBitmap;
+
+    use crate::heed_codec::facet::new::ordered_f64_codec::OrderedF64Codec;
+    use crate::milli_snap;
+    use crate::search::facet::facet_sort_ascending::ascending_facet_sort;
+    use crate::search::facet::test::FacetIndex;
+    use crate::snapshot_tests::display_bitmap;
 
     fn get_simple_index() -> FacetIndex<OrderedF64Codec> {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8);

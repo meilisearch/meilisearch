@@ -1,17 +1,17 @@
-use either::Either;
-pub use filter_parser::{Condition, Error as FPError, FilterCondition, Span, Token};
-use heed::types::DecodeIgnore;
-use roaring::RoaringBitmap;
 use std::collections::HashSet;
 use std::fmt::{Debug, Display};
 use std::ops::Bound::{self, Excluded, Included};
 
+use either::Either;
+pub use filter_parser::{Condition, Error as FPError, FilterCondition, Span, Token};
+use heed::types::DecodeIgnore;
+use roaring::RoaringBitmap;
+
+use super::facet_range_search;
 use crate::error::{Error, UserError};
 use crate::heed_codec::facet::new::ordered_f64_codec::OrderedF64Codec;
 use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKey, FacetKeyCodec};
 use crate::{distance_between_two_points, lat_lng_to_xyz, FieldId, Index, Result};
-
-use super::facet_range_search;
 
 /// The maximum number of filters the filter AST can process.
 const MAX_FILTER_DEPTH: usize = 2000;

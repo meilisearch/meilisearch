@@ -1,11 +1,12 @@
+use heed::types::ByteSlice;
+use heed::{BytesDecode, Error, RoTxn, RwTxn};
+use roaring::RoaringBitmap;
+
 use crate::heed_codec::facet::new::{
     FacetGroupValue, FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice,
 };
 use crate::search::facet::get_highest_level;
 use crate::Result;
-use heed::Error;
-use heed::{types::ByteSlice, BytesDecode, RoTxn, RwTxn};
-use roaring::RoaringBitmap;
 
 enum InsertionResult {
     InPlace,
@@ -462,18 +463,18 @@ impl FacetsUpdateIncremental {
 
 #[cfg(test)]
 mod tests {
-    use crate::milli_snap;
-    use crate::{
-        heed_codec::facet::new::{
-            ordered_f64_codec::OrderedF64Codec, str_ref::StrRefCodec, FacetGroupValueCodec,
-            FacetKeyCodec, MyByteSlice,
-        },
-        search::facet::{get_highest_level, test::FacetIndex},
-    };
-    use heed::{types::ByteSlice, BytesDecode, BytesEncode};
-    use rand::Rng;
-    use rand::{seq::SliceRandom, SeedableRng};
+    use heed::types::ByteSlice;
+    use heed::{BytesDecode, BytesEncode};
+    use rand::seq::SliceRandom;
+    use rand::{Rng, SeedableRng};
     use roaring::RoaringBitmap;
+
+    use crate::heed_codec::facet::new::ordered_f64_codec::OrderedF64Codec;
+    use crate::heed_codec::facet::new::str_ref::StrRefCodec;
+    use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKeyCodec, MyByteSlice};
+    use crate::milli_snap;
+    use crate::search::facet::get_highest_level;
+    use crate::search::facet::test::FacetIndex;
 
     pub fn verify_structure_validity<C>(index: &FacetIndex<C>, field_id: u16)
     where

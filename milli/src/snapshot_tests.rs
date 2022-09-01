@@ -1,9 +1,11 @@
-use crate::heed_codec::facet::new::{FacetGroupValue, FacetKey};
-use crate::{make_db_snap_from_iter, ExternalDocumentsIds, Index};
-use roaring::RoaringBitmap;
 use std::borrow::Cow;
 use std::fmt::Write;
 use std::path::Path;
+
+use roaring::RoaringBitmap;
+
+use crate::heed_codec::facet::new::{FacetGroupValue, FacetKey};
+use crate::{make_db_snap_from_iter, ExternalDocumentsIds, Index};
 
 #[track_caller]
 pub fn default_db_snapshot_settings_for_test(name: Option<&str>) -> (insta::Settings, String) {

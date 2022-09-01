@@ -1,9 +1,10 @@
-use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice};
-use heed::Result;
-use roaring::RoaringBitmap;
 use std::ops::ControlFlow;
 
+use heed::Result;
+use roaring::RoaringBitmap;
+
 use super::{get_first_facet_value, get_highest_level};
+use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice};
 
 pub fn iterate_over_facet_distribution<'t, CB>(
     rtxn: &'t heed::RoTxn<'t>,
@@ -108,16 +109,16 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::milli_snap;
-    use crate::{
-        heed_codec::facet::new::ordered_f64_codec::OrderedF64Codec, search::facet::test::FacetIndex,
-    };
+    use std::ops::ControlFlow;
+
     use heed::BytesDecode;
     use rand::{Rng, SeedableRng};
     use roaring::RoaringBitmap;
-    use std::ops::ControlFlow;
 
     use super::iterate_over_facet_distribution;
+    use crate::heed_codec::facet::new::ordered_f64_codec::OrderedF64Codec;
+    use crate::milli_snap;
+    use crate::search::facet::test::FacetIndex;
 
     fn get_simple_index() -> FacetIndex<OrderedF64Codec> {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8);

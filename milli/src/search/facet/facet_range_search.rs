@@ -1,17 +1,11 @@
+use std::ops::{Bound, RangeBounds};
+
 use heed::BytesEncode;
 use roaring::RoaringBitmap;
-use std::ops::Bound;
-use std::ops::RangeBounds;
 
-use crate::heed_codec::facet::new::FacetGroupValueCodec;
-use crate::heed_codec::facet::new::FacetKey;
-use crate::heed_codec::facet::new::FacetKeyCodec;
-use crate::heed_codec::facet::new::MyByteSlice;
+use super::{get_first_facet_value, get_highest_level, get_last_facet_value};
+use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice};
 use crate::Result;
-
-use super::get_first_facet_value;
-use super::get_highest_level;
-use super::get_last_facet_value;
 
 pub fn find_docids_of_facet_within_bounds<'t, BoundCodec>(
     rtxn: &'t heed::RoTxn<'t>,
@@ -258,17 +252,17 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
 
 #[cfg(test)]
 mod tests {
-    use crate::milli_snap;
-    use crate::{
-        heed_codec::facet::new::{ordered_f64_codec::OrderedF64Codec, FacetKeyCodec},
-        search::facet::test::FacetIndex,
-        snapshot_tests::display_bitmap,
-    };
-    use rand::{Rng, SeedableRng};
-    use roaring::RoaringBitmap;
     use std::ops::Bound;
 
+    use rand::{Rng, SeedableRng};
+    use roaring::RoaringBitmap;
+
     use super::find_docids_of_facet_within_bounds;
+    use crate::heed_codec::facet::new::ordered_f64_codec::OrderedF64Codec;
+    use crate::heed_codec::facet::new::FacetKeyCodec;
+    use crate::milli_snap;
+    use crate::search::facet::test::FacetIndex;
+    use crate::snapshot_tests::display_bitmap;
 
     fn get_simple_index() -> FacetIndex<OrderedF64Codec> {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8);

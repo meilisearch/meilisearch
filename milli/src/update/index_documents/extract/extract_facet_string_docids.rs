@@ -1,11 +1,13 @@
+use std::fs::File;
+use std::io;
+
+use heed::BytesEncode;
+
 use super::helpers::{create_sorter, sorter_into_reader, try_split_array_at, GrenadParameters};
 use crate::heed_codec::facet::new::str_ref::StrRefCodec;
 use crate::heed_codec::facet::new::{FacetKey, FacetKeyCodec};
 use crate::update::index_documents::merge_cbo_roaring_bitmaps;
 use crate::{FieldId, Result};
-use heed::BytesEncode;
-use std::fs::File;
-use std::io;
 
 /// Extracts the facet string and the documents ids where this facet string appear.
 ///

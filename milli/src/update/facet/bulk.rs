@@ -1,3 +1,14 @@
+use std::cmp;
+use std::fs::File;
+use std::num::NonZeroUsize;
+
+use grenad::CompressionType;
+use heed::types::ByteSlice;
+use heed::{BytesEncode, Error, RoTxn};
+use log::debug;
+use roaring::RoaringBitmap;
+use time::OffsetDateTime;
+
 use crate::error::InternalError;
 use crate::facet::FacetType;
 use crate::heed_codec::facet::new::{
@@ -5,15 +16,6 @@ use crate::heed_codec::facet::new::{
 };
 use crate::update::index_documents::{create_writer, write_into_lmdb_database, writer_into_reader};
 use crate::{FieldId, Index, Result};
-use grenad::CompressionType;
-use heed::types::ByteSlice;
-use heed::{BytesEncode, Error, RoTxn};
-use log::debug;
-use roaring::RoaringBitmap;
-use std::cmp;
-use std::fs::File;
-use std::num::NonZeroUsize;
-use time::OffsetDateTime;
 
 pub struct FacetsUpdateBulk<'i> {
     index: &'i Index,

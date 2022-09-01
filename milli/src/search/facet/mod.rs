@@ -1,10 +1,9 @@
 use heed::types::ByteSlice;
 use heed::{BytesDecode, RoTxn};
 
-use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKeyCodec, MyByteSlice};
-
 pub use self::facet_distribution::{FacetDistribution, DEFAULT_VALUES_PER_FACET};
 pub use self::filter::Filter;
+use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKeyCodec, MyByteSlice};
 
 mod facet_distribution;
 mod facet_distribution_iter;
@@ -78,17 +77,18 @@ pub(crate) fn get_highest_level<'t>(
 
 #[cfg(test)]
 pub mod test {
-    use crate::update::FacetsUpdateIncremental;
+    use std::fmt::Display;
+    use std::marker::PhantomData;
+    use std::rc::Rc;
+
     use heed::{BytesDecode, BytesEncode, Env, RwTxn};
     use roaring::RoaringBitmap;
-    use std::{fmt::Display, marker::PhantomData, rc::Rc};
 
-    use crate::{
-        heed_codec::facet::new::{
-            FacetGroupValue, FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice,
-        },
-        snapshot_tests::display_bitmap,
+    use crate::heed_codec::facet::new::{
+        FacetGroupValue, FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice,
     };
+    use crate::snapshot_tests::display_bitmap;
+    use crate::update::FacetsUpdateIncremental;
 
     pub struct FacetIndex<BoundCodec>
     where
