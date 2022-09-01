@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::cmp::min;
+use std::cmp::max;
 use std::{cmp, fmt, mem};
 
 use charabia::classifier::ClassifiedTokenIter;
@@ -450,14 +450,14 @@ fn create_query_tree(
     }
 
     let number_phrases = query.iter().filter(|p| p.is_phrase()).count();
-    let remove_count = query.len() - min(number_phrases, 1);
+    let remove_count = query.len() - max(number_phrases, 1);
     if remove_count == 0 {
         return ngrams(ctx, authorize_typos, query, false);
     }
 
     let mut operation_children = Vec::new();
     let mut query = query.to_vec();
-    for _ in 0..remove_count {
+    for _ in 0..=remove_count {
         let pos = match terms_matching_strategy {
             TermsMatchingStrategy::All => return ngrams(ctx, authorize_typos, &query, false),
             TermsMatchingStrategy::Any => {
@@ -1055,6 +1055,26 @@ mod test {
         AND
           PHRASE ["hey", "friends"]
           Exact { word: "wooop" }
+        "###);
+    }
+
+    #[test]
+    fn phrase_2() {
+        // https://github.com/meilisearch/meilisearch/issues/2722
+        let query = "coco \"harry\"";
+        let tokens = query.tokenize();
+
+        let (query_tree, _) = TestContext::default()
+            .build(TermsMatchingStrategy::default(), true, None, tokens)
+            .unwrap()
+            .unwrap();
+
+        insta::assert_debug_snapshot!(query_tree, @r###"
+        OR(WORD)
+          Exact { word: "harry" }
+          AND
+            Exact { word: "coco" }
+            Exact { word: "harry" }
         "###);
     }
 
