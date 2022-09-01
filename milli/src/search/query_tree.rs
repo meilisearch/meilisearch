@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::cmp::min;
+use std::cmp::max;
 use std::{cmp, fmt, mem};
 
 use charabia::classifier::ClassifiedTokenIter;
@@ -450,14 +450,14 @@ fn create_query_tree(
     }
 
     let number_phrases = query.iter().filter(|p| p.is_phrase()).count();
-    let remove_count = query.len() - min(number_phrases, 1);
+    let remove_count = query.len() - max(number_phrases, 1);
     if remove_count == 0 {
         return ngrams(ctx, authorize_typos, query, false);
     }
 
     let mut operation_children = Vec::new();
     let mut query = query.to_vec();
-    for _ in 0..remove_count {
+    for _ in 0..=remove_count {
         let pos = match terms_matching_strategy {
             TermsMatchingStrategy::All => return ngrams(ctx, authorize_typos, &query, false),
             TermsMatchingStrategy::Any => {
