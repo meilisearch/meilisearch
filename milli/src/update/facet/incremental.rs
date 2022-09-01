@@ -853,7 +853,7 @@ mod tests {
             txn.commit().unwrap();
         }
         verify_structure_validity(&index, 0);
-        milli_snap!(format!("{index}"));
+        milli_snap!(format!("{index}"), "before_delete");
 
         for &key in keys.iter() {
             verify_structure_validity(&index, 0);
@@ -862,11 +862,11 @@ mod tests {
             txn.commit().unwrap();
         }
         verify_structure_validity(&index, 0);
-        milli_snap!(format!("{index}"));
+        milli_snap!(format!("{index}"), "after_delete");
     }
 
     #[test]
-    fn shuffle_merge_string() {
+    fn shuffle_merge_string_and_delete() {
         let index = FacetIndex::<StrRefCodec>::new(4, 8);
 
         let mut keys = (1000..1064).into_iter().collect::<Vec<_>>();
@@ -883,7 +883,7 @@ mod tests {
             txn.commit().unwrap();
         }
         verify_structure_validity(&index, 0);
-        milli_snap!(format!("{index}"), 1);
+        milli_snap!(format!("{index}"), "before_delete");
 
         for &key in keys.iter() {
             verify_structure_validity(&index, 0);
@@ -892,7 +892,7 @@ mod tests {
             txn.commit().unwrap();
         }
         verify_structure_validity(&index, 0);
-        milli_snap!(format!("{index}"), 2);
+        milli_snap!(format!("{index}"), "after_delete");
     }
 
     // fuzz tests

@@ -318,7 +318,7 @@ mod tests {
                 .unwrap();
                 results.push_str(&format!("{}\n", display_bitmap(&docids)));
             }
-            milli_snap!(results, i);
+            milli_snap!(results, format!("included_{i}"));
             let mut results = String::new();
             for i in 0..=255 {
                 let i = i as f64;
@@ -334,7 +334,7 @@ mod tests {
                 .unwrap();
                 results.push_str(&format!("{}\n", display_bitmap(&docids)));
             }
-            milli_snap!(results, i);
+            milli_snap!(results, format!("excluded_{i}"));
             txn.commit().unwrap();
         }
     }
@@ -361,7 +361,7 @@ mod tests {
                 results.push_str(&format!("{}\n", display_bitmap(&docids)));
             }
 
-            milli_snap!(results, i);
+            milli_snap!(results, format!("included_{i}"));
 
             let mut results = String::new();
 
@@ -380,7 +380,7 @@ mod tests {
                 results.push_str(&format!("{}\n", display_bitmap(&docids)));
             }
 
-            milli_snap!(results, i);
+            milli_snap!(results, format!("excluded_{i}"));
 
             txn.commit().unwrap();
         }
@@ -408,7 +408,7 @@ mod tests {
                 results.push_str(&format!("{}\n", display_bitmap(&docids)));
             }
 
-            milli_snap!(results, i);
+            milli_snap!(results, format!("included_{i}"));
 
             let mut results = String::new();
 
@@ -427,7 +427,7 @@ mod tests {
                 results.push_str(&format!("{}\n", display_bitmap(&docids)));
             }
 
-            milli_snap!(results, i);
+            milli_snap!(results, format!("excluded_{i}"));
 
             txn.commit().unwrap();
         }
