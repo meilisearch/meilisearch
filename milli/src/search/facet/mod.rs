@@ -139,7 +139,7 @@ mod test {
             let max_group_size = std::cmp::max(group_size * 2, max_group_size as usize);
             let mut options = heed::EnvOpenOptions::new();
             let options = options.map_size(4096 * 4 * 100);
-            let tempdir = tempfile::TempDir::new_in("databases/").unwrap();
+            let tempdir = tempfile::TempDir::new().unwrap();
             let env = options.open(tempdir.path()).unwrap();
             let content = env.create_database(None).unwrap();
 

@@ -592,7 +592,7 @@ mod tests {
     use crate::index::tests::TempIndex;
     use crate::search::TermsMatchingStrategy;
     use crate::update::DeleteDocuments;
-    use crate::BEU16;
+    use crate::{db_snap, BEU16};
 
     #[test]
     fn simple_document_replacement() {
@@ -1379,6 +1379,25 @@ mod tests {
             })
             .unwrap();
 
+        db_snap!(index, facet_id_string_docids, @r###"
+        3   0  first        1  [1, ]
+        3   0  second       1  [2, ]
+        3   0  third        1  [3, ]
+        3   0  zeroth       1  [0, ]
+        "###);
+        db_snap!(index, field_id_docid_facet_strings, @r###"
+        3   0    zeroth       zeroth
+        3   1    first        first
+        3   2    second       second
+        3   3    third        third
+        "###);
+        db_snap!(index, string_faceted_documents_ids, @r###"
+        0   []
+        1   []
+        2   []
+        3   [0, 1, 2, 3, ]
+        "###);
+
         let rtxn = index.read_txn().unwrap();
 
         let hidden = index.faceted_fields(&rtxn).unwrap();
@@ -1399,6 +1418,15 @@ mod tests {
             })
             .unwrap();
 
+        db_snap!(index, facet_id_string_docids, @"");
+        db_snap!(index, field_id_docid_facet_strings, @"");
+        db_snap!(index, string_faceted_documents_ids, @r###"
+        0   []
+        1   []
+        2   []
+        3   [0, 1, 2, 3, ]
+        "###);
+
         let rtxn = index.read_txn().unwrap();
 
         let facets = index.faceted_fields(&rtxn).unwrap();
@@ -1411,6 +1439,25 @@ mod tests {
                 settings.set_sortable_fields(hashset!(S("dog.race")));
             })
             .unwrap();
+
+        db_snap!(index, facet_id_string_docids, @r###"
+        3   0  first        1  [1, ]
+        3   0  second       1  [2, ]
+        3   0  third        1  [3, ]
+        3   0  zeroth       1  [0, ]
+        "###);
+        db_snap!(index, field_id_docid_facet_strings, @r###"
+        3   0    zeroth       zeroth
+        3   1    first        first
+        3   2    second       second
+        3   3    third        third
+        "###);
+        db_snap!(index, string_faceted_documents_ids, @r###"
+        0   []
+        1   []
+        2   []
+        3   [0, 1, 2, 3, ]
+        "###);
 
         let rtxn = index.read_txn().unwrap();
 

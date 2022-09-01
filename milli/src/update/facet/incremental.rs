@@ -1,8 +1,9 @@
+use crate::facet::FacetType;
 use crate::heed_codec::facet::new::{
     FacetGroupValue, FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice,
 };
 use crate::search::facet::get_highest_level;
-use crate::Result;
+use crate::{Index, Result};
 use heed::Error;
 use heed::{types::ByteSlice, BytesDecode, RoTxn, RwTxn};
 use roaring::RoaringBitmap;
@@ -287,7 +288,7 @@ impl FacetsUpdateIncremental {
             .prefix_iter::<_, ByteSlice, ByteSlice>(&txn, &highest_level_prefix)?
             .count();
 
-        if size_highest_level < self.min_level_size {
+        if size_highest_level < self.group_size * self.min_level_size {
             return Ok(());
         }
 

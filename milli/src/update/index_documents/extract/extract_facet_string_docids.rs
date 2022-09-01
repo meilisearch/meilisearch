@@ -38,12 +38,13 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
 
         let (document_id_bytes, normalized_value_bytes) =
             try_split_array_at::<_, 4>(bytes).unwrap();
+        let document_id = u32::from_be_bytes(document_id_bytes);
 
         let normalised_value = std::str::from_utf8(normalized_value_bytes)?;
         let key = FacetKey { field_id, level: 0, left_bound: normalised_value };
         let key_bytes = FacetKeyCodec::<StrRefCodec>::bytes_encode(&key).unwrap();
 
-        facet_string_docids_sorter.insert(&key_bytes, &document_id_bytes)?;
+        facet_string_docids_sorter.insert(&key_bytes, &document_id.to_ne_bytes())?;
     }
 
     sorter_into_reader(facet_string_docids_sorter, indexer)

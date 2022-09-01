@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fs::File;
 use std::io;
@@ -17,8 +18,8 @@ use crate::heed_codec::facet::new::{FacetKeyCodec, MyByteSlice};
 use crate::update::index_documents::helpers::as_cloneable_grenad;
 use crate::update::FacetsUpdateIncremental;
 use crate::{
-    lat_lng_to_xyz, BoRoaringBitmapCodec, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index,
-    Result,
+    lat_lng_to_xyz, BoRoaringBitmapCodec, CboRoaringBitmapCodec, DocumentId, FieldId, GeoPoint,
+    Index, Result,
 };
 
 pub(crate) enum TypedChunk {
@@ -138,14 +139,41 @@ pub(crate) fn write_typed_chunk_into_index(
             is_merged_database = true;
         }
         TypedChunk::FieldIdFacetNumberDocids(facet_id_f64_docids_iter) => {
-            append_entries_into_database(
-                facet_id_f64_docids_iter,
-                &index.facet_id_f64_docids,
-                wtxn,
-                index_is_empty,
-                |value, _buffer| Ok(value),
-                merge_cbo_roaring_bitmaps,
-            )?;
+            // merge cbo roaring bitmaps is not the correct merger because the data in the DB
+            // is FacetGroupValue and not RoaringBitmap
+            // so I need to create my own merging function
+
+            // facet_id_string_docids is encoded as:
+            // key: FacetKeyCodec<StrRefCodec>
+            // value: CboRoaringBitmapCodec
+            // basically
+
+            // TODO: a condition saying "if I have more than 1/50th of the DB to add,
+            // then I do it in bulk, otherwise I do it incrementally". But instead of 1/50,
+            // it is a ratio I determine empirically
+
+            // for now I only do it incrementally, to see if things work
+            let indexer = FacetsUpdateIncremental::new(
+                index.facet_id_f64_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>(),
+            );
+
+            let mut new_faceted_docids = HashMap::<FieldId, RoaringBitmap>::default();
+
+            let mut cursor = facet_id_f64_docids_iter.into_cursor()?;
+            while let Some((key, value)) = cursor.move_on_next()? {
+                let key =
+                    FacetKeyCodec::<MyByteSlice>::bytes_decode(key).ok_or(heed::Error::Encoding)?;
+                let docids =
+                    CboRoaringBitmapCodec::bytes_decode(value).ok_or(heed::Error::Encoding)?;
+                indexer.insert(wtxn, key.field_id, key.left_bound, &docids)?;
+                *new_faceted_docids.entry(key.field_id).or_default() |= docids;
+            }
+            for (field_id, new_docids) in new_faceted_docids {
+                let mut docids = index.number_faceted_documents_ids(wtxn, field_id)?;
+                docids |= new_docids;
+                index.put_number_faceted_documents_ids(wtxn, field_id, &docids)?;
+            }
+
             is_merged_database = true;
         }
         TypedChunk::FieldIdFacetStringDocids(facet_id_string_docids) => {
@@ -163,16 +191,24 @@ pub(crate) fn write_typed_chunk_into_index(
             // it is a ratio I determine empirically
 
             // for now I only do it incrementally, to see if things work
-            let builder = FacetsUpdateIncremental::new(
+            let indexer = FacetsUpdateIncremental::new(
                 index.facet_id_string_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>(),
             );
+            let mut new_faceted_docids = HashMap::<FieldId, RoaringBitmap>::default();
+
             let mut cursor = facet_id_string_docids.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
                 let key =
                     FacetKeyCodec::<MyByteSlice>::bytes_decode(key).ok_or(heed::Error::Encoding)?;
-                let value =
+                let docids =
                     CboRoaringBitmapCodec::bytes_decode(value).ok_or(heed::Error::Encoding)?;
-                builder.insert(wtxn, key.field_id, key.left_bound, &value)?;
+                indexer.insert(wtxn, key.field_id, key.left_bound, &docids)?;
+                *new_faceted_docids.entry(key.field_id).or_default() |= docids;
+            }
+            for (field_id, new_docids) in new_faceted_docids {
+                let mut docids = index.string_faceted_documents_ids(wtxn, field_id)?;
+                docids |= new_docids;
+                index.put_string_faceted_documents_ids(wtxn, field_id, &docids)?;
             }
             is_merged_database = true;
         }

@@ -242,6 +242,15 @@ pub fn snap_facet_id_string_docids(index: &Index) -> String {
     });
     snap
 }
+pub fn snap_field_id_docid_facet_strings(index: &Index) -> String {
+    let snap = make_db_snap_from_iter!(index, field_id_docid_facet_strings, |(
+        (field_id, doc_id, string),
+        other_string,
+    )| {
+        &format!("{field_id:<3} {doc_id:<4} {string:<12} {other_string}")
+    });
+    snap
+}
 pub fn snap_documents_ids(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
     let documents_ids = index.documents_ids(&rtxn).unwrap();
@@ -422,6 +431,9 @@ macro_rules! full_snap_of_db {
     }};
     ($index:ident, facet_id_string_docids) => {{
         $crate::snapshot_tests::snap_facet_id_string_docids(&$index)
+    }};
+    ($index:ident, field_id_docid_facet_strings) => {{
+        $crate::snapshot_tests::snap_field_id_docid_facet_strings(&$index)
     }};
     ($index:ident, documents_ids) => {{
         $crate::snapshot_tests::snap_documents_ids(&$index)
