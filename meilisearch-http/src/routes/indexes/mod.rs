@@ -8,7 +8,7 @@ use serde_json::json;
 use time::OffsetDateTime;
 
 use crate::analytics::Analytics;
-use crate::extractors::authentication::{policies::*, GuardedData};
+use crate::extractors::authentication::{policies::*, AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::task::SummarizedTaskView;
 
@@ -74,16 +74,21 @@ pub async fn create_index(
         primary_key, uid, ..
     } = body.into_inner();
 
-    analytics.publish(
-        "Index Created".to_string(),
-        json!({ "primary_key": primary_key }),
-        Some(&req),
-    );
+    let allow_index_creation = meilisearch.filters().search_rules.is_index_authorized(&uid);
+    if allow_index_creation {
+        analytics.publish(
+            "Index Created".to_string(),
+            json!({ "primary_key": primary_key }),
+            Some(&req),
+        );
 
-    let update = Update::CreateIndex { primary_key };
-    let task: SummarizedTaskView = meilisearch.register_update(uid, update).await?.into();
+        let update = Update::CreateIndex { primary_key };
+        let task: SummarizedTaskView = meilisearch.register_update(uid, update).await?.into();
 
-    Ok(HttpResponse::Accepted().json(task))
+        Ok(HttpResponse::Accepted().json(task))
+    } else {
+        Err(AuthenticationError::InvalidToken.into())
+    }
 }
 
 #[derive(Debug, Deserialize)]
