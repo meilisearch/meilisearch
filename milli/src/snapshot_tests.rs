@@ -6,7 +6,7 @@ use std::fmt::Write;
 use std::path::Path;
 
 #[track_caller]
-pub fn default_db_snapshot_settings_for_test(name: Option<&str>) -> insta::Settings {
+pub fn default_db_snapshot_settings_for_test(name: Option<&str>) -> (insta::Settings, String) {
     let mut settings = insta::Settings::clone_current();
     settings.set_prepend_module_to_snapshot(false);
     let path = Path::new(std::panic::Location::caller().file());
@@ -16,12 +16,63 @@ pub fn default_db_snapshot_settings_for_test(name: Option<&str>) -> insta::Setti
 
     if let Some(name) = name {
         settings
-            .set_snapshot_path(Path::new("snapshots").join(filename).join(test_name).join(name));
+            .set_snapshot_path(Path::new("snapshots").join(filename).join(&test_name).join(name));
     } else {
-        settings.set_snapshot_path(Path::new("snapshots").join(filename).join(test_name));
+        settings.set_snapshot_path(Path::new("snapshots").join(filename).join(&test_name));
     }
 
-    settings
+    (settings, test_name)
+}
+#[macro_export]
+macro_rules! milli_snap {
+    ($value:expr, $name:expr) => {
+        let (settings, _) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(None);
+        settings.bind(|| {
+            let snap = $value;
+            let snaps = $crate::snapshot_tests::convert_snap_to_hash_if_needed(&format!("{}", $name), &snap, false);
+            for (name, snap) in snaps {
+                insta::assert_snapshot!(name, snap);
+            }
+        });
+    };
+    ($value:expr) => {
+        let (settings, test_name) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(None);
+        settings.bind(|| {
+            let snap = $value;
+            let snaps = $crate::snapshot_tests::convert_snap_to_hash_if_needed(&format!("{}", test_name), &snap, false);
+            for (name, snap) in snaps {
+                insta::assert_snapshot!(name, snap);
+            }
+        });
+    };
+    ($value:expr, @$inline:literal) => {
+        let (settings, test_name) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(None);
+        settings.bind(|| {
+            let snap = $value;
+            let snaps = $crate::snapshot_tests::convert_snap_to_hash_if_needed(&format!("{}", test_name), &snap, true);
+            for (name, snap) in snaps {
+                if !name.ends_with(".full") {
+                    insta::assert_snapshot!(snap, @$inline);
+                } else {
+                    insta::assert_snapshot!(name, snap);
+                }
+            }
+        });
+    };
+    ($value:expr, $name:expr, @$inline:literal) => {
+        let (settings, _) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(None);
+        settings.bind(|| {
+            let snap = $value;
+            let snaps = $crate::snapshot_tests::convert_snap_to_hash_if_needed(&format!("{}", $name), &snap, true);
+            for (name, snap) in snaps {
+                if !name.ends_with(".full") {
+                    insta::assert_snapshot!(snap, @$inline);
+                } else {
+                    insta::assert_snapshot!(name, snap);
+                }
+            }
+        });
+    };
 }
 
 /**
@@ -92,7 +143,7 @@ db_snap!(index, word_docids, "some_identifier", @"");
 #[macro_export]
 macro_rules! db_snap {
     ($index:ident, $db_name:ident, $name:expr) => {
-        let settings = $crate::snapshot_tests::default_db_snapshot_settings_for_test(Some(
+        let (settings, _) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(Some(
             &format!("{}", $name),
         ));
         settings.bind(|| {
@@ -104,7 +155,7 @@ macro_rules! db_snap {
         });
     };
     ($index:ident, $db_name:ident) => {
-        let settings = $crate::snapshot_tests::default_db_snapshot_settings_for_test(None);
+        let (settings, _) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(None);
         settings.bind(|| {
             let snap = $crate::full_snap_of_db!($index, $db_name);
             let snaps = $crate::snapshot_tests::convert_snap_to_hash_if_needed(stringify!($db_name), &snap, false);
@@ -114,7 +165,7 @@ macro_rules! db_snap {
         });
     };
     ($index:ident, $db_name:ident, @$inline:literal) => {
-        let settings = $crate::snapshot_tests::default_db_snapshot_settings_for_test(None);
+        let (settings, _) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(None);
         settings.bind(|| {
             let snap = $crate::full_snap_of_db!($index, $db_name);
             let snaps = $crate::snapshot_tests::convert_snap_to_hash_if_needed(stringify!($db_name), &snap, true);
@@ -127,8 +178,8 @@ macro_rules! db_snap {
             }
         });
     };
-    ($index:ident, $db_name:ident, $name:literal, @$inline:literal) => {
-        let settings = $crate::snapshot_tests::default_db_snapshot_settings_for_test(Some(&format!("{}", $name)));
+    ($index:ident, $db_name:ident, $name:expr, @$inline:literal) => {
+        let (settings, _) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(Some(&format!("{}", $name)));
         settings.bind(|| {
             let snap = $crate::full_snap_of_db!($index, $db_name);
             let snaps = $crate::snapshot_tests::convert_snap_to_hash_if_needed(stringify!($db_name), &snap, true);

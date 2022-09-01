@@ -1,9 +1,8 @@
-use crate::facet::FacetType;
 use crate::heed_codec::facet::new::{
     FacetGroupValue, FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice,
 };
 use crate::search::facet::get_highest_level;
-use crate::{Index, Result};
+use crate::Result;
 use heed::Error;
 use heed::{types::ByteSlice, BytesDecode, RoTxn, RwTxn};
 use roaring::RoaringBitmap;

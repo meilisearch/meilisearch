@@ -83,15 +83,15 @@ impl<'t, 'e> Iterator for AscendingFacetSort<'t, 'e> {
 
 #[cfg(test)]
 mod tests {
-    use rand::Rng;
-    use rand::SeedableRng;
-    use roaring::RoaringBitmap;
-
+    use crate::milli_snap;
     use crate::{
         heed_codec::facet::new::ordered_f64_codec::OrderedF64Codec,
         search::facet::{facet_sort_ascending::ascending_facet_sort, test::FacetIndex},
         snapshot_tests::display_bitmap,
     };
+    use rand::Rng;
+    use rand::SeedableRng;
+    use roaring::RoaringBitmap;
 
     fn get_simple_index() -> FacetIndex<OrderedF64Codec> {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8);
@@ -125,7 +125,7 @@ mod tests {
     #[test]
     fn random_looking_index_snap() {
         let index = get_random_looking_index();
-        insta::assert_display_snapshot!(index)
+        milli_snap!(format!("{index}"));
     }
     #[test]
     fn filter_sort() {
@@ -138,8 +138,9 @@ mod tests {
             for el in iter {
                 let docids = el.unwrap();
                 results.push_str(&display_bitmap(&docids));
+                results.push('\n');
             }
-            insta::assert_snapshot!(format!("filter_sort_{i}_ascending"), results);
+            milli_snap!(results, i);
 
             txn.commit().unwrap();
         }

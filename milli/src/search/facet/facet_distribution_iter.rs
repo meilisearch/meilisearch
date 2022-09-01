@@ -108,14 +108,14 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::milli_snap;
+    use crate::{
+        heed_codec::facet::new::ordered_f64_codec::OrderedF64Codec, search::facet::test::FacetIndex,
+    };
     use heed::BytesDecode;
     use rand::{Rng, SeedableRng};
     use roaring::RoaringBitmap;
     use std::ops::ControlFlow;
-
-    use crate::{
-        heed_codec::facet::new::ordered_f64_codec::OrderedF64Codec, search::facet::test::FacetIndex,
-    };
 
     use super::iterate_over_facet_distribution;
 
@@ -151,7 +151,7 @@ mod tests {
     #[test]
     fn random_looking_index_snap() {
         let index = get_random_looking_index();
-        insta::assert_display_snapshot!(index)
+        milli_snap!(format!("{index}"));
     }
     #[test]
     fn filter_distribution_all() {
@@ -172,7 +172,7 @@ mod tests {
                 },
             )
             .unwrap();
-            insta::assert_snapshot!(format!("filter_distribution_{i}_all"), results);
+            milli_snap!(results, i);
 
             txn.commit().unwrap();
         }
@@ -203,7 +203,7 @@ mod tests {
                 },
             )
             .unwrap();
-            insta::assert_snapshot!(format!("filter_distribution_{i}_all_stop_early"), results);
+            milli_snap!(results, i);
 
             txn.commit().unwrap();
         }

@@ -258,6 +258,7 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
 
 #[cfg(test)]
 mod tests {
+    use crate::milli_snap;
     use crate::{
         heed_codec::facet::new::{ordered_f64_codec::OrderedF64Codec, FacetKeyCodec},
         search::facet::test::FacetIndex,
@@ -301,7 +302,7 @@ mod tests {
     #[test]
     fn random_looking_index_snap() {
         let index = get_random_looking_index();
-        insta::assert_display_snapshot!(index)
+        milli_snap!(format!("{index}"));
     }
     #[test]
     fn filter_range_increasing() {
@@ -323,10 +324,7 @@ mod tests {
                 .unwrap();
                 results.push_str(&format!("{}\n", display_bitmap(&docids)));
             }
-            insta::assert_snapshot!(
-                format!("filter_range_{i}_increasing_included_bounds"),
-                results
-            );
+            milli_snap!(results, i);
             let mut results = String::new();
             for i in 0..=255 {
                 let i = i as f64;
@@ -342,10 +340,7 @@ mod tests {
                 .unwrap();
                 results.push_str(&format!("{}\n", display_bitmap(&docids)));
             }
-            insta::assert_snapshot!(
-                format!("filter_range_{i}_increasing_excluded_bounds"),
-                results
-            );
+            milli_snap!(results, i);
             txn.commit().unwrap();
         }
     }
@@ -372,10 +367,7 @@ mod tests {
                 results.push_str(&format!("{}\n", display_bitmap(&docids)));
             }
 
-            insta::assert_snapshot!(
-                format!("filter_range_{i}_decreasing_included_bounds"),
-                results
-            );
+            milli_snap!(results, i);
 
             let mut results = String::new();
 
@@ -394,10 +386,7 @@ mod tests {
                 results.push_str(&format!("{}\n", display_bitmap(&docids)));
             }
 
-            insta::assert_snapshot!(
-                format!("filter_range_{i}_decreasing_excluded_bounds"),
-                results
-            );
+            milli_snap!(results, i);
 
             txn.commit().unwrap();
         }
@@ -425,7 +414,7 @@ mod tests {
                 results.push_str(&format!("{}\n", display_bitmap(&docids)));
             }
 
-            insta::assert_snapshot!(format!("filter_range_{i}_pinch_included_bounds"), results);
+            milli_snap!(results, i);
 
             let mut results = String::new();
 
@@ -444,7 +433,7 @@ mod tests {
                 results.push_str(&format!("{}\n", display_bitmap(&docids)));
             }
 
-            insta::assert_snapshot!(format!("filter_range_{i}_pinch_excluded_bounds"), results);
+            milli_snap!(results, i);
 
             txn.commit().unwrap();
         }
