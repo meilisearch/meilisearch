@@ -178,6 +178,17 @@ mod store {
             Ok(self.get_update(uuid)?.metadata()?.len())
         }
 
+        pub async fn get_total_size(&self) -> Result<u64> {
+            let mut size = 0;
+
+            let mut dirs = tokio::fs::read_dir(&self.path).await?;
+            while let Some(file) = dirs.next_entry().await? {
+                size += file.metadata().await?.len();
+            }
+
+            Ok(size)
+        }
+
         pub async fn delete(&self, uuid: Uuid) -> Result<()> {
             let path = self.path.join(uuid.to_string());
             tokio::fs::remove_file(path).await?;

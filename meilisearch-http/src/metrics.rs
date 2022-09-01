@@ -81,8 +81,10 @@ pub async fn get_metrics(
 
     total_used_size += meilisearch.task_store.used_size().await?;
     total_on_disk_size += meilisearch.task_store.on_disk_size().await?;
+    total_on_disk_size += meilisearch.update_file_store.get_total_size().await?;
 
     MEILISEARCH_ON_DISK_SIZE.set(total_on_disk_size as i64);
+
     MEILISEARCH_DB_SIZE.set(total_used_size as i64);
     MEILISEARCH_INDEX_COUNT.set(response.indexes.len() as i64);
 
