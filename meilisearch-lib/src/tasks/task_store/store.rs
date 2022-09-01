@@ -174,6 +174,14 @@ impl Store {
 
         Ok(iter)
     }
+
+    pub fn on_disk_size(&self) -> Result<u64> {
+        Ok(self.env.real_disk_size()?)
+    }
+
+    pub fn used_size(&self) -> Result<u64> {
+        Ok(self.env.non_free_pages_size()?)
+    }
 }
 
 #[cfg(test)]
@@ -274,6 +282,20 @@ pub mod test {
         ) -> Result<Vec<Task>> {
             match self {
                 MockStore::Real(index) => index.list_tasks(txn, from, filter, limit),
+                MockStore::Fake(_) => todo!(),
+            }
+        }
+
+        pub fn on_disk_size(&self) -> Result<u64> {
+            match self {
+                MockStore::Real(index) => index.on_disk_size(),
+                MockStore::Fake(_) => todo!(),
+            }
+        }
+
+        pub fn used_size(&self) -> Result<u64> {
+            match self {
+                MockStore::Real(index) => index.used_size(),
                 MockStore::Fake(_) => todo!(),
             }
         }

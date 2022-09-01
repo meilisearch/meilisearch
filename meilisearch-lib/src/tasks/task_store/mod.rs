@@ -247,6 +247,18 @@ impl TaskStore {
         Ok(())
     }
 
+    pub async fn on_disk_size(&self) -> Result<u64> {
+        let store = self.store.clone();
+
+        Ok(tokio::task::spawn_blocking(move || store.on_disk_size()).await??)
+    }
+
+    pub async fn used_size(&self) -> Result<u64> {
+        let store = self.store.clone();
+
+        Ok(tokio::task::spawn_blocking(move || store.used_size()).await??)
+    }
+
     pub fn load_dump(src: impl AsRef<Path>, env: Arc<Env>) -> anyhow::Result<()> {
         // create a dummy update field store, since it is not needed right now.
         let store = Self::new(env.clone())?;
@@ -359,6 +371,20 @@ pub mod test {
         pub async fn register(&self, content: TaskContent) -> Result<Task> {
             match self {
                 Self::Real(s) => s.register(content).await,
+                Self::Mock(_m) => todo!(),
+            }
+        }
+
+        pub async fn on_disk_size(&self) -> Result<u64> {
+            match self {
+                Self::Real(s) => s.on_disk_size().await,
+                Self::Mock(_m) => todo!(),
+            }
+        }
+
+        pub async fn used_size(&self) -> Result<u64> {
+            match self {
+                Self::Real(s) => s.used_size().await,
                 Self::Mock(_m) => todo!(),
             }
         }

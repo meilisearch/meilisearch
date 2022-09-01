@@ -77,7 +77,7 @@ pub struct IndexSettings {
 pub struct IndexController<U, I> {
     pub index_resolver: Arc<IndexResolver<U, I>>,
     scheduler: Arc<RwLock<Scheduler>>,
-    task_store: TaskStore,
+    pub task_store: TaskStore,
     pub update_file_store: UpdateFileStore,
 }
 
