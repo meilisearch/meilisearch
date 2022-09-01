@@ -38,10 +38,23 @@ lazy_static! {
     ))
     .expect("Can't create a metric");
     pub static ref MEILISEARCH_DB_SIZE: IntGauge =
-        register_int_gauge!(opts!("meilisearch_db_size", "Meilisearch Db Used Size"))
+        register_int_gauge!(opts!("meilisearch_db_size", "Meilisearch DB Size"))
             .expect("Can't create a metric");
+    pub static ref MEILISEARCH_INDEX_DB_SIZE: IntGaugeVec = register_int_gauge_vec!(
+        opts!("meilisearch_index_db_size", "Meilisearch Index DB Size"),
+        &["index"]
+    )
+    .expect("Can't create a metric");
+    pub static ref MEILISEARCH_INDEX_ON_DISK_SIZE: IntGaugeVec = register_int_gauge_vec!(
+        opts!(
+            "meilisearch_index_on_disk_size",
+            "Meilisearch Index On Disk Size"
+        ),
+        &["index"]
+    )
+    .expect("Can't create a metric");
     pub static ref MEILISEARCH_INDEX_COUNT: IntGauge =
-        register_int_gauge!(opts!("meilisearch_index_count", "Meilisearch Index Count"))
+        register_int_gauge!(opts!("meilisearch_index_count", "Meilisearch Index Count"),)
             .expect("Can't create a metric");
     pub static ref MEILISEARCH_INDEX_DOCS_COUNT: IntGaugeVec = register_int_gauge_vec!(
         opts!(
@@ -63,36 +76,48 @@ lazy_static! {
 pub async fn get_metrics(
     meilisearch: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, MeiliSearch>,
 ) -> Result<HttpResponse, ResponseError> {
-    let search_rules = &meilisearch.filters().search_rules;
-    let response = meilisearch.get_all_stats(search_rules).await?;
+    let indexes = meilisearch.index_resolver.list().await?;
+
+    MEILISEARCH_INDEX_COUNT.set(indexes.len() as i64);
 
     let (mut total_used_size, mut total_on_disk_size) = (0, 0);
-
     // TODO: TAMO: unwrap
-    for (_index_uid, index) in meilisearch.index_resolver.list().await? {
+    for (index_uid, index) in indexes {
+        let rtxn = index.read_txn().unwrap();
+        let number_of_documents = index.number_of_documents(&rtxn).unwrap();
+        drop(rtxn);
+
         let (used_size, on_disk_size) =
             spawn_blocking::<_, _>(move || (index.used_size(), index.on_disk_size()))
                 .await
                 .unwrap();
 
-        total_used_size += used_size.unwrap();
-        total_on_disk_size += on_disk_size.unwrap();
+        let (used_size, on_disk_size) = (used_size.unwrap(), on_disk_size.unwrap());
+
+        MEILISEARCH_INDEX_DOCS_COUNT
+            .with_label_values(&[&index_uid])
+            .set(number_of_documents as i64);
+        MEILISEARCH_INDEX_DB_SIZE
+            .with_label_values(&[&index_uid])
+            .set(used_size as i64);
+        MEILISEARCH_INDEX_ON_DISK_SIZE
+            .with_label_values(&[&index_uid])
+            .set(on_disk_size as i64);
+
+        total_used_size += used_size;
+        total_on_disk_size += on_disk_size;
     }
 
     total_used_size += meilisearch.task_store.used_size().await?;
     total_on_disk_size += meilisearch.task_store.on_disk_size().await?;
-    total_on_disk_size += meilisearch.update_file_store.get_total_size().await?;
+    total_on_disk_size += meilisearch
+        .update_file_store
+        .get_total_size()
+        .await
+        .unwrap();
 
     MEILISEARCH_ON_DISK_SIZE.set(total_on_disk_size as i64);
-
     MEILISEARCH_DB_SIZE.set(total_used_size as i64);
-    MEILISEARCH_INDEX_COUNT.set(response.indexes.len() as i64);
-
-    for (index, value) in response.indexes.iter() {
-        MEILISEARCH_INDEX_DOCS_COUNT
-            .with_label_values(&[index])
-            .set(value.number_of_documents as i64);
-    }
 
     let encoder = TextEncoder::new();
     let mut buffer = vec![];
