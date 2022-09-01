@@ -107,11 +107,19 @@ pub struct Opt {
     pub import_snapshot: Option<PathBuf>,
 
     /// The engine will ignore a missing snapshot and not return an error in such case.
-    #[clap(long, env = "MEILI_IGNORE_MISSING_SNAPSHOT", requires = "import-snapshot")]
+    #[clap(
+        long,
+        env = "MEILI_IGNORE_MISSING_SNAPSHOT",
+        requires = "import-snapshot"
+    )]
     pub ignore_missing_snapshot: bool,
 
     /// The engine will skip snapshot importation and not return an error in such case.
-    #[clap(long, env = "MEILI_IGNORE_SNAPSHOT_IF_DB_EXISTS", requires = "import-snapshot")]
+    #[clap(
+        long,
+        env = "MEILI_IGNORE_SNAPSHOT_IF_DB_EXISTS",
+        requires = "import-snapshot"
+    )]
     pub ignore_snapshot_if_db_exists: bool,
 
     /// Defines the directory path where meilisearch will create snapshot each snapshot_time_gap.
