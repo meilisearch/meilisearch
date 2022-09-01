@@ -82,7 +82,6 @@ mod test {
     use heed::{BytesDecode, BytesEncode, Env, RwTxn};
     use roaring::RoaringBitmap;
     use std::{fmt::Display, marker::PhantomData, rc::Rc};
-    use tempfile::TempDir;
 
     use crate::{
         heed_codec::facet::new::{
@@ -113,8 +112,9 @@ mod test {
         for<'a> BoundCodec:
             BytesEncode<'a> + BytesDecode<'a, DItem = <BoundCodec as BytesEncode<'a>>::EItem>,
     {
+        #[cfg(all(test, fuzzing))]
         pub fn open_from_tempdir(
-            tempdir: Rc<TempDir>,
+            tempdir: Rc<tempfile::TempDir>,
             group_size: u8,
             max_group_size: u8,
         ) -> FacetIndex<BoundCodec> {

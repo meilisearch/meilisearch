@@ -2,7 +2,7 @@ use std::collections::btree_map::Entry;
 
 use fst::IntoStreamer;
 use heed::types::{ByteSlice, Str};
-use heed::{Database, RwTxn};
+use heed::Database;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -10,6 +10,7 @@ use time::OffsetDateTime;
 
 use super::{ClearDocuments, FacetsUpdateBulk};
 use crate::error::{InternalError, UserError};
+use crate::facet::FacetType;
 use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKeyCodec, MyByteSlice};
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::index::{db_name, main_key};
@@ -185,9 +186,9 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             prefix_word_pair_proximity_docids,
             word_position_docids,
             word_prefix_position_docids,
-            facet_id_f64_docids,
+            facet_id_f64_docids: _,
             facet_id_exists_docids,
-            facet_id_string_docids,
+            facet_id_string_docids: _,
             field_id_docid_facet_f64s,
             field_id_docid_facet_strings,
             documents,
@@ -440,22 +441,16 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             self.index.put_geo_faceted_documents_ids(self.wtxn, &geo_faceted_doc_ids)?;
         }
 
-        remove_docids_from_facet_id_docids(
-            self.wtxn,
-            self.index,
-            facet_id_f64_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>(),
-            &self.to_delete_docids,
-            fields_ids_map.clone(),
-            Index::put_number_faceted_documents_ids,
-        )?;
-        remove_docids_from_facet_id_docids(
-            self.wtxn,
-            self.index,
-            facet_id_string_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>(),
-            &self.to_delete_docids,
-            fields_ids_map.clone(),
-            Index::put_string_faceted_documents_ids,
-        )?;
+        for facet_type in [FacetType::Number, FacetType::String] {
+            remove_docids_from_facet_id_docids(
+                self.wtxn,
+                self.index,
+                &self.to_delete_docids,
+                fields_ids_map.clone(),
+                facet_type,
+            )?;
+        }
+
         // We delete the documents ids that are under the facet field id values.
         remove_docids_from_facet_id_exists_docids(
             self.wtxn,
@@ -613,11 +608,18 @@ where
 fn remove_docids_from_facet_id_docids<'a>(
     wtxn: &'a mut heed::RwTxn,
     index: &Index,
-    db: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
     to_remove: &RoaringBitmap,
     fields_ids_map: FieldsIdsMap,
-    put_faceted_docids_in_main: fn(&Index, &mut RwTxn, FieldId, &RoaringBitmap) -> heed::Result<()>,
+    facet_type: FacetType,
 ) -> Result<()> {
+    let db = match facet_type {
+        FacetType::String => {
+            index.facet_id_string_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>()
+        }
+        FacetType::Number => {
+            index.facet_id_f64_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>()
+        }
+    };
     let mut modified = false;
     for field_id in fields_ids_map.ids() {
         let mut level0_prefix = vec![];
@@ -646,7 +648,7 @@ fn remove_docids_from_facet_id_docids<'a>(
     if !modified {
         return Ok(());
     }
-    let builder = FacetsUpdateBulk::new(index, db, put_faceted_docids_in_main);
+    let builder = FacetsUpdateBulk::new(index, facet_type);
     builder.execute(wtxn)?;
 
     Ok(())

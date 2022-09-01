@@ -1,4 +1,5 @@
 use crate::error::InternalError;
+use crate::facet::FacetType;
 use crate::heed_codec::facet::new::{
     FacetGroupValue, FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice,
 };
@@ -6,7 +7,7 @@ use crate::update::index_documents::{create_writer, write_into_lmdb_database, wr
 use crate::{FieldId, Index, Result};
 use grenad::CompressionType;
 use heed::types::ByteSlice;
-use heed::{BytesEncode, Error, RoTxn, RwTxn};
+use heed::{BytesEncode, Error, RoTxn};
 use log::debug;
 use roaring::RoaringBitmap;
 use std::cmp;
@@ -21,28 +22,26 @@ pub struct FacetsUpdateBulk<'i> {
     pub(crate) chunk_compression_level: Option<u32>,
     level_group_size: usize,
     min_level_size: usize,
-    put_faceted_docids_in_main: fn(&Index, &mut RwTxn, FieldId, &RoaringBitmap) -> heed::Result<()>,
+    facet_type: FacetType,
 }
 
 impl<'i> FacetsUpdateBulk<'i> {
-    pub fn new(
-        index: &'i Index,
-        database: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
-        put_faceted_docids_in_main: fn(
-            &Index,
-            &mut RwTxn,
-            FieldId,
-            &RoaringBitmap,
-        ) -> heed::Result<()>,
-    ) -> FacetsUpdateBulk<'i> {
+    pub fn new(index: &'i Index, facet_type: FacetType) -> FacetsUpdateBulk<'i> {
         FacetsUpdateBulk {
             index,
-            database,
+            database: match facet_type {
+                FacetType::String => {
+                    index.facet_id_string_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>()
+                }
+                FacetType::Number => {
+                    index.facet_id_f64_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>()
+                }
+            },
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
             level_group_size: 4,
             min_level_size: 5,
-            put_faceted_docids_in_main,
+            facet_type,
         }
     }
 
@@ -86,12 +85,11 @@ impl<'i> FacetsUpdateBulk<'i> {
             let (level_readers, all_docids) =
                 self.compute_levels_for_field_id(field_id, &nested_wtxn)?;
 
-            (self.put_faceted_docids_in_main)(
-                &self.index,
-                &mut nested_wtxn,
-                field_id,
-                &all_docids,
-            )?;
+            let put_docids_fn = match self.facet_type {
+                FacetType::Number => Index::put_number_faceted_documents_ids,
+                FacetType::String => Index::put_string_faceted_documents_ids,
+            };
+            put_docids_fn(&self.index, &mut nested_wtxn, field_id, &all_docids)?;
 
             for level_reader in level_readers {
                 // TODO: append instead of write with merge
