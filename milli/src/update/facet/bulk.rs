@@ -6,7 +6,7 @@ use crate::update::index_documents::{create_writer, write_into_lmdb_database, wr
 use crate::{FieldId, Index, Result};
 use grenad::CompressionType;
 use heed::types::ByteSlice;
-use heed::{BytesEncode, Error, RoTxn};
+use heed::{BytesEncode, Error, RoTxn, RwTxn};
 use log::debug;
 use roaring::RoaringBitmap;
 use std::cmp;
@@ -21,12 +21,19 @@ pub struct FacetsUpdateBulk<'i> {
     pub(crate) chunk_compression_level: Option<u32>,
     level_group_size: usize,
     min_level_size: usize,
+    put_faceted_docids_in_main: fn(&Index, &mut RwTxn, FieldId, &RoaringBitmap) -> heed::Result<()>,
 }
 
 impl<'i> FacetsUpdateBulk<'i> {
     pub fn new(
         index: &'i Index,
         database: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
+        put_faceted_docids_in_main: fn(
+            &Index,
+            &mut RwTxn,
+            FieldId,
+            &RoaringBitmap,
+        ) -> heed::Result<()>,
     ) -> FacetsUpdateBulk<'i> {
         FacetsUpdateBulk {
             index,
@@ -35,6 +42,7 @@ impl<'i> FacetsUpdateBulk<'i> {
             chunk_compression_level: None,
             level_group_size: 4,
             min_level_size: 5,
+            put_faceted_docids_in_main,
         }
     }
 
@@ -78,8 +86,12 @@ impl<'i> FacetsUpdateBulk<'i> {
             let (level_readers, all_docids) =
                 self.compute_levels_for_field_id(field_id, &nested_wtxn)?;
 
-            // TODO: this will need to be an argument to Facets as well
-            self.index.put_string_faceted_documents_ids(&mut nested_wtxn, field_id, &all_docids)?;
+            (self.put_faceted_docids_in_main)(
+                &self.index,
+                &mut nested_wtxn,
+                field_id,
+                &all_docids,
+            )?;
 
             for level_reader in level_readers {
                 // TODO: append instead of write with merge

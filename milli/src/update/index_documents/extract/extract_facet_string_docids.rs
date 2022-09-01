@@ -32,6 +32,10 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
         let (field_id_bytes, bytes) = try_split_array_at(key).unwrap();
         let field_id = FieldId::from_be_bytes(field_id_bytes);
 
+        // document_id_bytes is a big-endian u32
+        // merge_cbo_roaring_bitmap works with native endian u32s
+        // that is a problem, I think
+
         let (document_id_bytes, normalized_value_bytes) =
             try_split_array_at::<_, 4>(bytes).unwrap();
 

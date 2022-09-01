@@ -138,7 +138,7 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
             let should_skip = {
                 match self.left {
                     Bound::Included(left) => left >= next_key.left_bound,
-                    Bound::Excluded(left) => left >= next_key.left_bound, // TODO: use > instead?
+                    Bound::Excluded(left) => left >= next_key.left_bound,
                     Bound::Unbounded => false,
                 }
             };

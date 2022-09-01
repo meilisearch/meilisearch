@@ -2,7 +2,7 @@ use std::collections::btree_map::Entry;
 
 use fst::IntoStreamer;
 use heed::types::{ByteSlice, Str};
-use heed::Database;
+use heed::{Database, RwTxn};
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -446,6 +446,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             facet_id_f64_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>(),
             &self.to_delete_docids,
             fields_ids_map.clone(),
+            Index::put_number_faceted_documents_ids,
         )?;
         remove_docids_from_facet_id_docids(
             self.wtxn,
@@ -453,6 +454,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             facet_id_string_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>(),
             &self.to_delete_docids,
             fields_ids_map.clone(),
+            Index::put_string_faceted_documents_ids,
         )?;
         // We delete the documents ids that are under the facet field id values.
         remove_docids_from_facet_id_exists_docids(
@@ -614,6 +616,7 @@ fn remove_docids_from_facet_id_docids<'a>(
     db: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
     to_remove: &RoaringBitmap,
     fields_ids_map: FieldsIdsMap,
+    put_faceted_docids_in_main: fn(&Index, &mut RwTxn, FieldId, &RoaringBitmap) -> heed::Result<()>,
 ) -> Result<()> {
     let mut modified = false;
     for field_id in fields_ids_map.ids() {
@@ -643,7 +646,7 @@ fn remove_docids_from_facet_id_docids<'a>(
     if !modified {
         return Ok(());
     }
-    let builder = FacetsUpdateBulk::new(index, db);
+    let builder = FacetsUpdateBulk::new(index, db, put_faceted_docids_in_main);
     builder.execute(wtxn)?;
 
     Ok(())

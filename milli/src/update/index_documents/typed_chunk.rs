@@ -13,7 +13,9 @@ use super::helpers::{
     valid_lmdb_key, CursorClonableMmap,
 };
 use super::{ClonableMmap, MergeFn};
+use crate::heed_codec::facet::new::{FacetKeyCodec, MyByteSlice};
 use crate::update::index_documents::helpers::as_cloneable_grenad;
+use crate::update::FacetsUpdateIncremental;
 use crate::{
     lat_lng_to_xyz, BoRoaringBitmapCodec, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index,
     Result,
@@ -146,6 +148,34 @@ pub(crate) fn write_typed_chunk_into_index(
             )?;
             is_merged_database = true;
         }
+        TypedChunk::FieldIdFacetStringDocids(facet_id_string_docids) => {
+            // merge cbo roaring bitmaps is not the correct merger because the data in the DB
+            // is FacetGroupValue and not RoaringBitmap
+            // so I need to create my own merging function
+
+            // facet_id_string_docids is encoded as:
+            // key: FacetKeyCodec<StrRefCodec>
+            // value: CboRoaringBitmapCodec
+            // basically
+
+            // TODO: a condition saying "if I have more than 1/50th of the DB to add,
+            // then I do it in bulk, otherwise I do it incrementally". But instead of 1/50,
+            // it is a ratio I determine empirically
+
+            // for now I only do it incrementally, to see if things work
+            let builder = FacetsUpdateIncremental::new(
+                index.facet_id_string_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>(),
+            );
+            let mut cursor = facet_id_string_docids.into_cursor()?;
+            while let Some((key, value)) = cursor.move_on_next()? {
+                let key =
+                    FacetKeyCodec::<MyByteSlice>::bytes_decode(key).ok_or(heed::Error::Encoding)?;
+                let value =
+                    CboRoaringBitmapCodec::bytes_decode(value).ok_or(heed::Error::Encoding)?;
+                builder.insert(wtxn, key.field_id, key.left_bound, &value)?;
+            }
+            is_merged_database = true;
+        }
         TypedChunk::FieldIdFacetExistsDocids(facet_id_exists_docids) => {
             append_entries_into_database(
                 facet_id_exists_docids,
@@ -187,17 +217,6 @@ pub(crate) fn write_typed_chunk_into_index(
                     index_fid_docid_facet_strings.put(wtxn, key, value)?;
                 }
             }
-        }
-        TypedChunk::FieldIdFacetStringDocids(facet_id_string_docids) => {
-            // facet_id_string_docids contains the thing that the extractor put into it,
-            // so: (FacetKey { field id, level: 0, left_bound } , docids: RoaringBitmap )
-            // now we need to either:
-            // 1. incrementally add the keys/docids pairs into the DB
-            // 2. add the keys/docids into level 0 and then call Facets::execute
-            // the choice of solution should be determined by their performance
-            // characteristics
-
-            is_merged_database = true;
         }
         TypedChunk::GeoPoints(geo_points) => {
             let mut rtree = index.geo_rtree(wtxn)?.unwrap_or_default();
