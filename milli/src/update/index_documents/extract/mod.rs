@@ -142,7 +142,7 @@ pub(crate) fn data_from_obkv_documents(
         indexer,
         lmdb_writer_sx.clone(),
         extract_facet_string_docids,
-        merge_roaring_bitmaps, // TODO: check (cbo?)
+        merge_cbo_roaring_bitmaps, // TODO: check (cbo?)
         TypedChunk::FieldIdFacetStringDocids,
         "field-id-facet-string-docids",
     );

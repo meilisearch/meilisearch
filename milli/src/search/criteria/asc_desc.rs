@@ -197,9 +197,10 @@ fn facet_ordered<'t>(
             field_id,
             candidates.clone(),
         )?;
+
         let string_iter = make_iter(
             rtxn,
-            index.facet_id_f64_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>(),
+            index.facet_id_string_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>(),
             field_id,
             candidates,
         )?;
