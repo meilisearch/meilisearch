@@ -77,7 +77,7 @@ pub(crate) fn get_highest_level<'t>(
 }
 
 #[cfg(test)]
-mod test {
+pub mod test {
     use crate::update::FacetsUpdateIncremental;
     use heed::{BytesDecode, BytesEncode, Env, RwTxn};
     use roaring::RoaringBitmap;
@@ -159,6 +159,17 @@ mod test {
             let update = FacetsUpdateIncremental::new(self.db.content);
             let key_bytes = BoundCodec::bytes_encode(&key).unwrap();
             update.insert(rwtxn, field_id, &key_bytes, docids).unwrap();
+        }
+        pub fn delete<'a>(
+            &self,
+            rwtxn: &'a mut RwTxn,
+            field_id: u16,
+            key: &'a <BoundCodec as BytesEncode<'a>>::EItem,
+            value: u32,
+        ) {
+            let update = FacetsUpdateIncremental::new(self.db.content);
+            let key_bytes = BoundCodec::bytes_encode(&key).unwrap();
+            update.delete(rwtxn, field_id, &key_bytes, value).unwrap();
         }
     }
 
