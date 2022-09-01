@@ -1059,6 +1059,26 @@ mod test {
     }
 
     #[test]
+    fn phrase_2() {
+        // https://github.com/meilisearch/meilisearch/issues/2722
+        let query = "coco \"harry\"";
+        let tokens = query.tokenize();
+
+        let (query_tree, _) = TestContext::default()
+            .build(TermsMatchingStrategy::default(), true, None, tokens)
+            .unwrap()
+            .unwrap();
+
+        insta::assert_debug_snapshot!(query_tree, @r###"
+        OR(WORD)
+          Exact { word: "harry" }
+          AND
+            Exact { word: "coco" }
+            Exact { word: "harry" }
+        "###);
+    }
+
+    #[test]
     fn phrase_with_hard_separator() {
         let query = "\"hey friends. wooop wooop\"";
         let tokens = query.tokenize();
