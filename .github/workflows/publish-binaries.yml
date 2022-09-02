@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     # No need to check the version for dry run (cron)
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       # Check if the tag has the v<nmumber>.<number>.<number> format.
       # If yes, it means we are publishing an official release.
       # If no, we are releasing a RC, so no need to check the version.

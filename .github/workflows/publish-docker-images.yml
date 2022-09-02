@@ -12,7 +12,7 @@ jobs:
   docker:
     runs-on: docker
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       # Check if the tag has the v<nmumber>.<number>.<number> format. If yes, it means we are publishing an official release.
       # In this situation, we need to set `output.stable` to create/update the following tags (additionally to the `vX.Y.Z` Docker tag):
