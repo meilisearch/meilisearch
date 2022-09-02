@@ -14,6 +14,12 @@ on:
   milestone:
     types: [created, closed]
 
+env:
+  MILESTONE_VERSION: ${{ github.event.milestone.title }}
+  MILESTONE_URL: ${{ github.event.milestone.html_url }}
+  MILESTONE_DUE_ON: ${{ github.event.milestone.due_on }}
+  GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
+
 jobs:
 
 # -----------------
@@ -51,11 +57,7 @@ jobs:
     if: github.event.action == 'created' && needs.get-release-version.outputs.is-patch == 'false'
     runs-on: ubuntu-latest
     env:
-      GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
       ISSUE_TEMPLATE: issue-template.md
-      MILESTONE_VERSION: ${{ github.event.milestone.title }}
-      MILESTONE_URL: ${{ github.event.milestone.html_url }}
-      MILESTONE_DUE_ON: ${{ github.event.milestone.due_on }}
     steps:
       - uses: actions/checkout@v3
       - name: Download the issue template
@@ -88,10 +90,7 @@ jobs:
     if: github.event.action == 'created' && needs.get-release-version.outputs.is-patch == 'false'
     runs-on: ubuntu-latest
     env:
-      GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
       ISSUE_TEMPLATE: issue-template.md
-      MILESTONE_VERSION: ${{ github.event.milestone.title }}
-      MILESTONE_URL: ${{ github.event.milestone.html_url }}
     steps:
       - uses: actions/checkout@v3
       - name: Download the issue template
@@ -120,10 +119,6 @@ jobs:
   create-release-label:
     if: github.event.action == 'closed'
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
-      MILESTONE_VERSION: ${{ github.event.milestone.title }}
-      MILESTONE_DUE_ON: ${{ github.event.milestone.due_on }}
     steps:
       - uses: actions/checkout@v3
       - name: Create the $MILESTONE_VERSION label
@@ -145,9 +140,6 @@ jobs:
     if: github.event.action == 'closed'
     needs: create-release-label
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
-      MILESTONE_VERSION: ${{ github.event.milestone.title }}
     steps:
       - uses: actions/checkout@v3
       - name: Add label $MILESTONE_VERSION to all PRs in the Milestone
