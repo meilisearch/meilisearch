@@ -121,7 +121,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Create the $MILESTONE_VERSION label
+      - name: Create the ${{ env.MILESTONE_VERSION }} label
         run: |
           label_description="PRs/issues solved in $MILESTONE_VERSION"
           if [[ ! -z $MILESTONE_DUE_ON ]]; then
@@ -142,13 +142,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Add label $MILESTONE_VERSION to all PRs in the Milestone
+      - name: Add label ${{ env.MILESTONE_VERSION }} to all PRs in the Milestone
         run: |
           prs=$(gh pr list --search milestone:"$MILESTONE_VERSION" --limit 1000 --state all --json number --template '{{range .}}{{tablerow (printf "%v" .number)}}{{end}}')
           for pr in $prs; do
               gh pr $pr edit --add-label $MILESTONE_VERSION
           done
-      - name: Add label $MILESTONE_VERSION to all issues in the Milestone
+      - name: Add label ${{ env.MILESTONE_VERSION }} to all issues in the Milestone
         run: |
           issues=$(gh issue list --search milestone:"$MILESTONE_VERSION" --limit 1000 --state all --json number --template '{{range .}}{{tablerow (printf "%v" .number)}}{{end}}')
           for issue in $issues; do
