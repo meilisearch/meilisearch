@@ -29,7 +29,7 @@ jobs:
     - name: Upload debian pkg to release
       uses: svenstaro/upload-release-action@v1-release
       with:
-        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
         file: target/debian/meilisearch.deb
         asset_name: meilisearch.deb
         tag: ${{ github.ref }}

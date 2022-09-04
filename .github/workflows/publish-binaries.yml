@@ -62,7 +62,7 @@ jobs:
       if: github.event_name != 'schedule'
       uses: svenstaro/upload-release-action@v1-release
       with:
-        repo_token: ${{ secrets.PUBLISH_TOKEN }}
+        repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
         file: target/release/${{ matrix.artifact_name }}
         asset_name: ${{ matrix.asset_name }}
         tag: ${{ github.ref }}
@@ -132,7 +132,7 @@ jobs:
         if: github.event_name != 'schedule'
         uses: svenstaro/upload-release-action@v1-release
         with:
-          repo_token: ${{ secrets.PUBLISH_TOKEN }}
+          repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
           file: target/${{ matrix.target }}/release/meilisearch
           asset_name: ${{ matrix.asset_name }}
           tag: ${{ github.ref }}
