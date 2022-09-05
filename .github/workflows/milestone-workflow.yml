@@ -1,0 +1,156 @@
+name: Milestone's workflow
+
+# /!\ No git flow are handled here
+
+# For each Milestone created (not opened!), and if the release is NOT a patch release (only the patch changed)
+# - the roadmap issue is created, see https://github.com/meilisearch/core-team/blob/main/issue-templates/roadmap-issue.md
+# - the changelog issue is created, see https://github.com/meilisearch/core-team/blob/main/issue-templates/changelog-issue.md
+
+# For each Milestone closed
+# - the `release_version` label is created
+# - this label is applied to all issues/PRs in the Milestone
+
+on:
+  milestone:
+    types: [created, closed]
+
+env:
+  MILESTONE_VERSION: ${{ github.event.milestone.title }}
+  MILESTONE_URL: ${{ github.event.milestone.html_url }}
+  MILESTONE_DUE_ON: ${{ github.event.milestone.due_on }}
+  GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
+
+jobs:
+
+# -----------------
+# MILESTONE CREATED
+# -----------------
+
+  get-release-version:
+    if: github.event.action == 'created'
+    runs-on: ubuntu-latest
+    outputs:
+      is-patch: ${{ steps.check-patch.outputs.is-patch }}
+    env:
+      MILESTONE_VERSION: ${{ github.event.milestone.title }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Check if this release is a patch release only
+        id: check-patch
+        run: |
+          echo version: $MILESTONE_VERSION
+          if [[ $MILESTONE_VERSION =~ ^v[0-9]+\.[0-9]+\.0$ ]]; then
+            echo 'This is NOT a patch release'
+            echo ::set-output name=is-patch::false
+          elif [[ $MILESTONE_VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo 'This is a patch release'
+            echo ::set-output name=is-patch::true
+          else
+            echo "Not a valid format of release, check the Milestone's title."
+            echo 'Should be vX.Y.Z'
+            exit 1
+          fi
+
+  create-roadmap-issue:
+    needs: get-release-version
+    # Create the roadmap issue if the release is not only a patch release
+    if: github.event.action == 'created' && needs.get-release-version.outputs.is-patch == 'false'
+    runs-on: ubuntu-latest
+    env:
+      ISSUE_TEMPLATE: issue-template.md
+    steps:
+      - uses: actions/checkout@v3
+      - name: Download the issue template
+        run: curl -s https://raw.githubusercontent.com/meilisearch/core-team/main/issue-templates/roadmap-issue.md > $ISSUE_TEMPLATE
+      - name: Replace all empty occurences in the templates
+        run: |
+          # Replace all <<version>> occurences
+          sed -i "s/<<version>>/$MILESTONE_VERSION/g" $ISSUE_TEMPLATE
+
+          # Replace all <<milestone_id>> occurences
+          milestone_id=$(echo $MILESTONE_URL | cut -d '/' -f 7)
+          sed -i "s/<<milestone_id>>/$milestone_id/g" $ISSUE_TEMPLATE
+
+          # Replace release date if exists
+          if [[ ! -z $MILESTONE_DUE_ON ]]; then
+            date=$(echo $MILESTONE_DUE_ON | cut -d 'T' -f 1)
+            sed -i "s/Release date\: 20XX-XX-XX/Release date\: $date/g" $ISSUE_TEMPLATE
+          fi
+      - name: Create the issue
+        run: |
+          gh issue create \
+            --title "$MILESTONE_VERSION ROADMAP" \
+            --label 'epic,impacts docs,impacts integrations,impacts cloud' \
+            --body-file $ISSUE_TEMPLATE \
+            --milestone $MILESTONE_VERSION
+
+  create-changelog-issue:
+    needs: get-release-version
+    # Create the changelog issue if the release is not only a patch release
+    if: github.event.action == 'created' && needs.get-release-version.outputs.is-patch == 'false'
+    runs-on: ubuntu-latest
+    env:
+      ISSUE_TEMPLATE: issue-template.md
+    steps:
+      - uses: actions/checkout@v3
+      - name: Download the issue template
+        run: curl -s https://raw.githubusercontent.com/meilisearch/core-team/main/issue-templates/changelog-issue.md > $ISSUE_TEMPLATE
+      - name: Replace all empty occurences in the templates
+        run: |
+          # Replace all <<version>> occurences
+          sed -i "s/<<version>>/$MILESTONE_VERSION/g" $ISSUE_TEMPLATE
+
+          # Replace all <<milestone_id>> occurences
+          milestone_id=$(echo $MILESTONE_URL | cut -d '/' -f 7)
+          sed -i "s/<<milestone_id>>/$milestone_id/g" $ISSUE_TEMPLATE
+      - name: Create the issue
+        run: |
+          gh issue create \
+            --title "Create release changelogs for $MILESTONE_VERSION" \
+            --label 'impacts docs,documentation' \
+            --body-file $ISSUE_TEMPLATE \
+            --milestone $MILESTONE_VERSION \
+            --assignee curquiza
+
+# ----------------
+# MILESTONE CLOSED
+# ----------------
+
+  create-release-label:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Create the ${{ env.MILESTONE_VERSION }} label
+        run: |
+          label_description="PRs/issues solved in $MILESTONE_VERSION"
+          if [[ ! -z $MILESTONE_DUE_ON ]]; then
+            date=$(echo $MILESTONE_DUE_ON | cut -d 'T' -f 1)
+            label_description="$label_description released on $date"
+          fi
+
+          gh api repos/curquiza/meilisearch/labels \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -f name="$MILESTONE_VERSION" \
+            -f description="$label_description" \
+            -f color='ff5ba3'
+
+  labelize-all-milestone-content:
+    if: github.event.action == 'closed'
+    needs: create-release-label
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Add label ${{ env.MILESTONE_VERSION }} to all PRs in the Milestone
+        run: |
+          prs=$(gh pr list --search milestone:"$MILESTONE_VERSION" --limit 1000 --state all --json number --template '{{range .}}{{tablerow (printf "%v" .number)}}{{end}}')
+          for pr in $prs; do
+              gh pr $pr edit --add-label $MILESTONE_VERSION
+          done
+      - name: Add label ${{ env.MILESTONE_VERSION }} to all issues in the Milestone
+        run: |
+          issues=$(gh issue list --search milestone:"$MILESTONE_VERSION" --limit 1000 --state all --json number --template '{{range .}}{{tablerow (printf "%v" .number)}}{{end}}')
+          for issue in $issues; do
+              gh issue edit $issue --add-label $MILESTONE_VERSION
+          done
