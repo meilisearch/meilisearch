@@ -1,30 +1,24 @@
+use crate::facet::FacetType;
+use crate::heed_codec::facet::{
+    ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
+};
+use crate::update::index_documents::{create_writer, writer_into_reader};
+use crate::{CboRoaringBitmapCodec, FieldId, Index, Result};
+use grenad::CompressionType;
+use heed::types::ByteSlice;
+use heed::{BytesEncode, Error, RoTxn, RwTxn};
+use log::debug;
+use roaring::RoaringBitmap;
 use std::borrow::Cow;
 use std::cmp;
 use std::fs::File;
-use std::num::NonZeroUsize;
-
-use grenad::CompressionType;
-use heed::types::{ByteSlice, DecodeIgnore};
-use heed::{BytesDecode, BytesEncode, Error, RoTxn, RwTxn};
-use log::debug;
-use roaring::RoaringBitmap;
 use time::OffsetDateTime;
-
-use crate::error::InternalError;
-use crate::facet::FacetType;
-use crate::heed_codec::facet::{
-    FacetGroupValue, FacetGroupValueCodec, FacetGroupKey, FacetGroupKeyCodec, ByteSliceRef,
-};
-use crate::update::index_documents::{
-    create_writer, valid_lmdb_key, write_into_lmdb_database, writer_into_reader,
-};
-use crate::{CboRoaringBitmapCodec, FieldId, Index, Result};
 
 pub struct FacetsUpdateBulk<'i> {
     index: &'i Index,
     database: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
-    level_group_size: usize,
-    min_level_size: usize,
+    level_group_size: u8,
+    min_level_size: u8,
     facet_type: FacetType,
     // None if level 0 does not need to be updated
     new_data: Option<grenad::Reader<File>>,
@@ -39,9 +33,9 @@ impl<'i> FacetsUpdateBulk<'i> {
         FacetsUpdateBulk {
             index,
             database: match facet_type {
-                FacetType::String => {
-                    index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
-                }
+                FacetType::String => index
+                    .facet_id_string_docids
+                    .remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>(),
                 FacetType::Number => {
                     index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
                 }
@@ -60,9 +54,9 @@ impl<'i> FacetsUpdateBulk<'i> {
         FacetsUpdateBulk {
             index,
             database: match facet_type {
-                FacetType::String => {
-                    index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
-                }
+                FacetType::String => index
+                    .facet_id_string_docids
+                    .remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>(),
                 FacetType::Number => {
                     index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
                 }
@@ -77,14 +71,14 @@ impl<'i> FacetsUpdateBulk<'i> {
     /// The number of elements from the level below that are represented by a single element in the level above
     ///
     /// This setting is always greater than or equal to 2.
-    pub fn level_group_size(&mut self, value: NonZeroUsize) -> &mut Self {
-        self.level_group_size = cmp::max(value.get(), 2);
+    pub fn level_group_size(mut self, value: u8) -> Self {
+        self.level_group_size = cmp::max(value, 2);
         self
     }
 
     /// The minimum number of elements that a level is allowed to have.
-    pub fn min_level_size(&mut self, value: NonZeroUsize) -> &mut Self {
-        self.min_level_size = value.get();
+    pub fn min_level_size(mut self, value: u8) -> Self {
+        self.min_level_size = cmp::max(value, 1);
         self
     }
 
@@ -109,8 +103,6 @@ impl<'i> FacetsUpdateBulk<'i> {
         }
         self.update_level0(wtxn)?;
 
-        // let mut nested_wtxn = self.index.env.nested_write_txn(wtxn)?;
-
         for &field_id in faceted_fields.iter() {
             let (level_readers, all_docids) = self.compute_levels_for_field_id(field_id, &wtxn)?;
 
@@ -119,10 +111,6 @@ impl<'i> FacetsUpdateBulk<'i> {
             for level_reader in level_readers {
                 let mut cursor = level_reader.into_cursor()?;
                 while let Some((k, v)) = cursor.move_on_next()? {
-                    let key = FacetGroupKeyCodec::<DecodeIgnore>::bytes_decode(k).unwrap();
-                    let value = FacetGroupValueCodec::bytes_decode(v).unwrap();
-                    println!("inserting {key:?} {value:?}");
-
                     self.database.remap_types::<ByteSlice, ByteSlice>().put(wtxn, k, v)?;
                 }
             }
@@ -141,14 +129,12 @@ impl<'i> FacetsUpdateBulk<'i> {
             let mut database = self.database.iter_mut(wtxn)?.remap_types::<ByteSlice, ByteSlice>();
             let mut cursor = new_data.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
-                if valid_lmdb_key(key) {
-                    buffer.clear();
-                    // the group size for level 0
-                    buffer.push(1);
-                    // then we extend the buffer with the docids bitmap
-                    buffer.extend_from_slice(value);
-                    unsafe { database.append(key, &buffer)? };
-                }
+                buffer.clear();
+                // the group size for level 0
+                buffer.push(1);
+                // then we extend the buffer with the docids bitmap
+                buffer.extend_from_slice(value);
+                unsafe { database.append(key, &buffer)? };
             }
         } else {
             let mut buffer = Vec::new();
@@ -156,25 +142,24 @@ impl<'i> FacetsUpdateBulk<'i> {
 
             let mut cursor = new_data.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
-                if valid_lmdb_key(key) {
-                    buffer.clear();
-                    // the group size for level 0
-                    buffer.push(1);
-                    // then we extend the buffer with the docids bitmap
-                    match database.get(wtxn, key)? {
-                        Some(prev_value) => {
-                            let old_bitmap = &prev_value[1..];
-                            CboRoaringBitmapCodec::merge_into(
-                                &[Cow::Borrowed(value), Cow::Borrowed(old_bitmap)],
-                                &mut buffer,
-                            )?;
-                        }
-                        None => {
-                            buffer.extend_from_slice(value);
-                        }
-                    };
-                    database.put(wtxn, key, &buffer)?;
-                }
+                // the value is a CboRoaringBitmap, but I still need to prepend the
+                // group size for level 0 (= 1) to it
+                buffer.clear();
+                buffer.push(1);
+                // then we extend the buffer with the docids bitmap
+                match database.get(wtxn, key)? {
+                    Some(prev_value) => {
+                        let old_bitmap = &prev_value[1..];
+                        CboRoaringBitmapCodec::merge_into(
+                            &[Cow::Borrowed(value), Cow::Borrowed(old_bitmap)],
+                            &mut buffer,
+                        )?;
+                    }
+                    None => {
+                        buffer.extend_from_slice(value);
+                    }
+                };
+                database.put(wtxn, key, &buffer)?;
             }
         }
 
@@ -186,7 +171,7 @@ impl<'i> FacetsUpdateBulk<'i> {
         field_id: FieldId,
         txn: &RoTxn,
     ) -> Result<(Vec<grenad::Reader<File>>, RoaringBitmap)> {
-        // TODO: first check whether there is anything in level 0
+        // TODO: first check whether there is anything in level 0?
         let algo = ComputeHigherLevels {
             rtxn: txn,
             db: &self.database,
@@ -212,8 +197,8 @@ struct ComputeHigherLevels<'t> {
     rtxn: &'t heed::RoTxn<'t>,
     db: &'t heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
     field_id: u16,
-    level_group_size: usize,
-    min_level_size: usize,
+    level_group_size: u8,
+    min_level_size: u8,
 }
 impl<'t> ComputeHigherLevels<'t> {
     fn read_level_0(
@@ -248,7 +233,7 @@ impl<'t> ComputeHigherLevels<'t> {
             }
             bitmaps.push(docids);
 
-            if bitmaps.len() == self.level_group_size {
+            if bitmaps.len() == self.level_group_size as usize {
                 handle_group(&bitmaps, left_bound)?;
                 first_iteration_for_new_group = true;
                 bitmaps.clear();
@@ -265,9 +250,8 @@ impl<'t> ComputeHigherLevels<'t> {
     /// Compute the content of the database levels from its level 0 for the given field id.
     ///
     /// ## Returns:
-    /// 1. a vector of grenad::Reader. The reader at index `i` corresponds to the elements of level `i + 1`
+    /// A vector of grenad::Reader. The reader at index `i` corresponds to the elements of level `i + 1`
     /// that must be inserted into the database.
-    /// 2. a roaring bitmap of all the document ids present in the database
     fn compute_higher_levels(
         &self,
         level: u8,
@@ -302,7 +286,7 @@ impl<'t> ComputeHigherLevels<'t> {
                 left_bounds.push(left_bound);
 
                 bitmaps.push(combined_bitmap);
-                if bitmaps.len() != self.level_group_size {
+                if bitmaps.len() != self.level_group_size as usize {
                     return Ok(());
                 }
                 let left_bound = left_bounds.first().unwrap();
@@ -312,8 +296,8 @@ impl<'t> ComputeHigherLevels<'t> {
                     bitmaps.drain(..).zip(left_bounds.drain(..)).zip(group_sizes.drain(..))
                 {
                     let key = FacetGroupKey { field_id: self.field_id, level, left_bound };
-                    let key =
-                        FacetGroupKeyCodec::<ByteSliceRef>::bytes_encode(&key).ok_or(Error::Encoding)?;
+                    let key = FacetGroupKeyCodec::<ByteSliceRef>::bytes_encode(&key)
+                        .ok_or(Error::Encoding)?;
                     let value = FacetGroupValue { size: group_size, bitmap };
                     let value =
                         FacetGroupValueCodec::bytes_encode(&value).ok_or(Error::Encoding)?;
@@ -330,8 +314,8 @@ impl<'t> ComputeHigherLevels<'t> {
                 bitmaps.drain(..).zip(left_bounds.drain(..)).zip(group_sizes.drain(..))
             {
                 let key = FacetGroupKey { field_id: self.field_id, level, left_bound };
-                let key =
-                    FacetGroupKeyCodec::<ByteSliceRef>::bytes_encode(&key).ok_or(Error::Encoding)?;
+                let key = FacetGroupKeyCodec::<ByteSliceRef>::bytes_encode(&key)
+                    .ok_or(Error::Encoding)?;
                 let value = FacetGroupValue { size: group_size, bitmap };
                 let value = FacetGroupValueCodec::bytes_encode(&value).ok_or(Error::Encoding)?;
                 cur_writer.insert(key, value)?;
@@ -340,6 +324,10 @@ impl<'t> ComputeHigherLevels<'t> {
         }
         if cur_writer_len > self.min_level_size {
             sub_writers.push(writer_into_reader(cur_writer)?);
+        } else {
+            if !bitmaps.is_empty() {
+                handle_group(&bitmaps, left_bounds.first().unwrap())?;
+            }
         }
         return Ok(sub_writers);
     }

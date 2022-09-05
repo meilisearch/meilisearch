@@ -5,7 +5,7 @@ use roaring::RoaringBitmap;
 
 use super::{get_first_facet_value, get_highest_level, get_last_facet_value};
 use crate::heed_codec::facet::{
-    FacetGroupValue, FacetGroupValueCodec, FacetGroupKey, FacetGroupKeyCodec, ByteSliceRef,
+    ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
 };
 
 pub fn descending_facet_sort<'t>(
@@ -37,7 +37,9 @@ struct DescendingFacetSort<'t> {
     field_id: u16,
     stack: Vec<(
         RoaringBitmap,
-        std::iter::Take<heed::RoRevRange<'t, FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>>,
+        std::iter::Take<
+            heed::RoRevRange<'t, FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
+        >,
         Bound<&'t [u8]>,
     )>,
 }
@@ -72,7 +74,8 @@ impl<'t> Iterator for DescendingFacetSort<'t> {
                     if level == 0 {
                         return Some(Ok(bitmap));
                     }
-                    let starting_key_below = FacetGroupKey { field_id, level: level - 1, left_bound };
+                    let starting_key_below =
+                        FacetGroupKey { field_id, level: level - 1, left_bound };
 
                     let end_key_kelow = match *right_bound {
                         Bound::Included(right) => Bound::Included(FacetGroupKey {
@@ -89,15 +92,17 @@ impl<'t> Iterator for DescendingFacetSort<'t> {
                     };
                     let prev_right_bound = *right_bound;
                     *right_bound = Bound::Excluded(left_bound);
-                    let iter =
-                        match self.db.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>().rev_range(
+                    let iter = match self
+                        .db
+                        .remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
+                        .rev_range(
                             &self.rtxn,
                             &(Bound::Included(starting_key_below), end_key_kelow),
                         ) {
-                            Ok(iter) => iter,
-                            Err(e) => return Some(Err(e.into())),
-                        }
-                        .take(group_size as usize);
+                        Ok(iter) => iter,
+                        Err(e) => return Some(Err(e.into())),
+                    }
+                    .take(group_size as usize);
 
                     self.stack.push((bitmap, iter, prev_right_bound));
                     continue 'outer;
@@ -114,8 +119,8 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use roaring::RoaringBitmap;
 
-    use crate::heed_codec::facet::ordered_f64_codec::OrderedF64Codec;
-    use crate::heed_codec::facet::{FacetGroupKeyCodec, ByteSliceRef};
+    use crate::heed_codec::facet::OrderedF64Codec;
+    use crate::heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec};
     use crate::milli_snap;
     use crate::search::facet::facet_sort_descending::descending_facet_sort;
     use crate::search::facet::test::FacetIndex;

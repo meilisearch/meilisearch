@@ -4,7 +4,9 @@ use heed::BytesEncode;
 use roaring::RoaringBitmap;
 
 use super::{get_first_facet_value, get_highest_level, get_last_facet_value};
-use crate::heed_codec::facet::{FacetGroupValueCodec, FacetGroupKey, FacetGroupKeyCodec, ByteSliceRef};
+use crate::heed_codec::facet::{
+    ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec,
+};
 use crate::Result;
 
 pub fn find_docids_of_facet_within_bounds<'t, BoundCodec>(
@@ -117,7 +119,8 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
             return self.run_level_0(starting_left_bound, group_size);
         }
 
-        let left_key = FacetGroupKey { field_id: self.field_id, level, left_bound: starting_left_bound };
+        let left_key =
+            FacetGroupKey { field_id: self.field_id, level, left_bound: starting_left_bound };
         let mut iter = self.db.range(&self.rtxn, &(left_key..))?.take(group_size);
 
         let (mut previous_key, mut previous_value) = iter.next().unwrap()?;
@@ -258,8 +261,8 @@ mod tests {
     use roaring::RoaringBitmap;
 
     use super::find_docids_of_facet_within_bounds;
-    use crate::heed_codec::facet::ordered_f64_codec::OrderedF64Codec;
     use crate::heed_codec::facet::FacetGroupKeyCodec;
+    use crate::heed_codec::facet::OrderedF64Codec;
     use crate::milli_snap;
     use crate::search::facet::test::FacetIndex;
     use crate::snapshot_tests::display_bitmap;

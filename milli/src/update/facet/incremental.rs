@@ -3,7 +3,7 @@ use heed::{BytesDecode, Error, RoTxn, RwTxn};
 use roaring::RoaringBitmap;
 
 use crate::heed_codec::facet::{
-    FacetGroupValue, FacetGroupValueCodec, FacetGroupKey, FacetGroupKeyCodec, ByteSliceRef,
+    ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
 };
 use crate::search::facet::get_highest_level;
 use crate::Result;
@@ -20,13 +20,25 @@ enum DeletionResult {
 
 pub struct FacetsUpdateIncremental {
     db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
-    group_size: usize,
-    min_level_size: usize,
-    max_group_size: usize,
+    group_size: u8,
+    min_level_size: u8,
+    max_group_size: u8,
 }
 impl FacetsUpdateIncremental {
     pub fn new(db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>) -> Self {
         Self { db, group_size: 4, min_level_size: 5, max_group_size: 8 }
+    }
+    pub fn group_size(mut self, size: u8) -> Self {
+        self.group_size = size;
+        self
+    }
+    pub fn min_level_size(mut self, size: u8) -> Self {
+        self.min_level_size = size;
+        self
+    }
+    pub fn max_group_size(mut self, size: u8) -> Self {
+        self.max_group_size = size;
+        self
     }
 }
 impl FacetsUpdateIncremental {
@@ -178,12 +190,7 @@ impl FacetsUpdateIncremental {
         let mut updated_value = self.db.get(&txn, &insertion_key.as_ref())?.unwrap();
 
         updated_value.size += 1;
-        if updated_value.size as usize == max_group_size {
-            // need to split it
-            // recompute left element and right element
-            // replace current group by left element
-            // add one more group to the right
-
+        if updated_value.size == max_group_size {
             let size_left = max_group_size / 2;
             let size_right = max_group_size - size_left;
 
@@ -201,7 +208,7 @@ impl FacetsUpdateIncremental {
                 )?
                 .unwrap();
 
-            let mut iter = self.db.range(&txn, &(start_key..))?.take(max_group_size);
+            let mut iter = self.db.range(&txn, &(start_key..))?.take(max_group_size as usize);
 
             let group_left = {
                 let mut values_left = RoaringBitmap::new();
@@ -234,8 +241,11 @@ impl FacetsUpdateIncremental {
                     values_right |= &value.bitmap;
                 }
 
-                let key =
-                    FacetGroupKey { field_id, level, left_bound: right_start_key.unwrap().to_vec() };
+                let key = FacetGroupKey {
+                    field_id,
+                    level,
+                    left_bound: right_start_key.unwrap().to_vec(),
+                };
                 let value = FacetGroupValue { size: size_right as u8, bitmap: values_right };
                 (key, value)
             };
@@ -288,7 +298,7 @@ impl FacetsUpdateIncremental {
             .prefix_iter::<_, ByteSlice, ByteSlice>(&txn, &highest_level_prefix)?
             .count();
 
-        if size_highest_level < self.group_size * self.min_level_size {
+        if size_highest_level < self.group_size as usize * self.min_level_size as usize {
             return Ok(());
         }
 
@@ -438,7 +448,7 @@ impl FacetsUpdateIncremental {
                 .as_polymorph()
                 .prefix_iter::<_, ByteSlice, ByteSlice>(&txn, &highest_level_prefix)?
                 .count()
-                >= self.group_size
+                >= self.min_level_size as usize
         {
             return Ok(());
         }
@@ -450,7 +460,9 @@ impl FacetsUpdateIncremental {
         while let Some(el) = iter.next() {
             let (k, _) = el?;
             to_delete.push(
-                FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(k).ok_or(Error::Encoding)?.into_owned(),
+                FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(k)
+                    .ok_or(Error::Encoding)?
+                    .into_owned(),
             );
         }
         drop(iter);
@@ -469,9 +481,9 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use roaring::RoaringBitmap;
 
-    use crate::heed_codec::facet::ordered_f64_codec::OrderedF64Codec;
-    use crate::heed_codec::facet::str_ref::StrRefCodec;
-    use crate::heed_codec::facet::{FacetGroupValueCodec, FacetGroupKeyCodec, ByteSliceRef};
+    use crate::heed_codec::facet::OrderedF64Codec;
+    use crate::heed_codec::facet::StrRefCodec;
+    use crate::heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec, FacetGroupValueCodec};
     use crate::milli_snap;
     use crate::search::facet::get_highest_level;
     use crate::search::facet::test::FacetIndex;

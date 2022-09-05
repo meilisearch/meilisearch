@@ -3,7 +3,7 @@ use roaring::RoaringBitmap;
 
 use super::{get_first_facet_value, get_highest_level};
 use crate::heed_codec::facet::{
-    FacetGroupValue, FacetGroupValueCodec, FacetGroupKey, FacetGroupKeyCodec, ByteSliceRef,
+    ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
 };
 
 pub fn ascending_facet_sort<'t>(
@@ -86,7 +86,7 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use roaring::RoaringBitmap;
 
-    use crate::heed_codec::facet::ordered_f64_codec::OrderedF64Codec;
+    use crate::heed_codec::facet::OrderedF64Codec;
     use crate::milli_snap;
     use crate::search::facet::facet_sort_ascending::ascending_facet_sort;
     use crate::search::facet::test::FacetIndex;

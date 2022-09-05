@@ -4,7 +4,6 @@ use crate::{
     heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec, FacetGroupValueCodec},
     CboRoaringBitmapCodec, FieldId, Index, Result,
 };
-use grenad::CompressionType;
 use heed::BytesDecode;
 use roaring::RoaringBitmap;
 use std::{collections::HashMap, fs::File};
@@ -42,26 +41,17 @@ impl<'i> FacetsUpdate<'i> {
         }
     }
 
-    // /// The number of elements from the level below that are represented by a single element in the level above
-    // ///
-    // /// This setting is always greater than or equal to 2.
-    // pub fn level_group_size(&mut self, value: u8) -> &mut Self {
-    //     self.level_group_size = std::cmp::max(value, 2);
-    //     self
-    // }
-
-    // /// The minimum number of elements that a level is allowed to have.
-    // pub fn min_level_size(&mut self, value: u8) -> &mut Self {
-    //     self.min_level_size = std::cmp::max(value, 1);
-    //     self
-    // }
-
     pub fn execute(self, wtxn: &mut heed::RwTxn) -> Result<()> {
+        // here, come up with a better condition!
         if self.database.is_empty(wtxn)? {
-            let bulk_update = FacetsUpdateBulk::new(self.index, self.facet_type, self.new_data);
+            let bulk_update = FacetsUpdateBulk::new(self.index, self.facet_type, self.new_data)
+                .level_group_size(self.level_group_size)
+                .min_level_size(self.min_level_size);
             bulk_update.execute(wtxn)?;
         } else {
-            let indexer = FacetsUpdateIncremental::new(self.database);
+            let indexer = FacetsUpdateIncremental::new(self.database)
+                .max_group_size(self.max_level_group_size)
+                .min_level_size(self.min_level_size);
 
             let mut new_faceted_docids = HashMap::<FieldId, RoaringBitmap>::default();
 
