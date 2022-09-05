@@ -6,6 +6,7 @@ use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 
 use super::{Criterion, CriterionParameters, CriterionResult};
+use crate::facet::FacetType;
 use crate::heed_codec::facet::new::{FacetKeyCodec, MyByteSlice};
 use crate::search::criteria::{resolve_query_tree, CriteriaBuilder};
 use crate::search::facet::facet_sort_ascending::ascending_facet_sort;
@@ -62,8 +63,10 @@ impl<'t> AscDesc<'t> {
         let field_id = fields_ids_map.id(&field_name);
         let faceted_candidates = match field_id {
             Some(field_id) => {
-                let number_faceted = index.number_faceted_documents_ids(rtxn, field_id)?;
-                let string_faceted = index.string_faceted_documents_ids(rtxn, field_id)?;
+                let number_faceted =
+                    index.faceted_documents_ids(rtxn, field_id, FacetType::Number)?;
+                let string_faceted =
+                    index.faceted_documents_ids(rtxn, field_id, FacetType::String)?;
                 number_faceted | string_faceted
             }
             None => RoaringBitmap::default(),

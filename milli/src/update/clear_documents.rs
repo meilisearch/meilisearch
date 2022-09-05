@@ -1,7 +1,7 @@
 use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 
-use crate::{ExternalDocumentsIds, FieldDistribution, Index, Result};
+use crate::{facet::FacetType, ExternalDocumentsIds, FieldDistribution, Index, Result};
 
 pub struct ClearDocuments<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -55,8 +55,18 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
 
         // We clean all the faceted documents ids.
         for field_id in faceted_fields {
-            self.index.put_number_faceted_documents_ids(self.wtxn, field_id, &empty_roaring)?;
-            self.index.put_string_faceted_documents_ids(self.wtxn, field_id, &empty_roaring)?;
+            self.index.put_faceted_documents_ids(
+                self.wtxn,
+                field_id,
+                FacetType::Number,
+                &empty_roaring,
+            )?;
+            self.index.put_faceted_documents_ids(
+                self.wtxn,
+                field_id,
+                FacetType::String,
+                &empty_roaring,
+            )?;
         }
 
         // Clear the other databases.
