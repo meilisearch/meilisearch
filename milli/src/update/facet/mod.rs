@@ -1,12 +1,9 @@
-use super::{FacetsUpdateBulk, FacetsUpdateIncremental};
-use crate::{
-    facet::FacetType,
-    heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec, FacetGroupValueCodec},
-    CboRoaringBitmapCodec, FieldId, Index, Result,
-};
-use heed::BytesDecode;
-use roaring::RoaringBitmap;
-use std::{collections::HashMap, fs::File};
+use self::incremental::FacetsUpdateIncremental;
+use super::FacetsUpdateBulk;
+use crate::facet::FacetType;
+use crate::heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec, FacetGroupValueCodec};
+use crate::{Index, Result};
+use std::fs::File;
 
 pub mod bulk;
 pub mod incremental;
@@ -14,11 +11,13 @@ pub mod incremental;
 pub struct FacetsUpdate<'i> {
     index: &'i Index,
     database: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
+    facet_type: FacetType,
+    new_data: grenad::Reader<File>,
+    // Options:
+    // there's no way to change these for now
     level_group_size: u8,
     max_level_group_size: u8,
     min_level_size: u8,
-    facet_type: FacetType,
-    new_data: grenad::Reader<File>,
 }
 impl<'i> FacetsUpdate<'i> {
     pub fn new(index: &'i Index, facet_type: FacetType, new_data: grenad::Reader<File>) -> Self {
@@ -42,36 +41,37 @@ impl<'i> FacetsUpdate<'i> {
     }
 
     pub fn execute(self, wtxn: &mut heed::RwTxn) -> Result<()> {
+        if self.new_data.is_empty() {
+            return Ok(());
+        }
         // here, come up with a better condition!
-        if self.database.is_empty(wtxn)? {
+        // ideally we'd choose which method to use for each field id individually
+        // but I dont' think it's worth the effort yet
+        // As a first requirement, we ask that the length of the new data is less
+        // than a 1/50th of the length of the database in order to use the incremental
+        // method.
+        if self.new_data.len() >= (self.database.len(wtxn)? as u64 / 50) {
             let bulk_update = FacetsUpdateBulk::new(self.index, self.facet_type, self.new_data)
                 .level_group_size(self.level_group_size)
                 .min_level_size(self.min_level_size);
             bulk_update.execute(wtxn)?;
         } else {
-            let indexer = FacetsUpdateIncremental::new(self.database)
-                .max_group_size(self.max_level_group_size)
-                .min_level_size(self.min_level_size);
-
-            let mut new_faceted_docids = HashMap::<FieldId, RoaringBitmap>::default();
-
-            let mut cursor = self.new_data.into_cursor()?;
-            while let Some((key, value)) = cursor.move_on_next()? {
-                let key = FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(key)
-                    .ok_or(heed::Error::Encoding)?;
-                let docids =
-                    CboRoaringBitmapCodec::bytes_decode(value).ok_or(heed::Error::Encoding)?;
-                indexer.insert(wtxn, key.field_id, key.left_bound, &docids)?;
-                *new_faceted_docids.entry(key.field_id).or_default() |= docids;
-            }
-
-            for (field_id, new_docids) in new_faceted_docids {
-                let mut docids =
-                    self.index.faceted_documents_ids(wtxn, field_id, self.facet_type)?;
-                docids |= new_docids;
-                self.index.put_faceted_documents_ids(wtxn, field_id, self.facet_type, &docids)?;
-            }
+            let incremental_update =
+                FacetsUpdateIncremental::new(self.index, self.facet_type, self.new_data)
+                    .group_size(self.level_group_size)
+                    .max_group_size(self.max_level_group_size)
+                    .min_level_size(self.min_level_size);
+            incremental_update.execute(wtxn)?;
         }
         Ok(())
     }
+}
+
+#[cfg(test)]
+mod tests {
+    // here I want to create a benchmark
+    // to find out at which point it is faster to do it incrementally
+
+    #[test]
+    fn update() {}
 }

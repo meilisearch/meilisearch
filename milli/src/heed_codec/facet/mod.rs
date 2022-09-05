@@ -3,17 +3,19 @@ mod field_doc_id_facet_string_codec;
 mod ordered_f64_codec;
 mod str_ref;
 
+use std::borrow::Cow;
+use std::convert::TryFrom;
+use std::marker::PhantomData;
+
+use heed::types::OwnedType;
+use heed::{BytesDecode, BytesEncode};
+use roaring::RoaringBitmap;
+
 pub use self::field_doc_id_facet_f64_codec::FieldDocIdFacetF64Codec;
 pub use self::field_doc_id_facet_string_codec::FieldDocIdFacetStringCodec;
 pub use self::ordered_f64_codec::OrderedF64Codec;
 pub use self::str_ref::StrRefCodec;
 use crate::{CboRoaringBitmapCodec, BEU16};
-use heed::types::OwnedType;
-use heed::{BytesDecode, BytesEncode};
-use roaring::RoaringBitmap;
-use std::borrow::Cow;
-use std::convert::TryFrom;
-use std::marker::PhantomData;
 
 pub type FieldIdCodec = OwnedType<BEU16>;
 

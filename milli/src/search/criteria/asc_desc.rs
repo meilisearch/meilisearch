@@ -7,7 +7,7 @@ use roaring::RoaringBitmap;
 
 use super::{Criterion, CriterionParameters, CriterionResult};
 use crate::facet::FacetType;
-use crate::heed_codec::facet::{FacetGroupKeyCodec, ByteSliceRef};
+use crate::heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec};
 use crate::search::criteria::{resolve_query_tree, CriteriaBuilder};
 use crate::search::facet::facet_sort_ascending::ascending_facet_sort;
 use crate::search::facet::facet_sort_descending::descending_facet_sort;

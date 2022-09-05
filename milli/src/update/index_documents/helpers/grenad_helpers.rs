@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{self, Seek, SeekFrom};
 use std::time::Instant;
 
-use grenad::{CompressionType, Reader, Sorter};
+use grenad::{CompressionType, Sorter};
 use heed::types::ByteSlice;
 use log::debug;
 
@@ -206,36 +206,6 @@ pub fn grenad_obkv_into_chunks<R: io::Read + io::Seek>(
     };
 
     Ok(std::iter::from_fn(move || transposer().transpose()))
-}
-
-pub fn write_into_lmdb_database(
-    wtxn: &mut heed::RwTxn,
-    database: heed::PolyDatabase,
-    reader: Reader<File>,
-    merge: MergeFn,
-) -> Result<()> {
-    debug!("Writing MTBL stores...");
-    let before = Instant::now();
-
-    let mut cursor = reader.into_cursor()?;
-    while let Some((k, v)) = cursor.move_on_next()? {
-        let mut iter = database.prefix_iter_mut::<_, ByteSlice, ByteSlice>(wtxn, k)?;
-        match iter.next().transpose()? {
-            Some((key, old_val)) if key == k => {
-                let vals = &[Cow::Borrowed(old_val), Cow::Borrowed(v)][..];
-                let val = merge(k, vals)?;
-                // safety: we don't keep references from inside the LMDB database.
-                unsafe { iter.put_current(k, &val)? };
-            }
-            _ => {
-                drop(iter);
-                database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?;
-            }
-        }
-    }
-
-    debug!("MTBL stores merged in {:.02?}!", before.elapsed());
-    Ok(())
 }
 
 pub fn sorter_into_lmdb_database(

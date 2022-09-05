@@ -5,7 +5,7 @@ use std::path::Path;
 use roaring::RoaringBitmap;
 
 use crate::facet::FacetType;
-use crate::heed_codec::facet::{FacetGroupValue, FacetGroupKey};
+use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::{make_db_snap_from_iter, ExternalDocumentsIds, Index};
 
 #[track_caller]

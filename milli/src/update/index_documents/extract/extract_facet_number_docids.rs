@@ -6,9 +6,9 @@ use heed::{BytesDecode, BytesEncode};
 use super::helpers::{
     create_sorter, merge_cbo_roaring_bitmaps, sorter_into_reader, GrenadParameters,
 };
-use crate::heed_codec::facet::FieldDocIdFacetF64Codec;
-use crate::heed_codec::facet::OrderedF64Codec;
-use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
+use crate::heed_codec::facet::{
+    FacetGroupKey, FacetGroupKeyCodec, FieldDocIdFacetF64Codec, OrderedF64Codec,
+};
 use crate::Result;
 
 /// Extracts the facet number and the documents ids where this facet number appear.

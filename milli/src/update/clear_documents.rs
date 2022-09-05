@@ -1,7 +1,8 @@
 use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 
-use crate::{facet::FacetType, ExternalDocumentsIds, FieldDistribution, Index, Result};
+use crate::facet::FacetType;
+use crate::{ExternalDocumentsIds, FieldDistribution, Index, Result};
 
 pub struct ClearDocuments<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,

@@ -11,7 +11,7 @@ use time::OffsetDateTime;
 use super::{ClearDocuments, FacetsUpdateBulk};
 use crate::error::{InternalError, UserError};
 use crate::facet::FacetType;
-use crate::heed_codec::facet::{FacetGroupValueCodec, FacetGroupKeyCodec, ByteSliceRef};
+use crate::heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec, FacetGroupValueCodec};
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::index::{db_name, main_key};
 use crate::{

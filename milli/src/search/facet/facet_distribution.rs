@@ -8,10 +8,10 @@ use roaring::RoaringBitmap;
 
 use crate::error::UserError;
 use crate::facet::FacetType;
-use crate::heed_codec::facet::OrderedF64Codec;
-use crate::heed_codec::facet::StrRefCodec;
-use crate::heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec, FacetGroupValueCodec};
-use crate::heed_codec::facet::{FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec};
+use crate::heed_codec::facet::{
+    ByteSliceRef, FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec,
+    FieldDocIdFacetStringCodec, OrderedF64Codec, StrRefCodec,
+};
 use crate::search::facet::facet_distribution_iter;
 use crate::{FieldId, Index, Result};
 

@@ -3,7 +3,7 @@ use heed::{BytesDecode, RoTxn};
 
 pub use self::facet_distribution::{FacetDistribution, DEFAULT_VALUES_PER_FACET};
 pub use self::filter::Filter;
-use crate::heed_codec::facet::{FacetGroupValueCodec, FacetGroupKeyCodec, ByteSliceRef};
+use crate::heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec, FacetGroupValueCodec};
 
 mod facet_distribution;
 mod facet_distribution_iter;
@@ -27,8 +27,8 @@ where
         db.as_polymorph().prefix_iter::<_, ByteSlice, ByteSlice>(txn, level0prefix.as_slice())?;
     if let Some(first) = level0_iter_forward.next() {
         let (first_key, _) = first?;
-        let first_key =
-            FacetGroupKeyCodec::<BoundCodec>::bytes_decode(first_key).ok_or(heed::Error::Encoding)?;
+        let first_key = FacetGroupKeyCodec::<BoundCodec>::bytes_decode(first_key)
+            .ok_or(heed::Error::Encoding)?;
         Ok(Some(first_key.left_bound))
     } else {
         Ok(None)
@@ -50,8 +50,8 @@ where
         .rev_prefix_iter::<_, ByteSlice, ByteSlice>(txn, level0prefix.as_slice())?;
     if let Some(last) = level0_iter_backward.next() {
         let (last_key, _) = last?;
-        let last_key =
-            FacetGroupKeyCodec::<BoundCodec>::bytes_decode(last_key).ok_or(heed::Error::Encoding)?;
+        let last_key = FacetGroupKeyCodec::<BoundCodec>::bytes_decode(last_key)
+            .ok_or(heed::Error::Encoding)?;
         Ok(Some(last_key.left_bound))
     } else {
         Ok(None)
@@ -85,11 +85,12 @@ pub mod test {
     use roaring::RoaringBitmap;
 
     use crate::heed_codec::facet::{
-        FacetGroupValue, FacetGroupValueCodec, FacetGroupKey, FacetGroupKeyCodec, ByteSliceRef,
+        ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
     };
     use crate::snapshot_tests::display_bitmap;
-    use crate::update::FacetsUpdateIncremental;
+    use crate::update::FacetsUpdateIncrementalInner;
 
+    // A dummy index that only contains the facet database, used for testing
     pub struct FacetIndex<BoundCodec>
     where
         for<'a> BoundCodec:
@@ -100,10 +101,12 @@ pub mod test {
         _phantom: PhantomData<BoundCodec>,
     }
 
+    // The faecet database and its settings
     pub struct Database {
         pub content: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
-        pub group_size: usize,
-        pub max_group_size: usize,
+        pub group_size: u8,
+        pub min_level_size: u8,
+        pub max_group_size: u8,
         _tempdir: Rc<tempfile::TempDir>,
     }
 
@@ -117,9 +120,12 @@ pub mod test {
             tempdir: Rc<tempfile::TempDir>,
             group_size: u8,
             max_group_size: u8,
+            min_level_size: u8,
         ) -> FacetIndex<BoundCodec> {
-            let group_size = std::cmp::min(127, std::cmp::max(group_size, 2)) as usize;
-            let max_group_size = std::cmp::max(group_size * 2, max_group_size as usize);
+            let group_size = std::cmp::min(127, std::cmp::max(group_size, 2)); // 2 <= x <= 127
+            let max_group_size = std::cmp::min(127, std::cmp::max(group_size * 2, max_group_size)); // 2*group_size <= x <= 127
+            let min_level_size = std::cmp::max(1, min_level_size); // 1 <= x <= inf
+
             let mut options = heed::EnvOpenOptions::new();
             let options = options.map_size(4096 * 4 * 10 * 100);
             unsafe {
@@ -129,14 +135,25 @@ pub mod test {
             let content = env.open_database(None).unwrap().unwrap();
 
             FacetIndex {
-                db: Database { content, group_size, max_group_size, _tempdir: tempdir },
+                db: Database {
+                    content,
+                    group_size,
+                    max_group_size,
+                    min_level_size,
+                    _tempdir: tempdir,
+                },
                 env,
                 _phantom: PhantomData,
             }
         }
-        pub fn new(group_size: u8, max_group_size: u8) -> FacetIndex<BoundCodec> {
-            let group_size = std::cmp::min(127, std::cmp::max(group_size, 2)) as usize;
-            let max_group_size = std::cmp::max(group_size * 2, max_group_size as usize);
+        pub fn new(
+            group_size: u8,
+            max_group_size: u8,
+            min_level_size: u8,
+        ) -> FacetIndex<BoundCodec> {
+            let group_size = std::cmp::min(127, std::cmp::max(group_size, 2)); // 2 <= x <= 127
+            let max_group_size = std::cmp::min(127, std::cmp::max(group_size * 2, max_group_size)); // 2*group_size <= x <= 127
+            let min_level_size = std::cmp::max(1, min_level_size); // 1 <= x <= inf
             let mut options = heed::EnvOpenOptions::new();
             let options = options.map_size(4096 * 4 * 100);
             let tempdir = tempfile::TempDir::new().unwrap();
@@ -144,7 +161,13 @@ pub mod test {
             let content = env.create_database(None).unwrap();
 
             FacetIndex {
-                db: Database { content, group_size, max_group_size, _tempdir: Rc::new(tempdir) },
+                db: Database {
+                    content,
+                    group_size,
+                    max_group_size,
+                    min_level_size,
+                    _tempdir: Rc::new(tempdir),
+                },
                 env,
                 _phantom: PhantomData,
             }
@@ -156,7 +179,7 @@ pub mod test {
             key: &'a <BoundCodec as BytesEncode<'a>>::EItem,
             docids: &RoaringBitmap,
         ) {
-            let update = FacetsUpdateIncremental::new(self.db.content);
+            let update = FacetsUpdateIncrementalInner::new(self.db.content);
             let key_bytes = BoundCodec::bytes_encode(&key).unwrap();
             update.insert(rwtxn, field_id, &key_bytes, docids).unwrap();
         }
@@ -167,7 +190,7 @@ pub mod test {
             key: &'a <BoundCodec as BytesEncode<'a>>::EItem,
             value: u32,
         ) {
-            let update = FacetsUpdateIncremental::new(self.db.content);
+            let update = FacetsUpdateIncrementalInner::new(self.db.content);
             let key_bytes = BoundCodec::bytes_encode(&key).unwrap();
             update.delete(rwtxn, field_id, &key_bytes, value).unwrap();
         }

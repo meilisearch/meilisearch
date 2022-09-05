@@ -1,12 +1,16 @@
+use std::collections::HashMap;
+use std::fs::File;
+
 use heed::types::ByteSlice;
 use heed::{BytesDecode, Error, RoTxn, RwTxn};
 use roaring::RoaringBitmap;
 
+use crate::facet::FacetType;
 use crate::heed_codec::facet::{
     ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
 };
 use crate::search::facet::get_highest_level;
-use crate::Result;
+use crate::{CboRoaringBitmapCodec, FieldId, Index, Result};
 
 enum InsertionResult {
     InPlace,
@@ -18,30 +22,79 @@ enum DeletionResult {
     Remove { prev: Option<Vec<u8>>, next: Option<Vec<u8>> },
 }
 
-pub struct FacetsUpdateIncremental {
+pub struct FacetsUpdateIncremental<'i> {
+    index: &'i Index,
+    inner: FacetsUpdateIncrementalInner,
+    facet_type: FacetType,
+    new_data: grenad::Reader<File>,
+}
+
+impl<'i> FacetsUpdateIncremental<'i> {
+    pub fn new(index: &'i Index, facet_type: FacetType, new_data: grenad::Reader<File>) -> Self {
+        FacetsUpdateIncremental {
+            index,
+            inner: FacetsUpdateIncrementalInner {
+                db: match facet_type {
+                    FacetType::String => index
+                        .facet_id_string_docids
+                        .remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>(),
+                    FacetType::Number => index
+                        .facet_id_f64_docids
+                        .remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>(),
+                },
+                group_size: 4,
+                max_group_size: 8,
+                min_level_size: 5,
+            },
+            facet_type,
+            new_data,
+        }
+    }
+    pub fn group_size(mut self, size: u8) -> Self {
+        self.inner.group_size = size;
+        self
+    }
+    pub fn min_level_size(mut self, size: u8) -> Self {
+        self.inner.min_level_size = size;
+        self
+    }
+    pub fn max_group_size(mut self, size: u8) -> Self {
+        self.inner.max_group_size = size;
+        self
+    }
+    pub fn execute(self, wtxn: &'i mut RwTxn) -> crate::Result<()> {
+        let mut new_faceted_docids = HashMap::<FieldId, RoaringBitmap>::default();
+
+        let mut cursor = self.new_data.into_cursor()?;
+        while let Some((key, value)) = cursor.move_on_next()? {
+            let key = FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(key)
+                .ok_or(heed::Error::Encoding)?;
+            let docids = CboRoaringBitmapCodec::bytes_decode(value).ok_or(heed::Error::Encoding)?;
+            self.inner.insert(wtxn, key.field_id, key.left_bound, &docids)?;
+            *new_faceted_docids.entry(key.field_id).or_default() |= docids;
+        }
+
+        for (field_id, new_docids) in new_faceted_docids {
+            let mut docids = self.index.faceted_documents_ids(wtxn, field_id, self.facet_type)?;
+            docids |= new_docids;
+            self.index.put_faceted_documents_ids(wtxn, field_id, self.facet_type, &docids)?;
+        }
+        Ok(())
+    }
+}
+
+pub struct FacetsUpdateIncrementalInner {
     db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
     group_size: u8,
     min_level_size: u8,
     max_group_size: u8,
 }
-impl FacetsUpdateIncremental {
+impl FacetsUpdateIncrementalInner {
     pub fn new(db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>) -> Self {
         Self { db, group_size: 4, min_level_size: 5, max_group_size: 8 }
     }
-    pub fn group_size(mut self, size: u8) -> Self {
-        self.group_size = size;
-        self
-    }
-    pub fn min_level_size(mut self, size: u8) -> Self {
-        self.min_level_size = size;
-        self
-    }
-    pub fn max_group_size(mut self, size: u8) -> Self {
-        self.max_group_size = size;
-        self
-    }
 }
-impl FacetsUpdateIncremental {
+impl FacetsUpdateIncrementalInner {
     fn find_insertion_key_value(
         &self,
         field_id: u16,
@@ -481,9 +534,9 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use roaring::RoaringBitmap;
 
-    use crate::heed_codec::facet::OrderedF64Codec;
-    use crate::heed_codec::facet::StrRefCodec;
-    use crate::heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec, FacetGroupValueCodec};
+    use crate::heed_codec::facet::{
+        ByteSliceRef, FacetGroupKeyCodec, FacetGroupValueCodec, OrderedF64Codec, StrRefCodec,
+    };
     use crate::milli_snap;
     use crate::search::facet::get_highest_level;
     use crate::search::facet::test::FacetIndex;
@@ -534,7 +587,7 @@ mod tests {
                     FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(&key_bytes).unwrap()
                 };
 
-                assert!(value.size > 0 && (value.size as usize) < db.max_group_size);
+                assert!(value.size > 0 && value.size < db.max_group_size);
 
                 let mut actual_size = 0;
                 let mut values_below = RoaringBitmap::new();
@@ -553,7 +606,7 @@ mod tests {
     }
     #[test]
     fn append() {
-        let index = FacetIndex::<OrderedF64Codec>::new(4, 8);
+        let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
         for i in 0..256u16 {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(i as u32);
@@ -566,7 +619,7 @@ mod tests {
     }
     #[test]
     fn many_field_ids_append() {
-        let index = FacetIndex::<OrderedF64Codec>::new(4, 8);
+        let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
         for i in 0..256u16 {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(i as u32);
@@ -595,7 +648,7 @@ mod tests {
     }
     #[test]
     fn many_field_ids_prepend() {
-        let index = FacetIndex::<OrderedF64Codec>::new(4, 8);
+        let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
         for i in (0..256).into_iter().rev() {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(i as u32);
@@ -625,7 +678,7 @@ mod tests {
 
     #[test]
     fn prepend() {
-        let index = FacetIndex::<OrderedF64Codec>::new(4, 8);
+        let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
         let mut txn = index.env.write_txn().unwrap();
 
         for i in (0..256).into_iter().rev() {
@@ -640,7 +693,7 @@ mod tests {
 
     #[test]
     fn shuffled() {
-        let index = FacetIndex::<OrderedF64Codec>::new(4, 8);
+        let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
         let mut txn = index.env.write_txn().unwrap();
 
         let mut keys = (0..256).into_iter().collect::<Vec<_>>();
@@ -659,7 +712,7 @@ mod tests {
 
     #[test]
     fn merge_values() {
-        let index = FacetIndex::<OrderedF64Codec>::new(4, 8);
+        let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
 
         let mut keys = (0..256).into_iter().collect::<Vec<_>>();
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
@@ -680,7 +733,7 @@ mod tests {
 
     #[test]
     fn delete_from_end() {
-        let index = FacetIndex::<OrderedF64Codec>::new(4, 8);
+        let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
         for i in 0..256 {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(i);
@@ -745,7 +798,7 @@ mod tests {
 
     #[test]
     fn delete_from_start() {
-        let index = FacetIndex::<OrderedF64Codec>::new(4, 8);
+        let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
 
         for i in 0..256 {
             let mut bitmap = RoaringBitmap::new();
@@ -783,7 +836,7 @@ mod tests {
 
     #[test]
     fn delete_shuffled() {
-        let index = FacetIndex::<OrderedF64Codec>::new(4, 8);
+        let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
 
         for i in 0..256 {
             let mut bitmap = RoaringBitmap::new();
@@ -829,7 +882,7 @@ mod tests {
 
     #[test]
     fn in_place_level0_insert() {
-        let index = FacetIndex::<OrderedF64Codec>::new(4, 8);
+        let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
         let mut keys = (0..16).into_iter().collect::<Vec<_>>();
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
         keys.shuffle(&mut rng);
@@ -849,7 +902,7 @@ mod tests {
 
     #[test]
     fn in_place_level0_delete() {
-        let index = FacetIndex::<OrderedF64Codec>::new(4, 8);
+        let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
 
         let mut keys = (0..64).into_iter().collect::<Vec<_>>();
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
@@ -879,7 +932,7 @@ mod tests {
 
     #[test]
     fn shuffle_merge_string_and_delete() {
-        let index = FacetIndex::<StrRefCodec>::new(4, 8);
+        let index = FacetIndex::<StrRefCodec>::new(4, 8, 5);
 
         let mut keys = (1000..1064).into_iter().collect::<Vec<_>>();
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);

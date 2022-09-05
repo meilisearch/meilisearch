@@ -93,7 +93,7 @@ mod tests {
     use crate::snapshot_tests::display_bitmap;
 
     fn get_simple_index() -> FacetIndex<OrderedF64Codec> {
-        let index = FacetIndex::<OrderedF64Codec>::new(4, 8);
+        let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
         let mut txn = index.env.write_txn().unwrap();
         for i in 0..256u16 {
             let mut bitmap = RoaringBitmap::new();
@@ -104,7 +104,7 @@ mod tests {
         index
     }
     fn get_random_looking_index() -> FacetIndex<OrderedF64Codec> {
-        let index = FacetIndex::<OrderedF64Codec>::new(4, 8);
+        let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
         let mut txn = index.env.write_txn().unwrap();
 
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);

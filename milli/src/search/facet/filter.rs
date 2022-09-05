@@ -9,8 +9,9 @@ use roaring::RoaringBitmap;
 
 use super::facet_range_search;
 use crate::error::{Error, UserError};
-use crate::heed_codec::facet::OrderedF64Codec;
-use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec};
+use crate::heed_codec::facet::{
+    FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec, OrderedF64Codec,
+};
 use crate::{distance_between_two_points, lat_lng_to_xyz, FieldId, Index, Result};
 
 /// The maximum number of filters the filter AST can process.

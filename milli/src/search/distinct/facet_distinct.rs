@@ -6,8 +6,7 @@ use roaring::RoaringBitmap;
 
 use super::{Distinct, DocIter};
 use crate::error::InternalError;
-use crate::heed_codec::facet::FacetGroupKey;
-use crate::heed_codec::facet::*;
+use crate::heed_codec::facet::{FacetGroupKey, *};
 use crate::index::db_name;
 use crate::{DocumentId, FieldId, Index, Result};
 
