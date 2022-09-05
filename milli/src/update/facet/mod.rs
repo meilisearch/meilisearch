@@ -1,23 +1,20 @@
-use std::{collections::HashMap, fs::File};
-
+use super::{FacetsUpdateBulk, FacetsUpdateIncremental};
+use crate::{
+    facet::FacetType,
+    heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec, FacetGroupValueCodec},
+    CboRoaringBitmapCodec, FieldId, Index, Result,
+};
 use grenad::CompressionType;
 use heed::BytesDecode;
 use roaring::RoaringBitmap;
-
-use crate::{
-    facet::FacetType,
-    heed_codec::facet::new::{FacetGroupValueCodec, FacetKeyCodec, MyByteSlice},
-    CboRoaringBitmapCodec, FieldId, Index, Result,
-};
-
-use super::{FacetsUpdateBulk, FacetsUpdateIncremental};
+use std::{collections::HashMap, fs::File};
 
 pub mod bulk;
 pub mod incremental;
 
 pub struct FacetsUpdate<'i> {
     index: &'i Index,
-    database: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
+    database: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
     level_group_size: u8,
     max_level_group_size: u8,
     min_level_size: u8,
@@ -28,10 +25,10 @@ impl<'i> FacetsUpdate<'i> {
     pub fn new(index: &'i Index, facet_type: FacetType, new_data: grenad::Reader<File>) -> Self {
         let database = match facet_type {
             FacetType::String => {
-                index.facet_id_string_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>()
+                index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
             }
             FacetType::Number => {
-                index.facet_id_f64_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>()
+                index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
             }
         };
         Self {
@@ -70,8 +67,8 @@ impl<'i> FacetsUpdate<'i> {
 
             let mut cursor = self.new_data.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
-                let key =
-                    FacetKeyCodec::<MyByteSlice>::bytes_decode(key).ok_or(heed::Error::Encoding)?;
+                let key = FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(key)
+                    .ok_or(heed::Error::Encoding)?;
                 let docids =
                     CboRoaringBitmapCodec::bytes_decode(value).ok_or(heed::Error::Encoding)?;
                 indexer.insert(wtxn, key.field_id, key.left_bound, &docids)?;

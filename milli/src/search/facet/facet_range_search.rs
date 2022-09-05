@@ -4,12 +4,12 @@ use heed::BytesEncode;
 use roaring::RoaringBitmap;
 
 use super::{get_first_facet_value, get_highest_level, get_last_facet_value};
-use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice};
+use crate::heed_codec::facet::{FacetGroupValueCodec, FacetGroupKey, FacetGroupKeyCodec, ByteSliceRef};
 use crate::Result;
 
 pub fn find_docids_of_facet_within_bounds<'t, BoundCodec>(
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetKeyCodec<BoundCodec>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<BoundCodec>, FacetGroupValueCodec>,
     field_id: u16,
     left: &'t Bound<<BoundCodec as BytesEncode<'t>>::EItem>,
     right: &'t Bound<<BoundCodec as BytesEncode<'t>>::EItem>,
@@ -42,13 +42,13 @@ where
         }
         Bound::Unbounded => Bound::Unbounded,
     };
-    let db = db.remap_key_type::<FacetKeyCodec<MyByteSlice>>();
+    let db = db.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>();
     let mut docids = RoaringBitmap::new();
     let mut f = FacetRangeSearch { rtxn, db, field_id, left, right, docids: &mut docids };
     let highest_level = get_highest_level(rtxn, db, field_id)?;
 
-    if let Some(first_bound) = get_first_facet_value::<MyByteSlice>(rtxn, db, field_id)? {
-        let last_bound = get_last_facet_value::<MyByteSlice>(rtxn, db, field_id)?.unwrap();
+    if let Some(first_bound) = get_first_facet_value::<ByteSliceRef>(rtxn, db, field_id)? {
+        let last_bound = get_last_facet_value::<ByteSliceRef>(rtxn, db, field_id)?.unwrap();
         f.run(highest_level, first_bound, Bound::Included(last_bound), usize::MAX)?;
         Ok(docids)
     } else {
@@ -59,7 +59,7 @@ where
 /// Fetch the document ids that have a facet with a value between the two given bounds
 struct FacetRangeSearch<'t, 'b, 'bitmap> {
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
     field_id: u16,
     left: Bound<&'b [u8]>,
     right: Bound<&'b [u8]>,
@@ -68,7 +68,7 @@ struct FacetRangeSearch<'t, 'b, 'bitmap> {
 impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
     fn run_level_0(&mut self, starting_left_bound: &'t [u8], group_size: usize) -> Result<()> {
         let left_key =
-            FacetKey { field_id: self.field_id, level: 0, left_bound: starting_left_bound };
+            FacetGroupKey { field_id: self.field_id, level: 0, left_bound: starting_left_bound };
         let iter = self.db.range(&self.rtxn, &(left_key..))?.take(group_size);
         for el in iter {
             let (key, value) = el?;
@@ -117,7 +117,7 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
             return self.run_level_0(starting_left_bound, group_size);
         }
 
-        let left_key = FacetKey { field_id: self.field_id, level, left_bound: starting_left_bound };
+        let left_key = FacetGroupKey { field_id: self.field_id, level, left_bound: starting_left_bound };
         let mut iter = self.db.range(&self.rtxn, &(left_key..))?.take(group_size);
 
         let (mut previous_key, mut previous_value) = iter.next().unwrap()?;
@@ -258,8 +258,8 @@ mod tests {
     use roaring::RoaringBitmap;
 
     use super::find_docids_of_facet_within_bounds;
-    use crate::heed_codec::facet::new::ordered_f64_codec::OrderedF64Codec;
-    use crate::heed_codec::facet::new::FacetKeyCodec;
+    use crate::heed_codec::facet::ordered_f64_codec::OrderedF64Codec;
+    use crate::heed_codec::facet::FacetGroupKeyCodec;
     use crate::milli_snap;
     use crate::search::facet::test::FacetIndex;
     use crate::snapshot_tests::display_bitmap;
@@ -310,7 +310,7 @@ mod tests {
                 let end = Bound::Included(i);
                 let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
-                    index.db.content.remap_key_type::<FacetKeyCodec<OrderedF64Codec>>(),
+                    index.db.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,
@@ -326,7 +326,7 @@ mod tests {
                 let end = Bound::Excluded(i);
                 let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
-                    index.db.content.remap_key_type::<FacetKeyCodec<OrderedF64Codec>>(),
+                    index.db.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,
@@ -352,7 +352,7 @@ mod tests {
                 let end = Bound::Included(255.);
                 let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
-                    index.db.content.remap_key_type::<FacetKeyCodec<OrderedF64Codec>>(),
+                    index.db.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,
@@ -371,7 +371,7 @@ mod tests {
                 let end = Bound::Excluded(255.);
                 let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
-                    index.db.content.remap_key_type::<FacetKeyCodec<OrderedF64Codec>>(),
+                    index.db.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,
@@ -399,7 +399,7 @@ mod tests {
                 let end = Bound::Included(255. - i);
                 let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
-                    index.db.content.remap_key_type::<FacetKeyCodec<OrderedF64Codec>>(),
+                    index.db.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,
@@ -418,7 +418,7 @@ mod tests {
                 let end = Bound::Excluded(255. - i);
                 let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
-                    index.db.content.remap_key_type::<FacetKeyCodec<OrderedF64Codec>>(),
+                    index.db.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,

@@ -14,15 +14,10 @@ use time::OffsetDateTime;
 use crate::error::{InternalError, UserError};
 use crate::facet::FacetType;
 use crate::fields_ids_map::FieldsIdsMap;
-use crate::heed_codec::facet::new::ordered_f64_codec::OrderedF64Codec;
-use crate::heed_codec::facet::new::str_ref::StrRefCodec;
-use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKeyCodec};
-use crate::heed_codec::facet::{
-    // FacetLevelValueF64Codec, FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec,
-    FieldDocIdFacetF64Codec,
-    FieldDocIdFacetStringCodec,
-    FieldIdCodec,
-};
+use crate::heed_codec::facet::OrderedF64Codec;
+use crate::heed_codec::facet::StrRefCodec;
+use crate::heed_codec::facet::{FacetGroupValueCodec, FacetGroupKeyCodec};
+use crate::heed_codec::facet::{FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec, FieldIdCodec};
 use crate::{
     default_criteria, BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec, Criterion,
     DocumentId, ExternalDocumentsIds, FacetDistribution, FieldDistribution, FieldId,
@@ -130,9 +125,9 @@ pub struct Index {
     pub facet_id_exists_docids: Database<FieldIdCodec, CboRoaringBitmapCodec>,
 
     /// Maps the facet field id and ranges of numbers with the docids that corresponds to them.
-    pub facet_id_f64_docids: Database<FacetKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>,
+    pub facet_id_f64_docids: Database<FacetGroupKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>,
     /// Maps the facet field id and ranges of strings with the docids that corresponds to them.
-    pub facet_id_string_docids: Database<FacetKeyCodec<StrRefCodec>, FacetGroupValueCodec>,
+    pub facet_id_string_docids: Database<FacetGroupKeyCodec<StrRefCodec>, FacetGroupValueCodec>,
 
     /// Maps the document id, the facet field id and the numbers.
     pub field_id_docid_facet_f64s: Database<FieldDocIdFacetF64Codec, Unit>,

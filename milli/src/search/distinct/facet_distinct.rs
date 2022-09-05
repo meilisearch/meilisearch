@@ -6,7 +6,7 @@ use roaring::RoaringBitmap;
 
 use super::{Distinct, DocIter};
 use crate::error::InternalError;
-use crate::heed_codec::facet::new::FacetKey;
+use crate::heed_codec::facet::FacetGroupKey;
 use crate::heed_codec::facet::*;
 use crate::index::db_name;
 use crate::{DocumentId, FieldId, Index, Result};
@@ -48,7 +48,7 @@ impl<'a> FacetDistinctIter<'a> {
     fn facet_string_docids(&self, key: &str) -> heed::Result<Option<RoaringBitmap>> {
         self.index
             .facet_id_string_docids
-            .get(self.txn, &FacetKey { field_id: self.distinct, level: 0, left_bound: key })
+            .get(self.txn, &FacetGroupKey { field_id: self.distinct, level: 0, left_bound: key })
             .map(|opt| opt.map(|v| v.bitmap))
     }
 
@@ -56,7 +56,7 @@ impl<'a> FacetDistinctIter<'a> {
         // get facet docids on level 0
         self.index
             .facet_id_f64_docids
-            .get(self.txn, &FacetKey { field_id: self.distinct, level: 0, left_bound: key })
+            .get(self.txn, &FacetGroupKey { field_id: self.distinct, level: 0, left_bound: key })
             .map(|opt| opt.map(|v| v.bitmap))
     }
 

@@ -11,7 +11,7 @@ use time::OffsetDateTime;
 use super::{ClearDocuments, FacetsUpdateBulk};
 use crate::error::{InternalError, UserError};
 use crate::facet::FacetType;
-use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKeyCodec, MyByteSlice};
+use crate::heed_codec::facet::{FacetGroupValueCodec, FacetGroupKeyCodec, ByteSliceRef};
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::index::{db_name, main_key};
 use crate::{
@@ -626,10 +626,10 @@ fn remove_docids_from_facet_id_docids<'a>(
 ) -> Result<()> {
     let db = match facet_type {
         FacetType::String => {
-            index.facet_id_string_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>()
+            index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
         }
         FacetType::Number => {
-            index.facet_id_f64_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>()
+            index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
         }
     };
     let mut modified = false;

@@ -2,8 +2,8 @@ use heed::types::ByteSlice;
 use heed::{BytesDecode, Error, RoTxn, RwTxn};
 use roaring::RoaringBitmap;
 
-use crate::heed_codec::facet::new::{
-    FacetGroupValue, FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice,
+use crate::heed_codec::facet::{
+    FacetGroupValue, FacetGroupValueCodec, FacetGroupKey, FacetGroupKeyCodec, ByteSliceRef,
 };
 use crate::search::facet::get_highest_level;
 use crate::Result;
@@ -19,13 +19,13 @@ enum DeletionResult {
 }
 
 pub struct FacetsUpdateIncremental {
-    db: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
     group_size: usize,
     min_level_size: usize,
     max_group_size: usize,
 }
 impl FacetsUpdateIncremental {
-    pub fn new(db: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>) -> Self {
+    pub fn new(db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>) -> Self {
         Self { db, group_size: 4, min_level_size: 5, max_group_size: 8 }
     }
 }
@@ -36,7 +36,7 @@ impl FacetsUpdateIncremental {
         level: u8,
         search_key: &[u8],
         txn: &RoTxn,
-    ) -> Result<(FacetKey<Vec<u8>>, FacetGroupValue)> {
+    ) -> Result<(FacetGroupKey<Vec<u8>>, FacetGroupValue)> {
         let mut prefix = vec![];
         prefix.extend_from_slice(&field_id.to_be_bytes());
         prefix.push(level);
@@ -45,17 +45,17 @@ impl FacetsUpdateIncremental {
         let mut prefix_iter = self
             .db
             .as_polymorph()
-            .prefix_iter::<_, MyByteSlice, FacetGroupValueCodec>(txn, &prefix.as_slice())?;
+            .prefix_iter::<_, ByteSliceRef, FacetGroupValueCodec>(txn, &prefix.as_slice())?;
         if let Some(e) = prefix_iter.next() {
             let (key_bytes, value) = e?;
             Ok((
-                FacetKeyCodec::<MyByteSlice>::bytes_decode(&key_bytes)
+                FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(&key_bytes)
                     .ok_or(Error::Encoding)?
                     .into_owned(),
                 value,
             ))
         } else {
-            let key = FacetKey { field_id, level, left_bound: search_key };
+            let key = FacetGroupKey { field_id, level, left_bound: search_key };
             match self.db.get_lower_than(txn, &key)? {
                 Some((key, value)) => {
                     if key.level != level || key.field_id != field_id {
@@ -66,13 +66,13 @@ impl FacetsUpdateIncremental {
                         let mut iter = self
                             .db
                             .as_polymorph()
-                            .prefix_iter::<_, MyByteSlice, FacetGroupValueCodec>(
+                            .prefix_iter::<_, ByteSliceRef, FacetGroupValueCodec>(
                                 txn,
                                 &prefix.as_slice(),
                             )?;
                         let (key_bytes, value) = iter.next().unwrap()?;
                         Ok((
-                            FacetKeyCodec::<MyByteSlice>::bytes_decode(&key_bytes)
+                            FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(&key_bytes)
                                 .ok_or(Error::Encoding)?
                                 .into_owned(),
                             value,
@@ -93,7 +93,7 @@ impl FacetsUpdateIncremental {
         new_key: &[u8],
         new_values: &RoaringBitmap,
     ) -> Result<InsertionResult> {
-        let key = FacetKey { field_id, level: 0, left_bound: new_key };
+        let key = FacetGroupKey { field_id, level: 0, left_bound: new_key };
         let value = FacetGroupValue { bitmap: new_values.clone(), size: 1 };
 
         let mut level0_prefix = vec![];
@@ -193,7 +193,7 @@ impl FacetsUpdateIncremental {
                 .db
                 .get_greater_than_or_equal_to(
                     &txn,
-                    &FacetKey {
+                    &FacetGroupKey {
                         field_id,
                         level: level_below,
                         left_bound: insertion_key.left_bound.as_slice(),
@@ -217,7 +217,7 @@ impl FacetsUpdateIncremental {
                 }
 
                 let key =
-                    FacetKey { field_id, level, left_bound: insertion_key.left_bound.clone() };
+                    FacetGroupKey { field_id, level, left_bound: insertion_key.left_bound.clone() };
                 let value = FacetGroupValue { size: size_left as u8, bitmap: values_left };
                 (key, value)
             };
@@ -235,7 +235,7 @@ impl FacetsUpdateIncremental {
                 }
 
                 let key =
-                    FacetKey { field_id, level, left_bound: right_start_key.unwrap().to_vec() };
+                    FacetGroupKey { field_id, level, left_bound: right_start_key.unwrap().to_vec() };
                 let value = FacetGroupValue { size: size_right as u8, bitmap: values_right };
                 (key, value)
             };
@@ -303,7 +303,7 @@ impl FacetsUpdateIncremental {
             let mut values = RoaringBitmap::new();
             for _ in 0..group_size {
                 let (key_bytes, value_i) = groups_iter.next().unwrap()?;
-                let key_i = FacetKeyCodec::<MyByteSlice>::bytes_decode(&key_bytes)
+                let key_i = FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(&key_bytes)
                     .ok_or(Error::Encoding)?;
 
                 if first_key.is_none() {
@@ -311,7 +311,7 @@ impl FacetsUpdateIncremental {
                 }
                 values |= value_i.bitmap;
             }
-            let key = FacetKey {
+            let key = FacetGroupKey {
                 field_id,
                 level: highest_level + 1,
                 left_bound: first_key.unwrap().left_bound,
@@ -384,7 +384,7 @@ impl FacetsUpdateIncremental {
         key: &[u8],
         value: u32,
     ) -> Result<DeletionResult> {
-        let key = FacetKey { field_id, level: 0, left_bound: key };
+        let key = FacetGroupKey { field_id, level: 0, left_bound: key };
         let mut bitmap = self.db.get(&txn, &key)?.unwrap().bitmap;
         bitmap.remove(value);
 
@@ -415,7 +415,7 @@ impl FacetsUpdateIncremental {
         key: &[u8],
         value: u32,
     ) -> Result<()> {
-        if self.db.get(txn, &FacetKey { field_id, level: 0, left_bound: key })?.is_none() {
+        if self.db.get(txn, &FacetGroupKey { field_id, level: 0, left_bound: key })?.is_none() {
             return Ok(());
         }
         let highest_level = get_highest_level(&txn, self.db, field_id)?;
@@ -450,7 +450,7 @@ impl FacetsUpdateIncremental {
         while let Some(el) = iter.next() {
             let (k, _) = el?;
             to_delete.push(
-                FacetKeyCodec::<MyByteSlice>::bytes_decode(k).ok_or(Error::Encoding)?.into_owned(),
+                FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(k).ok_or(Error::Encoding)?.into_owned(),
             );
         }
         drop(iter);
@@ -469,9 +469,9 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use roaring::RoaringBitmap;
 
-    use crate::heed_codec::facet::new::ordered_f64_codec::OrderedF64Codec;
-    use crate::heed_codec::facet::new::str_ref::StrRefCodec;
-    use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKeyCodec, MyByteSlice};
+    use crate::heed_codec::facet::ordered_f64_codec::OrderedF64Codec;
+    use crate::heed_codec::facet::str_ref::StrRefCodec;
+    use crate::heed_codec::facet::{FacetGroupValueCodec, FacetGroupKeyCodec, ByteSliceRef};
     use crate::milli_snap;
     use crate::search::facet::get_highest_level;
     use crate::search::facet::test::FacetIndex;
@@ -502,7 +502,7 @@ mod tests {
                 .unwrap();
             while let Some(el) = iter.next() {
                 let (key, value) = el.unwrap();
-                let key = FacetKeyCodec::<MyByteSlice>::bytes_decode(&key).unwrap();
+                let key = FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(&key).unwrap();
 
                 let mut prefix_start_below = vec![];
                 prefix_start_below.extend_from_slice(&field_id.to_be_bytes());
@@ -519,7 +519,7 @@ mod tests {
                         )
                         .unwrap();
                     let (key_bytes, _) = start_below_iter.next().unwrap().unwrap();
-                    FacetKeyCodec::<MyByteSlice>::bytes_decode(&key_bytes).unwrap()
+                    FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(&key_bytes).unwrap()
                 };
 
                 assert!(value.size > 0 && (value.size as usize) < db.max_group_size);
@@ -996,7 +996,7 @@ mod tests {
 
 //             for ((key, values), group) in values_field_id.iter().zip(level0iter) {
 //                 let (group_key, group_values) = group.unwrap();
-//                 let group_key = FacetKeyCodec::<U16Codec>::bytes_decode(group_key).unwrap();
+//                 let group_key = FacetGroupKeyCodec::<U16Codec>::bytes_decode(group_key).unwrap();
 //                 assert_eq!(key, &group_key.left_bound);
 //                 assert_eq!(values, &group_values.bitmap);
 //             }
@@ -1014,7 +1014,7 @@ mod tests {
 
 //             for ((key, values), group) in values_field_id.iter().zip(level0iter) {
 //                 let (group_key, group_values) = group.unwrap();
-//                 let group_key = FacetKeyCodec::<U16Codec>::bytes_decode(group_key).unwrap();
+//                 let group_key = FacetGroupKeyCodec::<U16Codec>::bytes_decode(group_key).unwrap();
 //                 assert_eq!(key, &group_key.left_bound);
 //                 assert_eq!(values, &group_values.bitmap);
 //             }

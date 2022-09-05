@@ -8,12 +8,11 @@ use roaring::RoaringBitmap;
 
 use crate::error::UserError;
 use crate::facet::FacetType;
-use crate::heed_codec::facet::new::ordered_f64_codec::OrderedF64Codec;
-use crate::heed_codec::facet::new::str_ref::StrRefCodec;
-use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKeyCodec, MyByteSlice};
+use crate::heed_codec::facet::OrderedF64Codec;
+use crate::heed_codec::facet::StrRefCodec;
+use crate::heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec, FacetGroupValueCodec};
 use crate::heed_codec::facet::{FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec};
 use crate::search::facet::facet_distribution_iter;
-// use crate::search::facet::FacetStringIter;
 use crate::{FieldId, Index, Result};
 
 /// The default number of values by facets that will
@@ -138,7 +137,7 @@ impl<'a> FacetDistribution<'a> {
     ) -> heed::Result<()> {
         facet_distribution_iter::iterate_over_facet_distribution(
             self.rtxn,
-            self.index.facet_id_f64_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>(),
+            self.index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>(),
             field_id,
             candidates,
             |facet_key, nbr_docids| {
@@ -161,7 +160,7 @@ impl<'a> FacetDistribution<'a> {
     ) -> heed::Result<()> {
         facet_distribution_iter::iterate_over_facet_distribution(
             self.rtxn,
-            self.index.facet_id_string_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>(),
+            self.index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>(),
             field_id,
             candidates,
             |facet_key, nbr_docids| {
@@ -191,7 +190,7 @@ impl<'a> FacetDistribution<'a> {
         let iter = db
             .as_polymorph()
             .prefix_iter::<_, ByteSlice, ByteSlice>(self.rtxn, prefix.as_slice())?
-            .remap_types::<FacetKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>();
+            .remap_types::<FacetGroupKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>();
 
         for result in iter {
             let (key, value) = result?;
@@ -206,7 +205,7 @@ impl<'a> FacetDistribution<'a> {
             .facet_id_string_docids
             .as_polymorph()
             .prefix_iter::<_, ByteSlice, ByteSlice>(self.rtxn, prefix.as_slice())?
-            .remap_types::<FacetKeyCodec<StrRefCodec>, FacetGroupValueCodec>();
+            .remap_types::<FacetGroupKeyCodec<StrRefCodec>, FacetGroupValueCodec>();
 
         // TODO: get the original value of the facet somewhere (in the documents DB?)
         for result in iter {

@@ -9,8 +9,8 @@ use roaring::RoaringBitmap;
 
 use super::facet_range_search;
 use crate::error::{Error, UserError};
-use crate::heed_codec::facet::new::ordered_f64_codec::OrderedF64Codec;
-use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKey, FacetKeyCodec};
+use crate::heed_codec::facet::OrderedF64Codec;
+use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec};
 use crate::{distance_between_two_points, lat_lng_to_xyz, FieldId, Index, Result};
 
 /// The maximum number of filters the filter AST can process.
@@ -180,7 +180,11 @@ impl<'a> Filter<'a> {
                 let string_docids = strings_db
                     .get(
                         rtxn,
-                        &FacetKey { field_id, level: 0, left_bound: &val.value().to_lowercase() },
+                        &FacetGroupKey {
+                            field_id,
+                            level: 0,
+                            left_bound: &val.value().to_lowercase(),
+                        },
                     )?
                     .map(|v| v.bitmap)
                     .unwrap_or_default();
@@ -218,10 +222,10 @@ impl<'a> Filter<'a> {
             .remap_data_type::<DecodeIgnore>()
             .get_lower_than_or_equal_to(
                 rtxn,
-                &FacetKey { field_id, level: u8::MAX, left_bound: f64::MAX },
+                &FacetGroupKey { field_id, level: u8::MAX, left_bound: f64::MAX },
             )?
             .and_then(
-                |(FacetKey { field_id: id, level, .. }, _)| {
+                |(FacetGroupKey { field_id: id, level, .. }, _)| {
                     if id == field_id {
                         Some(level)
                     } else {
@@ -252,7 +256,7 @@ impl<'a> Filter<'a> {
     /// going deeper through the levels.
     fn explore_facet_number_levels(
         rtxn: &heed::RoTxn,
-        db: heed::Database<FacetKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>,
+        db: heed::Database<FacetGroupKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>,
         field_id: FieldId,
         level: u8,
         left: Bound<f64>,

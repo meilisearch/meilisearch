@@ -4,11 +4,11 @@ use heed::Result;
 use roaring::RoaringBitmap;
 
 use super::{get_first_facet_value, get_highest_level};
-use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice};
+use crate::heed_codec::facet::{ByteSliceRef, FacetGroupKey, FacetGroupValueCodec, FacetGroupKeyCodec};
 
 pub fn iterate_over_facet_distribution<'t, CB>(
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
     field_id: u16,
     candidates: &RoaringBitmap,
     callback: CB,
@@ -18,9 +18,9 @@ where
 {
     let mut fd = FacetDistribution { rtxn, db, field_id, callback };
     let highest_level =
-        get_highest_level(rtxn, db.remap_key_type::<FacetKeyCodec<MyByteSlice>>(), field_id)?;
+        get_highest_level(rtxn, db.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>(), field_id)?;
 
-    if let Some(first_bound) = get_first_facet_value::<MyByteSlice>(rtxn, db, field_id)? {
+    if let Some(first_bound) = get_first_facet_value::<ByteSliceRef>(rtxn, db, field_id)? {
         fd.iterate(candidates, highest_level, first_bound, usize::MAX)?;
         return Ok(());
     } else {
@@ -33,7 +33,7 @@ where
     CB: FnMut(&'t [u8], u64) -> ControlFlow<()>,
 {
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
     field_id: u16,
     callback: CB,
 }
@@ -49,7 +49,7 @@ where
         group_size: usize,
     ) -> Result<ControlFlow<()>> {
         let starting_key =
-            FacetKey { field_id: self.field_id, level: 0, left_bound: starting_bound };
+            FacetGroupKey { field_id: self.field_id, level: 0, left_bound: starting_bound };
         let iter = self.db.range(self.rtxn, &(starting_key..))?.take(group_size);
         for el in iter {
             let (key, value) = el?;
@@ -78,7 +78,7 @@ where
         if level == 0 {
             return self.iterate_level_0(candidates, starting_bound, group_size);
         }
-        let starting_key = FacetKey { field_id: self.field_id, level, left_bound: starting_bound };
+        let starting_key = FacetGroupKey { field_id: self.field_id, level, left_bound: starting_bound };
         let iter = self.db.range(&self.rtxn, &(&starting_key..)).unwrap().take(group_size);
 
         for el in iter {
@@ -116,7 +116,7 @@ mod tests {
     use roaring::RoaringBitmap;
 
     use super::iterate_over_facet_distribution;
-    use crate::heed_codec::facet::new::ordered_f64_codec::OrderedF64Codec;
+    use crate::heed_codec::facet::ordered_f64_codec::OrderedF64Codec;
     use crate::milli_snap;
     use crate::search::facet::test::FacetIndex;
 

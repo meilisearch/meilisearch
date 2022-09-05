@@ -7,7 +7,7 @@ use roaring::RoaringBitmap;
 
 use super::{Criterion, CriterionParameters, CriterionResult};
 use crate::facet::FacetType;
-use crate::heed_codec::facet::new::{FacetKeyCodec, MyByteSlice};
+use crate::heed_codec::facet::{FacetGroupKeyCodec, ByteSliceRef};
 use crate::search::criteria::{resolve_query_tree, CriteriaBuilder};
 use crate::search::facet::facet_sort_ascending::ascending_facet_sort;
 use crate::search::facet::facet_sort_descending::descending_facet_sort;
@@ -196,14 +196,14 @@ fn facet_ordered<'t>(
 
         let number_iter = make_iter(
             rtxn,
-            index.facet_id_f64_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>(),
+            index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>(),
             field_id,
             candidates.clone(),
         )?;
 
         let string_iter = make_iter(
             rtxn,
-            index.facet_id_string_docids.remap_key_type::<FacetKeyCodec<MyByteSlice>>(),
+            index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>(),
             field_id,
             candidates,
         )?;

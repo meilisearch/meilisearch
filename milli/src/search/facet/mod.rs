@@ -3,7 +3,7 @@ use heed::{BytesDecode, RoTxn};
 
 pub use self::facet_distribution::{FacetDistribution, DEFAULT_VALUES_PER_FACET};
 pub use self::filter::Filter;
-use crate::heed_codec::facet::new::{FacetGroupValueCodec, FacetKeyCodec, MyByteSlice};
+use crate::heed_codec::facet::{FacetGroupValueCodec, FacetGroupKeyCodec, ByteSliceRef};
 
 mod facet_distribution;
 mod facet_distribution_iter;
@@ -14,7 +14,7 @@ mod filter;
 
 pub(crate) fn get_first_facet_value<'t, BoundCodec>(
     txn: &'t RoTxn,
-    db: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
     field_id: u16,
 ) -> heed::Result<Option<BoundCodec::DItem>>
 where
@@ -28,7 +28,7 @@ where
     if let Some(first) = level0_iter_forward.next() {
         let (first_key, _) = first?;
         let first_key =
-            FacetKeyCodec::<BoundCodec>::bytes_decode(first_key).ok_or(heed::Error::Encoding)?;
+            FacetGroupKeyCodec::<BoundCodec>::bytes_decode(first_key).ok_or(heed::Error::Encoding)?;
         Ok(Some(first_key.left_bound))
     } else {
         Ok(None)
@@ -36,7 +36,7 @@ where
 }
 pub(crate) fn get_last_facet_value<'t, BoundCodec>(
     txn: &'t RoTxn,
-    db: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
     field_id: u16,
 ) -> heed::Result<Option<BoundCodec::DItem>>
 where
@@ -51,7 +51,7 @@ where
     if let Some(last) = level0_iter_backward.next() {
         let (last_key, _) = last?;
         let last_key =
-            FacetKeyCodec::<BoundCodec>::bytes_decode(last_key).ok_or(heed::Error::Encoding)?;
+            FacetGroupKeyCodec::<BoundCodec>::bytes_decode(last_key).ok_or(heed::Error::Encoding)?;
         Ok(Some(last_key.left_bound))
     } else {
         Ok(None)
@@ -59,7 +59,7 @@ where
 }
 pub(crate) fn get_highest_level<'t>(
     txn: &'t RoTxn<'t>,
-    db: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
     field_id: u16,
 ) -> heed::Result<u8> {
     let field_id_prefix = &field_id.to_be_bytes();
@@ -69,7 +69,7 @@ pub(crate) fn get_highest_level<'t>(
         .next()
         .map(|el| {
             let (key, _) = el.unwrap();
-            let key = FacetKeyCodec::<MyByteSlice>::bytes_decode(key).unwrap();
+            let key = FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(key).unwrap();
             key.level
         })
         .unwrap_or(0))
@@ -84,8 +84,8 @@ pub mod test {
     use heed::{BytesDecode, BytesEncode, Env, RwTxn};
     use roaring::RoaringBitmap;
 
-    use crate::heed_codec::facet::new::{
-        FacetGroupValue, FacetGroupValueCodec, FacetKey, FacetKeyCodec, MyByteSlice,
+    use crate::heed_codec::facet::{
+        FacetGroupValue, FacetGroupValueCodec, FacetGroupKey, FacetGroupKeyCodec, ByteSliceRef,
     };
     use crate::snapshot_tests::display_bitmap;
     use crate::update::FacetsUpdateIncremental;
@@ -101,7 +101,7 @@ pub mod test {
     }
 
     pub struct Database {
-        pub content: heed::Database<FacetKeyCodec<MyByteSlice>, FacetGroupValueCodec>,
+        pub content: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
         pub group_size: usize,
         pub max_group_size: usize,
         _tempdir: Rc<tempfile::TempDir>,
@@ -184,7 +184,7 @@ pub mod test {
             let mut iter = self.db.content.iter(&txn).unwrap();
             while let Some(el) = iter.next() {
                 let (key, value) = el.unwrap();
-                let FacetKey { field_id, level, left_bound: bound } = key;
+                let FacetGroupKey { field_id, level, left_bound: bound } = key;
                 let bound = BoundCodec::bytes_decode(bound).unwrap();
                 let FacetGroupValue { size, bitmap } = value;
                 writeln!(

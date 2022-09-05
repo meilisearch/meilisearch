@@ -5,7 +5,7 @@ use std::path::Path;
 use roaring::RoaringBitmap;
 
 use crate::facet::FacetType;
-use crate::heed_codec::facet::new::{FacetGroupValue, FacetKey};
+use crate::heed_codec::facet::{FacetGroupValue, FacetGroupKey};
 use crate::{make_db_snap_from_iter, ExternalDocumentsIds, Index};
 
 #[track_caller]
@@ -280,7 +280,7 @@ pub fn snap_word_prefix_position_docids(index: &Index) -> String {
 }
 pub fn snap_facet_id_f64_docids(index: &Index) -> String {
     let snap = make_db_snap_from_iter!(index, facet_id_f64_docids, |(
-        FacetKey { field_id, level, left_bound },
+        FacetGroupKey { field_id, level, left_bound },
         FacetGroupValue { size, bitmap },
     )| {
         &format!("{field_id:<3} {level:<2} {left_bound:<6} {size:<2} {}", display_bitmap(&bitmap))
@@ -289,7 +289,7 @@ pub fn snap_facet_id_f64_docids(index: &Index) -> String {
 }
 pub fn snap_facet_id_string_docids(index: &Index) -> String {
     let snap = make_db_snap_from_iter!(index, facet_id_string_docids, |(
-        FacetKey { field_id, level, left_bound },
+        FacetGroupKey { field_id, level, left_bound },
         FacetGroupValue { size, bitmap },
     )| {
         &format!("{field_id:<3} {level:<2} {left_bound:<12} {size:<2} {}", display_bitmap(&bitmap))

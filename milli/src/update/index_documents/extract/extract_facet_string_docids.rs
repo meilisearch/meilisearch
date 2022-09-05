@@ -4,8 +4,8 @@ use std::io;
 use heed::BytesEncode;
 
 use super::helpers::{create_sorter, sorter_into_reader, try_split_array_at, GrenadParameters};
-use crate::heed_codec::facet::new::str_ref::StrRefCodec;
-use crate::heed_codec::facet::new::{FacetKey, FacetKeyCodec};
+use crate::heed_codec::facet::StrRefCodec;
+use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
 use crate::update::index_documents::merge_cbo_roaring_bitmaps;
 use crate::{FieldId, Result};
 
@@ -43,8 +43,8 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
         let document_id = u32::from_be_bytes(document_id_bytes);
 
         let normalised_value = std::str::from_utf8(normalized_value_bytes)?;
-        let key = FacetKey { field_id, level: 0, left_bound: normalised_value };
-        let key_bytes = FacetKeyCodec::<StrRefCodec>::bytes_encode(&key).unwrap();
+        let key = FacetGroupKey { field_id, level: 0, left_bound: normalised_value };
+        let key_bytes = FacetGroupKeyCodec::<StrRefCodec>::bytes_encode(&key).unwrap();
 
         facet_string_docids_sorter.insert(&key_bytes, &document_id.to_ne_bytes())?;
     }
