@@ -5,6 +5,8 @@ use std::marker::PhantomData;
 use heed::{BytesDecode, BytesEncode};
 use roaring::RoaringBitmap;
 
+use crate::CboRoaringBitmapCodec;
+
 pub mod ordered_f64_codec;
 pub mod str_ref;
 // TODO: these codecs were quickly written and not fast/resilient enough
@@ -35,6 +37,7 @@ impl<'a> FacetKey<Vec<u8>> {
     }
 }
 
+#[derive(Debug)]
 pub struct FacetGroupValue {
     pub size: u8,
     pub bitmap: RoaringBitmap,
@@ -56,7 +59,7 @@ where
         v.extend_from_slice(&value.field_id.to_be_bytes());
         v.extend_from_slice(&[value.level]);
 
-        let bound = T::bytes_encode(&value.left_bound).unwrap();
+        let bound = T::bytes_encode(&value.left_bound)?;
         v.extend_from_slice(&bound);
 
         Some(Cow::Owned(v))
@@ -69,9 +72,9 @@ where
     type DItem = FacetKey<T::DItem>;
 
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-        let fid = u16::from_be_bytes(<[u8; 2]>::try_from(&bytes[0..=1]).unwrap());
+        let fid = u16::from_be_bytes(<[u8; 2]>::try_from(&bytes[0..=1]).ok()?);
         let level = bytes[2];
-        let bound = T::bytes_decode(&bytes[3..]).unwrap();
+        let bound = T::bytes_decode(&bytes[3..])?;
         Some(FacetKey { field_id: fid, level, left_bound: bound })
     }
 }
@@ -83,7 +86,7 @@ impl<'a> heed::BytesEncode<'a> for FacetGroupValueCodec {
     fn bytes_encode(value: &'a Self::EItem) -> Option<Cow<'a, [u8]>> {
         let mut v = vec![];
         v.push(value.size);
-        value.bitmap.serialize_into(&mut v).unwrap();
+        CboRoaringBitmapCodec::serialize_into(&value.bitmap, &mut v);
         Some(Cow::Owned(v))
     }
 }
@@ -91,7 +94,7 @@ impl<'a> heed::BytesDecode<'a> for FacetGroupValueCodec {
     type DItem = FacetGroupValue;
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
         let size = bytes[0];
-        let bitmap = RoaringBitmap::deserialize_from(&bytes[1..]).unwrap();
+        let bitmap = CboRoaringBitmapCodec::deserialize_from(&bytes[1..]).ok()?;
         Some(FacetGroupValue { size, bitmap })
     }
 }
@@ -115,37 +118,3 @@ impl<'a> BytesDecode<'a> for MyByteSlice {
         Some(bytes)
     }
 }
-
-// I won't need these ones anymore
-// pub struct U16Codec;
-// impl<'a> BytesEncode<'a> for U16Codec {
-//     type EItem = u16;
-
-//     fn bytes_encode(item: &'a Self::EItem) -> Option<Cow<'a, [u8]>> {
-//         Some(Cow::Owned(item.to_be_bytes().to_vec()))
-//     }
-// }
-// impl<'a> BytesDecode<'a> for U16Codec {
-//     type DItem = u16;
-
-//     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-//         Some(u16::from_be_bytes(bytes[0..=1].try_into().unwrap()))
-//     }
-// }
-
-// pub struct StrCodec;
-// impl<'a> BytesEncode<'a> for StrCodec {
-//     type EItem = &'a str;
-
-//     fn bytes_encode(item: &'a &'a str) -> Option<Cow<'a, [u8]>> {
-//         Some(Cow::Borrowed(item.as_bytes()))
-//     }
-// }
-// impl<'a> BytesDecode<'a> for StrCodec {
-//     type DItem = &'a str;
-
-//     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-//         let s = std::str::from_utf8(bytes).unwrap();
-//         Some(s)
-//     }
-// }
