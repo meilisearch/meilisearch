@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use byte_unit::Byte;
-use clap::{Arg, Command, Parser};
+use clap::Parser;
 use meilisearch_lib::{
     export_to_env_if_not_present,
     options::{IndexerOpts, SchedulerConfig},
@@ -193,6 +193,12 @@ pub struct Opt {
     #[serde(flatten)]
     #[clap(flatten)]
     pub scheduler_options: SchedulerConfig,
+
+    /// The path to a configuration file that should be used to setup the engine.
+    /// Format must be TOML.
+    #[serde(skip_serializing)]
+    #[clap(long)]
+    config_file_path: Option<PathBuf>,
 }
 
 impl Opt {
@@ -203,29 +209,21 @@ impl Opt {
     }
 
     pub fn build() -> Self {
-        let args = Command::new("config")
-            .arg(
-                Arg::new("config_file_path")
-                    .long("config-file-path")
-                    .takes_value(true)
-                    .default_value("./config.toml")
-                    .help("Path to a config file, must be TOML format"),
-            )
-            .get_matches();
-        let config_file_path = args
-            .value_of("config_file_path")
-            .expect("default value present");
-        if let Some(Ok(opts_from_file)) = match std::fs::read_to_string(config_file_path) {
-            Ok(config_str) => Some(toml::from_str::<Opt>(&config_str)),
-            Err(err) => {
-                log::debug!("can't read {} : {}", config_file_path, err);
-                None
+        let mut opts = Opt::parse();
+        if let Some(config_file_path) = opts.config_file_path.as_ref() {
+            eprintln!("loading config file : {:?}", config_file_path);
+            match std::fs::read(config_file_path) {
+                Ok(config) => {
+                    let opt_from_config =
+                        toml::from_slice::<Opt>(&config).expect("can't read file");
+                    opt_from_config.export_to_env();
+                    opts = Opt::parse();
+                }
+                Err(err) => eprintln!("can't read {:?} : {}", config_file_path, err),
             }
-        } {
-            opts_from_file.export_to_env();
         }
 
-        Opt::parse()
+        opts
     }
 
     fn export_to_env(self) {
