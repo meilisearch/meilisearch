@@ -1183,6 +1183,15 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
+version = "0.33.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.0#a79ff8a1a98a807f40f970131c8de2ab11560de5"
+dependencies = [
+ "nom",
+ "nom_locate",
+]
+
+[[package]]
+name = "filter-parser"
 version = "0.33.4"
 source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.4#4fc6331cb6526c07f3137584564cfe3493fb25bd"
 dependencies = [
@@ -1198,6 +1207,14 @@ checksum = "f82b0f4c27ad9f8bfd1f3208d882da2b09c301bc1c828fd3a00d0216d2fbbff6"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
+]
+
+[[package]]
+name = "flatten-serde-json"
+version = "0.33.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.0#a79ff8a1a98a807f40f970131c8de2ab11560de5"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]
@@ -1632,6 +1649,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "index-scheduler"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "milli 0.33.0",
+ "roaring",
+ "serde",
+ "thiserror",
+ "time",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1709,6 +1739,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49409df3e3bf0856b916e2ceaca09ee28e6871cf7d9ce97a692cacfdb2a25a47"
 dependencies = [
  "wasm-bindgen",
+]
+
+[[package]]
+name = "json-depth-checker"
+version = "0.33.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.0#a79ff8a1a98a807f40f970131c8de2ab11560de5"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]
@@ -2060,7 +2098,7 @@ dependencies = [
  "enum-iterator",
  "hmac",
  "meilisearch-types",
- "milli",
+ "milli 0.33.4",
  "rand",
  "serde",
  "serde_json",
@@ -2178,7 +2216,7 @@ dependencies = [
  "log",
  "meilisearch-auth",
  "meilisearch-types",
- "milli",
+ "milli 0.33.4",
  "mime",
  "mockall",
  "nelson",
@@ -2249,6 +2287,51 @@ dependencies = [
 
 [[package]]
 name = "milli"
+version = "0.33.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.0#a79ff8a1a98a807f40f970131c8de2ab11560de5"
+dependencies = [
+ "bimap",
+ "bincode",
+ "bstr 0.2.17",
+ "byteorder",
+ "charabia",
+ "concat-arrays",
+ "crossbeam-channel",
+ "csv",
+ "either",
+ "filter-parser 0.33.0",
+ "flatten-serde-json 0.33.0",
+ "fst",
+ "fxhash",
+ "geoutils",
+ "grenad",
+ "heed",
+ "itertools",
+ "json-depth-checker 0.33.0",
+ "levenshtein_automata",
+ "log",
+ "logging_timer",
+ "memmap2",
+ "obkv",
+ "once_cell",
+ "ordered-float",
+ "rayon",
+ "roaring",
+ "rstar",
+ "serde",
+ "serde_json",
+ "slice-group-by",
+ "smallstr",
+ "smallvec",
+ "smartstring",
+ "tempfile",
+ "thiserror",
+ "time",
+ "uuid",
+]
+
+[[package]]
+name = "milli"
 version = "0.33.4"
 source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.4#4fc6331cb6526c07f3137584564cfe3493fb25bd"
 dependencies = [
@@ -2261,15 +2344,15 @@ dependencies = [
  "crossbeam-channel",
  "csv",
  "either",
- "filter-parser",
- "flatten-serde-json",
+ "filter-parser 0.33.4",
+ "flatten-serde-json 0.33.4",
  "fst",
  "fxhash",
  "geoutils",
  "grenad",
  "heed",
  "itertools",
- "json-depth-checker",
+ "json-depth-checker 0.33.4",
  "levenshtein_automata",
  "log",
  "logging_timer",
