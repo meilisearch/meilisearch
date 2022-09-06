@@ -29,12 +29,19 @@ pub struct Task {
 }
 
 impl Task {
+    /// Persist all the temp files associated with the task.
     pub fn persist(&self) -> Result<()> {
         self.kind.persist()
     }
 
+    /// Delete all the files associated with the task.
     pub fn remove_data(&self) -> Result<()> {
         self.kind.remove_data()
+    }
+
+    /// Return the list of indexes updated by this tasks.
+    pub fn indexes(&self) -> Option<Vec<&str>> {
+        self.kind.indexes()
     }
 }
 
@@ -98,8 +105,10 @@ impl KindWithContent {
     }
 
     pub fn persist(&self) -> Result<()> {
+        use KindWithContent::*;
+
         match self {
-            KindWithContent::DocumentAddition {
+            DocumentAddition {
                 index_name: _,
                 content_file: _,
             } => {
@@ -108,21 +117,23 @@ impl KindWithContent {
                 Ok(())
             }
             // There is nothing to persist for all these tasks
-            KindWithContent::DumpExport { .. }
-            | KindWithContent::DocumentDeletion { .. }
-            | KindWithContent::ClearAllDocuments { .. }
-            | KindWithContent::RenameIndex { .. }
-            | KindWithContent::CreateIndex { .. }
-            | KindWithContent::DeleteIndex { .. }
-            | KindWithContent::SwapIndex { .. }
-            | KindWithContent::CancelTask { .. }
-            | KindWithContent::Snapshot => Ok(()),
+            DumpExport { .. }
+            | DocumentDeletion { .. }
+            | ClearAllDocuments { .. }
+            | RenameIndex { .. }
+            | CreateIndex { .. }
+            | DeleteIndex { .. }
+            | SwapIndex { .. }
+            | CancelTask { .. }
+            | Snapshot => Ok(()),
         }
     }
 
     pub fn remove_data(&self) -> Result<()> {
+        use KindWithContent::*;
+
         match self {
-            KindWithContent::DocumentAddition {
+            DocumentAddition {
                 index_name: _,
                 content_file: _,
             } => {
@@ -131,15 +142,33 @@ impl KindWithContent {
                 Ok(())
             }
             // There is no data associated with all these tasks
-            KindWithContent::DumpExport { .. }
-            | KindWithContent::DocumentDeletion { .. }
-            | KindWithContent::ClearAllDocuments { .. }
-            | KindWithContent::RenameIndex { .. }
-            | KindWithContent::CreateIndex { .. }
-            | KindWithContent::DeleteIndex { .. }
-            | KindWithContent::SwapIndex { .. }
-            | KindWithContent::CancelTask { .. }
-            | KindWithContent::Snapshot => Ok(()),
+            DumpExport { .. }
+            | DocumentDeletion { .. }
+            | ClearAllDocuments { .. }
+            | RenameIndex { .. }
+            | CreateIndex { .. }
+            | DeleteIndex { .. }
+            | SwapIndex { .. }
+            | CancelTask { .. }
+            | Snapshot => Ok(()),
+        }
+    }
+
+    pub fn indexes(&self) -> Option<Vec<&str>> {
+        use KindWithContent::*;
+
+        match self {
+            DumpExport { .. } | Snapshot | CancelTask { .. } => None,
+            DocumentAddition { index_name, .. }
+            | DocumentDeletion { index_name, .. }
+            | ClearAllDocuments { index_name }
+            | CreateIndex { index_name, .. }
+            | DeleteIndex { index_name } => Some(vec![index_name]),
+            RenameIndex {
+                index_name: lhs,
+                new_name: rhs,
+            }
+            | SwapIndex { lhs, rhs } => Some(vec![lhs, rhs]),
         }
     }
 }
