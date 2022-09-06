@@ -263,8 +263,8 @@ mod tests {
     use super::find_docids_of_facet_within_bounds;
     use crate::heed_codec::facet::{FacetGroupKeyCodec, OrderedF64Codec};
     use crate::milli_snap;
-    use crate::search::facet::test::FacetIndex;
     use crate::snapshot_tests::display_bitmap;
+    use crate::update::facet::tests::FacetIndex;
 
     fn get_simple_index() -> FacetIndex<OrderedF64Codec> {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
@@ -312,7 +312,7 @@ mod tests {
                 let end = Bound::Included(i);
                 let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
-                    index.db.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
+                    index.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,
@@ -328,7 +328,7 @@ mod tests {
                 let end = Bound::Excluded(i);
                 let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
-                    index.db.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
+                    index.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,
@@ -354,7 +354,7 @@ mod tests {
                 let end = Bound::Included(255.);
                 let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
-                    index.db.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
+                    index.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,
@@ -373,7 +373,7 @@ mod tests {
                 let end = Bound::Excluded(255.);
                 let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
-                    index.db.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
+                    index.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,
@@ -401,7 +401,7 @@ mod tests {
                 let end = Bound::Included(255. - i);
                 let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
-                    index.db.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
+                    index.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,
@@ -420,7 +420,7 @@ mod tests {
                 let end = Bound::Excluded(255. - i);
                 let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
-                    index.db.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
+                    index.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,

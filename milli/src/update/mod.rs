@@ -17,7 +17,7 @@ pub use self::words_prefixes_fst::WordsPrefixesFst;
 mod available_documents_ids;
 mod clear_documents;
 mod delete_documents;
-mod facet;
+pub(crate) mod facet;
 mod index_documents;
 mod indexer_config;
 mod prefix_word_pairs;

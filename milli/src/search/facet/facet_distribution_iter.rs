@@ -114,14 +114,13 @@ where
 mod tests {
     use std::ops::ControlFlow;
 
-    use heed::BytesDecode;
-    use rand::{Rng, SeedableRng};
-    use roaring::RoaringBitmap;
-
     use super::iterate_over_facet_distribution;
     use crate::heed_codec::facet::OrderedF64Codec;
     use crate::milli_snap;
-    use crate::search::facet::test::FacetIndex;
+    use crate::update::facet::tests::FacetIndex;
+    use heed::BytesDecode;
+    use rand::{Rng, SeedableRng};
+    use roaring::RoaringBitmap;
 
     fn get_simple_index() -> FacetIndex<OrderedF64Codec> {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
@@ -164,17 +163,11 @@ mod tests {
             let txn = index.env.read_txn().unwrap();
             let candidates = (0..=255).into_iter().collect::<RoaringBitmap>();
             let mut results = String::new();
-            iterate_over_facet_distribution(
-                &txn,
-                index.db.content,
-                0,
-                &candidates,
-                |facet, count| {
-                    let facet = OrderedF64Codec::bytes_decode(facet).unwrap();
-                    results.push_str(&format!("{facet}: {count}\n"));
-                    ControlFlow::Continue(())
-                },
-            )
+            iterate_over_facet_distribution(&txn, index.content, 0, &candidates, |facet, count| {
+                let facet = OrderedF64Codec::bytes_decode(facet).unwrap();
+                results.push_str(&format!("{facet}: {count}\n"));
+                ControlFlow::Continue(())
+            })
             .unwrap();
             milli_snap!(results, i);
 
@@ -189,23 +182,17 @@ mod tests {
             let candidates = (0..=255).into_iter().collect::<RoaringBitmap>();
             let mut results = String::new();
             let mut nbr_facets = 0;
-            iterate_over_facet_distribution(
-                &txn,
-                index.db.content,
-                0,
-                &candidates,
-                |facet, count| {
-                    let facet = OrderedF64Codec::bytes_decode(facet).unwrap();
-                    if nbr_facets == 100 {
-                        return ControlFlow::Break(());
-                    } else {
-                        nbr_facets += 1;
-                        results.push_str(&format!("{facet}: {count}\n"));
+            iterate_over_facet_distribution(&txn, index.content, 0, &candidates, |facet, count| {
+                let facet = OrderedF64Codec::bytes_decode(facet).unwrap();
+                if nbr_facets == 100 {
+                    return ControlFlow::Break(());
+                } else {
+                    nbr_facets += 1;
+                    results.push_str(&format!("{facet}: {count}\n"));
 
-                        ControlFlow::Continue(())
-                    }
-                },
-            )
+                    ControlFlow::Continue(())
+                }
+            })
             .unwrap();
             milli_snap!(results, i);
 

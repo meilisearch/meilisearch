@@ -84,15 +84,10 @@ impl<'i> FacetsUpdateIncremental<'i> {
 }
 
 pub struct FacetsUpdateIncrementalInner {
-    db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
-    group_size: u8,
-    min_level_size: u8,
-    max_group_size: u8,
-}
-impl FacetsUpdateIncrementalInner {
-    pub fn new(db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>) -> Self {
-        Self { db, group_size: 4, min_level_size: 5, max_group_size: 8 }
-    }
+    pub db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
+    pub group_size: u8,
+    pub min_level_size: u8,
+    pub max_group_size: u8,
 }
 impl FacetsUpdateIncrementalInner {
     fn find_insertion_key_value(
@@ -528,82 +523,13 @@ impl FacetsUpdateIncrementalInner {
 
 #[cfg(test)]
 mod tests {
-    use heed::types::ByteSlice;
-    use heed::{BytesDecode, BytesEncode};
+    use crate::heed_codec::facet::{OrderedF64Codec, StrRefCodec};
+    use crate::milli_snap;
+    use crate::update::facet::tests::FacetIndex;
     use rand::seq::SliceRandom;
     use rand::{Rng, SeedableRng};
     use roaring::RoaringBitmap;
 
-    use crate::heed_codec::facet::{
-        ByteSliceRef, FacetGroupKeyCodec, FacetGroupValueCodec, OrderedF64Codec, StrRefCodec,
-    };
-    use crate::milli_snap;
-    use crate::search::facet::get_highest_level;
-    use crate::search::facet::test::FacetIndex;
-
-    pub fn verify_structure_validity<C>(index: &FacetIndex<C>, field_id: u16)
-    where
-        for<'a> C: BytesDecode<'a> + BytesEncode<'a, EItem = <C as BytesDecode<'a>>::DItem>,
-    {
-        let FacetIndex { env, db, .. } = index;
-
-        let txn = env.write_txn().unwrap();
-        let mut field_id_prefix = vec![];
-        field_id_prefix.extend_from_slice(&field_id.to_be_bytes());
-
-        let highest_level = get_highest_level(&txn, index.db.content, field_id).unwrap();
-        txn.commit().unwrap();
-
-        let txn = env.read_txn().unwrap();
-        for level_no in (1..=highest_level).rev() {
-            let mut level_no_prefix = vec![];
-            level_no_prefix.extend_from_slice(&field_id.to_be_bytes());
-            level_no_prefix.push(level_no);
-
-            let mut iter = db
-                .content
-                .as_polymorph()
-                .prefix_iter::<_, ByteSlice, FacetGroupValueCodec>(&txn, &level_no_prefix)
-                .unwrap();
-            while let Some(el) = iter.next() {
-                let (key, value) = el.unwrap();
-                let key = FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(&key).unwrap();
-
-                let mut prefix_start_below = vec![];
-                prefix_start_below.extend_from_slice(&field_id.to_be_bytes());
-                prefix_start_below.push(level_no - 1);
-                prefix_start_below.extend_from_slice(&key.left_bound);
-
-                let start_below = {
-                    let mut start_below_iter = db
-                        .content
-                        .as_polymorph()
-                        .prefix_iter::<_, ByteSlice, FacetGroupValueCodec>(
-                            &txn,
-                            &prefix_start_below,
-                        )
-                        .unwrap();
-                    let (key_bytes, _) = start_below_iter.next().unwrap().unwrap();
-                    FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(&key_bytes).unwrap()
-                };
-
-                assert!(value.size > 0 && value.size < db.max_group_size);
-
-                let mut actual_size = 0;
-                let mut values_below = RoaringBitmap::new();
-                let mut iter_below =
-                    db.content.range(&txn, &(start_below..)).unwrap().take(value.size as usize);
-                while let Some(el) = iter_below.next() {
-                    let (_, value) = el.unwrap();
-                    actual_size += 1;
-                    values_below |= value.bitmap;
-                }
-                assert_eq!(actual_size, value.size, "{key:?} start_below: {start_below:?}");
-
-                assert_eq!(value.bitmap, values_below);
-            }
-        }
-    }
     #[test]
     fn append() {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
@@ -614,7 +540,9 @@ mod tests {
             index.insert(&mut txn, 0, &(i as f64), &bitmap);
             txn.commit().unwrap();
         }
-        verify_structure_validity(&index, 0);
+        let txn = index.env.read_txn().unwrap();
+        index.verify_structure_validity(&txn, 0);
+        txn.commit().unwrap();
         milli_snap!(format!("{index}"));
     }
     #[test]
@@ -641,9 +569,11 @@ mod tests {
             index.insert(&mut txn, 1, &(i as f64), &bitmap);
             txn.commit().unwrap();
         }
-        verify_structure_validity(&index, 0);
-        verify_structure_validity(&index, 1);
-        verify_structure_validity(&index, 2);
+        let txn = index.env.read_txn().unwrap();
+        index.verify_structure_validity(&txn, 0);
+        index.verify_structure_validity(&txn, 1);
+        index.verify_structure_validity(&txn, 2);
+        txn.commit().unwrap();
         milli_snap!(format!("{index}"));
     }
     #[test]
@@ -670,9 +600,11 @@ mod tests {
             index.insert(&mut txn, 1, &(i as f64), &bitmap);
             txn.commit().unwrap();
         }
-        verify_structure_validity(&index, 0);
-        verify_structure_validity(&index, 1);
-        verify_structure_validity(&index, 2);
+        let txn = index.env.read_txn().unwrap();
+        index.verify_structure_validity(&txn, 0);
+        index.verify_structure_validity(&txn, 1);
+        index.verify_structure_validity(&txn, 2);
+        txn.commit().unwrap();
         milli_snap!(format!("{index}"));
     }
 
@@ -686,8 +618,9 @@ mod tests {
             bitmap.insert(i);
             index.insert(&mut txn, 0, &(i as f64), &bitmap);
         }
+
+        index.verify_structure_validity(&txn, 0);
         txn.commit().unwrap();
-        verify_structure_validity(&index, 0);
         milli_snap!(format!("{index}"));
     }
 
@@ -705,146 +638,138 @@ mod tests {
             bitmap.insert(key);
             index.insert(&mut txn, 0, &(key as f64), &bitmap);
         }
+        index.verify_structure_validity(&txn, 0);
         txn.commit().unwrap();
-        verify_structure_validity(&index, 0);
         milli_snap!(format!("{index}"));
     }
 
     #[test]
     fn merge_values() {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
+        let mut txn = index.env.write_txn().unwrap();
 
         let mut keys = (0..256).into_iter().collect::<Vec<_>>();
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
         keys.shuffle(&mut rng);
+
         for (_i, key) in keys.into_iter().enumerate() {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(key);
             bitmap.insert(rng.gen_range(256..512));
-            verify_structure_validity(&index, 0);
-            let mut txn = index.env.write_txn().unwrap();
+            index.verify_structure_validity(&txn, 0);
             index.insert(&mut txn, 0, &(key as f64), &bitmap);
-            txn.commit().unwrap();
         }
 
-        verify_structure_validity(&index, 0);
+        index.verify_structure_validity(&txn, 0);
+        txn.commit().unwrap();
         milli_snap!(format!("{index}"));
     }
 
     #[test]
     fn delete_from_end() {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
+        let mut txn = index.env.write_txn().unwrap();
         for i in 0..256 {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(i);
-            verify_structure_validity(&index, 0);
-            let mut txn = index.env.write_txn().unwrap();
+            index.verify_structure_validity(&txn, 0);
             index.insert(&mut txn, 0, &(&(i as f64)), &bitmap);
-            txn.commit().unwrap();
         }
 
         for i in (200..256).into_iter().rev() {
-            verify_structure_validity(&index, 0);
-            let mut txn = index.env.write_txn().unwrap();
+            index.verify_structure_validity(&txn, 0);
             index.delete(&mut txn, 0, &(i as f64), i as u32);
-            txn.commit().unwrap();
         }
-        verify_structure_validity(&index, 0);
+        index.verify_structure_validity(&txn, 0);
+        txn.commit().unwrap();
         milli_snap!(format!("{index}"), 200);
+        let mut txn = index.env.write_txn().unwrap();
 
         for i in (150..200).into_iter().rev() {
-            verify_structure_validity(&index, 0);
-            let mut txn = index.env.write_txn().unwrap();
+            index.verify_structure_validity(&txn, 0);
             index.delete(&mut txn, 0, &(i as f64), i as u32);
-            txn.commit().unwrap();
         }
-        verify_structure_validity(&index, 0);
+        index.verify_structure_validity(&txn, 0);
+        txn.commit().unwrap();
         milli_snap!(format!("{index}"), 150);
-
+        let mut txn = index.env.write_txn().unwrap();
         for i in (100..150).into_iter().rev() {
-            verify_structure_validity(&index, 0);
-            let mut txn = index.env.write_txn().unwrap();
+            index.verify_structure_validity(&txn, 0);
             index.delete(&mut txn, 0, &(i as f64), i as u32);
-            txn.commit().unwrap();
         }
-        verify_structure_validity(&index, 0);
+        index.verify_structure_validity(&txn, 0);
+        txn.commit().unwrap();
         milli_snap!(format!("{index}"), 100);
-
+        let mut txn = index.env.write_txn().unwrap();
         for i in (17..100).into_iter().rev() {
-            verify_structure_validity(&index, 0);
-            let mut txn = index.env.write_txn().unwrap();
+            index.verify_structure_validity(&txn, 0);
             index.delete(&mut txn, 0, &(i as f64), i as u32);
-            txn.commit().unwrap();
         }
-        verify_structure_validity(&index, 0);
+        index.verify_structure_validity(&txn, 0);
+        txn.commit().unwrap();
         milli_snap!(format!("{index}"), 17);
-
         let mut txn = index.env.write_txn().unwrap();
         for i in (15..17).into_iter().rev() {
             index.delete(&mut txn, 0, &(i as f64), i as u32);
         }
+        index.verify_structure_validity(&txn, 0);
         txn.commit().unwrap();
-        verify_structure_validity(&index, 0);
         milli_snap!(format!("{index}"), 15);
+        let mut txn = index.env.write_txn().unwrap();
         for i in (0..15).into_iter().rev() {
-            verify_structure_validity(&index, 0);
-            let mut txn = index.env.write_txn().unwrap();
+            index.verify_structure_validity(&txn, 0);
             index.delete(&mut txn, 0, &(i as f64), i as u32);
-            txn.commit().unwrap();
         }
-        verify_structure_validity(&index, 0);
+        index.verify_structure_validity(&txn, 0);
+        txn.commit().unwrap();
         milli_snap!(format!("{index}"), 0);
     }
 
     #[test]
     fn delete_from_start() {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
+        let mut txn = index.env.write_txn().unwrap();
 
         for i in 0..256 {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(i);
-            verify_structure_validity(&index, 0);
-            let mut txn = index.env.write_txn().unwrap();
+            index.verify_structure_validity(&txn, 0);
             index.insert(&mut txn, 0, &(i as f64), &bitmap);
-            txn.commit().unwrap();
         }
 
         for i in 0..128 {
-            let mut txn = index.env.write_txn().unwrap();
             index.delete(&mut txn, 0, &(i as f64), i as u32);
-            txn.commit().unwrap();
         }
-        verify_structure_validity(&index, 0);
+        index.verify_structure_validity(&txn, 0);
+        txn.commit().unwrap();
         milli_snap!(format!("{index}"), 127);
+        let mut txn = index.env.write_txn().unwrap();
         for i in 128..216 {
-            verify_structure_validity(&index, 0);
-            let mut txn = index.env.write_txn().unwrap();
+            index.verify_structure_validity(&txn, 0);
             index.delete(&mut txn, 0, &(i as f64), i as u32);
-            txn.commit().unwrap();
         }
-        verify_structure_validity(&index, 0);
+        index.verify_structure_validity(&txn, 0);
+        txn.commit().unwrap();
         milli_snap!(format!("{index}"), 215);
+        let mut txn = index.env.write_txn().unwrap();
         for i in 216..256 {
-            verify_structure_validity(&index, 0);
-            let mut txn = index.env.write_txn().unwrap();
+            index.verify_structure_validity(&txn, 0);
             index.delete(&mut txn, 0, &(i as f64), i as u32);
-            txn.commit().unwrap();
         }
-        verify_structure_validity(&index, 0);
+        index.verify_structure_validity(&txn, 0);
+        txn.commit().unwrap();
         milli_snap!(format!("{index}"), 255);
     }
 
     #[test]
     fn delete_shuffled() {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
-
+        let mut txn = index.env.write_txn().unwrap();
         for i in 0..256 {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(i);
-            verify_structure_validity(&index, 0);
-            let mut txn = index.env.write_txn().unwrap();
+            index.verify_structure_validity(&txn, 0);
             index.insert(&mut txn, 0, &(i as f64), &bitmap);
-            txn.commit().unwrap();
         }
 
         let mut keys = (0..256).into_iter().collect::<Vec<_>>();
@@ -853,36 +778,37 @@ mod tests {
 
         for i in 0..128 {
             let key = keys[i];
-            verify_structure_validity(&index, 0);
-            let mut txn = index.env.write_txn().unwrap();
+            index.verify_structure_validity(&txn, 0);
             index.delete(&mut txn, 0, &(key as f64), key as u32);
-            txn.commit().unwrap();
         }
-        verify_structure_validity(&index, 0);
+        index.verify_structure_validity(&txn, 0);
+        txn.commit().unwrap();
         milli_snap!(format!("{index}"), 127);
+        let mut txn = index.env.write_txn().unwrap();
         for i in 128..216 {
             let key = keys[i];
-            verify_structure_validity(&index, 0);
-            let mut txn = index.env.write_txn().unwrap();
+            index.verify_structure_validity(&txn, 0);
             index.delete(&mut txn, 0, &(key as f64), key as u32);
-            txn.commit().unwrap();
         }
-        verify_structure_validity(&index, 0);
+        index.verify_structure_validity(&txn, 0);
+        txn.commit().unwrap();
+        let mut txn = index.env.write_txn().unwrap();
         milli_snap!(format!("{index}"), 215);
         for i in 216..256 {
             let key = keys[i];
-            verify_structure_validity(&index, 0);
-            let mut txn = index.env.write_txn().unwrap();
+            index.verify_structure_validity(&txn, 0);
             index.delete(&mut txn, 0, &(key as f64), key as u32);
-            txn.commit().unwrap();
         }
-        verify_structure_validity(&index, 0);
+        index.verify_structure_validity(&txn, 0);
+        txn.commit().unwrap();
         milli_snap!(format!("{index}"), 255);
     }
 
     #[test]
     fn in_place_level0_insert() {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
+        let mut txn = index.env.write_txn().unwrap();
+
         let mut keys = (0..16).into_iter().collect::<Vec<_>>();
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
         keys.shuffle(&mut rng);
@@ -890,19 +816,19 @@ mod tests {
             for &key in keys.iter() {
                 let mut bitmap = RoaringBitmap::new();
                 bitmap.insert(rng.gen_range(i * 256..(i + 1) * 256));
-                verify_structure_validity(&index, 0);
-                let mut txn = index.env.write_txn().unwrap();
+                index.verify_structure_validity(&txn, 0);
                 index.insert(&mut txn, 0, &(key as f64), &bitmap);
-                txn.commit().unwrap();
             }
         }
-        verify_structure_validity(&index, 0);
+        index.verify_structure_validity(&txn, 0);
+        txn.commit().unwrap();
         milli_snap!(format!("{index}"));
     }
 
     #[test]
     fn in_place_level0_delete() {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
+        let mut txn = index.env.write_txn().unwrap();
 
         let mut keys = (0..64).into_iter().collect::<Vec<_>>();
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
@@ -912,27 +838,29 @@ mod tests {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(key);
             bitmap.insert(key + 100);
-            verify_structure_validity(&index, 0);
-            let mut txn = index.env.write_txn().unwrap();
+            index.verify_structure_validity(&txn, 0);
+
             index.insert(&mut txn, 0, &(key as f64), &bitmap);
-            txn.commit().unwrap();
         }
-        verify_structure_validity(&index, 0);
+        index.verify_structure_validity(&txn, 0);
+        txn.commit().unwrap();
         milli_snap!(format!("{index}"), "before_delete");
 
+        let mut txn = index.env.write_txn().unwrap();
+
         for &key in keys.iter() {
-            verify_structure_validity(&index, 0);
-            let mut txn = index.env.write_txn().unwrap();
+            index.verify_structure_validity(&txn, 0);
             index.delete(&mut txn, 0, &(key as f64), key + 100);
-            txn.commit().unwrap();
         }
-        verify_structure_validity(&index, 0);
+        index.verify_structure_validity(&txn, 0);
+        txn.commit().unwrap();
         milli_snap!(format!("{index}"), "after_delete");
     }
 
     #[test]
     fn shuffle_merge_string_and_delete() {
         let index = FacetIndex::<StrRefCodec>::new(4, 8, 5);
+        let mut txn = index.env.write_txn().unwrap();
 
         let mut keys = (1000..1064).into_iter().collect::<Vec<_>>();
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
@@ -942,21 +870,21 @@ mod tests {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(key);
             bitmap.insert(key + 100);
-            verify_structure_validity(&index, 0);
-            let mut txn = index.env.write_txn().unwrap();
+            index.verify_structure_validity(&txn, 0);
             index.insert(&mut txn, 0, &format!("{key:x}").as_str(), &bitmap);
-            txn.commit().unwrap();
         }
-        verify_structure_validity(&index, 0);
+        index.verify_structure_validity(&txn, 0);
+        txn.commit().unwrap();
         milli_snap!(format!("{index}"), "before_delete");
 
+        let mut txn = index.env.write_txn().unwrap();
+
         for &key in keys.iter() {
-            verify_structure_validity(&index, 0);
-            let mut txn = index.env.write_txn().unwrap();
+            index.verify_structure_validity(&txn, 0);
             index.delete(&mut txn, 0, &format!("{key:x}").as_str(), key + 100);
-            txn.commit().unwrap();
         }
-        verify_structure_validity(&index, 0);
+        index.verify_structure_validity(&txn, 0);
+        txn.commit().unwrap();
         milli_snap!(format!("{index}"), "after_delete");
     }
 
@@ -1083,7 +1011,7 @@ mod tests {
 //                 assert_eq!(key, &group_key.left_bound);
 //                 assert_eq!(values, &group_values.bitmap);
 //             }
-//             verify_structure_validity(&index, *field_id);
+//             index.verify_structure_validity(*field_id);
 //         }
 
 //         index.db.content.clear(&mut txn).unwrap();

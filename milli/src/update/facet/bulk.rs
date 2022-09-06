@@ -19,7 +19,7 @@ use crate::{CboRoaringBitmapCodec, FieldId, Index, Result};
 pub struct FacetsUpdateBulk<'i> {
     index: &'i Index,
     database: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
-    level_group_size: u8,
+    group_size: u8,
     min_level_size: u8,
     facet_type: FacetType,
     // None if level 0 does not need to be updated
@@ -42,7 +42,7 @@ impl<'i> FacetsUpdateBulk<'i> {
                     index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
                 }
             },
-            level_group_size: 4,
+            group_size: 4,
             min_level_size: 5,
             facet_type,
             new_data: Some(new_data),
@@ -63,7 +63,7 @@ impl<'i> FacetsUpdateBulk<'i> {
                     index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
                 }
             },
-            level_group_size: 4,
+            group_size: 4,
             min_level_size: 5,
             facet_type,
             new_data: None,
@@ -74,61 +74,85 @@ impl<'i> FacetsUpdateBulk<'i> {
     ///
     /// This setting is always greater than or equal to 2.
     pub fn level_group_size(mut self, value: u8) -> Self {
-        self.level_group_size = cmp::max(value, 2);
+        self.group_size = cmp::max(value, 2);
         self
     }
 
     /// The minimum number of elements that a level is allowed to have.
     pub fn min_level_size(mut self, value: u8) -> Self {
-        self.min_level_size = cmp::max(value, 1);
+        self.min_level_size = cmp::max(value, 2);
         self
+    }
+
+    #[logging_timer::time("FacetsUpdateBulk::{}")]
+    pub fn execute(self, wtxn: &mut heed::RwTxn) -> Result<()> {
+        debug!("Computing and writing the facet values levels docids into LMDB on disk...");
+
+        let Self { index, database, group_size, min_level_size, facet_type, new_data } = self;
+
+        index.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
+
+        let inner = FacetsUpdateBulkInner { db: database, new_data, group_size, min_level_size };
+
+        let field_ids = index.faceted_fields_ids(wtxn)?.iter().copied().collect::<Box<[_]>>();
+
+        inner.update(wtxn, &field_ids, |wtxn, field_id, all_docids| {
+            index.put_faceted_documents_ids(wtxn, field_id, facet_type, &all_docids)?;
+            Ok(())
+        })?;
+
+        Ok(())
+    }
+}
+
+pub(crate) struct FacetsUpdateBulkInner<R: std::io::Read + std::io::Seek> {
+    pub db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
+    pub new_data: Option<grenad::Reader<R>>,
+    pub group_size: u8,
+    pub min_level_size: u8,
+}
+impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
+    pub fn update(
+        mut self,
+        wtxn: &mut RwTxn,
+        field_ids: &[u16],
+        mut handle_all_docids: impl FnMut(&mut RwTxn, FieldId, RoaringBitmap) -> Result<()>,
+    ) -> Result<()> {
+        self.update_level0(wtxn)?;
+        for &field_id in field_ids.iter() {
+            self.clear_levels(wtxn, field_id)?;
+        }
+
+        for &field_id in field_ids.iter() {
+            let (level_readers, all_docids) = self.compute_levels_for_field_id(field_id, &wtxn)?;
+
+            handle_all_docids(wtxn, field_id, all_docids)?;
+
+            for level_reader in level_readers {
+                let mut cursor = level_reader.into_cursor()?;
+                while let Some((k, v)) = cursor.move_on_next()? {
+                    self.db.remap_types::<ByteSlice, ByteSlice>().put(wtxn, k, v)?;
+                }
+            }
+        }
+        Ok(())
     }
 
     fn clear_levels(&self, wtxn: &mut heed::RwTxn, field_id: FieldId) -> Result<()> {
         let left = FacetGroupKey::<&[u8]> { field_id, level: 1, left_bound: &[] };
         let right = FacetGroupKey::<&[u8]> { field_id, level: u8::MAX, left_bound: &[] };
         let range = left..=right;
-        self.database.delete_range(wtxn, &range).map(drop)?;
+        self.db.delete_range(wtxn, &range).map(drop)?;
         Ok(())
     }
-
-    #[logging_timer::time("FacetsUpdateBulk::{}")]
-    pub fn execute(mut self, wtxn: &mut heed::RwTxn) -> Result<()> {
-        self.index.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
-        debug!("Computing and writing the facet values levels docids into LMDB on disk...");
-
-        // We get the faceted fields to be able to create the facet levels.
-        let faceted_fields = self.index.faceted_fields_ids(wtxn)?.clone();
-
-        for &field_id in faceted_fields.iter() {
-            self.clear_levels(wtxn, field_id)?;
-        }
-        self.update_level0(wtxn)?;
-
-        for &field_id in faceted_fields.iter() {
-            let (level_readers, all_docids) = self.compute_levels_for_field_id(field_id, &wtxn)?;
-
-            self.index.put_faceted_documents_ids(wtxn, field_id, self.facet_type, &all_docids)?;
-
-            for level_reader in level_readers {
-                let mut cursor = level_reader.into_cursor()?;
-                while let Some((k, v)) = cursor.move_on_next()? {
-                    self.database.remap_types::<ByteSlice, ByteSlice>().put(wtxn, k, v)?;
-                }
-            }
-        }
-
-        Ok(())
-    }
-
     fn update_level0(&mut self, wtxn: &mut RwTxn) -> Result<()> {
         let new_data = match self.new_data.take() {
             Some(x) => x,
             None => return Ok(()),
         };
-        if self.database.is_empty(wtxn)? {
+        if self.db.is_empty(wtxn)? {
             let mut buffer = Vec::new();
-            let mut database = self.database.iter_mut(wtxn)?.remap_types::<ByteSlice, ByteSlice>();
+            let mut database = self.db.iter_mut(wtxn)?.remap_types::<ByteSlice, ByteSlice>();
             let mut cursor = new_data.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
                 buffer.clear();
@@ -140,7 +164,7 @@ impl<'i> FacetsUpdateBulk<'i> {
             }
         } else {
             let mut buffer = Vec::new();
-            let database = self.database.remap_types::<ByteSlice, ByteSlice>();
+            let database = self.db.remap_types::<ByteSlice, ByteSlice>();
 
             let mut cursor = new_data.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
@@ -164,47 +188,29 @@ impl<'i> FacetsUpdateBulk<'i> {
                 database.put(wtxn, key, &buffer)?;
             }
         }
-
         Ok(())
     }
-
     fn compute_levels_for_field_id(
         &self,
         field_id: FieldId,
         txn: &RoTxn,
     ) -> Result<(Vec<grenad::Reader<File>>, RoaringBitmap)> {
         // TODO: first check whether there is anything in level 0?
-        let algo = ComputeHigherLevels {
-            rtxn: txn,
-            db: &self.database,
-            field_id,
-            level_group_size: self.level_group_size,
-            min_level_size: self.min_level_size,
-        };
 
         let mut all_docids = RoaringBitmap::new();
-        let subwriters = algo.compute_higher_levels(32, &mut |bitmaps, _| {
+        let subwriters = self.compute_higher_levels(txn, field_id, 32, &mut |bitmaps, _| {
             for bitmap in bitmaps {
                 all_docids |= bitmap;
             }
             Ok(())
         })?;
-        drop(algo);
 
         Ok((subwriters, all_docids))
     }
-}
-
-struct ComputeHigherLevels<'t> {
-    rtxn: &'t heed::RoTxn<'t>,
-    db: &'t heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
-    field_id: u16,
-    level_group_size: u8,
-    min_level_size: u8,
-}
-impl<'t> ComputeHigherLevels<'t> {
-    fn read_level_0(
+    fn read_level_0<'t>(
         &self,
+        rtxn: &'t RoTxn,
+        field_id: u16,
         handle_group: &mut dyn FnMut(&[RoaringBitmap], &'t [u8]) -> Result<()>,
     ) -> Result<()> {
         // we read the elements one by one and
@@ -213,13 +219,13 @@ impl<'t> ComputeHigherLevels<'t> {
         let mut bitmaps = vec![];
 
         let mut level_0_prefix = vec![];
-        level_0_prefix.extend_from_slice(&self.field_id.to_be_bytes());
+        level_0_prefix.extend_from_slice(&field_id.to_be_bytes());
         level_0_prefix.push(0);
 
         let level_0_iter = self
             .db
             .as_polymorph()
-            .prefix_iter::<_, ByteSlice, ByteSlice>(self.rtxn, level_0_prefix.as_slice())?
+            .prefix_iter::<_, ByteSlice, ByteSlice>(rtxn, level_0_prefix.as_slice())?
             .remap_types::<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>();
 
         let mut left_bound: &[u8] = &[];
@@ -235,7 +241,7 @@ impl<'t> ComputeHigherLevels<'t> {
             }
             bitmaps.push(docids);
 
-            if bitmaps.len() == self.level_group_size as usize {
+            if bitmaps.len() == self.group_size as usize {
                 handle_group(&bitmaps, left_bound)?;
                 first_iteration_for_new_group = true;
                 bitmaps.clear();
@@ -254,13 +260,15 @@ impl<'t> ComputeHigherLevels<'t> {
     /// ## Returns:
     /// A vector of grenad::Reader. The reader at index `i` corresponds to the elements of level `i + 1`
     /// that must be inserted into the database.
-    fn compute_higher_levels(
+    fn compute_higher_levels<'t>(
         &self,
+        rtxn: &'t RoTxn,
+        field_id: u16,
         level: u8,
         handle_group: &mut dyn FnMut(&[RoaringBitmap], &'t [u8]) -> Result<()>,
     ) -> Result<Vec<grenad::Reader<File>>> {
         if level == 0 {
-            self.read_level_0(handle_group)?;
+            self.read_level_0(rtxn, field_id, handle_group)?;
             // Level 0 is already in the database
             return Ok(vec![]);
         }
@@ -270,7 +278,7 @@ impl<'t> ComputeHigherLevels<'t> {
         // of those elements, and their bitmaps, to the level above
 
         let mut cur_writer = create_writer(CompressionType::None, None, tempfile::tempfile()?);
-        let mut cur_writer_len = 0;
+        let mut cur_writer_len: usize = 0;
 
         let mut group_sizes = vec![];
         let mut left_bounds = vec![];
@@ -278,8 +286,13 @@ impl<'t> ComputeHigherLevels<'t> {
 
         // compute the levels below
         // in the callback, we fill `cur_writer` with the correct elements for this level
-        let mut sub_writers =
-            self.compute_higher_levels(level - 1, &mut |sub_bitmaps, left_bound| {
+        let mut sub_writers = self.compute_higher_levels(
+            rtxn,
+            field_id,
+            level - 1,
+            &mut |sub_bitmaps, left_bound| {
+                // TODO: is this done unnecessarily for all 32 levels?
+                println!("level: {level}");
                 let mut combined_bitmap = RoaringBitmap::default();
                 for bitmap in sub_bitmaps {
                     combined_bitmap |= bitmap;
@@ -288,7 +301,7 @@ impl<'t> ComputeHigherLevels<'t> {
                 left_bounds.push(left_bound);
 
                 bitmaps.push(combined_bitmap);
-                if bitmaps.len() != self.level_group_size as usize {
+                if bitmaps.len() != self.group_size as usize {
                     return Ok(());
                 }
                 let left_bound = left_bounds.first().unwrap();
@@ -297,7 +310,7 @@ impl<'t> ComputeHigherLevels<'t> {
                 for ((bitmap, left_bound), group_size) in
                     bitmaps.drain(..).zip(left_bounds.drain(..)).zip(group_sizes.drain(..))
                 {
-                    let key = FacetGroupKey { field_id: self.field_id, level, left_bound };
+                    let key = FacetGroupKey { field_id, level, left_bound };
                     let key = FacetGroupKeyCodec::<ByteSliceRef>::bytes_encode(&key)
                         .ok_or(Error::Encoding)?;
                     let value = FacetGroupValue { size: group_size, bitmap };
@@ -307,15 +320,26 @@ impl<'t> ComputeHigherLevels<'t> {
                     cur_writer_len += 1;
                 }
                 Ok(())
-            })?;
+            },
+        )?;
         // don't forget to insert the leftover elements into the writer as well
-        if !bitmaps.is_empty() && cur_writer_len >= self.min_level_size {
+
+        // but only do so if the current number of elements to be inserted into this
+        // levelcould grow to the minimum level size
+
+        if !bitmaps.is_empty() && (cur_writer_len >= self.min_level_size as usize - 1) {
+            // the length of bitmaps is between 0 and group_size
+            assert!(bitmaps.len() < self.group_size as usize);
+            assert!(cur_writer_len > 0);
+
             let left_bound = left_bounds.first().unwrap();
             handle_group(&bitmaps, left_bound)?;
+
+            // Note: how many bitmaps are there here?
             for ((bitmap, left_bound), group_size) in
                 bitmaps.drain(..).zip(left_bounds.drain(..)).zip(group_sizes.drain(..))
             {
-                let key = FacetGroupKey { field_id: self.field_id, level, left_bound };
+                let key = FacetGroupKey { field_id, level, left_bound };
                 let key = FacetGroupKeyCodec::<ByteSliceRef>::bytes_encode(&key)
                     .ok_or(Error::Encoding)?;
                 let value = FacetGroupValue { size: group_size, bitmap };
@@ -324,9 +348,12 @@ impl<'t> ComputeHigherLevels<'t> {
                 cur_writer_len += 1;
             }
         }
-        if cur_writer_len > self.min_level_size {
+        // if we inserted enough elements to reach the minimum level size, then we push the writer
+        if cur_writer_len as u8 >= self.min_level_size {
             sub_writers.push(writer_into_reader(cur_writer)?);
         } else {
+            // otherwise, if there are still leftover elements, we give them to the level above
+            // this is necessary in order to get the union of all docids
             if !bitmaps.is_empty() {
                 handle_group(&bitmaps, left_bounds.first().unwrap())?;
             }
@@ -337,184 +364,90 @@ impl<'t> ComputeHigherLevels<'t> {
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroUsize;
-
-    use crate::db_snap;
-    use crate::documents::documents_batch_reader_from_objects;
-    use crate::index::tests::TempIndex;
-
-    #[test]
-    fn test_facets_number() {
-        let test =
-            |name: &str, group_size: Option<NonZeroUsize>, min_level_size: Option<NonZeroUsize>| {
-                let mut index = TempIndex::new_with_map_size(4096 * 1000 * 10); // 40MB
-                index.index_documents_config.autogenerate_docids = true;
-                index.index_documents_config.facet_level_group_size = group_size;
-                index.index_documents_config.facet_min_level_size = min_level_size;
-
-                index
-                    .update_settings(|settings| {
-                        settings.set_filterable_fields(
-                            IntoIterator::into_iter(["facet".to_owned(), "facet2".to_owned()])
-                                .collect(),
-                        );
-                    })
-                    .unwrap();
-
-                let mut documents = vec![];
-                for i in 0..1_000 {
-                    documents.push(serde_json::json!({ "facet": i }).as_object().unwrap().clone());
-                }
-                for i in 0..100 {
-                    documents.push(serde_json::json!({ "facet2": i }).as_object().unwrap().clone());
-                }
-                let documents = documents_batch_reader_from_objects(documents);
-                index.add_documents(documents).unwrap();
-                db_snap!(index, facet_id_f64_docids, name);
-            };
-
-        test("default", None, None);
-        test("tiny_groups_tiny_levels", NonZeroUsize::new(1), NonZeroUsize::new(1));
-        test("small_groups_small_levels", NonZeroUsize::new(2), NonZeroUsize::new(2));
-        test("small_groups_large_levels", NonZeroUsize::new(2), NonZeroUsize::new(128));
-        test("large_groups_small_levels", NonZeroUsize::new(16), NonZeroUsize::new(2));
-        test("large_groups_large_levels", NonZeroUsize::new(16), NonZeroUsize::new(256));
-    }
+    use crate::heed_codec::facet::OrderedF64Codec;
+    use crate::milli_snap;
+    use crate::update::facet::tests::FacetIndex;
+    use roaring::RoaringBitmap;
+    use std::iter::once;
 
     #[test]
-    fn test_facets_string() {
-        let test = |name: &str,
-                    group_size: Option<NonZeroUsize>,
-                    min_level_size: Option<NonZeroUsize>| {
-            let mut index = TempIndex::new_with_map_size(4096 * 1000 * 10); // 40MB
-            index.index_documents_config.autogenerate_docids = true;
-            index.index_documents_config.facet_level_group_size = group_size;
-            index.index_documents_config.facet_min_level_size = min_level_size;
+    fn insert() {
+        let test = |name: &str, group_size: u8, min_level_size: u8| {
+            let index =
+                FacetIndex::<OrderedF64Codec>::new(group_size, 0 /*NA*/, min_level_size);
 
-            index
-                .update_settings(|settings| {
-                    settings.set_filterable_fields(
-                        IntoIterator::into_iter(["facet".to_owned(), "facet2".to_owned()])
-                            .collect(),
-                    );
-                })
-                .unwrap();
-
-            let mut documents = vec![];
-            for i in 0..100 {
-                documents.push(
-                    serde_json::json!({ "facet": format!("s{i:X}") }).as_object().unwrap().clone(),
-                );
+            let mut elements = Vec::<((u16, f64), RoaringBitmap)>::new();
+            for i in 0..1_000u32 {
+                // field id = 0, left_bound = i, docids = [i]
+                elements.push(((0, i as f64), once(i).collect()));
             }
-            for i in 0..10 {
-                documents.push(
-                    serde_json::json!({ "facet2": format!("s{i:X}") }).as_object().unwrap().clone(),
-                );
+            for i in 0..100u32 {
+                // field id = 1, left_bound = i, docids = [i]
+                elements.push(((1, i as f64), once(i).collect()));
             }
-            let documents = documents_batch_reader_from_objects(documents);
+            let mut wtxn = index.env.write_txn().unwrap();
+            index.bulk_insert(&mut wtxn, &[0, 1], elements.iter());
 
-            index.add_documents(documents).unwrap();
+            index.verify_structure_validity(&wtxn, 0);
+            index.verify_structure_validity(&wtxn, 1);
 
-            db_snap!(index, facet_id_string_docids, name);
+            wtxn.commit().unwrap();
+
+            milli_snap!(format!("{index}"), name);
         };
 
-        test("default", None, None);
-        test("tiny_groups_tiny_levels", NonZeroUsize::new(1), NonZeroUsize::new(1));
+        test("default", 4, 5);
+        test("small_group_small_min_level", 2, 2);
+        test("small_group_large_min_level", 2, 128);
+        test("large_group_small_min_level", 16, 2);
+        test("odd_group_odd_min_level", 7, 3);
     }
-
     #[test]
-    fn test_facets_number_incremental_update() {
-        let test =
-            |name: &str, group_size: Option<NonZeroUsize>, min_level_size: Option<NonZeroUsize>| {
-                let mut index = TempIndex::new_with_map_size(4096 * 1000 * 10); // 40MB
-                index.index_documents_config.autogenerate_docids = true;
-                index.index_documents_config.facet_level_group_size = group_size;
-                index.index_documents_config.facet_min_level_size = min_level_size;
+    fn insert_delete_field_insert() {
+        let test = |name: &str, group_size: u8, min_level_size: u8| {
+            let index =
+                FacetIndex::<OrderedF64Codec>::new(group_size, 0 /*NA*/, min_level_size);
+            let mut wtxn = index.env.write_txn().unwrap();
 
-                index
-                    .update_settings(|settings| {
-                        settings.set_filterable_fields(
-                            IntoIterator::into_iter(["facet".to_owned(), "facet2".to_owned()])
-                                .collect(),
-                        );
-                    })
-                    .unwrap();
+            let mut elements = Vec::<((u16, f64), RoaringBitmap)>::new();
+            for i in 0..100u32 {
+                // field id = 0, left_bound = i, docids = [i]
+                elements.push(((0, i as f64), once(i).collect()));
+            }
+            for i in 0..100u32 {
+                // field id = 1, left_bound = i, docids = [i]
+                elements.push(((1, i as f64), once(i).collect()));
+            }
+            index.bulk_insert(&mut wtxn, &[0, 1], elements.iter());
 
-                let mut documents = vec![];
-                for i in 0..1000 {
-                    documents.push(serde_json::json!({ "facet": i }).as_object().unwrap().clone());
-                }
-                for i in 0..100 {
-                    documents.push(serde_json::json!({ "facet2": i }).as_object().unwrap().clone());
-                }
-                let documents_batch = documents_batch_reader_from_objects(documents.clone());
+            index.verify_structure_validity(&wtxn, 0);
+            index.verify_structure_validity(&wtxn, 1);
+            // delete all the elements for the facet id 0
+            for i in 0..100u32 {
+                index.delete(&mut wtxn, 0, &(i as f64), i);
+            }
+            index.verify_structure_validity(&wtxn, 0);
+            index.verify_structure_validity(&wtxn, 1);
 
-                index.add_documents(documents_batch).unwrap();
+            let mut elements = Vec::<((u16, f64), RoaringBitmap)>::new();
+            // then add some elements again for the facet id 1
+            for i in 0..110u32 {
+                // field id = 1, left_bound = i, docids = [i]
+                elements.push(((1, i as f64), once(i).collect()));
+            }
+            index.verify_structure_validity(&wtxn, 0);
+            index.verify_structure_validity(&wtxn, 1);
+            index.bulk_insert(&mut wtxn, &[0, 1], elements.iter());
 
-                let mut documents = vec![];
-                for i in 1000..1010 {
-                    documents.push(serde_json::json!({ "facet": i }).as_object().unwrap().clone());
-                }
-                for i in 100..110 {
-                    documents.push(serde_json::json!({ "facet2": i }).as_object().unwrap().clone());
-                }
-                let documents_batch = documents_batch_reader_from_objects(documents.clone());
+            wtxn.commit().unwrap();
 
-                index.add_documents(documents_batch).unwrap();
+            milli_snap!(format!("{index}"), name);
+        };
 
-                db_snap!(index, facet_id_f64_docids, name);
-            };
-
-        test("default", None, None);
-        test("tiny_groups_tiny_levels", NonZeroUsize::new(1), NonZeroUsize::new(1));
-    }
-
-    #[test]
-    fn test_facets_number_delete_facet_id_then_bulk_update() {
-        let test =
-            |name: &str, group_size: Option<NonZeroUsize>, min_level_size: Option<NonZeroUsize>| {
-                let mut index = TempIndex::new_with_map_size(4096 * 1000 * 10); // 40MB
-                index.index_documents_config.autogenerate_docids = true;
-                index.index_documents_config.facet_level_group_size = group_size;
-                index.index_documents_config.facet_min_level_size = min_level_size;
-
-                index
-                    .update_settings(|settings| {
-                        settings.set_filterable_fields(
-                            IntoIterator::into_iter(["facet".to_owned(), "facet2".to_owned()])
-                                .collect(),
-                        );
-                    })
-                    .unwrap();
-
-                let mut documents = vec![];
-                for i in 0..1000 {
-                    documents.push(serde_json::json!({ "facet": i }).as_object().unwrap().clone());
-                }
-                for i in 0..100 {
-                    documents.push(serde_json::json!({ "facet2": i }).as_object().unwrap().clone());
-                }
-                let documents_batch = documents_batch_reader_from_objects(documents.clone());
-
-                index.add_documents(documents_batch).unwrap();
-
-                // 1100 facets -> how long is the DB?
-
-                let mut documents = vec![];
-                for i in 1000..1010 {
-                    documents.push(serde_json::json!({ "facet": i }).as_object().unwrap().clone());
-                }
-                for i in 100..110 {
-                    documents.push(serde_json::json!({ "facet2": i }).as_object().unwrap().clone());
-                }
-                let documents_batch = documents_batch_reader_from_objects(documents.clone());
-
-                index.add_documents(documents_batch).unwrap();
-
-                db_snap!(index, facet_id_f64_docids, name);
-            };
-
-        test("default", None, None);
-        test("tiny_groups_tiny_levels", NonZeroUsize::new(1), NonZeroUsize::new(1));
+        test("default", 4, 5);
+        test("small_group_small_min_level", 2, 2);
+        test("small_group_large_min_level", 2, 128);
+        test("large_group_small_min_level", 16, 2);
+        test("odd_group_odd_min_level", 7, 3);
     }
 }

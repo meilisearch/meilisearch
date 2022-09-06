@@ -89,8 +89,8 @@ mod tests {
     use crate::heed_codec::facet::OrderedF64Codec;
     use crate::milli_snap;
     use crate::search::facet::facet_sort_ascending::ascending_facet_sort;
-    use crate::search::facet::test::FacetIndex;
     use crate::snapshot_tests::display_bitmap;
+    use crate::update::facet::tests::FacetIndex;
 
     fn get_simple_index() -> FacetIndex<OrderedF64Codec> {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
@@ -133,7 +133,7 @@ mod tests {
             let txn = index.env.read_txn().unwrap();
             let candidates = (200..=300).into_iter().collect::<RoaringBitmap>();
             let mut results = String::new();
-            let iter = ascending_facet_sort(&txn, index.db.content, 0, candidates).unwrap();
+            let iter = ascending_facet_sort(&txn, index.content, 0, candidates).unwrap();
             for el in iter {
                 let docids = el.unwrap();
                 results.push_str(&display_bitmap(&docids));
