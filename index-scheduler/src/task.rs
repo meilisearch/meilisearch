@@ -25,7 +25,7 @@ pub struct Task {
     pub finished_at: Option<OffsetDateTime>,
 
     pub status: Status,
-    pub kind: Kind,
+    pub kind: KindWithContent,
 }
 
 impl Task {
@@ -40,10 +40,11 @@ impl Task {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum Kind {
+pub enum KindWithContent {
     DumpExport {
         output: PathBuf,
     },
+    Snapshot,
     DocumentAddition {
         index_name: String,
         content_file: String,
@@ -80,62 +81,81 @@ pub enum Kind {
     },
 }
 
-impl Kind {
+impl KindWithContent {
+    pub fn as_kind(&self) -> Kind {
+        match self {
+            KindWithContent::DumpExport { .. } => Kind::DumpExport,
+            KindWithContent::DocumentAddition { .. } => Kind::DocumentAddition,
+            KindWithContent::DocumentDeletion { .. } => Kind::DocumentDeletion,
+            KindWithContent::ClearAllDocuments { .. } => Kind::ClearAllDocuments,
+            KindWithContent::RenameIndex { .. } => Kind::RenameIndex,
+            KindWithContent::CreateIndex { .. } => Kind::CreateIndex,
+            KindWithContent::DeleteIndex { .. } => Kind::DeleteIndex,
+            KindWithContent::SwapIndex { .. } => Kind::SwapIndex,
+            KindWithContent::CancelTask { .. } => Kind::CancelTask,
+            KindWithContent::Snapshot => Kind::Snapshot,
+        }
+    }
+
     pub fn persist(&self) -> Result<()> {
         match self {
-            Kind::DocumentAddition {
-                index_name,
-                content_file,
+            KindWithContent::DocumentAddition {
+                index_name: _,
+                content_file: _,
             } => {
                 // TODO: TAMO: persist the file
                 // content_file.persist();
                 Ok(())
             }
             // There is nothing to persist for all these tasks
-            Kind::DumpExport { .. }
-            | Kind::DocumentDeletion { .. }
-            | Kind::ClearAllDocuments { .. }
-            | Kind::RenameIndex { .. }
-            | Kind::CreateIndex { .. }
-            | Kind::DeleteIndex { .. }
-            | Kind::SwapIndex { .. }
-            | Kind::CancelTask { .. } => Ok(()),
+            KindWithContent::DumpExport { .. }
+            | KindWithContent::DocumentDeletion { .. }
+            | KindWithContent::ClearAllDocuments { .. }
+            | KindWithContent::RenameIndex { .. }
+            | KindWithContent::CreateIndex { .. }
+            | KindWithContent::DeleteIndex { .. }
+            | KindWithContent::SwapIndex { .. }
+            | KindWithContent::CancelTask { .. }
+            | KindWithContent::Snapshot => Ok(()),
         }
     }
 
     pub fn remove_data(&self) -> Result<()> {
         match self {
-            Kind::DocumentAddition {
-                index_name,
-                content_file,
+            KindWithContent::DocumentAddition {
+                index_name: _,
+                content_file: _,
             } => {
                 // TODO: TAMO: delete the file
                 // content_file.delete();
                 Ok(())
             }
             // There is no data associated with all these tasks
-            Kind::DumpExport { .. }
-            | Kind::DocumentDeletion { .. }
-            | Kind::ClearAllDocuments { .. }
-            | Kind::RenameIndex { .. }
-            | Kind::CreateIndex { .. }
-            | Kind::DeleteIndex { .. }
-            | Kind::SwapIndex { .. }
-            | Kind::CancelTask { .. } => Ok(()),
+            KindWithContent::DumpExport { .. }
+            | KindWithContent::DocumentDeletion { .. }
+            | KindWithContent::ClearAllDocuments { .. }
+            | KindWithContent::RenameIndex { .. }
+            | KindWithContent::CreateIndex { .. }
+            | KindWithContent::DeleteIndex { .. }
+            | KindWithContent::SwapIndex { .. }
+            | KindWithContent::CancelTask { .. }
+            | KindWithContent::Snapshot => Ok(()),
         }
     }
+}
 
-    pub fn to_u32(&self) -> u32 {
-        match self {
-            Kind::DumpExport { .. } => 0,
-            Kind::DocumentAddition { .. } => 1,
-            Kind::DocumentDeletion { .. } => 2,
-            Kind::ClearAllDocuments { .. } => 3,
-            Kind::RenameIndex { .. } => 4,
-            Kind::CreateIndex { .. } => 5,
-            Kind::DeleteIndex { .. } => 6,
-            Kind::SwapIndex { .. } => 7,
-            Kind::CancelTask { .. } => 8,
-        }
-    }
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Kind {
+    CancelTask,
+    ClearAllDocuments,
+    CreateIndex,
+    DeleteIndex,
+    DocumentAddition,
+    DocumentDeletion,
+    DumpExport,
+    RenameIndex,
+    Settings,
+    Snapshot,
+    SwapIndex,
 }
