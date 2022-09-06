@@ -45,6 +45,19 @@ impl IndexScheduler {
         Ok(self.index_tasks.put(wtxn, index, bitmap)?)
     }
 
+    pub(crate) fn update_index(
+        &self,
+        wtxn: &mut RwTxn,
+        index: &str,
+        f: impl Fn(RoaringBitmap) -> RoaringBitmap,
+    ) -> Result<()> {
+        let tasks = self.get_index(&wtxn, index)?;
+        let tasks = f(tasks);
+        self.put_index(wtxn, index, &tasks)?;
+
+        Ok(())
+    }
+
     pub(crate) fn get_status(&self, rtxn: &RoTxn, status: Status) -> Result<RoaringBitmap> {
         Ok(self.status.get(&rtxn, &status)?.unwrap_or_default())
     }
@@ -58,19 +71,6 @@ impl IndexScheduler {
         Ok(self.status.put(wtxn, &status, bitmap)?)
     }
 
-    pub(crate) fn get_kind(&self, rtxn: &RoTxn, kind: Kind) -> Result<RoaringBitmap> {
-        Ok(self.kind.get(&rtxn, &kind)?.unwrap_or_default())
-    }
-
-    pub(crate) fn put_kind(
-        &self,
-        wtxn: &mut RwTxn,
-        kind: Kind,
-        bitmap: &RoaringBitmap,
-    ) -> Result<()> {
-        Ok(self.kind.put(wtxn, &kind, bitmap)?)
-    }
-
     pub(crate) fn update_status(
         &self,
         wtxn: &mut RwTxn,
@@ -82,6 +82,19 @@ impl IndexScheduler {
         self.put_status(wtxn, status, &tasks)?;
 
         Ok(())
+    }
+
+    pub(crate) fn get_kind(&self, rtxn: &RoTxn, kind: Kind) -> Result<RoaringBitmap> {
+        Ok(self.kind.get(&rtxn, &kind)?.unwrap_or_default())
+    }
+
+    pub(crate) fn put_kind(
+        &self,
+        wtxn: &mut RwTxn,
+        kind: Kind,
+        bitmap: &RoaringBitmap,
+    ) -> Result<()> {
+        Ok(self.kind.put(wtxn, &kind, bitmap)?)
     }
 
     pub(crate) fn update_kind(
