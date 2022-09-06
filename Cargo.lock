@@ -200,7 +200,7 @@ dependencies = [
  "serde_urlencoded",
  "smallvec",
  "socket2",
- "time 0.3.9",
+ "time 0.3.14",
  "url",
 ]
 
@@ -285,9 +285,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.62"
+version = "1.0.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1485d4d2cc45e7b201ee3767015c96faa5904387c9d87c6efdd0fb511f12d305"
+checksum = "b9a8f622bcf6ff3df478e9deba3e03e4e04b300f8e6a139e192c05fa3490afc7"
 dependencies = [
  "backtrace",
 ]
@@ -734,7 +734,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94d4706de1b0fa5b132270cddffa8585166037822e260a944fe161acd137ca05"
 dependencies = [
  "percent-encoding",
- "time 0.3.9",
+ "time 0.3.14",
  "version_check",
 ]
 
@@ -1576,6 +1576,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "index-scheduler"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "milli",
+ "roaring",
+ "serde",
+ "thiserror",
+ "time 0.3.14",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2016,7 +2029,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror",
- "time 0.3.9",
+ "time 0.3.14",
  "uuid",
 ]
 
@@ -2084,7 +2097,7 @@ dependencies = [
  "tar",
  "tempfile",
  "thiserror",
- "time 0.3.9",
+ "time 0.3.14",
  "tokio",
  "tokio-stream",
  "urlencoding",
@@ -2151,7 +2164,7 @@ dependencies = [
  "tar",
  "tempfile",
  "thiserror",
- "time 0.3.9",
+ "time 0.3.14",
  "tokio",
  "uuid",
  "walkdir",
@@ -2234,7 +2247,7 @@ dependencies = [
  "smartstring",
  "tempfile",
  "thiserror",
- "time 0.3.9",
+ "time 0.3.14",
  "uuid",
 ]
 
@@ -3099,7 +3112,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
- "time 0.3.9",
+ "time 0.3.14",
 ]
 
 [[package]]
@@ -3216,7 +3229,7 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "thiserror",
- "time 0.3.9",
+ "time 0.3.14",
 ]
 
 [[package]]
@@ -3460,9 +3473,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.9"
+version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2702e08a7a860f005826c6815dcac101b19b5eb330c27fe4a5928fec1d20ddd"
+checksum = "3c3f9a28b618c3a6b9251b6908e9c99e04b9e5c02e6581ccbb67d59c34ef7f9b"
 dependencies = [
  "itoa 1.0.2",
  "libc",
@@ -3720,7 +3733,7 @@ dependencies = [
  "git2",
  "rustversion",
  "thiserror",
- "time 0.3.9",
+ "time 0.3.14",
 ]
 
 [[package]]
