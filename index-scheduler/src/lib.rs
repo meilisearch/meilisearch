@@ -110,6 +110,15 @@ impl IndexScheduler {
         self.all_tasks
             .append(&mut wtxn, &BEU32::new(task_id), &task)?;
 
+        if let Some(indexes) = task.indexes() {
+            for index in indexes {
+                self.update_index(&mut wtxn, index, |mut bitmap| {
+                    bitmap.insert(task_id);
+                    bitmap
+                })?;
+            }
+        }
+
         self.update_status(&mut wtxn, Status::Enqueued, |mut bitmap| {
             bitmap.insert(task_id);
             bitmap
