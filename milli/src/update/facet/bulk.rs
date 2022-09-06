@@ -291,8 +291,6 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
             field_id,
             level - 1,
             &mut |sub_bitmaps, left_bound| {
-                // TODO: is this done unnecessarily for all 32 levels?
-                println!("level: {level}");
                 let mut combined_bitmap = RoaringBitmap::default();
                 for bitmap in sub_bitmaps {
                     combined_bitmap |= bitmap;

@@ -138,11 +138,13 @@ pub(crate) fn write_typed_chunk_into_index(
             is_merged_database = true;
         }
         TypedChunk::FieldIdFacetNumberDocids(facet_id_number_docids_iter) => {
+            // TODO indexer options for the facet level database
             let indexer = FacetsUpdate::new(index, FacetType::Number, facet_id_number_docids_iter);
             indexer.execute(wtxn)?;
             is_merged_database = true;
         }
         TypedChunk::FieldIdFacetStringDocids(facet_id_string_docids_iter) => {
+            // TODO indexer options for the facet level database
             let indexer = FacetsUpdate::new(index, FacetType::String, facet_id_string_docids_iter);
             indexer.execute(wtxn)?;
             is_merged_database = true;

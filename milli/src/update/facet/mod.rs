@@ -13,8 +13,6 @@ pub struct FacetsUpdate<'i> {
     database: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
     facet_type: FacetType,
     new_data: grenad::Reader<File>,
-    // Options:
-    // there's no way to change these for now
     level_group_size: u8,
     max_level_group_size: u8,
     min_level_size: u8,
@@ -39,6 +37,28 @@ impl<'i> FacetsUpdate<'i> {
             new_data,
         }
     }
+
+    // TODO: use the options below?
+    // but I don't actually see why they should be configurable
+    // /// The minimum number of elements that a level is allowed to have.
+    // pub fn level_max_group_size(mut self, value: u8) -> Self {
+    //     self.max_level_group_size = std::cmp::max(value, 4);
+    //     self
+    // }
+
+    // /// The number of elements from the level below that are represented by a single element in the level above
+    // ///
+    // /// This setting is always greater than or equal to 2.
+    // pub fn level_group_size(mut self, value: u8) -> Self {
+    //     self.level_group_size = std::cmp::max(value, 2);
+    //     self
+    // }
+
+    // /// The minimum number of elements that a level is allowed to have.
+    // pub fn min_level_size(mut self, value: u8) -> Self {
+    //     self.min_level_size = std::cmp::max(value, 2);
+    //     self
+    // }
 
     pub fn execute(self, wtxn: &mut heed::RwTxn) -> Result<()> {
         if self.new_data.is_empty() {
@@ -144,7 +164,7 @@ pub(crate) mod tests {
             let max_group_size = std::cmp::min(127, std::cmp::max(group_size * 2, max_group_size)); // 2*group_size <= x <= 127
             let min_level_size = std::cmp::max(1, min_level_size); // 1 <= x <= inf
             let mut options = heed::EnvOpenOptions::new();
-            let options = options.map_size(4096 * 4 * 100);
+            let options = options.map_size(4096 * 4 * 1000);
             let tempdir = tempfile::TempDir::new().unwrap();
             let env = options.open(tempdir.path()).unwrap();
             let content = env.create_database(None).unwrap();
@@ -306,6 +326,65 @@ pub(crate) mod tests {
                 )?;
             }
             Ok(())
+        }
+    }
+}
+
+#[allow(unused)]
+#[cfg(test)]
+mod comparison_bench {
+    use std::iter::once;
+
+    use rand::Rng;
+    use roaring::RoaringBitmap;
+
+    use crate::heed_codec::facet::OrderedF64Codec;
+
+    use super::tests::FacetIndex;
+
+    // This is a simple test to get an intuition on the relative speed
+    // of the incremental vs. bulk indexer.
+    // It appears that the incremental indexer is about 50 times slower than the
+    // bulk indexer.
+    #[test]
+    fn benchmark_facet_indexing() {
+        // then we add 10_000 documents at a time and compare the speed of adding 1, 100, and 1000 documents to it
+
+        let mut facet_value = 0;
+
+        let mut r = rand::thread_rng();
+
+        for i in 1..=20 {
+            let size = 50_000 * i;
+            let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
+
+            let mut txn = index.env.write_txn().unwrap();
+            let mut elements = Vec::<((u16, f64), RoaringBitmap)>::new();
+            for i in 0..size {
+                // field id = 0, left_bound = i, docids = [i]
+                elements.push(((0, facet_value as f64), once(i).collect()));
+                facet_value += 1;
+            }
+            let timer = std::time::Instant::now();
+            index.bulk_insert(&mut txn, &[0], elements.iter());
+            let time_spent = timer.elapsed().as_millis();
+            println!("bulk {size} : {time_spent}ms");
+
+            txn.commit().unwrap();
+
+            for nbr_doc in [1, 100, 1000, 10_000] {
+                let mut txn = index.env.write_txn().unwrap();
+                let timer = std::time::Instant::now();
+                //
+                // insert one document
+                //
+                for _ in 0..nbr_doc {
+                    index.insert(&mut txn, 0, &r.gen(), &once(1).collect());
+                }
+                let time_spent = timer.elapsed().as_millis();
+                println!("    add {nbr_doc} : {time_spent}ms");
+                txn.abort().unwrap();
+            }
         }
     }
 }
