@@ -9,6 +9,6 @@ jobs:
     name: Specify breaking
     runs-on: ubuntu-latest
     steps:
-    - uses: yogevbd/enforce-label-action@2.1.0
+    - uses: yogevbd/enforce-label-action@2.2.2
       with:
         REQUIRED_LABELS_ANY: 'no breaking,DB breaking,API breaking,skip changelog'
