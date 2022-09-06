@@ -1,22 +1,28 @@
+use crate::export_to_env_if_not_present;
+
 use core::fmt;
 use std::{convert::TryFrom, num::ParseIntError, ops::Deref, str::FromStr};
 
 use byte_unit::{Byte, ByteError};
 use clap::Parser;
 use milli::update::IndexerConfig;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sysinfo::{RefreshKind, System, SystemExt};
 
-#[derive(Debug, Clone, Parser, Serialize)]
+const MEILI_MAX_INDEXING_MEMORY: &str = "MEILI_MAX_INDEXING_MEMORY";
+const MEILI_MAX_INDEXING_THREADS: &str = "MEILI_MAX_INDEXING_THREADS";
+const DISABLE_AUTO_BATCHING: &str = "DISABLE_AUTO_BATCHING";
+
+#[derive(Debug, Clone, Parser, Serialize, Deserialize)]
 pub struct IndexerOpts {
     /// The amount of documents to skip before printing
     /// a log regarding the indexing advancement.
-    #[serde(skip)]
+    #[serde(skip_serializing)]
     #[clap(long, default_value = "100000", hide = true)] // 100k
     pub log_every_n: usize,
 
     /// Grenad max number of chunks in bytes.
-    #[serde(skip)]
+    #[serde(skip_serializing)]
     #[clap(long, hide = true)]
     pub max_nb_chunks: Option<usize>,
 
@@ -27,7 +33,7 @@ pub struct IndexerOpts {
     /// In case the engine is unable to retrieve the available memory the engine will
     /// try to use the memory it needs but without real limit, this can lead to
     /// Out-Of-Memory issues and it is recommended to specify the amount of memory to use.
-    #[clap(long, env = "MEILI_MAX_INDEXING_MEMORY", default_value_t)]
+    #[clap(long, env = MEILI_MAX_INDEXING_MEMORY, default_value_t)]
     pub max_indexing_memory: MaxMemory,
 
     /// The maximum number of threads the indexer will use.
@@ -35,16 +41,31 @@ pub struct IndexerOpts {
     /// it will use the maximum number of available cores.
     ///
     /// It defaults to half of the available threads.
-    #[clap(long, env = "MEILI_MAX_INDEXING_THREADS", default_value_t)]
+    #[clap(long, env = MEILI_MAX_INDEXING_THREADS, default_value_t)]
     pub max_indexing_threads: MaxThreads,
 }
 
-#[derive(Debug, Clone, Parser, Default, Serialize)]
+#[derive(Debug, Clone, Parser, Default, Serialize, Deserialize)]
 pub struct SchedulerConfig {
     /// The engine will disable task auto-batching,
     /// and will sequencialy compute each task one by one.
-    #[clap(long, env = "DISABLE_AUTO_BATCHING")]
+    #[clap(long, env = DISABLE_AUTO_BATCHING)]
     pub disable_auto_batching: bool,
+}
+
+impl IndexerOpts {
+    pub fn export_to_env(self) {
+        if let Some(max_indexing_memory) = self.max_indexing_memory.0 {
+            export_to_env_if_not_present(
+                MEILI_MAX_INDEXING_MEMORY,
+                max_indexing_memory.to_string(),
+            );
+        }
+        export_to_env_if_not_present(
+            MEILI_MAX_INDEXING_THREADS,
+            self.max_indexing_threads.0.to_string(),
+        );
+    }
 }
 
 impl TryFrom<&IndexerOpts> for IndexerConfig {
@@ -77,8 +98,17 @@ impl Default for IndexerOpts {
     }
 }
 
+impl SchedulerConfig {
+    pub fn export_to_env(self) {
+        export_to_env_if_not_present(
+            DISABLE_AUTO_BATCHING,
+            self.disable_auto_batching.to_string(),
+        );
+    }
+}
+
 /// A type used to detect the max memory available and use 2/3 of it.
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct MaxMemory(Option<Byte>);
 
 impl FromStr for MaxMemory {
@@ -134,7 +164,7 @@ fn total_memory_bytes() -> Option<u64> {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct MaxThreads(usize);
 
 impl FromStr for MaxThreads {

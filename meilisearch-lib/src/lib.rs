@@ -11,6 +11,8 @@ mod snapshot;
 pub mod tasks;
 mod update_file_store;
 
+use std::env::VarError;
+use std::ffi::OsStr;
 use std::path::Path;
 
 pub use index_controller::MeiliSearch;
@@ -33,5 +35,16 @@ pub fn is_empty_db(db_path: impl AsRef<Path>) -> bool {
         dir.count() == 0
     } else {
         true
+    }
+}
+
+/// Checks if the key is defined in the environment variables.
+/// If not, inserts it with the given value.
+pub fn export_to_env_if_not_present<T>(key: &str, value: T)
+where
+    T: AsRef<OsStr>,
+{
+    if let Err(VarError::NotPresent) = std::env::var(key) {
+        std::env::set_var(key, value);
     }
 }
