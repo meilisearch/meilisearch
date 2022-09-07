@@ -1139,8 +1139,8 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "0.33.2"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.2#f7c352a32db002fdd6aa7f5ce544043c0acca202"
+version = "0.33.3"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.3#549fa12d5a52ce6cee821ffcd89dc8d465f24b42"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1164,8 +1164,8 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "0.33.2"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.2#f7c352a32db002fdd6aa7f5ce544043c0acca202"
+version = "0.33.3"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.3#549fa12d5a52ce6cee821ffcd89dc8d465f24b42"
 dependencies = [
  "serde_json",
 ]
@@ -1683,8 +1683,8 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "0.33.2"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.2#f7c352a32db002fdd6aa7f5ce544043c0acca202"
+version = "0.33.3"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.3#549fa12d5a52ce6cee821ffcd89dc8d465f24b42"
 dependencies = [
  "serde_json",
 ]
@@ -2221,8 +2221,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.33.2"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.2#f7c352a32db002fdd6aa7f5ce544043c0acca202"
+version = "0.33.3"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.3#549fa12d5a52ce6cee821ffcd89dc8d465f24b42"
 dependencies = [
  "bimap",
  "bincode",
