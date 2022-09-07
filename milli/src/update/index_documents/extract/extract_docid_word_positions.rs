@@ -7,7 +7,9 @@ use charabia::{SeparatorKind, Token, TokenKind, TokenizerBuilder};
 use roaring::RoaringBitmap;
 use serde_json::Value;
 
-use super::helpers::{concat_u32s_array, create_sorter, sorter_into_reader, GrenadParameters};
+use super::helpers::{
+    concat_u32s_array, create_sorter, sorter_into_reader, GrenadParameters, MAX_WORD_LENGTH,
+};
 use crate::error::{InternalError, SerializationError};
 use crate::{absolute_from_relative_position, FieldId, Result, MAX_POSITION_PER_ATTRIBUTE};
 
@@ -68,7 +70,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
 
                     for (index, token) in tokens {
                         let token = token.lemma().trim();
-                        if !token.is_empty() {
+                        if !token.is_empty() && token.len() <= MAX_WORD_LENGTH {
                             key_buffer.truncate(mem::size_of::<u32>());
                             key_buffer.extend_from_slice(token.as_bytes());
 
