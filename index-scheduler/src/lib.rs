@@ -169,21 +169,16 @@ impl IndexScheduler {
 
         if let Some(indexes) = task.indexes() {
             for index in indexes {
-                self.update_index(&mut wtxn, index, |mut bitmap| {
-                    bitmap.insert(task_id);
-                    bitmap
-                })?;
+                self.update_index(&mut wtxn, index, |bitmap| drop(bitmap.insert(task_id)))?;
             }
         }
 
-        self.update_status(&mut wtxn, Status::Enqueued, |mut bitmap| {
+        self.update_status(&mut wtxn, Status::Enqueued, |bitmap| {
             bitmap.insert(task_id);
-            bitmap
         })?;
 
-        self.update_kind(&mut wtxn, task.kind.as_kind(), |mut bitmap| {
-            bitmap.insert(task_id);
-            bitmap
+        self.update_kind(&mut wtxn, task.kind.as_kind(), |bitmap| {
+            (bitmap.insert(task_id));
         })?;
 
         // we persist the file in last to be sure everything before was applied successfuly

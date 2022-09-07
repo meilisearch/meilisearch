@@ -50,24 +50,20 @@ impl IndexScheduler {
             .ok_or(Error::CorruptedTaskQueue)?;
 
         if old_task.status != task.status {
-            self.update_status(wtxn, old_task.status, |mut bitmap| {
+            self.update_status(wtxn, old_task.status, |bitmap| {
                 bitmap.remove(task.uid);
-                bitmap
             })?;
-            self.update_status(wtxn, task.status, |mut bitmap| {
+            self.update_status(wtxn, task.status, |bitmap| {
                 bitmap.insert(task.uid);
-                bitmap
             })?;
         }
 
         if old_task.kind.as_kind() != task.kind.as_kind() {
-            self.update_kind(wtxn, old_task.kind.as_kind(), |mut bitmap| {
+            self.update_kind(wtxn, old_task.kind.as_kind(), |bitmap| {
                 bitmap.remove(task.uid);
-                bitmap
             })?;
-            self.update_kind(wtxn, task.kind.as_kind(), |mut bitmap| {
+            self.update_kind(wtxn, task.kind.as_kind(), |bitmap| {
                 bitmap.insert(task.uid);
-                bitmap
             })?;
         }
 
@@ -91,10 +87,10 @@ impl IndexScheduler {
         &self,
         wtxn: &mut RwTxn,
         index: &str,
-        f: impl Fn(RoaringBitmap) -> RoaringBitmap,
+        f: impl Fn(&mut RoaringBitmap),
     ) -> Result<()> {
-        let tasks = self.get_index(&wtxn, index)?;
-        let tasks = f(tasks);
+        let mut tasks = self.get_index(&wtxn, index)?;
+        f(&mut tasks);
         self.put_index(wtxn, index, &tasks)?;
 
         Ok(())
@@ -117,10 +113,10 @@ impl IndexScheduler {
         &self,
         wtxn: &mut RwTxn,
         status: Status,
-        f: impl Fn(RoaringBitmap) -> RoaringBitmap,
+        f: impl Fn(&mut RoaringBitmap),
     ) -> Result<()> {
-        let tasks = self.get_status(&wtxn, status)?;
-        let tasks = f(tasks);
+        let mut tasks = self.get_status(&wtxn, status)?;
+        f(&mut tasks);
         self.put_status(wtxn, status, &tasks)?;
 
         Ok(())
@@ -143,10 +139,10 @@ impl IndexScheduler {
         &self,
         wtxn: &mut RwTxn,
         kind: Kind,
-        f: impl Fn(RoaringBitmap) -> RoaringBitmap,
+        f: impl Fn(&mut RoaringBitmap),
     ) -> Result<()> {
-        let tasks = self.get_kind(&wtxn, kind)?;
-        let tasks = f(tasks);
+        let mut tasks = self.get_kind(&wtxn, kind)?;
+        f(&mut tasks);
         self.put_kind(wtxn, kind, &tasks)?;
 
         Ok(())
