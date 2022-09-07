@@ -240,7 +240,7 @@ impl IndexScheduler {
                     self.index(&index_name)?.clear_documents()?;
                 }
                 KindWithContent::RenameIndex {
-                    index_name,
+                    index_name: _,
                     new_name,
                 } => {
                     if self.available_index.get(wtxn, &new_name)?.unwrap_or(false) {
@@ -260,7 +260,7 @@ impl IndexScheduler {
                         return Err(Error::IndexAlreadyExists(index_name.to_string()));
                     }
 
-                    self.available_index.put(wtxn, &index_name, &true);
+                    self.available_index.put(wtxn, &index_name, &true)?;
                     // TODO: TAMO: give real info to the index
                     let index = Index::open(
                         index_name.to_string(),
@@ -277,7 +277,6 @@ impl IndexScheduler {
                         .insert(index_name.to_string(), index.clone());
                 }
                 KindWithContent::DeleteIndex { index_name } => {
-                    self.index_map.write();
                     if !self.available_index.delete(wtxn, &index_name)? {
                         return Err(Error::IndexNotFound(index_name.to_string()));
                     }
