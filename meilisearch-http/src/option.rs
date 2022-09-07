@@ -242,15 +242,20 @@ impl Opt {
         !self.no_analytics
     }
 
+    /// Build a new Opt from config file, env vars and cli args.
     pub fn build() -> Self {
+        // Parse the args to get the config_file_path.
         let mut opts = Opt::parse();
         if let Some(config_file_path) = opts.config_file_path.as_ref() {
             eprintln!("loading config file : {:?}", config_file_path);
             match std::fs::read(config_file_path) {
                 Ok(config) => {
+                    // If the arg is present, and the file successfully read, we deserialize it with `toml`.
                     let opt_from_config =
                         toml::from_slice::<Opt>(&config).expect("can't read file");
+                    // We inject the values from the toml in the corresponding env vars if needs be. Doing so, we respect the priority toml < env vars < cli args.
                     opt_from_config.export_to_env();
+                    // Once injected we parse the cli args once again to take the new env vars into scope.
                     opts = Opt::parse();
                 }
                 Err(err) => eprintln!("can't read {:?} : {}", config_file_path, err),
@@ -260,6 +265,7 @@ impl Opt {
         opts
     }
 
+    /// Exports the opts values to their corresponding env vars if they are not set.
     fn export_to_env(self) {
         export_to_env_if_not_present(MEILI_DB_PATH, self.db_path);
         export_to_env_if_not_present(MEILI_HTTP_ADDR, self.http_addr);
@@ -408,6 +414,8 @@ fn load_ocsp(filename: &Option<PathBuf>) -> anyhow::Result<Vec<u8>> {
 
     Ok(ret)
 }
+
+/// Functions used to get default value for `Opt` fields, needs to be function because of serde's default attribute.
 
 fn default_db_path() -> PathBuf {
     PathBuf::from(DEFAULT_DB_PATH)

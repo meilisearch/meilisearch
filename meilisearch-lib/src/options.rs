@@ -59,6 +59,7 @@ pub struct SchedulerConfig {
 }
 
 impl IndexerOpts {
+    /// Exports the values to their corresponding env vars if they are not set.
     pub fn export_to_env(self) {
         if let Some(max_indexing_memory) = self.max_indexing_memory.0 {
             export_to_env_if_not_present(
