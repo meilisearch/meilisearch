@@ -215,7 +215,7 @@ impl IndexScheduler {
                     continue;
                 }
             };
-            let batch = match self.get_next_batch(&wtxn) {
+            let mut batch = match self.get_next_batch(&wtxn) {
                 Ok(batch) => batch,
                 Err(e) => {
                     log::error!("{}", e);
@@ -232,7 +232,7 @@ impl IndexScheduler {
 
     fn process_batch(&self, wtxn: &mut RwTxn, batch: &mut Batch) -> Result<()> {
         match batch {
-            Batch::One(task) => match task.kind {
+            Batch::One(task) => match &task.kind {
                 KindWithContent::ClearAllDocuments { index_name } => {
                     self.index(&index_name)?.clear_documents()?;
                 }
