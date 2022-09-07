@@ -70,6 +70,9 @@ pub struct IndexScheduler {
 }
 
 impl IndexScheduler {
+    /// Return the index corresponding to the name. If it wasn't opened before
+    /// it'll be opened. But if it doesn't exist on disk it'll throw an
+    /// `IndexNotFound` error.
     pub fn index(&self, name: &str) -> Result<Index> {
         let rtxn = self.env.read_txn()?;
         let uuid = self
@@ -103,18 +106,6 @@ impl IndexScheduler {
         };
 
         Ok(index)
-    }
-
-    fn last_task_id(&self, rtxn: &RoTxn) -> Result<Option<TaskId>> {
-        Ok(self
-            .all_tasks
-            .remap_data_type::<DecodeIgnore>()
-            .last(rtxn)?
-            .map(|(k, _)| k.get() + 1))
-    }
-
-    fn next_task_id(&self, rtxn: &RoTxn) -> Result<TaskId> {
-        Ok(self.last_task_id(rtxn)?.unwrap_or_default())
     }
 
     /// Returns the tasks corresponding to the query.
@@ -200,6 +191,7 @@ impl IndexScheduler {
         Ok(())
     }
 
+    /// Notify the scheduler there is or may be work to do.
     pub fn notify(&self) {
         self.wake_up
             .store(true, std::sync::atomic::Ordering::Relaxed);
