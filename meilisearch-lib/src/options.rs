@@ -13,12 +13,14 @@ const MEILI_MAX_INDEXING_MEMORY: &str = "MEILI_MAX_INDEXING_MEMORY";
 const MEILI_MAX_INDEXING_THREADS: &str = "MEILI_MAX_INDEXING_THREADS";
 const DISABLE_AUTO_BATCHING: &str = "DISABLE_AUTO_BATCHING";
 
+const DEFAULT_LOG_EVERY_N: usize = 100000;
+
 #[derive(Debug, Clone, Parser, Serialize, Deserialize)]
 pub struct IndexerOpts {
     /// The amount of documents to skip before printing
     /// a log regarding the indexing advancement.
-    #[serde(skip_serializing)]
-    #[clap(long, default_value = "100000", hide = true)] // 100k
+    #[serde(skip_serializing, default = "default_log_every_n")]
+    #[clap(long, default_value_t = default_log_every_n(), hide = true)] // 100k
     pub log_every_n: usize,
 
     /// Grenad max number of chunks in bytes.
@@ -34,6 +36,7 @@ pub struct IndexerOpts {
     /// try to use the memory it needs but without real limit, this can lead to
     /// Out-Of-Memory issues and it is recommended to specify the amount of memory to use.
     #[clap(long, env = MEILI_MAX_INDEXING_MEMORY, default_value_t)]
+    #[serde(default)]
     pub max_indexing_memory: MaxMemory,
 
     /// The maximum number of threads the indexer will use.
@@ -42,6 +45,7 @@ pub struct IndexerOpts {
     ///
     /// It defaults to half of the available threads.
     #[clap(long, env = MEILI_MAX_INDEXING_THREADS, default_value_t)]
+    #[serde(default)]
     pub max_indexing_threads: MaxThreads,
 }
 
@@ -50,6 +54,7 @@ pub struct SchedulerConfig {
     /// The engine will disable task auto-batching,
     /// and will sequencialy compute each task one by one.
     #[clap(long, env = DISABLE_AUTO_BATCHING)]
+    #[serde(default)]
     pub disable_auto_batching: bool,
 }
 
@@ -193,4 +198,8 @@ impl Deref for MaxThreads {
     fn deref(&self) -> &Self::Target {
         &self.0
     }
+}
+
+fn default_log_every_n() -> usize {
+    DEFAULT_LOG_EVERY_N
 }
