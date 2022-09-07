@@ -1,12 +1,12 @@
 use crate::{
     task::{KindWithContent, Status},
-    Error, IndexScheduler, Result,
+    Error, IndexScheduler, Result, TaskId,
 };
 use milli::heed::RoTxn;
 
 use crate::{task::Kind, Task};
 
-pub enum Batch {
+pub(crate) enum Batch {
     Cancel(Task),
     Snapshot(Vec<Task>),
     Dump(Vec<Task>),
@@ -21,7 +21,7 @@ impl IndexScheduler {
     /// 2. We get the *next* snapshot to process.
     /// 3. We get the *next* dump to process.
     /// 4. We get the *next* tasks to process for a specific index.
-    fn get_next_batch(&self, rtxn: &RoTxn) -> Result<Batch> {
+    pub(crate) fn get_next_batch(&self, rtxn: &RoTxn) -> Result<Batch> {
         let enqueued = &self.get_status(rtxn, Status::Enqueued)?;
         let to_cancel = self.get_kind(rtxn, Kind::CancelTask)? & enqueued;
 
@@ -106,5 +106,19 @@ impl IndexScheduler {
             tasks: self.get_existing_tasks(rtxn, to_process)?,
             kind,
         })
+    }
+}
+
+impl Batch {
+    pub fn task_ids(&self) -> impl IntoIterator<Item = TaskId> + '_ {
+        match self {
+            Batch::Cancel(task) | Batch::One(task) => {
+                Box::new(std::iter::once(task.uid)) as Box<dyn Iterator<Item = TaskId>>
+            }
+            Batch::Snapshot(tasks) | Batch::Dump(tasks) | Batch::Contiguous { tasks, .. } => {
+                Box::new(tasks.iter().map(|task| task.uid)) as Box<dyn Iterator<Item = TaskId>>
+            }
+            Batch::Empty => Box::new(std::iter::empty()) as Box<dyn Iterator<Item = TaskId>>,
+        }
     }
 }

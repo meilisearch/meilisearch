@@ -5,7 +5,7 @@ use time::OffsetDateTime;
 
 use crate::TaskId;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Status {
     Enqueued,
@@ -17,6 +17,8 @@ pub enum Status {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Task {
+    pub uid: TaskId,
+
     #[serde(with = "time::serde::rfc3339::option")]
     pub enqueued_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339::option")]
@@ -45,7 +47,7 @@ impl Task {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum KindWithContent {
     DumpExport {
@@ -173,7 +175,7 @@ impl KindWithContent {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Kind {
     CancelTask,
