@@ -22,6 +22,7 @@ use super::{Checked, Settings};
 
 pub type Document = Map<String, Value>;
 
+// @kero, what is this structure? Shouldn't it move entirely to milli?
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexMeta {
@@ -50,6 +51,7 @@ impl IndexMeta {
     }
 }
 
+// @kero Maybe this should be entirely generated somewhere else since it doesn't really concern the index?
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexStats {
@@ -103,6 +105,14 @@ impl Index {
     /// Asynchronously close the underlying index
     pub fn close(self) {
         self.inner.as_ref().clone().prepare_for_closing();
+    }
+
+    pub fn delete(self) -> Result<()> {
+        let path = self.path().to_path_buf();
+        self.inner.as_ref().clone().prepare_for_closing().wait();
+        std::fs::remove_file(path)?;
+
+        Ok(())
     }
 
     pub fn stats(&self) -> Result<IndexStats> {
