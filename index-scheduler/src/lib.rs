@@ -1,20 +1,24 @@
 mod batch;
 pub mod error;
+pub mod index;
 pub mod task;
+mod update_file_store;
 mod utils;
 
+use batch::Batch;
 pub use error::Error;
+use index::Index;
 use milli::heed::types::{DecodeIgnore, OwnedType, SerdeBincode, Str};
 pub use task::Task;
-use task::{Kind, Status};
+use task::{Kind, KindWithContent, Status};
 
 use std::collections::hash_map::Entry;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::{collections::HashMap, sync::RwLock};
 
 use milli::heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn};
-use milli::{Index, RoaringBitmapCodec, BEU32};
+use milli::{RoaringBitmapCodec, BEU32};
 use roaring::RoaringBitmap;
 use serde::Deserialize;
 
@@ -44,7 +48,7 @@ pub struct Query {
 pub struct IndexScheduler {
     // Keep track of the opened indexes and is used
     // mainly by the index resolver.
-    index_map: Arc<RwLock<HashMap<IndexUuid, Index>>>,
+    index_map: Arc<RwLock<HashMap<String, Index>>>,
 
     /// The list of tasks currently processing.
     processing_tasks: Arc<RwLock<RoaringBitmap>>,
@@ -60,8 +64,8 @@ pub struct IndexScheduler {
     // All the tasks ids grouped by their kind.
     kind: Database<SerdeBincode<Kind>, RoaringBitmapCodec>,
 
-    // Map an index name with an indexuuid.
-    index_name_mapper: Database<Str, Str>,
+    // Tell you if an index is currently available.
+    available_index: Database<Str, SerdeBincode<bool>>,
     // Store the tasks associated to an index.
     index_tasks: Database<Str, RoaringBitmapCodec>,
 
@@ -75,12 +79,13 @@ impl IndexScheduler {
     /// `IndexNotFound` error.
     pub fn index(&self, name: &str) -> Result<Index> {
         let rtxn = self.env.read_txn()?;
-        let uuid = self
-            .index_name_mapper
+
+        self.available_index
             .get(&rtxn, name)?
-            .ok_or(Error::IndexNotFound)?;
+            .ok_or(Error::IndexNotFound(name.to_string()))?;
+
         // we clone here to drop the lock before entering the match
-        let index = self.index_map.read().unwrap().get(&*uuid).cloned();
+        let index = self.index_map.read().unwrap().get(name).cloned();
         let index = match index {
             Some(index) => index,
             // since we're lazy, it's possible that the index doesn't exist yet.
@@ -93,10 +98,15 @@ impl IndexScheduler {
                 // if it's not already there.
                 // Since there is a good chance it's not already there we can use
                 // the entry method.
-                match index_map.entry(uuid.to_string()) {
+                match index_map.entry(name.to_string()) {
                     Entry::Vacant(entry) => {
-                        // TODO: TAMO: get the envopenoptions from somewhere
-                        let index = milli::Index::new(EnvOpenOptions::new(), uuid)?;
+                        // TODO: TAMO: get the args from somewhere.
+                        let index = Index::open(
+                            name.to_string(),
+                            name.to_string(),
+                            100_000_000,
+                            Arc::default(),
+                        )?;
                         entry.insert(index.clone());
                         index
                     }
@@ -187,6 +197,96 @@ impl IndexScheduler {
         }
 
         self.notify();
+
+        Ok(())
+    }
+
+    /// This worker function must be run in a different thread and must be run only once.
+    fn run(&self) {
+        loop {
+            // TODO: TAMO: remove this horrible spinlock in favor of a sleep / channel / we’ll see
+            while !self.wake_up.swap(false, Ordering::Relaxed) {}
+
+            let mut wtxn = match self.env.write_txn() {
+                Ok(wtxn) => wtxn,
+                Err(e) => {
+                    log::error!("{}", e);
+                    continue;
+                }
+            };
+            let batch = match self.get_next_batch(&wtxn) {
+                Ok(batch) => batch,
+                Err(e) => {
+                    log::error!("{}", e);
+                    continue;
+                }
+            };
+
+            let res = self.process_batch(&mut wtxn, &mut batch);
+
+            // TODO: TAMO: do this later
+            // self.handle_batch_result(res);
+        }
+    }
+
+    fn process_batch(&self, wtxn: &mut RwTxn, batch: &mut Batch) -> Result<()> {
+        match batch {
+            Batch::One(task) => match task.kind {
+                KindWithContent::ClearAllDocuments { index_name } => {
+                    self.index(&index_name)?.clear_documents()?;
+                }
+                KindWithContent::RenameIndex {
+                    index_name,
+                    new_name,
+                } => {
+                    if self.available_index.get(wtxn, &new_name)?.unwrap_or(false) {
+                        return Err(Error::IndexAlreadyExists);
+                    }
+                    todo!("wait for @guigui insight");
+                }
+                KindWithContent::CreateIndex {
+                    index_name,
+                    primary_key,
+                } => {
+                    if self
+                        .available_index
+                        .get(wtxn, &index_name)?
+                        .unwrap_or(false)
+                    {
+                        return Err(Error::IndexAlreadyExists(index_name.to_string()));
+                    }
+
+                    self.available_index.put(wtxn, &index_name, &true);
+                    // let index =
+                    todo!("tamo: once I get index.rs to works");
+                }
+                KindWithContent::DeleteIndex { index_name } => {
+                    self.index_map.write();
+                    if !self.available_index.delete(wtxn, &index_name)? {
+                        return Err(Error::IndexNotFound(index_name.to_string()));
+                    }
+                    todo!("tamo: once I get index.rs to works");
+                }
+                KindWithContent::SwapIndex { lhs, rhs } => {
+                    if !self.available_index.get(wtxn, &lhs)?.unwrap_or(false) {
+                        return Err(Error::IndexNotFound(lhs.to_string()));
+                    }
+                    if !self.available_index.get(wtxn, &rhs)?.unwrap_or(false) {
+                        return Err(Error::IndexNotFound(rhs.to_string()));
+                    }
+
+                    let index_map = self.index_map.write()?;
+
+                    // index_map.remove.
+                }
+                _ => unreachable!(),
+            },
+            Batch::Cancel(_) => todo!(),
+            Batch::Snapshot(_) => todo!(),
+            Batch::Dump(_) => todo!(),
+            Batch::Contiguous { tasks, kind } => todo!(),
+            Batch::Empty => todo!(),
+        }
 
         Ok(())
     }

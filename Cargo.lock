@@ -1581,11 +1581,21 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "derivative",
+ "either",
+ "fst",
+ "indexmap",
+ "log",
+ "meilisearch-types",
  "milli",
+ "permissive-json-pointer",
+ "regex",
  "roaring",
  "serde",
+ "serde_json",
  "thiserror",
  "time 0.3.14",
+ "uuid",
 ]
 
 [[package]]
