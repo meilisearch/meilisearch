@@ -137,6 +137,13 @@ pub mod test {
             }
         }
 
+        pub fn delete(self) -> Result<()> {
+            match self {
+                MockIndex::Real(index) => index.delete(),
+                MockIndex::Mock(m) => unsafe { m.get("delete").call(()) },
+            }
+        }
+
         pub fn perform_search(&self, query: SearchQuery) -> Result<SearchResult> {
             match self {
                 MockIndex::Real(index) => index.perform_search(query),
