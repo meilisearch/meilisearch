@@ -21,7 +21,7 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
 
     let mut facet_string_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
-        merge_cbo_roaring_bitmaps, // TODO: check that it is correct
+        merge_cbo_roaring_bitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,

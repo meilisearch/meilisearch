@@ -177,8 +177,6 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
         field_id: FieldId,
         txn: &RoTxn,
     ) -> Result<(Vec<grenad::Reader<File>>, RoaringBitmap)> {
-        // TODO: first check whether there is anything in level 0?
-
         let mut all_docids = RoaringBitmap::new();
         let subwriters = self.compute_higher_levels(txn, field_id, 32, &mut |bitmaps, _| {
             for bitmap in bitmaps {
