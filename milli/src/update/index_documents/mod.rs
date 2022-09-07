@@ -1741,4 +1741,22 @@ mod tests {
         index.add_documents(doc3).unwrap_err();
         index.add_documents(doc4).unwrap_err();
     }
+
+    #[test]
+    fn long_words_must_be_skipped() {
+        let index = TempIndex::new();
+
+        // this is obviousy too long
+        let long_word = "lol".repeat(1000);
+        let doc1 = documents! {[{
+            "id": "1",
+            "title": long_word.clone(),
+        }]};
+
+        index.add_documents(doc1).unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        let words_fst = index.words_fst(&rtxn).unwrap();
+        assert!(!words_fst.contains(&long_word));
+    }
 }
