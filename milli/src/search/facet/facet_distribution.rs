@@ -96,7 +96,7 @@ impl<'a> FacetDistribution<'a> {
                 let mut key_buffer: Vec<_> = field_id.to_be_bytes().iter().copied().collect();
 
                 let db = self.index.field_id_docid_facet_strings;
-                for docid in candidates.into_iter() {
+                'outer: for docid in candidates.into_iter() {
                     key_buffer.truncate(mem::size_of::<FieldId>());
                     key_buffer.extend_from_slice(&docid.to_be_bytes());
                     let iter = db
@@ -112,7 +112,7 @@ impl<'a> FacetDistribution<'a> {
                         *count += 1;
 
                         if normalized_distribution.len() == self.max_values_per_facet {
-                            break;
+                            break 'outer;
                         }
                     }
                 }
@@ -393,7 +393,7 @@ mod tests {
             .execute()
             .unwrap();
 
-        milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2, "RED": 1}}"###);
+        milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 1}}"###);
     }
 
     #[test]
