@@ -1655,6 +1655,7 @@ dependencies = [
  "actix-rt",
  "anyhow",
  "bincode",
+ "csv",
  "derivative",
  "either",
  "fst",
