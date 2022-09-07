@@ -4,7 +4,7 @@ pub use search::{
 };
 pub use updates::{apply_settings_to_builder, Checked, Facets, Settings, Unchecked};
 
-mod dump;
+// mod dump;
 pub mod error;
 mod search;
 pub mod updates;
@@ -52,14 +52,15 @@ pub mod test {
 
         pub fn open(
             path: impl AsRef<Path>,
+            name: String,
             size: usize,
-            uuid: Uuid,
             update_handler: Arc<IndexerConfig>,
         ) -> Result<Self> {
-            let index = Index::open(path, size, uuid, update_handler)?;
+            let index = Index::open(path, name, size, update_handler)?;
             Ok(Self::Real(index))
         }
 
+        /*
         pub fn load_dump(
             src: impl AsRef<Path>,
             dst: impl AsRef<Path>,
@@ -68,13 +69,7 @@ pub mod test {
         ) -> anyhow::Result<()> {
             Index::load_dump(src, dst, size, update_handler)
         }
-
-        pub fn uuid(&self) -> Uuid {
-            match self {
-                MockIndex::Real(index) => index.uuid(),
-                MockIndex::Mock(m) => unsafe { m.get("uuid").call(()) },
-            }
-        }
+        */
 
         pub fn stats(&self) -> Result<IndexStats> {
             match self {
@@ -121,7 +116,7 @@ pub mod test {
             }
         }
 
-        pub fn size(&self) -> u64 {
+        pub fn size(&self) -> Result<u64> {
             match self {
                 MockIndex::Real(index) => index.size(),
                 MockIndex::Mock(_) => todo!(),
@@ -149,12 +144,14 @@ pub mod test {
             }
         }
 
+        /*
         pub fn dump(&self, path: impl AsRef<Path>) -> Result<()> {
             match self {
                 MockIndex::Real(index) => index.dump(path),
                 MockIndex::Mock(m) => unsafe { m.get("dump").call(path.as_ref()) },
             }
         }
+        */
 
         pub fn update_documents(
             &self,
