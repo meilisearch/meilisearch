@@ -44,6 +44,36 @@ impl IndexScheduler {
             .collect::<Result<_>>()
     }
 
+    pub(crate) fn update_task(&self, wtxn: &mut RwTxn, task: Task) -> Result<()> {
+        let old_task = self
+            .get_task(wtxn, task.uid)?
+            .ok_or(Error::CorruptedTaskQueue)?;
+
+        if old_task.status != task.status {
+            self.update_status(wtxn, old_task.status, |bitmap| {
+                bitmap.remove(task.uid);
+                bitmap
+            })?;
+            self.update_status(wtxn, task.status, |bitmap| {
+                bitmap.insert(task.uid);
+                bitmap
+            })?;
+        }
+
+        if old_task.kind.as_kind() != task.kind.as_kind() {
+            self.update_kind(wtxn, old_task.kind.as_kind(), |bitmap| {
+                bitmap.remove(task.uid);
+                bitmap
+            })?;
+            self.update_kind(wtxn, task.kind.as_kind(), |bitmap| {
+                bitmap.insert(task.uid);
+                bitmap
+            })?;
+        }
+
+        Ok(())
+    }
+
     pub(crate) fn get_index(&self, rtxn: &RoTxn, index: &str) -> Result<RoaringBitmap> {
         Ok(self.index_tasks.get(&rtxn, index)?.unwrap_or_default())
     }
