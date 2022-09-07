@@ -4,7 +4,7 @@ use meilisearch_types::error::{Code, ErrorCode};
 use meilisearch_types::internal_error;
 use serde_json::Value;
 
-use crate::{error::MilliError, update_file_store};
+use crate::update_file_store;
 
 pub type Result<T> = std::result::Result<T, IndexError>;
 
@@ -29,6 +29,7 @@ internal_error!(
     milli::documents::Error
 );
 
+/*
 impl ErrorCode for IndexError {
     fn error_code(&self) -> Code {
         match self {
@@ -39,6 +40,7 @@ impl ErrorCode for IndexError {
         }
     }
 }
+*/
 
 impl From<milli::UserError> for IndexError {
     fn from(error: milli::UserError) -> IndexError {
