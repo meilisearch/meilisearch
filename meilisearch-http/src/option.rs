@@ -232,7 +232,7 @@ pub struct Opt {
     /// Format must be TOML.
     #[serde(skip_serializing)]
     #[clap(long)]
-    config_file_path: Option<PathBuf>,
+    pub config_file_path: Option<PathBuf>,
 }
 
 impl Opt {
