@@ -278,11 +278,9 @@ impl<'a> Filter<'a> {
             (Excluded(l), Included(r)) if l >= r => return Ok(()),
             (_, _) => (),
         }
-        let x = facet_range_search::find_docids_of_facet_within_bounds::<OrderedF64Codec>(
-            rtxn, db, field_id, &left, &right,
+        facet_range_search::find_docids_of_facet_within_bounds::<OrderedF64Codec>(
+            rtxn, db, field_id, &left, &right, output,
         )?;
-        // TODO: the facet range search should take a mutable roaring bitmap as argument
-        *output = x;
 
         Ok(())
     }

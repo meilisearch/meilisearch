@@ -116,49 +116,13 @@ impl<'t> Iterator for DescendingFacetSort<'t> {
 
 #[cfg(test)]
 mod tests {
-    use rand::{Rng, SeedableRng};
-    use roaring::RoaringBitmap;
-
-    use crate::heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec, OrderedF64Codec};
+    use crate::heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec};
     use crate::milli_snap;
     use crate::search::facet::facet_sort_descending::descending_facet_sort;
+    use crate::search::facet::tests::{get_random_looking_index, get_simple_index};
     use crate::snapshot_tests::display_bitmap;
-    use crate::update::facet::tests::FacetIndex;
+    use roaring::RoaringBitmap;
 
-    fn get_simple_index() -> FacetIndex<OrderedF64Codec> {
-        let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
-        let mut txn = index.env.write_txn().unwrap();
-        for i in 0..256u16 {
-            let mut bitmap = RoaringBitmap::new();
-            bitmap.insert(i as u32);
-            index.insert(&mut txn, 0, &(i as f64), &bitmap);
-        }
-        txn.commit().unwrap();
-        index
-    }
-    fn get_random_looking_index() -> FacetIndex<OrderedF64Codec> {
-        let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
-        let mut txn = index.env.write_txn().unwrap();
-
-        let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
-        let keys =
-            std::iter::from_fn(|| Some(rng.gen_range(0..256))).take(128).collect::<Vec<u32>>();
-
-        for (_i, key) in keys.into_iter().enumerate() {
-            let mut bitmap = RoaringBitmap::new();
-            bitmap.insert(key);
-            bitmap.insert(key + 100);
-            index.insert(&mut txn, 0, &(key as f64), &bitmap);
-        }
-        txn.commit().unwrap();
-        index
-    }
-
-    #[test]
-    fn random_looking_index_snap() {
-        let index = get_random_looking_index();
-        milli_snap!(format!("{index}"));
-    }
     #[test]
     fn filter_sort_descending() {
         let indexes = [get_simple_index(), get_random_looking_index()];

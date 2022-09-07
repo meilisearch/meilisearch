@@ -140,13 +140,13 @@ impl<'a> FacetDistribution<'a> {
             self.index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>(),
             field_id,
             candidates,
-            |facet_key, nbr_docids| {
+            |facet_key, nbr_docids, _| {
                 let facet_key = OrderedF64Codec::bytes_decode(facet_key).unwrap();
                 distribution.insert(facet_key.to_string(), nbr_docids);
                 if distribution.len() == self.max_values_per_facet {
-                    ControlFlow::Break(())
+                    Ok(ControlFlow::Break(()))
                 } else {
-                    ControlFlow::Continue(())
+                    Ok(ControlFlow::Continue(()))
                 }
             },
         )
@@ -163,13 +163,22 @@ impl<'a> FacetDistribution<'a> {
             self.index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>(),
             field_id,
             candidates,
-            |facet_key, nbr_docids| {
+            |facet_key, nbr_docids, any_docid| {
                 let facet_key = StrRefCodec::bytes_decode(facet_key).unwrap();
-                distribution.insert(facet_key.to_string(), nbr_docids);
+
+                let key: (FieldId, _, &str) = (field_id, any_docid, facet_key);
+                let original_string = self
+                    .index
+                    .field_id_docid_facet_strings
+                    .get(self.rtxn, &key)?
+                    .unwrap()
+                    .to_owned();
+
+                distribution.insert(original_string, nbr_docids);
                 if distribution.len() == self.max_values_per_facet {
-                    ControlFlow::Break(())
+                    Ok(ControlFlow::Break(()))
                 } else {
-                    ControlFlow::Continue(())
+                    Ok(ControlFlow::Continue(()))
                 }
             },
         )
@@ -186,7 +195,8 @@ impl<'a> FacetDistribution<'a> {
         let db = self.index.facet_id_f64_docids;
         let mut prefix = vec![];
         prefix.extend_from_slice(&field_id.to_be_bytes());
-        prefix.push(0);
+        prefix.push(0); // read values from level 0 only
+
         let iter = db
             .as_polymorph()
             .prefix_iter::<_, ByteSlice, ByteSlice>(self.rtxn, prefix.as_slice())?
@@ -207,10 +217,15 @@ impl<'a> FacetDistribution<'a> {
             .prefix_iter::<_, ByteSlice, ByteSlice>(self.rtxn, prefix.as_slice())?
             .remap_types::<FacetGroupKeyCodec<StrRefCodec>, FacetGroupValueCodec>();
 
-        // TODO: get the original value of the facet somewhere (in the documents DB?)
         for result in iter {
             let (key, value) = result?;
-            distribution.insert(key.left_bound.to_owned(), value.bitmap.len());
+
+            let docid = value.bitmap.iter().next().unwrap();
+            let key: (FieldId, _, &'a str) = (field_id, docid, key.left_bound);
+            let original_string =
+                self.index.field_id_docid_facet_strings.get(self.rtxn, &key)?.unwrap().to_owned();
+
+            distribution.insert(original_string, value.bitmap.len());
             if distribution.len() == self.max_values_per_facet {
                 break;
             }
@@ -302,5 +317,219 @@ impl fmt::Debug for FacetDistribution<'_> {
             .field("candidates", candidates)
             .field("max_values_per_facet", max_values_per_facet)
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use big_s::S;
+    use maplit::hashset;
+
+    use crate::{
+        documents::documents_batch_reader_from_objects, index::tests::TempIndex, milli_snap,
+        FacetDistribution,
+    };
+
+    #[test]
+    fn few_candidates_few_facet_values() {
+        // All the tests here avoid using the code in `facet_distribution_iter` because there aren't
+        // enough candidates.
+
+        let mut index = TempIndex::new();
+        index.index_documents_config.autogenerate_docids = true;
+
+        index
+            .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
+            .unwrap();
+
+        let documents = documents!([
+            { "colour": "Blue" },
+            { "colour": "  blue" },
+            { "colour": "RED" }
+        ]);
+
+        index.add_documents(documents).unwrap();
+
+        let txn = index.read_txn().unwrap();
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .execute()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2, "RED": 1}}"###);
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .candidates([0, 1, 2].iter().copied().collect())
+            .execute()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2, "RED": 1}}"###);
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .candidates([1, 2].iter().copied().collect())
+            .execute()
+            .unwrap();
+
+        // I think it would be fine if "  blue" was "Blue" instead.
+        // We just need to get any non-normalised string I think, even if it's not in
+        // the candidates
+        milli_snap!(format!("{map:?}"), @r###"{"colour": {"  blue": 1, "RED": 1}}"###);
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .candidates([2].iter().copied().collect())
+            .execute()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), @r###"{"colour": {"RED": 1}}"###);
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .candidates([0, 1, 2].iter().copied().collect())
+            .max_values_per_facet(1)
+            .execute()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2, "RED": 1}}"###);
+    }
+
+    #[test]
+    fn many_candidates_few_facet_values() {
+        let mut index = TempIndex::new_with_map_size(4096 * 10_000);
+        index.index_documents_config.autogenerate_docids = true;
+
+        index
+            .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
+            .unwrap();
+
+        let facet_values = ["Red", "RED", " red ", "Blue", "BLUE"];
+
+        let mut documents = vec![];
+        for i in 0..10_000 {
+            let document = serde_json::json!({
+                "colour": facet_values[i % 5],
+            })
+            .as_object()
+            .unwrap()
+            .clone();
+            documents.push(document);
+        }
+
+        let documents = documents_batch_reader_from_objects(documents);
+
+        index.add_documents(documents).unwrap();
+
+        let txn = index.read_txn().unwrap();
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .execute()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 4000, "Red": 6000}}"###);
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .max_values_per_facet(1)
+            .execute()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 4000}}"###);
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .candidates((0..10_000).into_iter().collect())
+            .execute()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 4000, "Red": 6000}}"###);
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .candidates((0..5_000).into_iter().collect())
+            .execute()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2000, "Red": 3000}}"###);
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .candidates((0..5_000).into_iter().collect())
+            .execute()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2000, "Red": 3000}}"###);
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .candidates((0..5_000).into_iter().collect())
+            .max_values_per_facet(1)
+            .execute()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2000}}"###);
+    }
+
+    #[test]
+    fn many_candidates_many_facet_values() {
+        let mut index = TempIndex::new_with_map_size(4096 * 10_000);
+        index.index_documents_config.autogenerate_docids = true;
+
+        index
+            .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
+            .unwrap();
+
+        let facet_values = (0..1000).into_iter().map(|x| format!("{x:x}")).collect::<Vec<_>>();
+
+        let mut documents = vec![];
+        for i in 0..10_000 {
+            let document = serde_json::json!({
+                "colour": facet_values[i % 1000],
+            })
+            .as_object()
+            .unwrap()
+            .clone();
+            documents.push(document);
+        }
+
+        let documents = documents_batch_reader_from_objects(documents);
+
+        index.add_documents(documents).unwrap();
+
+        let txn = index.read_txn().unwrap();
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .execute()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), "no_candidates", @"ac9229ed5964d893af96a7076e2f8af5");
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .max_values_per_facet(2)
+            .execute()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), "no_candidates_with_max_2", @r###"{"colour": {"0": 10, "1": 10}}"###);
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .candidates((0..10_000).into_iter().collect())
+            .execute()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), "candidates_0_10_000", @"ac9229ed5964d893af96a7076e2f8af5");
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .candidates((0..5_000).into_iter().collect())
+            .execute()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), "candidates_0_5_000", @"825f23a4090d05756f46176987b7d992");
     }
 }

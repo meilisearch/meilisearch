@@ -15,7 +15,8 @@ pub fn find_docids_of_facet_within_bounds<'t, BoundCodec>(
     field_id: u16,
     left: &'t Bound<<BoundCodec as BytesEncode<'t>>::EItem>,
     right: &'t Bound<<BoundCodec as BytesEncode<'t>>::EItem>,
-) -> Result<RoaringBitmap>
+    docids: &mut RoaringBitmap,
+) -> Result<()>
 where
     BoundCodec: for<'a> BytesEncode<'a>,
     for<'a> <BoundCodec as BytesEncode<'a>>::EItem: Sized,
@@ -45,16 +46,15 @@ where
         Bound::Unbounded => Bound::Unbounded,
     };
     let db = db.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>();
-    let mut docids = RoaringBitmap::new();
-    let mut f = FacetRangeSearch { rtxn, db, field_id, left, right, docids: &mut docids };
+    let mut f = FacetRangeSearch { rtxn, db, field_id, left, right, docids };
     let highest_level = get_highest_level(rtxn, db, field_id)?;
 
     if let Some(first_bound) = get_first_facet_value::<ByteSliceRef>(rtxn, db, field_id)? {
         let last_bound = get_last_facet_value::<ByteSliceRef>(rtxn, db, field_id)?.unwrap();
         f.run(highest_level, first_bound, Bound::Included(last_bound), usize::MAX)?;
-        Ok(docids)
+        Ok(())
     } else {
-        return Ok(RoaringBitmap::new());
+        return Ok(());
     }
 }
 
@@ -255,45 +255,13 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Bound;
-
-    use rand::{Rng, SeedableRng};
-    use roaring::RoaringBitmap;
-
     use super::find_docids_of_facet_within_bounds;
     use crate::heed_codec::facet::{FacetGroupKeyCodec, OrderedF64Codec};
     use crate::milli_snap;
+    use crate::search::facet::tests::{get_random_looking_index, get_simple_index};
     use crate::snapshot_tests::display_bitmap;
-    use crate::update::facet::tests::FacetIndex;
-
-    fn get_simple_index() -> FacetIndex<OrderedF64Codec> {
-        let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
-        let mut txn = index.env.write_txn().unwrap();
-        for i in 0..256u16 {
-            let mut bitmap = RoaringBitmap::new();
-            bitmap.insert(i as u32);
-            index.insert(&mut txn, 0, &(i as f64), &bitmap);
-        }
-        txn.commit().unwrap();
-        index
-    }
-    fn get_random_looking_index() -> FacetIndex<OrderedF64Codec> {
-        let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
-        let mut txn = index.env.write_txn().unwrap();
-
-        let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
-        let keys =
-            std::iter::from_fn(|| Some(rng.gen_range(0..256))).take(128).collect::<Vec<u32>>();
-
-        for (_i, key) in keys.into_iter().enumerate() {
-            let mut bitmap = RoaringBitmap::new();
-            bitmap.insert(key);
-            bitmap.insert(key + 100);
-            index.insert(&mut txn, 0, &(key as f64), &bitmap);
-        }
-        txn.commit().unwrap();
-        index
-    }
+    use roaring::RoaringBitmap;
+    use std::ops::Bound;
 
     #[test]
     fn random_looking_index_snap() {
@@ -310,12 +278,14 @@ mod tests {
                 let i = i as f64;
                 let start = Bound::Included(0.);
                 let end = Bound::Included(i);
-                let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
+                let mut docids = RoaringBitmap::new();
+                find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
                     index.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,
+                    &mut docids,
                 )
                 .unwrap();
                 results.push_str(&format!("{}\n", display_bitmap(&docids)));
@@ -326,12 +296,14 @@ mod tests {
                 let i = i as f64;
                 let start = Bound::Excluded(0.);
                 let end = Bound::Excluded(i);
-                let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
+                let mut docids = RoaringBitmap::new();
+                find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
                     index.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,
+                    &mut docids,
                 )
                 .unwrap();
                 results.push_str(&format!("{}\n", display_bitmap(&docids)));
@@ -352,12 +324,14 @@ mod tests {
                 let i = i as f64;
                 let start = Bound::Included(i);
                 let end = Bound::Included(255.);
-                let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
+                let mut docids = RoaringBitmap::new();
+                find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
                     index.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,
+                    &mut docids,
                 )
                 .unwrap();
                 results.push_str(&format!("{}\n", display_bitmap(&docids)));
@@ -371,12 +345,14 @@ mod tests {
                 let i = i as f64;
                 let start = Bound::Excluded(i);
                 let end = Bound::Excluded(255.);
-                let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
+                let mut docids = RoaringBitmap::new();
+                find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
                     index.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,
+                    &mut docids,
                 )
                 .unwrap();
                 results.push_str(&format!("{}\n", display_bitmap(&docids)));
@@ -399,12 +375,14 @@ mod tests {
                 let i = i as f64;
                 let start = Bound::Included(i);
                 let end = Bound::Included(255. - i);
-                let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
+                let mut docids = RoaringBitmap::new();
+                find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
                     index.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,
+                    &mut docids,
                 )
                 .unwrap();
                 results.push_str(&format!("{}\n", display_bitmap(&docids)));
@@ -418,12 +396,14 @@ mod tests {
                 let i = i as f64;
                 let start = Bound::Excluded(i);
                 let end = Bound::Excluded(255. - i);
-                let docids = find_docids_of_facet_within_bounds::<OrderedF64Codec>(
+                let mut docids = RoaringBitmap::new();
+                find_docids_of_facet_within_bounds::<OrderedF64Codec>(
                     &txn,
                     index.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
                     0,
                     &start,
                     &end,
+                    &mut docids,
                 )
                 .unwrap();
                 results.push_str(&format!("{}\n", display_bitmap(&docids)));
