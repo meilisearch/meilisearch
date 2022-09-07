@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.64"
 bincode = "1.3.3"
+csv = "1.1.6"
 derivative = "2.2.0"
 either = { version = "1.6.1", features = ["serde"] }
 fst = "0.4.7"
