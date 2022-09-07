@@ -178,9 +178,9 @@ mod store {
             Ok(self.get_update(uuid)?.metadata()?.len())
         }
 
-        pub async fn delete(&self, uuid: Uuid) -> Result<()> {
+        pub fn delete(&self, uuid: Uuid) -> Result<()> {
             let path = self.path.join(uuid.to_string());
-            tokio::fs::remove_file(path).await?;
+            std::fs::remove_file(path)?;
             Ok(())
         }
     }
@@ -248,9 +248,9 @@ mod test {
             }
         }
 
-        pub async fn delete(&self, uuid: Uuid) -> Result<()> {
+        pub fn delete(&self, uuid: Uuid) -> Result<()> {
             match self {
-                MockUpdateFileStore::Real(s) => s.delete(uuid).await,
+                MockUpdateFileStore::Real(s) => s.delete(uuid),
                 MockUpdateFileStore::Mock(mocker) => unsafe { mocker.get("delete").call(uuid) },
             }
         }
