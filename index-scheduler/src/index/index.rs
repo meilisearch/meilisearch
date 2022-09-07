@@ -12,7 +12,6 @@ use milli::{obkv_to_json, FieldDistribution, DEFAULT_VALUES_PER_FACET};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use time::OffsetDateTime;
-use uuid::Uuid;
 
 use crate::index::search::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 
@@ -298,7 +297,7 @@ impl Index {
     }
 
     pub fn size(&self) -> Result<u64> {
-        self.inner.on_disk_size()
+        Ok(self.inner.on_disk_size()?)
     }
 
     pub fn snapshot(&self, path: impl AsRef<Path>) -> Result<()> {

@@ -240,7 +240,7 @@ impl IndexScheduler {
                     new_name,
                 } => {
                     if self.available_index.get(wtxn, &new_name)?.unwrap_or(false) {
-                        return Err(Error::IndexAlreadyExists);
+                        return Err(Error::IndexAlreadyExists(new_name.to_string()));
                     }
                     todo!("wait for @guigui insight");
                 }
@@ -275,7 +275,10 @@ impl IndexScheduler {
                         return Err(Error::IndexNotFound(rhs.to_string()));
                     }
 
-                    let index_map = self.index_map.write()?;
+                    let index_map = self
+                        .index_map
+                        .write()
+                        .map_err(|_| Error::CorruptedTaskQueue)?;
 
                     // index_map.remove.
                 }
