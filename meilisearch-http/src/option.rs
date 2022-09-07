@@ -37,9 +37,15 @@ const MEILI_SSL_OCSP_PATH: &str = "MEILI_SSL_OCSP_PATH";
 const MEILI_SSL_REQUIRE_AUTH: &str = "MEILI_SSL_REQUIRE_AUTH";
 const MEILI_SSL_RESUMPTION: &str = "MEILI_SSL_RESUMPTION";
 const MEILI_SSL_TICKETS: &str = "MEILI_SSL_TICKETS";
+const MEILI_IMPORT_SNAPSHOT: &str = "MEILI_IMPORT_SNAPSHOT";
+const MEILI_IGNORE_MISSING_SNAPSHOT: &str = "MEILI_IGNORE_MISSING_SNAPSHOT";
+const MEILI_IGNORE_SNAPSHOT_IF_DB_EXISTS: &str = "MEILI_IGNORE_SNAPSHOT_IF_DB_EXISTS";
 const MEILI_SNAPSHOT_DIR: &str = "MEILI_SNAPSHOT_DIR";
 const MEILI_SCHEDULE_SNAPSHOT: &str = "MEILI_SCHEDULE_SNAPSHOT";
 const MEILI_SNAPSHOT_INTERVAL_SEC: &str = "MEILI_SNAPSHOT_INTERVAL_SEC";
+const MEILI_IMPORT_DUMP: &str = "MEILI_IMPORT_DUMP";
+const MEILI_IGNORE_MISSING_DUMP: &str = "MEILI_IGNORE_MISSING_DUMP";
+const MEILI_IGNORE_DUMP_IF_DB_EXISTS: &str = "MEILI_IGNORE_DUMP_IF_DB_EXISTS";
 const MEILI_DUMPS_DIR: &str = "MEILI_DUMPS_DIR";
 const MEILI_LOG_LEVEL: &str = "MEILI_LOG_LEVEL";
 #[cfg(feature = "metrics")]
@@ -147,13 +153,13 @@ pub struct Opt {
     /// Defines the path of the snapshot file to import.
     /// This option will, by default, stop the process if a database already exist or if no snapshot exists at
     /// the given path. If this option is not specified no snapshot is imported.
-    #[clap(long, env = "MEILI_IMPORT_SNAPSHOT")]
+    #[clap(long, env = MEILI_IMPORT_SNAPSHOT)]
     pub import_snapshot: Option<PathBuf>,
 
     /// The engine will ignore a missing snapshot and not return an error in such case.
     #[clap(
         long,
-        env = "MEILI_IGNORE_MISSING_SNAPSHOT",
+        env = MEILI_IGNORE_MISSING_SNAPSHOT,
         requires = "import-snapshot"
     )]
     #[serde(default)]
@@ -162,7 +168,7 @@ pub struct Opt {
     /// The engine will skip snapshot importation and not return an error in such case.
     #[clap(
         long,
-        env = "MEILI_IGNORE_SNAPSHOT_IF_DB_EXISTS",
+        env = MEILI_IGNORE_SNAPSHOT_IF_DB_EXISTS,
         requires = "import-snapshot"
     )]
     #[serde(default)]
@@ -185,16 +191,16 @@ pub struct Opt {
     pub snapshot_interval_sec: u64,
 
     /// Import a dump from the specified path, must be a `.dump` file.
-    #[clap(long, env = "MEILI_IMPORT_DUMP", conflicts_with = "import-snapshot")]
+    #[clap(long, env = MEILI_IMPORT_DUMP, conflicts_with = "import-snapshot")]
     pub import_dump: Option<PathBuf>,
 
     /// If the dump doesn't exists, load or create the database specified by `db-path` instead.
-    #[clap(long, env = "MEILI_IGNORE_MISSING_DUMP", requires = "import-dump")]
+    #[clap(long, env = MEILI_IGNORE_MISSING_DUMP, requires = "import-dump")]
     #[serde(default)]
     pub ignore_missing_dump: bool,
 
     /// Ignore the dump if a database already exists, and load that database instead.
-    #[clap(long, env = "MEILI_IGNORE_DUMP_IF_DB_EXISTS", requires = "import-dump")]
+    #[clap(long, env = MEILI_IGNORE_DUMP_IF_DB_EXISTS, requires = "import-dump")]
     #[serde(default)]
     pub ignore_dump_if_db_exists: bool,
 
