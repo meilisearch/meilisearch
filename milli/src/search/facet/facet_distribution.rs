@@ -325,10 +325,9 @@ mod tests {
     use big_s::S;
     use maplit::hashset;
 
-    use crate::{
-        documents::documents_batch_reader_from_objects, index::tests::TempIndex, milli_snap,
-        FacetDistribution,
-    };
+    use crate::documents::documents_batch_reader_from_objects;
+    use crate::index::tests::TempIndex;
+    use crate::{milli_snap, FacetDistribution};
 
     #[test]
     fn few_candidates_few_facet_values() {

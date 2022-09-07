@@ -4,10 +4,10 @@ use heed::Result;
 use roaring::RoaringBitmap;
 
 use super::{get_first_facet_value, get_highest_level};
-use crate::{
-    heed_codec::facet::{ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec},
-    DocumentId,
+use crate::heed_codec::facet::{
+    ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec,
 };
+use crate::DocumentId;
 
 pub fn iterate_over_facet_distribution<'t, CB>(
     rtxn: &'t heed::RoTxn<'t>,
@@ -114,13 +114,15 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::iterate_over_facet_distribution;
-    use crate::milli_snap;
-    use crate::search::facet::tests::get_random_looking_index;
-    use crate::{heed_codec::facet::OrderedF64Codec, search::facet::tests::get_simple_index};
+    use std::ops::ControlFlow;
+
     use heed::BytesDecode;
     use roaring::RoaringBitmap;
-    use std::ops::ControlFlow;
+
+    use super::iterate_over_facet_distribution;
+    use crate::heed_codec::facet::OrderedF64Codec;
+    use crate::milli_snap;
+    use crate::search::facet::tests::{get_random_looking_index, get_simple_index};
 
     #[test]
     fn filter_distribution_all() {

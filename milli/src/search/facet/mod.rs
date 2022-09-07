@@ -80,7 +80,8 @@ pub(crate) mod tests {
     use rand::{Rng, SeedableRng};
     use roaring::RoaringBitmap;
 
-    use crate::{heed_codec::facet::OrderedF64Codec, update::facet::tests::FacetIndex};
+    use crate::heed_codec::facet::OrderedF64Codec;
+    use crate::update::facet::tests::FacetIndex;
 
     pub fn get_simple_index() -> FacetIndex<OrderedF64Codec> {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);

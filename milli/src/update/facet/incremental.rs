@@ -1,14 +1,16 @@
+use std::collections::HashMap;
+use std::fs::File;
+
+use heed::types::{ByteSlice, DecodeIgnore};
+use heed::{BytesDecode, Error, RoTxn, RwTxn};
+use roaring::RoaringBitmap;
+
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{
     ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
 };
 use crate::search::facet::get_highest_level;
 use crate::{CboRoaringBitmapCodec, FieldId, Index, Result};
-use heed::types::{ByteSlice, DecodeIgnore};
-use heed::{BytesDecode, Error, RoTxn, RwTxn};
-use roaring::RoaringBitmap;
-use std::collections::HashMap;
-use std::fs::File;
 
 enum InsertionResult {
     InPlace,
@@ -613,12 +615,13 @@ impl<'a> FacetGroupKey<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
-    use crate::heed_codec::facet::{OrderedF64Codec, StrRefCodec};
-    use crate::milli_snap;
-    use crate::update::facet::tests::FacetIndex;
     use rand::seq::SliceRandom;
     use rand::{Rng, SeedableRng};
     use roaring::RoaringBitmap;
+
+    use crate::heed_codec::facet::{OrderedF64Codec, StrRefCodec};
+    use crate::milli_snap;
+    use crate::update::facet::tests::FacetIndex;
 
     #[test]
     fn append() {

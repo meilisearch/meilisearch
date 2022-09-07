@@ -1,19 +1,20 @@
+use std::borrow::Cow;
+use std::fs::File;
+
+use grenad::CompressionType;
+use heed::types::ByteSlice;
+use heed::{BytesEncode, Error, RoTxn, RwTxn};
+use log::debug;
+use roaring::RoaringBitmap;
+use time::OffsetDateTime;
+
+use super::{FACET_GROUP_SIZE, FACET_MIN_LEVEL_SIZE};
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{
     ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
 };
 use crate::update::index_documents::{create_writer, writer_into_reader};
 use crate::{CboRoaringBitmapCodec, FieldId, Index, Result};
-use grenad::CompressionType;
-use heed::types::ByteSlice;
-use heed::{BytesEncode, Error, RoTxn, RwTxn};
-use log::debug;
-use roaring::RoaringBitmap;
-use std::borrow::Cow;
-use std::fs::File;
-use time::OffsetDateTime;
-
-use super::{FACET_GROUP_SIZE, FACET_MIN_LEVEL_SIZE};
 
 /// Algorithm to insert elememts into the `facet_id_(string/f64)_docids` databases
 /// by rebuilding the database "from scratch".
@@ -342,11 +343,13 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
 
 #[cfg(test)]
 mod tests {
+    use std::iter::once;
+
+    use roaring::RoaringBitmap;
+
     use crate::heed_codec::facet::OrderedF64Codec;
     use crate::milli_snap;
     use crate::update::facet::tests::FacetIndex;
-    use roaring::RoaringBitmap;
-    use std::iter::once;
 
     #[test]
     fn insert() {

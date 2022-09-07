@@ -255,13 +255,15 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
 
 #[cfg(test)]
 mod tests {
+    use std::ops::Bound;
+
+    use roaring::RoaringBitmap;
+
     use super::find_docids_of_facet_within_bounds;
     use crate::heed_codec::facet::{FacetGroupKeyCodec, OrderedF64Codec};
     use crate::milli_snap;
     use crate::search::facet::tests::{get_random_looking_index, get_simple_index};
     use crate::snapshot_tests::display_bitmap;
-    use roaring::RoaringBitmap;
-    use std::ops::Bound;
 
     #[test]
     fn random_looking_index_snap() {

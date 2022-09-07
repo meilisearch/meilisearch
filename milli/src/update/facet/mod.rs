@@ -53,8 +53,8 @@ FacetGroupValue:
 ```
 
 When the database is first created using the "bulk" method, each node has a fixed number of children
-(except for possibly the last one) given by the `group_size` parameter (default to `FACET_GROUP_SIZE`). 
-The tree is also built such that the highest level has more than `min_level_size` 
+(except for possibly the last one) given by the `group_size` parameter (default to `FACET_GROUP_SIZE`).
+The tree is also built such that the highest level has more than `min_level_size`
 (default to `FACET_MIN_LEVEL_SIZE`) elements in it.
 
 When the database is incrementally updated, the number of children of a node can vary between
@@ -66,7 +66,7 @@ When adding documents to the databases, it is important to determine which metho
 minimise indexing time. The incremental method is faster when adding few new facet values, but the
 bulk method is faster when a large part of the database is modified. Empirically, it seems that
 it takes 50x more time to incrementally add N facet values to an existing database than it is to
-construct a database of N facet values. This is the heuristic that is used to choose between the 
+construct a database of N facet values. This is the heuristic that is used to choose between the
 two methods.
 */
 
@@ -74,12 +74,13 @@ pub const FACET_MAX_GROUP_SIZE: u8 = 8;
 pub const FACET_GROUP_SIZE: u8 = 4;
 pub const FACET_MIN_LEVEL_SIZE: u8 = 5;
 
+use std::fs::File;
+
 use self::incremental::FacetsUpdateIncremental;
 use super::FacetsUpdateBulk;
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec, FacetGroupValueCodec};
 use crate::{Index, Result};
-use std::fs::File;
 
 pub mod bulk;
 pub mod incremental;
@@ -119,11 +120,23 @@ impl<'i> FacetsUpdate<'i> {
             return Ok(());
         }
         if self.new_data.len() >= (self.database.len(wtxn)? as u64 / 50) {
-            let bulk_update = FacetsUpdateBulk::new(self.index, self.facet_type, self.new_data, self.group_size, self.min_level_size);
+            let bulk_update = FacetsUpdateBulk::new(
+                self.index,
+                self.facet_type,
+                self.new_data,
+                self.group_size,
+                self.min_level_size,
+            );
             bulk_update.execute(wtxn)?;
         } else {
-            let incremental_update =
-                FacetsUpdateIncremental::new(self.index, self.facet_type, self.new_data, self.group_size, self.min_level_size, self.max_group_size);
+            let incremental_update = FacetsUpdateIncremental::new(
+                self.index,
+                self.facet_type,
+                self.new_data,
+                self.group_size,
+                self.min_level_size,
+                self.max_group_size,
+            );
             incremental_update.execute(wtxn)?;
         }
         Ok(())
@@ -132,6 +145,14 @@ impl<'i> FacetsUpdate<'i> {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use std::fmt::Display;
+    use std::marker::PhantomData;
+    use std::rc::Rc;
+
+    use heed::types::ByteSlice;
+    use heed::{BytesDecode, BytesEncode, Env, RoTxn, RwTxn};
+    use roaring::RoaringBitmap;
+
     use super::bulk::FacetsUpdateBulkInner;
     use crate::heed_codec::facet::{
         ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
@@ -140,12 +161,6 @@ pub(crate) mod tests {
     use crate::snapshot_tests::display_bitmap;
     use crate::update::FacetsUpdateIncrementalInner;
     use crate::CboRoaringBitmapCodec;
-    use heed::types::ByteSlice;
-    use heed::{BytesDecode, BytesEncode, Env, RoTxn, RwTxn};
-    use roaring::RoaringBitmap;
-    use std::fmt::Display;
-    use std::marker::PhantomData;
-    use std::rc::Rc;
 
     // A dummy index that only contains the facet database, used for testing
     pub struct FacetIndex<BoundCodec>
@@ -381,9 +396,8 @@ mod comparison_bench {
     use rand::Rng;
     use roaring::RoaringBitmap;
 
-    use crate::heed_codec::facet::OrderedF64Codec;
-
     use super::tests::FacetIndex;
+    use crate::heed_codec::facet::OrderedF64Codec;
 
     // This is a simple test to get an intuition on the relative speed
     // of the incremental vs. bulk indexer.

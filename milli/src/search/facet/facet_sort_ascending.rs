@@ -83,11 +83,12 @@ impl<'t, 'e> Iterator for AscendingFacetSort<'t, 'e> {
 
 #[cfg(test)]
 mod tests {
+    use roaring::RoaringBitmap;
+
     use crate::milli_snap;
     use crate::search::facet::facet_sort_ascending::ascending_facet_sort;
     use crate::search::facet::tests::{get_random_looking_index, get_simple_index};
     use crate::snapshot_tests::display_bitmap;
-    use roaring::RoaringBitmap;
 
     #[test]
     fn filter_sort() {
