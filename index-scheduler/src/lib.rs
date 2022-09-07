@@ -222,6 +222,14 @@ impl IndexScheduler {
 
             // TODO: TAMO: do this later
             // self.handle_batch_result(res);
+
+            match wtxn.commit() {
+                Ok(()) => log::info!("A batch of tasks was successfully completed."),
+                Err(e) => {
+                    log::error!("{}", e);
+                    continue;
+                }
+            }
         }
     }
 
@@ -253,15 +261,37 @@ impl IndexScheduler {
                     }
 
                     self.available_index.put(wtxn, &index_name, &true);
-                    // let index =
-                    todo!("tamo: once I get index.rs to works");
+                    // TODO: TAMO: give real info to the index
+                    let index = Index::open(
+                        index_name.to_string(),
+                        index_name.to_string(),
+                        100_000_000,
+                        Arc::default(),
+                    )?;
+                    if let Some(primary_key) = primary_key {
+                        index.update_primary_key(primary_key.to_string())?;
+                    }
+                    self.index_map
+                        .write()
+                        .map_err(|_| Error::CorruptedTaskQueue)?
+                        .insert(index_name.to_string(), index.clone());
                 }
                 KindWithContent::DeleteIndex { index_name } => {
                     self.index_map.write();
                     if !self.available_index.delete(wtxn, &index_name)? {
                         return Err(Error::IndexNotFound(index_name.to_string()));
                     }
-                    todo!("tamo: once I get index.rs to works");
+                    if let Some(index) = self
+                        .index_map
+                        .write()
+                        .map_err(|_| Error::CorruptedTaskQueue)?
+                        .remove(index_name)
+                    {
+                        index.delete()?;
+                    } else {
+                        // TODO: TAMO: fix the path
+                        std::fs::remove_file(index_name)?;
+                    }
                 }
                 KindWithContent::SwapIndex { lhs, rhs } => {
                     if !self.available_index.get(wtxn, &lhs)?.unwrap_or(false) {
@@ -271,12 +301,26 @@ impl IndexScheduler {
                         return Err(Error::IndexNotFound(rhs.to_string()));
                     }
 
-                    let index_map = self
+                    let lhs_bitmap = self.index_tasks.get(wtxn, lhs)?;
+                    let rhs_bitmap = self.index_tasks.get(wtxn, rhs)?;
+                    // the bitmap are lazily created and thus may not exists.
+                    if let Some(bitmap) = rhs_bitmap {
+                        self.index_tasks.put(wtxn, lhs, &bitmap)?;
+                    }
+                    if let Some(bitmap) = lhs_bitmap {
+                        self.index_tasks.put(wtxn, rhs, &bitmap)?;
+                    }
+
+                    let mut index_map = self
                         .index_map
                         .write()
                         .map_err(|_| Error::CorruptedTaskQueue)?;
 
-                    // index_map.remove.
+                    let lhs_index = index_map.remove(lhs).unwrap();
+                    let rhs_index = index_map.remove(rhs).unwrap();
+
+                    index_map.insert(lhs.to_string(), rhs_index);
+                    index_map.insert(rhs.to_string(), lhs_index);
                 }
                 _ => unreachable!(),
             },
