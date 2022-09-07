@@ -1,7 +1,7 @@
 //! Utility functions on the DBs. Mainly getter and setters.
 
 use milli::{
-    heed::{RoTxn, RwTxn},
+    heed::{types::DecodeIgnore, RoTxn, RwTxn},
     BEU32,
 };
 use roaring::RoaringBitmap;
@@ -12,6 +12,18 @@ use crate::{
 };
 
 impl IndexScheduler {
+    pub(crate) fn last_task_id(&self, rtxn: &RoTxn) -> Result<Option<TaskId>> {
+        Ok(self
+            .all_tasks
+            .remap_data_type::<DecodeIgnore>()
+            .last(rtxn)?
+            .map(|(k, _)| k.get() + 1))
+    }
+
+    pub(crate) fn next_task_id(&self, rtxn: &RoTxn) -> Result<TaskId> {
+        Ok(self.last_task_id(rtxn)?.unwrap_or_default())
+    }
+
     pub(crate) fn get_task(&self, rtxn: &RoTxn, task_id: TaskId) -> Result<Option<Task>> {
         Ok(self.all_tasks.get(rtxn, &BEU32::new(task_id))?)
     }
