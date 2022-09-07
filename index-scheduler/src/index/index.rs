@@ -124,8 +124,8 @@ impl Index {
         self.settings_txn(&txn)
     }
 
-    pub fn name(&self) -> String {
-        self.name
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     pub fn settings_txn(&self, txn: &RoTxn) -> Result<Settings<Checked>> {

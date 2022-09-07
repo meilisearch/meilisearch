@@ -50,22 +50,22 @@ impl IndexScheduler {
             .ok_or(Error::CorruptedTaskQueue)?;
 
         if old_task.status != task.status {
-            self.update_status(wtxn, old_task.status, |bitmap| {
+            self.update_status(wtxn, old_task.status, |mut bitmap| {
                 bitmap.remove(task.uid);
                 bitmap
             })?;
-            self.update_status(wtxn, task.status, |bitmap| {
+            self.update_status(wtxn, task.status, |mut bitmap| {
                 bitmap.insert(task.uid);
                 bitmap
             })?;
         }
 
         if old_task.kind.as_kind() != task.kind.as_kind() {
-            self.update_kind(wtxn, old_task.kind.as_kind(), |bitmap| {
+            self.update_kind(wtxn, old_task.kind.as_kind(), |mut bitmap| {
                 bitmap.remove(task.uid);
                 bitmap
             })?;
-            self.update_kind(wtxn, task.kind.as_kind(), |bitmap| {
+            self.update_kind(wtxn, task.kind.as_kind(), |mut bitmap| {
                 bitmap.insert(task.uid);
                 bitmap
             })?;
