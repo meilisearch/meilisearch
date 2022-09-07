@@ -29,30 +29,13 @@ pub fn try_split_at(slice: &[u8], mid: usize) -> Option<(&[u8], &[u8])> {
     }
 }
 
+/// The key in the [`facet_id_string_docids` and `facet_id_f64_docids`][`Index::facet_id_string_docids`]
+/// databases.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct FacetGroupKey<T> {
     pub field_id: u16,
     pub level: u8,
     pub left_bound: T,
-}
-impl<'a> FacetGroupKey<&'a [u8]> {
-    pub fn into_owned(self) -> FacetGroupKey<Vec<u8>> {
-        FacetGroupKey {
-            field_id: self.field_id,
-            level: self.level,
-            left_bound: self.left_bound.to_vec(),
-        }
-    }
-}
-
-impl<'a> FacetGroupKey<Vec<u8>> {
-    pub fn as_ref(&self) -> FacetGroupKey<&[u8]> {
-        FacetGroupKey {
-            field_id: self.field_id,
-            level: self.level,
-            left_bound: self.left_bound.as_slice(),
-        }
-    }
 }
 
 #[derive(Debug)]

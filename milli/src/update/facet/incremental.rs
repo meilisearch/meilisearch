@@ -1,16 +1,14 @@
-use std::collections::HashMap;
-use std::fs::File;
-
-use heed::types::ByteSlice;
-use heed::{BytesDecode, Error, RoTxn, RwTxn};
-use roaring::RoaringBitmap;
-
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{
     ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
 };
 use crate::search::facet::get_highest_level;
 use crate::{CboRoaringBitmapCodec, FieldId, Index, Result};
+use heed::types::{ByteSlice, DecodeIgnore};
+use heed::{BytesDecode, Error, RoTxn, RwTxn};
+use roaring::RoaringBitmap;
+use std::collections::HashMap;
+use std::fs::File;
 
 enum InsertionResult {
     InPlace,
@@ -18,10 +16,15 @@ enum InsertionResult {
 }
 enum DeletionResult {
     InPlace,
-    Reduce { prev: Option<Vec<u8>>, next: Option<Vec<u8>> },
-    Remove { prev: Option<Vec<u8>>, next: Option<Vec<u8>> },
+    Reduce { next: Option<Vec<u8>> },
+    Remove { next: Option<Vec<u8>> },
 }
 
+/// Algorithm to incrementally insert and delete elememts into the
+/// `facet_id_(string/f64)_docids` databases.
+///
+/// Rhe `faceted_documents_ids` value in the main database of `Index`
+/// is also updated to contain the new set of faceted documents.
 pub struct FacetsUpdateIncremental<'i> {
     index: &'i Index,
     inner: FacetsUpdateIncrementalInner,
@@ -30,7 +33,14 @@ pub struct FacetsUpdateIncremental<'i> {
 }
 
 impl<'i> FacetsUpdateIncremental<'i> {
-    pub fn new(index: &'i Index, facet_type: FacetType, new_data: grenad::Reader<File>) -> Self {
+    pub fn new(
+        index: &'i Index,
+        facet_type: FacetType,
+        new_data: grenad::Reader<File>,
+        group_size: u8,
+        min_level_size: u8,
+        max_group_size: u8,
+    ) -> Self {
         FacetsUpdateIncremental {
             index,
             inner: FacetsUpdateIncrementalInner {
@@ -42,26 +52,15 @@ impl<'i> FacetsUpdateIncremental<'i> {
                         .facet_id_f64_docids
                         .remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>(),
                 },
-                group_size: 4,
-                max_group_size: 8,
-                min_level_size: 5,
+                group_size,
+                max_group_size,
+                min_level_size,
             },
             facet_type,
             new_data,
         }
     }
-    pub fn group_size(mut self, size: u8) -> Self {
-        self.inner.group_size = size;
-        self
-    }
-    pub fn min_level_size(mut self, size: u8) -> Self {
-        self.inner.min_level_size = size;
-        self
-    }
-    pub fn max_group_size(mut self, size: u8) -> Self {
-        self.inner.max_group_size = size;
-        self
-    }
+
     pub fn execute(self, wtxn: &'i mut RwTxn) -> crate::Result<()> {
         let mut new_faceted_docids = HashMap::<FieldId, RoaringBitmap>::default();
 
@@ -83,6 +82,7 @@ impl<'i> FacetsUpdateIncremental<'i> {
     }
 }
 
+/// Implementation of `FacetsUpdateIncremental` that is independent of milli's `Index` type
 pub struct FacetsUpdateIncrementalInner {
     pub db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
     pub group_size: u8,
@@ -90,22 +90,36 @@ pub struct FacetsUpdateIncrementalInner {
     pub max_group_size: u8,
 }
 impl FacetsUpdateIncrementalInner {
+    /// Find the `FacetGroupKey`/`FacetGroupValue` in the database that
+    /// should be used to insert the new `facet_value` for the given `field_id` and `level`
+    /// where `level` must be strictly greater than 0.
+    ///
+    /// For example, when inserting the facet value `4`, there are two possibilities:
+    ///
+    /// 1. We find a key whose lower bound is 3 followed by a key whose lower bound is 6. Therefore,
+    ///    we know that the implicit range of the first key is 3..6, which contains 4.
+    ///    So the new facet value belongs in that first key/value pair.
+    ///
+    /// 2. The first key of the level has a lower bound of `5`. We return this key/value pair
+    ///    but will need to change the lowerbound of this key to `4` in order to insert this facet value.
     fn find_insertion_key_value(
         &self,
         field_id: u16,
         level: u8,
-        search_key: &[u8],
+        facet_value: &[u8],
         txn: &RoTxn,
     ) -> Result<(FacetGroupKey<Vec<u8>>, FacetGroupValue)> {
+        assert!(level > 0);
+
         let mut prefix = vec![];
         prefix.extend_from_slice(&field_id.to_be_bytes());
         prefix.push(level);
-        prefix.extend_from_slice(search_key);
+        prefix.extend_from_slice(facet_value);
 
         let mut prefix_iter = self
             .db
             .as_polymorph()
-            .prefix_iter::<_, ByteSliceRef, FacetGroupValueCodec>(txn, &prefix.as_slice())?;
+            .prefix_iter::<_, ByteSlice, FacetGroupValueCodec>(txn, prefix.as_slice())?;
         if let Some(e) = prefix_iter.next() {
             let (key_bytes, value) = e?;
             Ok((
@@ -115,10 +129,10 @@ impl FacetsUpdateIncrementalInner {
                 value,
             ))
         } else {
-            let key = FacetGroupKey { field_id, level, left_bound: search_key };
+            let key = FacetGroupKey { field_id, level, left_bound: facet_value };
             match self.db.get_lower_than(txn, &key)? {
                 Some((key, value)) => {
-                    if key.level != level || key.field_id != field_id {
+                    if key.level != level {
                         let mut prefix = vec![];
                         prefix.extend_from_slice(&field_id.to_be_bytes());
                         prefix.push(level);
@@ -126,7 +140,7 @@ impl FacetsUpdateIncrementalInner {
                         let mut iter = self
                             .db
                             .as_polymorph()
-                            .prefix_iter::<_, ByteSliceRef, FacetGroupValueCodec>(
+                            .prefix_iter::<_, ByteSlice, FacetGroupValueCodec>(
                                 txn,
                                 &prefix.as_slice(),
                             )?;
@@ -146,15 +160,19 @@ impl FacetsUpdateIncrementalInner {
         }
     }
 
+    /// Insert the given facet value and corresponding document ids in the level 0 of the database
+    ///
+    /// ## Return
+    /// See documentation of `insert_in_level`
     fn insert_in_level_0<'t>(
         &self,
         txn: &'t mut RwTxn,
         field_id: u16,
-        new_key: &[u8],
-        new_values: &RoaringBitmap,
+        facet_value: &[u8],
+        docids: &RoaringBitmap,
     ) -> Result<InsertionResult> {
-        let key = FacetGroupKey { field_id, level: 0, left_bound: new_key };
-        let value = FacetGroupValue { bitmap: new_values.clone(), size: 1 };
+        let key = FacetGroupKey { field_id, level: 0, left_bound: facet_value };
+        let value = FacetGroupValue { bitmap: docids.clone(), size: 1 };
 
         let mut level0_prefix = vec![];
         level0_prefix.extend_from_slice(&field_id.to_be_bytes());
@@ -163,7 +181,7 @@ impl FacetsUpdateIncrementalInner {
         let mut iter = self
             .db
             .as_polymorph()
-            .prefix_iter::<_, ByteSlice, FacetGroupValueCodec>(&txn, &level0_prefix)?;
+            .prefix_iter::<_, ByteSlice, DecodeIgnore>(&txn, &level0_prefix)?;
 
         if iter.next().is_none() {
             drop(iter);
@@ -186,143 +204,158 @@ impl FacetsUpdateIncrementalInner {
             }
         }
     }
+
+    /// Insert the given facet value  and corresponding document ids in all the levels of the database up to the given `level`.
+    /// This function works recursively.
+    ///
+    /// ## Return
+    /// Returns the effect of adding the facet value to the database on the given `level`.
+    ///
+    /// - `InsertionResult::InPlace` means that inserting the `facet_value` into the `level` did not have
+    /// an effect on the number of keys in that level. Therefore, it did not increase the number of children
+    /// of the parent node.
+    ///
+    /// - `InsertionResult::Insert` means that inserting the `facet_value` into the `level` resulted
+    /// in the addition of a new key in that level, and that therefore the number of children
+    /// of the parent node should be incremented.
     fn insert_in_level<'t>(
         &self,
         txn: &'t mut RwTxn,
         field_id: u16,
         level: u8,
-        new_key: &[u8],
-        new_values: &RoaringBitmap,
+        facet_value: &[u8],
+        docids: &RoaringBitmap,
     ) -> Result<InsertionResult> {
         if level == 0 {
-            return self.insert_in_level_0(txn, field_id, new_key, new_values);
+            return self.insert_in_level_0(txn, field_id, facet_value, docids);
         }
 
         let max_group_size = self.max_group_size;
 
-        let (insertion_key, insertion_value) =
-            self.find_insertion_key_value(field_id, level, new_key, txn)?;
-
-        let result = self.insert_in_level(txn, field_id, level - 1, new_key.clone(), new_values)?;
+        let result = self.insert_in_level(txn, field_id, level - 1, facet_value.clone(), docids)?;
         // level below inserted an element
 
-        let insertion_key = {
-            let mut new_insertion_key = insertion_key.clone();
-            let mut modified = false;
-
-            if new_key < insertion_key.left_bound.as_slice() {
-                new_insertion_key.left_bound = new_key.to_vec();
-                modified = true;
-            }
-            if modified {
-                let is_deleted = self.db.delete(txn, &insertion_key.as_ref())?;
-                assert!(is_deleted);
-                self.db.put(txn, &new_insertion_key.as_ref(), &insertion_value)?;
-            }
-            new_insertion_key
-        };
+        let (insertion_key, insertion_value) =
+            self.find_insertion_key_value(field_id, level, facet_value, txn)?;
 
         match result {
-            // TODO: this could go above the block recomputing insertion key
-            // because we know that if we inserted in place, the key is not a new one
-            // thus it doesn't extend a group
+            // because we know that we inserted in place, the facet_value is not a new one
+            // thus it doesn't extend a group, and thus the insertion key computed above is
+            // still correct
             InsertionResult::InPlace => {
-                let mut updated_value = self.db.get(&txn, &insertion_key.as_ref())?.unwrap();
-                updated_value.bitmap |= new_values;
+                let mut updated_value = insertion_value;
+                updated_value.bitmap |= docids;
                 self.db.put(txn, &insertion_key.as_ref(), &updated_value)?;
 
                 return Ok(InsertionResult::InPlace);
             }
             InsertionResult::Insert => {}
         }
-        let mut updated_value = self.db.get(&txn, &insertion_key.as_ref())?.unwrap();
+
+        // Here we know that inserting the facet value in the level below resulted in the creation
+        // of a new key. Therefore, it may be the case that we need to modify the left bound of the
+        // insertion key (see documentation of `find_insertion_key_value` for an example of when that
+        // could happen).
+        let insertion_key = {
+            let mut new_insertion_key = insertion_key.clone();
+            let mut key_should_be_modified = false;
+
+            if facet_value < insertion_key.left_bound.as_slice() {
+                new_insertion_key.left_bound = facet_value.to_vec();
+                key_should_be_modified = true;
+            }
+            if key_should_be_modified {
+                let is_deleted = self.db.delete(txn, &insertion_key.as_ref())?;
+                assert!(is_deleted);
+                self.db.put(txn, &new_insertion_key.as_ref(), &insertion_value)?;
+            }
+            new_insertion_key
+        };
+        // Now we know that the insertion key contains the `facet_value`.
+
+        // We still need to update the insertion value by:
+        // 1. Incrementing the number of children (since the recursive call returned `InsertionResult::Insert`)
+        // 2. Merge the previous docids with the new one
+        let mut updated_value = insertion_value;
 
         updated_value.size += 1;
-        if updated_value.size == max_group_size {
-            let size_left = max_group_size / 2;
-            let size_right = max_group_size - size_left;
 
-            let level_below = level - 1;
+        if updated_value.size < max_group_size {
+            updated_value.bitmap |= docids;
+            self.db.put(txn, &insertion_key.as_ref(), &updated_value)?;
 
-            let (start_key, _) = self
-                .db
-                .get_greater_than_or_equal_to(
-                    &txn,
-                    &FacetGroupKey {
-                        field_id,
-                        level: level_below,
-                        left_bound: insertion_key.left_bound.as_slice(),
-                    },
-                )?
-                .unwrap();
-
-            let mut iter = self.db.range(&txn, &(start_key..))?.take(max_group_size as usize);
-
-            let group_left = {
-                let mut values_left = RoaringBitmap::new();
-
-                let mut i = 0;
-                while let Some(next) = iter.next() {
-                    let (_key, value) = next?;
-                    i += 1;
-                    values_left |= &value.bitmap;
-                    if i == size_left {
-                        break;
-                    }
-                }
-
-                let key =
-                    FacetGroupKey { field_id, level, left_bound: insertion_key.left_bound.clone() };
-                let value = FacetGroupValue { size: size_left as u8, bitmap: values_left };
-                (key, value)
-            };
-
-            let group_right = {
-                let mut values_right = RoaringBitmap::new();
-                let mut right_start_key = None;
-
-                while let Some(next) = iter.next() {
-                    let (key, value) = next?;
-                    if right_start_key.is_none() {
-                        right_start_key = Some(key.left_bound);
-                    }
-                    values_right |= &value.bitmap;
-                }
-
-                let key = FacetGroupKey {
-                    field_id,
-                    level,
-                    left_bound: right_start_key.unwrap().to_vec(),
-                };
-                let value = FacetGroupValue { size: size_right as u8, bitmap: values_right };
-                (key, value)
-            };
-            drop(iter);
-
-            let _ = self.db.delete(txn, &insertion_key.as_ref())?;
-
-            self.db.put(txn, &group_left.0.as_ref(), &group_left.1)?;
-            self.db.put(txn, &group_right.0.as_ref(), &group_right.1)?;
-
-            Ok(InsertionResult::Insert)
-        } else {
-            let mut value = self.db.get(&txn, &insertion_key.as_ref())?.unwrap();
-            value.bitmap |= new_values;
-            value.size += 1;
-            self.db.put(txn, &insertion_key.as_ref(), &value).unwrap();
-
-            Ok(InsertionResult::InPlace)
+            return Ok(InsertionResult::InPlace);
         }
+
+        // We've increased the group size of the value and realised it has become greater than or equal to `max_group_size`
+        // Therefore it must be split into two nodes.
+
+        let size_left = max_group_size / 2;
+        let size_right = max_group_size - size_left;
+
+        let level_below = level - 1;
+
+        let start_key = FacetGroupKey {
+            field_id,
+            level: level_below,
+            left_bound: insertion_key.left_bound.as_slice(),
+        };
+
+        let mut iter = self.db.range(&txn, &(start_key..))?.take(max_group_size as usize);
+
+        let group_left = {
+            let mut values_left = RoaringBitmap::new();
+
+            let mut i = 0;
+            while let Some(next) = iter.next() {
+                let (_key, value) = next?;
+                i += 1;
+                values_left |= &value.bitmap;
+                if i == size_left {
+                    break;
+                }
+            }
+
+            let key =
+                FacetGroupKey { field_id, level, left_bound: insertion_key.left_bound.clone() };
+            let value = FacetGroupValue { size: size_left as u8, bitmap: values_left };
+            (key, value)
+        };
+
+        let group_right = {
+            let (
+                FacetGroupKey { left_bound: right_left_bound, .. },
+                FacetGroupValue { bitmap: mut values_right, .. },
+            ) = iter.next().unwrap()?;
+
+            while let Some(next) = iter.next() {
+                let (_, value) = next?;
+                values_right |= &value.bitmap;
+            }
+
+            let key = FacetGroupKey { field_id, level, left_bound: right_left_bound.to_vec() };
+            let value = FacetGroupValue { size: size_right as u8, bitmap: values_right };
+            (key, value)
+        };
+        drop(iter);
+
+        let _ = self.db.delete(txn, &insertion_key.as_ref())?;
+
+        self.db.put(txn, &group_left.0.as_ref(), &group_left.1)?;
+        self.db.put(txn, &group_right.0.as_ref(), &group_right.1)?;
+
+        Ok(InsertionResult::Insert)
     }
 
+    /// Insert the given facet value and corresponding document ids in the database.
     pub fn insert<'a, 't>(
         &self,
         txn: &'t mut RwTxn,
         field_id: u16,
-        new_key: &[u8],
-        new_values: &RoaringBitmap,
+        facet_value: &[u8],
+        docids: &RoaringBitmap,
     ) -> Result<()> {
-        if new_values.is_empty() {
+        if docids.is_empty() {
             return Ok(());
         }
         let group_size = self.group_size;
@@ -330,11 +363,14 @@ impl FacetsUpdateIncrementalInner {
         let highest_level = get_highest_level(&txn, self.db, field_id)?;
 
         let result =
-            self.insert_in_level(txn, field_id, highest_level as u8, new_key, new_values)?;
+            self.insert_in_level(txn, field_id, highest_level as u8, facet_value, docids)?;
         match result {
             InsertionResult::InPlace => return Ok(()),
             InsertionResult::Insert => {}
         }
+
+        // Here we check whether the highest level has exceeded `min_level_size` * `self.group_size`.
+        // If it has, we must build an addition level above it.
 
         let mut highest_level_prefix = vec![];
         highest_level_prefix.extend_from_slice(&field_id.to_be_bytes());
@@ -384,36 +420,61 @@ impl FacetsUpdateIncrementalInner {
         Ok(())
     }
 
+    /// Delete the given document id from the given facet value in the database, from level 0 to the
+    /// the given level.
+    ///
+    /// ## Return
+    /// Returns the effect of removing the document id from the database on the given `level`.
+    ///
+    /// - `DeletionResult::InPlace` means that deleting the document id did not have
+    /// an effect on the keys in that level.
+    ///
+    /// - `DeletionResult::Reduce` means that deleting the document id resulted in a change in the
+    /// number of keys in the level. For example, removing a document id from the facet value `3` could
+    /// cause it to have no corresponding document in level 0 anymore, and therefore the key was deleted
+    /// entirely. In that case, `DeletionResult::Remove` is returned. The parent of the deleted key must
+    /// then adjust its group size. If its group size falls to 0, then it will need to be deleted as well.
+    ///
+    /// - `DeletionResult::Reduce` means that deleting the document id resulted in a change in the
+    /// bounds of the keys of the level. For example, removing a document id from the facet value
+    /// `3` might have caused the facet value `3` to have no corresponding document in level 0. Therefore,
+    /// in level 1, the key with the left bound `3` had to be changed to the next facet value (e.g. 4).
+    /// In that case `DeletionResult::Reduce` is returned. The parent of the reduced key may need to adjust
+    /// its left bound as well.
     fn delete_in_level<'t>(
         &self,
         txn: &'t mut RwTxn,
         field_id: u16,
         level: u8,
-        key: &[u8],
-        value: u32,
+        facet_value: &[u8],
+        docid: u32,
     ) -> Result<DeletionResult> {
         if level == 0 {
-            return self.delete_in_level_0(txn, field_id, key, value);
+            return self.delete_in_level_0(txn, field_id, facet_value, docid);
         }
         let (deletion_key, mut bitmap) =
-            self.find_insertion_key_value(field_id, level, key, txn)?;
+            self.find_insertion_key_value(field_id, level, facet_value, txn)?;
 
-        let result = self.delete_in_level(txn, field_id, level - 1, key.clone(), value)?;
+        let result = self.delete_in_level(txn, field_id, level - 1, facet_value.clone(), docid)?;
 
         let mut decrease_size = false;
-        let (prev_key, next_key) = match result {
+        let next_key = match result {
             DeletionResult::InPlace => {
-                bitmap.bitmap.remove(value);
+                bitmap.bitmap.remove(docid);
                 self.db.put(txn, &deletion_key.as_ref(), &bitmap)?;
                 return Ok(DeletionResult::InPlace);
             }
-            DeletionResult::Reduce { prev, next } => (prev, next),
-            DeletionResult::Remove { prev, next } => {
+            DeletionResult::Reduce { next } => next,
+            DeletionResult::Remove { next } => {
                 decrease_size = true;
-                (prev, next)
+                next
             }
         };
+        // If either DeletionResult::Reduce or DeletionResult::Remove was returned,
+        // then we may need to adjust the left_bound of the deletion key.
 
+        // If DeletionResult::Remove was returned, then we need to decrease the group
+        // size of the deletion key.
         let mut updated_value = bitmap;
         if decrease_size {
             updated_value.size -= 1;
@@ -421,17 +482,21 @@ impl FacetsUpdateIncrementalInner {
 
         if updated_value.size == 0 {
             self.db.delete(txn, &deletion_key.as_ref())?;
-            Ok(DeletionResult::Remove { prev: prev_key, next: next_key })
+            Ok(DeletionResult::Remove { next: next_key })
         } else {
             let mut updated_deletion_key = deletion_key.clone();
-            if key == deletion_key.left_bound {
+            let reduced_range = facet_value == deletion_key.left_bound;
+            if reduced_range {
                 updated_deletion_key.left_bound = next_key.clone().unwrap();
             }
-            updated_value.bitmap.remove(value);
+            updated_value.bitmap.remove(docid);
             let _ = self.db.delete(txn, &deletion_key.as_ref())?;
             self.db.put(txn, &updated_deletion_key.as_ref(), &updated_value)?;
-
-            Ok(DeletionResult::Reduce { prev: prev_key, next: next_key })
+            if reduced_range {
+                Ok(DeletionResult::Reduce { next: next_key })
+            } else {
+                Ok(DeletionResult::InPlace)
+            }
         }
     }
 
@@ -439,27 +504,24 @@ impl FacetsUpdateIncrementalInner {
         &self,
         txn: &'t mut RwTxn,
         field_id: u16,
-        key: &[u8],
-        value: u32,
+        facet_value: &[u8],
+        docid: u32,
     ) -> Result<DeletionResult> {
-        let key = FacetGroupKey { field_id, level: 0, left_bound: key };
+        let key = FacetGroupKey { field_id, level: 0, left_bound: facet_value };
         let mut bitmap = self.db.get(&txn, &key)?.unwrap().bitmap;
-        bitmap.remove(value);
+        bitmap.remove(docid);
 
         if bitmap.is_empty() {
-            let mut prev_key = None;
             let mut next_key = None;
-
-            if let Some(prev) = self.db.get_lower_than(&txn, &key)? {
-                prev_key = Some(prev.0.left_bound.to_vec());
-            }
-            if let Some(next) = self.db.get_greater_than(&txn, &key)? {
-                if next.0.level == 0 {
-                    next_key = Some(next.0.left_bound.to_vec());
+            if let Some((next, _)) =
+                self.db.remap_data_type::<DecodeIgnore>().get_greater_than(&txn, &key)?
+            {
+                if next.field_id == field_id && next.level == 0 {
+                    next_key = Some(next.left_bound.to_vec());
                 }
             }
             self.db.delete(txn, &key)?;
-            Ok(DeletionResult::Remove { prev: prev_key, next: next_key })
+            Ok(DeletionResult::Remove { next: next_key })
         } else {
             self.db.put(txn, &key, &FacetGroupValue { size: 1, bitmap })?;
             Ok(DeletionResult::InPlace)
@@ -470,22 +532,30 @@ impl FacetsUpdateIncrementalInner {
         &self,
         txn: &'t mut RwTxn,
         field_id: u16,
-        key: &[u8],
-        value: u32,
+        facet_value: &[u8],
+        docid: u32,
     ) -> Result<()> {
-        if self.db.get(txn, &FacetGroupKey { field_id, level: 0, left_bound: key })?.is_none() {
+        if self
+            .db
+            .remap_data_type::<DecodeIgnore>()
+            .get(txn, &FacetGroupKey { field_id, level: 0, left_bound: facet_value })?
+            .is_none()
+        {
             return Ok(());
         }
         let highest_level = get_highest_level(&txn, self.db, field_id)?;
 
-        // let key_bytes = BoundCodec::bytes_encode(&key).unwrap();
-
-        let result = self.delete_in_level(txn, field_id, highest_level as u8, key, value)?;
+        let result =
+            self.delete_in_level(txn, field_id, highest_level as u8, facet_value, docid)?;
         match result {
             DeletionResult::InPlace => return Ok(()),
-            DeletionResult::Reduce { .. } => {}
+            DeletionResult::Reduce { .. } => return Ok(()),
             DeletionResult::Remove { .. } => {}
         }
+
+        // if we either removed a key from the highest level, its size may have fallen
+        // below `min_level_size`, in which case we need to remove the entire level
+
         let mut highest_level_prefix = vec![];
         highest_level_prefix.extend_from_slice(&field_id.to_be_bytes());
         highest_level_prefix.push(highest_level);
@@ -518,6 +588,26 @@ impl FacetsUpdateIncrementalInner {
             self.db.delete(txn, &k.as_ref())?;
         }
         Ok(())
+    }
+}
+
+impl<'a> FacetGroupKey<&'a [u8]> {
+    pub fn into_owned(self) -> FacetGroupKey<Vec<u8>> {
+        FacetGroupKey {
+            field_id: self.field_id,
+            level: self.level,
+            left_bound: self.left_bound.to_vec(),
+        }
+    }
+}
+
+impl<'a> FacetGroupKey<Vec<u8>> {
+    pub fn as_ref(&self) -> FacetGroupKey<&[u8]> {
+        FacetGroupKey {
+            field_id: self.field_id,
+            level: self.level,
+            left_bound: self.left_bound.as_slice(),
+        }
     }
 }
 

@@ -1,3 +1,79 @@
+/*!
+This module implements two different algorithms for updating the `facet_id_string_docids`
+and `facet_id_f64_docids` databases. The first algorithm is a "bulk" algorithm, meaning that
+it recreates the database from scratch when new elements are added to it. The second algorithm
+is incremental: it modifies the database as little as possible.
+
+The databases must be able to return results for queries such as:
+1. Filter       : find all the document ids that have a facet value greater than X and/or smaller than Y
+2. Min/Max      : find the minimum/maximum facet value among these document ids
+3. Sort         : sort these document ids by increasing/decreasing facet values
+4. Distribution : given some document ids, make a list of each facet value
+   found in these documents along with the number of documents that contain it
+
+The algorithms that implement these queries are found in the `src/search/facet` folder.
+
+To make these queries fast to compute, the database adopts a tree structure:
+```ignore
+            ┌───────────────────────────────┬───────────────────────────────┬───────────────┐
+┌───────┐   │           "ab" (2)            │           "gaf" (2)           │   "woz" (1)   │
+│Level 2│   │                               │                               │               │
+└───────┘   │        [a, b, d, f, z]        │        [c, d, e, f, g]        │    [u, y]     │
+            ├───────────────┬───────────────┼───────────────┬───────────────┼───────────────┤
+┌───────┐   │   "ab" (2)    │   "ba" (2)    │   "gaf" (2)   │  "form" (2)   │   "woz" (2)   │
+│Level 1│   │               │               │               │               │               │
+└───────┘   │ [a, b, d, z]  │   [a, b, f]   │   [c, d, g]   │    [e, f]     │    [u, y]     │
+            ├───────┬───────┼───────┬───────┼───────┬───────┼───────┬───────┼───────┬───────┤
+┌───────┐   │  "ab" │  "ac" │  "ba" │ "bac" │ "gaf" │ "gal" │ "form"│ "wow" │ "woz" │  "zz" │
+│Level 0│   │       │       │       │       │       │       │       │       │       │       │
+└───────┘   │ [a, b]│ [d, z]│ [b, f]│ [a, f]│ [c, d]│  [g]  │  [e]  │ [e, f]│  [y]  │  [u]  │
+            └───────┴───────┴───────┴───────┴───────┴───────┴───────┴───────┴───────┴───────┘
+```
+In the diagram above, each cell corresponds to a node in the tree. The first line of the cell
+contains the left bound of the range of facet values as well as the number of children of the node.
+The second line contains the document ids which have a facet value within the range of the node.
+The nodes at level 0 are the leaf nodes. They have 0 children and a single facet value in their range.
+
+In the diagram above, the first cell of level 2 is `ab (2)`. Its range is `ab .. gaf` (because
+`gaf` is the left bound of the next node) and it has two children. Its document ids are `[a,b,d,f,z]`.
+These documents all contain a facet value that is contained within `ab .. gaf`.
+
+In the database, each node is represented by a key/value pair encoded as a [`FacetGroupKey`] and a
+[`FacetGroupValue`], which have the following format:
+
+```ignore
+FacetGroupKey:
+- field id  : u16
+- level     : u8
+- left bound: [u8]    // the facet value encoded using either OrderedF64Codec or Str
+
+FacetGroupValue:
+- #children : u8
+- docids    : RoaringBitmap
+```
+
+When the database is first created using the "bulk" method, each node has a fixed number of children
+(except for possibly the last one) given by the `group_size` parameter (default to `FACET_GROUP_SIZE`). 
+The tree is also built such that the highest level has more than `min_level_size` 
+(default to `FACET_MIN_LEVEL_SIZE`) elements in it.
+
+When the database is incrementally updated, the number of children of a node can vary between
+1 and `max_group_size`. This is done so that most incremental operations do not need to change
+the structure of the tree. When the number of children of a node reaches `max_group_size`,
+we split the node in two and update the number of children of its parent.
+
+When adding documents to the databases, it is important to determine which method to use to
+minimise indexing time. The incremental method is faster when adding few new facet values, but the
+bulk method is faster when a large part of the database is modified. Empirically, it seems that
+it takes 50x more time to incrementally add N facet values to an existing database than it is to
+construct a database of N facet values. This is the heuristic that is used to choose between the 
+two methods.
+*/
+
+pub const FACET_MAX_GROUP_SIZE: u8 = 8;
+pub const FACET_GROUP_SIZE: u8 = 4;
+pub const FACET_MIN_LEVEL_SIZE: u8 = 5;
+
 use self::incremental::FacetsUpdateIncremental;
 use super::FacetsUpdateBulk;
 use crate::facet::FacetType;
@@ -13,8 +89,8 @@ pub struct FacetsUpdate<'i> {
     database: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
     facet_type: FacetType,
     new_data: grenad::Reader<File>,
-    level_group_size: u8,
-    max_level_group_size: u8,
+    group_size: u8,
+    max_group_size: u8,
     min_level_size: u8,
 }
 impl<'i> FacetsUpdate<'i> {
@@ -30,57 +106,24 @@ impl<'i> FacetsUpdate<'i> {
         Self {
             index,
             database,
-            level_group_size: 4,
-            max_level_group_size: 8,
-            min_level_size: 5,
+            group_size: FACET_GROUP_SIZE,
+            max_group_size: FACET_MAX_GROUP_SIZE,
+            min_level_size: FACET_MIN_LEVEL_SIZE,
             facet_type,
             new_data,
         }
     }
 
-    // TODO: use the options below?
-    // but I don't actually see why they should be configurable
-    // /// The minimum number of elements that a level is allowed to have.
-    // pub fn level_max_group_size(mut self, value: u8) -> Self {
-    //     self.max_level_group_size = std::cmp::max(value, 4);
-    //     self
-    // }
-
-    // /// The number of elements from the level below that are represented by a single element in the level above
-    // ///
-    // /// This setting is always greater than or equal to 2.
-    // pub fn level_group_size(mut self, value: u8) -> Self {
-    //     self.level_group_size = std::cmp::max(value, 2);
-    //     self
-    // }
-
-    // /// The minimum number of elements that a level is allowed to have.
-    // pub fn min_level_size(mut self, value: u8) -> Self {
-    //     self.min_level_size = std::cmp::max(value, 2);
-    //     self
-    // }
-
     pub fn execute(self, wtxn: &mut heed::RwTxn) -> Result<()> {
         if self.new_data.is_empty() {
             return Ok(());
         }
-        // here, come up with a better condition!
-        // ideally we'd choose which method to use for each field id individually
-        // but I dont' think it's worth the effort yet
-        // As a first requirement, we ask that the length of the new data is less
-        // than a 1/50th of the length of the database in order to use the incremental
-        // method.
         if self.new_data.len() >= (self.database.len(wtxn)? as u64 / 50) {
-            let bulk_update = FacetsUpdateBulk::new(self.index, self.facet_type, self.new_data)
-                .level_group_size(self.level_group_size)
-                .min_level_size(self.min_level_size);
+            let bulk_update = FacetsUpdateBulk::new(self.index, self.facet_type, self.new_data, self.group_size, self.min_level_size);
             bulk_update.execute(wtxn)?;
         } else {
             let incremental_update =
-                FacetsUpdateIncremental::new(self.index, self.facet_type, self.new_data)
-                    .group_size(self.level_group_size)
-                    .max_group_size(self.max_level_group_size)
-                    .min_level_size(self.min_level_size);
+                FacetsUpdateIncremental::new(self.index, self.facet_type, self.new_data, self.group_size, self.min_level_size, self.max_group_size);
             incremental_update.execute(wtxn)?;
         }
         Ok(())
@@ -346,7 +389,7 @@ mod comparison_bench {
     // of the incremental vs. bulk indexer.
     // It appears that the incremental indexer is about 50 times slower than the
     // bulk indexer.
-    #[test]
+    // #[test]
     fn benchmark_facet_indexing() {
         // then we add 10_000 documents at a time and compare the speed of adding 1, 100, and 1000 documents to it
 

@@ -7,7 +7,7 @@ mod typed_chunk;
 use std::collections::HashSet;
 use std::io::{Cursor, Read, Seek};
 use std::iter::FromIterator;
-use std::num::{NonZeroU32, NonZeroUsize};
+use std::num::NonZeroU32;
 use std::result::Result as StdResult;
 
 use crossbeam_channel::{Receiver, Sender};
@@ -82,8 +82,6 @@ pub struct IndexDocuments<'t, 'u, 'i, 'a, F> {
 
 #[derive(Default, Debug, Clone)]
 pub struct IndexDocumentsConfig {
-    pub facet_level_group_size: Option<NonZeroUsize>,
-    pub facet_min_level_size: Option<NonZeroUsize>,
     pub words_prefix_threshold: Option<u32>,
     pub max_prefix_length: Option<usize>,
     pub words_positions_level_group_size: Option<NonZeroU32>,

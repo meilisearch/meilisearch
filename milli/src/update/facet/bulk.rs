@@ -1,24 +1,30 @@
-use std::borrow::Cow;
-use std::cmp;
-use std::fs::File;
-
-use grenad::CompressionType;
-use heed::types::ByteSlice;
-use heed::{BytesEncode, Error, RoTxn, RwTxn};
-use log::debug;
-use roaring::RoaringBitmap;
-use time::OffsetDateTime;
-
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{
     ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
 };
 use crate::update::index_documents::{create_writer, writer_into_reader};
 use crate::{CboRoaringBitmapCodec, FieldId, Index, Result};
+use grenad::CompressionType;
+use heed::types::ByteSlice;
+use heed::{BytesEncode, Error, RoTxn, RwTxn};
+use log::debug;
+use roaring::RoaringBitmap;
+use std::borrow::Cow;
+use std::fs::File;
+use time::OffsetDateTime;
 
+use super::{FACET_GROUP_SIZE, FACET_MIN_LEVEL_SIZE};
+
+/// Algorithm to insert elememts into the `facet_id_(string/f64)_docids` databases
+/// by rebuilding the database "from scratch".
+///
+/// First, the new elements are inserted into the level 0 of the database. Then, the
+/// higher levels are cleared and recomputed from the content of level 0.
+///
+/// Finally, the `faceted_documents_ids` value in the main database of `Index`
+/// is updated to contain the new set of faceted documents.
 pub struct FacetsUpdateBulk<'i> {
     index: &'i Index,
-    database: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
     group_size: u8,
     min_level_size: u8,
     facet_type: FacetType,
@@ -31,22 +37,10 @@ impl<'i> FacetsUpdateBulk<'i> {
         index: &'i Index,
         facet_type: FacetType,
         new_data: grenad::Reader<File>,
+        group_size: u8,
+        min_level_size: u8,
     ) -> FacetsUpdateBulk<'i> {
-        FacetsUpdateBulk {
-            index,
-            database: match facet_type {
-                FacetType::String => index
-                    .facet_id_string_docids
-                    .remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>(),
-                FacetType::Number => {
-                    index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
-                }
-            },
-            group_size: 4,
-            min_level_size: 5,
-            facet_type,
-            new_data: Some(new_data),
-        }
+        FacetsUpdateBulk { index, group_size, min_level_size, facet_type, new_data: Some(new_data) }
     }
 
     pub fn new_not_updating_level_0(
@@ -55,44 +49,31 @@ impl<'i> FacetsUpdateBulk<'i> {
     ) -> FacetsUpdateBulk<'i> {
         FacetsUpdateBulk {
             index,
-            database: match facet_type {
-                FacetType::String => index
-                    .facet_id_string_docids
-                    .remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>(),
-                FacetType::Number => {
-                    index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
-                }
-            },
-            group_size: 4,
-            min_level_size: 5,
+            group_size: FACET_GROUP_SIZE,
+            min_level_size: FACET_MIN_LEVEL_SIZE,
             facet_type,
             new_data: None,
         }
-    }
-
-    /// The number of elements from the level below that are represented by a single element in the level above
-    ///
-    /// This setting is always greater than or equal to 2.
-    pub fn level_group_size(mut self, value: u8) -> Self {
-        self.group_size = cmp::max(value, 2);
-        self
-    }
-
-    /// The minimum number of elements that a level is allowed to have.
-    pub fn min_level_size(mut self, value: u8) -> Self {
-        self.min_level_size = cmp::max(value, 2);
-        self
     }
 
     #[logging_timer::time("FacetsUpdateBulk::{}")]
     pub fn execute(self, wtxn: &mut heed::RwTxn) -> Result<()> {
         debug!("Computing and writing the facet values levels docids into LMDB on disk...");
 
-        let Self { index, database, group_size, min_level_size, facet_type, new_data } = self;
+        let Self { index, group_size, min_level_size, facet_type, new_data } = self;
+
+        let db = match facet_type {
+            FacetType::String => {
+                index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
+            }
+            FacetType::Number => {
+                index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
+            }
+        };
 
         index.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
 
-        let inner = FacetsUpdateBulkInner { db: database, new_data, group_size, min_level_size };
+        let inner = FacetsUpdateBulkInner { db, new_data, group_size, min_level_size };
 
         let field_ids = index.faceted_fields_ids(wtxn)?.iter().copied().collect::<Box<[_]>>();
 
@@ -105,6 +86,7 @@ impl<'i> FacetsUpdateBulk<'i> {
     }
 }
 
+/// Implementation of `FacetsUpdateBulk` that is independent of milli's `Index` type
 pub(crate) struct FacetsUpdateBulkInner<R: std::io::Read + std::io::Seek> {
     pub db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
     pub new_data: Option<grenad::Reader<R>>,
