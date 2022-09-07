@@ -18,8 +18,11 @@ pub use merge_functions::{
     roaring_bitmap_from_u32s_array, serialize_roaring_bitmap, MergeFn,
 };
 
+/// The maximum length a word can be
+pub const MAX_WORD_LENGTH: usize = 250;
+
 pub fn valid_lmdb_key(key: impl AsRef<[u8]>) -> bool {
-    key.as_ref().len() <= 511 && !key.as_ref().is_empty()
+    key.as_ref().len() <= MAX_WORD_LENGTH * 2 && !key.as_ref().is_empty()
 }
 
 /// Divides one slice into two at an index, returns `None` if mid is out of bounds.
