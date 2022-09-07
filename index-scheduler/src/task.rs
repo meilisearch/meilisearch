@@ -2,6 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 use crate::TaskId;
 
@@ -56,7 +57,7 @@ pub enum KindWithContent {
     Snapshot,
     DocumentAddition {
         index_name: String,
-        content_file: String,
+        content_file: Uuid,
     },
     DocumentDeletion {
         index_name: String,
