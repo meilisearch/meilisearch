@@ -67,6 +67,8 @@ impl IndexScheduler {
             })?;
         }
 
+        // TODO: TAMO: update the task in `all_tasks`
+
         Ok(())
     }
 
