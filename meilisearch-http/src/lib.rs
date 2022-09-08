@@ -10,8 +10,6 @@ pub mod routes;
 
 #[cfg(feature = "metrics")]
 pub mod metrics;
-#[cfg(feature = "metrics")]
-pub mod route_metrics;
 
 use std::sync::{atomic::AtomicBool, Arc};
 use std::time::Duration;
@@ -148,9 +146,7 @@ pub fn dashboard(config: &mut web::ServiceConfig, _enable_frontend: bool) {
 #[cfg(feature = "metrics")]
 pub fn configure_metrics_route(config: &mut web::ServiceConfig, enable_metrics_route: bool) {
     if enable_metrics_route {
-        config.service(
-            web::resource("/metrics").route(web::get().to(crate::route_metrics::get_metrics)),
-        );
+        config.service(web::resource("/metrics").route(web::get().to(crate::metrics::get_metrics)));
     }
 }
 
@@ -167,7 +163,7 @@ macro_rules! create_app {
         use meilisearch_http::routes;
         use meilisearch_http::{configure_data, dashboard};
         #[cfg(feature = "metrics")]
-        use meilisearch_http::{configure_metrics_route, metrics, route_metrics};
+        use meilisearch_http::{configure_metrics_route, metrics};
         use meilisearch_types::error::ResponseError;
 
         let app = App::new()
@@ -196,7 +192,7 @@ macro_rules! create_app {
         #[cfg(feature = "metrics")]
         let app = app.wrap(Condition::new(
             $opt.enable_metrics_route,
-            route_metrics::RouteMetrics,
+            metrics::RouteMetrics,
         ));
 
         app
