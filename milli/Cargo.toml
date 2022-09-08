@@ -9,7 +9,7 @@ bimap = { version = "0.6.2", features = ["serde"] }
 bincode = "1.3.3"
 bstr = "0.2.17"
 byteorder = "1.4.3"
-charabia = "0.6.0"
+charabia = { version = "0.6.0", default-features = false }
 concat-arrays = "0.1.2"
 crossbeam-channel = "0.5.2"
 either = "1.6.1"
@@ -57,4 +57,16 @@ md5 = "0.7.0"
 rand = "0.8.5"
 
 [features]
-default = []
+default = [ "charabia/default" ]
+
+# allow chinese specialized tokenization
+chinese = ["charabia/chinese"]
+
+# allow hebrew specialized tokenization
+hebrew = ["charabia/hebrew"]
+
+# allow japanese specialized tokenization
+japanese = ["charabia/japanese"]
+
+# allow thai specialized tokenization
+thai = ["charabia/thai"]
