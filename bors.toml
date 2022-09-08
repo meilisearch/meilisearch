@@ -1,5 +1,5 @@
 status = [
-    'Tests on ubuntu-18.04',
+    'Tests on ubuntu-20.04',
     'Tests on macos-latest',
     'Tests on windows-latest',
     'Run Rustfmt',
