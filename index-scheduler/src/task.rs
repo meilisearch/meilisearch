@@ -27,6 +27,9 @@ pub struct Task {
     #[serde(with = "time::serde::rfc3339::option")]
     pub finished_at: Option<OffsetDateTime>,
 
+    pub error: Option<String>,
+    pub info: Option<String>,
+
     pub status: Status,
     pub kind: KindWithContent,
 }
