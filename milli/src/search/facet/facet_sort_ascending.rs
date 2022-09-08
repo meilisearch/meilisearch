@@ -6,6 +6,28 @@ use crate::heed_codec::facet::{
     ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
 };
 
+/// Return an iterator which iterates over the given candidate documents in
+/// ascending order of their facet value for the given field id.
+///
+/// The documents returned by the iterator are grouped by the facet values that
+/// determined their rank. For example, given the documents:
+///
+/// ```ignore
+/// 0: { "colour": ["blue", "green"] }
+/// 1: { "colour": ["blue", "red"] }
+/// 2: { "colour": ["orange", "red"] }
+/// 3: { "colour": ["green", "red"] }
+/// 4: { "colour": ["blue", "orange", "red"] }
+/// ```
+/// Then calling the function on the candidates `[0, 2, 3, 4]` will return an iterator
+/// over the following elements:
+/// ```ignore
+/// [0, 4]  // corresponds to all the documents within the candidates that have the facet value "blue"
+/// [3]     // same for "green"
+/// [2]     // same for "orange"
+/// END
+/// ```
+/// Note that once a document id is returned by the iterator, it is never returned again.
 pub fn ascending_facet_sort<'t>(
     rtxn: &'t heed::RoTxn<'t>,
     db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,

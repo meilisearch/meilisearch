@@ -8,6 +8,9 @@ use crate::heed_codec::facet::{
     ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
 };
 
+/// See documentationg for [`ascending_facet_sort`](super::ascending_facet_sort).
+///
+/// This function does the same thing, but in the opposite order.
 pub fn descending_facet_sort<'t>(
     rtxn: &'t heed::RoTxn<'t>,
     db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,

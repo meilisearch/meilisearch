@@ -1,17 +1,19 @@
-use heed::types::ByteSlice;
-use heed::{BytesDecode, RoTxn};
-
 pub use self::facet_distribution::{FacetDistribution, DEFAULT_VALUES_PER_FACET};
 pub use self::filter::Filter;
 use crate::heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec, FacetGroupValueCodec};
+pub use facet_sort_ascending::ascending_facet_sort;
+pub use facet_sort_descending::descending_facet_sort;
+use heed::types::{ByteSlice, DecodeIgnore};
+use heed::{BytesDecode, RoTxn};
 
 mod facet_distribution;
 mod facet_distribution_iter;
 mod facet_range_search;
-pub mod facet_sort_ascending;
-pub mod facet_sort_descending;
+mod facet_sort_ascending;
+mod facet_sort_descending;
 mod filter;
 
+/// Get the first facet value in the facet database
 pub(crate) fn get_first_facet_value<'t, BoundCodec>(
     txn: &'t RoTxn,
     db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
@@ -23,8 +25,9 @@ where
     let mut level0prefix = vec![];
     level0prefix.extend_from_slice(&field_id.to_be_bytes());
     level0prefix.push(0);
-    let mut level0_iter_forward =
-        db.as_polymorph().prefix_iter::<_, ByteSlice, ByteSlice>(txn, level0prefix.as_slice())?;
+    let mut level0_iter_forward = db
+        .as_polymorph()
+        .prefix_iter::<_, ByteSlice, DecodeIgnore>(txn, level0prefix.as_slice())?;
     if let Some(first) = level0_iter_forward.next() {
         let (first_key, _) = first?;
         let first_key = FacetGroupKeyCodec::<BoundCodec>::bytes_decode(first_key)
@@ -34,6 +37,8 @@ where
         Ok(None)
     }
 }
+
+/// Get the last facet value in the facet database
 pub(crate) fn get_last_facet_value<'t, BoundCodec>(
     txn: &'t RoTxn,
     db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
@@ -47,7 +52,7 @@ where
     level0prefix.push(0);
     let mut level0_iter_backward = db
         .as_polymorph()
-        .rev_prefix_iter::<_, ByteSlice, ByteSlice>(txn, level0prefix.as_slice())?;
+        .rev_prefix_iter::<_, ByteSlice, DecodeIgnore>(txn, level0prefix.as_slice())?;
     if let Some(last) = level0_iter_backward.next() {
         let (last_key, _) = last?;
         let last_key = FacetGroupKeyCodec::<BoundCodec>::bytes_decode(last_key)
@@ -57,6 +62,8 @@ where
         Ok(None)
     }
 }
+
+/// Get the height of the highest level in the facet database
 pub(crate) fn get_highest_level<'t>(
     txn: &'t RoTxn<'t>,
     db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
@@ -65,7 +72,7 @@ pub(crate) fn get_highest_level<'t>(
     let field_id_prefix = &field_id.to_be_bytes();
     Ok(db
         .as_polymorph()
-        .rev_prefix_iter::<_, ByteSlice, ByteSlice>(&txn, field_id_prefix)?
+        .rev_prefix_iter::<_, ByteSlice, DecodeIgnore>(&txn, field_id_prefix)?
         .next()
         .map(|el| {
             let (key, _) = el.unwrap();
