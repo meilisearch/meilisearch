@@ -237,10 +237,12 @@ pub(crate) mod tests {
             }
         }
 
+        #[cfg(all(test, fuzzing))]
         pub fn set_group_size(&self, group_size: u8) {
             // 2 <= x <= 64
             self.group_size.set(std::cmp::min(64, std::cmp::max(group_size, 2)));
         }
+        #[cfg(all(test, fuzzing))]
         pub fn set_max_group_size(&self, max_group_size: u8) {
             // 2*group_size <= x <= 128
             let max_group_size = std::cmp::max(4, std::cmp::min(128, max_group_size));
@@ -249,6 +251,7 @@ pub(crate) mod tests {
                 self.group_size.set(max_group_size / 2);
             }
         }
+        #[cfg(all(test, fuzzing))]
         pub fn set_min_level_size(&self, min_level_size: u8) {
             // 1 <= x <= inf
             self.min_level_size.set(std::cmp::max(1, min_level_size));
