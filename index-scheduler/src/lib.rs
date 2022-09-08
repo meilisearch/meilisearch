@@ -80,6 +80,10 @@ pub struct IndexScheduler {
 }
 
 impl IndexScheduler {
+    pub fn create_index(&self, rwtxn: &mut RwTxn, name: &str) -> Result<Index> {
+        todo!()
+    }
+
     /// Return the index corresponding to the name. If it wasn't opened before
     /// it'll be opened. But if it doesn't exist on disk it'll throw an
     /// `IndexNotFound` error.
@@ -226,6 +230,9 @@ impl IndexScheduler {
             let res = self.process_batch(&mut wtxn, &mut batch);
 
             // TODO: TAMO: do this later
+            // must delete the file on disk
+            // in case of error, must update the tasks with the error
+            // in case of « success » we must update all the task on disk
             // self.handle_batch_result(res);
 
             match wtxn.commit() {
