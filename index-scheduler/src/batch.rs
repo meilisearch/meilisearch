@@ -11,12 +11,7 @@ pub(crate) enum Batch {
     Cancel(Task),
     Snapshot(Vec<Task>),
     Dump(Vec<Task>),
-    DocumentAddition {
-        index_uid: String,
-        tasks: Vec<Task>,
-        primary_key: Option<String>,
-        content_files: Vec<Uuid>,
-    },
+    IndexSpecific { index_uid: String, kind: BatchKind },
 }
 
 impl IndexScheduler {
@@ -66,28 +61,30 @@ impl IndexScheduler {
     /// 2. We get the *next* snapshot to process.
     /// 3. We get the *next* dump to process.
     /// 4. We get the *next* tasks to process for a specific index.
-    pub(crate) fn create_next_batch(&self, rtxn: &RoTxn) -> Result<Batch> {
+    pub(crate) fn create_next_batch(&self, rtxn: &RoTxn) -> Result<Option<Batch>> {
         let enqueued = &self.get_status(rtxn, Status::Enqueued)?;
         let to_cancel = self.get_kind(rtxn, Kind::CancelTask)? & enqueued;
 
         // 1. we get the last task to cancel.
         if let Some(task_id) = to_cancel.max() {
-            return Ok(Batch::Cancel(
+            return Ok(Some(Batch::Cancel(
                 self.get_task(rtxn, task_id)?
                     .ok_or(Error::CorruptedTaskQueue)?,
-            ));
+            )));
         }
 
         // 2. we batch the snapshot.
         let to_snapshot = self.get_kind(rtxn, Kind::Snapshot)? & enqueued;
         if !to_snapshot.is_empty() {
-            return Ok(Batch::Snapshot(self.get_existing_tasks(rtxn, to_snapshot)?));
+            return Ok(Some(Batch::Snapshot(
+                self.get_existing_tasks(rtxn, to_snapshot)?,
+            )));
         }
 
         // 3. we batch the dumps.
         let to_dump = self.get_kind(rtxn, Kind::DumpExport)? & enqueued;
         if !to_dump.is_empty() {
-            return Ok(Batch::Dump(self.get_existing_tasks(rtxn, to_dump)?));
+            return Ok(Some(Batch::Dump(self.get_existing_tasks(rtxn, to_dump)?)));
         }
 
         // 4. We take the next task and try to batch all the tasks associated with this index.
@@ -95,36 +92,34 @@ impl IndexScheduler {
             let task = self
                 .get_task(rtxn, task_id)?
                 .ok_or(Error::CorruptedTaskQueue)?;
-            match task.kind {
-                // We can batch all the consecutive tasks coming next which
-                // have the kind `DocumentAddition`.
-                KindWithContent::DocumentAddition { index_name, .. } => {
-                    return self.batch_contiguous_kind(rtxn, &index_name, Kind::DocumentAddition)
-                }
-                // We can batch all the consecutive tasks coming next which
-                // have the kind `DocumentDeletion`.
-                KindWithContent::DocumentDeletion { index_name, .. } => {
-                    return self.batch_contiguous_kind(rtxn, &index_name, Kind::DocumentAddition)
-                }
-                // The following tasks can't be batched
-                KindWithContent::ClearAllDocuments { .. }
-                | KindWithContent::RenameIndex { .. }
-                | KindWithContent::CreateIndex { .. }
-                | KindWithContent::DeleteIndex { .. }
-                | KindWithContent::SwapIndex { .. } => return Ok(Batch::One(task)),
 
-                // The following tasks have already been batched and thus can't appear here.
-                KindWithContent::CancelTask { .. }
-                | KindWithContent::DumpExport { .. }
-                | KindWithContent::Snapshot => {
-                    unreachable!()
-                }
-            }
+            // This is safe because all the remaining task are associated with
+            // AT LEAST one index. We can use the right or left one it doesn't
+            // matter.
+            let index_name = task.indexes().unwrap()[0];
+
+            let index = self.get_index(rtxn, &index_name)? & enqueued;
+
+            let enqueued = enqueued
+                .into_iter()
+                .map(|task_id| {
+                    self.get_task(rtxn, task_id)
+                        .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))
+                        .map(|task| (task.uid, task.kind.as_kind()))
+                })
+                .collect::<Result<Vec<_>>>()?;
+
+            return Ok(
+                autobatcher(enqueued).map(|batch_kind| Batch::IndexSpecific {
+                    index_uid: index_name.to_string(),
+                    kind: batch_kind,
+                }),
+            );
         }
 
         // If we found no tasks then we were notified for something that got autobatched
         // somehow and there is nothing to do.
-        Ok(Batch::Empty)
+        Ok(None)
     }
 
     /// Batch all the consecutive tasks coming next that shares the same `Kind`
