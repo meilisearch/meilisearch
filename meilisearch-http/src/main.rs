@@ -30,8 +30,6 @@ fn setup(opt: &Opt) -> anyhow::Result<()> {
 async fn main() -> anyhow::Result<()> {
     let opt = Opt::build();
 
-    println!("{:?}", opt);
-
     setup(&opt)?;
 
     match opt.env.as_ref() {
