@@ -58,3 +58,15 @@ rand = "0.8.5"
 
 [features]
 default = [ "charabia/default" ]
+
+# allow chinese specialized tokenization
+chinese = ["charabia/chinese"]
+
+# allow hebrew specialized tokenization
+hebrew = ["charabia/hebrew"]
+
+# allow japanese specialized tokenization
+japanese = ["charabia/japanese"]
+
+# allow thai specialized tokenization
+thai = ["charabia/thai"]
