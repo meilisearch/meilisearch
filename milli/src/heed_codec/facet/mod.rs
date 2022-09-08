@@ -40,6 +40,8 @@ pub struct FacetGroupKey<T> {
     pub left_bound: T,
 }
 
+/// The value in the [`facet_id_string_docids` and `facet_id_f64_docids`][`Index::facet_id_string_docids`]
+/// databases.
 #[derive(Debug)]
 pub struct FacetGroupValue {
     pub size: u8,
@@ -102,6 +104,8 @@ impl<'a> heed::BytesDecode<'a> for FacetGroupValueCodec {
     }
 }
 
+/// A codec for values of type `&[u8]`. Unlike `ByteSlice`, its `EItem` and `DItem` associated
+/// types are equivalent (= `&'a [u8]`) and these values can reside within another structure.
 pub struct ByteSliceRef;
 
 impl<'a> BytesEncode<'a> for ByteSliceRef {

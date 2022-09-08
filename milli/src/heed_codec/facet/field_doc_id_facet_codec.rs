@@ -1,7 +1,9 @@
-use crate::{try_split_array_at, DocumentId, FieldId};
-use heed::{BytesDecode, BytesEncode};
 use std::borrow::Cow;
 use std::marker::PhantomData;
+
+use heed::{BytesDecode, BytesEncode};
+
+use crate::{try_split_array_at, DocumentId, FieldId};
 
 pub struct FieldDocIdFacetCodec<C>(PhantomData<C>);
 

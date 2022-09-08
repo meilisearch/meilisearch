@@ -2,6 +2,8 @@ use std::borrow::Cow;
 
 use heed::{BytesDecode, BytesEncode};
 
+/// A codec for values of type `&str`. Unlike `Str`, its `EItem` and `DItem` associated
+/// types are equivalent (= `&'a str`) and these values can reside within another structure.
 pub struct StrRefCodec;
 impl<'a> BytesEncode<'a> for StrRefCodec {
     type EItem = &'a str;
