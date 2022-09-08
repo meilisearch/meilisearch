@@ -1,10 +1,11 @@
-pub use self::facet_distribution::{FacetDistribution, DEFAULT_VALUES_PER_FACET};
-pub use self::filter::Filter;
-use crate::heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec, FacetGroupValueCodec};
 pub use facet_sort_ascending::ascending_facet_sort;
 pub use facet_sort_descending::descending_facet_sort;
 use heed::types::{ByteSlice, DecodeIgnore};
 use heed::{BytesDecode, RoTxn};
+
+pub use self::facet_distribution::{FacetDistribution, DEFAULT_VALUES_PER_FACET};
+pub use self::filter::Filter;
+use crate::heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec, FacetGroupValueCodec};
 
 mod facet_distribution;
 mod facet_distribution_iter;

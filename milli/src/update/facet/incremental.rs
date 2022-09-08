@@ -14,6 +14,7 @@ use crate::{CboRoaringBitmapCodec, FieldId, Index, Result};
 
 enum InsertionResult {
     InPlace,
+    Expand,
     Insert,
 }
 enum DeletionResult {
@@ -251,6 +252,7 @@ impl FacetsUpdateIncrementalInner {
 
                 return Ok(InsertionResult::InPlace);
             }
+            InsertionResult::Expand => {}
             InsertionResult::Insert => {}
         }
 
@@ -258,7 +260,7 @@ impl FacetsUpdateIncrementalInner {
         // of a new key. Therefore, it may be the case that we need to modify the left bound of the
         // insertion key (see documentation of `find_insertion_key_value` for an example of when that
         // could happen).
-        let insertion_key = {
+        let (insertion_key, insertion_key_was_modified) = {
             let mut new_insertion_key = insertion_key.clone();
             let mut key_should_be_modified = false;
 
@@ -271,7 +273,7 @@ impl FacetsUpdateIncrementalInner {
                 assert!(is_deleted);
                 self.db.put(txn, &new_insertion_key.as_ref(), &insertion_value)?;
             }
-            new_insertion_key
+            (new_insertion_key, key_should_be_modified)
         };
         // Now we know that the insertion key contains the `facet_value`.
 
@@ -280,20 +282,25 @@ impl FacetsUpdateIncrementalInner {
         // 2. Merge the previous docids with the new one
         let mut updated_value = insertion_value;
 
-        updated_value.size += 1;
+        if matches!(result, InsertionResult::Insert) {
+            updated_value.size += 1;
+        }
 
         if updated_value.size < max_group_size {
             updated_value.bitmap |= docids;
             self.db.put(txn, &insertion_key.as_ref(), &updated_value)?;
-
-            return Ok(InsertionResult::InPlace);
+            if insertion_key_was_modified {
+                return Ok(InsertionResult::Expand);
+            } else {
+                return Ok(InsertionResult::InPlace);
+            }
         }
 
         // We've increased the group size of the value and realised it has become greater than or equal to `max_group_size`
         // Therefore it must be split into two nodes.
 
-        let size_left = max_group_size / 2;
-        let size_right = max_group_size - size_left;
+        let size_left = updated_value.size / 2;
+        let size_right = updated_value.size - size_left;
 
         let level_below = level - 1;
 
@@ -303,7 +310,8 @@ impl FacetsUpdateIncrementalInner {
             left_bound: insertion_key.left_bound.as_slice(),
         };
 
-        let mut iter = self.db.range(&txn, &(start_key..))?.take(max_group_size as usize);
+        let mut iter =
+            self.db.range(&txn, &(start_key..))?.take((size_left as usize) + (size_right as usize));
 
         let group_left = {
             let mut values_left = RoaringBitmap::new();
@@ -368,6 +376,7 @@ impl FacetsUpdateIncrementalInner {
             self.insert_in_level(txn, field_id, highest_level as u8, facet_value, docids)?;
         match result {
             InsertionResult::InPlace => return Ok(()),
+            InsertionResult::Expand => return Ok(()),
             InsertionResult::Insert => {}
         }
 
@@ -393,8 +402,11 @@ impl FacetsUpdateIncrementalInner {
             .as_polymorph()
             .prefix_iter::<_, ByteSlice, FacetGroupValueCodec>(&txn, &highest_level_prefix)?;
 
+        let nbr_new_groups = size_highest_level / self.group_size as usize;
+        let nbr_leftover_elements = size_highest_level % self.group_size as usize;
+
         let mut to_add = vec![];
-        for _ in 0..self.min_level_size {
+        for _ in 0..nbr_new_groups {
             let mut first_key = None;
             let mut values = RoaringBitmap::new();
             for _ in 0..group_size {
@@ -415,6 +427,30 @@ impl FacetsUpdateIncrementalInner {
             let value = FacetGroupValue { size: group_size as u8, bitmap: values };
             to_add.push((key.into_owned(), value));
         }
+        // now we add the rest of the level, in case its size is > group_size * min_level_size
+        // this can indeed happen if the min_level_size parameter changes between two calls to `insert`
+        if nbr_leftover_elements > 0 {
+            let mut first_key = None;
+            let mut values = RoaringBitmap::new();
+            for _ in 0..nbr_leftover_elements {
+                let (key_bytes, value_i) = groups_iter.next().unwrap()?;
+                let key_i = FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(&key_bytes)
+                    .ok_or(Error::Encoding)?;
+
+                if first_key.is_none() {
+                    first_key = Some(key_i);
+                }
+                values |= value_i.bitmap;
+            }
+            let key = FacetGroupKey {
+                field_id,
+                level: highest_level + 1,
+                left_bound: first_key.unwrap().left_bound,
+            };
+            let value = FacetGroupValue { size: nbr_leftover_elements as u8, bitmap: values };
+            to_add.push((key.into_owned(), value));
+        }
+
         drop(groups_iter);
         for (key, value) in to_add {
             self.db.put(txn, &key.as_ref(), &value)?;
@@ -983,243 +1019,345 @@ mod tests {
 
     // fuzz tests
 }
-// #[cfg(all(test, fuzzing))]
-// mod fuzz {
-//     use crate::codec::U16Codec;
+#[cfg(all(test, fuzzing))]
+mod fuzz {
+    use std::borrow::Cow;
+    use std::collections::{BTreeMap, HashMap};
+    use std::convert::TryFrom;
+    use std::rc::Rc;
 
-//     use super::tests::verify_structure_validity;
-//     use super::*;
-//     use fuzzcheck::mutators::integer_within_range::U16WithinRangeMutator;
-//     use fuzzcheck::DefaultMutator;
-//     use roaring::RoaringBitmap;
-//     use std::collections::BTreeMap;
-//     use std::collections::HashMap;
+    use fuzzcheck::mutators::integer_within_range::{U16WithinRangeMutator, U8WithinRangeMutator};
+    use fuzzcheck::DefaultMutator;
+    use heed::BytesEncode;
+    use roaring::RoaringBitmap;
+    use tempfile::TempDir;
 
-//     #[derive(Default)]
-//     pub struct TrivialDatabase<T> {
-//         pub elements: BTreeMap<u16, BTreeMap<T, RoaringBitmap>>,
-//     }
-//     impl<T> TrivialDatabase<T>
-//     where
-//         T: Ord + Clone + Copy + Eq + std::fmt::Debug,
-//     {
-//         pub fn insert(&mut self, field_id: u16, new_key: T, new_values: &RoaringBitmap) {
-//             if new_values.is_empty() {
-//                 return;
-//             }
-//             let values_field_id = self.elements.entry(field_id).or_default();
-//             let values = values_field_id.entry(new_key).or_default();
-//             *values |= new_values;
-//         }
-//         pub fn delete(&mut self, field_id: u16, key: T, value: u32) {
-//             if let Some(values_field_id) = self.elements.get_mut(&field_id) {
-//                 if let Some(values) = values_field_id.get_mut(&key) {
-//                     values.remove(value);
-//                     if values.is_empty() {
-//                         values_field_id.remove(&key);
-//                     }
-//                 }
-//                 if values_field_id.is_empty() {
-//                     self.elements.remove(&field_id);
-//                 }
-//             }
-//         }
-//     }
-//     #[derive(Clone, DefaultMutator, serde::Serialize, serde::Deserialize)]
-//     struct Operation<Key> {
-//         key: Key,
-//         #[field_mutator(U16WithinRangeMutator = { U16WithinRangeMutator::new(..=3) })]
-//         field_id: u16,
-//         kind: OperationKind,
-//     }
-//     #[derive(Clone, DefaultMutator, serde::Serialize, serde::Deserialize)]
-//     enum OperationKind {
-//         Insert(Vec<u8>),
-//         Delete(u8),
-//     }
+    use super::*;
+    use crate::milli_snap;
+    use crate::update::facet::tests::FacetIndex;
 
-//     fn compare_with_trivial_database(
-//         tempdir: Rc<TempDir>,
-//         group_size: u8,
-//         max_group_size: u8,
-//         operations: &[Operation<u16>],
-//     ) {
-//         let index = FacetIndex::<OrderedF64Codec>::open_from_tempdir(tempdir, group_size, max_group_size);
-//         let mut trivial_db = TrivialDatabase::<u16>::default();
-//         let mut value_to_keys = HashMap::<u8, Vec<u16>>::new();
-//         let mut txn = index.env.write_txn().unwrap();
-//         for Operation { key, field_id, kind } in operations {
-//             match kind {
-//                 OperationKind::Insert(values) => {
-//                     let mut bitmap = RoaringBitmap::new();
-//                     for value in values {
-//                         bitmap.insert(*value as u32);
-//                         value_to_keys.entry(*value).or_default().push(*key);
-//                     }
-//                     index.insert(&mut txn, *field_id, key, &bitmap);
-//                     trivial_db.insert(*field_id, *key, &bitmap);
-//                 }
-//                 OperationKind::Delete(value) => {
-//                     if let Some(keys) = value_to_keys.get(value) {
-//                         for key in keys {
-//                             index.delete(&mut txn, *field_id, key, *value as u32);
-//                             trivial_db.delete(*field_id, *key, *value as u32);
-//                         }
-//                     }
-//                 }
-//             }
-//         }
-//         for (field_id, values_field_id) in trivial_db.elements.iter() {
-//             let level0iter = index
-//                 .db
-//                 .content
-//                 .as_polymorph()
-//                 .prefix_iter::<_, ByteSlice, FacetGroupValueCodec>(
-//                     &mut txn,
-//                     &field_id.to_be_bytes(),
-//                 )
-//                 .unwrap();
+    struct NEU16Codec;
+    impl<'a> BytesEncode<'a> for NEU16Codec {
+        type EItem = u16;
+        #[no_coverage]
+        fn bytes_encode(item: &'a Self::EItem) -> Option<std::borrow::Cow<'a, [u8]>> {
+            Some(Cow::Owned(item.to_be_bytes().to_vec()))
+        }
+    }
+    impl<'a> BytesDecode<'a> for NEU16Codec {
+        type DItem = u16;
+        #[no_coverage]
+        fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
+            let bytes = <[u8; 2]>::try_from(&bytes[0..=1]).unwrap();
+            Some(u16::from_be_bytes(bytes))
+        }
+    }
 
-//             for ((key, values), group) in values_field_id.iter().zip(level0iter) {
-//                 let (group_key, group_values) = group.unwrap();
-//                 let group_key = FacetGroupKeyCodec::<U16Codec>::bytes_decode(group_key).unwrap();
-//                 assert_eq!(key, &group_key.left_bound);
-//                 assert_eq!(values, &group_values.bitmap);
-//             }
-//         }
+    #[derive(Default)]
+    pub struct TrivialDatabase<T> {
+        pub elements: BTreeMap<u16, BTreeMap<T, RoaringBitmap>>,
+    }
+    impl<T> TrivialDatabase<T>
+    where
+        T: Ord + Clone + Copy + Eq + std::fmt::Debug,
+    {
+        #[no_coverage]
+        pub fn insert(&mut self, field_id: u16, new_key: T, new_values: &RoaringBitmap) {
+            if new_values.is_empty() {
+                return;
+            }
+            let values_field_id = self.elements.entry(field_id).or_default();
+            let values = values_field_id.entry(new_key).or_default();
+            *values |= new_values;
+        }
+        #[no_coverage]
+        pub fn delete(&mut self, field_id: u16, key: T, value: u32) {
+            if let Some(values_field_id) = self.elements.get_mut(&field_id) {
+                if let Some(values) = values_field_id.get_mut(&key) {
+                    values.remove(value);
+                    if values.is_empty() {
+                        values_field_id.remove(&key);
+                    }
+                }
+                if values_field_id.is_empty() {
+                    self.elements.remove(&field_id);
+                }
+            }
+        }
+    }
+    #[derive(Clone, DefaultMutator, serde::Serialize, serde::Deserialize)]
+    struct Operation<Key> {
+        key: Key,
+        #[field_mutator(U8WithinRangeMutator = { U8WithinRangeMutator::new(..32) })]
+        group_size: u8,
+        #[field_mutator(U8WithinRangeMutator = { U8WithinRangeMutator::new(..32) })]
+        max_group_size: u8,
+        #[field_mutator(U8WithinRangeMutator = { U8WithinRangeMutator::new(..32) })]
+        min_level_size: u8,
+        #[field_mutator(U16WithinRangeMutator = { U16WithinRangeMutator::new(..=3) })]
+        field_id: u16,
+        kind: OperationKind,
+    }
+    #[derive(Clone, DefaultMutator, serde::Serialize, serde::Deserialize)]
+    enum OperationKind {
+        Insert(Vec<u8>),
+        Delete(u8),
+    }
 
-//         txn.commit().unwrap();
-//         let mut txn = index.env.write_txn().unwrap();
-//         for (field_id, values_field_id) in trivial_db.elements.iter() {
-//             let level0iter = index
-//                 .db
-//                 .content
-//                 .as_polymorph()
-//                 .prefix_iter::<_, ByteSlice, FacetGroupValueCodec>(&txn, &field_id.to_be_bytes())
-//                 .unwrap();
+    #[no_coverage]
+    fn compare_with_trivial_database(tempdir: Rc<TempDir>, operations: &[Operation<u16>]) {
+        let index = FacetIndex::<NEU16Codec>::open_from_tempdir(tempdir, 4, 8, 5); // dummy params, they'll be overwritten
+                                                                                   // let mut txn = index.env.write_txn().unwrap();
+        let mut txn = index.env.write_txn().unwrap();
 
-//             for ((key, values), group) in values_field_id.iter().zip(level0iter) {
-//                 let (group_key, group_values) = group.unwrap();
-//                 let group_key = FacetGroupKeyCodec::<U16Codec>::bytes_decode(group_key).unwrap();
-//                 assert_eq!(key, &group_key.left_bound);
-//                 assert_eq!(values, &group_values.bitmap);
-//             }
-//             index.verify_structure_validity(*field_id);
-//         }
+        let mut trivial_db = TrivialDatabase::<u16>::default();
+        let mut value_to_keys = HashMap::<u8, Vec<u16>>::new();
+        for Operation { key, group_size, max_group_size, min_level_size, field_id, kind } in
+            operations
+        {
+            index.set_group_size(*group_size);
+            index.set_max_group_size(*max_group_size);
+            index.set_min_level_size(*min_level_size);
+            match kind {
+                OperationKind::Insert(values) => {
+                    let mut bitmap = RoaringBitmap::new();
+                    for value in values {
+                        bitmap.insert(*value as u32);
+                        value_to_keys.entry(*value).or_default().push(*key);
+                    }
+                    index.insert(&mut txn, *field_id, key, &bitmap);
+                    trivial_db.insert(*field_id, *key, &bitmap);
+                }
+                OperationKind::Delete(value) => {
+                    if let Some(keys) = value_to_keys.get(value) {
+                        for key in keys {
+                            index.delete(&mut txn, *field_id, key, *value as u32);
+                            trivial_db.delete(*field_id, *key, *value as u32);
+                        }
+                    }
+                }
+            }
+        }
 
-//         index.db.content.clear(&mut txn).unwrap();
-//         txn.commit().unwrap();
-//     }
+        for (field_id, values_field_id) in trivial_db.elements.iter() {
+            let level0iter = index
+                .content
+                .as_polymorph()
+                .prefix_iter::<_, ByteSlice, FacetGroupValueCodec>(
+                    &mut txn,
+                    &field_id.to_be_bytes(),
+                )
+                .unwrap();
 
-//     #[test]
-//     fn fuzz() {
-//         let tempdir = Rc::new(TempDir::new().unwrap());
-//         let tempdir_cloned = tempdir.clone();
-//         let result = fuzzcheck::fuzz_test(move |x: &(u8, u8, Vec<Operation<u16>>)| {
-//             compare_with_trivial_database(tempdir_cloned.clone(), x.0, x.1, &x.2)
-//         })
-//         .default_mutator()
-//         .serde_serializer()
-//         .default_sensor_and_pool_with_custom_filter(|file, function| {
-//             if file.is_relative()
-//                 && !function.contains("serde")
-//                 && !function.contains("tests::")
-//                 && !function.contains("fuzz::")
-//                 && !function.contains("display_bitmap")
-//             {
-//                 true
-//             } else {
-//                 false
-//             }
-//         })
-//         .arguments_from_cargo_fuzzcheck()
-//         .launch();
-//         assert!(!result.found_test_failure);
-//     }
+            for ((key, values), group) in values_field_id.iter().zip(level0iter) {
+                let (group_key, group_values) = group.unwrap();
+                let group_key = FacetGroupKeyCodec::<NEU16Codec>::bytes_decode(group_key).unwrap();
+                assert_eq!(key, &group_key.left_bound);
+                assert_eq!(values, &group_values.bitmap);
+            }
+        }
 
-//     #[test]
-//     fn reproduce_bug() {
-//         let operations = r#"
-//         [
-//         {"key":0, "field_id": 0, "kind":{"Insert":[109]}},
-//         {"key":143, "field_id": 0, "kind":{"Insert":[243]}},
-//         {"key":90, "field_id": 0, "kind":{"Insert":[217]}},
-//         {"key":172, "field_id": 0, "kind":{"Insert":[94]}},
-//         {"key":27, "field_id": 0, "kind":{"Insert":[4]}},
-//         {"key":124, "field_id": 0, "kind":{"Insert":[0]}},
-//         {"key":123, "field_id": 0, "kind":{"Insert":[0]}},
-//         {"key":67, "field_id": 0, "kind":{"Insert":[109]}},
-//         {"key":13, "field_id": 0, "kind":{"Insert":[0]}},
-//         {"key":162, "field_id": 0, "kind":{"Insert":[213]}},
-//         {"key":235, "field_id": 0, "kind":{"Insert":[67]}},
-//         {"key":251, "field_id": 0, "kind":{"Insert":[50]}},
-//         {"key":218, "field_id": 0, "kind":{"Insert":[164]}},
-//         {"key":166, "field_id": 0, "kind":{"Insert":[67]}},
-//         {"key":64, "field_id": 0, "kind":{"Insert":[61]}},
-//         {"key":183, "field_id": 0, "kind":{"Insert":[210]}},
-//         {"key":250, "field_id": 0, "kind":{"Delete":50}}
-//         ]
-//         "#;
-//         let operations: Vec<Operation<u16>> = serde_json::from_str(operations).unwrap();
-//         let tempdir = TempDir::new().unwrap();
-//         compare_with_trivial_database(Rc::new(tempdir), 4, 8, &operations);
-//     }
+        for (field_id, values_field_id) in trivial_db.elements.iter() {
+            let level0iter = index
+                .content
+                .as_polymorph()
+                .prefix_iter::<_, ByteSlice, FacetGroupValueCodec>(&txn, &field_id.to_be_bytes())
+                .unwrap();
 
-//     #[test]
-//     fn reproduce_bug2() {
-//         let operations = r#"
-//         [
-//         {"key":102, "field_id": 0, "kind":{"Insert":[122]}},
-//         {"key":73, "field_id": 0, "kind":{"Insert":[132]}},
-//         {"key":20, "field_id": 0, "kind":{"Insert":[215]}},
-//         {"key":39, "field_id": 0, "kind":{"Insert":[152]}},
-//         {"key":151, "field_id": 0, "kind":{"Insert":[226]}},
-//         {"key":17, "field_id": 0, "kind":{"Insert":[101]}},
-//         {"key":74, "field_id": 0, "kind":{"Insert":[210]}},
-//         {"key":2, "field_id": 0, "kind":{"Insert":[130]}},
-//         {"key":64, "field_id": 0, "kind":{"Insert":[180]}},
-//         {"key":83, "field_id": 0, "kind":{"Insert":[250]}},
-//         {"key":80, "field_id": 0, "kind":{"Insert":[210]}},
-//         {"key":113, "field_id": 0, "kind":{"Insert":[63]}},
-//         {"key":201, "field_id": 0, "kind":{"Insert":[210]}},
-//         {"key":200, "field_id": 0, "kind":{"Insert":[5]}},
-//         {"key":93, "field_id": 0, "kind":{"Insert":[98]}},
-//         {"key":162, "field_id": 0, "kind":{"Insert":[5]}},
-//         {"key":80, "field_id": 0, "kind":{"Delete":210}}
-//         ]
-//         "#;
-//         let operations: Vec<Operation<u16>> = serde_json::from_str(operations).unwrap();
-//         let tempdir = TempDir::new().unwrap();
-//         compare_with_trivial_database(Rc::new(tempdir), 4, 8, &operations);
-//     }
-//     #[test]
-//     fn reproduce_bug3() {
-//         let operations = r#"
-//         [
-//         {"key":27488, "field_id": 0, "kind":{"Insert":[206]}},
-//         {"key":64716, "field_id": 0, "kind":{"Insert":[216]}},
-//         {"key":60886, "field_id": 0, "kind":{"Insert":[206]}},
-//         {"key":59509, "field_id": 0, "kind":{"Insert":[187,231]}},
-//         {"key":55057, "field_id": 0, "kind":{"Insert":[37]}},
-//         {"key":45200, "field_id": 0, "kind":{"Insert":[206]}},
-//         {"key":55056, "field_id": 0, "kind":{"Insert":[37]}},
-//         {"key":63679, "field_id": 0, "kind":{"Insert":[206]}},
-//         {"key":52155, "field_id": 0, "kind":{"Insert":[74]}},
-//         {"key":20648, "field_id": 0, "kind":{"Insert":[47,138,157]}}
-//         ]
-//         "#;
-//         let operations: Vec<Operation<u16>> = serde_json::from_str(operations).unwrap();
-//         let tempdir = TempDir::new().unwrap();
-//         compare_with_trivial_database(Rc::new(tempdir), 0, 7, &operations);
-//     }
+            for ((key, values), group) in values_field_id.iter().zip(level0iter) {
+                let (group_key, group_values) = group.unwrap();
+                let group_key = FacetGroupKeyCodec::<NEU16Codec>::bytes_decode(group_key).unwrap();
+                assert_eq!(key, &group_key.left_bound);
+                assert_eq!(values, &group_values.bitmap);
+            }
+            index.verify_structure_validity(&txn, *field_id);
+        }
+        txn.abort().unwrap();
+    }
 
-//     #[test]
-//     fn reproduce_bug4() {
-//         let operations = r#"
-//         [{"key":63499, "field_id": 0, "kind":{"Insert":[87]}},{"key":25374, "field_id": 0, "kind":{"Insert":[14]}},{"key":64481, "field_id": 0, "kind":{"Delete":87}},{"key":23038, "field_id": 0, "kind":{"Insert":[173]}},{"key":14862, "field_id": 0, "kind":{"Insert":[8]}},{"key":13145, "field_id": 0, "kind":{"Insert":[5,64]}},{"key":23446, "field_id": 0, "kind":{"Insert":[86,59]}},{"key":17972, "field_id": 0, "kind":{"Insert":[58,137]}},{"key":21273, "field_id": 0, "kind":{"Insert":[121,132,81,147]}},{"key":28264, "field_id": 0, "kind":{"Insert":[36]}},{"key":46659, "field_id": 0, "kind":{"Insert":[]}}]
-//         "#;
-//         let operations: Vec<Operation<u16>> = serde_json::from_str(operations).unwrap();
-//         let tempdir = TempDir::new().unwrap();
-//         compare_with_trivial_database(Rc::new(tempdir), 2, 1, &operations);
-//     }
-// }
+    #[test]
+    #[no_coverage]
+    fn fuzz() {
+        let tempdir = Rc::new(TempDir::new().unwrap());
+        let tempdir_cloned = tempdir.clone();
+        let result = fuzzcheck::fuzz_test(move |operations: &[Operation<u16>]| {
+            compare_with_trivial_database(tempdir_cloned.clone(), operations)
+        })
+        .default_mutator()
+        .serde_serializer()
+        .default_sensor_and_pool_with_custom_filter(|file, function| {
+            file == std::path::Path::new("milli/src/update/facet/incremental.rs")
+                && !function.contains("serde")
+                && !function.contains("tests::")
+                && !function.contains("fuzz::")
+                && !function.contains("display_bitmap")
+        })
+        .arguments_from_cargo_fuzzcheck()
+        .launch();
+        assert!(!result.found_test_failure);
+    }
+
+    #[test]
+    #[no_coverage]
+    fn reproduce_bug1() {
+        let operations = r#"
+        [
+        {"key":0, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[109]}},
+        {"key":143, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[243]}},
+        {"key":90, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[217]}},
+        {"key":172, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[94]}},
+        {"key":27, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[4]}},
+        {"key":124, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[0]}},
+        {"key":123, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[0]}},
+        {"key":67, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[109]}},
+        {"key":13, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[0]}},
+        {"key":162, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[213]}},
+        {"key":235, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[67]}},
+        {"key":251, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[50]}},
+        {"key":218, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[164]}},
+        {"key":166, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[67]}},
+        {"key":64, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[61]}},
+        {"key":183, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[210]}},
+        {"key":250, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Delete":50}}
+        ]
+        "#;
+        let operations: Vec<Operation<u16>> = serde_json::from_str(operations).unwrap();
+        let tempdir = TempDir::new().unwrap();
+        compare_with_trivial_database(Rc::new(tempdir), &operations);
+    }
+
+    #[test]
+    #[no_coverage]
+    fn reproduce_bug2() {
+        let operations = r#"
+        [
+        {"key":102, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[122]}},
+        {"key":73, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[132]}},
+        {"key":20, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[215]}},
+        {"key":39, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[152]}},
+        {"key":151, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[226]}},
+        {"key":17, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[101]}},
+        {"key":74, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[210]}},
+        {"key":2, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[130]}},
+        {"key":64, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[180]}},
+        {"key":83, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[250]}},
+        {"key":80, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[210]}},
+        {"key":113, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[63]}},
+        {"key":201, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[210]}},
+        {"key":200, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[5]}},
+        {"key":93, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[98]}},
+        {"key":162, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[5]}},
+        {"key":80, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Delete":210}}
+        ]
+        "#;
+        let operations: Vec<Operation<u16>> = serde_json::from_str(operations).unwrap();
+        let tempdir = TempDir::new().unwrap();
+        compare_with_trivial_database(Rc::new(tempdir), &operations);
+    }
+    #[test]
+    #[no_coverage]
+    fn reproduce_bug3() {
+        let operations = r#"
+        [
+        {"key":27488, "field_id": 0, "group_size":0, "max_group_size":7, "min_level_size":0, "kind":{"Insert":[206]}},
+        {"key":64716, "field_id": 0, "group_size":0, "max_group_size":7, "min_level_size":0, "kind":{"Insert":[216]}},
+        {"key":60886, "field_id": 0, "group_size":0, "max_group_size":7, "min_level_size":0, "kind":{"Insert":[206]}},
+        {"key":59509, "field_id": 0, "group_size":0, "max_group_size":7, "min_level_size":0, "kind":{"Insert":[187,231]}},
+        {"key":55057, "field_id": 0, "group_size":0, "max_group_size":7, "min_level_size":0, "kind":{"Insert":[37]}},
+        {"key":45200, "field_id": 0, "group_size":0, "max_group_size":7, "min_level_size":0, "kind":{"Insert":[206]}},
+        {"key":55056, "field_id": 0, "group_size":0, "max_group_size":7, "min_level_size":0, "kind":{"Insert":[37]}},
+        {"key":63679, "field_id": 0, "group_size":0, "max_group_size":7, "min_level_size":0, "kind":{"Insert":[206]}},
+        {"key":52155, "field_id": 0, "group_size":0, "max_group_size":7, "min_level_size":0, "kind":{"Insert":[74]}},
+        {"key":20648, "field_id": 0, "group_size":0, "max_group_size":7, "min_level_size":0, "kind":{"Insert":[47,138,157]}}
+        ]
+        "#;
+        let operations: Vec<Operation<u16>> = serde_json::from_str(operations).unwrap();
+        let tempdir = TempDir::new().unwrap();
+        compare_with_trivial_database(Rc::new(tempdir), &operations);
+    }
+
+    #[test]
+    #[no_coverage]
+    fn reproduce_bug4() {
+        let operations = r#"[
+        {"key":63499, "field_id": 0, "group_size":2, "max_group_size":1, "min_level_size":0, "kind":{"Insert":[87]}},
+        {"key":25374, "field_id": 0, "group_size":2, "max_group_size":1, "min_level_size":0, "kind":{"Insert":[14]}},
+        {"key":64481, "field_id": 0, "group_size":2, "max_group_size":1, "min_level_size":0, "kind":{"Delete":87}},
+        {"key":23038, "field_id": 0, "group_size":2, "max_group_size":1, "min_level_size":0, "kind":{"Insert":[173]}},
+        {"key":14862, "field_id": 0, "group_size":2, "max_group_size":1, "min_level_size":0, "kind":{"Insert":[8]}},
+        {"key":13145, "field_id": 0, "group_size":2, "max_group_size":1, "min_level_size":0, "kind":{"Insert":[5,64]}},
+        {"key":23446, "field_id": 0, "group_size":2, "max_group_size":1, "min_level_size":0, "kind":{"Insert":[86,59]}},
+        {"key":17972, "field_id": 0, "group_size":2, "max_group_size":1, "min_level_size":0, "kind":{"Insert":[58,137]}},
+        {"key":21273, "field_id": 0, "group_size":2, "max_group_size":1, "min_level_size":0, "kind":{"Insert":[121,132,81,147]}},
+        {"key":28264, "field_id": 0, "group_size":2, "max_group_size":1, "min_level_size":0, "kind":{"Insert":[36]}},
+        {"key":46659, "field_id": 0, "group_size":2, "max_group_size":1, "min_level_size":0, "kind":{"Insert":[]}}
+        ]
+        "#;
+        let operations: Vec<Operation<u16>> = serde_json::from_str(operations).unwrap();
+        let tempdir = TempDir::new().unwrap();
+        compare_with_trivial_database(Rc::new(tempdir), &operations);
+    }
+
+    #[test]
+    #[no_coverage]
+    fn reproduce_bug5() {
+        let input = r#"
+        [
+            {
+                "key":3438,
+                "group_size":11,
+                "max_group_size":0,
+                "min_level_size":17,
+                "field_id":3,
+                "kind":{"Insert":[198]}
+            },
+
+            {
+                "key":47098,
+                "group_size":0,
+                "max_group_size":8,
+                "min_level_size":0,
+                "field_id":3,
+                "kind":{"Insert":[11]}
+            },
+            {
+                "key":22453,
+                "group_size":0,
+                "max_group_size":0,
+                "min_level_size":0,
+                "field_id":3,
+                "kind":{"Insert":[145]}
+            },
+            {
+                "key":14105,
+                "group_size":14,
+                "max_group_size":4,
+                "min_level_size":25,
+                "field_id":3,
+                "kind":{"Delete":11}
+            }
+        ]
+        "#;
+        let operations: Vec<Operation<u16>> = serde_json::from_str(input).unwrap();
+        let tmpdir = TempDir::new().unwrap();
+        compare_with_trivial_database(Rc::new(tmpdir), &operations);
+    }
+
+    #[test]
+    #[no_coverage]
+    fn reproduce_bug6() {
+        let input = r#"
+        [
+        {"key":45720,"group_size":1,"max_group_size":4,"min_level_size":0,"field_id":0,"kind":{"Insert":[120]}},
+        {"key":37463,"group_size":1,"max_group_size":4,"min_level_size":0,"field_id":0,"kind":{"Insert":[187]}},
+        {"key":21512,"group_size":23,"max_group_size":20,"min_level_size":23,"field_id":0,"kind":{"Insert":[181]}},
+        {"key":21511,"group_size":23,"max_group_size":20,"min_level_size":23,"field_id":0,"kind":{"Insert":[181]}},
+        {"key":37737,"group_size":12,"max_group_size":0,"min_level_size":6,"field_id":0,"kind":{"Insert":[181]}},
+        {"key":53042,"group_size":23,"max_group_size":20,"min_level_size":23,"field_id":0,"kind":{"Insert":[181]}}
+        ]
+        "#;
+        let operations: Vec<Operation<u16>> = serde_json::from_str(input).unwrap();
+        let tmpdir = TempDir::new().unwrap();
+        compare_with_trivial_database(Rc::new(tmpdir), &operations);
+    }
+}

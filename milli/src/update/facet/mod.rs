@@ -145,6 +145,7 @@ impl<'i> FacetsUpdate<'i> {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use std::cell::Cell;
     use std::fmt::Display;
     use std::marker::PhantomData;
     use std::rc::Rc;
@@ -170,9 +171,9 @@ pub(crate) mod tests {
     {
         pub env: Env,
         pub content: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
-        pub group_size: u8,
-        pub min_level_size: u8,
-        pub max_group_size: u8,
+        pub group_size: Cell<u8>,
+        pub min_level_size: Cell<u8>,
+        pub max_group_size: Cell<u8>,
         _tempdir: Rc<tempfile::TempDir>,
         _phantom: PhantomData<BoundCodec>,
     }
@@ -189,9 +190,9 @@ pub(crate) mod tests {
             max_group_size: u8,
             min_level_size: u8,
         ) -> FacetIndex<BoundCodec> {
-            let group_size = std::cmp::min(127, std::cmp::max(group_size, 2)); // 2 <= x <= 127
-            let max_group_size = std::cmp::min(127, std::cmp::max(group_size * 2, max_group_size)); // 2*group_size <= x <= 127
-            let min_level_size = std::cmp::max(1, min_level_size); // 1 <= x <= inf
+            let group_size = std::cmp::min(16, std::cmp::max(group_size, 2)); // 2 <= x <= 16
+            let max_group_size = std::cmp::min(16, std::cmp::max(group_size * 2, max_group_size)); // 2*group_size <= x <= 16
+            let min_level_size = std::cmp::min(17, std::cmp::max(1, min_level_size)); // 1 <= x <= 17
 
             let mut options = heed::EnvOpenOptions::new();
             let options = options.map_size(4096 * 4 * 10 * 100);
@@ -202,13 +203,11 @@ pub(crate) mod tests {
             let content = env.open_database(None).unwrap().unwrap();
 
             FacetIndex {
-                db: Database {
-                    content,
-                    group_size,
-                    max_group_size,
-                    min_level_size,
-                    _tempdir: tempdir,
-                },
+                content,
+                group_size: Cell::new(group_size),
+                max_group_size: Cell::new(max_group_size),
+                min_level_size: Cell::new(min_level_size),
+                _tempdir: tempdir,
                 env,
                 _phantom: PhantomData,
             }
@@ -229,14 +228,32 @@ pub(crate) mod tests {
 
             FacetIndex {
                 content,
-                group_size,
-                max_group_size,
-                min_level_size,
+                group_size: Cell::new(group_size),
+                max_group_size: Cell::new(max_group_size),
+                min_level_size: Cell::new(min_level_size),
                 _tempdir: Rc::new(tempdir),
                 env,
                 _phantom: PhantomData,
             }
         }
+
+        pub fn set_group_size(&self, group_size: u8) {
+            // 2 <= x <= 64
+            self.group_size.set(std::cmp::min(64, std::cmp::max(group_size, 2)));
+        }
+        pub fn set_max_group_size(&self, max_group_size: u8) {
+            // 2*group_size <= x <= 128
+            let max_group_size = std::cmp::max(4, std::cmp::min(128, max_group_size));
+            self.max_group_size.set(max_group_size);
+            if self.group_size.get() < max_group_size / 2 {
+                self.group_size.set(max_group_size / 2);
+            }
+        }
+        pub fn set_min_level_size(&self, min_level_size: u8) {
+            // 1 <= x <= inf
+            self.min_level_size.set(std::cmp::max(1, min_level_size));
+        }
+
         pub fn insert<'a>(
             &self,
             wtxn: &'a mut RwTxn,
@@ -246,9 +263,9 @@ pub(crate) mod tests {
         ) {
             let update = FacetsUpdateIncrementalInner {
                 db: self.content,
-                group_size: self.group_size,
-                min_level_size: self.min_level_size,
-                max_group_size: self.max_group_size,
+                group_size: self.group_size.get(),
+                min_level_size: self.min_level_size.get(),
+                max_group_size: self.max_group_size.get(),
             };
             let key_bytes = BoundCodec::bytes_encode(&key).unwrap();
             update.insert(wtxn, field_id, &key_bytes, docids).unwrap();
@@ -262,9 +279,9 @@ pub(crate) mod tests {
         ) {
             let update = FacetsUpdateIncrementalInner {
                 db: self.content,
-                group_size: self.group_size,
-                min_level_size: self.min_level_size,
-                max_group_size: self.max_group_size,
+                group_size: self.group_size.get(),
+                min_level_size: self.min_level_size.get(),
+                max_group_size: self.max_group_size.get(),
             };
             let key_bytes = BoundCodec::bytes_encode(&key).unwrap();
             update.delete(wtxn, field_id, &key_bytes, value).unwrap();
@@ -296,8 +313,8 @@ pub(crate) mod tests {
             let update = FacetsUpdateBulkInner {
                 db: self.content,
                 new_data: Some(reader),
-                group_size: self.group_size,
-                min_level_size: self.min_level_size,
+                group_size: self.group_size.get(),
+                min_level_size: self.min_level_size.get(),
             };
 
             update.update(wtxn, field_ids, |_, _, _| Ok(())).unwrap();
@@ -341,7 +358,7 @@ pub(crate) mod tests {
                         FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(&key_bytes).unwrap()
                     };
 
-                    assert!(value.size > 0 && value.size < self.max_group_size);
+                    assert!(value.size > 0);
 
                     let mut actual_size = 0;
                     let mut values_below = RoaringBitmap::new();

@@ -1,11 +1,13 @@
+use std::ops::ControlFlow;
+
+use heed::Result;
+use roaring::RoaringBitmap;
+
 use super::{get_first_facet_value, get_highest_level};
 use crate::heed_codec::facet::{
     ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec,
 };
 use crate::DocumentId;
-use heed::Result;
-use roaring::RoaringBitmap;
-use std::ops::ControlFlow;
 
 /// Call the given closure on the facet distribution of the candidate documents.
 ///
