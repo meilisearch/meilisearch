@@ -1,5 +1,4 @@
-mod field_doc_id_facet_f64_codec;
-mod field_doc_id_facet_string_codec;
+mod field_doc_id_facet_codec;
 mod ordered_f64_codec;
 mod str_ref;
 
@@ -7,15 +6,18 @@ use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::marker::PhantomData;
 
-use heed::types::OwnedType;
+use heed::types::{DecodeIgnore, OwnedType};
 use heed::{BytesDecode, BytesEncode};
 use roaring::RoaringBitmap;
 
-pub use self::field_doc_id_facet_f64_codec::FieldDocIdFacetF64Codec;
-pub use self::field_doc_id_facet_string_codec::FieldDocIdFacetStringCodec;
+pub use self::field_doc_id_facet_codec::FieldDocIdFacetCodec;
 pub use self::ordered_f64_codec::OrderedF64Codec;
 pub use self::str_ref::StrRefCodec;
 use crate::{CboRoaringBitmapCodec, BEU16};
+
+pub type FieldDocIdFacetF64Codec = FieldDocIdFacetCodec<OrderedF64Codec>;
+pub type FieldDocIdFacetStringCodec = FieldDocIdFacetCodec<StrRefCodec>;
+pub type FieldDocIdFacetIgnoreCodec = FieldDocIdFacetCodec<DecodeIgnore>;
 
 pub type FieldIdCodec = OwnedType<BEU16>;
 
