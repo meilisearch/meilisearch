@@ -1,0 +1,121 @@
+# This file shows the default configuration of Meilisearch.
+# All variables are defined here https://docs.meilisearch.com/learn/configuration/instance_options.html#environment-variables
+
+
+### DUMP
+
+# Folder where dumps are created when the dump route is called
+# dumps-dir = "dumps/"
+
+# Ignore the dump if a database already exists, and load that database instead
+# ignore-dump-if-db-exists = false
+
+# If the dump doesn't exists, load or create the database specified by `db-path` instead
+# ignore-missing-dump = false
+
+# Import a dump from the specified path, must be a `.dump` file
+# import-dump = "./path/to/my/file.dump"
+
+
+### SNAPSHOT
+
+# The engine will ignore a missing snapshot and not return an error in such case
+# ignore-missing-snapshot = false
+            
+# The engine will skip snapshot importation and not return an error in such case
+# ignore-snapshot-if-db-exists = false
+
+# Defines the path of the snapshot file to import. This option will, by default, stop the
+# process if a database already exist or if no snapshot exists at the given path. If this
+# option is not specified no snapshot is imported
+# import-snapshot = false
+
+# Activate snapshot scheduling
+# schedule-snapshot = false
+            
+# Defines the directory path where meilisearch will create snapshot each snapshot_time_gap
+# snapshot-dir = "snapshots/"
+            
+# Defines time interval, in seconds, between each snapshot creation
+# snapshot-interval-sec = 86400
+
+
+### INDEX
+
+# The maximum size, in bytes, of the main lmdb database directory
+# max-index-size = "100 GiB"
+
+# The maximum amount of memory the indexer will use. It defaults to 2/3 of the available
+# memory. It is recommended to use something like 80%-90% of the available memory, no
+# more.
+#
+# In case the engine is unable to retrieve the available memory the engine will try to use
+# the memory it needs but without real limit, this can lead to Out-Of-Memory issues and it
+# is recommended to specify the amount of memory to use.
+#
+# /!\ The default value is system dependant /!\
+# max-indexing-memory = "2 GiB"
+
+# The maximum number of threads the indexer will use. If the number set is higher than the
+# real number of cores available in the machine, it will use the maximum number of
+# available cores.
+#
+# It defaults to half of the available threads.
+# max-indexing-threads = 4
+
+
+### SSL
+
+# Enable client authentication, and accept certificates signed by those roots provided in CERTFILE
+# ssl-auth-path = "./path/to/root"
+
+# Read server certificates from CERTFILE. This should contain PEM-format certificates in
+# the right order (the first certificate should certify KEYFILE, the last should be a root
+# CA)
+# ssl-cert-path = "./path/to/CERTFILE"
+
+# Read private key from KEYFILE.  This should be a RSA private key or PKCS8-encoded
+# private key, in PEM format
+# ssl-key-path = "./path/to/private-key"
+            
+# Read DER-encoded OCSP response from OCSPFILE and staple to certificate. Optional
+# ssl-ocsp-path = "./path/to/OCSPFILE"
+
+# Send a fatal alert if the client does not complete client authentication
+# ssl-require-auth = false
+            
+# SSL support session resumption
+# ssl-resumption = false
+
+# SSL support tickets 
+# ssl-tickets = false
+
+
+### MISC
+
+# This environment variable must be set to `production` if you are running in production.
+# If the server is running in development mode more logs will be displayed, and the master
+# key can be avoided which implies that there is no security on the updates routes. This
+# is useful to debug when integrating the engine with another service
+# env = "development" # possible values: [development, production]
+
+# The address on which the http server will listen
+# http-addr = "127.0.0.1:7700"
+
+# The maximum size, in bytes, of accepted JSON payloads
+# http-payload-size-limit = 100000000
+
+# The destination where the database must be created
+# db-path = "./data.ms"
+
+# The engine will disable task auto-batching, and will sequencialy compute each task one by one
+# disable-auto-batching = false
+   
+# Set the log level
+# log-level = "info"
+            
+# The master key allowing you to do everything on the server
+# master-key = "YOUR MASTER KEY"
+           
+# The maximum size, in bytes, of the update lmdb database directory 
+# max-task-db-size = "100 GiB"
