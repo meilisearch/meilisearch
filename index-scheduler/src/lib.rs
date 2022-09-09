@@ -1,3 +1,4 @@
+mod autobatcher;
 mod batch;
 mod document_formats;
 pub mod error;
@@ -219,7 +220,7 @@ impl IndexScheduler {
                     continue;
                 }
             };
-            let mut batch = match self.get_next_batch(&wtxn) {
+            let mut batch = match self.create_next_batch(&wtxn) {
                 Ok(batch) => batch,
                 Err(e) => {
                     log::error!("{}", e);
@@ -227,7 +228,7 @@ impl IndexScheduler {
                 }
             };
 
-            let res = self.process_batch(&mut wtxn, &mut batch);
+            let res = self.process_batch(&mut wtxn, batch);
 
             // TODO: TAMO: do this later
             // must delete the file on disk
@@ -245,6 +246,7 @@ impl IndexScheduler {
         }
     }
 
+    #[cfg(truc)]
     fn process_batch(&self, wtxn: &mut RwTxn, batch: &mut Batch) -> Result<()> {
         match batch {
             Batch::One(task) => match &task.kind {
