@@ -56,9 +56,15 @@ impl Task {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum KindWithContent {
-    DocumentAdditionOrUpdate {
+    DocumentAddition {
         index_uid: String,
-        merge_strategy: IndexDocumentsMethod,
+        primary_key: Option<String>,
+        content_file: Uuid,
+        documents_count: usize,
+        allow_index_creation: bool,
+    },
+    DocumentUpdate {
+        index_uid: String,
         primary_key: Option<String>,
         content_file: Uuid,
         documents_count: usize,
@@ -108,7 +114,8 @@ pub enum KindWithContent {
 impl KindWithContent {
     pub fn as_kind(&self) -> Kind {
         match self {
-            KindWithContent::DocumentAdditionOrUpdate { .. } => Kind::DocumentAdditionOrUpdate,
+            KindWithContent::DocumentAddition { .. } => Kind::DocumentAddition,
+            KindWithContent::DocumentUpdate { .. } => Kind::DocumentUpdate,
             KindWithContent::DocumentDeletion { .. } => Kind::DocumentDeletion,
             KindWithContent::DocumentClear { .. } => Kind::DocumentClear,
             KindWithContent::Settings { .. } => Kind::Settings,
@@ -127,7 +134,7 @@ impl KindWithContent {
         use KindWithContent::*;
 
         match self {
-            DocumentAdditionOrUpdate { .. } => {
+            DocumentAddition { .. } | DocumentUpdate { .. } => {
                 // TODO: TAMO: persist the file
                 // content_file.persist();
                 Ok(())
@@ -150,13 +157,12 @@ impl KindWithContent {
         use KindWithContent::*;
 
         match self {
-            DocumentAdditionOrUpdate { .. } => {
+            DocumentAddition { .. } | DocumentUpdate { .. } => {
                 // TODO: TAMO: delete the file
                 // content_file.delete();
                 Ok(())
             }
-            DocumentAdditionOrUpdate { .. }
-            | IndexCreation { .. }
+            IndexCreation { .. }
             | DocumentDeletion { .. }
             | DocumentClear { .. }
             | Settings { .. }
@@ -175,7 +181,8 @@ impl KindWithContent {
 
         match self {
             DumpExport { .. } | Snapshot | CancelTask { .. } => None,
-            DocumentAdditionOrUpdate { index_uid, .. }
+            DocumentAddition { index_uid, .. }
+            | DocumentUpdate { index_uid, .. }
             | DocumentDeletion { index_uid, .. }
             | DocumentClear { index_uid }
             | Settings { index_uid, .. }
@@ -194,7 +201,8 @@ impl KindWithContent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Kind {
-    DocumentAdditionOrUpdate,
+    DocumentAddition,
+    DocumentUpdate,
     DocumentDeletion,
     DocumentClear,
     Settings,
