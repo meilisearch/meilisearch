@@ -20,8 +20,8 @@ pub enum Status {
 pub struct Task {
     pub uid: TaskId,
 
-    #[serde(with = "time::serde::rfc3339::option")]
-    pub enqueued_at: Option<OffsetDateTime>,
+    #[serde(with = "time::serde::rfc3339")]
+    pub enqueued_at: OffsetDateTime,
     #[serde(with = "time::serde::rfc3339::option")]
     pub started_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339::option")]
@@ -60,6 +60,7 @@ pub enum KindWithContent {
     Snapshot,
     DocumentAddition {
         index_name: String,
+        primary_key: Option<String>,
         content_file: Uuid,
     },
     DocumentDeletion {
@@ -69,11 +70,11 @@ pub enum KindWithContent {
     ClearAllDocuments {
         index_name: String,
     },
-    // TODO: TAMO: uncomment the settings
-    // Settings {
-    //     index_name: String,
-    //     new_settings: Settings,
-    // },
+    Settings {
+        index_name: String,
+        // TODO: TAMO: fix the type
+        new_settings: String,
+    },
     RenameIndex {
         index_name: String,
         new_name: String,
@@ -107,6 +108,10 @@ impl KindWithContent {
             KindWithContent::SwapIndex { .. } => Kind::SwapIndex,
             KindWithContent::CancelTask { .. } => Kind::CancelTask,
             KindWithContent::Snapshot => Kind::Snapshot,
+            KindWithContent::Settings {
+                index_name,
+                new_settings,
+            } => todo!(),
         }
     }
 
@@ -117,6 +122,7 @@ impl KindWithContent {
             DocumentAddition {
                 index_name: _,
                 content_file: _,
+                primary_key,
             } => {
                 // TODO: TAMO: persist the file
                 // content_file.persist();
@@ -124,6 +130,7 @@ impl KindWithContent {
             }
             // There is nothing to persist for all these tasks
             DumpExport { .. }
+            | Settings { .. }
             | DocumentDeletion { .. }
             | ClearAllDocuments { .. }
             | RenameIndex { .. }
@@ -142,6 +149,7 @@ impl KindWithContent {
             DocumentAddition {
                 index_name: _,
                 content_file: _,
+                primary_key,
             } => {
                 // TODO: TAMO: delete the file
                 // content_file.delete();
@@ -149,6 +157,7 @@ impl KindWithContent {
             }
             // There is no data associated with all these tasks
             DumpExport { .. }
+            | Settings { .. }
             | DocumentDeletion { .. }
             | ClearAllDocuments { .. }
             | RenameIndex { .. }
@@ -175,6 +184,7 @@ impl KindWithContent {
                 new_name: rhs,
             }
             | SwapIndex { lhs, rhs } => Some(vec![lhs, rhs]),
+            Settings { index_name, .. } => Some(vec![index_name]),
         }
     }
 }

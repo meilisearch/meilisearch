@@ -1,5 +1,12 @@
-use crate::{autobatcher::BatchKind, task::Status, Error, IndexScheduler, Result, TaskId};
-use milli::{heed::RoTxn, update::IndexDocumentsMethod};
+use crate::{
+    autobatcher::BatchKind,
+    task::{KindWithContent, Status},
+    Error, IndexScheduler, Result, TaskId,
+};
+use milli::{
+    heed::{RoTxn, RwTxn},
+    update::IndexDocumentsMethod,
+};
 use uuid::Uuid;
 
 use crate::{task::Kind, Task};
@@ -8,10 +15,100 @@ pub(crate) enum Batch {
     Cancel(Task),
     Snapshot(Vec<Task>),
     Dump(Vec<Task>),
-    IndexSpecific { index_uid: String, kind: BatchKind },
+    // IndexSpecific { index_uid: String, kind: BatchKind },
+    DocumentAddition {
+        index_uid: String,
+        primary_key: Option<String>,
+        content_files: Vec<Uuid>,
+        tasks: Vec<Task>,
+    },
+    SettingsAndDocumentAddition {
+        index_uid: String,
+
+        primary_key: Option<String>,
+        content_files: Vec<Uuid>,
+        document_addition_tasks: Vec<Task>,
+
+        settings: Vec<String>,
+        settings_tasks: Vec<Task>,
+    },
 }
 
 impl IndexScheduler {
+    pub(crate) fn create_next_batch_index(
+        &self,
+        rtxn: &RoTxn,
+        index_uid: String,
+        batch: BatchKind,
+    ) -> Result<Option<Batch>> {
+        match batch {
+            BatchKind::ClearAll { ids } => todo!(),
+            BatchKind::DocumentAddition { addition_ids } => todo!(),
+            BatchKind::DocumentDeletion { deletion_ids } => todo!(),
+            BatchKind::ClearAllAndSettings {
+                other,
+                settings_ids,
+            } => todo!(),
+            BatchKind::SettingsAndDocumentAddition {
+                addition_ids,
+                settings_ids,
+            } => {
+                // you're not supposed to create an empty BatchKind.
+                assert!(addition_ids.len() > 0);
+                assert!(settings_ids.len() > 0);
+
+                let document_addition_tasks = addition_ids
+                    .iter()
+                    .map(|tid| {
+                        self.get_task(rtxn, *tid)
+                            .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                let settings_tasks = settings_ids
+                    .iter()
+                    .map(|tid| {
+                        self.get_task(rtxn, *tid)
+                            .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+
+                let primary_key = match document_addition_tasks[0].kind {
+                    KindWithContent::DocumentAddition { primary_key, .. } => primary_key,
+                    _ => unreachable!(),
+                };
+                let content_files = document_addition_tasks
+                    .iter()
+                    .map(|task| match task.kind {
+                        KindWithContent::DocumentAddition { content_file, .. } => content_file,
+                        _ => unreachable!(),
+                    })
+                    .collect();
+
+                let settings = settings_tasks
+                    .iter()
+                    .map(|task| match task.kind {
+                        KindWithContent::Settings { new_settings, .. } => new_settings.to_string(),
+                        _ => unreachable!(),
+                    })
+                    .collect();
+
+                Ok(Some(Batch::SettingsAndDocumentAddition {
+                    index_uid,
+                    primary_key,
+                    content_files,
+                    document_addition_tasks,
+                    settings,
+                    settings_tasks,
+                }))
+            }
+            BatchKind::Settings { settings_ids } => todo!(),
+            BatchKind::DeleteIndex { ids } => todo!(),
+            BatchKind::CreateIndex { id } => todo!(),
+            BatchKind::SwapIndex { id } => todo!(),
+            BatchKind::RenameIndex { id } => todo!(),
+        }
+    }
+
     /// Create the next batch to be processed;
     /// 1. We get the *last* task to cancel.
     /// 2. We get the *next* snapshot to process.
@@ -65,12 +162,9 @@ impl IndexScheduler {
                 })
                 .collect::<Result<Vec<_>>>()?;
 
-            return Ok(crate::autobatcher::autobatch(enqueued).map(|batch_kind| {
-                Batch::IndexSpecific {
-                    index_uid: index_name.to_string(),
-                    kind: batch_kind,
-                }
-            }));
+            if let Some(batchkind) = crate::autobatcher::autobatch(enqueued) {
+                return self.create_next_batch_index(rtxn, index_name.to_string(), batchkind);
+            }
         }
 
         // If we found no tasks then we were notified for something that got autobatched
@@ -80,53 +174,62 @@ impl IndexScheduler {
 
     pub(crate) fn process_batch(&self, wtxn: &mut RwTxn, batch: Batch) -> Result<Vec<Task>> {
         match batch {
-            Batch::IndexSpecific { index_uid, kind } => {
-                let index = create_index();
-                match kind {
-                    BatchKind::ClearAll { ids } => todo!(),
-                    BatchKind::DocumentAddition { addition_ids } => {
-                        let index = self.create_index(wtxn, &index_uid)?;
-                        let ret = index.update_documents(
-                            IndexDocumentsMethod::UpdateDocuments,
-                            None, // TODO primary key
-                            self.file_store,
-                            content_files,
-                        )?;
+            Batch::Cancel(_) => todo!(),
+            Batch::Snapshot(_) => todo!(),
+            Batch::Dump(_) => todo!(),
+            Batch::DocumentAddition {
+                index_uid,
+                primary_key,
+                content_files,
+                tasks,
+            } => todo!(),
+            Batch::SettingsAndDocumentAddition {
+                index_uid,
+                primary_key,
+                content_files,
+                document_addition_tasks,
+                settings,
+                settings_tasks,
+            } => {
+                let index = self.create_index(wtxn, &index_uid)?;
+                let mut updated_tasks = Vec::new();
 
-                        assert_eq!(ret.len(), tasks.len(), "Update documents must return the same number of `Result` than the number of tasks.");
-
-                        Ok(tasks
-                            .into_iter()
-                            .zip(ret)
-                            .map(|(mut task, res)| match res {
-                                Ok(info) => {
-                                    task.status = Status::Succeeded;
-                                    task.info = Some(info.to_string());
-                                }
-                                Err(error) => {
-                                    task.status = Status::Failed;
-                                    task.error = Some(error.to_string());
-                                }
-                            })
-                            .collect())
+                /*
+                let ret = index.update_settings(settings)?;
+                for (ret, task) in ret.iter().zip(settings_tasks) {
+                    match ret {
+                        Ok(ret) => task.status = Some(ret),
+                        Err(err) => task.error = Some(err),
                     }
-                    BatchKind::DocumentDeletion { deletion_ids } => todo!(),
-                    BatchKind::ClearAllAndSettings {
-                        other,
-                        settings_ids,
-                    } => todo!(),
-                    BatchKind::SettingsAndDocumentAddition {
-                        settings_ids,
-                        addition_ids,
-                    } => todo!(),
-                    BatchKind::Settings { settings_ids } => todo!(),
-                    BatchKind::DeleteIndex { ids } => todo!(),
-                    BatchKind::CreateIndex { id } => todo!(),
-                    BatchKind::SwapIndex { id } => todo!(),
-                    BatchKind::RenameIndex { id } => todo!(),
                 }
+                */
+
+                /*
+                for (ret, task) in ret.iter().zip(settings_tasks) {
+                    match ret {
+                        Ok(ret) => task.status = Some(ret),
+                        Err(err) => task.error = Some(err),
+                    }
+                    updated_tasks.push(task);
+                }
+                */
+
+                let ret = index.update_documents(
+                    IndexDocumentsMethod::ReplaceDocuments,
+                    primary_key,
+                    self.file_store,
+                    content_files.into_iter(),
+                )?;
+
+                for (ret, task) in ret.iter().zip(document_addition_tasks) {
+                    match ret {
+                        Ok(ret) => task.info = Some(format!("{:?}", ret)),
+                        Err(err) => task.error = Some(err.to_string()),
+                    }
+                    updated_tasks.push(task);
+                }
+                Ok(updated_tasks)
             }
-            _ => unreachable!(),
         }
     }
 }
