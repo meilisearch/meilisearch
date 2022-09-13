@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use super::error::{IndexError, Result};
 use super::index::{Index, IndexMeta};
-use file_store::UpdateFileStore;
+use file_store::FileStore;
 
 fn serialize_with_wildcard<S>(
     field: &Setting<Vec<String>>,
@@ -297,7 +297,7 @@ impl Index {
         &self,
         method: IndexDocumentsMethod,
         primary_key: Option<String>,
-        file_store: UpdateFileStore,
+        file_store: FileStore,
         contents: impl IntoIterator<Item = Uuid>,
     ) -> Result<Vec<Result<DocumentAdditionResult>>> {
         trace!("performing document addition");
