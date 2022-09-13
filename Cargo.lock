@@ -1659,6 +1659,7 @@ dependencies = [
  "csv",
  "derivative",
  "either",
+ "file-store",
  "fst",
  "indexmap",
  "lazy_static",

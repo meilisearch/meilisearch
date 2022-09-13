@@ -4,8 +4,6 @@ use meilisearch_types::error::{Code, ErrorCode};
 use meilisearch_types::internal_error;
 use serde_json::Value;
 
-use crate::update_file_store;
-
 pub type Result<T> = std::result::Result<T, IndexError>;
 
 #[derive(Debug, thiserror::Error)]
@@ -25,22 +23,9 @@ internal_error!(
     milli::heed::Error,
     fst::Error,
     serde_json::Error,
-    update_file_store::UpdateFileStoreError,
+    file_store::Error,
     milli::documents::Error
 );
-
-/*
-impl ErrorCode for IndexError {
-    fn error_code(&self) -> Code {
-        match self {
-            IndexError::Internal(_) => Code::Internal,
-            IndexError::DocumentNotFound(_) => Code::DocumentNotFound,
-            IndexError::Facet(e) => e.error_code(),
-            IndexError::Milli(e) => MilliError(e).error_code(),
-        }
-    }
-}
-*/
 
 impl From<milli::UserError> for IndexError {
     fn from(error: milli::UserError) -> IndexError {
