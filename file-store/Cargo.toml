@@ -1,0 +1,14 @@
+[package]
+name = "file-store"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+uuid = { version = "1.1.2", features = ["serde", "v4"] }
+tempfile = "3.3.0"
+thiserror = "1.0.30"
+
+[dev-dependencies]
+nelson = { git = "https://github.com/meilisearch/nelson.git", rev = "675f13885548fb415ead8fbb447e9e6d9314000a"}
