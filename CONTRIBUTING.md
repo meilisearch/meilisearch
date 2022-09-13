@@ -45,19 +45,6 @@ We recommend using the `--release` flag to test the full performance.
 cargo test
 ```
 
-### Querying the engine via the web interface
-
-To help you develop your feature you might need to use a web interface! You can query the engine by going to [the HTML page itself](http://127.0.0.1:9700).
-
-### Compile and run the HTTP debug server
-
-You can specify the number of threads to use to index documents and many other settings too.
-
-```bash
-cd http-ui
-cargo run --release -- --db my-database.mdb -vvv --indexing-jobs 8
-```
-
 ### Index your documents
 
 It can index a massive amount of documents in not much time, I already achieved to index:
