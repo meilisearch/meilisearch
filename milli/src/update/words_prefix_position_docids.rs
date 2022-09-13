@@ -65,6 +65,7 @@ impl<'t, 'u, 'i> WordPrefixPositionDocids<'t, 'u, 'i> {
         debug!("Computing and writing the word levels positions docids into LMDB on disk...");
 
         let mut prefix_position_docids_sorter = create_sorter(
+            grenad::SortAlgorithm::Unstable,
             merge_cbo_roaring_bitmaps,
             self.chunk_compression_type,
             self.chunk_compression_level,

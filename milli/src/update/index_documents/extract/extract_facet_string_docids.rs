@@ -23,6 +23,7 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
     let max_memory = indexer.max_memory_by_thread();
 
     let mut facet_string_docids_sorter = create_sorter(
+        grenad::SortAlgorithm::Stable,
         keep_first_prefix_value_merge_roaring_bitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,

@@ -25,6 +25,7 @@ pub fn extract_fid_word_count_docids<R: io::Read + io::Seek>(
     let max_memory = indexer.max_memory_by_thread();
 
     let mut fid_word_count_docids_sorter = create_sorter(
+        grenad::SortAlgorithm::Unstable,
         merge_cbo_roaring_bitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,

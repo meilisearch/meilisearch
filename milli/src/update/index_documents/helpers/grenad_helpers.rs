@@ -27,6 +27,7 @@ pub fn create_writer<R: io::Write>(
 }
 
 pub fn create_sorter(
+    sort_algorithm: grenad::SortAlgorithm,
     merge: MergeFn,
     chunk_compression_type: grenad::CompressionType,
     chunk_compression_level: Option<u32>,
@@ -45,6 +46,7 @@ pub fn create_sorter(
         builder.dump_threshold(memory);
         builder.allow_realloc(false);
     }
+    builder.sort_algorithm(sort_algorithm);
     builder.build()
 }
 
