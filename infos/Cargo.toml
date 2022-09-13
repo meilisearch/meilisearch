@@ -1,6 +1,6 @@
 [package]
 name = "infos"
-version = "0.33.3"
+version = "0.33.4"
 authors = ["Clément Renault <clement@meilisearch.com>"]
 edition = "2018"
 publish = false
