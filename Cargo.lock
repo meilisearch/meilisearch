@@ -722,6 +722,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "console"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "89eab4d20ce20cea182308bca13088fecea9c05f6776cf287205d41a0ed3c847"
+dependencies = [
+ "encode_unicode",
+ "libc",
+ "once_cell",
+ "terminal_size",
+ "winapi",
+]
+
+[[package]]
 name = "convert_case"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1024,6 +1037,12 @@ dependencies = [
  "nb 0.1.3",
  "void",
 ]
+
+[[package]]
+name = "encode_unicode"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a357d28ed41a50f9c765dbfe56cbc04a64e53e5fc58ba79fbc34c10ef3df831f"
 
 [[package]]
 name = "encoding"
@@ -1687,6 +1706,7 @@ dependencies = [
  "csv",
  "file-store",
  "index",
+ "insta",
  "log",
  "milli",
  "nelson",
@@ -1707,6 +1727,19 @@ dependencies = [
  "autocfg",
  "hashbrown 0.11.2",
  "serde",
+]
+
+[[package]]
+name = "insta"
+version = "1.19.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc61e98be01e89296f3343a878e9f8ca75a494cb5aaf29df65ef55734aeb85f5"
+dependencies = [
+ "console",
+ "linked-hash-map",
+ "once_cell",
+ "similar",
+ "yaml-rust",
 ]
 
 [[package]]
@@ -2022,6 +2055,12 @@ dependencies = [
  "log",
  "yada",
 ]
+
+[[package]]
+name = "linked-hash-map"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
 
 [[package]]
 name = "lmdb-rkv-sys"
@@ -3331,6 +3370,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "similar"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62ac7f900db32bf3fd12e0117dd3dc4da74bc52ebaac97f39668446d89694803"
+
+[[package]]
 name = "simple_asn1"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3537,6 +3582,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bab24d30b911b2376f3a13cc2cd443142f0c81dda04c118693e35b3835757755"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "terminal_size"
+version = "0.1.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "633c1a546cee861a1a6d0dc69ebeca693bf4296661ba7852b9d21d159e0506df"
+dependencies = [
+ "libc",
+ "winapi",
 ]
 
 [[package]]
@@ -4129,6 +4184,15 @@ name = "yada"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d12cb7a57bbf2ab670ed9545bae3648048547f9039279a89ce000208e585c1"
+
+[[package]]
+name = "yaml-rust"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56c1936c4cc7a1c9ab21a1ebb602eb942ba868cbd44a99cb7cdc5892335e1c85"
+dependencies = [
+ "linked-hash-map",
+]
 
 [[package]]
 name = "yaup"
