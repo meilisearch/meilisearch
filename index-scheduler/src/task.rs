@@ -1,4 +1,6 @@
 use anyhow::Result;
+use index::{Settings, Unchecked};
+use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use time::OffsetDateTime;
@@ -51,67 +53,73 @@ impl Task {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum KindWithContent {
-    DumpExport {
-        output: PathBuf,
-    },
-    Snapshot,
-    DocumentAddition {
-        index_name: String,
+    DocumentAdditionOrUpdate {
+        index_uid: String,
+        merge_strategy: IndexDocumentsMethod,
         primary_key: Option<String>,
         content_file: Uuid,
+        documents_count: usize,
+        allow_index_creation: bool,
     },
     DocumentDeletion {
-        index_name: String,
+        index_uid: String,
         documents_ids: Vec<String>,
     },
-    ClearAllDocuments {
-        index_name: String,
+    DocumentClear {
+        index_uid: String,
     },
     Settings {
-        index_name: String,
-        // TODO: TAMO: fix the type
-        new_settings: String,
+        index_uid: String,
+        new_settings: Settings<Unchecked>,
+        is_deletion: bool,
+        allow_index_creation: bool,
     },
-    RenameIndex {
-        index_name: String,
-        new_name: String,
+    IndexDeletion {
+        index_uid: String,
     },
-    CreateIndex {
-        index_name: String,
+    IndexCreation {
+        index_uid: String,
         primary_key: Option<String>,
     },
-    DeleteIndex {
-        index_name: String,
+    IndexUpdate {
+        index_uid: String,
+        primary_key: Option<String>,
     },
-    SwapIndex {
+    IndexRename {
+        index_uid: String,
+        new_name: String,
+    },
+    IndexSwap {
         lhs: String,
         rhs: String,
     },
     CancelTask {
         tasks: Vec<TaskId>,
     },
+    DumpExport {
+        output: PathBuf,
+    },
+    Snapshot,
 }
 
 impl KindWithContent {
     pub fn as_kind(&self) -> Kind {
         match self {
-            KindWithContent::DumpExport { .. } => Kind::DumpExport,
-            KindWithContent::DocumentAddition { .. } => Kind::DocumentAddition,
+            KindWithContent::DocumentAdditionOrUpdate { .. } => Kind::DocumentAdditionOrUpdate,
             KindWithContent::DocumentDeletion { .. } => Kind::DocumentDeletion,
-            KindWithContent::ClearAllDocuments { .. } => Kind::ClearAllDocuments,
-            KindWithContent::RenameIndex { .. } => Kind::RenameIndex,
-            KindWithContent::CreateIndex { .. } => Kind::CreateIndex,
-            KindWithContent::DeleteIndex { .. } => Kind::DeleteIndex,
-            KindWithContent::SwapIndex { .. } => Kind::SwapIndex,
+            KindWithContent::DocumentClear { .. } => Kind::DocumentClear,
+            KindWithContent::Settings { .. } => Kind::Settings,
+            KindWithContent::IndexCreation { .. } => Kind::IndexCreation,
+            KindWithContent::IndexDeletion { .. } => Kind::IndexDeletion,
+            KindWithContent::IndexUpdate { .. } => Kind::IndexUpdate,
+            KindWithContent::IndexRename { .. } => Kind::IndexRename,
+            KindWithContent::IndexSwap { .. } => Kind::IndexSwap,
             KindWithContent::CancelTask { .. } => Kind::CancelTask,
+            KindWithContent::DumpExport { .. } => Kind::DumpExport,
             KindWithContent::Snapshot => Kind::Snapshot,
-            KindWithContent::Settings {
-                index_name,
-                new_settings,
-            } => todo!(),
         }
     }
 
@@ -119,26 +127,22 @@ impl KindWithContent {
         use KindWithContent::*;
 
         match self {
-            DocumentAddition {
-                index_name: _,
-                content_file: _,
-                primary_key,
-            } => {
+            DocumentAdditionOrUpdate { .. } => {
                 // TODO: TAMO: persist the file
                 // content_file.persist();
                 Ok(())
             }
-            // There is nothing to persist for all these tasks
-            DumpExport { .. }
+            DocumentDeletion { .. }
+            | DocumentClear { .. }
             | Settings { .. }
-            | DocumentDeletion { .. }
-            | ClearAllDocuments { .. }
-            | RenameIndex { .. }
-            | CreateIndex { .. }
-            | DeleteIndex { .. }
-            | SwapIndex { .. }
+            | IndexCreation { .. }
+            | IndexDeletion { .. }
+            | IndexUpdate { .. }
+            | IndexRename { .. }
+            | IndexSwap { .. }
             | CancelTask { .. }
-            | Snapshot => Ok(()),
+            | DumpExport { .. }
+            | Snapshot => Ok(()), // There is nothing to persist for all these tasks
         }
     }
 
@@ -146,26 +150,23 @@ impl KindWithContent {
         use KindWithContent::*;
 
         match self {
-            DocumentAddition {
-                index_name: _,
-                content_file: _,
-                primary_key,
-            } => {
+            DocumentAdditionOrUpdate { .. } => {
                 // TODO: TAMO: delete the file
                 // content_file.delete();
                 Ok(())
             }
-            // There is no data associated with all these tasks
-            DumpExport { .. }
-            | Settings { .. }
+            DocumentAdditionOrUpdate { .. }
+            | IndexCreation { .. }
             | DocumentDeletion { .. }
-            | ClearAllDocuments { .. }
-            | RenameIndex { .. }
-            | CreateIndex { .. }
-            | DeleteIndex { .. }
-            | SwapIndex { .. }
+            | DocumentClear { .. }
+            | Settings { .. }
+            | IndexDeletion { .. }
+            | IndexUpdate { .. }
+            | IndexRename { .. }
+            | IndexSwap { .. }
             | CancelTask { .. }
-            | Snapshot => Ok(()),
+            | DumpExport { .. }
+            | Snapshot => Ok(()), // There is no data associated with all these tasks
         }
     }
 
@@ -174,17 +175,18 @@ impl KindWithContent {
 
         match self {
             DumpExport { .. } | Snapshot | CancelTask { .. } => None,
-            DocumentAddition { index_name, .. }
-            | DocumentDeletion { index_name, .. }
-            | ClearAllDocuments { index_name }
-            | CreateIndex { index_name, .. }
-            | DeleteIndex { index_name } => Some(vec![index_name]),
-            RenameIndex {
-                index_name: lhs,
+            DocumentAdditionOrUpdate { index_uid, .. }
+            | DocumentDeletion { index_uid, .. }
+            | DocumentClear { index_uid }
+            | Settings { index_uid, .. }
+            | IndexCreation { index_uid, .. }
+            | IndexUpdate { index_uid, .. }
+            | IndexDeletion { index_uid } => Some(vec![index_uid]),
+            IndexRename {
+                index_uid: lhs,
                 new_name: rhs,
             }
-            | SwapIndex { lhs, rhs } => Some(vec![lhs, rhs]),
-            Settings { index_name, .. } => Some(vec![index_name]),
+            | IndexSwap { lhs, rhs } => Some(vec![lhs, rhs]),
         }
     }
 }
@@ -192,15 +194,16 @@ impl KindWithContent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Kind {
-    CancelTask,
-    ClearAllDocuments,
-    CreateIndex,
-    DeleteIndex,
-    DocumentAddition,
+    DocumentAdditionOrUpdate,
     DocumentDeletion,
-    DumpExport,
-    RenameIndex,
+    DocumentClear,
     Settings,
+    IndexCreation,
+    IndexDeletion,
+    IndexUpdate,
+    IndexRename,
+    IndexSwap,
+    CancelTask,
+    DumpExport,
     Snapshot,
-    SwapIndex,
 }
