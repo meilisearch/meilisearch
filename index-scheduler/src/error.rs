@@ -1,8 +1,6 @@
 use milli::heed;
 use thiserror::Error;
 
-use crate::index;
-
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Index `{0}` not found")]

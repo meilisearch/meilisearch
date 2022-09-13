@@ -1723,10 +1723,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "index-scheduler"
+name = "index"
 version = "0.1.0"
 dependencies = [
- "actix-rt",
  "anyhow",
  "bincode",
  "csv",
@@ -1739,17 +1738,33 @@ dependencies = [
  "log",
  "meilisearch-types",
  "milli 0.33.0",
- "mockall",
  "nelson",
  "obkv",
- "paste",
  "permissive-json-pointer",
  "proptest",
  "proptest-derive",
  "regex",
- "roaring",
  "serde",
  "serde_json",
+ "thiserror",
+ "time",
+ "uuid 1.1.2",
+]
+
+[[package]]
+name = "index-scheduler"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "csv",
+ "file-store",
+ "index",
+ "log",
+ "milli 0.33.0",
+ "nelson",
+ "roaring",
+ "serde",
  "tempfile",
  "thiserror",
  "time",
