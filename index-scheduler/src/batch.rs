@@ -3,6 +3,7 @@ use crate::{
     task::{KindWithContent, Status},
     Error, IndexScheduler, Result, TaskId,
 };
+use index::{Settings, Unchecked};
 use milli::{
     heed::{RoTxn, RwTxn},
     update::IndexDocumentsMethod,
@@ -29,7 +30,7 @@ pub(crate) enum Batch {
         content_files: Vec<Uuid>,
         document_addition_tasks: Vec<Task>,
 
-        settings: Vec<String>,
+        settings: Vec<Settings<Unchecked>>,
         settings_tasks: Vec<Task>,
     },
 }
@@ -42,10 +43,10 @@ impl IndexScheduler {
         batch: BatchKind,
     ) -> Result<Option<Batch>> {
         match batch {
-            BatchKind::ClearAll { ids } => todo!(),
+            BatchKind::DocumentClear { ids } => todo!(),
             BatchKind::DocumentAddition { addition_ids } => todo!(),
             BatchKind::DocumentDeletion { deletion_ids } => todo!(),
-            BatchKind::ClearAllAndSettings {
+            BatchKind::ClearAndSettings {
                 other,
                 settings_ids,
             } => todo!(),
@@ -73,13 +74,17 @@ impl IndexScheduler {
                     .collect::<Result<Vec<_>>>()?;
 
                 let primary_key = match &document_addition_tasks[0].kind {
-                    KindWithContent::DocumentAddition { primary_key, .. } => primary_key.clone(),
+                    KindWithContent::DocumentAdditionOrUpdate { primary_key, .. } => {
+                        primary_key.clone()
+                    }
                     _ => unreachable!(),
                 };
                 let content_files = document_addition_tasks
                     .iter()
                     .map(|task| match task.kind {
-                        KindWithContent::DocumentAddition { content_file, .. } => content_file,
+                        KindWithContent::DocumentAdditionOrUpdate { content_file, .. } => {
+                            content_file
+                        }
                         _ => unreachable!(),
                     })
                     .collect();
@@ -87,7 +92,7 @@ impl IndexScheduler {
                 let settings = settings_tasks
                     .iter()
                     .map(|task| match &task.kind {
-                        KindWithContent::Settings { new_settings, .. } => new_settings.to_string(),
+                        KindWithContent::Settings { new_settings, .. } => new_settings.clone(),
                         _ => unreachable!(),
                     })
                     .collect();
@@ -102,10 +107,11 @@ impl IndexScheduler {
                 }))
             }
             BatchKind::Settings { settings_ids } => todo!(),
-            BatchKind::DeleteIndex { ids } => todo!(),
-            BatchKind::CreateIndex { id } => todo!(),
-            BatchKind::SwapIndex { id } => todo!(),
-            BatchKind::RenameIndex { id } => todo!(),
+            BatchKind::IndexCreation { id } => todo!(),
+            BatchKind::IndexDeletion { ids } => todo!(),
+            BatchKind::IndexUpdate { id } => todo!(),
+            BatchKind::IndexSwap { id } => todo!(),
+            BatchKind::IndexRename { id } => todo!(),
         }
     }
 
