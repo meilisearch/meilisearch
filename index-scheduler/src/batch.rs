@@ -72,8 +72,8 @@ impl IndexScheduler {
                     })
                     .collect::<Result<Vec<_>>>()?;
 
-                let primary_key = match document_addition_tasks[0].kind {
-                    KindWithContent::DocumentAddition { primary_key, .. } => primary_key,
+                let primary_key = match &document_addition_tasks[0].kind {
+                    KindWithContent::DocumentAddition { primary_key, .. } => primary_key.clone(),
                     _ => unreachable!(),
                 };
                 let content_files = document_addition_tasks
@@ -86,7 +86,7 @@ impl IndexScheduler {
 
                 let settings = settings_tasks
                     .iter()
-                    .map(|task| match task.kind {
+                    .map(|task| match &task.kind {
                         KindWithContent::Settings { new_settings, .. } => new_settings.to_string(),
                         _ => unreachable!(),
                     })
@@ -217,11 +217,11 @@ impl IndexScheduler {
                 let ret = index.update_documents(
                     IndexDocumentsMethod::ReplaceDocuments,
                     primary_key,
-                    self.file_store,
+                    self.file_store.clone(),
                     content_files.into_iter(),
                 )?;
 
-                for (ret, task) in ret.iter().zip(document_addition_tasks) {
+                for (ret, mut task) in ret.iter().zip(document_addition_tasks.into_iter()) {
                     match ret {
                         Ok(ret) => task.info = Some(format!("{:?}", ret)),
                         Err(err) => task.error = Some(err.to_string()),
