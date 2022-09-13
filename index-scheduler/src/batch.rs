@@ -45,6 +45,7 @@ impl IndexScheduler {
         match batch {
             BatchKind::DocumentClear { ids } => todo!(),
             BatchKind::DocumentAddition { addition_ids } => todo!(),
+            BatchKind::DocumentUpdate { update_ids } => todo!(),
             BatchKind::DocumentDeletion { deletion_ids } => todo!(),
             BatchKind::ClearAndSettings {
                 other,
@@ -74,17 +75,13 @@ impl IndexScheduler {
                     .collect::<Result<Vec<_>>>()?;
 
                 let primary_key = match &document_addition_tasks[0].kind {
-                    KindWithContent::DocumentAdditionOrUpdate { primary_key, .. } => {
-                        primary_key.clone()
-                    }
+                    KindWithContent::DocumentAddition { primary_key, .. } => primary_key.clone(),
                     _ => unreachable!(),
                 };
                 let content_files = document_addition_tasks
                     .iter()
                     .map(|task| match task.kind {
-                        KindWithContent::DocumentAdditionOrUpdate { content_file, .. } => {
-                            content_file
-                        }
+                        KindWithContent::DocumentAddition { content_file, .. } => content_file,
                         _ => unreachable!(),
                     })
                     .collect();
@@ -106,6 +103,10 @@ impl IndexScheduler {
                     settings_tasks,
                 }))
             }
+            BatchKind::SettingsAndDocumentUpdate {
+                update_ids,
+                settings_ids,
+            } => todo!(),
             BatchKind::Settings { settings_ids } => todo!(),
             BatchKind::IndexCreation { id } => todo!(),
             BatchKind::IndexDeletion { ids } => todo!(),
