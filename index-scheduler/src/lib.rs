@@ -221,14 +221,20 @@ impl IndexScheduler {
                 }
             };
             let mut batch = match self.create_next_batch(&wtxn) {
-                Ok(batch) => batch,
+                Ok(Some(batch)) => batch,
+                Ok(None) => continue,
                 Err(e) => {
                     log::error!("{}", e);
                     continue;
                 }
             };
+            // 1. store the starting date with the bitmap of processing tasks
+            // 2. update the tasks with a starting date *but* do not write anything on disk
 
+            // 3. process the tasks
             let res = self.process_batch(&mut wtxn, batch);
+
+            // 4. store the updated tasks on disk
 
             // TODO: TAMO: do this later
             // must delete the file on disk
