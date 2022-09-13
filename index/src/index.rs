@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use time::OffsetDateTime;
 
-use crate::index::search::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
+use crate::search::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 
 use super::error::IndexError;
 use super::error::Result;
