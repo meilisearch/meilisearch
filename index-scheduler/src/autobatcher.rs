@@ -2,6 +2,7 @@ use std::ops::ControlFlow;
 
 use crate::{task::Kind, TaskId};
 
+#[derive(Debug)]
 pub enum BatchKind {
     DocumentClear {
         ids: Vec<TaskId>,
@@ -367,5 +368,818 @@ pub fn autobatch(enqueued: Vec<(TaskId, Kind)>) -> Option<BatchKind> {
         };
     }
 
-    None
+    Some(acc)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use insta::*;
+    use Kind::*;
+
+    fn input_from(input: impl IntoIterator<Item = Kind>) -> Vec<(TaskId, Kind)> {
+        input
+            .into_iter()
+            .enumerate()
+            .map(|(id, kind)| (id as TaskId, kind))
+            .collect()
+    }
+
+    #[test]
+    fn autobatch_simple_operation_together() {
+        // we can autobatch one or multiple DocumentAddition together
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition])), @r###"
+        Some(
+            DocumentAddition {
+                addition_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, DocumentAddition, DocumentAddition])), @r###"
+        Some(
+            DocumentAddition {
+                addition_ids: [
+                    0,
+                    1,
+                    2,
+                ],
+            },
+        )
+        "###);
+        // we can autobatch one or multiple DocumentUpdate together
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate])), @r###"
+        Some(
+            DocumentUpdate {
+                update_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, DocumentUpdate, DocumentUpdate])), @r###"
+        Some(
+            DocumentUpdate {
+                update_ids: [
+                    0,
+                    1,
+                    2,
+                ],
+            },
+        )
+        "###);
+        // we can autobatch one or multiple DocumentDeletion together
+        assert_debug_snapshot!(autobatch(input_from([DocumentDeletion])), @r###"
+        Some(
+            DocumentDeletion {
+                deletion_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentDeletion, DocumentDeletion, DocumentDeletion])), @r###"
+        Some(
+            DocumentDeletion {
+                deletion_ids: [
+                    0,
+                    1,
+                    2,
+                ],
+            },
+        )
+        "###);
+        // we can autobatch one or multiple Settings together
+        assert_debug_snapshot!(autobatch(input_from([Settings])), @r###"
+        Some(
+            Settings {
+                settings_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([Settings, Settings, Settings])), @r###"
+        Some(
+            Settings {
+                settings_ids: [
+                    0,
+                    1,
+                    2,
+                ],
+            },
+        )
+        "###);
+    }
+
+    #[test]
+    fn simple_document_operation_dont_autobatch_with_other() {
+        // addition, updates and deletion can't batch together
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, DocumentUpdate])), @r###"
+        Some(
+            DocumentAddition {
+                addition_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, DocumentDeletion])), @r###"
+        Some(
+            DocumentAddition {
+                addition_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, DocumentAddition])), @r###"
+        Some(
+            DocumentUpdate {
+                update_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, DocumentDeletion])), @r###"
+        Some(
+            DocumentUpdate {
+                update_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentDeletion, DocumentAddition])), @r###"
+        Some(
+            DocumentDeletion {
+                deletion_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentDeletion, DocumentUpdate])), @r###"
+        Some(
+            DocumentDeletion {
+                deletion_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, IndexCreation])), @r###"
+        Some(
+            DocumentAddition {
+                addition_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, IndexCreation])), @r###"
+        Some(
+            DocumentUpdate {
+                update_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentDeletion, IndexCreation])), @r###"
+        Some(
+            DocumentDeletion {
+                deletion_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, IndexUpdate])), @r###"
+        Some(
+            DocumentAddition {
+                addition_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, IndexUpdate])), @r###"
+        Some(
+            DocumentUpdate {
+                update_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentDeletion, IndexUpdate])), @r###"
+        Some(
+            DocumentDeletion {
+                deletion_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, IndexRename])), @r###"
+        Some(
+            DocumentAddition {
+                addition_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, IndexRename])), @r###"
+        Some(
+            DocumentUpdate {
+                update_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentDeletion, IndexRename])), @r###"
+        Some(
+            DocumentDeletion {
+                deletion_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, IndexSwap])), @r###"
+        Some(
+            DocumentAddition {
+                addition_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, IndexSwap])), @r###"
+        Some(
+            DocumentUpdate {
+                update_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentDeletion, IndexSwap])), @r###"
+        Some(
+            DocumentDeletion {
+                deletion_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+    }
+
+    #[test]
+    fn document_addition_batch_with_settings() {
+        // simple case
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings])), @r###"
+        Some(
+            SettingsAndDocumentAddition {
+                settings_ids: [
+                    1,
+                ],
+                addition_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings])), @r###"
+        Some(
+            SettingsAndDocumentUpdate {
+                settings_ids: [
+                    1,
+                ],
+                update_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+
+        // multiple settings and doc addition
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, DocumentAddition, Settings, Settings])), @r###"
+        Some(
+            SettingsAndDocumentAddition {
+                settings_ids: [
+                    2,
+                    3,
+                ],
+                addition_ids: [
+                    0,
+                    1,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, DocumentAddition, Settings, Settings])), @r###"
+        Some(
+            SettingsAndDocumentAddition {
+                settings_ids: [
+                    2,
+                    3,
+                ],
+                addition_ids: [
+                    0,
+                    1,
+                ],
+            },
+        )
+        "###);
+
+        // addition and setting unordered
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings, DocumentAddition, Settings])), @r###"
+        Some(
+            SettingsAndDocumentAddition {
+                settings_ids: [
+                    1,
+                    3,
+                ],
+                addition_ids: [
+                    0,
+                    2,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings, DocumentUpdate, Settings])), @r###"
+        Some(
+            SettingsAndDocumentUpdate {
+                settings_ids: [
+                    1,
+                    3,
+                ],
+                update_ids: [
+                    0,
+                    2,
+                ],
+            },
+        )
+        "###);
+
+        // We ensure this kind of batch doesn't batch with forbidden operations
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings, DocumentUpdate])), @r###"
+        Some(
+            SettingsAndDocumentAddition {
+                settings_ids: [
+                    1,
+                ],
+                addition_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings, DocumentAddition])), @r###"
+        Some(
+            SettingsAndDocumentUpdate {
+                settings_ids: [
+                    1,
+                ],
+                update_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings, DocumentDeletion])), @r###"
+        Some(
+            SettingsAndDocumentAddition {
+                settings_ids: [
+                    1,
+                ],
+                addition_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings, DocumentDeletion])), @r###"
+        Some(
+            SettingsAndDocumentUpdate {
+                settings_ids: [
+                    1,
+                ],
+                update_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings, IndexCreation])), @r###"
+        Some(
+            SettingsAndDocumentAddition {
+                settings_ids: [
+                    1,
+                ],
+                addition_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings, IndexCreation])), @r###"
+        Some(
+            SettingsAndDocumentUpdate {
+                settings_ids: [
+                    1,
+                ],
+                update_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings, IndexUpdate])), @r###"
+        Some(
+            SettingsAndDocumentAddition {
+                settings_ids: [
+                    1,
+                ],
+                addition_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings, IndexUpdate])), @r###"
+        Some(
+            SettingsAndDocumentUpdate {
+                settings_ids: [
+                    1,
+                ],
+                update_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings, IndexRename])), @r###"
+        Some(
+            SettingsAndDocumentAddition {
+                settings_ids: [
+                    1,
+                ],
+                addition_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings, IndexRename])), @r###"
+        Some(
+            SettingsAndDocumentUpdate {
+                settings_ids: [
+                    1,
+                ],
+                update_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings, IndexSwap])), @r###"
+        Some(
+            SettingsAndDocumentAddition {
+                settings_ids: [
+                    1,
+                ],
+                addition_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings, IndexSwap])), @r###"
+        Some(
+            SettingsAndDocumentUpdate {
+                settings_ids: [
+                    1,
+                ],
+                update_ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+    }
+
+    #[test]
+    fn clear_and_additions() {
+        // these two doesn't need to batch
+        assert_debug_snapshot!(autobatch(input_from([DocumentClear, DocumentAddition])), @r###"
+        Some(
+            DocumentClear {
+                ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentClear, DocumentUpdate])), @r###"
+        Some(
+            DocumentClear {
+                ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+
+        // Basic use case
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, DocumentAddition, DocumentClear])), @r###"
+        Some(
+            DocumentClear {
+                ids: [
+                    0,
+                    1,
+                    2,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, DocumentUpdate, DocumentClear])), @r###"
+        Some(
+            DocumentClear {
+                ids: [
+                    0,
+                    1,
+                    2,
+                ],
+            },
+        )
+        "###);
+
+        // This batch kind doesn't mix with other document addition
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, DocumentAddition, DocumentClear, DocumentAddition])), @r###"
+        Some(
+            DocumentClear {
+                ids: [
+                    0,
+                    1,
+                    2,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, DocumentUpdate, DocumentClear, DocumentUpdate])), @r###"
+        Some(
+            DocumentClear {
+                ids: [
+                    0,
+                    1,
+                    2,
+                ],
+            },
+        )
+        "###);
+
+        // But you can batch multiple clear together
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, DocumentAddition, DocumentClear, DocumentClear, DocumentClear])), @r###"
+        Some(
+            DocumentClear {
+                ids: [
+                    0,
+                    1,
+                    2,
+                    3,
+                    4,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, DocumentUpdate, DocumentClear, DocumentClear, DocumentClear])), @r###"
+        Some(
+            DocumentClear {
+                ids: [
+                    0,
+                    1,
+                    2,
+                    3,
+                    4,
+                ],
+            },
+        )
+        "###);
+    }
+
+    #[test]
+    fn clear_and_additions_and_settings() {
+        // A clear don't need to autobatch the settings that happens AFTER there is no documents
+        assert_debug_snapshot!(autobatch(input_from([DocumentClear, Settings])), @r###"
+        Some(
+            DocumentClear {
+                ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+
+        assert_debug_snapshot!(autobatch(input_from([Settings, DocumentClear, Settings])), @r###"
+        Some(
+            ClearAndSettings {
+                other: [
+                    1,
+                ],
+                settings_ids: [
+                    0,
+                    2,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings, DocumentClear])), @r###"
+        Some(
+            ClearAndSettings {
+                other: [
+                    0,
+                    2,
+                ],
+                settings_ids: [
+                    1,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings, DocumentClear])), @r###"
+        Some(
+            ClearAndSettings {
+                other: [
+                    0,
+                    2,
+                ],
+                settings_ids: [
+                    1,
+                ],
+            },
+        )
+        "###);
+    }
+
+    #[test]
+    fn anything_and_index_deletion() {
+        // The indexdeletion doesn't batch with anything that happens AFTER
+        assert_debug_snapshot!(autobatch(input_from([IndexDeletion, DocumentAddition])), @r###"
+        Some(
+            IndexDeletion {
+                ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([IndexDeletion, DocumentUpdate])), @r###"
+        Some(
+            IndexDeletion {
+                ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([IndexDeletion, DocumentDeletion])), @r###"
+        Some(
+            IndexDeletion {
+                ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([IndexDeletion, DocumentClear])), @r###"
+        Some(
+            IndexDeletion {
+                ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([IndexDeletion, Settings])), @r###"
+        Some(
+            IndexDeletion {
+                ids: [
+                    0,
+                ],
+            },
+        )
+        "###);
+
+        // The index deletion can accept almost any type of BatchKind and transform it to an IndexDeletion
+        // First, the basic cases
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, IndexDeletion])), @r###"
+        Some(
+            IndexDeletion {
+                ids: [
+                    0,
+                    1,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, IndexDeletion])), @r###"
+        Some(
+            IndexDeletion {
+                ids: [
+                    0,
+                    1,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentDeletion, IndexDeletion])), @r###"
+        Some(
+            IndexDeletion {
+                ids: [
+                    0,
+                    1,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentClear, IndexDeletion])), @r###"
+        Some(
+            IndexDeletion {
+                ids: [
+                    0,
+                    1,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([Settings, IndexDeletion])), @r###"
+        Some(
+            IndexDeletion {
+                ids: [
+                    0,
+                    1,
+                ],
+            },
+        )
+        "###);
+
+        // Then the mixed cases
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings, IndexDeletion])), @r###"
+        Some(
+            IndexDeletion {
+                ids: [
+                    0,
+                    2,
+                    1,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings, IndexDeletion])), @r###"
+        Some(
+            IndexDeletion {
+                ids: [
+                    0,
+                    2,
+                    1,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings, DocumentClear, IndexDeletion])), @r###"
+        Some(
+            IndexDeletion {
+                ids: [
+                    1,
+                    3,
+                    0,
+                    2,
+                ],
+            },
+        )
+        "###);
+        assert_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings, DocumentClear, IndexDeletion])), @r###"
+        Some(
+            IndexDeletion {
+                ids: [
+                    1,
+                    3,
+                    0,
+                    2,
+                ],
+            },
+        )
+        "###);
+    }
 }
