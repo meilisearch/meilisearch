@@ -13,7 +13,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::index::error::FacetError;
+use crate::error::FacetError;
 
 use super::error::{IndexError, Result};
 use super::index::Index;

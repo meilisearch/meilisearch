@@ -6,6 +6,7 @@ members = [
     "meilisearch-lib",
     "meilisearch-auth",
     "index-scheduler",
+    "index",
     "file-store",
     "permissive-json-pointer",
 ]
