@@ -304,24 +304,23 @@ where
                 documents_chunk_size,
             );
 
-            let result = original_chunk_iter
-                .and_then(|original_chunk_iter| Ok((original_chunk_iter, flattened_chunk_iter?)))
-                .map(|(original_chunk, flattened_chunk)| {
-                    // extract all databases from the chunked obkv douments
-                    extract::data_from_obkv_documents(
-                        original_chunk,
-                        flattened_chunk,
-                        pool_params,
-                        lmdb_writer_sx.clone(),
-                        searchable_fields,
-                        faceted_fields,
-                        primary_key_id,
-                        geo_fields_ids,
-                        stop_words,
-                        max_positions_per_attributes,
-                        exact_attributes,
-                    )
-                });
+            let result = original_chunk_iter.and_then(|original_chunk| {
+                let flattened_chunk = flattened_chunk_iter?;
+                // extract all databases from the chunked obkv douments
+                extract::data_from_obkv_documents(
+                    original_chunk,
+                    flattened_chunk,
+                    pool_params,
+                    lmdb_writer_sx.clone(),
+                    searchable_fields,
+                    faceted_fields,
+                    primary_key_id,
+                    geo_fields_ids,
+                    stop_words,
+                    max_positions_per_attributes,
+                    exact_attributes,
+                )
+            });
 
             if let Err(e) = result {
                 let _ = lmdb_writer_sx.send(Err(e));
