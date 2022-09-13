@@ -22,3 +22,4 @@ uuid = { version = "1.1.2", features = ["serde", "v4"] }
 
 [dev-dependencies]
 nelson = { git = "https://github.com/meilisearch/nelson.git", rev = "675f13885548fb415ead8fbb447e9e6d9314000a"}
+insta = "1.19.1"
