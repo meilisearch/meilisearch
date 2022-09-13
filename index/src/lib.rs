@@ -12,10 +12,10 @@ pub mod updates;
 #[allow(clippy::module_inception)]
 mod index;
 
-pub use index::{Document, IndexMeta, IndexStats};
+pub use self::index::{Document, IndexMeta, IndexStats};
 
 #[cfg(not(test))]
-pub use index::Index;
+pub use self::index::Index;
 
 #[cfg(test)]
 pub use test::MockIndex as Index;
@@ -37,7 +37,7 @@ pub mod test {
     use super::index::Index;
     use super::Document;
     use super::{Checked, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings};
-    use crate::update_file_store::UpdateFileStore;
+    use file_store::FileStore;
 
     #[derive(Clone)]
     pub enum MockIndex {
@@ -164,7 +164,7 @@ pub mod test {
             &self,
             method: IndexDocumentsMethod,
             primary_key: Option<String>,
-            file_store: UpdateFileStore,
+            file_store: FileStore,
             contents: impl Iterator<Item = Uuid>,
         ) -> Result<Vec<Result<DocumentAdditionResult>>> {
             match self {

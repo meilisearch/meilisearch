@@ -1,8 +1,6 @@
 mod autobatcher;
 mod batch;
-mod document_formats;
 pub mod error;
-pub mod index;
 pub mod task;
 mod utils;
 
