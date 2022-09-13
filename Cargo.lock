@@ -898,6 +898,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "darling"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4529658bdda7fd6769b8614be250cdcfc3aeb0ee72fe66f9e41e5e5eb73eac02"
+dependencies = [
+ "darling_core",
+ "darling_macro",
+]
+
+[[package]]
+name = "darling_core"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "649c91bc01e8b1eac09fb91e8dbc7d517684ca6be8ebc75bb9cafc894f9fdb6f"
+dependencies = [
+ "fnv",
+ "ident_case",
+ "proc-macro2 1.0.39",
+ "quote 1.0.18",
+ "strsim",
+ "syn 1.0.96",
+]
+
+[[package]]
+name = "darling_macro"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ddfc69c5bfcbd2fc09a0f38451d2daf0e372e367986a83906d1b0dbc88134fb5"
+dependencies = [
+ "darling_core",
+ "quote 1.0.18",
+ "syn 1.0.96",
+]
+
+[[package]]
 name = "derivative"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1106,13 +1141,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "faux"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "939b325b85dc8df6e071d038fcc79e9b2b23769eddf9c88bcb56cd832faed9c4"
+dependencies = [
+ "faux_macros",
+ "paste",
+]
+
+[[package]]
+name = "faux_macros"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3749b7d7d45b650956f6ab3a57a2a2b6d92ecf2866e20fc358825871bb9204f"
+dependencies = [
+ "darling",
+ "proc-macro2 1.0.39",
+ "quote 1.0.18",
+ "syn 1.0.96",
+ "uuid 0.8.2",
+]
+
+[[package]]
 name = "file-store"
 version = "0.1.0"
 dependencies = [
- "nelson",
+ "faux",
  "tempfile",
  "thiserror",
- "uuid",
+ "uuid 1.1.2",
 ]
 
 [[package]]
@@ -1575,6 +1633,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ident_case"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
+
+[[package]]
 name = "idna"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1615,7 +1679,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "time 0.3.14",
- "uuid",
+ "uuid 1.1.2",
 ]
 
 [[package]]
@@ -2060,7 +2124,7 @@ dependencies = [
  "sha2",
  "thiserror",
  "time 0.3.14",
- "uuid",
+ "uuid 1.1.2",
 ]
 
 [[package]]
@@ -2131,7 +2195,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "urlencoding",
- "uuid",
+ "uuid 1.1.2",
  "vergen",
  "walkdir",
  "yaup",
@@ -2196,7 +2260,7 @@ dependencies = [
  "thiserror",
  "time 0.3.14",
  "tokio",
- "uuid",
+ "uuid 1.1.2",
  "walkdir",
  "whoami",
 ]
@@ -2278,7 +2342,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "time 0.3.14",
- "uuid",
+ "uuid 1.1.2",
 ]
 
 [[package]]
@@ -3727,6 +3791,15 @@ name = "utf8-width"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5190c9442dcdaf0ddd50f37420417d219ae5261bbf5db120d0f9bab996c9cba1"
+
+[[package]]
+name = "uuid"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
+dependencies = [
+ "getrandom",
+]
 
 [[package]]
 name = "uuid"
