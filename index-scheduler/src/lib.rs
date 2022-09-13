@@ -8,7 +8,7 @@ mod utils;
 
 use batch::Batch;
 pub use error::Error;
-use file_store::UpdateFileStore;
+use file_store::FileStore;
 use index::Index;
 pub use task::Task;
 use task::{Kind, KindWithContent, Status};
@@ -57,7 +57,7 @@ pub struct IndexScheduler {
     /// The list of tasks currently processing.
     processing_tasks: Arc<RwLock<RoaringBitmap>>,
 
-    file_store: UpdateFileStore,
+    file_store: FileStore,
 
     /// The LMDB environment which the DBs are associated with.
     env: Env,
