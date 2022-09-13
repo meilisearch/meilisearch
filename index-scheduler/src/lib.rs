@@ -4,16 +4,15 @@ mod document_formats;
 pub mod error;
 pub mod index;
 pub mod task;
-mod update_file_store;
 mod utils;
 
 use batch::Batch;
 pub use error::Error;
+use file_store::UpdateFileStore;
 use index::Index;
 pub use task::Task;
 use task::{Kind, KindWithContent, Status};
 use time::OffsetDateTime;
-use update_file_store::UpdateFileStore;
 
 use std::collections::hash_map::Entry;
 use std::sync::atomic::{AtomicBool, Ordering};

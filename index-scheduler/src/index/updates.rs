@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use super::error::{IndexError, Result};
 use super::index::{Index, IndexMeta};
-use crate::update_file_store::UpdateFileStore;
+use file_store::UpdateFileStore;
 
 fn serialize_with_wildcard<S>(
     field: &Setting<Vec<String>>,
