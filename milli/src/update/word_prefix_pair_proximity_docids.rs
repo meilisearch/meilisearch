@@ -1,7 +1,7 @@
 /*!
  ## What is WordPrefixPairProximityDocids?
 The word-prefix-pair-proximity-docids database is a database whose keys are of
-the form (`word`, `prefix`, `proximity`) and the values are roaring bitmaps of
+the form `(proximity, word, prefix)` and the values are roaring bitmaps of
 the documents which contain `word` followed by another word starting with
 `prefix` at a distance of `proximity`.
 
@@ -23,127 +23,100 @@ dog
 Note that only prefixes which correspond to more than a certain number of
 different words from the database are included in this list.
 
-* a sorted list of word pairs and the distance between them (i.e. proximity),
-* associated with a roaring bitmap, such as:
+* a sorted list of proximities and word pairs (the proximity is the distance between the two words),
+associated with a roaring bitmap, such as:
 ```text
-good dog   3         -> docids1: [2, 5, 6]
-good doggo 1         -> docids2: [8]
-good dogma 1         -> docids3: [7, 19, 20]
-good ghost 2         -> docids4: [1]
-horror cathedral 4   -> docids5: [1, 2]
+1 good doggo         -> docids1: [8]
+1 good door          -> docids2: [7, 19, 20]
+1 good ghost         -> docids3: [1]
+2 good dog           -> docids4: [2, 5, 6]
+2 horror cathedral   -> docids5: [1, 2]
 ```
 
 I illustrate a simplified version of the algorithm to create the word-prefix
 pair-proximity database below:
 
-1. **Outer loop:** First, we iterate over each word pair and its proximity:
+1. **Outer loop:** First, we iterate over each proximity and word pair:
 ```text
+proximity: 1
 word1    : good
-word2    : dog
-proximity: 3
+word2    : doggo
 ```
 2. **Inner loop:** Then, we iterate over all the prefixes of `word2` that are
-in the list of sorted prefixes. And we insert the key (`prefix`, `proximity`)
+in the list of sorted prefixes. And we insert the key `prefix`
 and the value (`docids`) to a sorted map which we call the “batch”. For example,
 at the end of the first inner loop, we may have:
 ```text
 Outer loop 1:
 ------------------------------
+proximity: 1
 word1    : good
-word2    : dog
-proximity: 3
+word2    : doggo
 docids   : docids1
 
 prefixes: [d, do, dog]
 
 batch: [
-    (d, 3)   -> [docids1]
-    (do, 3)  -> [docids1]
-    (dog, 3) -> [docids1]
+    d,   -> [docids1]
+    do   -> [docids1]
+    dog  -> [docids1]
 ]
 ```
 3. For illustration purpose, let's run through a second iteration of the outer loop:
 ```text
 Outer loop 2:
 ------------------------------
-word1    : good
-word2    : doggo
 proximity: 1
+word1    : good
+word2    : door
 docids   : docids2
 
-prefixes: [d, do, dog]
+prefixes: [d, do, doo]
 
 batch: [
-    (d, 1)   -> [docids2]
-    (d, 3)   -> [docids1]
-    (do, 1)  -> [docids2]
-    (do, 3)  -> [docids1]
-    (dog, 1) -> [docids2]
-    (dog, 3) -> [docids1]
-]
-```
-Notice that the batch had to re-order some (`prefix`, `proximity`) keys: some
-of the elements inserted in the second iteration of the outer loop appear
-*before* elements from the first iteration.
-
-4. And a third:
-```text
-Outer loop 3:
-------------------------------
-word1    : good
-word2    : dogma
-proximity: 1
-docids   : docids3
-
-prefixes: [d, do, dog]
-
-batch: [
-    (d, 1)   -> [docids2, docids3]
-    (d, 3)   -> [docids1]
-    (do, 1)  -> [docids2, docids3]
-    (do, 3)  -> [docids1]
-    (dog, 1) -> [docids2, docids3]
-    (dog, 3) -> [docids1]
+    d   -> [docids1, docids2]
+    do  -> [docids1, docids2]
+    dog -> [docids1]
+    doo -> [docids2]
 ]
 ```
 Notice that there were some conflicts which were resolved by merging the
-conflicting values together.
+conflicting values together. Also, an additional prefix was added at the
+end of the batch.
 
-5. On the fourth iteration of the outer loop, we have:
+4. On the third iteration of the outer loop, we have:
 ```text
 Outer loop 4:
 ------------------------------
+proximity: 1
 word1    : good
 word2    : ghost
-proximity: 2
 ```
 Because `word2` begins with a different letter than the previous `word2`,
-we know that:
-
-1. All the prefixes of `word2` are greater than the prefixes of the previous word2
-2. And therefore, every instance of (`word2`, `prefix`) will be greater than
-any element in the batch.
+we know that all the prefixes of `word2` are greater than the prefixes of the previous word2
 
 Therefore, we know that we can insert every element from the batch into the
 database before proceeding any further. This operation is called
-“flushing the batch”. Flushing the batch should also be done whenever `word1`
-is different than the previous `word1`.
+“flushing the batch”. Flushing the batch should also be done whenever:
+* `proximity` is different than the previous `proximity`.
+* `word1` is different than the previous `word1`.
+* `word2` starts with a different letter than the previous word2
 
-6. **Flushing the batch:** to flush the batch, we look at the `word1` and
-iterate over the elements of the batch in sorted order:
+6. **Flushing the batch:** to flush the batch, we iterate over its elements:
 ```text
 Flushing Batch loop 1:
 ------------------------------
-word1    : good
-word2    : d
-proximity: 1
+proximity  : 1
+word1      : good
+prefix     : d
+
 docids   : [docids2, docids3]
 ```
 We then merge the array of `docids` (of type `Vec<Vec<u8>>`) using
 `merge_cbo_roaring_bitmap` in order to get a single byte vector representing a
 roaring bitmap of all the document ids where `word1` is followed by `prefix`
 at a distance of `proximity`.
-Once we have done that, we insert (`word1`, `prefix`, `proximity`) -> `merged_docids`
+Once we have done that, we insert `(proximity, word1, prefix) -> merged_docids`
 into the database.
 
 7. That's it! ... except...
@@ -184,8 +157,8 @@ Note, also, that since we read data from the database when iterating over
 `word_pairs_db`, we cannot insert the computed word-prefix-pair-proximity-
 docids from the batch directly into the database (we would have a concurrent
 reader and writer). Therefore, when calling the algorithm on
-(`new_prefixes`, `word_pairs_db`), we insert the computed
-((`word`, `prefix`, `proximity`), `docids`) elements in an intermediary grenad
+`(new_prefixes, word_pairs_db)`, we insert the computed
+`((proximity, word, prefix), docids)` elements in an intermediary grenad
 Writer instead of the DB. At the end of the outer loop, we finally read from
 the grenad and insert its elements in the database.
 
@@ -406,7 +379,7 @@ fn execute_on_word_pairs_and_prefixes<I>(
     while let Some(((word1, word2, proximity), data)) = next_word_pair_proximity(iter)? {
         // skip this iteration if the proximity is over the threshold
         if proximity > max_proximity {
-            continue;
+            break;
         };
         let word2_start_different_than_prev = word2[0] != prev_word2_start;
         // if there were no potential prefixes for the previous word2 based on its first letter,
@@ -416,16 +389,21 @@ fn execute_on_word_pairs_and_prefixes<I>(
             continue;
         }
 
-        // if word1 is different than the previous word1 OR if the start of word2 is different
-        // than the previous start of word2, then we'll need to flush the batch
+        // if the proximity is different to the previous one, OR
+        // if word1 is different than the previous word1, OR
+        // if the start of word2 is different than the previous start of word2,
+        // THEN we'll need to flush the batch
+        let prox_different_than_prev = proximity != batch.proximity;
         let word1_different_than_prev = word1 != batch.word1;
-        if word1_different_than_prev || word2_start_different_than_prev {
+        if prox_different_than_prev || word1_different_than_prev || word2_start_different_than_prev
+        {
             batch.flush(&mut merge_buffer, &mut insert)?;
             // don't forget to reset the value of batch.word1 and prev_word2_start
             if word1_different_than_prev {
                 prefix_search_start.0 = 0;
                 batch.word1.clear();
                 batch.word1.extend_from_slice(word1);
+                batch.proximity = proximity;
             }
             if word2_start_different_than_prev {
                 // word2_start_different_than_prev == true
@@ -437,74 +415,70 @@ fn execute_on_word_pairs_and_prefixes<I>(
 
         if !empty_prefixes {
             // All conditions are satisfied, we can now insert each new prefix of word2 into the batch
+            prefix_buffer.clear();
             prefixes.for_each_prefix_of(
                 word2,
                 &mut prefix_buffer,
                 &prefix_search_start,
                 |prefix_buffer| {
-                    let prefix_len = prefix_buffer.len();
-                    prefix_buffer.push(0);
-                    prefix_buffer.push(proximity);
                     batch.insert(&prefix_buffer, data.to_vec());
-                    prefix_buffer.truncate(prefix_len);
                 },
             );
-            prefix_buffer.clear();
         }
     }
     batch.flush(&mut merge_buffer, &mut insert)?;
     Ok(())
 }
 /**
-A map structure whose keys are (prefix, proximity) and whose values are vectors of bitstrings (serialized roaring bitmaps).
+A map structure whose keys are prefixes and whose values are vectors of bitstrings (serialized roaring bitmaps).
 The keys are sorted and conflicts are resolved by merging the vectors of bitstrings together.
 
-It is used to ensure that all ((word1, prefix, proximity), docids) are inserted into the database in sorted order and efficiently.
+It is used to ensure that all ((proximity, word1, prefix), docids) are inserted into the database in sorted order and efficiently.
 
-The batch is flushed as often as possible, when we are sure that every (word1, prefix, proximity) key derived from its content
+The batch is flushed as often as possible, when we are sure that every (proximity, word1, prefix) key derived from its content
 can be inserted into the database in sorted order. When it is flushed, it calls a user-provided closure with the following arguments:
-- key   : (word1, prefix, proximity) as bytes
-- value : merged roaring bitmaps from all values associated with (prefix, proximity) in the batch, serialised to bytes
+- key   : (proximity, word1, prefix) as bytes
+- value : merged roaring bitmaps from all values associated with prefix in the batch, serialised to bytes
 */
 #[derive(Default)]
 struct PrefixAndProximityBatch {
+    proximity: u8,
     word1: Vec<u8>,
     batch: Vec<(Vec<u8>, Vec<Cow<'static, [u8]>>)>,
 }
 
 impl PrefixAndProximityBatch {
     /// Insert the new key and value into the batch
+    ///
+    /// The key must either exist in the batch or be greater than all existing keys
     fn insert(&mut self, new_key: &[u8], new_value: Vec<u8>) {
-        match self.batch.binary_search_by_key(&new_key, |(k, _)| k.as_slice()) {
-            Ok(position) => {
-                self.batch[position].1.push(Cow::Owned(new_value));
-            }
-            Err(position) => {
-                self.batch.insert(position, (new_key.to_vec(), vec![Cow::Owned(new_value)]));
-            }
+        match self.batch.iter_mut().find(|el| el.0 == new_key) {
+            Some((_prefix, docids)) => docids.push(Cow::Owned(new_value)),
+            None => self.batch.push((new_key.to_vec(), vec![Cow::Owned(new_value)])),
         }
     }
 
     /// Empties the batch, calling `insert` on each element.
     ///
-    /// The key given to `insert` is `(word1, prefix, proximity)` and the value is the associated merged roaring bitmap.
+    /// The key given to `insert` is `(proximity, word1, prefix)` and the value is the associated merged roaring bitmap.
     fn flush(
         &mut self,
         merge_buffer: &mut Vec<u8>,
         insert: &mut impl for<'buffer> FnMut(&'buffer [u8], &'buffer [u8]) -> Result<()>,
     ) -> Result<()> {
-        let PrefixAndProximityBatch { word1, batch } = self;
+        let PrefixAndProximityBatch { proximity, word1, batch } = self;
         if batch.is_empty() {
             return Ok(());
         }
         merge_buffer.clear();
 
-        let mut buffer = Vec::with_capacity(word1.len() + 1 + 6 + 1);
+        let mut buffer = Vec::with_capacity(word1.len() + 1 + 6);
+        buffer.push(*proximity);
         buffer.extend_from_slice(word1);
         buffer.push(0);
 
         for (key, mergeable_data) in batch.drain(..) {
-            buffer.truncate(word1.len() + 1);
+            buffer.truncate(1 + word1.len() + 1);
             buffer.extend_from_slice(key.as_slice());
 
             let data = if mergeable_data.len() > 1 {
@@ -884,51 +858,33 @@ mod tests {
         CboRoaringBitmapCodec::serialize_into(&bitmap_ranges, &mut serialised_bitmap_ranges);
 
         let word_pairs = [
-            // 1, 3:  (healthy arb 2) and (healthy arbre 2) with (bitmap123 | bitmap456)
-            (("healthy", "arbre", 2), &serialised_bitmap123),
-            //          not inserted because 3 > max_proximity
-            (("healthy", "arbre", 3), &serialised_bitmap456),
-            // 0, 2:  (healthy arb 1) and (healthy arbre 1) with (bitmap123)
             (("healthy", "arbres", 1), &serialised_bitmap123),
-            // 1, 3:
-            (("healthy", "arbres", 2), &serialised_bitmap456),
-            //          not be inserted because 3 > max_proximity
-            (("healthy", "arbres", 3), &serialised_bitmap789),
-            //          not inserted because no prefixes for boat
             (("healthy", "boat", 1), &serialised_bitmap123),
-            //          not inserted because no prefixes for ca
             (("healthy", "ca", 1), &serialised_bitmap123),
-            // 4: (healthy cat 1) with (bitmap456 + bitmap123)
             (("healthy", "cats", 1), &serialised_bitmap456),
-            // 5: (healthy cat 2) with (bitmap789 + bitmap_ranges)
-            (("healthy", "cats", 2), &serialised_bitmap789),
-            // 4 + 6: (healthy catto 1) with (bitmap123)
             (("healthy", "cattos", 1), &serialised_bitmap123),
-            // 5 + 7: (healthy catto 2) with (bitmap_ranges)
-            (("healthy", "cattos", 2), &serialised_bitmap_ranges),
-            // 8: (jittery cat 1) with (bitmap123 | bitmap456 | bitmap789 | bitmap_ranges)
             (("jittery", "cat", 1), &serialised_bitmap123),
-            // 8:
             (("jittery", "cata", 1), &serialised_bitmap456),
-            // 8:
             (("jittery", "catb", 1), &serialised_bitmap789),
-            // 8:
             (("jittery", "catc", 1), &serialised_bitmap_ranges),
+            (("healthy", "arbre", 2), &serialised_bitmap123),
+            (("healthy", "arbres", 2), &serialised_bitmap456),
+            (("healthy", "cats", 2), &serialised_bitmap789),
+            (("healthy", "cattos", 2), &serialised_bitmap_ranges),
+            (("healthy", "arbre", 3), &serialised_bitmap456),
+            (("healthy", "arbres", 3), &serialised_bitmap789),
         ];
 
         let expected_result = [
-            // first batch:
             (("healthy", "arb", 1), bitmap123.clone()),
-            (("healthy", "arb", 2), &bitmap123 | &bitmap456),
             (("healthy", "arbre", 1), bitmap123.clone()),
-            (("healthy", "arbre", 2), &bitmap123 | &bitmap456),
-            // second batch:
             (("healthy", "cat", 1), &bitmap456 | &bitmap123),
-            (("healthy", "cat", 2), &bitmap789 | &bitmap_ranges),
             (("healthy", "catto", 1), bitmap123.clone()),
-            (("healthy", "catto", 2), bitmap_ranges.clone()),
-            // third batch
             (("jittery", "cat", 1), (&bitmap123 | &bitmap456 | &bitmap789 | &bitmap_ranges)),
+            (("healthy", "arb", 2), &bitmap123 | &bitmap456),
+            (("healthy", "arbre", 2), &bitmap123 | &bitmap456),
+            (("healthy", "cat", 2), &bitmap789 | &bitmap_ranges),
+            (("healthy", "catto", 2), bitmap_ranges.clone()),
         ];
 
         let mut result = vec![];

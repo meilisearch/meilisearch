@@ -151,11 +151,10 @@ fn document_word_positions_into_sorter<'b>(
     let mut key_buffer = Vec::new();
     for ((w1, w2), prox) in word_pair_proximity {
         key_buffer.clear();
+        key_buffer.push(prox as u8);
         key_buffer.extend_from_slice(w1.as_bytes());
         key_buffer.push(0);
         key_buffer.extend_from_slice(w2.as_bytes());
-        key_buffer.push(0);
-        key_buffer.push(prox as u8);
 
         word_pair_proximity_docids_sorter.insert(&key_buffer, &document_id.to_ne_bytes())?;
     }

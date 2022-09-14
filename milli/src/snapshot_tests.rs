@@ -194,7 +194,7 @@ pub fn snap_word_prefix_pair_proximity_docids(index: &Index) -> String {
         (word1, prefix, proximity),
         b,
     )| {
-        &format!("{word1:<16} {prefix:<4} {proximity:<2} {}", display_bitmap(&b))
+        &format!("{proximity:<2} {word1:<16} {prefix:<4} {}", display_bitmap(&b))
     });
     snap
 }
