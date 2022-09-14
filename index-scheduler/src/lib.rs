@@ -9,6 +9,7 @@ use batch::Batch;
 pub use error::Error;
 use file_store::FileStore;
 use index::Index;
+use index_mapper::IndexMapper;
 pub use task::Task;
 use task::{Kind, KindWithContent, Status};
 use time::OffsetDateTime;
@@ -21,7 +22,7 @@ use std::{collections::HashMap, sync::RwLock};
 
 use milli::heed::types::{DecodeIgnore, OwnedType, SerdeBincode, Str};
 use milli::heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn};
-use milli::update::IndexDocumentsMethod;
+use milli::update::{IndexDocumentsMethod, IndexerConfig};
 use milli::{RoaringBitmapCodec, BEU32};
 use roaring::RoaringBitmap;
 use serde::Deserialize;
@@ -50,10 +51,6 @@ pub struct Query {
 /// 2. Schedule the tasks.
 #[derive(Clone)]
 pub struct IndexScheduler {
-    // Keep track of the opened indexes and is used
-    // mainly by the index resolver.
-    index_map: Arc<RwLock<HashMap<Uuid, Index>>>,
-
     /// The list of tasks currently processing.
     processing_tasks: Arc<RwLock<RoaringBitmap>>,
 
@@ -65,15 +62,15 @@ pub struct IndexScheduler {
     // The main database, it contains all the tasks accessible by their Id.
     all_tasks: Database<OwnedType<BEU32>, SerdeBincode<Task>>,
 
-    // All the tasks ids grouped by their status.
+    /// All the tasks ids grouped by their status.
     status: Database<SerdeBincode<Status>, RoaringBitmapCodec>,
-    // All the tasks ids grouped by their kind.
+    /// All the tasks ids grouped by their kind.
     kind: Database<SerdeBincode<Kind>, RoaringBitmapCodec>,
-
-    // Map an index name with an index uuid currentl available on disk.
-    index_mapping: Database<Str, SerdeBincode<Uuid>>,
-    // Store the tasks associated to an index.
+    /// Store the tasks associated to an index.
     index_tasks: Database<Str, RoaringBitmapCodec>,
+
+    /// In charge of creating and returning indexes.
+    index_mapper: IndexMapper,
 
     // set to true when there is work to do.
     wake_up: Arc<AtomicBool>,
@@ -85,7 +82,7 @@ impl IndexScheduler {
     /// `IndexNotFound` error.
     pub fn index(&self, name: &str) -> Result<Index> {
         let rtxn = self.env.read_txn()?;
-        self.index_txn(&rtxn, name)
+        self.index_mapper.index(&rtxn, name)
     }
 
     /// Returns the tasks corresponding to the query.
