@@ -15,7 +15,7 @@ use walkdir::WalkDir;
 use crate::compression::from_tar_gz;
 use crate::index_controller::open_meta_env;
 use crate::index_controller::versioning::VERSION_FILE_NAME;
-use crate::tasks::Scheduler;
+use index_scheduler::IndexScheduler;
 
 pub struct SnapshotService {
     pub(crate) db_path: PathBuf,
@@ -23,7 +23,7 @@ pub struct SnapshotService {
     pub(crate) snapshot_path: PathBuf,
     pub(crate) index_size: usize,
     pub(crate) meta_env_size: usize,
-    pub(crate) scheduler: Arc<RwLock<Scheduler>>,
+    pub(crate) scheduler: IndexScheduler,
 }
 
 impl SnapshotService {
@@ -39,7 +39,8 @@ impl SnapshotService {
                 meta_env_size: self.meta_env_size,
                 index_size: self.index_size,
             };
-            self.scheduler.write().await.schedule_snapshot(snapshot_job);
+            // TODO: TAMO: reenable the snapshots
+            // self.scheduler.write().await.schedule_snapshot(snapshot_job);
             sleep(self.snapshot_period).await;
         }
     }

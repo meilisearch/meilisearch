@@ -3,22 +3,21 @@ pub mod error;
 pub mod options;
 
 mod analytics;
+mod document_formats;
+// TODO: TAMO: reenable the dumps
+#[cfg(todo)]
 mod dump;
-pub mod index;
-pub mod index_controller;
-mod index_resolver;
+mod index_controller;
 mod snapshot;
-pub mod tasks;
-mod update_file_store;
 
 use std::path::Path;
 
-pub use index_controller::MeiliSearch;
+// TODO: TAMO: rename the MeiliSearch in Meilisearch
+pub use index_controller::Meilisearch as MeiliSearch;
 pub use milli;
 pub use milli::heed;
 
 mod compression;
-pub mod document_formats;
 
 /// Check if a db is empty. It does not provide any information on the
 /// validity of the data in it.

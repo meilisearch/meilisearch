@@ -1,6 +1,6 @@
 use crate::{
     autobatcher::BatchKind,
-    task::{KindWithContent, Status},
+    task::{Kind, KindWithContent, Status, Task},
     Error, IndexScheduler, Result,
 };
 use index::{Settings, Unchecked};
@@ -9,8 +9,6 @@ use milli::{
     update::IndexDocumentsMethod,
 };
 use uuid::Uuid;
-
-use crate::{task::Kind, Task};
 
 pub(crate) enum Batch {
     Cancel(Task),
@@ -230,8 +228,8 @@ impl IndexScheduler {
 
                 for (ret, mut task) in ret.iter().zip(document_addition_tasks.into_iter()) {
                     match ret {
-                        Ok(ret) => task.info = Some(format!("{:?}", ret)),
-                        Err(err) => task.error = Some(err.to_string()),
+                        Ok(ret) => todo!(),  // task.info = Some(format!("{:?}", ret)),
+                        Err(err) => todo!(), // task.error = Some(err.to_string()),
                     }
                     updated_tasks.push(task);
                 }
