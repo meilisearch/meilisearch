@@ -88,4 +88,21 @@ impl IndexMapper {
 
         Ok(index)
     }
+
+    /// Swap two index name.
+    pub fn swap(&self, wtxn: &mut RwTxn, lhs: &str, rhs: &str) -> Result<()> {
+        let lhs_uuid = self
+            .index_mapping
+            .get(wtxn, lhs)?
+            .ok_or(Error::IndexNotFound(lhs.to_string()))?;
+        let rhs_uuid = self
+            .index_mapping
+            .get(wtxn, rhs)?
+            .ok_or(Error::IndexNotFound(rhs.to_string()))?;
+
+        self.index_mapping.put(wtxn, lhs, &rhs_uuid)?;
+        self.index_mapping.put(wtxn, rhs, &lhs_uuid)?;
+
+        Ok(())
+    }
 }
