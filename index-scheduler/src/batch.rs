@@ -1,7 +1,7 @@
 use crate::{
     autobatcher::BatchKind,
     task::{KindWithContent, Status},
-    Error, IndexScheduler, Result, TaskId,
+    Error, IndexScheduler, Result,
 };
 use index::{Settings, Unchecked};
 use milli::{
@@ -43,13 +43,13 @@ impl IndexScheduler {
         batch: BatchKind,
     ) -> Result<Option<Batch>> {
         match batch {
-            BatchKind::DocumentClear { ids } => todo!(),
-            BatchKind::DocumentAddition { addition_ids } => todo!(),
-            BatchKind::DocumentUpdate { update_ids } => todo!(),
-            BatchKind::DocumentDeletion { deletion_ids } => todo!(),
+            BatchKind::DocumentClear { ids: _ } => todo!(),
+            BatchKind::DocumentAddition { addition_ids: _ } => todo!(),
+            BatchKind::DocumentUpdate { update_ids: _ } => todo!(),
+            BatchKind::DocumentDeletion { deletion_ids: _ } => todo!(),
             BatchKind::ClearAndSettings {
-                other,
-                settings_ids,
+                other: _,
+                settings_ids: _,
             } => todo!(),
             BatchKind::SettingsAndDocumentAddition {
                 addition_ids,
@@ -104,15 +104,15 @@ impl IndexScheduler {
                 }))
             }
             BatchKind::SettingsAndDocumentUpdate {
-                update_ids,
-                settings_ids,
+                update_ids: _,
+                settings_ids: _,
             } => todo!(),
-            BatchKind::Settings { settings_ids } => todo!(),
-            BatchKind::IndexCreation { id } => todo!(),
-            BatchKind::IndexDeletion { ids } => todo!(),
-            BatchKind::IndexUpdate { id } => todo!(),
-            BatchKind::IndexSwap { id } => todo!(),
-            BatchKind::IndexRename { id } => todo!(),
+            BatchKind::Settings { settings_ids: _ } => todo!(),
+            BatchKind::IndexCreation { id: _ } => todo!(),
+            BatchKind::IndexDeletion { ids: _ } => todo!(),
+            BatchKind::IndexUpdate { id: _ } => todo!(),
+            BatchKind::IndexSwap { id: _ } => todo!(),
+            BatchKind::IndexRename { id: _ } => todo!(),
         }
     }
 
@@ -158,7 +158,7 @@ impl IndexScheduler {
             // matter.
             let index_name = task.indexes().unwrap()[0];
 
-            let index = self.get_index(rtxn, &index_name)? & enqueued;
+            let _index = self.get_index(rtxn, &index_name)? & enqueued;
 
             let enqueued = enqueued
                 .into_iter()
@@ -185,18 +185,18 @@ impl IndexScheduler {
             Batch::Snapshot(_) => todo!(),
             Batch::Dump(_) => todo!(),
             Batch::DocumentAddition {
-                index_uid,
-                primary_key,
-                content_files,
-                tasks,
+                index_uid: _,
+                primary_key: _,
+                content_files: _,
+                tasks: _,
             } => todo!(),
             Batch::SettingsAndDocumentAddition {
                 index_uid,
                 primary_key,
                 content_files,
                 document_addition_tasks,
-                settings,
-                settings_tasks,
+                settings: _,
+                settings_tasks: _,
             } => {
                 let index = self.index_mapper.create_index(wtxn, &index_uid)?;
                 let mut updated_tasks = Vec::new();
