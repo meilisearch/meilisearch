@@ -55,6 +55,9 @@ tokio = { version = "1.21.2", features = ["full"] }
 uuid = { version = "1.1.2", features = ["serde", "v4"] }
 walkdir = "2.3.2"
 whoami = { version = "1.2.3", optional = true }
+index-scheduler = { path = "../index-scheduler" }
+index = { path = "../index" }
+file-store = { path = "../file-store" }
 
 [dev-dependencies]
 actix-rt = "2.7.0"

@@ -1,9 +1,9 @@
 use anyhow::Result;
 use index::{Settings, Unchecked};
 
-use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use time::OffsetDateTime;
+use serde::{Deserialize, Serialize, Serializer};
+use std::{fmt::Write, path::PathBuf};
+use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 use crate::TaskId;
@@ -15,6 +15,38 @@ pub enum Status {
     Processing,
     Succeeded,
     Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Error {
+    message: String,
+    code: String,
+    #[serde(rename = "type")]
+    kind: String,
+    link: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskView {
+    pub uid: TaskId,
+    pub index_uid: Option<String>,
+    pub status: Status,
+    #[serde(rename = "type")]
+    pub kind: Kind,
+
+    pub details: Option<Details>,
+    pub error: Option<Error>,
+
+    #[serde(serialize_with = "serialize_duration")]
+    pub duration: Option<Duration>,
+    #[serde(with = "time::serde::rfc3339")]
+    pub enqueued_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub started_at: Option<OffsetDateTime>,
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub finished_at: Option<OffsetDateTime>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -29,8 +61,8 @@ pub struct Task {
     #[serde(with = "time::serde::rfc3339::option")]
     pub finished_at: Option<OffsetDateTime>,
 
-    pub error: Option<String>,
-    pub info: Option<String>,
+    pub error: Option<Error>,
+    pub details: Option<Details>,
 
     pub status: Status,
     pub kind: KindWithContent,
@@ -50,6 +82,27 @@ impl Task {
     /// Return the list of indexes updated by this tasks.
     pub fn indexes(&self) -> Option<Vec<&str>> {
         self.kind.indexes()
+    }
+
+    /// Convert a Task to a TaskView
+    pub fn as_task_view(&self) -> TaskView {
+        TaskView {
+            uid: self.uid,
+            index_uid: self
+                .indexes()
+                .and_then(|vec| vec.first().map(|i| i.to_string())),
+            status: self.status,
+            kind: self.kind.as_kind(),
+            details: self.details.clone(),
+            error: self.error.clone(),
+            duration: self
+                .started_at
+                .zip(self.finished_at)
+                .map(|(start, end)| end - start),
+            enqueued_at: self.enqueued_at,
+            started_at: self.started_at,
+            finished_at: self.finished_at,
+        }
     }
 }
 
@@ -214,4 +267,82 @@ pub enum Kind {
     CancelTask,
     DumpExport,
     Snapshot,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+#[allow(clippy::large_enum_variant)]
+pub enum Details {
+    #[serde(rename_all = "camelCase")]
+    DocumentAddition {
+        received_documents: usize,
+        indexed_documents: Option<u64>,
+    },
+    #[serde(rename_all = "camelCase")]
+    Settings {
+        #[serde(flatten)]
+        settings: Settings<Unchecked>,
+    },
+    #[serde(rename_all = "camelCase")]
+    IndexInfo { primary_key: Option<String> },
+    #[serde(rename_all = "camelCase")]
+    DocumentDeletion {
+        received_document_ids: usize,
+        deleted_documents: Option<u64>,
+    },
+    #[serde(rename_all = "camelCase")]
+    ClearAll { deleted_documents: Option<u64> },
+    #[serde(rename_all = "camelCase")]
+    Dump { dump_uid: String },
+}
+
+/// Serialize a `time::Duration` as a best effort ISO 8601 while waiting for
+/// https://github.com/time-rs/time/issues/378.
+/// This code is a port of the old code of time that was removed in 0.2.
+fn serialize_duration<S: Serializer>(
+    duration: &Option<Duration>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    match duration {
+        Some(duration) => {
+            // technically speaking, negative duration is not valid ISO 8601
+            if duration.is_negative() {
+                return serializer.serialize_none();
+            }
+
+            const SECS_PER_DAY: i64 = Duration::DAY.whole_seconds();
+            let secs = duration.whole_seconds();
+            let days = secs / SECS_PER_DAY;
+            let secs = secs - days * SECS_PER_DAY;
+            let hasdate = days != 0;
+            let nanos = duration.subsec_nanoseconds();
+            let hastime = (secs != 0 || nanos != 0) || !hasdate;
+
+            // all the following unwrap can't fail
+            let mut res = String::new();
+            write!(&mut res, "P").unwrap();
+
+            if hasdate {
+                write!(&mut res, "{}D", days).unwrap();
+            }
+
+            const NANOS_PER_MILLI: i32 = Duration::MILLISECOND.subsec_nanoseconds();
+            const NANOS_PER_MICRO: i32 = Duration::MICROSECOND.subsec_nanoseconds();
+
+            if hastime {
+                if nanos == 0 {
+                    write!(&mut res, "T{}S", secs).unwrap();
+                } else if nanos % NANOS_PER_MILLI == 0 {
+                    write!(&mut res, "T{}.{:03}S", secs, nanos / NANOS_PER_MILLI).unwrap();
+                } else if nanos % NANOS_PER_MICRO == 0 {
+                    write!(&mut res, "T{}.{:06}S", secs, nanos / NANOS_PER_MICRO).unwrap();
+                } else {
+                    write!(&mut res, "T{}.{:09}S", secs, nanos).unwrap();
+                }
+            }
+
+            serializer.serialize_str(&res)
+        }
+        None => serializer.serialize_none(),
+    }
 }

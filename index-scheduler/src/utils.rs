@@ -7,8 +7,8 @@ use milli::{
 use roaring::RoaringBitmap;
 
 use crate::{
-    task::{Kind, Status},
-    Error, IndexScheduler, Result, Task, TaskId,
+    task::{Kind, Status, Task},
+    Error, IndexScheduler, Result, TaskId,
 };
 
 impl IndexScheduler {
