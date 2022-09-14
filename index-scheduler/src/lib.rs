@@ -11,6 +11,7 @@ use index::Index;
 pub use task::Task;
 use task::{Kind, KindWithContent, Status};
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 use std::collections::hash_map::Entry;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -50,7 +51,7 @@ pub struct Query {
 pub struct IndexScheduler {
     // Keep track of the opened indexes and is used
     // mainly by the index resolver.
-    index_map: Arc<RwLock<HashMap<String, Index>>>,
+    index_map: Arc<RwLock<HashMap<Uuid, Index>>>,
 
     /// The list of tasks currently processing.
     processing_tasks: Arc<RwLock<RoaringBitmap>>,
@@ -68,8 +69,8 @@ pub struct IndexScheduler {
     // All the tasks ids grouped by their kind.
     kind: Database<SerdeBincode<Kind>, RoaringBitmapCodec>,
 
-    // Tell you if an index is currently available.
-    available_index: Database<Str, SerdeBincode<bool>>,
+    // Map an index name with an index uuid currentl available on disk.
+    index_mapping: Database<Str, SerdeBincode<Uuid>>,
     // Store the tasks associated to an index.
     index_tasks: Database<Str, RoaringBitmapCodec>,
 
@@ -88,16 +89,16 @@ impl IndexScheduler {
     pub fn index(&self, name: &str) -> Result<Index> {
         let rtxn = self.env.read_txn()?;
 
-        self.available_index
+        let uuid = self
+            .index_mapping
             .get(&rtxn, name)?
             .ok_or(Error::IndexNotFound(name.to_string()))?;
 
         // we clone here to drop the lock before entering the match
-        let index = self.index_map.read().unwrap().get(name).cloned();
+        let index = self.index_map.read().unwrap().get(&uuid).cloned();
         let index = match index {
             Some(index) => index,
-            // since we're lazy, it's possible that the index doesn't exist yet.
-            // We need to open it ourselves.
+            // since we're lazy, it's possible that the index has not been opened yet.
             None => {
                 let mut index_map = self.index_map.write().unwrap();
                 // between the read lock and the write lock it's not impossible
@@ -106,7 +107,7 @@ impl IndexScheduler {
                 // if it's not already there.
                 // Since there is a good chance it's not already there we can use
                 // the entry method.
-                match index_map.entry(name.to_string()) {
+                match index_map.entry(uuid) {
                     Entry::Vacant(entry) => {
                         // TODO: TAMO: get the args from somewhere.
                         let index = Index::open(
