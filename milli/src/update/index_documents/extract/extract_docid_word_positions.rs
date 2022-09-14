@@ -32,6 +32,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
 
     let mut documents_ids = RoaringBitmap::new();
     let mut docid_word_positions_sorter = create_sorter(
+        grenad::SortAlgorithm::Stable,
         concat_u32s_array,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,

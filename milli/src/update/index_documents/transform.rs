@@ -99,6 +99,7 @@ impl<'a, 'i> Transform<'a, 'i> {
 
         // We initialize the sorter with the user indexing settings.
         let original_sorter = create_sorter(
+            grenad::SortAlgorithm::Stable,
             merge_function,
             indexer_settings.chunk_compression_type,
             indexer_settings.chunk_compression_level,
@@ -108,6 +109,7 @@ impl<'a, 'i> Transform<'a, 'i> {
 
         // We initialize the sorter with the user indexing settings.
         let flattened_sorter = create_sorter(
+            grenad::SortAlgorithm::Stable,
             merge_function,
             indexer_settings.chunk_compression_type,
             indexer_settings.chunk_compression_level,

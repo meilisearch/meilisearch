@@ -48,6 +48,7 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
         // It is forbidden to keep a mutable reference into the database
         // and write into it at the same time, therefore we write into another file.
         let mut prefix_docids_sorter = create_sorter(
+            grenad::SortAlgorithm::Unstable,
             merge_roaring_bitmaps,
             self.chunk_compression_type,
             self.chunk_compression_level,

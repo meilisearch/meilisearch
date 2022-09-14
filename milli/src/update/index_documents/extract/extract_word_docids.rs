@@ -30,6 +30,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
     let max_memory = indexer.max_memory_by_thread();
 
     let mut word_docids_sorter = create_sorter(
+        grenad::SortAlgorithm::Unstable,
         merge_roaring_bitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
@@ -38,6 +39,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
     );
 
     let mut exact_word_docids_sorter = create_sorter(
+        grenad::SortAlgorithm::Unstable,
         merge_roaring_bitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,

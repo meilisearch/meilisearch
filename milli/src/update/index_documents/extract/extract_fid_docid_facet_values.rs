@@ -28,6 +28,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     let max_memory = indexer.max_memory_by_thread();
 
     let mut fid_docid_facet_numbers_sorter = create_sorter(
+        grenad::SortAlgorithm::Stable,
         keep_first,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
@@ -36,6 +37,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     );
 
     let mut fid_docid_facet_strings_sorter = create_sorter(
+        grenad::SortAlgorithm::Stable,
         keep_first,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
