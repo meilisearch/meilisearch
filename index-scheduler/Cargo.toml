@@ -19,6 +19,7 @@ tempfile = "3.3.0"
 thiserror = "1.0.30"
 time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 uuid = { version = "1.1.2", features = ["serde", "v4"] }
+synchronoise = "1.0.1"
 
 [dev-dependencies]
 nelson = { git = "https://github.com/meilisearch/nelson.git", rev = "675f13885548fb415ead8fbb447e9e6d9314000a"}
