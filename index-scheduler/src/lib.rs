@@ -1,6 +1,7 @@
 mod autobatcher;
 mod batch;
 pub mod error;
+mod index_mapper;
 pub mod task;
 mod utils;
 
@@ -79,52 +80,12 @@ pub struct IndexScheduler {
 }
 
 impl IndexScheduler {
-    pub fn create_index(&self, rwtxn: &mut RwTxn, name: &str) -> Result<Index> {
-        todo!()
-    }
-
     /// Return the index corresponding to the name. If it wasn't opened before
     /// it'll be opened. But if it doesn't exist on disk it'll throw an
     /// `IndexNotFound` error.
     pub fn index(&self, name: &str) -> Result<Index> {
         let rtxn = self.env.read_txn()?;
-
-        let uuid = self
-            .index_mapping
-            .get(&rtxn, name)?
-            .ok_or(Error::IndexNotFound(name.to_string()))?;
-
-        // we clone here to drop the lock before entering the match
-        let index = self.index_map.read().unwrap().get(&uuid).cloned();
-        let index = match index {
-            Some(index) => index,
-            // since we're lazy, it's possible that the index has not been opened yet.
-            None => {
-                let mut index_map = self.index_map.write().unwrap();
-                // between the read lock and the write lock it's not impossible
-                // that someone already opened the index (eg if two search happens
-                // at the same time), thus before opening it we check a second time
-                // if it's not already there.
-                // Since there is a good chance it's not already there we can use
-                // the entry method.
-                match index_map.entry(uuid) {
-                    Entry::Vacant(entry) => {
-                        // TODO: TAMO: get the args from somewhere.
-                        let index = Index::open(
-                            name.to_string(),
-                            name.to_string(),
-                            100_000_000,
-                            Arc::default(),
-                        )?;
-                        entry.insert(index.clone());
-                        index
-                    }
-                    Entry::Occupied(entry) => entry.get().clone(),
-                }
-            }
-        };
-
-        Ok(index)
+        self.index_txn(&rtxn, name)
     }
 
     /// Returns the tasks corresponding to the query.
