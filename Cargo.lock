@@ -1785,6 +1785,7 @@ dependencies = [
  "nelson",
  "roaring",
  "serde",
+ "synchronoise",
  "tempfile",
  "thiserror",
  "time",
