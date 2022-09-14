@@ -10,6 +10,7 @@ pub use error::Error;
 use file_store::FileStore;
 use index::Index;
 use index_mapper::IndexMapper;
+use synchronoise::SignalEvent;
 pub use task::Task;
 use task::{Kind, KindWithContent, Status};
 use time::OffsetDateTime;
@@ -73,10 +74,16 @@ pub struct IndexScheduler {
     index_mapper: IndexMapper,
 
     // set to true when there is work to do.
-    wake_up: Arc<AtomicBool>,
+    wake_up: Arc<SignalEvent>,
 }
 
 impl IndexScheduler {
+    pub fn new() -> Self {
+        // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
+        let wake_up = SignalEvent::auto(true);
+        todo!()
+    }
+
     /// Return the index corresponding to the name. If it wasn't opened before
     /// it'll be opened. But if it doesn't exist on disk it'll throw an
     /// `IndexNotFound` error.
@@ -166,8 +173,7 @@ impl IndexScheduler {
     /// This worker function must be run in a different thread and must be run only once.
     fn run(&self) {
         loop {
-            // TODO: TAMO: remove this horrible spinlock in favor of a sleep / channel / we’ll see
-            while !self.wake_up.swap(false, Ordering::Relaxed) {}
+            self.wake_up.wait();
 
             let mut wtxn = match self.env.write_txn() {
                 Ok(wtxn) => wtxn,
@@ -370,7 +376,6 @@ impl IndexScheduler {
 
     /// Notify the scheduler there is or may be work to do.
     pub fn notify(&self) {
-        self.wake_up
-            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.wake_up.signal()
     }
 }
