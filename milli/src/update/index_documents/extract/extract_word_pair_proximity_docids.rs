@@ -106,17 +106,6 @@ fn document_word_positions_into_sorter<'b>(
                             *p = cmp::min(*p, prox);
                         })
                         .or_insert(prox);
-
-                    // We also compute the inverse proximity.
-                    let prox = prox + 1;
-                    if prox < MAX_DISTANCE {
-                        word_pair_proximity
-                            .entry((word.clone(), head.word.clone()))
-                            .and_modify(|p| {
-                                *p = cmp::min(*p, prox);
-                            })
-                            .or_insert(prox);
-                    }
                 }
             }
 
