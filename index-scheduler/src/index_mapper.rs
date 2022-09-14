@@ -1,23 +1,48 @@
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::RwLock;
 
 use index::Index;
+use milli::heed::types::SerdeBincode;
+use milli::heed::types::Str;
+use milli::heed::Database;
 use milli::heed::RoTxn;
 use milli::heed::RwTxn;
+use milli::update::IndexerConfig;
 use uuid::Uuid;
 
 use crate::Error;
-use crate::IndexScheduler;
 use crate::Result;
 
-impl IndexScheduler {
+#[derive(Clone)]
+pub struct IndexMapper {
+    // Keep track of the opened indexes and is used
+    // mainly by the index resolver.
+    index_map: Arc<RwLock<HashMap<Uuid, Index>>>,
+
+    // Map an index name with an index uuid currentl available on disk.
+    index_mapping: Database<Str, SerdeBincode<Uuid>>,
+
+    base_path: PathBuf,
+    index_size: usize,
+    indexer_config: Arc<IndexerConfig>,
+}
+
+impl IndexMapper {
+    /// Get or create the index.
     pub fn create_index(&self, rwtxn: &mut RwTxn, name: &str) -> Result<Index> {
-        let index = match self.index_txn(rwtxn, name) {
+        let index = match self.index(rwtxn, name) {
             Ok(index) => index,
             Err(Error::IndexNotFound(_)) => {
                 let uuid = Uuid::new_v4();
-                // TODO: TAMO: take the arguments from somewhere
-                Index::open(uuid.to_string(), name.to_string(), 100000, Arc::default())?
+                Index::open(
+                    self.base_path.join(uuid.to_string()),
+                    name.to_string(),
+                    self.index_size,
+                    self.indexer_config.clone(),
+                )?
             }
             error => return error,
         };
@@ -25,7 +50,8 @@ impl IndexScheduler {
         Ok(index)
     }
 
-    pub fn index_txn(&self, rtxn: &RoTxn, name: &str) -> Result<Index> {
+    /// Return an index, may open it if it wasn't already opened.
+    pub fn index(&self, rtxn: &RoTxn, name: &str) -> Result<Index> {
         let uuid = self
             .index_mapping
             .get(&rtxn, name)?
@@ -46,12 +72,11 @@ impl IndexScheduler {
                 // the entry method.
                 match index_map.entry(uuid) {
                     Entry::Vacant(entry) => {
-                        // TODO: TAMO: get the args from somewhere.
                         let index = Index::open(
-                            uuid.to_string(),
+                            self.base_path.join(uuid.to_string()),
                             name.to_string(),
-                            100_000_000,
-                            Arc::default(),
+                            self.index_size,
+                            self.indexer_config.clone(),
                         )?;
                         entry.insert(index.clone());
                         index
