@@ -44,7 +44,7 @@ pub fn index_prefix_word_database(
             let mut cursor = new_word_pair_proximity_docids.clone().into_prefix_iter(prefix_key)?;
             // This is the core of the algorithm
             execute_on_word_pairs_and_prefixes(
-                proximity + 1,
+                proximity,
                 prefix.as_bytes(),
                 // the next two arguments tell how to iterate over the new word pairs
                 &mut cursor,
@@ -91,7 +91,7 @@ pub fn index_prefix_word_database(
                 .prefix_iter::<_, ByteSlice, ByteSlice>(wtxn, prefix_key.as_slice())?
                 .remap_key_type::<UncheckedU8StrStrCodec>();
             execute_on_word_pairs_and_prefixes(
-                proximity + 1,
+                proximity,
                 prefix.as_bytes(),
                 &mut db_iter,
                 |db_iter| {
