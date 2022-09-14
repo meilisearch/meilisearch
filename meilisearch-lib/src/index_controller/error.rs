@@ -7,12 +7,8 @@ use tokio::task::JoinError;
 
 use super::DocumentAdditionFormat;
 use crate::document_formats::DocumentFormatError;
-use crate::dump::error::DumpError;
-use crate::index::error::IndexError;
-use crate::tasks::error::TaskError;
-use crate::update_file_store::UpdateFileStoreError;
-
-use crate::index_resolver::error::IndexResolverError;
+// use crate::dump::error::DumpError;
+use index::error::IndexError;
 
 pub type Result<T> = std::result::Result<T, IndexControllerError>;
 
@@ -20,17 +16,15 @@ pub type Result<T> = std::result::Result<T, IndexControllerError>;
 pub enum IndexControllerError {
     #[error("Index creation must have an uid")]
     MissingUid,
-    #[error("{0}")]
-    IndexResolver(#[from] IndexResolverError),
-    #[error("{0}")]
+    #[error(transparent)]
+    IndexResolver(#[from] index_scheduler::Error),
+    #[error(transparent)]
     IndexError(#[from] IndexError),
     #[error("An internal error has occurred. `{0}`.")]
     Internal(Box<dyn Error + Send + Sync + 'static>),
-    #[error("{0}")]
-    TaskError(#[from] TaskError),
-    #[error("{0}")]
-    DumpError(#[from] DumpError),
-    #[error("{0}")]
+    // #[error("{0}")]
+    // DumpError(#[from] DumpError),
+    #[error(transparent)]
     DocumentFormatError(#[from] DocumentFormatError),
     #[error("A {0} payload is missing.")]
     MissingPayload(DocumentAdditionFormat),
@@ -38,7 +32,7 @@ pub enum IndexControllerError {
     PayloadTooLarge,
 }
 
-internal_error!(IndexControllerError: JoinError, UpdateFileStoreError);
+internal_error!(IndexControllerError: JoinError, file_store::Error);
 
 impl From<actix_web::error::PayloadError> for IndexControllerError {
     fn from(other: actix_web::error::PayloadError) -> Self {
@@ -53,20 +47,20 @@ impl ErrorCode for IndexControllerError {
     fn error_code(&self) -> Code {
         match self {
             IndexControllerError::MissingUid => Code::BadRequest,
-            IndexControllerError::IndexResolver(e) => e.error_code(),
-            IndexControllerError::IndexError(e) => e.error_code(),
             IndexControllerError::Internal(_) => Code::Internal,
-            IndexControllerError::TaskError(e) => e.error_code(),
             IndexControllerError::DocumentFormatError(e) => e.error_code(),
             IndexControllerError::MissingPayload(_) => Code::MissingPayload,
             IndexControllerError::PayloadTooLarge => Code::PayloadTooLarge,
-            IndexControllerError::DumpError(e) => e.error_code(),
+            IndexControllerError::IndexResolver(_) => todo!(),
+            IndexControllerError::IndexError(_) => todo!(),
         }
     }
 }
 
+/*
 impl From<IndexUidFormatError> for IndexControllerError {
     fn from(err: IndexUidFormatError) -> Self {
-        IndexResolverError::from(err).into()
+        index_scheduler::Error::from(err).into()
     }
 }
+*/

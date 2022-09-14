@@ -13,8 +13,10 @@ pub enum Error {
     Heed(#[from] heed::Error),
     #[error(transparent)]
     Milli(#[from] milli::Error),
-    #[error("{0}")]
+    #[error(transparent)]
     IndexError(#[from] index::error::IndexError),
+    #[error(transparent)]
+    FileStore(#[from] file_store::Error),
     #[error(transparent)]
     IoError(#[from] std::io::Error),
 
