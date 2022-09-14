@@ -46,7 +46,7 @@ jsonwebtoken = "8.0.1"
 log = "0.4.14"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
-meilisearch-lib = { path = "../meilisearch-lib" }
+meilisearch-lib = { path = "../meilisearch-lib", default-features = false }
 mimalloc = { version = "0.1.29", default-features = false }
 mime = "0.3.16"
 num_cpus = "1.13.1"
@@ -90,7 +90,7 @@ urlencoding = "2.1.0"
 yaup = "0.2.0"
 
 [features]
-default = ["analytics", "mini-dashboard"]
+default = ["analytics", "meilisearch-lib/default", "mini-dashboard"]
 metrics = ["prometheus"]
 analytics = ["segment"]
 mini-dashboard = [
@@ -104,6 +104,10 @@ mini-dashboard = [
     "tempfile",
     "zip",
 ]
+chinese = ["meilisearch-lib/chinese"]
+hebrew = ["meilisearch-lib/hebrew"]
+japanese = ["meilisearch-lib/japanese"]
+thai = ["meilisearch-lib/thai"]
 
 [package.metadata.mini-dashboard]
 assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.1/build.zip"
