@@ -301,7 +301,7 @@ impl Segment {
                 .push(Identify {
                     context: Some(json!({
                         "app": {
-                            "version": "prototype-pagination-2".to_string(),
+                            "version": "prototype-pagination-4".to_string(),
                         },
                     })),
                     user: self.user.clone(),
