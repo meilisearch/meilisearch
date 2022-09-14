@@ -138,7 +138,7 @@ impl<'c> Context<'c> for CriteriaBuilder<'c> {
         right: &str,
         proximity: u8,
     ) -> heed::Result<Option<RoaringBitmap>> {
-        let key = (left, right, proximity);
+        let key = (proximity, left, right);
         self.index.word_pair_proximity_docids.get(self.rtxn, &key)
     }
 
@@ -148,7 +148,7 @@ impl<'c> Context<'c> for CriteriaBuilder<'c> {
         right: &str,
         proximity: u8,
     ) -> heed::Result<Option<RoaringBitmap>> {
-        let key = (left, right, proximity);
+        let key = (proximity, left, right);
         self.index.word_prefix_pair_proximity_docids.get(self.rtxn, &key)
     }
 

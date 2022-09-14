@@ -182,16 +182,16 @@ pub fn snap_docid_word_positions(index: &Index) -> String {
 }
 pub fn snap_word_pair_proximity_docids(index: &Index) -> String {
     let snap = make_db_snap_from_iter!(index, word_pair_proximity_docids, |(
-        (word1, word2, proximity),
+        (proximity, word1, word2),
         b,
     )| {
-        &format!("{word1:<16} {word2:<16} {proximity:<2} {}", display_bitmap(&b))
+        &format!("{proximity:<2} {word1:<16} {word2:<16} {}", display_bitmap(&b))
     });
     snap
 }
 pub fn snap_word_prefix_pair_proximity_docids(index: &Index) -> String {
     let snap = make_db_snap_from_iter!(index, word_prefix_pair_proximity_docids, |(
-        (word1, prefix, proximity),
+        (proximity, word1, prefix),
         b,
     )| {
         &format!("{proximity:<2} {word1:<16} {prefix:<4} {}", display_bitmap(&b))

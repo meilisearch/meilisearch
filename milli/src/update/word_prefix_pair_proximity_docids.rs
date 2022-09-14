@@ -177,7 +177,7 @@ use log::debug;
 use crate::update::index_documents::{
     create_writer, merge_cbo_roaring_bitmaps, CursorClonableMmap,
 };
-use crate::{CboRoaringBitmapCodec, Index, Result, UncheckedStrStrU8Codec};
+use crate::{CboRoaringBitmapCodec, Index, Result, UncheckedU8StrStrCodec};
 
 pub struct WordPrefixPairProximityDocids<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -259,9 +259,9 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
                 &mut cursor,
                 |cursor| {
                     if let Some((key, value)) = cursor.move_on_next()? {
-                        let (word1, word2, proximity) = UncheckedStrStrU8Codec::bytes_decode(key)
+                        let (proximity, word1, word2) = UncheckedU8StrStrCodec::bytes_decode(key)
                             .ok_or(heed::Error::Decoding)?;
-                        Ok(Some(((word1, word2, proximity), value)))
+                        Ok(Some(((proximity, word1, word2), value)))
                     } else {
                         Ok(None)
                     }
@@ -293,7 +293,7 @@ impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
             let mut db_iter = self
                 .index
                 .word_pair_proximity_docids
-                .remap_key_type::<UncheckedStrStrU8Codec>()
+                .remap_key_type::<UncheckedU8StrStrCodec>()
                 .remap_data_type::<ByteSlice>()
                 .iter(self.wtxn)?;
 
@@ -358,7 +358,7 @@ fn execute_on_word_pairs_and_prefixes<I>(
     mut next_word_pair_proximity: impl for<'a> FnMut(
         &'a mut I,
     ) -> Result<
-        Option<((&'a [u8], &'a [u8], u8), &'a [u8])>,
+        Option<((u8, &'a [u8], &'a [u8]), &'a [u8])>,
     >,
     prefixes: &PrefixTrieNode,
     max_proximity: u8,
@@ -376,14 +376,14 @@ fn execute_on_word_pairs_and_prefixes<I>(
     let mut prefix_buffer = Vec::with_capacity(8);
     let mut merge_buffer = Vec::with_capacity(65_536);
 
-    while let Some(((word1, word2, proximity), data)) = next_word_pair_proximity(iter)? {
+    while let Some(((proximity, word1, word2), data)) = next_word_pair_proximity(iter)? {
         // skip this iteration if the proximity is over the threshold
         if proximity > max_proximity {
             break;
         };
         let word2_start_different_than_prev = word2[0] != prev_word2_start;
         // if there were no potential prefixes for the previous word2 based on its first letter,
-        // and if the current word2 starts with the same letter, then there is also no potential
+        // and if the current word2 starts with the s`ame letter, then there is also no potential
         // prefixes for the current word2, and we can skip to the next iteration
         if empty_prefixes && !word2_start_different_than_prev {
             continue;
@@ -683,7 +683,7 @@ mod tests {
     use super::*;
     use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
     use crate::index::tests::TempIndex;
-    use crate::{db_snap, CboRoaringBitmapCodec, StrStrU8Codec};
+    use crate::{db_snap, CboRoaringBitmapCodec, U8StrStrCodec};
 
     fn documents_with_enough_different_words_for_prefixes(prefixes: &[&str]) -> Vec<crate::Object> {
         let mut documents = Vec::new();
@@ -858,40 +858,40 @@ mod tests {
         CboRoaringBitmapCodec::serialize_into(&bitmap_ranges, &mut serialised_bitmap_ranges);
 
         let word_pairs = [
-            (("healthy", "arbres", 1), &serialised_bitmap123),
-            (("healthy", "boat", 1), &serialised_bitmap123),
-            (("healthy", "ca", 1), &serialised_bitmap123),
-            (("healthy", "cats", 1), &serialised_bitmap456),
-            (("healthy", "cattos", 1), &serialised_bitmap123),
-            (("jittery", "cat", 1), &serialised_bitmap123),
-            (("jittery", "cata", 1), &serialised_bitmap456),
-            (("jittery", "catb", 1), &serialised_bitmap789),
-            (("jittery", "catc", 1), &serialised_bitmap_ranges),
-            (("healthy", "arbre", 2), &serialised_bitmap123),
-            (("healthy", "arbres", 2), &serialised_bitmap456),
-            (("healthy", "cats", 2), &serialised_bitmap789),
-            (("healthy", "cattos", 2), &serialised_bitmap_ranges),
-            (("healthy", "arbre", 3), &serialised_bitmap456),
-            (("healthy", "arbres", 3), &serialised_bitmap789),
+            ((1, "healthy", "arbres"), &serialised_bitmap123),
+            ((1, "healthy", "boat"), &serialised_bitmap123),
+            ((1, "healthy", "ca"), &serialised_bitmap123),
+            ((1, "healthy", "cats"), &serialised_bitmap456),
+            ((1, "healthy", "cattos"), &serialised_bitmap123),
+            ((1, "jittery", "cat"), &serialised_bitmap123),
+            ((1, "jittery", "cata"), &serialised_bitmap456),
+            ((1, "jittery", "catb"), &serialised_bitmap789),
+            ((1, "jittery", "catc"), &serialised_bitmap_ranges),
+            ((2, "healthy", "arbre"), &serialised_bitmap123),
+            ((2, "healthy", "arbres"), &serialised_bitmap456),
+            ((2, "healthy", "cats"), &serialised_bitmap789),
+            ((2, "healthy", "cattos"), &serialised_bitmap_ranges),
+            ((3, "healthy", "arbre"), &serialised_bitmap456),
+            ((3, "healthy", "arbres"), &serialised_bitmap789),
         ];
 
         let expected_result = [
-            (("healthy", "arb", 1), bitmap123.clone()),
-            (("healthy", "arbre", 1), bitmap123.clone()),
-            (("healthy", "cat", 1), &bitmap456 | &bitmap123),
-            (("healthy", "catto", 1), bitmap123.clone()),
-            (("jittery", "cat", 1), (&bitmap123 | &bitmap456 | &bitmap789 | &bitmap_ranges)),
-            (("healthy", "arb", 2), &bitmap123 | &bitmap456),
-            (("healthy", "arbre", 2), &bitmap123 | &bitmap456),
-            (("healthy", "cat", 2), &bitmap789 | &bitmap_ranges),
-            (("healthy", "catto", 2), bitmap_ranges.clone()),
+            ((1, "healthy", "arb"), bitmap123.clone()),
+            ((1, "healthy", "arbre"), bitmap123.clone()),
+            ((1, "healthy", "cat"), &bitmap456 | &bitmap123),
+            ((1, "healthy", "catto"), bitmap123.clone()),
+            ((1, "jittery", "cat"), (&bitmap123 | &bitmap456 | &bitmap789 | &bitmap_ranges)),
+            ((2, "healthy", "arb"), &bitmap123 | &bitmap456),
+            ((2, "healthy", "arbre"), &bitmap123 | &bitmap456),
+            ((2, "healthy", "cat"), &bitmap789 | &bitmap_ranges),
+            ((2, "healthy", "catto"), bitmap_ranges.clone()),
         ];
 
         let mut result = vec![];
 
         let mut iter =
-            IntoIterator::into_iter(word_pairs).map(|((word1, word2, proximity), data)| {
-                ((word1.as_bytes(), word2.as_bytes(), proximity), data.as_slice())
+            IntoIterator::into_iter(word_pairs).map(|((proximity, word1, word2), data)| {
+                ((proximity, word1.as_bytes(), word2.as_bytes()), data.as_slice())
             });
         execute_on_word_pairs_and_prefixes(
             &mut iter,
@@ -899,7 +899,7 @@ mod tests {
             &prefixes,
             2,
             |k, v| {
-                let (word1, prefix, proximity) = StrStrU8Codec::bytes_decode(k).unwrap();
+                let (word1, prefix, proximity) = U8StrStrCodec::bytes_decode(k).unwrap();
                 let bitmap = CboRoaringBitmapCodec::bytes_decode(v).unwrap();
                 result.push(((word1.to_owned(), prefix.to_owned(), proximity.to_owned()), bitmap));
                 Ok(())
@@ -908,8 +908,8 @@ mod tests {
         .unwrap();
 
         for (x, y) in result.into_iter().zip(IntoIterator::into_iter(expected_result)) {
-            let ((actual_word1, actual_prefix, actual_proximity), actual_bitmap) = x;
-            let ((expected_word1, expected_prefix, expected_proximity), expected_bitmap) = y;
+            let ((actual_proximity, actual_word1, actual_prefix), actual_bitmap) = x;
+            let ((expected_proximity, expected_word1, expected_prefix), expected_bitmap) = y;
 
             assert_eq!(actual_word1, expected_word1);
             assert_eq!(actual_prefix, expected_prefix);
