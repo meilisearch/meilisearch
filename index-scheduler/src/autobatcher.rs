@@ -88,7 +88,7 @@ impl BatchKind {
     }
 
     /// Return true if you must stop.
-    fn accumulate(mut self, id: TaskId, kind: Kind) -> ControlFlow<Self, Self> {
+    fn accumulate(self, id: TaskId, kind: Kind) -> ControlFlow<Self, Self> {
         match (self, kind) {
             // We don't batch any of these operations
             (
