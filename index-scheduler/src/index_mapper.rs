@@ -8,11 +8,13 @@ use index::Index;
 use milli::heed::types::SerdeBincode;
 use milli::heed::types::Str;
 use milli::heed::Database;
+use milli::heed::Env;
 use milli::heed::RoTxn;
 use milli::heed::RwTxn;
 use milli::update::IndexerConfig;
 use uuid::Uuid;
 
+use crate::index_scheduler::db_name;
 use crate::Error;
 use crate::Result;
 
@@ -31,9 +33,24 @@ pub struct IndexMapper {
 }
 
 impl IndexMapper {
+    pub fn new(
+        env: &Env,
+        base_path: PathBuf,
+        index_size: usize,
+        indexer_config: IndexerConfig,
+    ) -> Result<Self> {
+        Ok(Self {
+            index_map: Arc::default(),
+            index_mapping: env.create_database(Some(db_name::INDEX_MAPPING))?,
+            base_path,
+            index_size,
+            indexer_config: Arc::new(indexer_config),
+        })
+    }
+
     /// Get or create the index.
-    pub fn create_index(&self, rwtxn: &mut RwTxn, name: &str) -> Result<Index> {
-        let index = match self.index(rwtxn, name) {
+    pub fn create_index(&self, wtxn: &mut RwTxn, name: &str) -> Result<Index> {
+        let index = match self.index(wtxn, name) {
             Ok(index) => index,
             Err(Error::IndexNotFound(_)) => {
                 let uuid = Uuid::new_v4();
