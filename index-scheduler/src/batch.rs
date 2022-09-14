@@ -198,7 +198,7 @@ impl IndexScheduler {
                 settings,
                 settings_tasks,
             } => {
-                let index = self.create_index(wtxn, &index_uid)?;
+                let index = self.index_mapper.create_index(wtxn, &index_uid)?;
                 let mut updated_tasks = Vec::new();
 
                 /*
