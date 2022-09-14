@@ -183,6 +183,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             word_pair_proximity_docids,
             field_id_word_count_docids,
             word_prefix_pair_proximity_docids,
+            prefix_word_pair_proximity_docids,
             word_position_docids,
             word_prefix_position_docids,
             facet_id_f64_docids,
@@ -327,25 +328,25 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             self.index.put_words_prefixes_fst(self.wtxn, &new_words_prefixes_fst)?;
         }
 
-        // We delete the documents ids from the word prefix pair proximity database docids
-        // and remove the empty pairs too.
-        let db = word_prefix_pair_proximity_docids.remap_key_type::<ByteSlice>();
-        let mut iter = db.iter_mut(self.wtxn)?;
-        while let Some(result) = iter.next() {
-            let (key, mut docids) = result?;
-            let previous_len = docids.len();
-            docids -= &self.to_delete_docids;
-            if docids.is_empty() {
-                // safety: we don't keep references from inside the LMDB database.
-                unsafe { iter.del_current()? };
-            } else if docids.len() != previous_len {
-                let key = key.to_owned();
-                // safety: we don't keep references from inside the LMDB database.
-                unsafe { iter.put_current(&key, &docids)? };
+        for db in [word_prefix_pair_proximity_docids, prefix_word_pair_proximity_docids] {
+            // We delete the documents ids from the word prefix pair proximity database docids
+            // and remove the empty pairs too.
+            let db = db.remap_key_type::<ByteSlice>();
+            let mut iter = db.iter_mut(self.wtxn)?;
+            while let Some(result) = iter.next() {
+                let (key, mut docids) = result?;
+                let previous_len = docids.len();
+                docids -= &self.to_delete_docids;
+                if docids.is_empty() {
+                    // safety: we don't keep references from inside the LMDB database.
+                    unsafe { iter.del_current()? };
+                } else if docids.len() != previous_len {
+                    let key = key.to_owned();
+                    // safety: we don't keep references from inside the LMDB database.
+                    unsafe { iter.put_current(&key, &docids)? };
+                }
             }
         }
-
-        drop(iter);
 
         // We delete the documents ids that are under the pairs of words,
         // it is faster and use no memory to iterate over all the words pairs than

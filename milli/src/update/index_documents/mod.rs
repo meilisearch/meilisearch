@@ -36,8 +36,8 @@ use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::UserError;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
-    self, Facets, IndexerConfig, UpdateIndexingStep, WordPrefixDocids,
-    WordPrefixPairProximityDocids, WordPrefixPositionDocids, WordsPrefixesFst,
+    self, Facets, IndexerConfig, PrefixWordPairsProximityDocids, UpdateIndexingStep,
+    WordPrefixDocids, WordPrefixPositionDocids, WordsPrefixesFst,
 };
 use crate::{Index, Result, RoaringBitmapCodec};
 
@@ -528,12 +528,7 @@ where
 
         if let Some(word_pair_proximity_docids) = word_pair_proximity_docids {
             // Run the word prefix pair proximity docids update operation.
-            let mut builder = WordPrefixPairProximityDocids::new(self.wtxn, self.index);
-            builder.chunk_compression_type = self.indexer_config.chunk_compression_type;
-            builder.chunk_compression_level = self.indexer_config.chunk_compression_level;
-            builder.max_nb_chunks = self.indexer_config.max_nb_chunks;
-            builder.max_memory = self.indexer_config.max_memory;
-            builder.execute(
+            PrefixWordPairsProximityDocids::new(self.wtxn, self.index).execute(
                 word_pair_proximity_docids,
                 &new_prefix_fst_words,
                 &common_prefix_fst_words,

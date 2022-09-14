@@ -198,6 +198,15 @@ pub fn snap_word_prefix_pair_proximity_docids(index: &Index) -> String {
     });
     snap
 }
+pub fn snap_prefix_word_pair_proximity_docids(index: &Index) -> String {
+    let snap = make_db_snap_from_iter!(index, prefix_word_pair_proximity_docids, |(
+        (proximity, prefix, word2),
+        b,
+    )| {
+        &format!("{proximity:<2} {prefix:<4} {word2:<16} {}", display_bitmap(&b))
+    });
+    snap
+}
 pub fn snap_word_position_docids(index: &Index) -> String {
     let snap = make_db_snap_from_iter!(index, word_position_docids, |((word, position), b)| {
         &format!("{word:<16} {position:<6} {}", display_bitmap(&b))
@@ -426,6 +435,9 @@ macro_rules! full_snap_of_db {
     }};
     ($index:ident, word_prefix_pair_proximity_docids) => {{
         $crate::snapshot_tests::snap_word_prefix_pair_proximity_docids(&$index)
+    }};
+    ($index:ident, prefix_word_pair_proximity_docids) => {{
+        $crate::snapshot_tests::snap_prefix_word_pair_proximity_docids(&$index)
     }};
     ($index:ident, word_position_docids) => {{
         $crate::snapshot_tests::snap_word_position_docids(&$index)

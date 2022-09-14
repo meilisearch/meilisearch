@@ -1,5 +1,5 @@
 /*!
- ## What is WordPrefixPairProximityDocids?
+ ## What is WordPrefix?
 The word-prefix-pair-proximity-docids database is a database whose keys are of
 the form `(proximity, word, prefix)` and the values are roaring bitmaps of
 the documents which contain `word` followed by another word starting with
@@ -139,7 +139,7 @@ inputs described above, which come from different places:
 
     2. `word_pairs_db`, which is the list of word pairs from the database.
     This list includes all elements in `new_word_pairs` since `new_word_pairs`
-    was added to the database prior to calling the `WordPrefixPairProximityDocIds::execute`
+    was added to the database prior to calling the `WordPrefix::execute`
     function.
 
 To update the prefix database correctly, we call the algorithm described earlier first
@@ -161,196 +161,137 @@ reader and writer). Therefore, when calling the algorithm on
 `((proximity, word, prefix), docids)` elements in an intermediary grenad
 Writer instead of the DB. At the end of the outer loop, we finally read from
 the grenad and insert its elements in the database.
-
-
-
 */
-use std::borrow::Cow;
-use std::collections::HashSet;
-use std::io::BufReader;
 
+use crate::update::index_documents::{create_writer, CursorClonableMmap};
+use crate::update::prefix_word_pairs::{
+    insert_into_database, write_into_lmdb_database_without_merging,
+};
+use crate::{CboRoaringBitmapCodec, Result, U8StrStrCodec, UncheckedU8StrStrCodec};
 use grenad::CompressionType;
 use heed::types::ByteSlice;
 use heed::BytesDecode;
 use log::debug;
+use std::borrow::Cow;
+use std::collections::HashSet;
 
-use crate::update::index_documents::{
-    create_writer, merge_cbo_roaring_bitmaps, CursorClonableMmap,
-};
-use crate::{CboRoaringBitmapCodec, Index, Result, UncheckedU8StrStrCodec};
-
-pub struct WordPrefixPairProximityDocids<'t, 'u, 'i> {
-    wtxn: &'t mut heed::RwTxn<'i, 'u>,
-    index: &'i Index,
-    pub(crate) chunk_compression_type: CompressionType,
-    pub(crate) chunk_compression_level: Option<u32>,
-    pub(crate) max_nb_chunks: Option<usize>,
-    pub(crate) max_memory: Option<usize>,
+#[logging_timer::time]
+pub fn index_word_prefix_database(
+    wtxn: &mut heed::RwTxn,
+    word_pair_proximity_docids: heed::Database<U8StrStrCodec, CboRoaringBitmapCodec>,
+    word_prefix_pair_proximity_docids: heed::Database<U8StrStrCodec, CboRoaringBitmapCodec>,
     max_proximity: u8,
     max_prefix_length: usize,
-}
+    new_word_pair_proximity_docids: grenad::Reader<CursorClonableMmap>,
+    new_prefix_fst_words: &[String],
+    common_prefix_fst_words: &[&[String]],
+    del_prefix_fst_words: &HashSet<Vec<u8>>,
+) -> Result<()> {
+    debug!("Computing and writing the word prefix pair proximity docids into LMDB on disk...");
 
-impl<'t, 'u, 'i> WordPrefixPairProximityDocids<'t, 'u, 'i> {
-    pub fn new(
-        wtxn: &'t mut heed::RwTxn<'i, 'u>,
-        index: &'i Index,
-    ) -> WordPrefixPairProximityDocids<'t, 'u, 'i> {
-        WordPrefixPairProximityDocids {
-            wtxn,
-            index,
-            chunk_compression_type: CompressionType::None,
-            chunk_compression_level: None,
-            max_nb_chunks: None,
-            max_memory: None,
-            max_proximity: 4,
-            max_prefix_length: 2,
-        }
-    }
+    // Make a prefix trie from the common prefixes that are shorter than self.max_prefix_length
+    let prefixes = PrefixTrieNode::from_sorted_prefixes(
+        common_prefix_fst_words
+            .into_iter()
+            .map(|s| s.into_iter())
+            .flatten()
+            .map(|s| s.as_str())
+            .filter(|s| s.len() <= max_prefix_length),
+    );
 
-    /// Set the maximum proximity required to make a prefix be part of the words prefixes
-    /// database. If two words are too far from the threshold the associated documents will
-    /// not be part of the prefix database.
-    ///
-    /// Default value is 4. This value must be lower or equal than 7 and will be clamped
-    /// to this bound otherwise.
-    pub fn max_proximity(&mut self, value: u8) -> &mut Self {
-        self.max_proximity = value.max(7);
-        self
-    }
-
-    /// Set the maximum length the prefix of a word pair is allowed to have to be part of the words
-    /// prefixes database. If the prefix length is higher than the threshold, the associated documents
-    /// will not be part of the prefix database.
-    ///
-    /// Default value is 2.
-    pub fn max_prefix_length(&mut self, value: usize) -> &mut Self {
-        self.max_prefix_length = value;
-        self
-    }
-
-    #[logging_timer::time("WordPrefixPairProximityDocids::{}")]
-    pub fn execute<'a>(
-        mut self,
-        new_word_pair_proximity_docids: grenad::Reader<CursorClonableMmap>,
-        new_prefix_fst_words: &'a [String],
-        common_prefix_fst_words: &[&'a [String]],
-        del_prefix_fst_words: &HashSet<Vec<u8>>,
-    ) -> Result<()> {
-        debug!("Computing and writing the word prefix pair proximity docids into LMDB on disk...");
-
-        // Make a prefix trie from the common prefixes that are shorter than self.max_prefix_length
-        let prefixes = PrefixTrieNode::from_sorted_prefixes(
-            common_prefix_fst_words
-                .into_iter()
-                .map(|s| s.into_iter())
-                .flatten()
-                .map(|s| s.as_str())
-                .filter(|s| s.len() <= self.max_prefix_length),
-        );
-
-        // If the prefix trie is not empty, then we can iterate over all new
-        // word pairs to look for new (word1, common_prefix, proximity) elements
-        // to insert in the DB
-        if !prefixes.is_empty() {
-            let mut cursor = new_word_pair_proximity_docids.into_cursor()?;
-            // This is the core of the algorithm
-            execute_on_word_pairs_and_prefixes(
-                // the first two arguments tell how to iterate over the new word pairs
-                &mut cursor,
-                |cursor| {
-                    if let Some((key, value)) = cursor.move_on_next()? {
-                        let (proximity, word1, word2) = UncheckedU8StrStrCodec::bytes_decode(key)
-                            .ok_or(heed::Error::Decoding)?;
-                        Ok(Some(((proximity, word1, word2), value)))
-                    } else {
-                        Ok(None)
-                    }
-                },
-                &prefixes,
-                self.max_proximity,
-                // and this argument tells what to do with each new key (word1, prefix, proximity) and value (roaring bitmap)
-                |key, value| {
-                    insert_into_database(
-                        &mut self.wtxn,
-                        *self.index.word_prefix_pair_proximity_docids.as_polymorph(),
-                        key,
-                        value,
-                    )
-                },
-            )?;
-        }
-
-        // Now we do the same thing with the new prefixes and all word pairs in the DB
-
-        let prefixes = PrefixTrieNode::from_sorted_prefixes(
-            new_prefix_fst_words
-                .into_iter()
-                .map(|s| s.as_str())
-                .filter(|s| s.len() <= self.max_prefix_length),
-        );
-
-        if !prefixes.is_empty() {
-            let mut db_iter = self
-                .index
-                .word_pair_proximity_docids
-                .remap_key_type::<UncheckedU8StrStrCodec>()
-                .remap_data_type::<ByteSlice>()
-                .iter(self.wtxn)?;
-
-            // Since we read the DB, we can't write to it directly, so we add each new (word1, prefix, proximity)
-            // element in an intermediary grenad
-            let mut writer = create_writer(
-                self.chunk_compression_type,
-                self.chunk_compression_level,
-                tempfile::tempfile()?,
-            );
-
-            execute_on_word_pairs_and_prefixes(
-                &mut db_iter,
-                |db_iter| db_iter.next().transpose().map_err(|e| e.into()),
-                &prefixes,
-                self.max_proximity,
-                |key, value| writer.insert(key, value).map_err(|e| e.into()),
-            )?;
-            drop(db_iter);
-
-            // and then we write the grenad into the DB
-            // Since the grenad contains only new prefixes, we know in advance that none
-            // of its elements already exist in the DB, thus there is no need to specify
-            // how to merge conflicting elements
-            write_into_lmdb_database_without_merging(
-                self.wtxn,
-                *self.index.word_prefix_pair_proximity_docids.as_polymorph(),
-                writer,
-            )?;
-        }
-
-        // All of the word prefix pairs in the database that have a w2
-        // that is contained in the `suppr_pw` set must be removed as well.
-        if !del_prefix_fst_words.is_empty() {
-            let mut iter = self
-                .index
-                .word_prefix_pair_proximity_docids
-                .remap_data_type::<ByteSlice>()
-                .iter_mut(self.wtxn)?;
-            while let Some(((_, w2, _), _)) = iter.next().transpose()? {
-                if del_prefix_fst_words.contains(w2.as_bytes()) {
-                    // Delete this entry as the w2 prefix is no more in the words prefix fst.
-                    unsafe { iter.del_current()? };
+    // If the prefix trie is not empty, then we can iterate over all new
+    // word pairs to look for new (proximity, word1, common_prefix) elements
+    // to insert in the DB
+    if !prefixes.is_empty() {
+        let mut cursor = new_word_pair_proximity_docids.into_cursor()?;
+        // This is the core of the algorithm
+        execute_on_word_pairs_and_prefixes(
+            // the first two arguments tell how to iterate over the new word pairs
+            &mut cursor,
+            |cursor| {
+                if let Some((key, value)) = cursor.move_on_next()? {
+                    let (proximity, word1, word2) =
+                        UncheckedU8StrStrCodec::bytes_decode(key).ok_or(heed::Error::Decoding)?;
+                    Ok(Some(((proximity, word1, word2), value)))
+                } else {
+                    Ok(None)
                 }
+            },
+            &prefixes,
+            max_proximity,
+            // and this argument tells what to do with each new key (proximity, word1, prefix) and value (roaring bitmap)
+            |key, value| {
+                insert_into_database(
+                    wtxn,
+                    *word_prefix_pair_proximity_docids.as_polymorph(),
+                    key,
+                    value,
+                )
+            },
+        )?;
+    }
+
+    // Now we do the same thing with the new prefixes and all word pairs in the DB
+
+    let prefixes = PrefixTrieNode::from_sorted_prefixes(
+        new_prefix_fst_words
+            .into_iter()
+            .map(|s| s.as_str())
+            .filter(|s| s.len() <= max_prefix_length),
+    );
+
+    if !prefixes.is_empty() {
+        let mut db_iter = word_pair_proximity_docids
+            .remap_key_type::<UncheckedU8StrStrCodec>()
+            .remap_data_type::<ByteSlice>()
+            .iter(wtxn)?;
+
+        // Since we read the DB, we can't write to it directly, so we add each new (proximity, word1, prefix)
+        // element in an intermediary grenad
+        let mut writer = create_writer(CompressionType::None, None, tempfile::tempfile()?);
+
+        execute_on_word_pairs_and_prefixes(
+            &mut db_iter,
+            |db_iter| db_iter.next().transpose().map_err(|e| e.into()),
+            &prefixes,
+            max_proximity,
+            |key, value| writer.insert(key, value).map_err(|e| e.into()),
+        )?;
+        drop(db_iter);
+
+        // and then we write the grenad into the DB
+        // Since the grenad contains only new prefixes, we know in advance that none
+        // of its elements already exist in the DB, thus there is no need to specify
+        // how to merge conflicting elements
+        write_into_lmdb_database_without_merging(
+            wtxn,
+            *word_prefix_pair_proximity_docids.as_polymorph(),
+            writer,
+        )?;
+    }
+
+    // All of the word prefix pairs in the database that have a w2
+    // that is contained in the `suppr_pw` set must be removed as well.
+    if !del_prefix_fst_words.is_empty() {
+        let mut iter =
+            word_prefix_pair_proximity_docids.remap_data_type::<ByteSlice>().iter_mut(wtxn)?;
+        while let Some(((_, _, prefix), _)) = iter.next().transpose()? {
+            if del_prefix_fst_words.contains(prefix.as_bytes()) {
+                // Delete this entry as the w2 prefix is no more in the words prefix fst.
+                unsafe { iter.del_current()? };
             }
         }
-
-        Ok(())
     }
+
+    Ok(())
 }
 
 /// This is the core of the algorithm to initialise the Word Prefix Pair Proximity Docids database.
 ///
 /// Its main arguments are:
-/// 1. a sorted iterator over ((word1, word2, proximity), docids) elements
+/// 1. a sorted iterator over ((proximity, word1, word2), docids) elements
 /// 2. a prefix trie
-/// 3. a closure to describe how to handle the new computed (word1, prefix, proximity) elements
+/// 3. a closure to describe how to handle the new computed (proximity, word1, prefix) elements
 ///
 /// For more information about what this function does, read the module documentation.
 fn execute_on_word_pairs_and_prefixes<I>(
@@ -495,61 +436,6 @@ impl PrefixAndProximityBatch {
     }
 }
 
-// This is adapted from `sorter_into_lmdb_database`
-fn insert_into_database(
-    wtxn: &mut heed::RwTxn,
-    database: heed::PolyDatabase,
-    new_key: &[u8],
-    new_value: &[u8],
-) -> Result<()> {
-    let mut iter = database.prefix_iter_mut::<_, ByteSlice, ByteSlice>(wtxn, new_key)?;
-    match iter.next().transpose()? {
-        Some((key, old_val)) if new_key == key => {
-            let val =
-                merge_cbo_roaring_bitmaps(key, &[Cow::Borrowed(old_val), Cow::Borrowed(new_value)])
-                    .map_err(|_| {
-                        // TODO just wrap this error?
-                        crate::error::InternalError::IndexingMergingKeys {
-                            process: "get-put-merge",
-                        }
-                    })?;
-            // safety: we use the new_key, not the one from the database iterator, to avoid undefined behaviour
-            unsafe { iter.put_current(new_key, &val)? };
-        }
-        _ => {
-            drop(iter);
-            database.put::<_, ByteSlice, ByteSlice>(wtxn, new_key, new_value)?;
-        }
-    }
-    Ok(())
-}
-
-// This is adapted from `sorter_into_lmdb_database` and `write_into_lmdb_database`,
-// but it uses `append` if the database is empty, and it assumes that the values in the
-// writer don't conflict with values in the database.
-pub fn write_into_lmdb_database_without_merging(
-    wtxn: &mut heed::RwTxn,
-    database: heed::PolyDatabase,
-    writer: grenad::Writer<std::fs::File>,
-) -> Result<()> {
-    let file = writer.into_inner()?;
-    let reader = grenad::Reader::new(BufReader::new(file))?;
-    if database.is_empty(wtxn)? {
-        let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
-        let mut cursor = reader.into_cursor()?;
-        while let Some((k, v)) = cursor.move_on_next()? {
-            // safety: the key comes from the grenad reader, not the database
-            unsafe { out_iter.append(k, v)? };
-        }
-    } else {
-        let mut cursor = reader.into_cursor()?;
-        while let Some((k, v)) = cursor.move_on_next()? {
-            database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?;
-        }
-    }
-    Ok(())
-}
-
 /** A prefix trie. Used to iterate quickly over the prefixes of a word that are
 within a set.
 
@@ -676,90 +562,9 @@ impl PrefixTrieNode {
 }
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
-
-    use roaring::RoaringBitmap;
-
     use super::*;
-    use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
-    use crate::index::tests::TempIndex;
-    use crate::{db_snap, CboRoaringBitmapCodec, U8StrStrCodec};
-
-    fn documents_with_enough_different_words_for_prefixes(prefixes: &[&str]) -> Vec<crate::Object> {
-        let mut documents = Vec::new();
-        for prefix in prefixes {
-            for i in 0..50 {
-                documents.push(
-                    serde_json::json!({
-                        "text": format!("{prefix}{i:x}"),
-                    })
-                    .as_object()
-                    .unwrap()
-                    .clone(),
-                )
-            }
-        }
-        documents
-    }
-
-    #[test]
-    fn test_update() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.words_prefix_threshold = Some(50);
-        index.index_documents_config.autogenerate_docids = true;
-
-        index
-            .update_settings(|settings| {
-                settings.set_searchable_fields(vec!["text".to_owned()]);
-            })
-            .unwrap();
-
-        let batch_reader_from_documents = |documents| {
-            let mut builder = DocumentsBatchBuilder::new(Vec::new());
-            for object in documents {
-                builder.append_json_object(&object).unwrap();
-            }
-            DocumentsBatchReader::from_reader(Cursor::new(builder.into_inner().unwrap())).unwrap()
-        };
-
-        let mut documents = documents_with_enough_different_words_for_prefixes(&["a", "be"]);
-        // now we add some documents where the text should populate the word_prefix_pair_proximity_docids database
-        documents.push(
-            serde_json::json!({
-                "text": "At an amazing and beautiful house"
-            })
-            .as_object()
-            .unwrap()
-            .clone(),
-        );
-        documents.push(
-            serde_json::json!({
-                "text": "The bell rings at 5 am"
-            })
-            .as_object()
-            .unwrap()
-            .clone(),
-        );
-
-        let documents = batch_reader_from_documents(documents);
-        index.add_documents(documents).unwrap();
-
-        db_snap!(index, word_prefix_pair_proximity_docids, "initial");
-
-        let mut documents = documents_with_enough_different_words_for_prefixes(&["am", "an"]);
-        documents.push(
-            serde_json::json!({
-                "text": "At an extraordinary house"
-            })
-            .as_object()
-            .unwrap()
-            .clone(),
-        );
-        let documents = batch_reader_from_documents(documents);
-        index.add_documents(documents).unwrap();
-
-        db_snap!(index, word_prefix_pair_proximity_docids, "update");
-    }
+    use crate::{CboRoaringBitmapCodec, U8StrStrCodec};
+    use roaring::RoaringBitmap;
 
     fn check_prefixes(
         trie: &PrefixTrieNode,
@@ -899,9 +704,9 @@ mod tests {
             &prefixes,
             2,
             |k, v| {
-                let (word1, prefix, proximity) = U8StrStrCodec::bytes_decode(k).unwrap();
+                let (proximity, word1, prefix) = U8StrStrCodec::bytes_decode(k).unwrap();
                 let bitmap = CboRoaringBitmapCodec::bytes_decode(v).unwrap();
-                result.push(((word1.to_owned(), prefix.to_owned(), proximity.to_owned()), bitmap));
+                result.push(((proximity.to_owned(), word1.to_owned(), prefix.to_owned()), bitmap));
                 Ok(())
             },
         )
