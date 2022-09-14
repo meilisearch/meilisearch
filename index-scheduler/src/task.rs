@@ -1,6 +1,6 @@
 use anyhow::Result;
 use index::{Settings, Unchecked};
-use milli::update::IndexDocumentsMethod;
+
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use time::OffsetDateTime;

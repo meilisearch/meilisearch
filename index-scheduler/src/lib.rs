@@ -5,25 +5,25 @@ mod index_mapper;
 pub mod task;
 mod utils;
 
-use batch::Batch;
+
 pub use error::Error;
 use file_store::FileStore;
 use index::Index;
 use index_mapper::IndexMapper;
 use synchronoise::SignalEvent;
 pub use task::Task;
-use task::{Kind, KindWithContent, Status};
-use time::OffsetDateTime;
-use uuid::Uuid;
+use task::{Kind, Status};
 
-use std::collections::hash_map::Entry;
-use std::sync::atomic::{AtomicBool, Ordering};
+
+
+
+
 use std::sync::Arc;
-use std::{collections::HashMap, sync::RwLock};
+use std::{sync::RwLock};
 
-use milli::heed::types::{DecodeIgnore, OwnedType, SerdeBincode, Str};
-use milli::heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn};
-use milli::update::{IndexDocumentsMethod, IndexerConfig};
+use milli::heed::types::{OwnedType, SerdeBincode, Str};
+use milli::heed::{Database, Env};
+
 use milli::{RoaringBitmapCodec, BEU32};
 use roaring::RoaringBitmap;
 use serde::Deserialize;
@@ -80,7 +80,7 @@ pub struct IndexScheduler {
 impl IndexScheduler {
     pub fn new() -> Self {
         // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
-        let wake_up = SignalEvent::auto(true);
+        let _wake_up = SignalEvent::auto(true);
         todo!()
     }
 
@@ -182,7 +182,7 @@ impl IndexScheduler {
                     continue;
                 }
             };
-            let mut batch = match self.create_next_batch(&wtxn) {
+            let batch = match self.create_next_batch(&wtxn) {
                 Ok(Some(batch)) => batch,
                 Ok(None) => continue,
                 Err(e) => {
@@ -194,7 +194,7 @@ impl IndexScheduler {
             // 2. update the tasks with a starting date *but* do not write anything on disk
 
             // 3. process the tasks
-            let res = self.process_batch(&mut wtxn, batch);
+            let _res = self.process_batch(&mut wtxn, batch);
 
             // 4. store the updated tasks on disk
 
