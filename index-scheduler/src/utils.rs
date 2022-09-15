@@ -44,7 +44,7 @@ impl IndexScheduler {
             .collect::<Result<_>>()
     }
 
-    pub(crate) fn update_task(&self, wtxn: &mut RwTxn, task: Task) -> Result<()> {
+    pub(crate) fn update_task(&self, wtxn: &mut RwTxn, task: &Task) -> Result<()> {
         let old_task = self
             .get_task(wtxn, task.uid)?
             .ok_or(Error::CorruptedTaskQueue)?;
