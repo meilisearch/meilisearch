@@ -226,6 +226,7 @@ fn resolve_state(
                     }
                     // compute intersection on pair of words with a proximity of 0.
                     Phrase(phrase) => {
+                        // TODO: use resolve_phrase here
                         let mut bitmaps = Vec::with_capacity(phrase.len().saturating_sub(1));
                         for words in phrase.windows(2) {
                             if let [left, right] = words {
