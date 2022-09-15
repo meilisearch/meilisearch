@@ -31,20 +31,23 @@ impl DerefMut for File {
     }
 }
 
-// #[cfg_attr(test, faux::create)]
+#[cfg_attr(test, faux::create)]
 #[derive(Clone, Debug)]
 pub struct FileStore {
     path: PathBuf,
 }
 
-// #[cfg_attr(test, faux::methods)]
+#[cfg(not(test))]
 impl FileStore {
     pub fn new(path: impl AsRef<Path>) -> Result<FileStore> {
         let path = path.as_ref().join(UPDATE_FILES_PATH);
         std::fs::create_dir_all(&path)?;
         Ok(FileStore { path })
     }
+}
 
+#[cfg_attr(test, faux::methods)]
+impl FileStore {
     /// Creates a new temporary update file.
     /// A call to `persist` is needed to persist the file in the database.
     pub fn new_update(&self) -> Result<(Uuid, File)> {
