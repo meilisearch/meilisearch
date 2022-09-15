@@ -1,7 +1,7 @@
 use crate::{
     autobatcher::BatchKind,
     task::{Kind, KindWithContent, Status, Task},
-    Error, IndexScheduler, Result,
+    Error, IndexScheduler, Result, TaskId,
 };
 use index::{Settings, Unchecked};
 use milli::{
@@ -31,6 +31,26 @@ pub(crate) enum Batch {
         settings: Vec<Settings<Unchecked>>,
         settings_tasks: Vec<Task>,
     },
+}
+
+impl Batch {
+    pub fn ids(&self) -> Vec<TaskId> {
+        match self {
+            Batch::Cancel(task) => vec![task.uid],
+            Batch::Snapshot(tasks) | Batch::Dump(tasks) | Batch::DocumentAddition { tasks, .. } => {
+                tasks.iter().map(|task| task.uid).collect()
+            }
+            Batch::SettingsAndDocumentAddition {
+                document_addition_tasks,
+                settings_tasks,
+                ..
+            } => document_addition_tasks
+                .iter()
+                .chain(settings_tasks)
+                .map(|task| task.uid)
+                .collect(),
+        }
+    }
 }
 
 impl IndexScheduler {
