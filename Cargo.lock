@@ -1775,6 +1775,7 @@ name = "index-scheduler"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "big_s",
  "bincode",
  "csv",
  "file-store",

@@ -412,7 +412,12 @@ impl IndexScheduler {
 
 #[cfg(test)]
 mod tests {
+    use big_s::S;
+    use insta::assert_debug_snapshot;
     use tempfile::TempDir;
+    use uuid::Uuid;
+
+    use crate::assert_smol_debug_snapshot;
 
     use super::*;
 
@@ -431,5 +436,78 @@ mod tests {
     #[test]
     fn simple_new() {
         new();
+    }
+
+    #[test]
+    fn register() {
+        let index_scheduler = new();
+        let kinds = [
+            KindWithContent::IndexCreation {
+                index_uid: S("catto"),
+                primary_key: Some(S("mouse")),
+            },
+            KindWithContent::DocumentAddition {
+                index_uid: S("catto"),
+                primary_key: None,
+                content_file: Uuid::new_v4(),
+                documents_count: 12,
+                allow_index_creation: true,
+            },
+            KindWithContent::CancelTask { tasks: vec![0, 1] },
+            KindWithContent::DocumentAddition {
+                index_uid: S("catto"),
+                primary_key: None,
+                content_file: Uuid::new_v4(),
+                documents_count: 50,
+                allow_index_creation: true,
+            },
+            KindWithContent::DocumentAddition {
+                index_uid: S("doggo"),
+                primary_key: Some(S("bone")),
+                content_file: Uuid::new_v4(),
+                documents_count: 5000,
+                allow_index_creation: true,
+            },
+        ];
+        let mut inserted_tasks = Vec::new();
+        for (idx, kind) in kinds.into_iter().enumerate() {
+            let k = kind.as_kind();
+            let task = index_scheduler.register(kind).unwrap();
+
+            assert_eq!(task.uid, idx as u32);
+            assert_eq!(task.status, Status::Enqueued);
+            assert_eq!(task.kind, k);
+
+            inserted_tasks.push(task);
+        }
+
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+        let mut all_tasks = Vec::new();
+        for ret in index_scheduler.all_tasks.iter(&rtxn).unwrap() {
+            all_tasks.push(ret.unwrap());
+        }
+
+        assert_smol_debug_snapshot!(all_tasks, @r###"[(U32(0), Task { uid: 0, enqueued_at: OffsetDateTime { local_datetime: PrimitiveDateTime { date: Date { year: 2022, ordinal: 258 }, time: Time { hour: 10, minute: 20, second: 33, nanosecond: 531850695 } }, offset: UtcOffset { hours: 0, minutes: 0, seconds: 0 } }, started_at: None, finished_at: None, error: None, details: None, status: Enqueued, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") } }), (U32(1), Task { uid: 1, enqueued_at: OffsetDateTime { local_datetime: PrimitiveDateTime { date: Date { year: 2022, ordinal: 258 }, time: Time { hour: 10, minute: 20, second: 33, nanosecond: 531928625 } }, offset: UtcOffset { hours: 0, minutes: 0, seconds: 0 } }, started_at: None, finished_at: None, error: None, details: None, status: Enqueued, kind: DocumentAddition { index_uid: "catto", primary_key: None, content_file: c0d2f89e-a2ea-4357-a3ea-8c3135d1e9c7, documents_count: 12, allow_index_creation: true } }), (U32(2), Task { uid: 2, enqueued_at: OffsetDateTime { local_datetime: PrimitiveDateTime { date: Date { year: 2022, ordinal: 258 }, time: Time { hour: 10, minute: 20, second: 33, nanosecond: 531966226 } }, offset: UtcOffset { hours: 0, minutes: 0, seconds: 0 } }, started_at: None, finished_at: None, error: None, details: None, status: Enqueued, kind: CancelTask { tasks: [0, 1] } }), (U32(3), Task { uid: 3, enqueued_at: OffsetDateTime { local_datetime: PrimitiveDateTime { date: Date { year: 2022, ordinal: 258 }, time: Time { hour: 10, minute: 20, second: 33, nanosecond: 531997016 } }, offset: UtcOffset { hours: 0, minutes: 0, seconds: 0 } }, started_at: None, finished_at: None, error: None, details: None, status: Enqueued, kind: DocumentAddition { index_uid: "catto", primary_key: None, content_file: 84aa6582-645c-4347-abbe-32cb85d488a8, documents_count: 50, allow_index_creation: true } }), (U32(4), Task { uid: 4, enqueued_at: OffsetDateTime { local_datetime: PrimitiveDateTime { date: Date { year: 2022, ordinal: 258 }, time: Time { hour: 10, minute: 20, second: 33, nanosecond: 532027497 } }, offset: UtcOffset { hours: 0, minutes: 0, seconds: 0 } }, started_at: None, finished_at: None, error: None, details: None, status: Enqueued, kind: DocumentAddition { index_uid: "doggo", primary_key: Some("bone"), content_file: 4335f1d6-0cab-4474-beef-5d564f23f5a0, documents_count: 5000, allow_index_creation: true } })]"###);
+
+        let mut status = Vec::new();
+        for ret in index_scheduler.status.iter(&rtxn).unwrap() {
+            status.push(ret.unwrap());
+        }
+
+        assert_smol_debug_snapshot!(status, @"[(Enqueued, RoaringBitmap<[0, 1, 2, 3, 4]>)]");
+
+        let mut kind = Vec::new();
+        for ret in index_scheduler.kind.iter(&rtxn).unwrap() {
+            kind.push(ret.unwrap());
+        }
+
+        assert_smol_debug_snapshot!(kind, @"[(DocumentAddition, RoaringBitmap<[1, 3, 4]>), (IndexCreation, RoaringBitmap<[0]>), (CancelTask, RoaringBitmap<[2]>)]");
+
+        let mut index_tasks = Vec::new();
+        for ret in index_scheduler.index_tasks.iter(&rtxn).unwrap() {
+            index_tasks.push(ret.unwrap());
+        }
+
+        assert_smol_debug_snapshot!(index_tasks, @r###"[("catto", RoaringBitmap<[0, 1, 3]>), ("doggo", RoaringBitmap<[4]>)]"###);
     }
 }
