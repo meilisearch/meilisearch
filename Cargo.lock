@@ -1903,7 +1903,7 @@ dependencies = [
 [[package]]
 name = "lmdb-rkv-sys"
 version = "0.15.0"
-source = "git+https://github.com/meilisearch/lmdb-rs#d0b50d02938ee84e4e4372697ea991fe2a4cae3b"
+source = "git+https://github.com/meilisearch/lmdb-rs#8f0fe377a98d177cabbd056e777778f559df2bb6"
 dependencies = [
  "cc",
  "libc",
