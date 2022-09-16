@@ -69,19 +69,36 @@ pub(crate) enum Batch {
         settings: Vec<(bool, Settings<Unchecked>)>,
         settings_tasks: Vec<Task>,
     },
+    IndexCreation {
+        index_uid: String,
+        primary_key: Option<String>,
+        task: Task,
+    },
+    IndexUpdate {
+        index_uid: String,
+        primary_key: Option<String>,
+        task: Task,
+    },
+    IndexDeletion {
+        index_uid: String,
+        tasks: Vec<Task>,
+    },
 }
 
 impl Batch {
     pub fn ids(&self) -> Vec<TaskId> {
         match self {
-            Batch::Cancel(task) => vec![task.uid],
+            Batch::Cancel(task)
+            | Batch::IndexCreation { task, .. }
+            | Batch::IndexUpdate { task, .. } => vec![task.uid],
             Batch::Snapshot(tasks)
             | Batch::Dump(tasks)
             | Batch::DocumentAddition { tasks, .. }
             | Batch::DocumentUpdate { tasks, .. }
             | Batch::DocumentDeletion { tasks, .. }
             | Batch::Settings { tasks, .. }
-            | Batch::DocumentClear { tasks, .. } => tasks.iter().map(|task| task.uid).collect(),
+            | Batch::DocumentClear { tasks, .. }
+            | Batch::IndexDeletion { tasks, .. } => tasks.iter().map(|task| task.uid).collect(),
             Batch::SettingsAndDocumentAddition {
                 document_addition_tasks: tasks,
                 settings_tasks: other,
@@ -311,9 +328,37 @@ impl IndexScheduler {
                     _ => unreachable!(),
                 }
             }
-            BatchKind::IndexCreation { id: _ } => todo!(),
-            BatchKind::IndexDeletion { ids: _ } => todo!(),
-            BatchKind::IndexUpdate { id: _ } => todo!(),
+            BatchKind::IndexCreation { id } => {
+                let task = self.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
+                let (index_uid, primary_key) = match &task.kind {
+                    KindWithContent::IndexCreation {
+                        index_uid,
+                        primary_key,
+                    } => (index_uid.clone(), primary_key.clone()),
+                    _ => unreachable!(),
+                };
+                Ok(Some(Batch::IndexCreation {
+                    index_uid,
+                    primary_key,
+                    task,
+                }))
+            }
+            BatchKind::IndexUpdate { id } => {
+                let task = self.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
+                let primary_key = match &task.kind {
+                    KindWithContent::IndexUpdate { primary_key, .. } => primary_key.clone(),
+                    _ => unreachable!(),
+                };
+                Ok(Some(Batch::IndexUpdate {
+                    index_uid,
+                    primary_key,
+                    task,
+                }))
+            }
+            BatchKind::IndexDeletion { ids } => Ok(Some(Batch::IndexDeletion {
+                index_uid,
+                tasks: self.get_existing_tasks(rtxn, ids)?,
+            })),
             BatchKind::IndexSwap { id: _ } => todo!(),
             BatchKind::IndexRename { id: _ } => todo!(),
         }
@@ -471,6 +516,17 @@ impl IndexScheduler {
                 settings,
                 settings_tasks,
             } => todo!(),
+            Batch::IndexCreation {
+                index_uid,
+                primary_key,
+                task,
+            } => todo!(),
+            Batch::IndexUpdate {
+                index_uid,
+                primary_key,
+                task,
+            } => todo!(),
+            Batch::IndexDeletion { index_uid, tasks } => todo!(),
         }
     }
 }
