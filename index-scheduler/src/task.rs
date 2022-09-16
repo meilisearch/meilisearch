@@ -1,6 +1,7 @@
 use anyhow::Result;
 use index::{Settings, Unchecked};
 
+use milli::DocumentId;
 use serde::{Deserialize, Serialize, Serializer};
 use std::{fmt::Write, path::PathBuf};
 use time::{Duration, OffsetDateTime};
@@ -125,7 +126,7 @@ pub enum KindWithContent {
     },
     DocumentDeletion {
         index_uid: String,
-        documents_ids: Vec<String>,
+        documents_ids: Vec<DocumentId>,
     },
     DocumentClear {
         index_uid: String,
