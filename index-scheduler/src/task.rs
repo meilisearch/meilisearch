@@ -276,8 +276,8 @@ pub enum Kind {
 pub enum Details {
     #[serde(rename_all = "camelCase")]
     DocumentAddition {
-        received_documents: usize,
-        indexed_documents: Option<u64>,
+        received_documents: u64,
+        indexed_documents: u64,
     },
     #[serde(rename_all = "camelCase")]
     Settings {
