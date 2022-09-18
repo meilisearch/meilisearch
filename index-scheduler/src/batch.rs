@@ -1,12 +1,12 @@
 use crate::{
     autobatcher::BatchKind,
-    task::{Kind, KindWithContent, Status, Task},
+    task::{Details, Kind, KindWithContent, Status, Task},
     Error, IndexScheduler, Result, TaskId,
 };
 use index::{Settings, Unchecked};
 use milli::{
     heed::{RoTxn, RwTxn},
-    update::IndexDocumentsMethod,
+    update::{DocumentAdditionResult, IndexDocumentsMethod},
     DocumentId,
 };
 use uuid::Uuid;
@@ -434,11 +434,39 @@ impl IndexScheduler {
             Batch::Dump(_) => todo!(),
             Batch::DocumentClear { tasks, .. } => todo!(),
             Batch::DocumentAddition {
-                index_uid: _,
-                primary_key: _,
-                content_files: _,
-                tasks: _,
-            } => todo!(),
+                index_uid,
+                primary_key,
+                content_files,
+                mut tasks,
+            } => {
+                let index = self.index_mapper.create_index(wtxn, &index_uid)?;
+                let ret = index.update_documents(
+                    IndexDocumentsMethod::ReplaceDocuments,
+                    primary_key,
+                    self.file_store.clone(),
+                    content_files,
+                )?;
+
+                for (task, ret) in tasks.iter_mut().zip(ret) {
+                    match ret {
+                        Ok(DocumentAdditionResult {
+                            indexed_documents,
+                            number_of_documents,
+                        }) => {
+                            task.details = Some(Details::DocumentAddition {
+                                received_documents: number_of_documents,
+                                indexed_documents,
+                            });
+                        }
+                        Err(error) => {
+                            // TODO: TAMO: find a way to convert all errors to the `Task::Error` type
+                            // task.error = Some(error);
+                        }
+                    }
+                }
+
+                todo!()
+            }
             Batch::SettingsAndDocumentAddition {
                 index_uid,
                 primary_key,
