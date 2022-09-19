@@ -64,6 +64,7 @@ const DEFAULT_LOG_LEVEL: &str = "info";
 
 #[derive(Debug, Clone, Parser, Serialize, Deserialize)]
 #[clap(version)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct Opt {
     /// The destination where the database must be created.
     #[clap(long, env = MEILI_DB_PATH, default_value_os_t = default_db_path())]
@@ -75,15 +76,15 @@ pub struct Opt {
     #[serde(default = "default_http_addr")]
     pub http_addr: String,
 
-    /// The master key allowing you to do everything on the server.
+    /// Sets the instance's master key, automatically protecting all routes except GET /health
     #[serde(skip_serializing)]
     #[clap(long, env = MEILI_MASTER_KEY)]
     pub master_key: Option<String>,
 
     /// This environment variable must be set to `production` if you are running in production.
-    /// If the server is running in development mode more logs will be displayed,
-    /// and the master key can be avoided which implies that there is no security on the updates routes.
-    /// This is useful to debug when integrating the engine with another service.
+    /// More logs wiil be displayed if the server is running in development mode. Setting the master
+    /// key is optional; hence no security on the updates routes. This
+    /// is useful to debug when integrating the engine with another service
     #[clap(long, env = MEILI_ENV, default_value_t = default_env(), possible_values = &POSSIBLE_ENV)]
     #[serde(default = "default_env")]
     pub env: String,
@@ -94,12 +95,12 @@ pub struct Opt {
     #[clap(long, env = MEILI_NO_ANALYTICS)]
     pub no_analytics: bool,
 
-    /// The maximum size, in bytes, of the main lmdb database directory
+    /// The maximum size, in bytes, of the main LMDB database directory
     #[clap(long, env = MEILI_MAX_INDEX_SIZE, default_value_t = default_max_index_size())]
     #[serde(default = "default_max_index_size")]
     pub max_index_size: Byte,
 
-    /// The maximum size, in bytes, of the update lmdb database directory
+    /// The maximum size, in bytes, of the update LMDB database directory
     #[clap(long, env = MEILI_MAX_TASK_DB_SIZE, default_value_t = default_max_task_db_size())]
     #[serde(default = "default_max_task_db_size")]
     pub max_task_db_size: Byte,
@@ -117,7 +118,7 @@ pub struct Opt {
     #[clap(long, env = MEILI_SSL_CERT_PATH, parse(from_os_str))]
     pub ssl_cert_path: Option<PathBuf>,
 
-    /// Read private key from KEYFILE.  This should be a RSA
+    /// Read the private key from KEYFILE.  This should be an RSA
     /// private key or PKCS8-encoded private key, in PEM format.
     #[serde(skip_serializing)]
     #[clap(long, env = MEILI_SSL_KEY_PATH, parse(from_os_str))]
@@ -151,12 +152,12 @@ pub struct Opt {
     pub ssl_tickets: bool,
 
     /// Defines the path of the snapshot file to import.
-    /// This option will, by default, stop the process if a database already exist or if no snapshot exists at
-    /// the given path. If this option is not specified no snapshot is imported.
+    /// This option will, by default, stop the process if a database already exists or if no snapshot exists at
+    /// the given path. If this option is not specified, no snapshot is imported.
     #[clap(long, env = MEILI_IMPORT_SNAPSHOT)]
     pub import_snapshot: Option<PathBuf>,
 
-    /// The engine will ignore a missing snapshot and not return an error in such case.
+    /// The engine will ignore a missing snapshot and not return an error in such a case.
     #[clap(
         long,
         env = MEILI_IGNORE_MISSING_SNAPSHOT,
@@ -174,7 +175,7 @@ pub struct Opt {
     #[serde(default)]
     pub ignore_snapshot_if_db_exists: bool,
 
-    /// Defines the directory path where meilisearch will create snapshot each snapshot_time_gap.
+    /// Defines the directory path where Meilisearch will create a snapshot each snapshot-interval-sec.
     #[clap(long, env = MEILI_SNAPSHOT_DIR, default_value_os_t = default_snapshot_dir())]
     #[serde(default = "default_snapshot_dir")]
     pub snapshot_dir: PathBuf,
@@ -194,7 +195,7 @@ pub struct Opt {
     #[clap(long, env = MEILI_IMPORT_DUMP, conflicts_with = "import-snapshot")]
     pub import_dump: Option<PathBuf>,
 
-    /// If the dump doesn't exists, load or create the database specified by `db-path` instead.
+    /// If the dump doesn't exist, load or create the database specified by `db-path` instead.
     #[clap(long, env = MEILI_IGNORE_MISSING_DUMP, requires = "import-dump")]
     #[serde(default)]
     pub ignore_missing_dump: bool,
@@ -209,7 +210,7 @@ pub struct Opt {
     #[serde(default = "default_dumps_dir")]
     pub dumps_dir: PathBuf,
 
-    /// Set the log level
+    /// Set the log level. # Possible values: [ERROR, WARN, INFO, DEBUG, TRACE]
     #[clap(long, env = MEILI_LOG_LEVEL, default_value_t = default_log_level())]
     #[serde(default = "default_log_level")]
     pub log_level: String,
@@ -243,78 +244,124 @@ impl Opt {
     }
 
     /// Build a new Opt from config file, env vars and cli args.
-    pub fn build() -> Self {
+    pub fn try_build() -> anyhow::Result<(Self, Option<PathBuf>)> {
         // Parse the args to get the config_file_path.
         let mut opts = Opt::parse();
-        if let Some(config_file_path) = opts.config_file_path.as_ref() {
-            eprintln!("loading config file : {:?}", config_file_path);
-            match std::fs::read(config_file_path) {
+        let mut config_read_from = None;
+        if let Some(config_file_path) = opts
+            .config_file_path
+            .clone()
+            .or_else(|| Some(PathBuf::from("./config.toml")))
+        {
+            match std::fs::read(&config_file_path) {
                 Ok(config) => {
-                    // If the arg is present, and the file successfully read, we deserialize it with `toml`.
-                    let opt_from_config =
-                        toml::from_slice::<Opt>(&config).expect("can't read file");
-                    // We inject the values from the toml in the corresponding env vars if needs be. Doing so, we respect the priority toml < env vars < cli args.
-                    opt_from_config.export_to_env();
-                    // Once injected we parse the cli args once again to take the new env vars into scope.
-                    opts = Opt::parse();
+                    // If the file is successfully read, we deserialize it with `toml`.
+                    match toml::from_slice::<Opt>(&config) {
+                        Ok(opt_from_config) => {
+                            // We inject the values from the toml in the corresponding env vars if needs be. Doing so, we respect the priority toml < env vars < cli args.
+                            opt_from_config.export_to_env();
+                            // Once injected we parse the cli args once again to take the new env vars into scope.
+                            opts = Opt::parse();
+                            config_read_from = Some(config_file_path);
+                        }
+                        // If we have an error deserializing the file defined by the user.
+                        Err(err) if opts.config_file_path.is_some() => anyhow::bail!(err),
+                        _ => (),
+                    }
                 }
-                Err(err) => eprintln!("can't read {:?} : {}", config_file_path, err),
+                // If we have an error while reading the file defined by the user.
+                Err(err) if opts.config_file_path.is_some() => anyhow::bail!(err),
+                _ => (),
             }
         }
 
-        opts
+        Ok((opts, config_read_from))
     }
 
     /// Exports the opts values to their corresponding env vars if they are not set.
     fn export_to_env(self) {
-        export_to_env_if_not_present(MEILI_DB_PATH, self.db_path);
-        export_to_env_if_not_present(MEILI_HTTP_ADDR, self.http_addr);
-        if let Some(master_key) = self.master_key {
+        let Opt {
+            db_path,
+            http_addr,
+            master_key,
+            env,
+            max_index_size,
+            max_task_db_size,
+            http_payload_size_limit,
+            ssl_cert_path,
+            ssl_key_path,
+            ssl_auth_path,
+            ssl_ocsp_path,
+            ssl_require_auth,
+            ssl_resumption,
+            ssl_tickets,
+            snapshot_dir,
+            schedule_snapshot,
+            snapshot_interval_sec,
+            dumps_dir,
+            log_level,
+            indexer_options,
+            scheduler_options,
+            import_snapshot: _,
+            ignore_missing_snapshot: _,
+            ignore_snapshot_if_db_exists: _,
+            import_dump: _,
+            ignore_missing_dump: _,
+            ignore_dump_if_db_exists: _,
+            config_file_path: _,
+            #[cfg(all(not(debug_assertions), feature = "analytics"))]
+            no_analytics,
+            #[cfg(feature = "metrics")]
+            enable_metrics_route,
+        } = self;
+        export_to_env_if_not_present(MEILI_DB_PATH, db_path);
+        export_to_env_if_not_present(MEILI_HTTP_ADDR, http_addr);
+        if let Some(master_key) = master_key {
             export_to_env_if_not_present(MEILI_MASTER_KEY, master_key);
         }
-        export_to_env_if_not_present(MEILI_ENV, self.env);
+        export_to_env_if_not_present(MEILI_ENV, env);
         #[cfg(all(not(debug_assertions), feature = "analytics"))]
         {
-            export_to_env_if_not_present(MEILI_NO_ANALYTICS, self.no_analytics.to_string());
+            export_to_env_if_not_present(MEILI_NO_ANALYTICS, no_analytics.to_string());
         }
-        export_to_env_if_not_present(MEILI_MAX_INDEX_SIZE, self.max_index_size.to_string());
-        export_to_env_if_not_present(MEILI_MAX_TASK_DB_SIZE, self.max_task_db_size.to_string());
+        export_to_env_if_not_present(MEILI_MAX_INDEX_SIZE, max_index_size.to_string());
+        export_to_env_if_not_present(MEILI_MAX_TASK_DB_SIZE, max_task_db_size.to_string());
         export_to_env_if_not_present(
             MEILI_HTTP_PAYLOAD_SIZE_LIMIT,
-            self.http_payload_size_limit.to_string(),
+            http_payload_size_limit.to_string(),
         );
-        if let Some(ssl_cert_path) = self.ssl_cert_path {
+        if let Some(ssl_cert_path) = ssl_cert_path {
             export_to_env_if_not_present(MEILI_SSL_CERT_PATH, ssl_cert_path);
         }
-        if let Some(ssl_key_path) = self.ssl_key_path {
+        if let Some(ssl_key_path) = ssl_key_path {
             export_to_env_if_not_present(MEILI_SSL_KEY_PATH, ssl_key_path);
         }
-        if let Some(ssl_auth_path) = self.ssl_auth_path {
+        if let Some(ssl_auth_path) = ssl_auth_path {
             export_to_env_if_not_present(MEILI_SSL_AUTH_PATH, ssl_auth_path);
         }
-        if let Some(ssl_ocsp_path) = self.ssl_ocsp_path {
+        if let Some(ssl_ocsp_path) = ssl_ocsp_path {
             export_to_env_if_not_present(MEILI_SSL_OCSP_PATH, ssl_ocsp_path);
         }
-        export_to_env_if_not_present(MEILI_SSL_REQUIRE_AUTH, self.ssl_require_auth.to_string());
-        export_to_env_if_not_present(MEILI_SSL_RESUMPTION, self.ssl_resumption.to_string());
-        export_to_env_if_not_present(MEILI_SSL_TICKETS, self.ssl_tickets.to_string());
-        export_to_env_if_not_present(MEILI_SNAPSHOT_DIR, self.snapshot_dir);
-        export_to_env_if_not_present(MEILI_SCHEDULE_SNAPSHOT, self.schedule_snapshot.to_string());
+        export_to_env_if_not_present(MEILI_SSL_REQUIRE_AUTH, ssl_require_auth.to_string());
+        export_to_env_if_not_present(MEILI_SSL_RESUMPTION, ssl_resumption.to_string());
+        export_to_env_if_not_present(MEILI_SSL_TICKETS, ssl_tickets.to_string());
+        export_to_env_if_not_present(MEILI_SNAPSHOT_DIR, snapshot_dir);
+        export_to_env_if_not_present(MEILI_SCHEDULE_SNAPSHOT, schedule_snapshot.to_string());
         export_to_env_if_not_present(
             MEILI_SNAPSHOT_INTERVAL_SEC,
-            self.snapshot_interval_sec.to_string(),
+            snapshot_interval_sec.to_string(),
         );
-        export_to_env_if_not_present(MEILI_DUMPS_DIR, self.dumps_dir);
-        export_to_env_if_not_present(MEILI_LOG_LEVEL, self.log_level);
+        export_to_env_if_not_present(MEILI_DUMPS_DIR, dumps_dir);
+        export_to_env_if_not_present(MEILI_LOG_LEVEL, log_level);
         #[cfg(feature = "metrics")]
         {
             export_to_env_if_not_present(
                 MEILI_ENABLE_METRICS_ROUTE,
-                self.enable_metrics_route.to_string(),
+                enable_metrics_route.to_string(),
             );
         }
-        self.indexer_options.export_to_env();
-        self.scheduler_options.export_to_env();
+        indexer_options.export_to_env();
+        scheduler_options.export_to_env();
     }
 
     pub fn get_ssl_config(&self) -> anyhow::Result<Option<rustls::ServerConfig>> {

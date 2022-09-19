@@ -12,10 +12,10 @@ use sysinfo::{RefreshKind, System, SystemExt};
 const MEILI_MAX_INDEXING_MEMORY: &str = "MEILI_MAX_INDEXING_MEMORY";
 const MEILI_MAX_INDEXING_THREADS: &str = "MEILI_MAX_INDEXING_THREADS";
 const DISABLE_AUTO_BATCHING: &str = "DISABLE_AUTO_BATCHING";
-
 const DEFAULT_LOG_EVERY_N: usize = 100000;
 
 #[derive(Debug, Clone, Parser, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct IndexerOpts {
     /// The amount of documents to skip before printing
     /// a log regarding the indexing advancement.
@@ -50,6 +50,7 @@ pub struct IndexerOpts {
 }
 
 #[derive(Debug, Clone, Parser, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct SchedulerConfig {
     /// The engine will disable task auto-batching,
     /// and will sequencialy compute each task one by one.
@@ -61,7 +62,13 @@ pub struct SchedulerConfig {
 impl IndexerOpts {
     /// Exports the values to their corresponding env vars if they are not set.
     pub fn export_to_env(self) {
-        if let Some(max_indexing_memory) = self.max_indexing_memory.0 {
+        let IndexerOpts {
+            max_indexing_memory,
+            max_indexing_threads,
+            log_every_n: _,
+            max_nb_chunks: _,
+        } = self;
+        if let Some(max_indexing_memory) = max_indexing_memory.0 {
             export_to_env_if_not_present(
                 MEILI_MAX_INDEXING_MEMORY,
                 max_indexing_memory.to_string(),
@@ -69,7 +76,7 @@ impl IndexerOpts {
         }
         export_to_env_if_not_present(
             MEILI_MAX_INDEXING_THREADS,
-            self.max_indexing_threads.0.to_string(),
+            max_indexing_threads.0.to_string(),
         );
     }
 }
@@ -106,10 +113,10 @@ impl Default for IndexerOpts {
 
 impl SchedulerConfig {
     pub fn export_to_env(self) {
-        export_to_env_if_not_present(
-            DISABLE_AUTO_BATCHING,
-            self.disable_auto_batching.to_string(),
-        );
+        let SchedulerConfig {
+            disable_auto_batching,
+        } = self;
+        export_to_env_if_not_present(DISABLE_AUTO_BATCHING, disable_auto_batching.to_string());
     }
 }
 
