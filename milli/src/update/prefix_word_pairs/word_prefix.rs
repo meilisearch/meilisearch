@@ -163,17 +163,19 @@ Writer instead of the DB. At the end of the outer loop, we finally read from
 the grenad and insert its elements in the database.
 */
 
+use std::borrow::Cow;
+use std::collections::HashSet;
+
+use grenad::CompressionType;
+use heed::types::ByteSlice;
+use heed::BytesDecode;
+use log::debug;
+
 use crate::update::index_documents::{create_writer, CursorClonableMmap};
 use crate::update::prefix_word_pairs::{
     insert_into_database, write_into_lmdb_database_without_merging,
 };
 use crate::{CboRoaringBitmapCodec, Result, U8StrStrCodec, UncheckedU8StrStrCodec};
-use grenad::CompressionType;
-use heed::types::ByteSlice;
-use heed::BytesDecode;
-use log::debug;
-use std::borrow::Cow;
-use std::collections::HashSet;
 
 #[logging_timer::time]
 pub fn index_word_prefix_database(
@@ -562,9 +564,10 @@ impl PrefixTrieNode {
 }
 #[cfg(test)]
 mod tests {
+    use roaring::RoaringBitmap;
+
     use super::*;
     use crate::{CboRoaringBitmapCodec, U8StrStrCodec};
-    use roaring::RoaringBitmap;
 
     fn check_prefixes(
         trie: &PrefixTrieNode,

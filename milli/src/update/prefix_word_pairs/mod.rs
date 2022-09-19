@@ -1,7 +1,11 @@
+use std::borrow::Cow;
+use std::collections::HashSet;
+use std::io::BufReader;
+
+use heed::types::ByteSlice;
+
 use super::index_documents::{merge_cbo_roaring_bitmaps, CursorClonableMmap};
 use crate::{Index, Result};
-use heed::types::ByteSlice;
-use std::{borrow::Cow, collections::HashSet, io::BufReader};
 
 mod prefix_word;
 mod word_prefix;
@@ -131,10 +135,11 @@ pub fn write_into_lmdb_database_without_merging(
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use crate::db_snap;
     use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
     use crate::index::tests::TempIndex;
-    use std::io::Cursor;
 
     fn documents_with_enough_different_words_for_prefixes(prefixes: &[&str]) -> Vec<crate::Object> {
         let mut documents = Vec::new();

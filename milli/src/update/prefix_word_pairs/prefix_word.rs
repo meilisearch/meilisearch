@@ -1,14 +1,16 @@
+use std::borrow::Cow;
+use std::collections::{BTreeMap, HashSet};
+
+use grenad::CompressionType;
+use heed::types::ByteSlice;
+use heed::BytesDecode;
+use log::debug;
+
 use crate::update::index_documents::{create_writer, CursorClonableMmap};
 use crate::update::prefix_word_pairs::{
     insert_into_database, write_into_lmdb_database_without_merging,
 };
 use crate::{CboRoaringBitmapCodec, Result, U8StrStrCodec, UncheckedU8StrStrCodec};
-use grenad::CompressionType;
-use heed::types::ByteSlice;
-use heed::BytesDecode;
-use log::debug;
-use std::borrow::Cow;
-use std::collections::{BTreeMap, HashSet};
 
 #[logging_timer::time]
 pub fn index_prefix_word_database(
