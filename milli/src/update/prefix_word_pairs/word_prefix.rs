@@ -1,5 +1,4 @@
 /*!
- ## What is WordPrefix?
 The word-prefix-pair-proximity-docids database is a database whose keys are of
 the form `(proximity, word, prefix)` and the values are roaring bitmaps of
 the documents which contain `word` followed by another word starting with
@@ -320,7 +319,7 @@ fn execute_on_word_pairs_and_prefixes<I>(
     let mut merge_buffer = Vec::with_capacity(65_536);
 
     while let Some(((proximity, word1, word2), data)) = next_word_pair_proximity(iter)? {
-        // skip this iteration if the proximity is over the threshold
+        // stop indexing if the proximity is over the threshold
         if proximity > max_proximity {
             break;
         };

@@ -35,9 +35,6 @@ pub fn index_prefix_word_database(
         .filter(|s| s.len() <= max_prefix_length)
         .collect();
 
-    // If the prefix trie is not empty, then we can iterate over all new
-    // word pairs to look for new (word1, common_prefix, proximity) elements
-    // to insert in the DB
     for proximity in 1..=max_proximity - 1 {
         for prefix in common_prefixes.iter() {
             let mut prefix_key = vec![];
@@ -135,13 +132,11 @@ pub fn index_prefix_word_database(
     Ok(())
 }
 
-/// This is the core of the algorithm to initialise the Word Prefix Pair Proximity Docids database.
+/// This is the core of the algorithm to initialise the Prefix Word Pair Proximity Docids database.
 ///
-/// Its main arguments are:
-/// 1. a sorted prefix iterator over ((word1, word2, proximity), docids) elements
-/// 2. a closure to describe how to handle the new computed (word1, prefix, proximity) elements
-///
-/// For more information about what this function does, read the module documentation.
+/// Its arguments are:
+/// - an iterator over the words following the given `prefix` with the given `proximity`
+/// - a closure to describe how to handle the new computed (proximity, prefix, word2) elements
 fn execute_on_word_pairs_and_prefixes<I>(
     proximity: u8,
     prefix: &[u8],
@@ -151,28 +146,32 @@ fn execute_on_word_pairs_and_prefixes<I>(
 ) -> Result<()> {
     let mut batch: BTreeMap<Vec<u8>, Vec<Cow<'static, [u8]>>> = <_>::default();
 
-    while let Some((word2, data)) = next_word2_and_docids(iter)? {
+    // Memory usage check:
+    // The content of the loop will be called for each `word2` that follows a word beginning
+    // with `prefix` with the given proximity.
+    // In practice, I don't think the batch can ever get too big.
+    while let Some((word2, docids)) = next_word2_and_docids(iter)? {
         let entry = batch.entry(word2.to_owned()).or_default();
-        entry.push(Cow::Owned(data.to_owned()));
+        entry.push(Cow::Owned(docids.to_owned()));
     }
 
-    let mut key_buffer = Vec::with_capacity(8);
+    let mut key_buffer = Vec::with_capacity(512);
     key_buffer.push(proximity);
     key_buffer.extend_from_slice(prefix);
     key_buffer.push(0);
 
     let mut value_buffer = Vec::with_capacity(65_536);
 
-    for (key, values) in batch {
+    for (word2, docids) in batch {
         key_buffer.truncate(prefix.len() + 2);
         value_buffer.clear();
 
-        key_buffer.extend_from_slice(&key);
-        let data = if values.len() > 1 {
-            CboRoaringBitmapCodec::merge_into(&values, &mut value_buffer)?;
+        key_buffer.extend_from_slice(&word2);
+        let data = if docids.len() > 1 {
+            CboRoaringBitmapCodec::merge_into(&docids, &mut value_buffer)?;
             value_buffer.as_slice()
         } else {
-            &values[0]
+            &docids[0]
         };
         insert(key_buffer.as_slice(), data)?;
     }
