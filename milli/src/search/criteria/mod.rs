@@ -427,12 +427,14 @@ pub fn resolve_query_tree(
 pub fn resolve_phrase(ctx: &dyn Context, phrase: &[String]) -> Result<RoaringBitmap> {
     let mut candidates = RoaringBitmap::new();
     let mut first_iter = true;
-    let winsize = phrase.len().min(7);
+    let winsize = phrase.len().min(3);
     for win in phrase.windows(winsize) {
         // Get all the documents with the matching distance for each word pairs.
         let mut bitmaps = Vec::with_capacity(winsize.pow(2));
         for (offset, s1) in win.iter().enumerate() {
             for (dist, s2) in win.iter().skip(offset + 1).enumerate() {
+                // TODO: add proximity between identical words to the word
+                // pair proximity database
                 if s1 == s2 {
                     continue;
                 }
