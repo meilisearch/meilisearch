@@ -169,7 +169,7 @@ pub struct Opt {
 }
 
 impl Opt {
-    /// Wether analytics should be enabled or not.
+    /// Whether analytics should be enabled or not.
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     pub fn analytics(&self) -> bool {
         !self.no_analytics

@@ -62,12 +62,12 @@ jobs:
       - uses: actions/checkout@v3
       - name: Download the issue template
         run: curl -s https://raw.githubusercontent.com/meilisearch/core-team/main/issue-templates/roadmap-issue.md > $ISSUE_TEMPLATE
-      - name: Replace all empty occurences in the templates
+      - name: Replace all empty occurrences in the templates
         run: |
-          # Replace all <<version>> occurences
+          # Replace all <<version>> occurrences
           sed -i "s/<<version>>/$MILESTONE_VERSION/g" $ISSUE_TEMPLATE
 
-          # Replace all <<milestone_id>> occurences
+          # Replace all <<milestone_id>> occurrences
           milestone_id=$(echo $MILESTONE_URL | cut -d '/' -f 7)
           sed -i "s/<<milestone_id>>/$milestone_id/g" $ISSUE_TEMPLATE
 
@@ -95,12 +95,12 @@ jobs:
       - uses: actions/checkout@v3
       - name: Download the issue template
         run: curl -s https://raw.githubusercontent.com/meilisearch/core-team/main/issue-templates/changelog-issue.md > $ISSUE_TEMPLATE
-      - name: Replace all empty occurences in the templates
+      - name: Replace all empty occurrences in the templates
         run: |
-          # Replace all <<version>> occurences
+          # Replace all <<version>> occurrences
           sed -i "s/<<version>>/$MILESTONE_VERSION/g" $ISSUE_TEMPLATE
 
-          # Replace all <<milestone_id>> occurences
+          # Replace all <<milestone_id>> occurrences
           milestone_id=$(echo $MILESTONE_URL | cut -d '/' -f 7)
           sed -i "s/<<milestone_id>>/$milestone_id/g" $ISSUE_TEMPLATE
       - name: Create the issue

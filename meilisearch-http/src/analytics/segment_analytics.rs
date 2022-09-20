@@ -349,16 +349,16 @@ pub struct SearchAggregator {
 
     // sort
     sort_with_geo_point: bool,
-    // everytime a request has a filter, this field must be incremented by the number of terms it contains
+    // every time a request has a filter, this field must be incremented by the number of terms it contains
     sort_sum_of_criteria_terms: usize,
-    // everytime a request has a filter, this field must be incremented by one
+    // every time a request has a filter, this field must be incremented by one
     sort_total_number_of_criteria: usize,
 
     // filter
     filter_with_geo_radius: bool,
-    // everytime a request has a filter, this field must be incremented by the number of terms it contains
+    // every time a request has a filter, this field must be incremented by the number of terms it contains
     filter_sum_of_criteria_terms: usize,
-    // everytime a request has a filter, this field must be incremented by one
+    // every time a request has a filter, this field must be incremented by one
     filter_total_number_of_criteria: usize,
     used_syntax: HashMap<String, usize>,
 
@@ -366,7 +366,7 @@ pub struct SearchAggregator {
     // The maximum number of terms in a q request
     max_terms_number: usize,
 
-    // everytime a search is done, we increment the counter linked to the used settings
+    // every time a search is done, we increment the counter linked to the used settings
     matching_strategy: HashMap<String, usize>,
 
     // pagination
