@@ -1,6 +1,8 @@
 use milli::heed;
 use thiserror::Error;
 
+use crate::TaskId;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Index `{0}` not found")]
@@ -9,6 +11,8 @@ pub enum Error {
     IndexAlreadyExists(String),
     #[error("Corrupted task queue.")]
     CorruptedTaskQueue,
+    #[error("Task `{0}` not found")]
+    TaskNotFound(TaskId),
     #[error(transparent)]
     Heed(#[from] heed::Error),
     #[error(transparent)]
