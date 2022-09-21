@@ -284,6 +284,7 @@ impl IndexScheduler {
 #[cfg(test)]
 mod tests {
     use big_s::S;
+    use insta::*;
     use uuid::Uuid;
 
     use crate::{assert_smol_debug_snapshot, tests::index_scheduler};
