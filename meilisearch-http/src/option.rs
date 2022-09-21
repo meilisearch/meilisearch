@@ -60,7 +60,7 @@ const DEFAULT_HTTP_PAYLOAD_SIZE_LIMIT: &str = "100 MB";
 const DEFAULT_SNAPSHOT_DIR: &str = "snapshots/";
 const DEFAULT_SNAPSHOT_INTERVAL_SEC: u64 = 86400;
 const DEFAULT_DUMPS_DIR: &str = "dumps/";
-const DEFAULT_LOG_LEVEL: &str = "info";
+const DEFAULT_LOG_LEVEL: &str = "INFO";
 
 #[derive(Debug, Clone, Parser, Serialize, Deserialize)]
 #[clap(version)]
@@ -126,8 +126,8 @@ pub struct Opt {
 
     /// Enable client authentication, and accept certificates
     /// signed by those roots provided in CERTFILE.
-    #[clap(long, env = MEILI_SSL_AUTH_PATH, parse(from_os_str))]
     #[serde(skip_serializing)]
+    #[clap(long, env = MEILI_SSL_AUTH_PATH, parse(from_os_str))]
     pub ssl_auth_path: Option<PathBuf>,
 
     /// Read DER-encoded OCSP response from OCSPFILE and staple to certificate.
@@ -152,7 +152,7 @@ pub struct Opt {
     pub ssl_tickets: bool,
 
     /// Defines the path of the snapshot file to import.
-    /// This option will, by default, stop the process if a database already exists or if no snapshot exists at
+    /// This option will, by default, stop the process if a database already exists, or if no snapshot exists at
     /// the given path. If this option is not specified, no snapshot is imported.
     #[clap(long, env = MEILI_IMPORT_SNAPSHOT)]
     pub import_snapshot: Option<PathBuf>,

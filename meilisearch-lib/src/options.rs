@@ -28,9 +28,7 @@ pub struct IndexerOpts {
     #[clap(long, hide = true)]
     pub max_nb_chunks: Option<usize>,
 
-    /// The maximum amount of memory the indexer will use. It defaults to 2/3
-    /// of the available memory. It is recommended to use something like 80%-90%
-    /// of the available memory, no more.
+    /// The maximum amount of memory the indexer will use.
     ///
     /// In case the engine is unable to retrieve the available memory the engine will
     /// try to use the memory it needs but without real limit, this can lead to
