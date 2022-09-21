@@ -18,19 +18,45 @@ pub use task::TaskView as Task;
 
 #[cfg(test)]
 mod tests {
+    use milli::update::IndexerConfig;
+    use tempfile::TempDir;
+
+    use crate::IndexScheduler;
+
     #[macro_export]
     macro_rules! assert_smol_debug_snapshot {
-    ($value:expr, @$snapshot:literal) => {{
-        let value = format!("{:?}", $value);
-        insta::assert_snapshot!(value, stringify!($value), @$snapshot);
-    }};
-    ($name:expr, $value:expr) => {{
-        let value = format!("{:?}", $value);
-        insta::assert_snapshot!(Some($name), value, stringify!($value));
-    }};
-    ($value:expr) => {{
-        let value = format!("{:?}", $value);
-        insta::assert_snapshot!($crate::_macro_support::AutoName, value, stringify!($value));
-    }};
-}
+        ($value:expr, @$snapshot:literal) => {{
+            let value = format!("{:?}", $value);
+            insta::assert_snapshot!(value, stringify!($value), @$snapshot);
+        }};
+        ($name:expr, $value:expr) => {{
+            let value = format!("{:?}", $value);
+            insta::assert_snapshot!(Some($name), value, stringify!($value));
+        }};
+        ($value:expr) => {{
+            let value = format!("{:?}", $value);
+            insta::assert_snapshot!($crate::_macro_support::AutoName, value, stringify!($value));
+        }};
+    }
+
+    pub fn index_scheduler() -> (IndexScheduler, TempDir) {
+        let dir = TempDir::new().unwrap();
+
+        (
+            IndexScheduler::new(
+                dir.path().join("db_path"),
+                dir.path().join("file_store"),
+                dir.path().join("indexes"),
+                1024 * 1024,
+                IndexerConfig::default(),
+            )
+            .unwrap(),
+            dir,
+        )
+    }
+
+    #[test]
+    fn simple_new() {
+        index_scheduler();
+    }
 }

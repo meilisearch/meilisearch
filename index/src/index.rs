@@ -248,26 +248,20 @@ impl Index {
         limit: usize,
         attributes_to_retrieve: Option<Vec<S>>,
     ) -> Result<(u64, Vec<Document>)> {
-        let txn = self.read_txn()?;
-
-        let fields_ids_map = self.fields_ids_map(&txn)?;
-        let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
+        let rtxn = self.read_txn()?;
 
         let mut documents = Vec::new();
-        for entry in self.all_documents(&txn)?.skip(offset).take(limit) {
-            let (_id, obkv) = entry?;
-            let document = obkv_to_json(&all_fields, &fields_ids_map, obkv)?;
+        for document in self.all_documents(&rtxn)?.skip(offset).take(limit) {
             let document = match &attributes_to_retrieve {
                 Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
-                    &document,
+                    &document?,
                     attributes_to_retrieve.iter().map(|s| s.as_ref()),
                 ),
-                None => document,
+                None => document?,
             };
             documents.push(document);
         }
-
-        let number_of_documents = self.number_of_documents(&txn)?;
+        let number_of_documents = self.number_of_documents(&rtxn)?;
 
         Ok((number_of_documents, documents))
     }
@@ -304,6 +298,21 @@ impl Index {
         };
 
         Ok(document)
+    }
+
+    pub fn all_documents<'a>(
+        &self,
+        rtxn: &'a RoTxn,
+    ) -> Result<impl Iterator<Item = Result<Document>> + 'a> {
+        let fields_ids_map = self.fields_ids_map(&rtxn)?;
+        let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
+
+        Ok(self.inner.all_documents(&rtxn)?.map(move |ret| {
+            ret.map_err(IndexError::from)
+                .and_then(|(_key, document)| -> Result<_> {
+                    Ok(obkv_to_json(&all_fields, &fields_ids_map, document)?)
+                })
+        }))
     }
 
     pub fn size(&self) -> Result<u64> {

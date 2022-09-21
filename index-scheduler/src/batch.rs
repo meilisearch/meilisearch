@@ -459,13 +459,12 @@ impl IndexScheduler {
                             });
                         }
                         Err(error) => {
-                            // TODO: TAMO: find a way to convert all errors to the `Task::Error` type
-                            // task.error = Some(error);
+                            task.error = Some(error.into());
                         }
                     }
                 }
 
-                todo!()
+                Ok(tasks)
             }
             Batch::SettingsAndDocumentAddition {
                 index_uid,

@@ -54,6 +54,7 @@ impl IndexMapper {
             Ok(index) => index,
             Err(Error::IndexNotFound(_)) => {
                 let uuid = Uuid::new_v4();
+                self.index_mapping.put(wtxn, name, &uuid)?;
                 Index::open(
                     self.base_path.join(uuid.to_string()),
                     name.to_string(),
