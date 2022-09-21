@@ -1,6 +1,6 @@
 use crate::index_mapper::IndexMapper;
 use crate::task::{Kind, KindWithContent, Status, Task, TaskView};
-use crate::{Error, Result};
+use crate::{Error, Result, TaskId};
 use file_store::FileStore;
 use index::Index;
 use milli::update::IndexerConfig;
@@ -20,7 +20,7 @@ use serde::Deserialize;
 
 const DEFAULT_LIMIT: fn() -> u32 = || 20;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(derive_builder::Builder, Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Query {
     #[serde(default = "DEFAULT_LIMIT")]
@@ -30,6 +30,38 @@ pub struct Query {
     #[serde(rename = "type")]
     kind: Option<Vec<Kind>>,
     index_uid: Option<Vec<String>>,
+}
+
+impl Default for Query {
+    fn default() -> Self {
+        Self {
+            limit: DEFAULT_LIMIT(),
+            from: None,
+            status: None,
+            kind: None,
+            index_uid: None,
+        }
+    }
+}
+
+impl Query {
+    pub fn with_status(self, status: Status) -> Self {
+        let mut status_vec = self.status.unwrap_or_default();
+        status_vec.push(status);
+        Self {
+            status: Some(status_vec),
+            ..self
+        }
+    }
+
+    pub fn with_kind(self, kind: Kind) -> Self {
+        let mut kind_vec = self.kind.unwrap_or_default();
+        kind_vec.push(kind);
+        Self {
+            kind: Some(kind_vec),
+            ..self
+        }
+    }
 }
 
 pub mod db_name {
@@ -73,20 +105,20 @@ pub struct IndexScheduler {
 
 impl IndexScheduler {
     pub fn new(
-        db_path: PathBuf,
+        tasks_path: PathBuf,
         update_file_path: PathBuf,
         indexes_path: PathBuf,
         index_size: usize,
         indexer_config: IndexerConfig,
     ) -> Result<Self> {
-        std::fs::create_dir_all(&db_path)?;
+        std::fs::create_dir_all(&tasks_path)?;
         std::fs::create_dir_all(&update_file_path)?;
         std::fs::create_dir_all(&indexes_path)?;
 
         let mut options = heed::EnvOpenOptions::new();
         options.max_dbs(6);
 
-        let env = options.open(db_path)?;
+        let env = options.open(tasks_path)?;
         // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
         let wake_up = SignalEvent::auto(true);
 
@@ -113,6 +145,12 @@ impl IndexScheduler {
     pub fn index(&self, name: &str) -> Result<Index> {
         let rtxn = self.env.read_txn()?;
         self.index_mapper.index(&rtxn, name)
+    }
+
+    /// Return and open all the indexes.
+    pub fn indexes(&self) -> Result<Vec<Index>> {
+        let rtxn = self.env.read_txn()?;
+        self.index_mapper.indexes(&rtxn)
     }
 
     /// Returns the tasks corresponding to the query.
@@ -153,6 +191,15 @@ impl IndexScheduler {
         let tasks =
             self.get_existing_tasks(&rtxn, tasks.into_iter().rev().take(query.limit as usize))?;
         Ok(tasks.into_iter().map(|task| task.as_task_view()).collect())
+    }
+
+    /// Returns the tasks corresponding to the query.
+    pub fn task(&self, uid: TaskId) -> Result<TaskView> {
+        let rtxn = self.env.read_txn()?;
+        self.get_task(&rtxn, uid).and_then(|opt| {
+            opt.ok_or(Error::TaskNotFound(uid))
+                .map(|task| task.as_task_view())
+        })
     }
 
     /// Register a new task in the scheduler. If it fails and data was associated with the task
