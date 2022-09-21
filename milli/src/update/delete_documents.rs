@@ -26,6 +26,8 @@ pub struct DeleteDocuments<'t, 'u, 'i> {
     index: &'i Index,
     external_documents_ids: ExternalDocumentsIds<'static>,
     to_delete_docids: RoaringBitmap,
+    #[cfg(test)]
+    disable_soft_delete: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,7 +48,14 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             index,
             external_documents_ids,
             to_delete_docids: RoaringBitmap::new(),
+            #[cfg(test)]
+            disable_soft_delete: false,
         })
+    }
+
+    #[cfg(test)]
+    fn disable_soft_delete(&mut self, disable: bool) {
+        self.disable_soft_delete = disable;
     }
 
     pub fn delete_document(&mut self, docid: u32) {
@@ -147,7 +156,20 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         //   We run the deletion.
         // - With 100Go of disk and 50Go used including 15Go of soft-deleted documents
         //   We run the deletion.
-        if percentage_available > 10 && percentage_used_by_soft_deleted_documents < 10 {
+        let disable_soft_delete = {
+            #[cfg(not(test))]
+            {
+                false
+            }
+            #[cfg(test)]
+            {
+                self.disable_soft_delete
+            }
+        };
+        if !disable_soft_delete
+            && percentage_available > 10
+            && percentage_used_by_soft_deleted_documents < 10
+        {
             self.index.put_soft_deleted_documents_ids(self.wtxn, &soft_deleted_docids)?;
             return Ok(DocumentDeletionResult {
                 deleted_documents: self.to_delete_docids.len(),
