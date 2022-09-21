@@ -20,7 +20,7 @@ where
         let (document_id_bytes, bytes) = try_split_array_at(bytes)?;
         let document_id = u32::from_be_bytes(document_id_bytes);
 
-        let value = C::bytes_decode(&bytes[8..])?;
+        let value = C::bytes_decode(bytes)?;
 
         Some((field_id, document_id, value))
     }
@@ -33,10 +33,11 @@ where
     type EItem = (FieldId, DocumentId, C::EItem);
 
     fn bytes_encode((field_id, document_id, value): &'a Self::EItem) -> Option<Cow<[u8]>> {
-        let mut bytes = Vec::with_capacity(2 + 4 + 8 + 8);
-        bytes.extend_from_slice(&field_id.to_be_bytes());
-        bytes.extend_from_slice(&document_id.to_be_bytes());
+        let mut bytes = Vec::with_capacity(32);
+        bytes.extend_from_slice(&field_id.to_be_bytes()); // 2 bytes
+        bytes.extend_from_slice(&document_id.to_be_bytes()); // 4 bytes
         let value_bytes = C::bytes_encode(value)?;
+        // variable length, if f64 -> 16 bytes, if string -> large, potentially
         bytes.extend_from_slice(&value_bytes);
         Some(Cow::Owned(bytes))
     }
