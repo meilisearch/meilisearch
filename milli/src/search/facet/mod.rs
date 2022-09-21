@@ -119,4 +119,35 @@ pub(crate) mod tests {
         txn.commit().unwrap();
         index
     }
+    pub fn get_simple_index_with_multiple_field_ids() -> FacetIndex<OrderedF64Codec> {
+        let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
+        let mut txn = index.env.write_txn().unwrap();
+        for fid in 0..2 {
+            for i in 0..256u16 {
+                let mut bitmap = RoaringBitmap::new();
+                bitmap.insert(i as u32);
+                index.insert(&mut txn, fid, &(i as f64), &bitmap);
+            }
+        }
+        txn.commit().unwrap();
+        index
+    }
+    pub fn get_random_looking_index_with_multiple_field_ids() -> FacetIndex<OrderedF64Codec> {
+        let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
+        let mut txn = index.env.write_txn().unwrap();
+
+        let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
+        let keys =
+            std::iter::from_fn(|| Some(rng.gen_range(0..256))).take(128).collect::<Vec<u32>>();
+        for fid in 0..2 {
+            for (_i, &key) in keys.iter().enumerate() {
+                let mut bitmap = RoaringBitmap::new();
+                bitmap.insert(key);
+                bitmap.insert(key + 100);
+                index.insert(&mut txn, fid, &(key as f64), &bitmap);
+            }
+        }
+        txn.commit().unwrap();
+        index
+    }
 }

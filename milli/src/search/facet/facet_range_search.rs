@@ -9,6 +9,8 @@ use crate::heed_codec::facet::{
 };
 use crate::Result;
 
+/// Find all the document ids for which the given field contains a value contained within
+/// the two bounds.
 pub fn find_docids_of_facet_within_bounds<'t, BoundCodec>(
     rtxn: &'t heed::RoTxn<'t>,
     db: heed::Database<FacetGroupKeyCodec<BoundCodec>, FacetGroupValueCodec>,
@@ -24,11 +26,11 @@ where
     let inner;
     let left = match left {
         Bound::Included(left) => {
-            inner = BoundCodec::bytes_encode(left).unwrap();
+            inner = BoundCodec::bytes_encode(left).ok_or(heed::Error::Encoding)?;
             Bound::Included(inner.as_ref())
         }
         Bound::Excluded(left) => {
-            inner = BoundCodec::bytes_encode(left).unwrap();
+            inner = BoundCodec::bytes_encode(left).ok_or(heed::Error::Encoding)?;
             Bound::Excluded(inner.as_ref())
         }
         Bound::Unbounded => Bound::Unbounded,
@@ -36,11 +38,11 @@ where
     let inner;
     let right = match right {
         Bound::Included(right) => {
-            inner = BoundCodec::bytes_encode(right).unwrap();
+            inner = BoundCodec::bytes_encode(right).ok_or(heed::Error::Encoding)?;
             Bound::Included(inner.as_ref())
         }
         Bound::Excluded(right) => {
-            inner = BoundCodec::bytes_encode(right).unwrap();
+            inner = BoundCodec::bytes_encode(right).ok_or(heed::Error::Encoding)?;
             Bound::Excluded(inner.as_ref())
         }
         Bound::Unbounded => Bound::Unbounded,
@@ -49,9 +51,11 @@ where
     let mut f = FacetRangeSearch { rtxn, db, field_id, left, right, docids };
     let highest_level = get_highest_level(rtxn, db, field_id)?;
 
-    if let Some(first_bound) = get_first_facet_value::<ByteSliceRef>(rtxn, db, field_id)? {
-        let last_bound = get_last_facet_value::<ByteSliceRef>(rtxn, db, field_id)?.unwrap();
-        f.run(highest_level, first_bound, Bound::Included(last_bound), usize::MAX)?;
+    if let Some(starting_left_bound) = get_first_facet_value::<ByteSliceRef>(rtxn, db, field_id)? {
+        let rightmost_bound =
+            Bound::Included(get_last_facet_value::<ByteSliceRef>(rtxn, db, field_id)?.unwrap()); // will not fail because get_first_facet_value succeeded
+        let group_size = usize::MAX;
+        f.run(highest_level, starting_left_bound, rightmost_bound, group_size)?;
         Ok(())
     } else {
         return Ok(());
@@ -107,7 +111,25 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
         Ok(())
     }
 
-    /// Recursive part of the algorithm for level > 0
+    /// Recursive part of the algorithm for level > 0.
+    ///
+    /// It works by visiting a slice of a level and checking whether the range asscociated
+    /// with each visited element is contained within the bounds.
+    ///
+    /// 1. So long as the element's range is less than the left bound, we do nothing and keep iterating
+    /// 2. If the element's range is fully contained by the bounds, then all of its docids are added to
+    /// the roaring bitmap.
+    /// 3. If the element's range merely intersects the bounds, then we call the algorithm recursively
+    /// on the children of the element from the level below.
+    /// 4. If the element's range is greater than the right bound, we do nothing and stop iterating.
+    /// Note that the right bound is found through either the `left_bound` of the *next* element,
+    /// or from the `rightmost_bound` argument
+    ///
+    /// ## Arguments
+    /// - `level`: the level being visited
+    /// - `starting_left_bound`: the left_bound of the first element to visit
+    /// - `rightmost_bound`: the right bound of the last element that should be visited
+    /// - `group_size`: the number of elements that should be visited
     fn run(
         &mut self,
         level: u8,
@@ -123,13 +145,14 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
             FacetGroupKey { field_id: self.field_id, level, left_bound: starting_left_bound };
         let mut iter = self.db.range(&self.rtxn, &(left_key..))?.take(group_size);
 
+        // We iterate over the range while keeping in memory the previous value
         let (mut previous_key, mut previous_value) = iter.next().unwrap()?;
         for el in iter {
             let (next_key, next_value) = el?;
-            // the right of the iter range is unbounded, so we need to make sure that we are not iterating
-            // on the next field id
+            // the right of the iter range is potentially unbounded (e.g. if `group_size` is usize::MAX),
+            // so we need to make sure that we are not iterating on the next field id
             if next_key.field_id != self.field_id {
-                return Ok(());
+                break;
             }
             // now, do we skip, stop, or visit?
             let should_skip = {
@@ -176,6 +199,8 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
                 previous_value = next_value;
                 continue;
             }
+            // from here, we should visit the children of the previous element and
+            // call the function recursively
 
             let level = level - 1;
             let starting_left_bound = previous_key.left_bound;
@@ -187,7 +212,7 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
             previous_key = next_key;
             previous_value = next_value;
         }
-        // previous_key/previous_value are the last element
+        // previous_key/previous_value are the last element's key/value
 
         // now, do we skip, stop, or visit?
         let should_skip = {
@@ -224,18 +249,41 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
                 Bound::Unbounded => true,
             };
             let right_condition = match (self.right, rightmost_bound) {
-                (Bound::Included(right), Bound::Included(rightmost)) => rightmost <= right,
-                (Bound::Included(right), Bound::Excluded(rightmost)) => rightmost < right,
-                // e.g. x < 8 and rightmost is <= y
-                // condition met if rightmost < 8
-                (Bound::Excluded(right), Bound::Included(rightmost)) => rightmost < right,
-                // e.g. x < 8 and rightmost is < y
-                // condition met only if y <= 8?
-                (Bound::Excluded(right), Bound::Excluded(rightmost)) => rightmost <= right,
-                // e.g. x < inf. , so yes we take the whole thing
-                (Bound::Unbounded, _) => true,
-                // e.g. x < 7 , righmost is inf
-                (_, Bound::Unbounded) => false, // panic?
+                (Bound::Included(right), Bound::Included(rightmost)) => {
+                    // we need to stay within the bound ..=right
+                    // the element's range goes to ..=righmost
+                    // so the element fits entirely within the bound if rightmost <= right
+                    rightmost <= right
+                }
+                (Bound::Included(right), Bound::Excluded(rightmost)) => {
+                    // we need to stay within the bound ..=right
+                    // the element's range goes to ..righmost
+                    // so the element fits entirely within the bound if rightmost <= right
+                    rightmost <= right
+                }
+                (Bound::Excluded(right), Bound::Included(rightmost)) => {
+                    // we need to stay within the bound ..right
+                    // the element's range goes to ..=righmost
+                    // so the element fits entirely within the bound if rightmost < right
+                    rightmost < right
+                }
+                (Bound::Excluded(right), Bound::Excluded(rightmost)) => {
+                    // we need to stay within the bound ..right
+                    // the element's range goes to ..righmost
+                    // so the element fits entirely within the bound if rightmost <= right
+                    rightmost <= right
+                }
+                (Bound::Unbounded, _) => {
+                    // we need to stay within the bound ..inf
+                    // so the element always fits entirely within the bound
+                    true
+                }
+                (_, Bound::Unbounded) => {
+                    // we need to stay within a finite bound
+                    // but the element's range goes to ..inf
+                    // so the element never fits entirely within the bound
+                    false
+                }
             };
             left_condition && right_condition
         };
@@ -262,7 +310,10 @@ mod tests {
     use super::find_docids_of_facet_within_bounds;
     use crate::heed_codec::facet::{FacetGroupKeyCodec, OrderedF64Codec};
     use crate::milli_snap;
-    use crate::search::facet::tests::{get_random_looking_index, get_simple_index};
+    use crate::search::facet::tests::{
+        get_random_looking_index, get_random_looking_index_with_multiple_field_ids,
+        get_simple_index, get_simple_index_with_multiple_field_ids,
+    };
     use crate::snapshot_tests::display_bitmap;
 
     #[test]
@@ -272,7 +323,12 @@ mod tests {
     }
     #[test]
     fn filter_range_increasing() {
-        let indexes = [get_simple_index(), get_random_looking_index()];
+        let indexes = [
+            get_simple_index(),
+            get_random_looking_index(),
+            get_simple_index_with_multiple_field_ids(),
+            get_random_looking_index_with_multiple_field_ids(),
+        ];
         for (i, index) in indexes.iter().enumerate() {
             let txn = index.env.read_txn().unwrap();
             let mut results = String::new();
@@ -316,7 +372,12 @@ mod tests {
     }
     #[test]
     fn filter_range_decreasing() {
-        let indexes = [get_simple_index(), get_random_looking_index()];
+        let indexes = [
+            get_simple_index(),
+            get_random_looking_index(),
+            get_simple_index_with_multiple_field_ids(),
+            get_random_looking_index_with_multiple_field_ids(),
+        ];
         for (i, index) in indexes.iter().enumerate() {
             let txn = index.env.read_txn().unwrap();
 
@@ -367,7 +428,12 @@ mod tests {
     }
     #[test]
     fn filter_range_pinch() {
-        let indexes = [get_simple_index(), get_random_looking_index()];
+        let indexes = [
+            get_simple_index(),
+            get_random_looking_index(),
+            get_simple_index_with_multiple_field_ids(),
+            get_random_looking_index_with_multiple_field_ids(),
+        ];
         for (i, index) in indexes.iter().enumerate() {
             let txn = index.env.read_txn().unwrap();
 
