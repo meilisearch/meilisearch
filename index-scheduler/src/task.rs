@@ -1,5 +1,6 @@
 use anyhow::Result;
 use index::{Settings, Unchecked};
+use meilisearch_types::error::ResponseError;
 
 use milli::DocumentId;
 use serde::{Deserialize, Serialize, Serializer};
@@ -20,16 +21,6 @@ pub enum Status {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Error {
-    message: String,
-    code: String,
-    #[serde(rename = "type")]
-    kind: String,
-    link: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct TaskView {
     pub uid: TaskId,
     pub index_uid: Option<String>,
@@ -38,7 +29,7 @@ pub struct TaskView {
     pub kind: Kind,
 
     pub details: Option<Details>,
-    pub error: Option<Error>,
+    pub error: Option<ResponseError>,
 
     #[serde(serialize_with = "serialize_duration")]
     pub duration: Option<Duration>,
@@ -62,7 +53,7 @@ pub struct Task {
     #[serde(with = "time::serde::rfc3339::option")]
     pub finished_at: Option<OffsetDateTime>,
 
-    pub error: Option<Error>,
+    pub error: Option<ResponseError>,
     pub details: Option<Details>,
 
     pub status: Status,
