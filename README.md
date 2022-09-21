@@ -18,7 +18,6 @@ This repository contains crates to quickly debug the engine:
  - The `cli` crate is a simple command-line interface that helps run [flamegraph] on top of it.
  - The `filter-parser` crate contains the parser for the Meilisearch filter syntax.
  - The `flatten-serde-json` crate contains the library that flattens serde-json `Value` objects like Elasticsearch does.
- - The `helpers` crate is only used to do operations on the database.
  - The `json-depth-checker` crate is used to indicate if a JSON must be flattened.
 
 ## How to use it?
