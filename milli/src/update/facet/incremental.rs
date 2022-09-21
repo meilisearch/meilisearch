@@ -485,20 +485,20 @@ impl FacetsUpdateIncrementalInner {
         field_id: u16,
         level: u8,
         facet_value: &[u8],
-        docid: u32,
+        docids: &RoaringBitmap,
     ) -> Result<DeletionResult> {
         if level == 0 {
-            return self.delete_in_level_0(txn, field_id, facet_value, docid);
+            return self.delete_in_level_0(txn, field_id, facet_value, docids);
         }
         let (deletion_key, mut bitmap) =
             self.find_insertion_key_value(field_id, level, facet_value, txn)?;
 
-        let result = self.delete_in_level(txn, field_id, level - 1, facet_value.clone(), docid)?;
+        let result = self.delete_in_level(txn, field_id, level - 1, facet_value.clone(), docids)?;
 
         let mut decrease_size = false;
         let next_key = match result {
             DeletionResult::InPlace => {
-                bitmap.bitmap.remove(docid);
+                bitmap.bitmap -= docids;
                 self.db.put(txn, &deletion_key.as_ref(), &bitmap)?;
                 return Ok(DeletionResult::InPlace);
             }
@@ -527,7 +527,7 @@ impl FacetsUpdateIncrementalInner {
             if reduced_range {
                 updated_deletion_key.left_bound = next_key.clone().unwrap();
             }
-            updated_value.bitmap.remove(docid);
+            updated_value.bitmap -= docids;
             let _ = self.db.delete(txn, &deletion_key.as_ref())?;
             self.db.put(txn, &updated_deletion_key.as_ref(), &updated_value)?;
             if reduced_range {
@@ -543,11 +543,11 @@ impl FacetsUpdateIncrementalInner {
         txn: &'t mut RwTxn,
         field_id: u16,
         facet_value: &[u8],
-        docid: u32,
+        docids: &RoaringBitmap,
     ) -> Result<DeletionResult> {
         let key = FacetGroupKey { field_id, level: 0, left_bound: facet_value };
         let mut bitmap = self.db.get(&txn, &key)?.unwrap().bitmap;
-        bitmap.remove(docid);
+        bitmap -= docids;
 
         if bitmap.is_empty() {
             let mut next_key = None;
@@ -571,7 +571,7 @@ impl FacetsUpdateIncrementalInner {
         txn: &'t mut RwTxn,
         field_id: u16,
         facet_value: &[u8],
-        docid: u32,
+        docids: &RoaringBitmap,
     ) -> Result<()> {
         if self
             .db
@@ -584,7 +584,7 @@ impl FacetsUpdateIncrementalInner {
         let highest_level = get_highest_level(&txn, self.db, field_id)?;
 
         let result =
-            self.delete_in_level(txn, field_id, highest_level as u8, facet_value, docid)?;
+            self.delete_in_level(txn, field_id, highest_level as u8, facet_value, docids)?;
         match result {
             DeletionResult::InPlace => return Ok(()),
             DeletionResult::Reduce { .. } => return Ok(()),
@@ -807,7 +807,7 @@ mod tests {
 
         for i in (200..256).into_iter().rev() {
             index.verify_structure_validity(&txn, 0);
-            index.delete(&mut txn, 0, &(i as f64), i as u32);
+            index.delete_single_docid(&mut txn, 0, &(i as f64), i as u32);
         }
         index.verify_structure_validity(&txn, 0);
         txn.commit().unwrap();
@@ -816,7 +816,7 @@ mod tests {
 
         for i in (150..200).into_iter().rev() {
             index.verify_structure_validity(&txn, 0);
-            index.delete(&mut txn, 0, &(i as f64), i as u32);
+            index.delete_single_docid(&mut txn, 0, &(i as f64), i as u32);
         }
         index.verify_structure_validity(&txn, 0);
         txn.commit().unwrap();
@@ -824,7 +824,7 @@ mod tests {
         let mut txn = index.env.write_txn().unwrap();
         for i in (100..150).into_iter().rev() {
             index.verify_structure_validity(&txn, 0);
-            index.delete(&mut txn, 0, &(i as f64), i as u32);
+            index.delete_single_docid(&mut txn, 0, &(i as f64), i as u32);
         }
         index.verify_structure_validity(&txn, 0);
         txn.commit().unwrap();
@@ -832,14 +832,14 @@ mod tests {
         let mut txn = index.env.write_txn().unwrap();
         for i in (17..100).into_iter().rev() {
             index.verify_structure_validity(&txn, 0);
-            index.delete(&mut txn, 0, &(i as f64), i as u32);
+            index.delete_single_docid(&mut txn, 0, &(i as f64), i as u32);
         }
         index.verify_structure_validity(&txn, 0);
         txn.commit().unwrap();
         milli_snap!(format!("{index}"), 17);
         let mut txn = index.env.write_txn().unwrap();
         for i in (15..17).into_iter().rev() {
-            index.delete(&mut txn, 0, &(i as f64), i as u32);
+            index.delete_single_docid(&mut txn, 0, &(i as f64), i as u32);
         }
         index.verify_structure_validity(&txn, 0);
         txn.commit().unwrap();
@@ -847,7 +847,7 @@ mod tests {
         let mut txn = index.env.write_txn().unwrap();
         for i in (0..15).into_iter().rev() {
             index.verify_structure_validity(&txn, 0);
-            index.delete(&mut txn, 0, &(i as f64), i as u32);
+            index.delete_single_docid(&mut txn, 0, &(i as f64), i as u32);
         }
         index.verify_structure_validity(&txn, 0);
         txn.commit().unwrap();
@@ -867,7 +867,7 @@ mod tests {
         }
 
         for i in 0..128 {
-            index.delete(&mut txn, 0, &(i as f64), i as u32);
+            index.delete_single_docid(&mut txn, 0, &(i as f64), i as u32);
         }
         index.verify_structure_validity(&txn, 0);
         txn.commit().unwrap();
@@ -875,7 +875,7 @@ mod tests {
         let mut txn = index.env.write_txn().unwrap();
         for i in 128..216 {
             index.verify_structure_validity(&txn, 0);
-            index.delete(&mut txn, 0, &(i as f64), i as u32);
+            index.delete_single_docid(&mut txn, 0, &(i as f64), i as u32);
         }
         index.verify_structure_validity(&txn, 0);
         txn.commit().unwrap();
@@ -883,7 +883,7 @@ mod tests {
         let mut txn = index.env.write_txn().unwrap();
         for i in 216..256 {
             index.verify_structure_validity(&txn, 0);
-            index.delete(&mut txn, 0, &(i as f64), i as u32);
+            index.delete_single_docid(&mut txn, 0, &(i as f64), i as u32);
         }
         index.verify_structure_validity(&txn, 0);
         txn.commit().unwrap();
@@ -908,7 +908,7 @@ mod tests {
         for i in 0..128 {
             let key = keys[i];
             index.verify_structure_validity(&txn, 0);
-            index.delete(&mut txn, 0, &(key as f64), key as u32);
+            index.delete_single_docid(&mut txn, 0, &(key as f64), key as u32);
         }
         index.verify_structure_validity(&txn, 0);
         txn.commit().unwrap();
@@ -917,7 +917,7 @@ mod tests {
         for i in 128..216 {
             let key = keys[i];
             index.verify_structure_validity(&txn, 0);
-            index.delete(&mut txn, 0, &(key as f64), key as u32);
+            index.delete_single_docid(&mut txn, 0, &(key as f64), key as u32);
         }
         index.verify_structure_validity(&txn, 0);
         txn.commit().unwrap();
@@ -926,7 +926,7 @@ mod tests {
         for i in 216..256 {
             let key = keys[i];
             index.verify_structure_validity(&txn, 0);
-            index.delete(&mut txn, 0, &(key as f64), key as u32);
+            index.delete_single_docid(&mut txn, 0, &(key as f64), key as u32);
         }
         index.verify_structure_validity(&txn, 0);
         txn.commit().unwrap();
@@ -979,7 +979,7 @@ mod tests {
 
         for &key in keys.iter() {
             index.verify_structure_validity(&txn, 0);
-            index.delete(&mut txn, 0, &(key as f64), key + 100);
+            index.delete_single_docid(&mut txn, 0, &(key as f64), key + 100);
         }
         index.verify_structure_validity(&txn, 0);
         txn.commit().unwrap();
@@ -1010,7 +1010,7 @@ mod tests {
 
         for &key in keys.iter() {
             index.verify_structure_validity(&txn, 0);
-            index.delete(&mut txn, 0, &format!("{key:x}").as_str(), key + 100);
+            index.delete_single_docid(&mut txn, 0, &format!("{key:x}").as_str(), key + 100);
         }
         index.verify_structure_validity(&txn, 0);
         txn.commit().unwrap();
@@ -1131,7 +1131,7 @@ mod fuzz {
                 OperationKind::Delete(value) => {
                     if let Some(keys) = value_to_keys.get(value) {
                         for key in keys {
-                            index.delete(&mut txn, *field_id, key, *value as u32);
+                            index.delete_single_docid(&mut txn, *field_id, key, *value as u32);
                             trivial_db.delete(*field_id, *key, *value as u32);
                         }
                     }

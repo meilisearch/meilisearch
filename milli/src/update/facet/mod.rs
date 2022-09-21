@@ -74,15 +74,15 @@ pub const FACET_MAX_GROUP_SIZE: u8 = 8;
 pub const FACET_GROUP_SIZE: u8 = 4;
 pub const FACET_MIN_LEVEL_SIZE: u8 = 5;
 
-use std::fs::File;
-
 use self::incremental::FacetsUpdateIncremental;
 use super::FacetsUpdateBulk;
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec, FacetGroupValueCodec};
 use crate::{Index, Result};
+use std::fs::File;
 
 pub mod bulk;
+pub mod delete;
 pub mod incremental;
 
 pub struct FacetsUpdate<'i> {
@@ -120,8 +120,11 @@ impl<'i> FacetsUpdate<'i> {
             return Ok(());
         }
         if self.new_data.len() >= (self.database.len(wtxn)? as u64 / 50) {
+            let field_ids =
+                self.index.faceted_fields_ids(wtxn)?.iter().copied().collect::<Vec<_>>();
             let bulk_update = FacetsUpdateBulk::new(
                 self.index,
+                field_ids,
                 self.facet_type,
                 self.new_data,
                 self.group_size,
@@ -273,12 +276,12 @@ pub(crate) mod tests {
             let key_bytes = BoundCodec::bytes_encode(&key).unwrap();
             update.insert(wtxn, field_id, &key_bytes, docids).unwrap();
         }
-        pub fn delete<'a>(
+        pub fn delete_single_docid<'a>(
             &self,
             wtxn: &'a mut RwTxn,
             field_id: u16,
             key: &'a <BoundCodec as BytesEncode<'a>>::EItem,
-            value: u32,
+            docid: u32,
         ) {
             let update = FacetsUpdateIncrementalInner {
                 db: self.content,
@@ -287,7 +290,25 @@ pub(crate) mod tests {
                 max_group_size: self.max_group_size.get(),
             };
             let key_bytes = BoundCodec::bytes_encode(&key).unwrap();
-            update.delete(wtxn, field_id, &key_bytes, value).unwrap();
+            let mut docids = RoaringBitmap::new();
+            docids.insert(docid);
+            update.delete(wtxn, field_id, &key_bytes, &docids).unwrap();
+        }
+        pub fn delete<'a>(
+            &self,
+            wtxn: &'a mut RwTxn,
+            field_id: u16,
+            key: &'a <BoundCodec as BytesEncode<'a>>::EItem,
+            docids: &RoaringBitmap,
+        ) {
+            let update = FacetsUpdateIncrementalInner {
+                db: self.content,
+                group_size: self.group_size.get(),
+                min_level_size: self.min_level_size.get(),
+                max_group_size: self.max_group_size.get(),
+            };
+            let key_bytes = BoundCodec::bytes_encode(&key).unwrap();
+            update.delete(wtxn, field_id, &key_bytes, docids).unwrap();
         }
 
         pub fn bulk_insert<'a, 'b>(

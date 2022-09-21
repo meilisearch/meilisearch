@@ -29,6 +29,7 @@ pub struct FacetsUpdateBulk<'i> {
     group_size: u8,
     min_level_size: u8,
     facet_type: FacetType,
+    field_ids: Vec<FieldId>,
     // None if level 0 does not need to be updated
     new_data: Option<grenad::Reader<File>>,
 }
@@ -36,20 +37,30 @@ pub struct FacetsUpdateBulk<'i> {
 impl<'i> FacetsUpdateBulk<'i> {
     pub fn new(
         index: &'i Index,
+        field_ids: Vec<FieldId>,
         facet_type: FacetType,
         new_data: grenad::Reader<File>,
         group_size: u8,
         min_level_size: u8,
     ) -> FacetsUpdateBulk<'i> {
-        FacetsUpdateBulk { index, group_size, min_level_size, facet_type, new_data: Some(new_data) }
+        FacetsUpdateBulk {
+            index,
+            field_ids,
+            group_size,
+            min_level_size,
+            facet_type,
+            new_data: Some(new_data),
+        }
     }
 
     pub fn new_not_updating_level_0(
         index: &'i Index,
+        field_ids: Vec<FieldId>,
         facet_type: FacetType,
     ) -> FacetsUpdateBulk<'i> {
         FacetsUpdateBulk {
             index,
+            field_ids,
             group_size: FACET_GROUP_SIZE,
             min_level_size: FACET_MIN_LEVEL_SIZE,
             facet_type,
@@ -61,7 +72,7 @@ impl<'i> FacetsUpdateBulk<'i> {
     pub fn execute(self, wtxn: &mut heed::RwTxn) -> Result<()> {
         debug!("Computing and writing the facet values levels docids into LMDB on disk...");
 
-        let Self { index, group_size, min_level_size, facet_type, new_data } = self;
+        let Self { index, field_ids, group_size, min_level_size, facet_type, new_data } = self;
 
         let db = match facet_type {
             FacetType::String => {
@@ -75,8 +86,6 @@ impl<'i> FacetsUpdateBulk<'i> {
         index.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
 
         let inner = FacetsUpdateBulkInner { db, new_data, group_size, min_level_size };
-
-        let field_ids = index.faceted_fields_ids(wtxn)?.iter().copied().collect::<Box<[_]>>();
 
         inner.update(wtxn, &field_ids, |wtxn, field_id, all_docids| {
             index.put_faceted_documents_ids(wtxn, field_id, facet_type, &all_docids)?;
@@ -405,7 +414,7 @@ mod tests {
             index.verify_structure_validity(&wtxn, 1);
             // delete all the elements for the facet id 0
             for i in 0..100u32 {
-                index.delete(&mut wtxn, 0, &(i as f64), i);
+                index.delete_single_docid(&mut wtxn, 0, &(i as f64), i);
             }
             index.verify_structure_validity(&wtxn, 0);
             index.verify_structure_validity(&wtxn, 1);
