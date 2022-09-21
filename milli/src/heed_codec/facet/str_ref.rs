@@ -16,7 +16,7 @@ impl<'a> BytesDecode<'a> for StrRefCodec {
     type DItem = &'a str;
 
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-        let s = std::str::from_utf8(bytes).unwrap();
+        let s = std::str::from_utf8(bytes).ok()?;
         Some(s)
     }
 }
