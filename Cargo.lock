@@ -1078,6 +1078,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "document-formats"
+version = "0.1.0"
+dependencies = [
+ "csv",
+ "either",
+ "meilisearch-types",
+ "milli 0.33.0",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "downcast"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1784,10 +1796,12 @@ dependencies = [
  "big_s",
  "bincode",
  "csv",
+ "document-formats",
  "file-store",
  "index",
  "insta",
  "log",
+ "meilisearch-types",
  "milli 0.33.0",
  "nelson",
  "roaring 0.9.0",
