@@ -9,12 +9,12 @@ mod utils;
 pub type Result<T> = std::result::Result<T, Error>;
 pub type TaskId = u32;
 
-pub use crate::index_scheduler::IndexScheduler;
+pub use crate::index_scheduler::{IndexScheduler, Query};
 pub use error::Error;
 /// from the exterior you don't need to know there is multiple type of `Kind`
-pub use task::KindWithContent as TaskKind;
+pub use task::KindWithContent;
 /// from the exterior you don't need to know there is multiple type of `Task`
-pub use task::TaskView as Task;
+pub use task::TaskView;
 
 #[cfg(test)]
 mod tests {
