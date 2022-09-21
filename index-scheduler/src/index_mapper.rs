@@ -107,6 +107,16 @@ impl IndexMapper {
         Ok(index)
     }
 
+    pub fn indexes(&self, rtxn: &RoTxn) -> Result<Vec<Index>> {
+        self.index_mapping
+            .iter(&rtxn)?
+            .map(|ret| {
+                ret.map_err(Error::from)
+                    .and_then(|(name, _)| self.index(rtxn, name))
+            })
+            .collect()
+    }
+
     /// Swap two index name.
     pub fn swap(&self, wtxn: &mut RwTxn, lhs: &str, rhs: &str) -> Result<()> {
         let lhs_uuid = self
