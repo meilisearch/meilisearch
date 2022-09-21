@@ -1,0 +1,14 @@
+[package]
+name = "document-formats"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+csv = "1.1.6"
+meilisearch-types = { path = "../meilisearch-types" }
+either = { version = "1.6.1", features = ["serde"] }
+milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.33.0" }
+serde_json = { version = "1.0.85", features = ["preserve_order"] }
+serde = { version = "1.0.136", features = ["derive"] }

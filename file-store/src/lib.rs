@@ -40,7 +40,7 @@ pub struct FileStore {
 #[cfg(not(test))]
 impl FileStore {
     pub fn new(path: impl AsRef<Path>) -> Result<FileStore> {
-        let path = path.as_ref().join(UPDATE_FILES_PATH);
+        let path = path.as_ref().to_path_buf();
         std::fs::create_dir_all(&path)?;
         Ok(FileStore { path })
     }
