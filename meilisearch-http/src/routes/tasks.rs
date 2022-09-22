@@ -156,6 +156,8 @@ async fn get_task(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    let task_id = task_id.into_inner();
+
     analytics.publish(
         "Tasks Seen".to_string(),
         json!({ "per_task_uid": true }),
@@ -170,10 +172,11 @@ async fn get_task(
         }
     }
 
-    filters.limit = 1;
-    filters.from = Some(*task_id);
+    filters.uid = Some(vec![task_id]);
 
-    let task = meilisearch.list_tasks(filters).await?;
-
-    Ok(HttpResponse::Ok().json(task))
+    if let Some(task) = meilisearch.list_tasks(filters).await?.first() {
+        Ok(HttpResponse::Ok().json(task))
+    } else {
+        Err(index_scheduler::Error::TaskNotFound(task_id).into())
+    }
 }

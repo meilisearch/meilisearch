@@ -51,8 +51,8 @@ impl ErrorCode for IndexControllerError {
             IndexControllerError::DocumentFormatError(e) => e.error_code(),
             IndexControllerError::MissingPayload(_) => Code::MissingPayload,
             IndexControllerError::PayloadTooLarge => Code::PayloadTooLarge,
-            IndexControllerError::IndexResolver(_) => todo!(),
-            IndexControllerError::IndexError(_) => todo!(),
+            IndexControllerError::IndexResolver(e) => e.error_code(),
+            IndexControllerError::IndexError(e) => e.error_code(),
         }
     }
 }

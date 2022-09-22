@@ -31,6 +31,7 @@ pub struct Query {
     #[serde(rename = "type")]
     pub kind: Option<Vec<Kind>>,
     pub index_uid: Option<Vec<String>>,
+    pub uid: Option<Vec<TaskId>>,
 }
 
 impl Default for Query {
@@ -41,6 +42,7 @@ impl Default for Query {
             status: None,
             kind: None,
             index_uid: None,
+            uid: None,
         }
     }
 }
@@ -69,6 +71,15 @@ impl Query {
         index_vec.push(index_uid);
         Self {
             index_uid: Some(index_vec),
+            ..self
+        }
+    }
+
+    pub fn with_uid(self, uid: TaskId) -> Self {
+        let mut task_vec = self.uid.unwrap_or_default();
+        task_vec.push(uid);
+        Self {
+            uid: Some(task_vec),
             ..self
         }
     }
@@ -172,7 +183,11 @@ impl IndexScheduler {
         };
 
         // This is the list of all the tasks.
-        let mut tasks = RoaringBitmap::from_iter(0..last_task_id);
+        let mut tasks = RoaringBitmap::from_sorted_iter(0..last_task_id).unwrap();
+
+        if let Some(uids) = query.uid {
+            tasks &= RoaringBitmap::from_iter(uids);
+        }
 
         if let Some(status) = query.status {
             let mut status_tasks = RoaringBitmap::new();
@@ -254,6 +269,10 @@ impl IndexScheduler {
 
     pub fn create_update_file(&self) -> Result<(Uuid, File)> {
         Ok(self.file_store.new_update()?)
+    }
+
+    pub fn delete_update_file(&self, uuid: Uuid) -> Result<()> {
+        Ok(self.file_store.delete(uuid)?)
     }
 
     /// This worker function must be run in a different thread and must be run only once.
