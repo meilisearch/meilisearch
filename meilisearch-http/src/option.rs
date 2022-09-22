@@ -256,21 +256,18 @@ impl Opt {
             match std::fs::read(&config_file_path) {
                 Ok(config) => {
                     // If the file is successfully read, we deserialize it with `toml`.
-                    match toml::from_slice::<Opt>(&config) {
-                        Ok(opt_from_config) => {
-                            // We inject the values from the toml in the corresponding env vars if needs be. Doing so, we respect the priority toml < env vars < cli args.
-                            opt_from_config.export_to_env();
-                            // Once injected we parse the cli args once again to take the new env vars into scope.
-                            opts = Opt::parse();
-                            config_read_from = Some(config_file_path);
-                        }
-                        // If we have an error deserializing the file defined by the user.
-                        Err(err) if opts.config_file_path.is_some() => anyhow::bail!(err),
-                        _ => (),
-                    }
+                    let opt_from_config = toml::from_slice::<Opt>(&config)?;
+                    // We inject the values from the toml in the corresponding env vars if needs be. Doing so, we respect the priority toml < env vars < cli args.
+                    opt_from_config.export_to_env();
+                    // Once injected we parse the cli args once again to take the new env vars into scope.
+                    opts = Opt::parse();
+                    config_read_from = Some(config_file_path);
                 }
                 // If we have an error while reading the file defined by the user.
-                Err(err) if opts.config_file_path.is_some() => anyhow::bail!(err),
+                Err(_) if opts.config_file_path.is_some() => anyhow::bail!(
+                    "unable to open or read the {:?} configuration file.",
+                    opts.config_file_path.unwrap().display().to_string()
+                ),
                 _ => (),
             }
         }

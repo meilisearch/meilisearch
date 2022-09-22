@@ -119,7 +119,7 @@ pub fn print_launch_resume(opt: &Opt, user: &str, config_read_from: Option<PathB
     eprintln!("{}", ascii_name);
 
     eprintln!(
-        "Config file path:\t{}",
+        "Config file path:\t{:?}",
         config_read_from
             .map(|config_file_path| config_file_path.display().to_string())
             .unwrap_or_else(|| "none".to_string())
