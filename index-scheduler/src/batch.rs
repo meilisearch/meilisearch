@@ -30,7 +30,7 @@ pub(crate) enum Batch {
     },
     DocumentDeletion {
         index_uid: String,
-        documents: Vec<DocumentId>,
+        documents: Vec<String>,
         tasks: Vec<Task>,
     },
     DocumentClear {

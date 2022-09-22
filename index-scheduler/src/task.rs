@@ -2,22 +2,12 @@ use anyhow::Result;
 use index::{Settings, Unchecked};
 use meilisearch_types::error::ResponseError;
 
-use milli::DocumentId;
 use serde::{Deserialize, Serialize, Serializer};
-use std::{fmt::Write, path::PathBuf};
+use std::{fmt::Write, path::PathBuf, str::FromStr};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
-use crate::TaskId;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum Status {
-    Enqueued,
-    Processing,
-    Succeeded,
-    Failed,
-}
+use crate::{Error, TaskId};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -98,6 +88,29 @@ impl Task {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Status {
+    Enqueued,
+    Processing,
+    Succeeded,
+    Failed,
+}
+
+impl FromStr for Status {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "enqueued" => Ok(Status::Enqueued),
+            "processing" => Ok(Status::Processing),
+            "succeeded" => Ok(Status::Succeeded),
+            "failed" => Ok(Status::Failed),
+            s => Err(Error::InvalidStatus(s.to_string())),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum KindWithContent {
@@ -117,7 +130,7 @@ pub enum KindWithContent {
     },
     DocumentDeletion {
         index_uid: String,
-        documents_ids: Vec<DocumentId>,
+        documents_ids: Vec<String>,
     },
     DocumentClear {
         index_uid: String,
@@ -259,6 +272,29 @@ pub enum Kind {
     CancelTask,
     DumpExport,
     Snapshot,
+}
+
+impl FromStr for Kind {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "document_addition" => Ok(Kind::DocumentAddition),
+            "document_update" => Ok(Kind::DocumentUpdate),
+            "document_deletion" => Ok(Kind::DocumentDeletion),
+            "document_clear" => Ok(Kind::DocumentClear),
+            "settings" => Ok(Kind::Settings),
+            "index_creation" => Ok(Kind::IndexCreation),
+            "index_deletion" => Ok(Kind::IndexDeletion),
+            "index_update" => Ok(Kind::IndexUpdate),
+            "index_rename" => Ok(Kind::IndexRename),
+            "index_swap" => Ok(Kind::IndexSwap),
+            "cancel_task" => Ok(Kind::CancelTask),
+            "dump_export" => Ok(Kind::DumpExport),
+            "snapshot" => Ok(Kind::Snapshot),
+            s => Err(Error::InvalidKind(s.to_string())),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]

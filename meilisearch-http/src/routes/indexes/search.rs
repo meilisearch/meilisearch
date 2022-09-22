@@ -1,11 +1,11 @@
 use actix_web::{web, HttpRequest, HttpResponse};
-use log::debug;
-use meilisearch_auth::IndexSearchRules;
-use meilisearch_lib::index::{
+use index::{
     MatchingStrategy, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
     DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
     DEFAULT_SEARCH_OFFSET,
 };
+use log::debug;
+use meilisearch_auth::IndexSearchRules;
 use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::ResponseError;
 use serde::Deserialize;

@@ -11,10 +11,7 @@ pub type TaskId = u32;
 
 pub use crate::index_scheduler::{IndexScheduler, Query};
 pub use error::Error;
-/// from the exterior you don't need to know there is multiple type of `Kind`
-pub use task::KindWithContent;
-/// from the exterior you don't need to know there is multiple type of `Task`
-pub use task::TaskView;
+pub use task::{Kind, KindWithContent, Status, TaskView};
 
 #[cfg(test)]
 mod tests {

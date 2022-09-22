@@ -60,6 +60,14 @@ pub struct Meilisearch {
     index_scheduler: IndexScheduler,
 }
 
+impl std::ops::Deref for Meilisearch {
+    type Target = IndexScheduler;
+
+    fn deref(&self) -> &Self::Target {
+        &self.index_scheduler
+    }
+}
+
 #[derive(Debug)]
 pub enum DocumentAdditionFormat {
     Json,
@@ -315,10 +323,6 @@ impl Meilisearch {
             tokio::task::spawn_blocking(move || this.clone().index_scheduler.register(task))
                 .await??,
         )
-    }
-
-    pub async fn get_task(&self, id: TaskId) -> Result<TaskView> {
-        Ok(self.index_scheduler.task(id)?)
     }
 
     pub async fn list_tasks(&self, filter: index_scheduler::Query) -> Result<Vec<TaskView>> {
