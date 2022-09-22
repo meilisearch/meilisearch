@@ -15,6 +15,7 @@ use std::ffi::OsStr;
 use std::path::Path;
 
 // TODO: TAMO: rename the MeiliSearch in Meilisearch
+pub use index_controller::error::IndexControllerError;
 pub use index_controller::Meilisearch as MeiliSearch;
 pub use milli;
 pub use milli::heed;

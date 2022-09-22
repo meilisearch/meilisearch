@@ -18,16 +18,27 @@ pub struct TaskView {
     #[serde(rename = "type")]
     pub kind: Kind,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<Details>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<ResponseError>,
 
-    #[serde(serialize_with = "serialize_duration")]
+    #[serde(
+        serialize_with = "serialize_duration",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub duration: Option<Duration>,
     #[serde(with = "time::serde::rfc3339")]
     pub enqueued_at: OffsetDateTime,
-    #[serde(with = "time::serde::rfc3339::option")]
+    #[serde(
+        with = "time::serde::rfc3339::option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub started_at: Option<OffsetDateTime>,
-    #[serde(with = "time::serde::rfc3339::option")]
+    #[serde(
+        with = "time::serde::rfc3339::option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub finished_at: Option<OffsetDateTime>,
 }
 
