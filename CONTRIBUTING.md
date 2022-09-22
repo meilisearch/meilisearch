@@ -10,11 +10,21 @@ If Meilisearch does not offer optimized support for your language, please consid
 
 ## Table of Contents
 
+- [Hacktoberfest 2022](#hacktoberfest-2022)
 - [Assumptions](#assumptions)
 - [How to Contribute](#how-to-contribute)
 - [Development Workflow](#development-workflow)
 - [Git Guidelines](#git-guidelines)
 - [Release Process (for internal team only)](#release-process-for-internal-team-only)
+
+## Hacktoberfest 2022
+
+It's [Hacktoberfest month](https://hacktoberfest.com)! 🥳
+
+Thanks so much for participating with Meilisearch this year!
+1. We will follow the quality standards set by the organisers of Hacktoberfest (see detail on their [website](https://hacktoberfest.digitalocean.com/resources/qualitystandards)). Our reviewers will not consider any PR that doesn’t match that standard.
+2. PRs reviews will take place from Monday to Thursday, during usual working hours, CEST time. If you submit outside of these hours, there’s no need to panic; we will get around to your contribution.
+3. There will be no PR assignment as we don’t want people to ask to be assigned specific PRs and never return, discouraging the volunteer contributors from opening a PR to fix this issue. We take the liberty to chose the PR that best fixes the issue, so we encourage you to get to it as soon as possible and do your best!
 
 ## Assumptions
 
