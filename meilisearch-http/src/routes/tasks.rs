@@ -1,6 +1,6 @@
 use actix_web::{web, HttpRequest, HttpResponse};
-use meilisearch_lib::tasks::task::{TaskContent, TaskEvent, TaskId};
-use meilisearch_lib::tasks::TaskFilter;
+use index_scheduler::TaskId;
+use index_scheduler::{Kind, Status};
 use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
@@ -12,7 +12,6 @@ use serde_json::json;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::task::{TaskListView, TaskStatus, TaskType, TaskView};
 
 use super::fold_star_or;
 
@@ -27,8 +26,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TasksFilterQuery {
     #[serde(rename = "type")]
-    type_: Option<CS<StarOr<TaskType>>>,
-    status: Option<CS<StarOr<TaskStatus>>>,
+    type_: Option<CS<StarOr<Kind>>>,
+    status: Option<CS<StarOr<Status>>>,
     index_uid: Option<CS<StarOr<IndexUid>>>,
     #[serde(default = "DEFAULT_LIMIT")]
     limit: usize,
@@ -92,65 +91,43 @@ async fn get_tasks(
         Some(&req),
     );
 
+    let mut filters = index_scheduler::Query::default();
+
     // Then we filter on potential indexes and make sure that the search filter
     // restrictions are also applied.
-    let indexes_filters = match index_uid {
+    match index_uid {
         Some(indexes) => {
-            let mut filters = TaskFilter::default();
             for name in indexes {
                 if search_rules.is_index_authorized(&name) {
-                    filters.filter_index(name.to_string());
+                    filters = filters.with_index(name.to_string());
                 }
             }
-            Some(filters)
         }
         None => {
-            if search_rules.is_index_authorized("*") {
-                None
-            } else {
-                let mut filters = TaskFilter::default();
+            if !search_rules.is_index_authorized("*") {
                 for (index, _policy) in search_rules.clone() {
-                    filters.filter_index(index);
+                    filters = filters.with_index(index.to_string());
                 }
-                Some(filters)
             }
         }
     };
 
-    // Then we complete the task filter with other potential status and types filters.
-    let filters = if type_.is_some() || status.is_some() {
-        let mut filters = indexes_filters.unwrap_or_default();
-        filters.filter_fn(Box::new(move |task| {
-            let matches_type = match &type_ {
-                Some(types) => types
-                    .iter()
-                    .any(|t| task_type_matches_content(t, &task.content)),
-                None => true,
-            };
+    if let Some(kinds) = type_ {
+        for kind in kinds {
+            filters = filters.with_kind(kind);
+        }
+    }
 
-            let matches_status = match &status {
-                Some(statuses) => statuses
-                    .iter()
-                    .any(|t| task_status_matches_events(t, &task.events)),
-                None => true,
-            };
-
-            matches_type && matches_status
-        }));
-        Some(filters)
-    } else {
-        indexes_filters
-    };
+    if let Some(statuses) = status {
+        for status in statuses {
+            filters = filters.with_status(status);
+        }
+    }
 
     // We +1 just to know if there is more after this "page" or not.
     let limit = limit.saturating_add(1);
 
-    let mut tasks_results: Vec<_> = meilisearch
-        .list_tasks(filters, Some(limit), from)
-        .await?
-        .into_iter()
-        .map(TaskView::from)
-        .collect();
+    let mut tasks_results: Vec<_> = meilisearch.list_tasks(filters).await?.into_iter().collect();
 
     // If we were able to fetch the number +1 tasks we asked
     // it means that there is more to come.
@@ -162,12 +139,13 @@ async fn get_tasks(
 
     let from = tasks_results.first().map(|t| t.uid);
 
-    let tasks = TaskListView {
-        results: tasks_results,
-        limit: limit.saturating_sub(1),
-        from,
-        next,
-    };
+    // TODO: TAMO: define a structure to represent this type
+    let tasks = json!({
+        "results": tasks_results,
+        "limit": limit.saturating_sub(1),
+        "from": from,
+        "next": next,
+    });
 
     Ok(HttpResponse::Ok().json(tasks))
 }
@@ -185,20 +163,17 @@ async fn get_task(
     );
 
     let search_rules = &meilisearch.filters().search_rules;
-    let filters = if search_rules.is_index_authorized("*") {
-        None
-    } else {
-        let mut filters = TaskFilter::default();
+    let mut filters = index_scheduler::Query::default();
+    if !search_rules.is_index_authorized("*") {
         for (index, _policy) in search_rules.clone() {
-            filters.filter_index(index);
+            filters = filters.with_index(index);
         }
-        Some(filters)
-    };
+    }
 
-    let task: TaskView = meilisearch
-        .get_task(task_id.into_inner(), filters)
-        .await?
-        .into();
+    filters.limit = 1;
+    filters.from = Some(*task_id);
+
+    let task = meilisearch.list_tasks(filters).await?;
 
     Ok(HttpResponse::Ok().json(task))
 }

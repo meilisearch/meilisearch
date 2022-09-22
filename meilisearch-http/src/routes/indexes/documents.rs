@@ -4,9 +4,10 @@ use actix_web::web::Bytes;
 use actix_web::HttpMessage;
 use actix_web::{web, HttpRequest, HttpResponse};
 use bstr::ByteSlice;
+use document_formats::PayloadType;
 use futures::{Stream, StreamExt};
+use index_scheduler::{KindWithContent, TaskView};
 use log::debug;
-use meilisearch_lib::index_controller::{DocumentAdditionFormat, Update};
 use meilisearch_lib::milli::update::IndexDocumentsMethod;
 use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::ResponseError;
@@ -24,7 +25,6 @@ use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::payload::Payload;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::{fold_star_or, PaginationView};
-use crate::task::SummarizedTaskView;
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec![
@@ -117,8 +117,11 @@ pub async fn delete_document(
         document_id,
         index_uid,
     } = path.into_inner();
-    let update = Update::DeleteDocuments(vec![document_id]);
-    let task: SummarizedTaskView = meilisearch.register_update(index_uid, update).await?.into();
+    let task = KindWithContent::DocumentDeletion {
+        index_uid,
+        documents_ids: vec![document_id],
+    };
+    let task = meilisearch.register_task(task).await?;
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
 }
@@ -235,14 +238,14 @@ async fn document_addition(
     body: Payload,
     method: IndexDocumentsMethod,
     allow_index_creation: bool,
-) -> Result<SummarizedTaskView, ResponseError> {
+) -> Result<TaskView, ResponseError> {
     let format = match mime_type
         .as_ref()
         .map(|m| (m.type_().as_str(), m.subtype().as_str()))
     {
-        Some(("application", "json")) => DocumentAdditionFormat::Json,
-        Some(("application", "x-ndjson")) => DocumentAdditionFormat::Ndjson,
-        Some(("text", "csv")) => DocumentAdditionFormat::Csv,
+        Some(("application", "json")) => PayloadType::Json,
+        Some(("application", "x-ndjson")) => PayloadType::Ndjson,
+        Some(("text", "csv")) => PayloadType::Csv,
         Some((type_, subtype)) => {
             return Err(MeilisearchHttpError::InvalidContentType(
                 format!("{}/{}", type_, subtype),
@@ -257,12 +260,16 @@ async fn document_addition(
         }
     };
 
-    let update = Update::DocumentAddition {
-        payload: Box::new(payload_to_stream(body)),
+    let (file, uuid) = meilisearch.create_update_file()?;
+
+    let update = KindWithContent::DocumentAddition {
+        content_file: Box::new(payload_to_stream(body)),
+        documents_count: 0, // TODO: TAMO: get the document count
         primary_key,
         method,
         format,
         allow_index_creation,
+        index_uid,
     };
 
     let task = meilisearch.register_update(index_uid, update).await?.into();
