@@ -42,13 +42,15 @@ impl ErrorCode for Error {
             Error::IndexNotFound(_) => Code::IndexNotFound,
             Error::IndexAlreadyExists(_) => Code::IndexAlreadyExists,
             Error::TaskNotFound(_) => Code::TaskNotFound,
-            Error::InvalidStatus(_) => todo!(),
-            Error::InvalidKind(_) => todo!(),
-            Error::Heed(_) => todo!(),
-            Error::Milli(_) => todo!(),
-            Error::IndexError(_) => todo!(),
-            Error::FileStore(_) => todo!(),
-            Error::IoError(_) => todo!(),
+            Error::InvalidStatus(_) => Code::BadRequest,
+            Error::InvalidKind(_) => Code::BadRequest,
+
+            // TODO: TAMO: are all these errors really internal?
+            Error::Heed(_) => Code::Internal,
+            Error::Milli(_) => Code::Internal,
+            Error::IndexError(_) => Code::Internal,
+            Error::FileStore(_) => Code::Internal,
+            Error::IoError(_) => Code::Internal,
             Error::Anyhow(_) => Code::Internal,
             Error::CorruptedTaskQueue => Code::Internal,
         }

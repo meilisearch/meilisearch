@@ -260,19 +260,31 @@ async fn document_addition(
         }
     };
 
-    let (file, uuid) = meilisearch.create_update_file()?;
+    // TODO: TAMO: do something with the update file
+    // Box::new(payload_to_stream(body))
+    let (uuid, file) = meilisearch.create_update_file()?;
 
-    let update = KindWithContent::DocumentAddition {
-        content_file: Box::new(payload_to_stream(body)),
-        documents_count: 0, // TODO: TAMO: get the document count
-        primary_key,
-        method,
-        format,
-        allow_index_creation,
-        index_uid,
+    let task = match method {
+        IndexDocumentsMethod::ReplaceDocuments => KindWithContent::DocumentAddition {
+            content_file: uuid,
+            documents_count: 0, // TODO: TAMO: get the document count
+            primary_key,
+            allow_index_creation,
+            index_uid,
+        },
+
+        IndexDocumentsMethod::UpdateDocuments => KindWithContent::DocumentUpdate {
+            content_file: uuid,
+            documents_count: 0, // TODO: TAMO: get the document count
+            primary_key,
+            allow_index_creation,
+            index_uid,
+        },
+        // TODO: TAMO: can I get rids of the `non_exhaustive` on the IndexDocumentsMethod enum
+        _ => todo!(),
     };
 
-    let task = meilisearch.register_update(index_uid, update).await?.into();
+    let task = meilisearch.register_task(task).await?;
 
     debug!("returns: {:?}", task);
     Ok(task)
@@ -293,11 +305,11 @@ pub async fn delete_documents(
         })
         .collect();
 
-    let update = Update::DeleteDocuments(ids);
-    let task: SummarizedTaskView = meilisearch
-        .register_update(path.into_inner(), update)
-        .await?
-        .into();
+    let task = KindWithContent::DocumentDeletion {
+        index_uid: path.into_inner(),
+        documents_ids: ids,
+    };
+    let task = meilisearch.register_task(task).await?;
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
@@ -307,11 +319,10 @@ pub async fn clear_all_documents(
     meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, MeiliSearch>,
     path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let update = Update::ClearDocuments;
-    let task: SummarizedTaskView = meilisearch
-        .register_update(path.into_inner(), update)
-        .await?
-        .into();
+    let task = KindWithContent::DocumentClear {
+        index_uid: path.into_inner(),
+    };
+    let task = meilisearch.register_task(task).await?;
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
