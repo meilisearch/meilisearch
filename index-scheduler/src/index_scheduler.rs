@@ -1,11 +1,12 @@
 use crate::index_mapper::IndexMapper;
 use crate::task::{Kind, KindWithContent, Status, Task, TaskView};
 use crate::{Error, Result, TaskId};
-use file_store::FileStore;
+use file_store::{File, FileStore};
 use index::Index;
 use milli::update::IndexerConfig;
 use synchronoise::SignalEvent;
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -24,12 +25,12 @@ const DEFAULT_LIMIT: fn() -> u32 = || 20;
 #[serde(rename_all = "camelCase")]
 pub struct Query {
     #[serde(default = "DEFAULT_LIMIT")]
-    limit: u32,
-    from: Option<u32>,
-    status: Option<Vec<Status>>,
+    pub limit: u32,
+    pub from: Option<u32>,
+    pub status: Option<Vec<Status>>,
     #[serde(rename = "type")]
-    kind: Option<Vec<Kind>>,
-    index_uid: Option<Vec<String>>,
+    pub kind: Option<Vec<Kind>>,
+    pub index_uid: Option<Vec<String>>,
 }
 
 impl Default for Query {
@@ -59,6 +60,15 @@ impl Query {
         kind_vec.push(kind);
         Self {
             kind: Some(kind_vec),
+            ..self
+        }
+    }
+
+    pub fn with_index(self, index_uid: String) -> Self {
+        let mut index_vec = self.index_uid.unwrap_or_default();
+        index_vec.push(index_uid);
+        Self {
+            index_uid: Some(index_vec),
             ..self
         }
     }
@@ -193,15 +203,6 @@ impl IndexScheduler {
         Ok(tasks.into_iter().map(|task| task.as_task_view()).collect())
     }
 
-    /// Returns the tasks corresponding to the query.
-    pub fn task(&self, uid: TaskId) -> Result<TaskView> {
-        let rtxn = self.env.read_txn()?;
-        self.get_task(&rtxn, uid).and_then(|opt| {
-            opt.ok_or(Error::TaskNotFound(uid))
-                .map(|task| task.as_task_view())
-        })
-    }
-
     /// Register a new task in the scheduler. If it fails and data was associated with the task
     /// it tries to delete the file.
     pub fn register(&self, task: KindWithContent) -> Result<TaskView> {
@@ -249,6 +250,10 @@ impl IndexScheduler {
         self.notify();
 
         Ok(task.as_task_view())
+    }
+
+    pub fn create_update_file(&self) -> Result<(Uuid, File)> {
+        Ok(self.file_store.new_update()?)
     }
 
     /// This worker function must be run in a different thread and must be run only once.
@@ -422,10 +427,8 @@ mod tests {
             "doggo": "bob"
         }"#;
 
-        let (uuid, mut file) = index_scheduler.file_store.new_update().unwrap();
+        let (uuid, mut file) = index_scheduler.create_update_file().unwrap();
         document_formats::read_json(content.as_bytes(), file.as_file_mut()).unwrap();
-        file.persist().unwrap();
-
         index_scheduler
             .register(KindWithContent::DocumentAddition {
                 index_uid: S("doggos"),
@@ -435,6 +438,7 @@ mod tests {
                 allow_index_creation: true,
             })
             .unwrap();
+        file.persist().unwrap();
 
         index_scheduler.tick().unwrap();
 
