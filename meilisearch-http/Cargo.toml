@@ -48,6 +48,9 @@ log = "0.4.17"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
 meilisearch-lib = { path = "../meilisearch-lib", default-features = false }
+index = { path = "../index" }
+index-scheduler = { path = "../index-scheduler" }
+document-formats = { path = "../document-formats" }
 mimalloc = { version = "0.1.29", default-features = false }
 mime = "0.3.16"
 num_cpus = "1.13.1"

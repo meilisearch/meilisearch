@@ -1,15 +1,14 @@
 use log::debug;
 
 use actix_web::{web, HttpRequest, HttpResponse};
-use meilisearch_lib::index::{Settings, Unchecked};
-use meilisearch_lib::index_controller::Update;
+use index::{Settings, Unchecked};
+use index_scheduler::KindWithContent;
 use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::ResponseError;
 use serde_json::json;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
-use crate::task::SummarizedTaskView;
 
 #[macro_export]
 macro_rules! make_setting_route {
@@ -18,34 +17,33 @@ macro_rules! make_setting_route {
             use actix_web::{web, HttpRequest, HttpResponse, Resource};
             use log::debug;
 
+            use index::Settings;
+            use index_scheduler::KindWithContent;
             use meilisearch_lib::milli::update::Setting;
-            use meilisearch_lib::{index::Settings, index_controller::Update, MeiliSearch};
+            use meilisearch_lib::MeiliSearch;
 
             use meilisearch_types::error::ResponseError;
             use $crate::analytics::Analytics;
             use $crate::extractors::authentication::{policies::*, GuardedData};
             use $crate::extractors::sequential_extractor::SeqHandler;
-            use $crate::task::SummarizedTaskView;
 
             pub async fn delete(
                 meilisearch: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, MeiliSearch>,
                 index_uid: web::Path<String>,
             ) -> Result<HttpResponse, ResponseError> {
-                let settings = Settings {
+                let new_settings = Settings {
                     $attr: Setting::Reset,
                     ..Default::default()
                 };
 
                 let allow_index_creation = meilisearch.filters().allow_index_creation;
-                let update = Update::Settings {
-                    settings,
+                let task = KindWithContent::Settings {
+                    index_uid: index_uid.into_inner(),
+                    new_settings,
                     is_deletion: true,
                     allow_index_creation,
                 };
-                let task: SummarizedTaskView = meilisearch
-                    .register_update(index_uid.into_inner(), update)
-                    .await?
-                    .into();
+                let task = meilisearch.register_task(task).await?;
 
                 debug!("returns: {:?}", task);
                 Ok(HttpResponse::Accepted().json(task))
@@ -62,7 +60,7 @@ macro_rules! make_setting_route {
 
                 $analytics(&body, &req);
 
-                let settings = Settings {
+                let new_settings = Settings {
                     $attr: match body {
                         Some(inner_body) => Setting::Set(inner_body),
                         None => Setting::Reset,
@@ -71,15 +69,13 @@ macro_rules! make_setting_route {
                 };
 
                 let allow_index_creation = meilisearch.filters().allow_index_creation;
-                let update = Update::Settings {
-                    settings,
+                let task = KindWithContent::Settings {
+                    index_uid: index_uid.into_inner(),
+                    new_settings,
                     is_deletion: false,
                     allow_index_creation,
                 };
-                let task: SummarizedTaskView = meilisearch
-                    .register_update(index_uid.into_inner(), update)
-                    .await?
-                    .into();
+                let task = meilisearch.register_task(task).await?;
 
                 debug!("returns: {:?}", task);
                 Ok(HttpResponse::Accepted().json(task))
@@ -89,7 +85,9 @@ macro_rules! make_setting_route {
                 meilisearch: GuardedData<ActionPolicy<{ actions::SETTINGS_GET }>, MeiliSearch>,
                 index_uid: actix_web::web::Path<String>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
-                let settings = meilisearch.settings(index_uid.into_inner()).await?;
+                let index = meilisearch.get_index(index_uid.into_inner()).await?;
+                let settings = index.settings()?;
+
                 debug!("returns: {:?}", settings);
                 let mut json = serde_json::json!(&settings);
                 let val = json[$camelcase_attr].take();
@@ -175,11 +173,11 @@ make_setting_route!(
 make_setting_route!(
     "/typo-tolerance",
     patch,
-    meilisearch_lib::index::updates::TypoSettings,
+    index::updates::TypoSettings,
     typo_tolerance,
     "typoTolerance",
     analytics,
-    |setting: &Option<meilisearch_lib::index::updates::TypoSettings>, req: &HttpRequest| {
+    |setting: &Option<index::updates::TypoSettings>, req: &HttpRequest| {
         use serde_json::json;
 
         analytics.publish(
@@ -285,11 +283,11 @@ make_setting_route!(
 make_setting_route!(
     "/faceting",
     patch,
-    meilisearch_lib::index::updates::FacetingSettings,
+    index::updates::FacetingSettings,
     faceting,
     "faceting",
     analytics,
-    |setting: &Option<meilisearch_lib::index::updates::FacetingSettings>, req: &HttpRequest| {
+    |setting: &Option<index::updates::FacetingSettings>, req: &HttpRequest| {
         use serde_json::json;
 
         analytics.publish(
@@ -307,11 +305,11 @@ make_setting_route!(
 make_setting_route!(
     "/pagination",
     patch,
-    meilisearch_lib::index::updates::PaginationSettings,
+    index::updates::PaginationSettings,
     pagination,
     "pagination",
     analytics,
-    |setting: &Option<meilisearch_lib::index::updates::PaginationSettings>, req: &HttpRequest| {
+    |setting: &Option<index::updates::PaginationSettings>, req: &HttpRequest| {
         use serde_json::json;
 
         analytics.publish(
@@ -361,40 +359,40 @@ pub async fn update_all(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let settings = body.into_inner();
+    let new_settings = body.into_inner();
 
     analytics.publish(
         "Settings Updated".to_string(),
         json!({
            "ranking_rules": {
-                "sort_position": settings.ranking_rules.as_ref().set().map(|sort| sort.iter().position(|s| s == "sort")),
+                "sort_position": new_settings.ranking_rules.as_ref().set().map(|sort| sort.iter().position(|s| s == "sort")),
             },
             "searchable_attributes": {
-                "total": settings.searchable_attributes.as_ref().set().map(|searchable| searchable.len()),
+                "total": new_settings.searchable_attributes.as_ref().set().map(|searchable| searchable.len()),
             },
            "sortable_attributes": {
-                "total": settings.sortable_attributes.as_ref().set().map(|sort| sort.len()),
-                "has_geo": settings.sortable_attributes.as_ref().set().map(|sort| sort.iter().any(|s| s == "_geo")),
+                "total": new_settings.sortable_attributes.as_ref().set().map(|sort| sort.len()),
+                "has_geo": new_settings.sortable_attributes.as_ref().set().map(|sort| sort.iter().any(|s| s == "_geo")),
             },
            "filterable_attributes": {
-                "total": settings.filterable_attributes.as_ref().set().map(|filter| filter.len()),
-                "has_geo": settings.filterable_attributes.as_ref().set().map(|filter| filter.iter().any(|s| s == "_geo")),
+                "total": new_settings.filterable_attributes.as_ref().set().map(|filter| filter.len()),
+                "has_geo": new_settings.filterable_attributes.as_ref().set().map(|filter| filter.iter().any(|s| s == "_geo")),
             },
             "typo_tolerance": {
-                "enabled": settings.typo_tolerance
+                "enabled": new_settings.typo_tolerance
                     .as_ref()
                     .set()
                     .and_then(|s| s.enabled.as_ref().set())
                     .copied(),
-                "disable_on_attributes": settings.typo_tolerance
+                "disable_on_attributes": new_settings.typo_tolerance
                     .as_ref()
                     .set()
                     .and_then(|s| s.disable_on_attributes.as_ref().set().map(|m| !m.is_empty())),
-                "disable_on_words": settings.typo_tolerance
+                "disable_on_words": new_settings.typo_tolerance
                     .as_ref()
                     .set()
                     .and_then(|s| s.disable_on_words.as_ref().set().map(|m| !m.is_empty())),
-                "min_word_size_for_one_typo": settings.typo_tolerance
+                "min_word_size_for_one_typo": new_settings.typo_tolerance
                     .as_ref()
                     .set()
                     .and_then(|s| s.min_word_size_for_typos
@@ -402,7 +400,7 @@ pub async fn update_all(
                         .set()
                         .map(|s| s.one_typo.set()))
                     .flatten(),
-                "min_word_size_for_two_typos": settings.typo_tolerance
+                "min_word_size_for_two_typos": new_settings.typo_tolerance
                     .as_ref()
                     .set()
                     .and_then(|s| s.min_word_size_for_typos
@@ -412,13 +410,13 @@ pub async fn update_all(
                     .flatten(),
             },
             "faceting": {
-                "max_values_per_facet": settings.faceting
+                "max_values_per_facet": new_settings.faceting
                     .as_ref()
                     .set()
                     .and_then(|s| s.max_values_per_facet.as_ref().set()),
             },
             "pagination": {
-                "max_total_hits": settings.pagination
+                "max_total_hits": new_settings.pagination
                     .as_ref()
                     .set()
                     .and_then(|s| s.max_total_hits.as_ref().set()),
@@ -428,45 +426,42 @@ pub async fn update_all(
     );
 
     let allow_index_creation = meilisearch.filters().allow_index_creation;
-    let update = Update::Settings {
-        settings,
+    let task = KindWithContent::Settings {
+        index_uid: index_uid.into_inner(),
+        new_settings,
         is_deletion: false,
         allow_index_creation,
     };
-    let task: SummarizedTaskView = meilisearch
-        .register_update(index_uid.into_inner(), update)
-        .await?
-        .into();
+    let task = meilisearch.register_task(task).await?;
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
 }
 
 pub async fn get_all(
-    data: GuardedData<ActionPolicy<{ actions::SETTINGS_GET }>, MeiliSearch>,
+    meilisearch: GuardedData<ActionPolicy<{ actions::SETTINGS_GET }>, MeiliSearch>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let settings = data.settings(index_uid.into_inner()).await?;
-    debug!("returns: {:?}", settings);
-    Ok(HttpResponse::Ok().json(settings))
+    let index = meilisearch.get_index(index_uid.into_inner()).await?;
+    let new_settings = index.settings()?;
+    debug!("returns: {:?}", new_settings);
+    Ok(HttpResponse::Ok().json(new_settings))
 }
 
 pub async fn delete_all(
     data: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, MeiliSearch>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let settings = Settings::cleared().into_unchecked();
+    let new_settings = Settings::cleared().into_unchecked();
 
     let allow_index_creation = data.filters().allow_index_creation;
-    let update = Update::Settings {
-        settings,
+    let task = KindWithContent::Settings {
+        index_uid: index_uid.into_inner(),
+        new_settings,
         is_deletion: true,
         allow_index_creation,
     };
-    let task: SummarizedTaskView = data
-        .register_update(index_uid.into_inner(), update)
-        .await?
-        .into();
+    let task = data.register_task(task).await?;
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))

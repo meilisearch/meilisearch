@@ -1,6 +1,6 @@
 use actix_web::{web, HttpRequest, HttpResponse};
+use index_scheduler::KindWithContent;
 use log::debug;
-use meilisearch_lib::index_controller::Update;
 use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::ResponseError;
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,7 @@ use time::OffsetDateTime;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::task::SummarizedTaskView;
+use index_scheduler::task::TaskView;
 
 use super::Pagination;
 
@@ -48,10 +48,14 @@ pub async fn list_indexes(
     let nb_indexes = indexes.len();
     let iter = indexes
         .into_iter()
-        .filter(|i| search_rules.is_index_authorized(&i.uid));
+        .filter(|index| search_rules.is_index_authorized(&index.name));
+    /*
+    TODO: TAMO: implements me
     let ret = paginate
         .into_inner()
         .auto_paginate_unsized(nb_indexes, iter);
+    */
+    let ret = todo!();
 
     debug!("returns: {:?}", ret);
     Ok(HttpResponse::Ok().json(ret))
@@ -70,9 +74,7 @@ pub async fn create_index(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let IndexCreateRequest {
-        primary_key, uid, ..
-    } = body.into_inner();
+    let IndexCreateRequest { primary_key, uid } = body.into_inner();
 
     let allow_index_creation = meilisearch.filters().search_rules.is_index_authorized(&uid);
     if allow_index_creation {
@@ -82,8 +84,11 @@ pub async fn create_index(
             Some(&req),
         );
 
-        let update = Update::CreateIndex { primary_key };
-        let task: SummarizedTaskView = meilisearch.register_update(uid, update).await?.into();
+        let task = KindWithContent::IndexCreation {
+            index_uid: uid,
+            primary_key,
+        };
+        let task = meilisearch.register_task(task).await?;
 
         Ok(HttpResponse::Accepted().json(task))
     } else {
@@ -118,7 +123,10 @@ pub async fn get_index(
 ) -> Result<HttpResponse, ResponseError> {
     let meta = meilisearch.get_index(path.into_inner()).await?;
     debug!("returns: {:?}", meta);
-    Ok(HttpResponse::Ok().json(meta))
+
+    // TODO: TAMO: do this as well
+    todo!()
+    // Ok(HttpResponse::Ok().json(meta))
 }
 
 pub async fn update_index(
@@ -136,14 +144,12 @@ pub async fn update_index(
         Some(&req),
     );
 
-    let update = Update::UpdateIndex {
+    let task = KindWithContent::IndexUpdate {
+        index_uid: path.into_inner(),
         primary_key: body.primary_key,
     };
 
-    let task: SummarizedTaskView = meilisearch
-        .register_update(path.into_inner(), update)
-        .await?
-        .into();
+    let task = meilisearch.register_task(task).await?;
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
@@ -153,9 +159,9 @@ pub async fn delete_index(
     meilisearch: GuardedData<ActionPolicy<{ actions::INDEXES_DELETE }>, MeiliSearch>,
     path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let uid = path.into_inner();
-    let update = Update::DeleteIndex;
-    let task: SummarizedTaskView = meilisearch.register_update(uid, update).await?.into();
+    let index_uid = path.into_inner();
+    let task = KindWithContent::IndexDeletion { index_uid };
+    let task = meilisearch.register_task(task).await?;
 
     Ok(HttpResponse::Accepted().json(task))
 }
