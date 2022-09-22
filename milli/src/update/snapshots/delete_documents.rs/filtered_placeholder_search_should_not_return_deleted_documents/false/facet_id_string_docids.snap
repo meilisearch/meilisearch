@@ -1,0 +1,19 @@
+---
+source: milli/src/update/delete_documents.rs
+---
+1   abstract abstract [2, 6, 10, 13, 14, 15, 16, 17, ]
+1   aquarium aquarium [5, ]
+1   art      art      [4, 5, 8, 9, 10, 12, 17, ]
+1   cartoon  cartoon  [2, 7, 15, 17, ]
+1   colorfulness colorfulness [13, ]
+1   design   design   [2, 18, ]
+1   drawing  drawing  [3, 4, 5, 8, 10, 11, 16, ]
+1   geometry geometry [19, ]
+1   letter   letter   [1, ]
+1   outdoor  outdoor  [4, ]
+1   painting painting [3, ]
+1   pattern  pattern  [2, 3, 9, 10, 13, 14, 16, ]
+1   sign     sign     [0, ]
+2   design   design   [21, ]
+2   geometry geometry [20, 22, ]
+
