@@ -327,7 +327,6 @@ impl IndexScheduler {
 
     /// Create and execute and store the result of one batch of registered tasks.
     fn tick(&self) -> Result<()> {
-        // We notifiy we're starting a tick.
         #[cfg(test)]
         self.test_breakpoint_sdr.send(Breakpoint::Start).unwrap();
 
@@ -344,7 +343,6 @@ impl IndexScheduler {
         let started_at = OffsetDateTime::now_utc();
         *self.processing_tasks.write().unwrap() = (started_at, processing_tasks);
 
-        // We notifiy we've finished creating the tasks.
         #[cfg(test)]
         self.test_breakpoint_sdr
             .send(Breakpoint::BatchCreated)
@@ -387,7 +385,6 @@ impl IndexScheduler {
         wtxn.commit()?;
         log::info!("A batch of tasks was successfully completed.");
 
-        // We notifiy we finished processing the tasks.
         #[cfg(test)]
         self.test_breakpoint_sdr
             .send(Breakpoint::BatchProcessed)
