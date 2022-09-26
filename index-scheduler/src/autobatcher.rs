@@ -378,136 +378,138 @@ mod tests {
     use super::*;
     use Kind::*;
 
-    fn input_from(input: impl IntoIterator<Item = Kind>) -> Vec<(TaskId, Kind)> {
-        input
-            .into_iter()
-            .enumerate()
-            .map(|(id, kind)| (id as TaskId, kind))
-            .collect()
+    fn autobatch_from(input: impl IntoIterator<Item = Kind>) -> Option<BatchKind> {
+        autobatch(
+            input
+                .into_iter()
+                .enumerate()
+                .map(|(id, kind)| (id as TaskId, kind))
+                .collect(),
+        )
     }
 
     #[test]
     fn autobatch_simple_operation_together() {
         // we can autobatch one or multiple DocumentAddition together
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition])), @"Some(DocumentAddition { addition_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, DocumentAddition, DocumentAddition])), @"Some(DocumentAddition { addition_ids: [0, 1, 2] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition]), @"Some(DocumentAddition { addition_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, DocumentAddition, DocumentAddition]), @"Some(DocumentAddition { addition_ids: [0, 1, 2] })");
         // we can autobatch one or multiple DocumentUpdate together
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate])), @"Some(DocumentUpdate { update_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, DocumentUpdate, DocumentUpdate])), @"Some(DocumentUpdate { update_ids: [0, 1, 2] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate]), @"Some(DocumentUpdate { update_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, DocumentUpdate, DocumentUpdate]), @"Some(DocumentUpdate { update_ids: [0, 1, 2] })");
         // we can autobatch one or multiple DocumentDeletion together
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentDeletion])), @"Some(DocumentDeletion { deletion_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentDeletion, DocumentDeletion, DocumentDeletion])), @"Some(DocumentDeletion { deletion_ids: [0, 1, 2] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentDeletion]), @"Some(DocumentDeletion { deletion_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentDeletion, DocumentDeletion, DocumentDeletion]), @"Some(DocumentDeletion { deletion_ids: [0, 1, 2] })");
         // we can autobatch one or multiple Settings together
-        assert_smol_debug_snapshot!(autobatch(input_from([Settings])), @"Some(Settings { settings_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([Settings, Settings, Settings])), @"Some(Settings { settings_ids: [0, 1, 2] })");
+        assert_smol_debug_snapshot!(autobatch_from([Settings]), @"Some(Settings { settings_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([Settings, Settings, Settings]), @"Some(Settings { settings_ids: [0, 1, 2] })");
     }
 
     #[test]
     fn simple_document_operation_dont_autobatch_with_other() {
         // addition, updates and deletion can't batch together
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, DocumentUpdate])), @"Some(DocumentAddition { addition_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, DocumentDeletion])), @"Some(DocumentAddition { addition_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, DocumentAddition])), @"Some(DocumentUpdate { update_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, DocumentDeletion])), @"Some(DocumentUpdate { update_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentDeletion, DocumentAddition])), @"Some(DocumentDeletion { deletion_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentDeletion, DocumentUpdate])), @"Some(DocumentDeletion { deletion_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, DocumentUpdate]), @"Some(DocumentAddition { addition_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, DocumentDeletion]), @"Some(DocumentAddition { addition_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, DocumentAddition]), @"Some(DocumentUpdate { update_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, DocumentDeletion]), @"Some(DocumentUpdate { update_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentDeletion, DocumentAddition]), @"Some(DocumentDeletion { deletion_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentDeletion, DocumentUpdate]), @"Some(DocumentDeletion { deletion_ids: [0] })");
 
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, IndexCreation])), @"Some(DocumentAddition { addition_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, IndexCreation])), @"Some(DocumentUpdate { update_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentDeletion, IndexCreation])), @"Some(DocumentDeletion { deletion_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, IndexCreation]), @"Some(DocumentAddition { addition_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, IndexCreation]), @"Some(DocumentUpdate { update_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentDeletion, IndexCreation]), @"Some(DocumentDeletion { deletion_ids: [0] })");
 
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, IndexUpdate])), @"Some(DocumentAddition { addition_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, IndexUpdate])), @"Some(DocumentUpdate { update_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentDeletion, IndexUpdate])), @"Some(DocumentDeletion { deletion_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, IndexUpdate]), @"Some(DocumentAddition { addition_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, IndexUpdate]), @"Some(DocumentUpdate { update_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentDeletion, IndexUpdate]), @"Some(DocumentDeletion { deletion_ids: [0] })");
 
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, IndexRename])), @"Some(DocumentAddition { addition_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, IndexRename])), @"Some(DocumentUpdate { update_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentDeletion, IndexRename])), @"Some(DocumentDeletion { deletion_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, IndexRename]), @"Some(DocumentAddition { addition_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, IndexRename]), @"Some(DocumentUpdate { update_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentDeletion, IndexRename]), @"Some(DocumentDeletion { deletion_ids: [0] })");
 
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, IndexSwap])), @"Some(DocumentAddition { addition_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, IndexSwap])), @"Some(DocumentUpdate { update_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentDeletion, IndexSwap])), @"Some(DocumentDeletion { deletion_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, IndexSwap]), @"Some(DocumentAddition { addition_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, IndexSwap]), @"Some(DocumentUpdate { update_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentDeletion, IndexSwap]), @"Some(DocumentDeletion { deletion_ids: [0] })");
     }
 
     #[test]
     fn document_addition_batch_with_settings() {
         // simple case
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings])), @"Some(SettingsAndDocumentAddition { settings_ids: [1], addition_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings])), @"Some(SettingsAndDocumentUpdate { settings_ids: [1], update_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, Settings]), @"Some(SettingsAndDocumentAddition { settings_ids: [1], addition_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, Settings]), @"Some(SettingsAndDocumentUpdate { settings_ids: [1], update_ids: [0] })");
 
         // multiple settings and doc addition
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, DocumentAddition, Settings, Settings])), @"Some(SettingsAndDocumentAddition { settings_ids: [2, 3], addition_ids: [0, 1] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, DocumentAddition, Settings, Settings])), @"Some(SettingsAndDocumentAddition { settings_ids: [2, 3], addition_ids: [0, 1] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, DocumentAddition, Settings, Settings]), @"Some(SettingsAndDocumentAddition { settings_ids: [2, 3], addition_ids: [0, 1] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, DocumentAddition, Settings, Settings]), @"Some(SettingsAndDocumentAddition { settings_ids: [2, 3], addition_ids: [0, 1] })");
 
         // addition and setting unordered
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings, DocumentAddition, Settings])), @"Some(SettingsAndDocumentAddition { settings_ids: [1, 3], addition_ids: [0, 2] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings, DocumentUpdate, Settings])), @"Some(SettingsAndDocumentUpdate { settings_ids: [1, 3], update_ids: [0, 2] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, Settings, DocumentAddition, Settings]), @"Some(SettingsAndDocumentAddition { settings_ids: [1, 3], addition_ids: [0, 2] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, Settings, DocumentUpdate, Settings]), @"Some(SettingsAndDocumentUpdate { settings_ids: [1, 3], update_ids: [0, 2] })");
 
         // We ensure this kind of batch doesn't batch with forbidden operations
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings, DocumentUpdate])), @"Some(SettingsAndDocumentAddition { settings_ids: [1], addition_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings, DocumentAddition])), @"Some(SettingsAndDocumentUpdate { settings_ids: [1], update_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings, DocumentDeletion])), @"Some(SettingsAndDocumentAddition { settings_ids: [1], addition_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings, DocumentDeletion])), @"Some(SettingsAndDocumentUpdate { settings_ids: [1], update_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings, IndexCreation])), @"Some(SettingsAndDocumentAddition { settings_ids: [1], addition_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings, IndexCreation])), @"Some(SettingsAndDocumentUpdate { settings_ids: [1], update_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings, IndexUpdate])), @"Some(SettingsAndDocumentAddition { settings_ids: [1], addition_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings, IndexUpdate])), @"Some(SettingsAndDocumentUpdate { settings_ids: [1], update_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings, IndexRename])), @"Some(SettingsAndDocumentAddition { settings_ids: [1], addition_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings, IndexRename])), @"Some(SettingsAndDocumentUpdate { settings_ids: [1], update_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings, IndexSwap])), @"Some(SettingsAndDocumentAddition { settings_ids: [1], addition_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings, IndexSwap])), @"Some(SettingsAndDocumentUpdate { settings_ids: [1], update_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, Settings, DocumentUpdate]), @"Some(SettingsAndDocumentAddition { settings_ids: [1], addition_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, Settings, DocumentAddition]), @"Some(SettingsAndDocumentUpdate { settings_ids: [1], update_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, Settings, DocumentDeletion]), @"Some(SettingsAndDocumentAddition { settings_ids: [1], addition_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, Settings, DocumentDeletion]), @"Some(SettingsAndDocumentUpdate { settings_ids: [1], update_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, Settings, IndexCreation]), @"Some(SettingsAndDocumentAddition { settings_ids: [1], addition_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, Settings, IndexCreation]), @"Some(SettingsAndDocumentUpdate { settings_ids: [1], update_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, Settings, IndexUpdate]), @"Some(SettingsAndDocumentAddition { settings_ids: [1], addition_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, Settings, IndexUpdate]), @"Some(SettingsAndDocumentUpdate { settings_ids: [1], update_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, Settings, IndexRename]), @"Some(SettingsAndDocumentAddition { settings_ids: [1], addition_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, Settings, IndexRename]), @"Some(SettingsAndDocumentUpdate { settings_ids: [1], update_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, Settings, IndexSwap]), @"Some(SettingsAndDocumentAddition { settings_ids: [1], addition_ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, Settings, IndexSwap]), @"Some(SettingsAndDocumentUpdate { settings_ids: [1], update_ids: [0] })");
     }
 
     #[test]
     fn clear_and_additions() {
         // these two doesn't need to batch
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentClear, DocumentAddition])), @"Some(DocumentClear { ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentClear, DocumentUpdate])), @"Some(DocumentClear { ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentClear, DocumentAddition]), @"Some(DocumentClear { ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentClear, DocumentUpdate]), @"Some(DocumentClear { ids: [0] })");
 
         // Basic use case
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, DocumentAddition, DocumentClear])), @"Some(DocumentClear { ids: [0, 1, 2] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, DocumentUpdate, DocumentClear])), @"Some(DocumentClear { ids: [0, 1, 2] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, DocumentAddition, DocumentClear]), @"Some(DocumentClear { ids: [0, 1, 2] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, DocumentUpdate, DocumentClear]), @"Some(DocumentClear { ids: [0, 1, 2] })");
 
         // This batch kind doesn't mix with other document addition
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, DocumentAddition, DocumentClear, DocumentAddition])), @"Some(DocumentClear { ids: [0, 1, 2] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, DocumentUpdate, DocumentClear, DocumentUpdate])), @"Some(DocumentClear { ids: [0, 1, 2] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, DocumentAddition, DocumentClear, DocumentAddition]), @"Some(DocumentClear { ids: [0, 1, 2] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, DocumentUpdate, DocumentClear, DocumentUpdate]), @"Some(DocumentClear { ids: [0, 1, 2] })");
 
         // But you can batch multiple clear together
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, DocumentAddition, DocumentClear, DocumentClear, DocumentClear])), @"Some(DocumentClear { ids: [0, 1, 2, 3, 4] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, DocumentUpdate, DocumentClear, DocumentClear, DocumentClear])), @"Some(DocumentClear { ids: [0, 1, 2, 3, 4] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, DocumentAddition, DocumentClear, DocumentClear, DocumentClear]), @"Some(DocumentClear { ids: [0, 1, 2, 3, 4] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, DocumentUpdate, DocumentClear, DocumentClear, DocumentClear]), @"Some(DocumentClear { ids: [0, 1, 2, 3, 4] })");
     }
 
     #[test]
     fn clear_and_additions_and_settings() {
         // A clear don't need to autobatch the settings that happens AFTER there is no documents
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentClear, Settings])), @"Some(DocumentClear { ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentClear, Settings]), @"Some(DocumentClear { ids: [0] })");
 
-        assert_smol_debug_snapshot!(autobatch(input_from([Settings, DocumentClear, Settings])), @"Some(ClearAndSettings { other: [1], settings_ids: [0, 2] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings, DocumentClear])), @"Some(ClearAndSettings { other: [0, 2], settings_ids: [1] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings, DocumentClear])), @"Some(ClearAndSettings { other: [0, 2], settings_ids: [1] })");
+        assert_smol_debug_snapshot!(autobatch_from([Settings, DocumentClear, Settings]), @"Some(ClearAndSettings { other: [1], settings_ids: [0, 2] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, Settings, DocumentClear]), @"Some(ClearAndSettings { other: [0, 2], settings_ids: [1] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, Settings, DocumentClear]), @"Some(ClearAndSettings { other: [0, 2], settings_ids: [1] })");
     }
 
     #[test]
     fn anything_and_index_deletion() {
         // The indexdeletion doesn't batch with anything that happens AFTER
-        assert_smol_debug_snapshot!(autobatch(input_from([IndexDeletion, DocumentAddition])), @"Some(IndexDeletion { ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([IndexDeletion, DocumentUpdate])), @"Some(IndexDeletion { ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([IndexDeletion, DocumentDeletion])), @"Some(IndexDeletion { ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([IndexDeletion, DocumentClear])), @"Some(IndexDeletion { ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([IndexDeletion, Settings])), @"Some(IndexDeletion { ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([IndexDeletion, DocumentAddition]), @"Some(IndexDeletion { ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([IndexDeletion, DocumentUpdate]), @"Some(IndexDeletion { ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([IndexDeletion, DocumentDeletion]), @"Some(IndexDeletion { ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([IndexDeletion, DocumentClear]), @"Some(IndexDeletion { ids: [0] })");
+        assert_smol_debug_snapshot!(autobatch_from([IndexDeletion, Settings]), @"Some(IndexDeletion { ids: [0] })");
 
         // The index deletion can accept almost any type of BatchKind and transform it to an IndexDeletion
         // First, the basic cases
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, IndexDeletion])), @"Some(IndexDeletion { ids: [0, 1] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, IndexDeletion])), @"Some(IndexDeletion { ids: [0, 1] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentDeletion, IndexDeletion])), @"Some(IndexDeletion { ids: [0, 1] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentClear, IndexDeletion])), @"Some(IndexDeletion { ids: [0, 1] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([Settings, IndexDeletion])), @"Some(IndexDeletion { ids: [0, 1] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, IndexDeletion]), @"Some(IndexDeletion { ids: [0, 1] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, IndexDeletion]), @"Some(IndexDeletion { ids: [0, 1] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentDeletion, IndexDeletion]), @"Some(IndexDeletion { ids: [0, 1] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentClear, IndexDeletion]), @"Some(IndexDeletion { ids: [0, 1] })");
+        assert_smol_debug_snapshot!(autobatch_from([Settings, IndexDeletion]), @"Some(IndexDeletion { ids: [0, 1] })");
 
         // Then the mixed cases
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings, IndexDeletion])), @"Some(IndexDeletion { ids: [0, 2, 1] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings, IndexDeletion])), @"Some(IndexDeletion { ids: [0, 2, 1] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentAddition, Settings, DocumentClear, IndexDeletion])), @"Some(IndexDeletion { ids: [1, 3, 0, 2] })");
-        assert_smol_debug_snapshot!(autobatch(input_from([DocumentUpdate, Settings, DocumentClear, IndexDeletion])), @"Some(IndexDeletion { ids: [1, 3, 0, 2] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, Settings, IndexDeletion]), @"Some(IndexDeletion { ids: [0, 2, 1] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, Settings, IndexDeletion]), @"Some(IndexDeletion { ids: [0, 2, 1] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, Settings, DocumentClear, IndexDeletion]), @"Some(IndexDeletion { ids: [1, 3, 0, 2] })");
+        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, Settings, DocumentClear, IndexDeletion]), @"Some(IndexDeletion { ids: [1, 3, 0, 2] })");
     }
 }
