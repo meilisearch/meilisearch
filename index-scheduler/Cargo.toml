@@ -26,5 +26,5 @@ derive_builder = "0.11.2"
 
 [dev-dependencies]
 nelson = { git = "https://github.com/meilisearch/nelson.git", rev = "675f13885548fb415ead8fbb447e9e6d9314000a"}
-insta = { version = "1.19.1", features = ["json"] }
+insta = { version = "1.19.1", features = ["json", "redactions"] }
 big_s = "1.0.2"
