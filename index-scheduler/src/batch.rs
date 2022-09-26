@@ -427,7 +427,7 @@ impl IndexScheduler {
         Ok(None)
     }
 
-    pub(crate) fn process_batch(&self, wtxn: &mut RwTxn, batch: Batch) -> Result<Vec<Task>> {
+    pub(crate) fn process_batch(&self, batch: Batch) -> Result<Vec<Task>> {
         match batch {
             Batch::Cancel(_) => todo!(),
             Batch::Snapshot(_) => todo!(),
@@ -439,7 +439,12 @@ impl IndexScheduler {
                 content_files,
                 mut tasks,
             } => {
-                let index = self.index_mapper.create_index(wtxn, &index_uid)?;
+                // we NEED a write transaction for the index creation.
+                // To avoid blocking the whole process we're going to commit asap.
+                let mut wtxn = self.env.write_txn()?;
+                let index = self.index_mapper.create_index(&mut wtxn, &index_uid)?;
+                wtxn.commit()?;
+
                 let ret = index.update_documents(
                     IndexDocumentsMethod::ReplaceDocuments,
                     primary_key,
@@ -474,7 +479,9 @@ impl IndexScheduler {
                 settings: _,
                 settings_tasks: _,
             } => {
-                let index = self.index_mapper.create_index(wtxn, &index_uid)?;
+                let mut wtxn = self.env.write_txn()?;
+                let index = self.index_mapper.create_index(&mut wtxn, &index_uid)?;
+                wtxn.commit()?;
                 let mut updated_tasks = Vec::new();
 
                 /*
