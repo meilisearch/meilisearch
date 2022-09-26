@@ -181,47 +181,6 @@ impl IndexScheduler {
         })
     }
 
-    #[cfg(test)]
-    pub fn test() -> Self {
-        let dir = TempDir::new().unwrap();
-        let tasks_path = dir.path().join("db_path");
-        let update_file_path = dir.path().join("file_store");
-        let indexes_path = dir.path().join("indexes");
-        let index_size = 1024 * 1024;
-        let indexer_config = IndexerConfig::default();
-
-        std::fs::create_dir_all(&tasks_path).unwrap();
-        std::fs::create_dir_all(&update_file_path).unwrap();
-        std::fs::create_dir_all(&indexes_path).unwrap();
-
-        let mut options = heed::EnvOpenOptions::new();
-        options.max_dbs(6);
-
-        let env = options.open(tasks_path).unwrap();
-        let processing_tasks = (OffsetDateTime::now_utc(), RoaringBitmap::new());
-        let file_store = FileStore::new(&update_file_path).unwrap();
-
-        let (sender, receiver) = crossbeam::channel::bounded(0);
-
-        Self {
-            // by default there is no processing tasks
-            processing_tasks: Arc::new(RwLock::new(processing_tasks)),
-            file_store,
-            all_tasks: env.create_database(Some(db_name::ALL_TASKS)).unwrap(),
-            status: env.create_database(Some(db_name::STATUS)).unwrap(),
-            kind: env.create_database(Some(db_name::KIND)).unwrap(),
-            index_tasks: env.create_database(Some(db_name::INDEX_TASKS)).unwrap(),
-            index_mapper: IndexMapper::new(&env, indexes_path, index_size, indexer_config).unwrap(),
-            env,
-            // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
-            wake_up: Arc::new(SignalEvent::auto(true)),
-
-            test_breakpoint_rcv: receiver,
-            test_breakpoint_sdr: sender,
-            test_tempdir: Arc::new(dir),
-        }
-    }
-
     /// Return the index corresponding to the name. If it wasn't opened before
     /// it'll be opened. But if it doesn't exist on disk it'll throw an
     /// `IndexNotFound` error.
@@ -373,7 +332,7 @@ impl IndexScheduler {
     fn tick(&self) -> Result<()> {
         // We notifiy we're starting a tick.
         #[cfg(test)]
-        self.test_breakpoint_sdr.send(Breakpoint::Start);
+        self.test_breakpoint_sdr.send(Breakpoint::Start).unwrap();
 
         let mut wtxn = self.env.write_txn()?;
         let batch = match self.create_next_batch(&wtxn)? {
@@ -390,7 +349,9 @@ impl IndexScheduler {
 
         // We notifiy we've finished creating the tasks.
         #[cfg(test)]
-        self.test_breakpoint_sdr.send(Breakpoint::BatchCreated);
+        self.test_breakpoint_sdr
+            .send(Breakpoint::BatchCreated)
+            .unwrap();
 
         // 2. process the tasks
         let res = self.process_batch(&mut wtxn, batch);
@@ -431,7 +392,9 @@ impl IndexScheduler {
 
         // We notifiy we finished processing the tasks.
         #[cfg(test)]
-        self.test_breakpoint_sdr.send(Breakpoint::BatchProcessed);
+        self.test_breakpoint_sdr
+            .send(Breakpoint::BatchProcessed)
+            .unwrap();
 
         Ok(())
     }
@@ -473,6 +436,49 @@ mod tests {
     use crate::assert_smol_debug_snapshot;
 
     use super::*;
+
+    impl IndexScheduler {
+        pub fn test() -> Self {
+            let dir = TempDir::new().unwrap();
+            let tasks_path = dir.path().join("db_path");
+            let update_file_path = dir.path().join("file_store");
+            let indexes_path = dir.path().join("indexes");
+            let index_size = 1024 * 1024;
+            let indexer_config = IndexerConfig::default();
+
+            std::fs::create_dir_all(&tasks_path).unwrap();
+            std::fs::create_dir_all(&update_file_path).unwrap();
+            std::fs::create_dir_all(&indexes_path).unwrap();
+
+            let mut options = heed::EnvOpenOptions::new();
+            options.max_dbs(6);
+
+            let env = options.open(tasks_path).unwrap();
+            let processing_tasks = (OffsetDateTime::now_utc(), RoaringBitmap::new());
+            let file_store = FileStore::new(&update_file_path).unwrap();
+
+            let (sender, receiver) = crossbeam::channel::bounded(0);
+
+            Self {
+                // by default there is no processing tasks
+                processing_tasks: Arc::new(RwLock::new(processing_tasks)),
+                file_store,
+                all_tasks: env.create_database(Some(db_name::ALL_TASKS)).unwrap(),
+                status: env.create_database(Some(db_name::STATUS)).unwrap(),
+                kind: env.create_database(Some(db_name::KIND)).unwrap(),
+                index_tasks: env.create_database(Some(db_name::INDEX_TASKS)).unwrap(),
+                index_mapper: IndexMapper::new(&env, indexes_path, index_size, indexer_config)
+                    .unwrap(),
+                env,
+                // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
+                wake_up: Arc::new(SignalEvent::auto(true)),
+
+                test_breakpoint_rcv: receiver,
+                test_breakpoint_sdr: sender,
+                test_tempdir: Arc::new(dir),
+            }
+        }
+    }
 
     #[test]
     fn register() {
