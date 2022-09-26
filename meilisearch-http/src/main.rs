@@ -46,6 +46,8 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let meilisearch = setup_meilisearch(&opt)?;
+    let m = meilisearch.clone();
+    tokio::task::spawn_blocking(move || m.run());
 
     let auth_controller = AuthController::new(&opt.db_path, &opt.master_key)?;
 
