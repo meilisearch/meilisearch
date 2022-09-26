@@ -42,7 +42,7 @@ pub struct TaskView {
     pub finished_at: Option<OffsetDateTime>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Task {
     pub uid: TaskId,
@@ -122,7 +122,7 @@ impl FromStr for Status {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum KindWithContent {
     DocumentAddition {
