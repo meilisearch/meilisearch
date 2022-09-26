@@ -477,7 +477,26 @@ mod tests {
         index_scheduler.tick().unwrap();
 
         let task = index_scheduler.get_tasks(Query::default()).unwrap();
-        assert_smol_debug_snapshot!(task, @r###"[TaskView { uid: 0, index_uid: Some("doggos"), status: Succeeded, kind: DocumentAddition, details: Some(DocumentAddition { received_documents: 1, indexed_documents: 1 }), error: None, duration: Some(Duration { seconds: 0, nanoseconds: 29654837 }), enqueued_at: OffsetDateTime { local_datetime: PrimitiveDateTime { date: Date { year: 2022, ordinal: 269 }, time: Time { hour: 11, minute: 34, second: 29, nanosecond: 202925184 } }, offset: UtcOffset { hours: 0, minutes: 0, seconds: 0 } }, started_at: Some(OffsetDateTime { local_datetime: PrimitiveDateTime { date: Date { year: 2022, ordinal: 269 }, time: Time { hour: 11, minute: 34, second: 29, nanosecond: 203190739 } }, offset: UtcOffset { hours: 0, minutes: 0, seconds: 0 } }), finished_at: Some(OffsetDateTime { local_datetime: PrimitiveDateTime { date: Date { year: 2022, ordinal: 269 }, time: Time { hour: 11, minute: 34, second: 29, nanosecond: 232845576 } }, offset: UtcOffset { hours: 0, minutes: 0, seconds: 0 } }) }]"###);
+        assert_json_snapshot!(task, 
+            { "[].enqueuedAt" => "date", "[].startedAt" => "date", "[].finishedAt" => "date", "[].duration" => "duration" }
+            ,@r###"
+        [
+          {
+            "uid": 0,
+            "indexUid": "doggos",
+            "status": "succeeded",
+            "type": "documentAddition",
+            "details": {
+              "receivedDocuments": 1,
+              "indexedDocuments": 1
+            },
+            "duration": "duration",
+            "enqueuedAt": "date",
+            "startedAt": "date",
+            "finishedAt": "date"
+          }
+        ]
+        "###);
 
         let doggos = index_scheduler.index("doggos").unwrap();
 
