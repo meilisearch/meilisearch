@@ -15,11 +15,6 @@ pub use task::{Kind, KindWithContent, Status, TaskView};
 
 #[cfg(test)]
 mod tests {
-    use milli::update::IndexerConfig;
-    use tempfile::TempDir;
-
-    use crate::IndexScheduler;
-
     #[macro_export]
     macro_rules! assert_smol_debug_snapshot {
         ($value:expr, @$snapshot:literal) => {{
@@ -36,24 +31,8 @@ mod tests {
         }};
     }
 
-    pub fn index_scheduler() -> (IndexScheduler, TempDir) {
-        let dir = TempDir::new().unwrap();
-
-        (
-            IndexScheduler::new(
-                dir.path().join("db_path"),
-                dir.path().join("file_store"),
-                dir.path().join("indexes"),
-                1024 * 1024,
-                IndexerConfig::default(),
-            )
-            .unwrap(),
-            dir,
-        )
-    }
-
     #[test]
     fn simple_new() {
-        index_scheduler();
+        crate::IndexScheduler::test();
     }
 }
