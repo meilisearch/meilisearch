@@ -49,6 +49,12 @@ impl IndexScheduler {
             .get_task(wtxn, task.uid)?
             .ok_or(Error::CorruptedTaskQueue)?;
 
+        debug_assert_eq!(old_task.uid, task.uid);
+
+        if old_task == *task {
+            return Ok(());
+        }
+
         if old_task.status != task.status {
             self.update_status(wtxn, old_task.status, |bitmap| {
                 bitmap.remove(task.uid);
@@ -67,8 +73,7 @@ impl IndexScheduler {
             })?;
         }
 
-        // TODO: TAMO: update the task in `all_tasks`
-
+        self.all_tasks.put(wtxn, &BEU32::new(task.uid), &task)?;
         Ok(())
     }
 
