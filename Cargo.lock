@@ -2352,6 +2352,7 @@ dependencies = [
  "document-formats",
  "either",
  "env_logger",
+ "file-store",
  "flate2",
  "fst",
  "futures",
@@ -2486,6 +2487,7 @@ dependencies = [
  "proptest-derive",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]

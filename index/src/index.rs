@@ -268,7 +268,7 @@ impl Index {
 
     pub fn retrieve_document<S: AsRef<str>>(
         &self,
-        doc_id: String,
+        doc_id: &str,
         attributes_to_retrieve: Option<Vec<S>>,
     ) -> Result<Document> {
         let txn = self.read_txn()?;
@@ -279,14 +279,14 @@ impl Index {
         let internal_id = self
             .external_documents_ids(&txn)?
             .get(doc_id.as_bytes())
-            .ok_or_else(|| IndexError::DocumentNotFound(doc_id.clone()))?;
+            .ok_or_else(|| IndexError::DocumentNotFound(doc_id.to_string()))?;
 
         let document = self
             .documents(&txn, std::iter::once(internal_id))?
             .into_iter()
             .next()
             .map(|(_, d)| d)
-            .ok_or(IndexError::DocumentNotFound(doc_id))?;
+            .ok_or_else(|| IndexError::DocumentNotFound(doc_id.to_string()))?;
 
         let document = obkv_to_json(&all_fields, &fields_ids_map, document)?;
         let document = match &attributes_to_retrieve {

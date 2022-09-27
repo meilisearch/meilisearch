@@ -107,7 +107,7 @@ pub mod test {
 
         pub fn retrieve_document<S: AsRef<str>>(
             &self,
-            doc_id: String,
+            doc_id: &str,
             attributes_to_retrieve: Option<Vec<S>>,
         ) -> Result<Document> {
             match self {

@@ -50,6 +50,7 @@ meilisearch-types = { path = "../meilisearch-types" }
 meilisearch-lib = { path = "../meilisearch-lib", default-features = false }
 index = { path = "../index" }
 index-scheduler = { path = "../index-scheduler" }
+file-store = { path = "../file-store" }
 document-formats = { path = "../document-formats" }
 mimalloc = { version = "0.1.29", default-features = false }
 mime = "0.3.16"

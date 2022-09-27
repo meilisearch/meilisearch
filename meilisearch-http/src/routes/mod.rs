@@ -1,4 +1,6 @@
+use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
+use index_scheduler::IndexScheduler;
 use log::debug;
 use serde::{Deserialize, Serialize};
 
@@ -6,7 +8,6 @@ use serde_json::json;
 use time::OffsetDateTime;
 
 use index::{Settings, Unchecked};
-use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::star_or::StarOr;
 
@@ -232,7 +233,7 @@ pub async fn running() -> HttpResponse {
 }
 
 async fn get_stats(
-    meilisearch: GuardedData<ActionPolicy<{ actions::STATS_GET }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<IndexScheduler>>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -241,8 +242,9 @@ async fn get_stats(
         json!({ "per_index_uid": false }),
         Some(&req),
     );
-    let search_rules = &meilisearch.filters().search_rules;
-    let response = meilisearch.get_all_stats(search_rules).await?;
+    let search_rules = &index_scheduler.filters().search_rules;
+    // let response = index_scheduler.get_all_stats(search_rules).await?;
+    let response = todo!();
 
     debug!("returns: {:?}", response);
     Ok(HttpResponse::Ok().json(response))
@@ -257,7 +259,7 @@ struct VersionResponse {
 }
 
 async fn get_version(
-    _meilisearch: GuardedData<ActionPolicy<{ actions::VERSION }>, MeiliSearch>,
+    _index_scheduler: GuardedData<ActionPolicy<{ actions::VERSION }>, Data<IndexScheduler>>,
 ) -> HttpResponse {
     let commit_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
     let commit_date = option_env!("VERGEN_GIT_COMMIT_TIMESTAMP").unwrap_or("unknown");

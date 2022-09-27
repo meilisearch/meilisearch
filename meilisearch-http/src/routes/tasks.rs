@@ -1,7 +1,7 @@
+use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use index_scheduler::TaskId;
+use index_scheduler::{IndexScheduler, TaskId};
 use index_scheduler::{Kind, Status};
-use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::star_or::StarOr;
@@ -15,7 +15,7 @@ use crate::extractors::sequential_extractor::SeqHandler;
 
 use super::fold_star_or;
 
-const DEFAULT_LIMIT: fn() -> usize = || 20;
+const DEFAULT_LIMIT: fn() -> u32 = || 20;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::get().to(SeqHandler(get_tasks))))
@@ -30,7 +30,7 @@ pub struct TasksFilterQuery {
     status: Option<CS<StarOr<Status>>>,
     index_uid: Option<CS<StarOr<IndexUid>>>,
     #[serde(default = "DEFAULT_LIMIT")]
-    limit: usize,
+    limit: u32,
     from: Option<TaskId>,
 }
 
@@ -60,7 +60,7 @@ fn task_status_matches_events(status: &TaskStatus, events: &[TaskEvent]) -> bool
 }
 
 async fn get_tasks(
-    meilisearch: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, Data<IndexScheduler>>,
     params: web::Query<TasksFilterQuery>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
@@ -73,7 +73,7 @@ async fn get_tasks(
         from,
     } = params.into_inner();
 
-    let search_rules = &meilisearch.filters().search_rules;
+    let search_rules = &index_scheduler.filters().search_rules;
 
     // We first transform a potential indexUid=* into a "not specified indexUid filter"
     // for every one of the filters: type, status, and indexUid.
@@ -124,14 +124,16 @@ async fn get_tasks(
         }
     }
 
+    filters.from = from;
     // We +1 just to know if there is more after this "page" or not.
     let limit = limit.saturating_add(1);
+    filters.limit = limit;
 
-    let mut tasks_results: Vec<_> = meilisearch.list_tasks(filters).await?.into_iter().collect();
+    let mut tasks_results: Vec<_> = index_scheduler.get_tasks(filters)?.into_iter().collect();
 
     // If we were able to fetch the number +1 tasks we asked
     // it means that there is more to come.
-    let next = if tasks_results.len() == limit {
+    let next = if tasks_results.len() == limit as usize {
         tasks_results.pop().map(|t| t.uid)
     } else {
         None
@@ -151,7 +153,7 @@ async fn get_tasks(
 }
 
 async fn get_task(
-    meilisearch: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, Data<IndexScheduler>>,
     task_id: web::Path<TaskId>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
@@ -164,7 +166,7 @@ async fn get_task(
         Some(&req),
     );
 
-    let search_rules = &meilisearch.filters().search_rules;
+    let search_rules = &index_scheduler.filters().search_rules;
     let mut filters = index_scheduler::Query::default();
     if !search_rules.is_index_authorized("*") {
         for (index, _policy) in search_rules.clone() {
@@ -174,7 +176,7 @@ async fn get_task(
 
     filters.uid = Some(vec![task_id]);
 
-    if let Some(task) = meilisearch.list_tasks(filters).await?.first() {
+    if let Some(task) = index_scheduler.get_tasks(filters)?.first() {
         Ok(HttpResponse::Ok().json(task))
     } else {
         Err(index_scheduler::Error::TaskNotFound(task_id).into())

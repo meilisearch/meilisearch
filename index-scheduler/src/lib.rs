@@ -6,6 +6,8 @@ mod index_scheduler;
 pub mod task;
 mod utils;
 
+pub use milli;
+
 pub type Result<T> = std::result::Result<T, Error>;
 pub type TaskId = u32;
 

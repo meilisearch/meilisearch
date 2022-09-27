@@ -1,7 +1,8 @@
+use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
+use index_scheduler::IndexScheduler;
 use index_scheduler::KindWithContent;
 use log::debug;
-use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::ResponseError;
 use serde_json::json;
 
@@ -14,16 +15,16 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 pub async fn create_dump(
-    meilisearch: GuardedData<ActionPolicy<{ actions::DUMPS_CREATE }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DUMPS_CREATE }>, Data<IndexScheduler>>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     analytics.publish("Dump Created".to_string(), json!({}), Some(&req));
 
     let task = KindWithContent::DumpExport {
-        output: "toto".to_string().into(),
+        output: "todo".to_string().into(),
     };
-    let res = meilisearch.register_task(task).await?;
+    let res = tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;
 
     debug!("returns: {:?}", res);
     Ok(HttpResponse::Accepted().json(res))

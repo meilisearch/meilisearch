@@ -1,12 +1,13 @@
+use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use index::{
     MatchingStrategy, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
     DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
     DEFAULT_SEARCH_OFFSET,
 };
+use index_scheduler::IndexScheduler;
 use log::debug;
 use meilisearch_auth::IndexSearchRules;
-use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::ResponseError;
 use serde::Deserialize;
 use serde_cs::vec::CS;
@@ -136,8 +137,8 @@ fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 }
 
 pub async fn search_with_url_query(
-    meilisearch: GuardedData<ActionPolicy<{ actions::SEARCH }>, MeiliSearch>,
-    path: web::Path<String>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
     params: web::Query<SearchQueryGet>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
@@ -145,9 +146,8 @@ pub async fn search_with_url_query(
     debug!("called with params: {:?}", params);
     let mut query: SearchQuery = params.into_inner().into();
 
-    let index_uid = path.into_inner();
     // Tenant token search_rules.
-    if let Some(search_rules) = meilisearch
+    if let Some(search_rules) = index_scheduler
         .filters()
         .search_rules
         .get_index_search_rules(&index_uid)
@@ -157,7 +157,8 @@ pub async fn search_with_url_query(
 
     let mut aggregate = SearchAggregator::from_query(&query, &req);
 
-    let search_result = meilisearch.search(index_uid, query).await;
+    let index = index_scheduler.index(&index_uid)?;
+    let search_result = index.perform_search(query);
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
@@ -170,8 +171,8 @@ pub async fn search_with_url_query(
 }
 
 pub async fn search_with_post(
-    meilisearch: GuardedData<ActionPolicy<{ actions::SEARCH }>, MeiliSearch>,
-    path: web::Path<String>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
     params: web::Json<SearchQuery>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
@@ -179,9 +180,8 @@ pub async fn search_with_post(
     let mut query = params.into_inner();
     debug!("search called with params: {:?}", query);
 
-    let index_uid = path.into_inner();
     // Tenant token search_rules.
-    if let Some(search_rules) = meilisearch
+    if let Some(search_rules) = index_scheduler
         .filters()
         .search_rules
         .get_index_search_rules(&index_uid)
@@ -191,7 +191,8 @@ pub async fn search_with_post(
 
     let mut aggregate = SearchAggregator::from_query(&query, &req);
 
-    let search_result = meilisearch.search(index_uid, query).await;
+    let index = index_scheduler.index(&index_uid)?;
+    let search_result = index.perform_search(query);
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
