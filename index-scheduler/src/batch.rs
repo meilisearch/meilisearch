@@ -4,11 +4,8 @@ use crate::{
     Error, IndexScheduler, Result, TaskId,
 };
 use index::{Settings, Unchecked};
-use milli::{
-    heed::{RoTxn, RwTxn},
-    update::{DocumentAdditionResult, IndexDocumentsMethod},
-    DocumentId,
-};
+use milli::heed::RoTxn;
+use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
 use uuid::Uuid;
 
 pub(crate) enum Batch {

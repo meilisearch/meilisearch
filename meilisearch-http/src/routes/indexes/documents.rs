@@ -2,16 +2,16 @@ use std::io::Cursor;
 
 use actix_web::error::PayloadError;
 use actix_web::http::header::CONTENT_TYPE;
-use actix_web::web::Bytes;
+use actix_web::web::{Bytes, Data};
 use actix_web::HttpMessage;
 use actix_web::{web, HttpRequest, HttpResponse};
 use bstr::ByteSlice;
 use document_formats::{read_csv, read_json, read_ndjson, PayloadType};
 use futures::{Stream, StreamExt};
+use index_scheduler::milli::update::IndexDocumentsMethod;
+use index_scheduler::IndexScheduler;
 use index_scheduler::{KindWithContent, TaskView};
 use log::debug;
-use meilisearch_lib::milli::update::IndexDocumentsMethod;
-use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::star_or::StarOr;
 use mime::Mime;
@@ -95,24 +95,21 @@ pub struct GetDocument {
 }
 
 pub async fn get_document(
-    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     path: web::Path<DocumentParam>,
     params: web::Query<GetDocument>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = path.index_uid.clone();
-    let id = path.document_id.clone();
     let GetDocument { fields } = params.into_inner();
     let attributes_to_retrieve = fields.and_then(fold_star_or);
 
-    let document = meilisearch
-        .document(index, id, attributes_to_retrieve)
-        .await?;
+    let index = index_scheduler.index(&path.index_uid)?;
+    let document = index.retrieve_document(&path.document_id, attributes_to_retrieve)?;
     debug!("returns: {:?}", document);
     Ok(HttpResponse::Ok().json(document))
 }
 
 pub async fn delete_document(
-    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let DocumentParam {
@@ -123,7 +120,7 @@ pub async fn delete_document(
         index_uid,
         documents_ids: vec![document_id],
     };
-    let task = meilisearch.register_task(task).await?;
+    let task = tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
 }
@@ -139,8 +136,8 @@ pub struct BrowseQuery {
 }
 
 pub async fn get_all_documents(
-    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, MeiliSearch>,
-    path: web::Path<String>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
     params: web::Query<BrowseQuery>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
@@ -151,9 +148,8 @@ pub async fn get_all_documents(
     } = params.into_inner();
     let attributes_to_retrieve = fields.and_then(fold_star_or);
 
-    let (total, documents) = meilisearch
-        .documents(path.into_inner(), offset, limit, attributes_to_retrieve)
-        .await?;
+    let index = index_scheduler.index(&index_uid)?;
+    let (total, documents) = index.retrieve_documents(offset, limit, attributes_to_retrieve)?;
 
     let ret = PaginationView::new(offset, limit, total as usize, documents);
 
@@ -168,8 +164,8 @@ pub struct UpdateDocumentsQuery {
 }
 
 pub async fn add_documents(
-    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, MeiliSearch>,
-    path: web::Path<String>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
     req: HttpRequest,
@@ -177,19 +173,14 @@ pub async fn add_documents(
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
     let params = params.into_inner();
-    let index_uid = path.into_inner();
 
-    analytics.add_documents(
-        &params,
-        meilisearch.get_index(index_uid.clone()).await.is_err(),
-        &req,
-    );
+    analytics.add_documents(&params, index_scheduler.index(&index_uid).is_err(), &req);
 
-    let allow_index_creation = meilisearch.filters().allow_index_creation;
+    let allow_index_creation = index_scheduler.filters().allow_index_creation;
     let task = document_addition(
         extract_mime_type(&req)?,
-        meilisearch,
-        index_uid,
+        index_scheduler,
+        index_uid.into_inner(),
         params.primary_key,
         body,
         IndexDocumentsMethod::ReplaceDocuments,
@@ -201,7 +192,7 @@ pub async fn add_documents(
 }
 
 pub async fn update_documents(
-    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
     path: web::Path<String>,
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
@@ -211,16 +202,12 @@ pub async fn update_documents(
     debug!("called with params: {:?}", params);
     let index_uid = path.into_inner();
 
-    analytics.update_documents(
-        &params,
-        meilisearch.get_index(index_uid.clone()).await.is_err(),
-        &req,
-    );
+    analytics.update_documents(&params, index_scheduler.index(&index_uid).is_err(), &req);
 
-    let allow_index_creation = meilisearch.filters().allow_index_creation;
+    let allow_index_creation = index_scheduler.filters().allow_index_creation;
     let task = document_addition(
         extract_mime_type(&req)?,
-        meilisearch,
+        index_scheduler,
         index_uid,
         params.into_inner().primary_key,
         body,
@@ -234,7 +221,7 @@ pub async fn update_documents(
 
 async fn document_addition(
     mime_type: Option<Mime>,
-    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
     index_uid: String,
     primary_key: Option<String>,
     mut body: Payload,
@@ -262,7 +249,7 @@ async fn document_addition(
         }
     };
 
-    let (uuid, mut update_file) = meilisearch.create_update_file()?;
+    let (uuid, mut update_file) = index_scheduler.create_update_file()?;
 
     // push the entire stream into a `Vec`.
     // TODO: Maybe we should write it to a file to reduce the RAM consumption
@@ -281,7 +268,7 @@ async fn document_addition(
                 PayloadType::Ndjson => read_ndjson(reader, update_file.as_file_mut())?,
             };
             // we NEED to persist the file here because we moved the `udpate_file` in another task.
-            update_file.persist();
+            update_file.persist()?;
             Ok(documents_count)
         })
         .await;
@@ -289,11 +276,11 @@ async fn document_addition(
     let documents_count = match documents_count {
         Ok(Ok(documents_count)) => documents_count,
         Ok(Err(e)) => {
-            meilisearch.delete_update_file(uuid)?;
+            index_scheduler.delete_update_file(uuid)?;
             return Err(e.into());
         }
         Err(e) => {
-            meilisearch.delete_update_file(uuid)?;
+            index_scheduler.delete_update_file(uuid)?;
             return Err(e.into());
         }
     };
@@ -318,10 +305,11 @@ async fn document_addition(
         _ => todo!(),
     };
 
-    let task = match meilisearch.register_task(task).await {
+    let scheduler = index_scheduler.clone();
+    let task = match tokio::task::spawn_blocking(move || scheduler.register(task)).await? {
         Ok(task) => task,
         Err(e) => {
-            meilisearch.delete_update_file(uuid)?;
+            index_scheduler.delete_update_file(uuid)?;
             return Err(e.into());
         }
     };
@@ -331,7 +319,7 @@ async fn document_addition(
 }
 
 pub async fn delete_documents(
-    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     path: web::Path<String>,
     body: web::Json<Vec<Value>>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -349,20 +337,20 @@ pub async fn delete_documents(
         index_uid: path.into_inner(),
         documents_ids: ids,
     };
-    let task = meilisearch.register_task(task).await?;
+    let task = tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
 }
 
 pub async fn clear_all_documents(
-    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let task = KindWithContent::DocumentClear {
         index_uid: path.into_inner(),
     };
-    let task = meilisearch.register_task(task).await?;
+    let task = tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
