@@ -96,7 +96,7 @@ impl<U, I> Clone for IndexController<U, I> {
 #[derive(Debug)]
 pub enum DocumentAdditionFormat {
     Json,
-    Csv,
+    Csv(u8),
     Ndjson,
 }
 
@@ -105,7 +105,7 @@ impl fmt::Display for DocumentAdditionFormat {
         match self {
             DocumentAdditionFormat::Json => write!(f, "json"),
             DocumentAdditionFormat::Ndjson => write!(f, "ndjson"),
-            DocumentAdditionFormat::Csv => write!(f, "csv"),
+            DocumentAdditionFormat::Csv(_) => write!(f, "csv"),
         }
     }
 }
@@ -402,7 +402,7 @@ where
                     let reader = Cursor::new(buffer);
                     let count = match format {
                         DocumentAdditionFormat::Json => read_json(reader, &mut *update_file)?,
-                        DocumentAdditionFormat::Csv => read_csv(reader, &mut *update_file)?,
+                        DocumentAdditionFormat::Csv(delimiter) => read_csv(reader, &mut *update_file, delimiter)?,
                         DocumentAdditionFormat::Ndjson => read_ndjson(reader, &mut *update_file)?,
                     };
 

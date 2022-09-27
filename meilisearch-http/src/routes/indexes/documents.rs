@@ -160,6 +160,7 @@ pub async fn get_all_documents(
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpdateDocumentsQuery {
     pub primary_key: Option<String>,
+    pub csv_delimiter: Option<char>,
 }
 
 pub async fn add_documents(
@@ -185,8 +186,9 @@ pub async fn add_documents(
         extract_mime_type(&req)?,
         meilisearch,
         index_uid,
-        params.primary_key,
+        params.primary_key.clone(),
         body,
+        params.csv_delimiter.clone(),
         IndexDocumentsMethod::ReplaceDocuments,
         allow_index_creation,
     )
@@ -217,8 +219,9 @@ pub async fn update_documents(
         extract_mime_type(&req)?,
         meilisearch,
         index_uid,
-        params.into_inner().primary_key,
+        params.primary_key.clone(),
         body,
+        params.csv_delimiter.clone(),
         IndexDocumentsMethod::UpdateDocuments,
         allow_index_creation,
     )
@@ -233,6 +236,7 @@ async fn document_addition(
     index_uid: String,
     primary_key: Option<String>,
     body: Payload,
+    csv_delimiter: Option<char>,
     method: IndexDocumentsMethod,
     allow_index_creation: bool,
 ) -> Result<SummarizedTaskView, ResponseError> {
@@ -242,7 +246,7 @@ async fn document_addition(
     {
         Some(("application", "json")) => DocumentAdditionFormat::Json,
         Some(("application", "x-ndjson")) => DocumentAdditionFormat::Ndjson,
-        Some(("text", "csv")) => DocumentAdditionFormat::Csv,
+        Some(("text", "csv")) => DocumentAdditionFormat::Csv(csv_delimiter.map_or(',' as u8, |delim| delim as u8)),
         Some((type_, subtype)) => {
             return Err(MeilisearchHttpError::InvalidContentType(
                 format!("{}/{}", type_, subtype),

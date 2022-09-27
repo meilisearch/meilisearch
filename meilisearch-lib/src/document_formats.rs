@@ -15,7 +15,7 @@ type Result<T> = std::result::Result<T, DocumentFormatError>;
 pub enum PayloadType {
     Ndjson,
     Json,
-    Csv,
+    Csv(u8),
 }
 
 impl fmt::Display for PayloadType {
@@ -23,7 +23,7 @@ impl fmt::Display for PayloadType {
         match self {
             PayloadType::Ndjson => f.write_str("ndjson"),
             PayloadType::Json => f.write_str("json"),
-            PayloadType::Csv => f.write_str("csv"),
+            PayloadType::Csv(_) => f.write_str("csv"),
         }
     }
 }
@@ -91,11 +91,13 @@ impl ErrorCode for DocumentFormatError {
 internal_error!(DocumentFormatError: io::Error);
 
 /// Reads CSV from input and write an obkv batch to writer.
-pub fn read_csv(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
+pub fn read_csv(input: impl Read, writer: impl Write + Seek, delimiter: u8) -> Result<usize> {
     let mut builder = DocumentsBatchBuilder::new(writer);
 
-    let csv = csv::Reader::from_reader(input);
-    builder.append_csv(csv).map_err(|e| (PayloadType::Csv, e))?;
+    let csv = csv::ReaderBuilder::new()
+        .delimiter(delimiter)
+        .from_reader(input);
+    builder.append_csv(csv).map_err(|e| (PayloadType::Csv(delimiter), e))?;
 
     let count = builder.documents_count();
     let _ = builder
