@@ -3,7 +3,6 @@ resolver = "2"
 members = [
     "meilisearch-http",
     "meilisearch-types",
-    "meilisearch-lib",
     "meilisearch-auth",
     "index-scheduler",
     "document-formats",

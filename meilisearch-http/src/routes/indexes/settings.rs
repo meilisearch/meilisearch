@@ -1,9 +1,9 @@
+use actix_web::web::Data;
 use log::debug;
 
 use actix_web::{web, HttpRequest, HttpResponse};
 use index::{Settings, Unchecked};
-use index_scheduler::KindWithContent;
-use meilisearch_lib::MeiliSearch;
+use index_scheduler::{IndexScheduler, KindWithContent};
 use meilisearch_types::error::ResponseError;
 use serde_json::json;
 
@@ -14,13 +14,13 @@ use crate::extractors::authentication::{policies::*, GuardedData};
 macro_rules! make_setting_route {
     ($route:literal, $update_verb:ident, $type:ty, $attr:ident, $camelcase_attr:literal, $analytics_var:ident, $analytics:expr) => {
         pub mod $attr {
+            use actix_web::web::Data;
             use actix_web::{web, HttpRequest, HttpResponse, Resource};
             use log::debug;
 
             use index::Settings;
-            use index_scheduler::KindWithContent;
-            use meilisearch_lib::milli::update::Setting;
-            use meilisearch_lib::MeiliSearch;
+            use index_scheduler::milli::update::Setting;
+            use index_scheduler::{IndexScheduler, KindWithContent};
 
             use meilisearch_types::error::ResponseError;
             use $crate::analytics::Analytics;
@@ -28,7 +28,10 @@ macro_rules! make_setting_route {
             use $crate::extractors::sequential_extractor::SeqHandler;
 
             pub async fn delete(
-                meilisearch: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, MeiliSearch>,
+                index_scheduler: GuardedData<
+                    ActionPolicy<{ actions::SETTINGS_UPDATE }>,
+                    Data<IndexScheduler>,
+                >,
                 index_uid: web::Path<String>,
             ) -> Result<HttpResponse, ResponseError> {
                 let new_settings = Settings {
@@ -36,21 +39,25 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
 
-                let allow_index_creation = meilisearch.filters().allow_index_creation;
+                let allow_index_creation = index_scheduler.filters().allow_index_creation;
                 let task = KindWithContent::Settings {
                     index_uid: index_uid.into_inner(),
                     new_settings,
                     is_deletion: true,
                     allow_index_creation,
                 };
-                let task = meilisearch.register_task(task).await?;
+                let task =
+                    tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;
 
                 debug!("returns: {:?}", task);
                 Ok(HttpResponse::Accepted().json(task))
             }
 
             pub async fn update(
-                meilisearch: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, MeiliSearch>,
+                index_scheduler: GuardedData<
+                    ActionPolicy<{ actions::SETTINGS_UPDATE }>,
+                    Data<IndexScheduler>,
+                >,
                 index_uid: actix_web::web::Path<String>,
                 body: actix_web::web::Json<Option<$type>>,
                 req: HttpRequest,
@@ -68,24 +75,28 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
 
-                let allow_index_creation = meilisearch.filters().allow_index_creation;
+                let allow_index_creation = index_scheduler.filters().allow_index_creation;
                 let task = KindWithContent::Settings {
                     index_uid: index_uid.into_inner(),
                     new_settings,
                     is_deletion: false,
                     allow_index_creation,
                 };
-                let task = meilisearch.register_task(task).await?;
+                let task =
+                    tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;
 
                 debug!("returns: {:?}", task);
                 Ok(HttpResponse::Accepted().json(task))
             }
 
             pub async fn get(
-                meilisearch: GuardedData<ActionPolicy<{ actions::SETTINGS_GET }>, MeiliSearch>,
+                index_scheduler: GuardedData<
+                    ActionPolicy<{ actions::SETTINGS_GET }>,
+                    Data<IndexScheduler>,
+                >,
                 index_uid: actix_web::web::Path<String>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
-                let index = meilisearch.get_index(index_uid.into_inner()).await?;
+                let index = index_scheduler.index(&index_uid)?;
                 let settings = index.settings()?;
 
                 debug!("returns: {:?}", settings);
@@ -353,7 +364,7 @@ generate_configure!(
 );
 
 pub async fn update_all(
-    meilisearch: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     body: web::Json<Settings<Unchecked>>,
     req: HttpRequest,
@@ -425,43 +436,43 @@ pub async fn update_all(
         Some(&req),
     );
 
-    let allow_index_creation = meilisearch.filters().allow_index_creation;
+    let allow_index_creation = index_scheduler.filters().allow_index_creation;
     let task = KindWithContent::Settings {
         index_uid: index_uid.into_inner(),
         new_settings,
         is_deletion: false,
         allow_index_creation,
     };
-    let task = meilisearch.register_task(task).await?;
+    let task = tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
 }
 
 pub async fn get_all(
-    meilisearch: GuardedData<ActionPolicy<{ actions::SETTINGS_GET }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = meilisearch.get_index(index_uid.into_inner()).await?;
+    let index = index_scheduler.index(&index_uid)?;
     let new_settings = index.settings()?;
     debug!("returns: {:?}", new_settings);
     Ok(HttpResponse::Ok().json(new_settings))
 }
 
 pub async fn delete_all(
-    data: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let new_settings = Settings::cleared().into_unchecked();
 
-    let allow_index_creation = data.filters().allow_index_creation;
+    let allow_index_creation = index_scheduler.filters().allow_index_creation;
     let task = KindWithContent::Settings {
         index_uid: index_uid.into_inner(),
         new_settings,
         is_deletion: true,
         allow_index_creation,
     };
-    let task = data.register_task(task).await?;
+    let task = tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))

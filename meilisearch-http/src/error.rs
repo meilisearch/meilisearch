@@ -1,7 +1,6 @@
 use actix_web as aweb;
 use aweb::error::{JsonPayloadError, QueryPayloadError};
 use document_formats::DocumentFormatError;
-use meilisearch_lib::IndexControllerError;
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use tokio::task::JoinError;
 
@@ -20,9 +19,9 @@ pub enum MeilisearchHttpError {
     #[error(transparent)]
     Payload(#[from] PayloadError),
     #[error(transparent)]
-    DocumentFormat(#[from] DocumentFormatError),
+    FileStore(#[from] file_store::Error),
     #[error(transparent)]
-    IndexController(#[from] IndexControllerError),
+    DocumentFormat(#[from] DocumentFormatError),
     #[error(transparent)]
     Join(#[from] JoinError),
 }
@@ -34,8 +33,8 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::InvalidContentType(_, _) => Code::InvalidContentType,
             MeilisearchHttpError::IndexScheduler(e) => e.error_code(),
             MeilisearchHttpError::Payload(e) => e.error_code(),
+            MeilisearchHttpError::FileStore(_) => Code::Internal,
             MeilisearchHttpError::DocumentFormat(e) => e.error_code(),
-            MeilisearchHttpError::IndexController(e) => e.error_code(),
             MeilisearchHttpError::Join(_) => Code::Internal,
         }
     }
