@@ -9,7 +9,7 @@ use clap::Parser;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
 use meilisearch_http::analytics::Analytics;
-use meilisearch_http::{analytics, configure_data, create_app, dashboard, routes};
+use meilisearch_http::{analytics, configure_data, dashboard, routes};
 use meilisearch_http::{setup_meilisearch, Opt};
 
 #[global_allocator]
