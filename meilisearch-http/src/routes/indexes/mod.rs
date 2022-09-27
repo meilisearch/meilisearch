@@ -1,6 +1,11 @@
+use std::convert::TryFrom;
+use std::sync::Arc;
+
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use index_scheduler::{IndexScheduler, KindWithContent};
+use index::Index;
+use index_scheduler::milli::FieldDistribution;
+use index_scheduler::{IndexScheduler, KindWithContent, Query, Status};
 use log::debug;
 use meilisearch_types::error::ResponseError;
 use serde::{Deserialize, Serialize};
@@ -39,6 +44,30 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexView {
+    pub uid: String,
+    #[serde(with = "time::serde::rfc3339")]
+    pub created_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    pub updated_at: OffsetDateTime,
+    pub primary_key: Option<String>,
+}
+
+impl TryFrom<&Index> for IndexView {
+    type Error = index::error::IndexError;
+
+    fn try_from(index: &Index) -> Result<IndexView, Self::Error> {
+        Ok(IndexView {
+            uid: index.name.clone(),
+            created_at: index.created_at()?,
+            updated_at: index.updated_at()?,
+            primary_key: index.primary_key()?,
+        })
+    }
+}
+
 pub async fn list_indexes(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, Data<IndexScheduler>>,
     paginate: web::Query<Pagination>,
@@ -46,16 +75,13 @@ pub async fn list_indexes(
     let search_rules = &index_scheduler.filters().search_rules;
     let indexes: Vec<_> = index_scheduler.indexes()?;
     let nb_indexes = indexes.len();
-    let iter = indexes
-        .into_iter()
-        .filter(|index| search_rules.is_index_authorized(&index.name));
-    /*
-    TODO: TAMO: implements me. It's missing a kind of IndexView or something
-    let ret = paginate
-        .into_inner()
-        .auto_paginate_unsized(nb_indexes, iter);
-    */
-    let ret = todo!();
+    let indexes = indexes
+        .iter()
+        .filter(|index| search_rules.is_index_authorized(&index.name))
+        .map(IndexView::try_from)
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let ret = paginate.auto_paginate_sized(indexes.into_iter());
 
     debug!("returns: {:?}", ret);
     Ok(HttpResponse::Ok().json(ret))
@@ -99,29 +125,16 @@ pub struct UpdateIndexRequest {
     primary_key: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UpdateIndexResponse {
-    name: String,
-    uid: String,
-    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
-    created_at: OffsetDateTime,
-    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
-    updated_at: OffsetDateTime,
-    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
-    primary_key: OffsetDateTime,
-}
-
 pub async fn get_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let meta = index_scheduler.index(&index_uid)?;
-    debug!("returns: {:?}", meta);
+    let index = index_scheduler.index(&index_uid)?;
+    let index_view: IndexView = (&index).try_into()?;
 
-    // TODO: TAMO: do this as well
-    todo!()
-    // Ok(HttpResponse::Ok().json(meta))
+    debug!("returns: {:?}", index_view);
+
+    Ok(HttpResponse::Ok().json(index_view))
 }
 
 pub async fn update_index(
@@ -173,11 +186,40 @@ pub async fn get_index_stats(
         json!({ "per_index_uid": true }),
         Some(&req),
     );
-    let index = index_scheduler.index(&index_uid)?;
-    // TODO: TAMO: Bring the index_stats in meilisearch-http
-    // let response = index.get_index_stats()?;
-    let response = todo!();
 
-    debug!("returns: {:?}", response);
-    Ok(HttpResponse::Ok().json(response))
+    let stats = IndexStats::new((*index_scheduler).clone(), index_uid.into_inner());
+
+    debug!("returns: {:?}", stats);
+    Ok(HttpResponse::Ok().json(stats))
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexStats {
+    pub number_of_documents: u64,
+    pub is_indexing: bool,
+    pub field_distribution: FieldDistribution,
+}
+
+impl IndexStats {
+    pub fn new(
+        index_scheduler: Data<IndexScheduler>,
+        index_uid: String,
+    ) -> Result<Self, ResponseError> {
+        // we check if there is currently a task processing associated with this index.
+        let processing_task = index_scheduler.get_tasks(
+            Query::default()
+                .with_status(Status::Processing)
+                .with_index(index_uid.clone())
+                .with_limit(1),
+        )?;
+        let is_processing = !processing_task.is_empty();
+
+        let index = index_scheduler.index(&index_uid)?;
+        Ok(IndexStats {
+            number_of_documents: index.number_of_documents()?,
+            is_indexing: is_processing,
+            field_distribution: index.field_distribution()?,
+        })
+    }
 }
