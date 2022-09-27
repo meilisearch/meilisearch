@@ -116,15 +116,6 @@ async fn run_http(
         ));
 
         app
-        /*
-        create_app!(
-            index_scheduler.clone(),
-            auth_controller.clone(),
-            enable_dashboard,
-            opt,
-            analytics.clone()
-        )
-        */
     })
     // Disable signals allows the server to terminate immediately when a user enter CTRL-C
     .disable_signals()
