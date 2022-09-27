@@ -12,7 +12,7 @@ pub mod updates;
 #[allow(clippy::module_inception)]
 mod index;
 
-pub use self::index::{Document, IndexMeta, IndexStats};
+pub use self::index::Document;
 
 #[cfg(not(test))]
 pub use self::index::Index;
@@ -30,13 +30,15 @@ pub mod test {
     use milli::update::{
         DocumentAdditionResult, DocumentDeletionResult, IndexDocumentsMethod, IndexerConfig,
     };
+    use milli::FieldDistribution;
     use nelson::Mocker;
+    use time::OffsetDateTime;
     use uuid::Uuid;
 
     use super::error::Result;
     use super::index::Index;
     use super::Document;
-    use super::{Checked, IndexMeta, IndexStats, SearchQuery, SearchResult, Settings};
+    use super::{Checked, SearchQuery, SearchResult, Settings};
     use file_store::FileStore;
 
     #[derive(Clone)]
@@ -71,19 +73,6 @@ pub mod test {
         }
         */
 
-        pub fn stats(&self) -> Result<IndexStats> {
-            match self {
-                MockIndex::Real(index) => index.stats(),
-                MockIndex::Mock(m) => unsafe { m.get("stats").call(()) },
-            }
-        }
-
-        pub fn meta(&self) -> Result<IndexMeta> {
-            match self {
-                MockIndex::Real(index) => index.meta(),
-                MockIndex::Mock(_) => todo!(),
-            }
-        }
         pub fn settings(&self) -> Result<Settings<Checked>> {
             match self {
                 MockIndex::Real(index) => index.settings(),
@@ -144,21 +133,26 @@ pub mod test {
             }
         }
 
+        pub fn number_of_documents(&self) -> Result<u64> {
+            match self {
+                MockIndex::Real(index) => index.number_of_documents(),
+                MockIndex::Mock(m) => unsafe { m.get("number_of_documents").call(()) },
+            }
+        }
+
+        pub fn field_distribution(&self) -> Result<FieldDistribution> {
+            match self {
+                MockIndex::Real(index) => index.field_distribution(),
+                MockIndex::Mock(m) => unsafe { m.get("field_distribution").call(()) },
+            }
+        }
+
         pub fn perform_search(&self, query: SearchQuery) -> Result<SearchResult> {
             match self {
                 MockIndex::Real(index) => index.perform_search(query),
                 MockIndex::Mock(m) => unsafe { m.get("perform_search").call(query) },
             }
         }
-
-        /*
-        pub fn dump(&self, path: impl AsRef<Path>) -> Result<()> {
-            match self {
-                MockIndex::Real(index) => index.dump(path),
-                MockIndex::Mock(m) => unsafe { m.get("dump").call(path.as_ref()) },
-            }
-        }
-        */
 
         pub fn update_documents(
             &self,
@@ -186,7 +180,7 @@ pub mod test {
             }
         }
 
-        pub fn update_primary_key(&self, primary_key: String) -> Result<IndexMeta> {
+        pub fn update_primary_key(&self, primary_key: String) -> Result<()> {
             match self {
                 MockIndex::Real(index) => index.update_primary_key(primary_key),
                 MockIndex::Mock(m) => unsafe { m.get("update_primary_key").call(primary_key) },
@@ -204,6 +198,27 @@ pub mod test {
             match self {
                 MockIndex::Real(index) => index.clear_documents(),
                 MockIndex::Mock(m) => unsafe { m.get("clear_documents").call(()) },
+            }
+        }
+
+        pub fn created_at(&self) -> Result<OffsetDateTime> {
+            match self {
+                MockIndex::Real(index) => index.created_at(),
+                MockIndex::Mock(m) => unsafe { m.get("created_ad").call(()) },
+            }
+        }
+
+        pub fn updated_at(&self) -> Result<OffsetDateTime> {
+            match self {
+                MockIndex::Real(index) => index.updated_at(),
+                MockIndex::Mock(m) => unsafe { m.get("updated_ad").call(()) },
+            }
+        }
+
+        pub fn primary_key(&self) -> Result<Option<String>> {
+            match self {
+                MockIndex::Real(index) => index.primary_key(),
+                MockIndex::Mock(m) => unsafe { m.get("primary_key").call(()) },
             }
         }
     }

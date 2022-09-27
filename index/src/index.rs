@@ -22,49 +22,6 @@ use super::{Checked, Settings};
 
 pub type Document = Map<String, Value>;
 
-// @kero, what is this structure? Shouldn't it move entirely to milli?
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct IndexMeta {
-    #[serde(with = "time::serde::rfc3339")]
-    pub created_at: OffsetDateTime,
-    #[serde(with = "time::serde::rfc3339")]
-    pub updated_at: OffsetDateTime,
-    pub primary_key: Option<String>,
-}
-
-impl IndexMeta {
-    pub fn new(index: &Index) -> Result<Self> {
-        let txn = index.read_txn()?;
-        Self::new_txn(index, &txn)
-    }
-
-    pub fn new_txn(index: &Index, txn: &milli::heed::RoTxn) -> Result<Self> {
-        let created_at = index.created_at(txn)?;
-        let updated_at = index.updated_at(txn)?;
-        let primary_key = index.primary_key(txn)?.map(String::from);
-        Ok(Self {
-            created_at,
-            updated_at,
-            primary_key,
-        })
-    }
-}
-
-// @kero Maybe this should be entirely generated somewhere else since it doesn't really concern the index?
-#[derive(Serialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct IndexStats {
-    #[serde(skip)]
-    pub size: u64,
-    pub number_of_documents: u64,
-    /// Whether the current index is performing an update. It is initially `None` when the
-    /// index returns it, since it is the `UpdateStore` that knows what index is currently indexing. It is
-    /// later set to either true or false, we we retrieve the information from the `UpdateStore`
-    pub is_indexing: Option<bool>,
-    pub field_distribution: FieldDistribution,
-}
-
 #[derive(Clone, derivative::Derivative)]
 #[derivative(Debug)]
 pub struct Index {
@@ -115,20 +72,16 @@ impl Index {
         Ok(())
     }
 
-    pub fn stats(&self) -> Result<IndexStats> {
+    pub fn number_of_documents(&self) -> Result<u64> {
         let rtxn = self.read_txn()?;
-
-        Ok(IndexStats {
-            size: self.size()?,
-            number_of_documents: self.number_of_documents(&rtxn)?,
-            is_indexing: None,
-            field_distribution: self.field_distribution(&rtxn)?,
-        })
+        Ok(self.inner.number_of_documents(&rtxn)?)
     }
 
-    pub fn meta(&self) -> Result<IndexMeta> {
-        IndexMeta::new(self)
+    pub fn field_distribution(&self) -> Result<FieldDistribution> {
+        let rtxn = self.read_txn()?;
+        Ok(self.inner.field_distribution(&rtxn)?)
     }
+
     pub fn settings(&self) -> Result<Settings<Checked>> {
         let txn = self.read_txn()?;
         self.settings_txn(&txn)
@@ -261,7 +214,7 @@ impl Index {
             };
             documents.push(document);
         }
-        let number_of_documents = self.number_of_documents(&rtxn)?;
+        let number_of_documents = self.inner.number_of_documents(&rtxn)?;
 
         Ok((number_of_documents, documents))
     }
@@ -313,6 +266,21 @@ impl Index {
                     Ok(obkv_to_json(&all_fields, &fields_ids_map, document)?)
                 })
         }))
+    }
+
+    pub fn created_at(&self) -> Result<OffsetDateTime> {
+        let rtxn = self.read_txn()?;
+        Ok(self.inner.created_at(&rtxn)?)
+    }
+
+    pub fn updated_at(&self) -> Result<OffsetDateTime> {
+        let rtxn = self.read_txn()?;
+        Ok(self.inner.updated_at(&rtxn)?)
+    }
+
+    pub fn primary_key(&self) -> Result<Option<String>> {
+        let rtxn = self.read_txn()?;
+        Ok(self.inner.primary_key(&rtxn)?.map(str::to_string))
     }
 
     pub fn size(&self) -> Result<u64> {
