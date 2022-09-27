@@ -1,6 +1,7 @@
 use std::fmt;
 
 use actix_web::{self as aweb, http::StatusCode, HttpResponseBuilder};
+use aweb::rt::task::JoinError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -337,6 +338,12 @@ impl ErrCode {
             error_name,
             error_type: ErrorType::InvalidRequestError,
         }
+    }
+}
+
+impl ErrorCode for JoinError {
+    fn error_code(&self) -> Code {
+        Code::Internal
     }
 }
 

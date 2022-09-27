@@ -1,7 +1,7 @@
+use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use index_scheduler::KindWithContent;
+use index_scheduler::{IndexScheduler, KindWithContent};
 use log::debug;
-use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::ResponseError;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -40,17 +40,17 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 pub async fn list_indexes(
-    data: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, Data<IndexScheduler>>,
     paginate: web::Query<Pagination>,
 ) -> Result<HttpResponse, ResponseError> {
-    let search_rules = &data.filters().search_rules;
-    let indexes: Vec<_> = data.list_indexes().await?;
+    let search_rules = &index_scheduler.filters().search_rules;
+    let indexes: Vec<_> = index_scheduler.indexes()?;
     let nb_indexes = indexes.len();
     let iter = indexes
         .into_iter()
         .filter(|index| search_rules.is_index_authorized(&index.name));
     /*
-    TODO: TAMO: implements me
+    TODO: TAMO: implements me. It's missing a kind of IndexView or something
     let ret = paginate
         .into_inner()
         .auto_paginate_unsized(nb_indexes, iter);
@@ -69,7 +69,7 @@ pub struct IndexCreateRequest {
 }
 
 pub async fn create_index(
-    meilisearch: GuardedData<ActionPolicy<{ actions::INDEXES_CREATE }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_CREATE }>, Data<IndexScheduler>>,
     body: web::Json<IndexCreateRequest>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
@@ -86,7 +86,7 @@ pub async fn create_index(
         index_uid: uid,
         primary_key,
     };
-    let task = meilisearch.register_task(task).await?;
+    let task = tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;
 
     Ok(HttpResponse::Accepted().json(task))
 }
@@ -113,10 +113,10 @@ pub struct UpdateIndexResponse {
 }
 
 pub async fn get_index(
-    meilisearch: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, MeiliSearch>,
-    path: web::Path<String>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let meta = meilisearch.get_index(path.into_inner()).await?;
+    let meta = index_scheduler.index(&index_uid)?;
     debug!("returns: {:?}", meta);
 
     // TODO: TAMO: do this as well
@@ -125,7 +125,7 @@ pub async fn get_index(
 }
 
 pub async fn update_index(
-    meilisearch: GuardedData<ActionPolicy<{ actions::INDEXES_UPDATE }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_UPDATE }>, Data<IndexScheduler>>,
     path: web::Path<String>,
     body: web::Json<UpdateIndexRequest>,
     req: HttpRequest,
@@ -144,26 +144,27 @@ pub async fn update_index(
         primary_key: body.primary_key,
     };
 
-    let task = meilisearch.register_task(task).await?;
+    let task = tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
 }
 
 pub async fn delete_index(
-    meilisearch: GuardedData<ActionPolicy<{ actions::INDEXES_DELETE }>, MeiliSearch>,
-    path: web::Path<String>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_DELETE }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index_uid = path.into_inner();
-    let task = KindWithContent::IndexDeletion { index_uid };
-    let task = meilisearch.register_task(task).await?;
+    let task = KindWithContent::IndexDeletion {
+        index_uid: index_uid.into_inner(),
+    };
+    let task = tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;
 
     Ok(HttpResponse::Accepted().json(task))
 }
 
 pub async fn get_index_stats(
-    meilisearch: GuardedData<ActionPolicy<{ actions::STATS_GET }>, MeiliSearch>,
-    path: web::Path<String>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -172,7 +173,10 @@ pub async fn get_index_stats(
         json!({ "per_index_uid": true }),
         Some(&req),
     );
-    let response = meilisearch.get_index_stats(path.into_inner()).await?;
+    let index = index_scheduler.index(&index_uid)?;
+    // TODO: TAMO: Bring the index_stats in meilisearch-http
+    // let response = index.get_index_stats()?;
+    let response = todo!();
 
     debug!("returns: {:?}", response);
     Ok(HttpResponse::Ok().json(response))
