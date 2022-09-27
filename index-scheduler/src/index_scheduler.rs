@@ -82,6 +82,13 @@ impl Query {
             ..self
         }
     }
+
+    pub fn with_limit(self, limit: u32) -> Self {
+        Self {
+            limit,
+            ..self
+        }
+    }
 }
 
 pub mod db_name {
@@ -197,7 +204,6 @@ impl IndexScheduler {
         };
 
         std::thread::spawn(move || loop {
-            println!("started running");
             run.wake_up.wait();
 
             match run.tick() {

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use uuid::Uuid;
 
 use super::error::{IndexError, Result};
-use super::index::{Index, IndexMeta};
+use super::index::Index;
 use file_store::FileStore;
 
 fn serialize_with_wildcard<S>(
@@ -251,21 +251,18 @@ impl Index {
         &'a self,
         txn: &mut milli::heed::RwTxn<'a, 'b>,
         primary_key: String,
-    ) -> Result<IndexMeta> {
+    ) -> Result<()> {
         let mut builder = milli::update::Settings::new(txn, self, self.indexer_config.as_ref());
         builder.set_primary_key(primary_key);
         builder.execute(|_| ())?;
-        let meta = IndexMeta::new_txn(self, txn)?;
-
-        Ok(meta)
+        Ok(())
     }
 
-    pub fn update_primary_key(&self, primary_key: String) -> Result<IndexMeta> {
+    pub fn update_primary_key(&self, primary_key: String) -> Result<()> {
         let mut txn = self.write_txn()?;
-        let res = self.update_primary_key_txn(&mut txn, primary_key)?;
+        self.update_primary_key_txn(&mut txn, primary_key)?;
         txn.commit()?;
-
-        Ok(res)
+        Ok(())
     }
 
     /// Deletes `ids` from the index, and returns how many documents were deleted.
@@ -304,7 +301,7 @@ impl Index {
         let mut txn = self.write_txn()?;
 
         if let Some(primary_key) = primary_key {
-            if self.primary_key(&txn)?.is_none() {
+            if self.inner.primary_key(&txn)?.is_none() {
                 self.update_primary_key_txn(&mut txn, primary_key)?;
             }
         }
