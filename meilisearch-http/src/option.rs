@@ -1,3 +1,4 @@
+use std::env;
 use std::fs;
 use std::io::{BufReader, Read};
 use std::path::PathBuf;
@@ -51,6 +52,7 @@ const MEILI_LOG_LEVEL: &str = "MEILI_LOG_LEVEL";
 #[cfg(feature = "metrics")]
 const MEILI_ENABLE_METRICS_ROUTE: &str = "MEILI_ENABLE_METRICS_ROUTE";
 
+const DEFAULT_CONFIG_FILE_PATH: &str = "./config.yml";
 const DEFAULT_DB_PATH: &str = "./data.ms";
 const DEFAULT_HTTP_ADDR: &str = "127.0.0.1:7700";
 const DEFAULT_ENV: &str = "development";
@@ -261,33 +263,33 @@ impl Opt {
         // Parse the args to get the config_file_path.
         let mut opts = Opt::parse();
         let mut config_read_from = None;
-        if let Some(config_file_path) = opts
+        let config_file_path = opts
             .config_file_path
             .clone()
-            .or_else(|| Some(PathBuf::from("./config.toml")))
-        {
-            match std::fs::read(&config_file_path) {
-                Ok(config) => {
-                    // If the file is successfully read, we deserialize it with `toml`.
-                    let opt_from_config = toml::from_slice::<Opt>(&config)?;
-                    // Return an error if config file contains 'config_file_path'
-                    // Using that key in the config file doesn't make sense bc it creates a logical loop (config file referencing itself)
-                    if opt_from_config.config_file_path.is_some() {
-                        anyhow::bail!("`config_file_path` is not supported in config file")
-                    }
-                    // We inject the values from the toml in the corresponding env vars if needs be. Doing so, we respect the priority toml < env vars < cli args.
-                    opt_from_config.export_to_env();
-                    // Once injected we parse the cli args once again to take the new env vars into scope.
-                    opts = Opt::parse();
-                    config_read_from = Some(config_file_path);
+            .or_else(|| env::var("MEILI_CONFIG_FILE_PATH").map(PathBuf::from).ok())
+            .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIG_FILE_PATH));
+
+        match std::fs::read(&config_file_path) {
+            Ok(config) => {
+                // If the file is successfully read, we deserialize it with `toml`.
+                let opt_from_config = toml::from_slice::<Opt>(&config)?;
+                // Return an error if config file contains 'config_file_path'
+                // Using that key in the config file doesn't make sense bc it creates a logical loop (config file referencing itself)
+                if opt_from_config.config_file_path.is_some() {
+                    anyhow::bail!("`config_file_path` is not supported in config file")
                 }
-                // If we have an error while reading the file defined by the user.
-                Err(_) if opts.config_file_path.is_some() => anyhow::bail!(
-                    "unable to open or read the {:?} configuration file.",
-                    opts.config_file_path.unwrap().display().to_string()
-                ),
-                _ => (),
+                // We inject the values from the toml in the corresponding env vars if needs be. Doing so, we respect the priority toml < env vars < cli args.
+                opt_from_config.export_to_env();
+                // Once injected we parse the cli args once again to take the new env vars into scope.
+                opts = Opt::parse();
+                config_read_from = Some(config_file_path);
             }
+            // If we have an error while reading the file defined by the user.
+            Err(_) if opts.config_file_path.is_some() => anyhow::bail!(
+                "unable to open or read the {:?} configuration file.",
+                opts.config_file_path.unwrap().display().to_string()
+            ),
+            _ => (),
         }
 
         Ok((opts, config_read_from))
