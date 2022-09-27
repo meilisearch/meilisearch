@@ -246,7 +246,9 @@ async fn document_addition(
     {
         Some(("application", "json")) => DocumentAdditionFormat::Json,
         Some(("application", "x-ndjson")) => DocumentAdditionFormat::Ndjson,
-        Some(("text", "csv")) => DocumentAdditionFormat::Csv(csv_delimiter.map_or(',' as u8, |delim| delim as u8)),
+        Some(("text", "csv")) => {
+            DocumentAdditionFormat::Csv(csv_delimiter.map_or(',' as u8, |delim| delim as u8))
+        }
         Some((type_, subtype)) => {
             return Err(MeilisearchHttpError::InvalidContentType(
                 format!("{}/{}", type_, subtype),

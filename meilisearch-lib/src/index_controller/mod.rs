@@ -402,7 +402,9 @@ where
                     let reader = Cursor::new(buffer);
                     let count = match format {
                         DocumentAdditionFormat::Json => read_json(reader, &mut *update_file)?,
-                        DocumentAdditionFormat::Csv(delimiter) => read_csv(reader, &mut *update_file, delimiter)?,
+                        DocumentAdditionFormat::Csv(delimiter) => {
+                            read_csv(reader, &mut *update_file, delimiter)?
+                        }
                         DocumentAdditionFormat::Ndjson => read_ndjson(reader, &mut *update_file)?,
                     };
 

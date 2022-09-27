@@ -97,7 +97,9 @@ pub fn read_csv(input: impl Read, writer: impl Write + Seek, delimiter: u8) -> R
     let csv = csv::ReaderBuilder::new()
         .delimiter(delimiter)
         .from_reader(input);
-    builder.append_csv(csv).map_err(|e| (PayloadType::Csv(delimiter), e))?;
+    builder
+        .append_csv(csv)
+        .map_err(|e| (PayloadType::Csv(delimiter), e))?;
 
     let count = builder.documents_count();
     let _ = builder
