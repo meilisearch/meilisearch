@@ -1,6 +1,8 @@
+use std::collections::BTreeMap;
+
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use index_scheduler::IndexScheduler;
+use index_scheduler::{IndexScheduler, Query, Status};
 use log::debug;
 use serde::{Deserialize, Serialize};
 
@@ -13,6 +15,8 @@ use meilisearch_types::star_or::StarOr;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
+
+use self::indexes::{IndexStats, IndexView};
 
 mod api_key;
 mod dump;
@@ -232,6 +236,15 @@ pub async fn running() -> HttpResponse {
     HttpResponse::Ok().json(serde_json::json!({ "status": "Meilisearch is running" }))
 }
 
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Stats {
+    pub database_size: u64,
+    #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
+    pub last_update: Option<OffsetDateTime>,
+    pub indexes: BTreeMap<String, IndexStats>,
+}
+
 async fn get_stats(
     index_scheduler: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<IndexScheduler>>,
     req: HttpRequest,
@@ -243,11 +256,48 @@ async fn get_stats(
         Some(&req),
     );
     let search_rules = &index_scheduler.filters().search_rules;
-    // let response = index_scheduler.get_all_stats(search_rules).await?;
-    let response = todo!();
 
-    debug!("returns: {:?}", response);
-    Ok(HttpResponse::Ok().json(response))
+    let mut last_task: Option<OffsetDateTime> = None;
+    let mut indexes = BTreeMap::new();
+    let mut database_size = 0;
+    let processing_task = index_scheduler.get_tasks(
+        Query::default()
+            .with_status(Status::Processing)
+            .with_limit(1),
+    )?;
+    let processing_index = processing_task
+        .first()
+        .and_then(|task| task.index_uid.clone());
+
+    for index in index_scheduler.indexes()? {
+        if !search_rules.is_index_authorized(&index.name) {
+            continue;
+        }
+
+        database_size += index.size()?;
+
+        let stats = IndexStats {
+            number_of_documents: index.number_of_documents()?,
+            is_indexing: processing_index
+                .as_deref()
+                .map_or(false, |index_name| index.name == index_name),
+            field_distribution: index.field_distribution()?,
+        };
+
+        let updated_at = index.updated_at()?;
+        last_task = last_task.map_or(Some(updated_at), |last| Some(last.max(updated_at)));
+
+        indexes.insert(index.name.clone(), stats);
+    }
+
+    let stats = Stats {
+        database_size,
+        last_update: last_task,
+        indexes,
+    };
+
+    debug!("returns: {:?}", stats);
+    Ok(HttpResponse::Ok().json(stats))
 }
 
 #[derive(Serialize)]
