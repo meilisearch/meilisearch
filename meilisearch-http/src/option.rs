@@ -154,6 +154,10 @@ pub struct Opt {
     #[clap(long, env = "MEILI_LOG_LEVEL", default_value = "info")]
     pub log_level: String,
 
+    /// Send log messages to the local syslog instead of stderr.
+    #[clap(long, env = "MEILI_SYSLOG")]
+    pub syslog: bool,
+
     /// Enables Prometheus metrics and /metrics route.
     #[cfg(feature = "metrics")]
     #[clap(long, env = "MEILI_ENABLE_METRICS_ROUTE")]

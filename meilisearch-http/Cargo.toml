@@ -70,6 +70,7 @@ siphasher = "0.3.10"
 slice-group-by = "0.3.0"
 static-files = { version = "0.2.3", optional = true }
 sysinfo = "0.23.5"
+syslog = "6.0.1"
 tar = "0.4.38"
 tempfile = "3.3.0"
 thiserror = "1.0.30"

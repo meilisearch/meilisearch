@@ -15,14 +15,24 @@ static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 /// does all the setup before meilisearch is launched
 fn setup(opt: &Opt) -> anyhow::Result<()> {
-    let mut log_builder = env_logger::Builder::new();
-    log_builder.parse_filters(&opt.log_level);
-    if opt.log_level == "info" {
-        // if we are in info we only allow the warn log_level for milli
-        log_builder.filter_module("milli", log::LevelFilter::Warn);
-    }
+    if opt.syslog {
+        let level = opt.log_level.parse().expect(&format!(
+            "MEILI_LOG_LEVEL={} is not a valid syslog level",
+            opt.log_level
+        ));
+        syslog::init_unix(syslog::Facility::LOG_DAEMON, level)
+            .expect("Failed to connect to syslog");
+        eprintln!("Logging to syslog");
+    } else {
+        let mut log_builder = env_logger::Builder::new();
+        log_builder.parse_filters(&opt.log_level);
+        if opt.log_level == "info" {
+            // if we are in info we only allow the warn log_level for milli
+            log_builder.filter_module("milli", log::LevelFilter::Warn);
+        }
 
-    log_builder.init();
+        log_builder.init();
+    }
 
     Ok(())
 }
