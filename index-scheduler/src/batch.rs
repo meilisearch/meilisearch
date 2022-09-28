@@ -15,7 +15,6 @@ pub(crate) enum Batch {
     Cancel(Task),
     Snapshot(Vec<Task>),
     Dump(Vec<Task>),
-    // IndexSpecific { index_uid: String, kind: BatchKind },
     DocumentAddition {
         index_uid: String,
         primary_key: Option<String>,
@@ -479,46 +478,7 @@ impl IndexScheduler {
                 settings: _,
                 settings_tasks: _,
             } => {
-                let mut wtxn = self.env.write_txn()?;
-                let index = self.index_mapper.create_index(&mut wtxn, &index_uid)?;
-                wtxn.commit()?;
-                let mut updated_tasks = Vec::new();
-
-                /*
-                let ret = index.update_settings(settings)?;
-                for (ret, task) in ret.iter().zip(settings_tasks) {
-                    match ret {
-                        Ok(ret) => task.status = Some(ret),
-                        Err(err) => task.error = Some(err),
-                    }
-                }
-                */
-
-                /*
-                for (ret, task) in ret.iter().zip(settings_tasks) {
-                    match ret {
-                        Ok(ret) => task.status = Some(ret),
-                        Err(err) => task.error = Some(err),
-                    }
-                    updated_tasks.push(task);
-                }
-                */
-
-                let ret = index.update_documents(
-                    IndexDocumentsMethod::ReplaceDocuments,
-                    primary_key,
-                    self.file_store.clone(),
-                    content_files.into_iter(),
-                )?;
-
-                for (ret, mut task) in ret.iter().zip(document_addition_tasks.into_iter()) {
-                    match ret {
-                        Ok(ret) => todo!(),  // task.info = Some(format!("{:?}", ret)),
-                        Err(err) => todo!(), // task.error = Some(err.to_string()),
-                    }
-                    updated_tasks.push(task);
-                }
-                Ok(updated_tasks)
+                todo!();
             }
             Batch::DocumentUpdate {
                 index_uid,
@@ -564,19 +524,3 @@ impl IndexScheduler {
         }
     }
 }
-
-/*
-impl Batch {
-    pub fn task_ids(&self) -> impl IntoIterator<Item = TaskId> + '_ {
-        match self {
-            Batch::Cancel(task) | Batch::One(task) => {
-                Box::new(std::iter::once(task.uid)) as Box<dyn Iterator<Item = TaskId>>
-            }
-            Batch::Snapshot(tasks) | Batch::Dump(tasks) | Batch::Contiguous { tasks, .. } => {
-                Box::new(tasks.iter().map(|task| task.uid)) as Box<dyn Iterator<Item = TaskId>>
-            }
-            Batch::Empty => Box::new(std::iter::empty()) as Box<dyn Iterator<Item = TaskId>>,
-        }
-    }
-}
-*/
