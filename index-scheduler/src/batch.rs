@@ -566,10 +566,45 @@ impl IndexScheduler {
             }
             Batch::DocumentClearAndSetting {
                 index_uid,
-                cleared_tasks,
+                mut cleared_tasks,
                 settings,
-                settings_tasks,
-            } => todo!(),
+                mut settings_tasks,
+            } => {
+                // If the settings were given before the document clear
+                // we must create the index first.
+                // we NEED a write transaction for the index creation.
+                // To avoid blocking the whole process we're going to commit asap.
+                let mut wtxn = self.env.write_txn()?;
+                let index = self.index_mapper.create_index(&mut wtxn, &index_uid)?;
+                wtxn.commit()?;
+
+                // TODO We must use the same write transaction to commit
+                //      the clear AND the settings in one transaction.
+
+                let ret = index.clear_documents();
+                for task in &mut cleared_tasks {
+                    task.details = Some(Details::ClearAll {
+                        // TODO where can I find this information of how many documents did we delete?
+                        deleted_documents: None,
+                    });
+                    if let Err(ref error) = ret {
+                        task.error = Some(error.into());
+                    }
+                }
+
+                // TODO merge the settings to only do a reindexation once.
+                for (task, (_, settings)) in settings_tasks.iter_mut().zip(settings) {
+                    let checked_settings = settings.clone().check();
+                    task.details = Some(Details::Settings { settings });
+                    if let Err(error) = index.update_settings(&checked_settings) {
+                        task.error = Some(error.into());
+                    }
+                }
+
+                let mut tasks = cleared_tasks;
+                tasks.append(&mut settings_tasks);
+                Ok(tasks)
+            }
             Batch::SettingsAndDocumentUpdate {
                 index_uid,
                 primary_key,
