@@ -84,10 +84,7 @@ impl Query {
     }
 
     pub fn with_limit(self, limit: u32) -> Self {
-        Self {
-            limit,
-            ..self
-        }
+        Self { limit, ..self }
     }
 }
 
@@ -435,6 +432,7 @@ impl IndexScheduler {
 mod tests {
     use big_s::S;
     use insta::*;
+    use milli::update::IndexDocumentsMethod::{self, ReplaceDocuments, UpdateDocuments};
     use tempfile::TempDir;
     use uuid::Uuid;
 
@@ -501,24 +499,27 @@ mod tests {
                 index_uid: S("catto"),
                 primary_key: Some(S("mouse")),
             },
-            KindWithContent::DocumentAddition {
+            KindWithContent::DocumentImport {
                 index_uid: S("catto"),
                 primary_key: None,
+                method: ReplaceDocuments,
                 content_file: Uuid::new_v4(),
                 documents_count: 12,
                 allow_index_creation: true,
             },
             KindWithContent::CancelTask { tasks: vec![0, 1] },
-            KindWithContent::DocumentAddition {
+            KindWithContent::DocumentImport {
                 index_uid: S("catto"),
                 primary_key: None,
+                method: ReplaceDocuments,
                 content_file: Uuid::new_v4(),
                 documents_count: 50,
                 allow_index_creation: true,
             },
-            KindWithContent::DocumentAddition {
+            KindWithContent::DocumentImport {
                 index_uid: S("doggo"),
                 primary_key: Some(S("bone")),
+                method: ReplaceDocuments,
                 content_file: Uuid::new_v4(),
                 documents_count: 5000,
                 allow_index_creation: true,
@@ -603,9 +604,10 @@ mod tests {
         let documents_count =
             document_formats::read_json(content.as_bytes(), file.as_file_mut()).unwrap();
         index_scheduler
-            .register(KindWithContent::DocumentAddition {
+            .register(KindWithContent::DocumentImport {
                 index_uid: S("doggos"),
                 primary_key: Some(S("id")),
+                method: ReplaceDocuments,
                 content_file: uuid,
                 documents_count,
                 allow_index_creation: true,
@@ -633,7 +635,7 @@ mod tests {
 
         // Once the task has started being batched it should be marked as processing
         let task = index_scheduler.get_tasks(Query::default()).unwrap();
-        assert_json_snapshot!(task, 
+        assert_json_snapshot!(task,
             { "[].enqueuedAt" => "date", "[].startedAt" => "date", "[].finishedAt" => "date", "[].duration" => "duration" }
             ,@r###"
         [
@@ -650,7 +652,7 @@ mod tests {
         handle.wait_till(Breakpoint::AfterProcessing);
 
         let task = index_scheduler.get_tasks(Query::default()).unwrap();
-        assert_json_snapshot!(task, 
+        assert_json_snapshot!(task,
             { "[].enqueuedAt" => "date", "[].startedAt" => "date", "[].finishedAt" => "date", "[].duration" => "duration" }
             ,@r###"
         [
