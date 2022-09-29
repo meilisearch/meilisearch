@@ -7,6 +7,7 @@ members = [
     "index-scheduler",
     "document-formats",
     "index",
+    "dump",
     "file-store",
     "permissive-json-pointer",
 ]
