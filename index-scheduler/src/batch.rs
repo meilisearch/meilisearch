@@ -35,6 +35,7 @@ pub(crate) enum Batch {
     },
     Settings {
         index_uid: String,
+        // TODO what's that boolean, does it mean that it removes things or what?
         settings: Vec<(bool, Settings<Unchecked>)>,
         tasks: Vec<Task>,
     },
@@ -460,9 +461,7 @@ impl IndexScheduler {
                                 indexed_documents,
                             });
                         }
-                        Err(error) => {
-                            task.error = Some(error.into());
-                        }
+                        Err(error) => task.error = Some(error.into()),
                     }
                 }
 
@@ -509,9 +508,7 @@ impl IndexScheduler {
                                 indexed_documents,
                             });
                         }
-                        Err(error) => {
-                            task.error = Some(error.into());
-                        }
+                        Err(error) => task.error = Some(error.into()),
                     }
                 }
 
@@ -539,9 +536,7 @@ impl IndexScheduler {
                                 deleted_documents: Some(deleted_documents),
                             });
                         }
-                        Err(ref error) => {
-                            task.error = Some(error.into());
-                        }
+                        Err(ref error) => task.error = Some(error.into()),
                     }
                 }
 
@@ -550,8 +545,25 @@ impl IndexScheduler {
             Batch::Settings {
                 index_uid,
                 settings,
-                tasks,
-            } => todo!(),
+                mut tasks,
+            } => {
+                // we NEED a write transaction for the index creation.
+                // To avoid blocking the whole process we're going to commit asap.
+                let mut wtxn = self.env.write_txn()?;
+                let index = self.index_mapper.create_index(&mut wtxn, &index_uid)?;
+                wtxn.commit()?;
+
+                // TODO merge the settings to only do a reindexation once.
+                for (task, (_, settings)) in tasks.iter_mut().zip(settings) {
+                    let checked_settings = settings.clone().check();
+                    task.details = Some(Details::Settings { settings });
+                    if let Err(error) = index.update_settings(&checked_settings) {
+                        task.error = Some(error.into());
+                    }
+                }
+
+                Ok(tasks)
+            }
             Batch::DocumentClearAndSetting {
                 index_uid,
                 cleared_tasks,
