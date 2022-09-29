@@ -5,7 +5,7 @@ use crate::{
 };
 use index::{Settings, Unchecked};
 use milli::heed::RoTxn;
-use milli::update::{DocumentAdditionResult, IndexDocumentsMethod};
+use milli::update::{DocumentAdditionResult, DocumentDeletionResult, IndexDocumentsMethod};
 use uuid::Uuid;
 
 pub(crate) enum Batch {
@@ -487,7 +487,32 @@ impl IndexScheduler {
                 index_uid,
                 documents,
                 tasks,
-            } => todo!(),
+            } => {
+                let rtxn = self.env.read_txn()?;
+                let index = self.index_mapper.index(&rtxn, &index_uid)?;
+
+                let ret = index.delete_documents(&documents);
+                for task in tasks {
+                    match ret {
+                        Ok(DocumentDeletionResult {
+                            deleted_documents,
+                            remaining_documents: _,
+                        }) => {
+                            // TODO we are assigning the same amount of documents to
+                            //      all the tasks that are in the same batch. That's wrong!
+                            task.details = Some(Details::DocumentDeletion {
+                                received_document_ids: documents.len(),
+                                deleted_documents: Some(deleted_documents),
+                            });
+                        }
+                        Err(error) => {
+                            task.error = Some(error.into());
+                        }
+                    }
+                }
+
+                Ok(tasks)
+            }
             Batch::Settings {
                 index_uid,
                 settings,

@@ -327,6 +327,7 @@ pub enum Details {
     #[serde(rename_all = "camelCase")]
     DocumentDeletion {
         received_document_ids: usize,
+        // TODO why is this optional?
         deleted_documents: Option<u64>,
     },
     #[serde(rename_all = "camelCase")]
