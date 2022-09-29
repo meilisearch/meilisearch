@@ -43,6 +43,7 @@ pub(crate) enum Batch {
         index_uid: String,
         cleared_tasks: Vec<Task>,
 
+        // TODO what's that boolean, does it mean that it removes things or what?
         settings: Vec<(bool, Settings<Unchecked>)>,
         settings_tasks: Vec<Task>,
     },
@@ -53,6 +54,7 @@ pub(crate) enum Batch {
         content_files: Vec<Uuid>,
         document_addition_tasks: Vec<Task>,
 
+        // TODO what's that boolean, does it mean that it removes things or what?
         settings: Vec<(bool, Settings<Unchecked>)>,
         settings_tasks: Vec<Task>,
     },
@@ -63,6 +65,7 @@ pub(crate) enum Batch {
         content_files: Vec<Uuid>,
         document_update_tasks: Vec<Task>,
 
+        // TODO what's that boolean, does it mean that it removes things or what?
         settings: Vec<(bool, Settings<Unchecked>)>,
         settings_tasks: Vec<Task>,
     },
@@ -429,7 +432,27 @@ impl IndexScheduler {
             Batch::Cancel(_) => todo!(),
             Batch::Snapshot(_) => todo!(),
             Batch::Dump(_) => todo!(),
-            Batch::DocumentClear { tasks, .. } => todo!(),
+            Batch::DocumentClear {
+                index_uid,
+                mut tasks,
+            } => {
+                let rtxn = self.env.read_txn()?;
+                let index = self.index_mapper.index(&rtxn, &index_uid)?;
+                rtxn.abort()?;
+
+                let ret = index.clear_documents();
+                for task in &mut tasks {
+                    task.details = Some(Details::ClearAll {
+                        // TODO where can I find this information of how many documents did we delete?
+                        deleted_documents: None,
+                    });
+                    if let Err(ref error) = ret {
+                        task.error = Some(error.into());
+                    }
+                }
+
+                Ok(tasks)
+            }
             // TODO we should merge both document import with a method field
             Batch::DocumentAddition {
                 index_uid,
