@@ -1044,6 +1044,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "dump"
+version = "0.29.0"
+dependencies = [
+ "flate2",
+ "index",
+ "insta",
+ "serde",
+ "serde_json",
+ "tar",
+ "tempfile",
+ "thiserror",
+ "time 0.3.14",
+ "uuid 1.1.2",
+]
+
+[[package]]
 name = "either"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
