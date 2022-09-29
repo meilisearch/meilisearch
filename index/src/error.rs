@@ -40,6 +40,17 @@ impl ErrorCode for IndexError {
     }
 }
 
+impl ErrorCode for &IndexError {
+    fn error_code(&self) -> Code {
+        match self {
+            IndexError::Internal(_) => Code::Internal,
+            IndexError::DocumentNotFound(_) => Code::DocumentNotFound,
+            IndexError::Facet(e) => e.error_code(),
+            IndexError::Milli(e) => MilliError(e).error_code(),
+        }
+    }
+}
+
 impl From<milli::UserError> for IndexError {
     fn from(error: milli::UserError) -> IndexError {
         IndexError::Milli(error.into())

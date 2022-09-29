@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::{Error, TaskId};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskView {
     pub uid: TaskId,

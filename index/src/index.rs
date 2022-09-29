@@ -9,7 +9,6 @@ use fst::IntoStreamer;
 use milli::heed::{CompactionOption, EnvOpenOptions, RoTxn};
 use milli::update::{IndexerConfig, Setting};
 use milli::{obkv_to_json, FieldDistribution, DEFAULT_VALUES_PER_FACET};
-use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use time::OffsetDateTime;
 
