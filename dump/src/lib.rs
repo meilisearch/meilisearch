@@ -53,17 +53,18 @@ impl DumpWriter {
             db_version: env!("CARGO_PKG_VERSION").to_string(),
             dump_date: OffsetDateTime::now_utc(),
         };
-
         fs::write(
             dir.path().join("metadata.json"),
             serde_json::to_string(&metadata)?,
         )?;
 
+        std::fs::create_dir(&dir.path().join("indexes"))?;
+
         Ok(DumpWriter { dir })
     }
 
     pub fn create_index(&self, index_name: &str) -> Result<IndexWriter> {
-        IndexWriter::new(self.dir.path().join(index_name))
+        IndexWriter::new(self.dir.path().join("indexes").join(index_name))
     }
 
     #[must_use]
@@ -136,6 +137,7 @@ impl TaskWriter {
         update_file: Option<impl Read>,
     ) -> Result<()> {
         self.queue.write_all(&serde_json::to_vec(&task)?)?;
+        self.queue.write_all(b"\n")?;
         if let Some(mut update_file) = update_file {
             let mut file = File::create(&self.update_files.join(task_id.to_string()))?;
             std::io::copy(&mut update_file, &mut file)?;
@@ -192,16 +194,48 @@ pub(crate) mod test {
     fn create_directory_hierarchy(dir: &Path) -> String {
         let mut ret = String::new();
         writeln!(ret, ".").unwrap();
-        _create_directory_hierarchy(dir, 0)
+        ret.push_str(&_create_directory_hierarchy(dir, 0));
+        ret
     }
 
     fn _create_directory_hierarchy(dir: &Path, depth: usize) -> String {
         let mut ret = String::new();
 
-        for entry in fs::read_dir(dir).unwrap() {
-            let entry = entry.unwrap();
+        // the entries are not guarenteed to be returned in the same order thus we need to sort them.
+        let mut entries = fs::read_dir(dir)
+            .unwrap()
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .unwrap();
 
-            let ident = " ".repeat(depth * 4) + &"├".to_string() + &"-".repeat(4);
+        // I want the directories first and then sort by name.
+        entries.sort_by(|a, b| {
+            let (aft, bft) = (a.file_type().unwrap(), b.file_type().unwrap());
+
+            if aft.is_dir() && bft.is_dir() {
+                a.file_name().cmp(&b.file_name())
+            } else if aft.is_file() {
+                std::cmp::Ordering::Greater
+            } else if bft.is_file() {
+                std::cmp::Ordering::Less
+            } else {
+                a.file_name().cmp(&b.file_name())
+            }
+        });
+
+        for (idx, entry) in entries.iter().enumerate() {
+            let mut ident = String::new();
+
+            for _ in 0..depth {
+                ident.push_str(&"│");
+                ident.push_str(&" ".repeat(4));
+            }
+            if idx == entries.len() - 1 {
+                ident.push_str(&"└");
+            } else {
+                ident.push_str(&"├");
+            }
+            ident.push_str(&"-".repeat(4));
+
             let name = entry.file_name().into_string().unwrap();
             let file_type = entry.file_type().unwrap();
             let is_dir = file_type.is_dir().then_some("/").unwrap_or("");
@@ -284,16 +318,18 @@ pub(crate) mod test {
 
         // ==== checking global file hierarchy (we want to be sure there isn't too many files or too few)
         insta::assert_display_snapshot!(create_directory_hierarchy(dump_path), @r###"
-        ├---- keys.jsonl
+        .
+        ├---- indexes/
+        │    └---- doggos/
+        │    │    ├---- settings.json
+        │    │    └---- documents.jsonl
         ├---- tasks/
-            ├---- update_files/
-                ├---- 1
-            ├---- queue.jsonl
-        ├---- doggos/
-            ├---- settings.json
-            ├---- documents.jsonl
+        │    ├---- update_files/
+        │    │    └---- 1
+        │    └---- queue.jsonl
+        ├---- keys.jsonl
         ├---- metadata.json
-        ├---- instance-uid
+        └---- instance-uid
         "###);
 
         // ==== checking the top level infos
@@ -328,11 +364,10 @@ pub(crate) mod test {
         for (task, expected) in tasks_queue.lines().zip(tasks) {
             assert_eq!(task, serde_json::to_string(&expected.1).unwrap());
             if let Some(expected_update) = expected.2 {
-                let update = fs::read_to_string(
-                    dump_path.join(format!("tasks/update_files/{}", expected.1)),
-                )
-                .unwrap();
-                assert_eq!(update, serde_json::to_string(expected_update).unwrap());
+                let path = dump_path.join(format!("tasks/update_files/{}", expected.0));
+                println!("trying to open {}", path.display());
+                let update = fs::read(path).unwrap();
+                assert_eq!(update, expected_update);
             }
         }
 
