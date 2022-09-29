@@ -133,4 +133,8 @@ impl IndexMapper {
 
         Ok(())
     }
+
+    pub fn indexer_config(&self) -> &IndexerConfig {
+        &self.indexer_config
+    }
 }
