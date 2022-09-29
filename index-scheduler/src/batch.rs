@@ -429,6 +429,7 @@ impl IndexScheduler {
             Batch::Snapshot(_) => todo!(),
             Batch::Dump(_) => todo!(),
             Batch::DocumentClear { tasks, .. } => todo!(),
+            // TODO we should merge both document import with a method field
             Batch::DocumentAddition {
                 index_uid,
                 primary_key,
@@ -477,22 +478,55 @@ impl IndexScheduler {
             } => {
                 todo!();
             }
+            // TODO we should merge both document import with a method field
             Batch::DocumentUpdate {
                 index_uid,
                 primary_key,
                 content_files,
-                tasks,
-            } => todo!(),
+                mut tasks,
+            } => {
+                // we NEED a write transaction for the index creation.
+                // To avoid blocking the whole process we're going to commit asap.
+                let mut wtxn = self.env.write_txn()?;
+                let index = self.index_mapper.create_index(&mut wtxn, &index_uid)?;
+                wtxn.commit()?;
+
+                let ret = index.update_documents(
+                    IndexDocumentsMethod::UpdateDocuments,
+                    primary_key,
+                    self.file_store.clone(),
+                    content_files,
+                )?;
+
+                for (task, ret) in tasks.iter_mut().zip(ret) {
+                    match ret {
+                        Ok(DocumentAdditionResult {
+                            indexed_documents,
+                            number_of_documents,
+                        }) => {
+                            task.details = Some(Details::DocumentAddition {
+                                received_documents: number_of_documents,
+                                indexed_documents,
+                            });
+                        }
+                        Err(error) => {
+                            task.error = Some(error.into());
+                        }
+                    }
+                }
+
+                Ok(tasks)
+            }
             Batch::DocumentDeletion {
                 index_uid,
                 documents,
-                tasks,
+                mut tasks,
             } => {
                 let rtxn = self.env.read_txn()?;
                 let index = self.index_mapper.index(&rtxn, &index_uid)?;
 
                 let ret = index.delete_documents(&documents);
-                for task in tasks {
+                for task in &mut tasks {
                     match ret {
                         Ok(DocumentDeletionResult {
                             deleted_documents,
@@ -505,7 +539,7 @@ impl IndexScheduler {
                                 deleted_documents: Some(deleted_documents),
                             });
                         }
-                        Err(error) => {
+                        Err(ref error) => {
                             task.error = Some(error.into());
                         }
                     }
