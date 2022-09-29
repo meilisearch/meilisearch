@@ -414,11 +414,53 @@ impl IndexScheduler {
                 primary_key,
                 method,
                 content_files,
-                document_import_tasks,
-                settings: _,
-                settings_tasks: _,
+                mut document_import_tasks,
+                settings,
+                mut settings_tasks,
             } => {
-                todo!();
+                // we NEED a write transaction for the index creation.
+                // To avoid blocking the whole process we're going to commit asap.
+                let mut wtxn = self.env.write_txn()?;
+                let index = self.index_mapper.create_index(&mut wtxn, &index_uid)?;
+                wtxn.commit()?;
+
+                // TODO merge the settings to only do a reindexation once.
+                for (task, (_, settings)) in settings_tasks.iter_mut().zip(settings) {
+                    let checked_settings = settings.clone().check();
+                    task.details = Some(Details::Settings { settings });
+                    if let Err(error) = index.update_settings(&checked_settings) {
+                        task.error = Some(error.into());
+                    }
+                }
+
+                // TODO we must use the same write transaction, here!
+
+                let ret = index.update_documents(
+                    method,
+                    primary_key,
+                    self.file_store.clone(),
+                    content_files,
+                )?;
+
+                for (task, ret) in document_import_tasks.iter_mut().zip(ret) {
+                    match ret {
+                        Ok(DocumentAdditionResult {
+                            indexed_documents,
+                            number_of_documents,
+                        }) => {
+                            task.details = Some(Details::DocumentAddition {
+                                received_documents: number_of_documents,
+                                indexed_documents,
+                            });
+                        }
+                        Err(error) => task.error = Some(error.into()),
+                    }
+                }
+
+                let mut tasks = settings_tasks;
+                tasks.append(&mut document_import_tasks);
+
+                Ok(tasks)
             }
             Batch::DocumentDeletion {
                 index_uid,
