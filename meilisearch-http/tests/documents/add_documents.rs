@@ -372,7 +372,7 @@ async fn error_add_malformed_json_documents() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The `json` payload provided is malformed. `Couldn't serialize document value: data did not match any variant of untagged enum Either`."#
+            r#"The `json` payload provided is malformed. `Couldn't serialize document value: data are neither an object nor a list of objects`."#
         )
     );
     assert_eq!(response["code"], json!("malformed_payload"));
@@ -395,7 +395,7 @@ async fn error_add_malformed_json_documents() {
     assert_eq!(status_code, 400);
     assert_eq!(
         response["message"],
-        json!("The `json` payload provided is malformed. `Couldn't serialize document value: data did not match any variant of untagged enum Either`.")
+        json!("The `json` payload provided is malformed. `Couldn't serialize document value: data are neither an object nor a list of objects`.")
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
