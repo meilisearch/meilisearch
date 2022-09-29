@@ -285,24 +285,13 @@ async fn document_addition(
         }
     };
 
-    let task = match method {
-        IndexDocumentsMethod::ReplaceDocuments => KindWithContent::DocumentAddition {
-            content_file: uuid,
-            documents_count,
-            primary_key,
-            allow_index_creation,
-            index_uid,
-        },
-
-        IndexDocumentsMethod::UpdateDocuments => KindWithContent::DocumentUpdate {
-            content_file: uuid,
-            documents_count,
-            primary_key,
-            allow_index_creation,
-            index_uid,
-        },
-        // TODO: TAMO: can I get rids of the `non_exhaustive` on the IndexDocumentsMethod enum
-        _ => todo!(),
+    let task = KindWithContent::DocumentImport {
+        method,
+        content_file: uuid,
+        documents_count,
+        primary_key,
+        allow_index_creation,
+        index_uid,
     };
 
     let scheduler = index_scheduler.clone();
