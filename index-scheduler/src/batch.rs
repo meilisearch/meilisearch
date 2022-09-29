@@ -12,15 +12,10 @@ pub(crate) enum Batch {
     Cancel(Task),
     Snapshot(Vec<Task>),
     Dump(Vec<Task>),
-    DocumentAddition {
+    DocumentImport {
         index_uid: String,
         primary_key: Option<String>,
-        content_files: Vec<Uuid>,
-        tasks: Vec<Task>,
-    },
-    DocumentUpdate {
-        index_uid: String,
-        primary_key: Option<String>,
+        method: IndexDocumentsMethod,
         content_files: Vec<Uuid>,
         tasks: Vec<Task>,
     },
@@ -47,23 +42,13 @@ pub(crate) enum Batch {
         settings: Vec<(bool, Settings<Unchecked>)>,
         settings_tasks: Vec<Task>,
     },
-    SettingsAndDocumentAddition {
+    SettingsAndDocumentImport {
         index_uid: String,
 
         primary_key: Option<String>,
+        method: IndexDocumentsMethod,
         content_files: Vec<Uuid>,
-        document_addition_tasks: Vec<Task>,
-
-        // TODO what's that boolean, does it mean that it removes things or what?
-        settings: Vec<(bool, Settings<Unchecked>)>,
-        settings_tasks: Vec<Task>,
-    },
-    SettingsAndDocumentUpdate {
-        index_uid: String,
-
-        primary_key: Option<String>,
-        content_files: Vec<Uuid>,
-        document_update_tasks: Vec<Task>,
+        document_import_tasks: Vec<Task>,
 
         // TODO what's that boolean, does it mean that it removes things or what?
         settings: Vec<(bool, Settings<Unchecked>)>,
@@ -93,24 +78,18 @@ impl Batch {
             | Batch::IndexUpdate { task, .. } => vec![task.uid],
             Batch::Snapshot(tasks)
             | Batch::Dump(tasks)
-            | Batch::DocumentAddition { tasks, .. }
-            | Batch::DocumentUpdate { tasks, .. }
+            | Batch::DocumentImport { tasks, .. }
             | Batch::DocumentDeletion { tasks, .. }
             | Batch::Settings { tasks, .. }
             | Batch::DocumentClear { tasks, .. }
             | Batch::IndexDeletion { tasks, .. } => tasks.iter().map(|task| task.uid).collect(),
-            Batch::SettingsAndDocumentAddition {
-                document_addition_tasks: tasks,
+            Batch::SettingsAndDocumentImport {
+                document_import_tasks: tasks,
                 settings_tasks: other,
                 ..
             }
             | Batch::DocumentClearAndSetting {
                 cleared_tasks: tasks,
-                settings_tasks: other,
-                ..
-            }
-            | Batch::SettingsAndDocumentUpdate {
-                document_update_tasks: tasks,
                 settings_tasks: other,
                 ..
             } => tasks.iter().chain(other).map(|task| task.uid).collect(),
@@ -130,44 +109,24 @@ impl IndexScheduler {
                 tasks: self.get_existing_tasks(rtxn, ids)?,
                 index_uid,
             })),
-            BatchKind::DocumentAddition { addition_ids } => {
-                let tasks = self.get_existing_tasks(rtxn, addition_ids)?;
+            BatchKind::DocumentImport { method, import_ids } => {
+                let tasks = self.get_existing_tasks(rtxn, import_ids)?;
                 let primary_key = match &tasks[0].kind {
-                    KindWithContent::DocumentAddition { primary_key, .. } => primary_key.clone(),
+                    KindWithContent::DocumentImport { primary_key, .. } => primary_key.clone(),
                     _ => unreachable!(),
                 };
                 let content_files = tasks
                     .iter()
                     .map(|task| match task.kind {
-                        KindWithContent::DocumentAddition { content_file, .. } => content_file,
+                        KindWithContent::DocumentImport { content_file, .. } => content_file,
                         _ => unreachable!(),
                     })
                     .collect();
 
-                Ok(Some(Batch::DocumentAddition {
+                Ok(Some(Batch::DocumentImport {
                     index_uid,
                     primary_key,
-                    content_files,
-                    tasks,
-                }))
-            }
-            BatchKind::DocumentUpdate { update_ids } => {
-                let tasks = self.get_existing_tasks(rtxn, update_ids)?;
-                let primary_key = match &tasks[0].kind {
-                    KindWithContent::DocumentUpdate { primary_key, .. } => primary_key.clone(),
-                    _ => unreachable!(),
-                };
-                let content_files = tasks
-                    .iter()
-                    .map(|task| match task.kind {
-                        KindWithContent::DocumentUpdate { content_file, .. } => content_file,
-                        _ => unreachable!(),
-                    })
-                    .collect();
-
-                Ok(Some(Batch::DocumentUpdate {
-                    index_uid,
-                    primary_key,
+                    method,
                     content_files,
                     tasks,
                 }))
@@ -246,51 +205,10 @@ impl IndexScheduler {
                     settings_tasks,
                 }))
             }
-            BatchKind::SettingsAndDocumentAddition {
-                addition_ids,
+            BatchKind::SettingsAndDocumentImport {
                 settings_ids,
-            } => {
-                let (index_uid, settings, settings_tasks) = match self
-                    .create_next_batch_index(rtxn, index_uid, BatchKind::Settings { settings_ids })?
-                    .unwrap()
-                {
-                    Batch::Settings {
-                        index_uid,
-                        settings,
-                        tasks,
-                    } => (index_uid, settings, tasks),
-                    _ => unreachable!(),
-                };
-
-                let (index_uid, primary_key, content_files, document_addition_tasks) = match self
-                    .create_next_batch_index(
-                        rtxn,
-                        index_uid,
-                        BatchKind::DocumentAddition { addition_ids },
-                    )?
-                    .unwrap()
-                {
-                    Batch::DocumentAddition {
-                        index_uid,
-                        primary_key,
-                        content_files,
-                        tasks,
-                    } => (index_uid, primary_key, content_files, tasks),
-                    _ => unreachable!(),
-                };
-
-                Ok(Some(Batch::SettingsAndDocumentAddition {
-                    index_uid,
-                    primary_key,
-                    content_files,
-                    document_addition_tasks,
-                    settings,
-                    settings_tasks,
-                }))
-            }
-            BatchKind::SettingsAndDocumentUpdate {
-                update_ids,
-                settings_ids,
+                method,
+                import_ids,
             } => {
                 let settings = self.create_next_batch_index(
                     rtxn,
@@ -298,18 +216,18 @@ impl IndexScheduler {
                     BatchKind::Settings { settings_ids },
                 )?;
 
-                let document_update = self.create_next_batch_index(
+                let document_import = self.create_next_batch_index(
                     rtxn,
                     index_uid.clone(),
-                    BatchKind::DocumentUpdate { update_ids },
+                    BatchKind::DocumentImport { method, import_ids },
                 )?;
 
-                match (document_update, settings) {
+                match (document_import, settings) {
                     (
-                        Some(Batch::DocumentUpdate {
+                        Some(Batch::DocumentImport {
                             primary_key,
                             content_files,
-                            tasks: document_update_tasks,
+                            tasks: document_import_tasks,
                             ..
                         }),
                         Some(Batch::Settings {
@@ -317,11 +235,12 @@ impl IndexScheduler {
                             tasks: settings_tasks,
                             ..
                         }),
-                    ) => Ok(Some(Batch::SettingsAndDocumentUpdate {
+                    ) => Ok(Some(Batch::SettingsAndDocumentImport {
                         index_uid,
                         primary_key,
+                        method,
                         content_files,
-                        document_update_tasks,
+                        document_import_tasks,
                         settings,
                         settings_tasks,
                     })),
@@ -453,10 +372,10 @@ impl IndexScheduler {
 
                 Ok(tasks)
             }
-            // TODO we should merge both document import with a method field
-            Batch::DocumentAddition {
+            Batch::DocumentImport {
                 index_uid,
                 primary_key,
+                method,
                 content_files,
                 mut tasks,
             } => {
@@ -467,7 +386,7 @@ impl IndexScheduler {
                 wtxn.commit()?;
 
                 let ret = index.update_documents(
-                    IndexDocumentsMethod::ReplaceDocuments,
+                    method,
                     primary_key,
                     self.file_store.clone(),
                     content_files,
@@ -490,52 +409,16 @@ impl IndexScheduler {
 
                 Ok(tasks)
             }
-            Batch::SettingsAndDocumentAddition {
+            Batch::SettingsAndDocumentImport {
                 index_uid,
                 primary_key,
+                method,
                 content_files,
-                document_addition_tasks,
+                document_import_tasks,
                 settings: _,
                 settings_tasks: _,
             } => {
                 todo!();
-            }
-            // TODO we should merge both document import with a method field
-            Batch::DocumentUpdate {
-                index_uid,
-                primary_key,
-                content_files,
-                mut tasks,
-            } => {
-                // we NEED a write transaction for the index creation.
-                // To avoid blocking the whole process we're going to commit asap.
-                let mut wtxn = self.env.write_txn()?;
-                let index = self.index_mapper.create_index(&mut wtxn, &index_uid)?;
-                wtxn.commit()?;
-
-                let ret = index.update_documents(
-                    IndexDocumentsMethod::UpdateDocuments,
-                    primary_key,
-                    self.file_store.clone(),
-                    content_files,
-                )?;
-
-                for (task, ret) in tasks.iter_mut().zip(ret) {
-                    match ret {
-                        Ok(DocumentAdditionResult {
-                            indexed_documents,
-                            number_of_documents,
-                        }) => {
-                            task.details = Some(Details::DocumentAddition {
-                                received_documents: number_of_documents,
-                                indexed_documents,
-                            });
-                        }
-                        Err(error) => task.error = Some(error.into()),
-                    }
-                }
-
-                Ok(tasks)
             }
             Batch::DocumentDeletion {
                 index_uid,
@@ -628,14 +511,6 @@ impl IndexScheduler {
                 tasks.append(&mut settings_tasks);
                 Ok(tasks)
             }
-            Batch::SettingsAndDocumentUpdate {
-                index_uid,
-                primary_key,
-                content_files,
-                document_update_tasks,
-                settings,
-                settings_tasks,
-            } => todo!(),
             Batch::IndexCreation {
                 index_uid,
                 primary_key,

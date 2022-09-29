@@ -1,6 +1,7 @@
 use anyhow::Result;
 use index::{Settings, Unchecked};
 use meilisearch_types::error::ResponseError;
+use milli::update::IndexDocumentsMethod;
 
 use serde::{Deserialize, Serialize, Serializer};
 use std::{fmt::Write, path::PathBuf, str::FromStr};
@@ -125,16 +126,10 @@ impl FromStr for Status {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum KindWithContent {
-    DocumentAddition {
+    DocumentImport {
         index_uid: String,
         primary_key: Option<String>,
-        content_file: Uuid,
-        documents_count: usize,
-        allow_index_creation: bool,
-    },
-    DocumentUpdate {
-        index_uid: String,
-        primary_key: Option<String>,
+        method: IndexDocumentsMethod,
         content_file: Uuid,
         documents_count: usize,
         allow_index_creation: bool,
@@ -183,8 +178,15 @@ pub enum KindWithContent {
 impl KindWithContent {
     pub fn as_kind(&self) -> Kind {
         match self {
-            KindWithContent::DocumentAddition { .. } => Kind::DocumentAddition,
-            KindWithContent::DocumentUpdate { .. } => Kind::DocumentUpdate,
+            KindWithContent::DocumentImport {
+                method: IndexDocumentsMethod::ReplaceDocuments,
+                ..
+            } => Kind::DocumentAddition,
+            KindWithContent::DocumentImport {
+                method: IndexDocumentsMethod::UpdateDocuments,
+                ..
+            } => Kind::DocumentUpdate,
+            KindWithContent::DocumentImport { .. } => unreachable!(),
             KindWithContent::DocumentDeletion { .. } => Kind::DocumentDeletion,
             KindWithContent::DocumentClear { .. } => Kind::DocumentClear,
             KindWithContent::Settings { .. } => Kind::Settings,
@@ -203,7 +205,7 @@ impl KindWithContent {
         use KindWithContent::*;
 
         match self {
-            DocumentAddition { .. } | DocumentUpdate { .. } => {
+            DocumentImport { .. } => {
                 // TODO: TAMO: persist the file
                 // content_file.persist();
                 Ok(())
@@ -226,7 +228,7 @@ impl KindWithContent {
         use KindWithContent::*;
 
         match self {
-            DocumentAddition { .. } | DocumentUpdate { .. } => {
+            DocumentImport { .. } => {
                 // TODO: TAMO: delete the file
                 // content_file.delete();
                 Ok(())
@@ -250,8 +252,7 @@ impl KindWithContent {
 
         match self {
             DumpExport { .. } | Snapshot | CancelTask { .. } => None,
-            DocumentAddition { index_uid, .. }
-            | DocumentUpdate { index_uid, .. }
+            DocumentImport { index_uid, .. }
             | DocumentDeletion { index_uid, .. }
             | DocumentClear { index_uid }
             | Settings { index_uid, .. }
