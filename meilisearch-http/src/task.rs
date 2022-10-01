@@ -147,7 +147,7 @@ enum TaskDetails {
     IndexInfo { primary_key: Option<String> },
     #[serde(rename_all = "camelCase")]
     DocumentDeletion {
-        received_document_ids: usize,
+        matched_documents: usize,
         deleted_documents: Option<u64>,
     },
     #[serde(rename_all = "camelCase")]
@@ -255,7 +255,7 @@ impl From<Task> for TaskView {
             } => (
                 TaskType::DocumentDeletion,
                 Some(TaskDetails::DocumentDeletion {
-                    received_document_ids: ids.len(),
+                    matched_documents: ids.len(),
                     deleted_documents: None,
                 }),
             ),
