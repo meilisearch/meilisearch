@@ -94,6 +94,7 @@ impl Index {
         create_dir_all(&path)?;
         let mut options = EnvOpenOptions::new();
         options.map_size(size);
+        options.max_readers(1024);
         let inner = Arc::new(milli::Index::new(options, &path)?);
         Ok(Index {
             inner,

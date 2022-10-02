@@ -105,6 +105,7 @@ impl Index {
 
         let mut options = EnvOpenOptions::new();
         options.map_size(size);
+        options.max_readers(1024);
         let index = milli::Index::new(options, &dst_dir_path)?;
 
         let mut txn = index.write_txn()?;
