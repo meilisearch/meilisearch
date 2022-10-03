@@ -4,9 +4,10 @@ use std::{
     path::Path,
 };
 
-use index::Unchecked;
+use index::{Checked, Unchecked};
 use tempfile::TempDir;
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 use crate::{Error, Result, Version};
 
@@ -61,7 +62,7 @@ impl V6Reader {
 
 impl DumpReader for V6Reader {
     type Document = serde_json::Map<String, serde_json::Value>;
-    type Settings = index::Settings<Unchecked>;
+    type Settings = index::Settings<Checked>;
 
     type Task = index_scheduler::TaskView;
     type UpdateFile = File;
@@ -74,6 +75,11 @@ impl DumpReader for V6Reader {
 
     fn date(&self) -> Option<OffsetDateTime> {
         Some(self.metadata.dump_date)
+    }
+
+    fn instance_uid(&self) -> Result<Option<Uuid>> {
+        let uuid = fs::read_to_string(self.dump.path().join("instance-uid"))?;
+        Ok(Some(Uuid::parse_str(&uuid)?))
     }
 
     fn indexes(
@@ -125,7 +131,11 @@ impl DumpReader for V6Reader {
         &mut self,
     ) -> Box<dyn Iterator<Item = Result<(Self::Task, Option<Self::UpdateFile>)>> + '_> {
         Box::new((&mut self.tasks).lines().map(|line| -> Result<_> {
-            let task: index_scheduler::TaskView = serde_json::from_str(&line?)?;
+            let mut task: index_scheduler::TaskView = serde_json::from_str(&line?)?;
+            // TODO: this can be removed once we can `Deserialize` the duration from the `TaskView`.
+            if let Some((started_at, finished_at)) = task.started_at.zip(task.finished_at) {
+                task.duration = Some(finished_at - started_at);
+            }
             let update_file_path = self
                 .dump
                 .path()
@@ -152,7 +162,7 @@ impl DumpReader for V6Reader {
 
 impl IndexReader for V6IndexReader {
     type Document = serde_json::Map<String, serde_json::Value>;
-    type Settings = index::Settings<Unchecked>;
+    type Settings = index::Settings<Checked>;
 
     fn name(&self) -> &str {
         &self.name
@@ -165,6 +175,7 @@ impl IndexReader for V6IndexReader {
     }
 
     fn settings(&mut self) -> Result<Self::Settings> {
-        Ok(serde_json::from_reader(&mut self.settings)?)
+        let settings: index::Settings<Unchecked> = serde_json::from_reader(&mut self.settings)?;
+        Ok(settings.check())
     }
 }
