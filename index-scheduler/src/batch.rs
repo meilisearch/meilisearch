@@ -304,7 +304,6 @@ impl IndexScheduler {
                 tasks: self.get_existing_tasks(rtxn, ids)?,
             })),
             BatchKind::IndexSwap { id: _ } => todo!(),
-            BatchKind::IndexRename { id: _ } => todo!(),
         }
     }
 
