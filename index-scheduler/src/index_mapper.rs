@@ -72,8 +72,8 @@ impl IndexMapper {
     pub fn index(&self, rtxn: &RoTxn, name: &str) -> Result<Index> {
         let uuid = self
             .index_mapping
-            .get(&rtxn, name)?
-            .ok_or(Error::IndexNotFound(name.to_string()))?;
+            .get(rtxn, name)?
+            .ok_or_else(|| Error::IndexNotFound(name.to_string()))?;
 
         // we clone here to drop the lock before entering the match
         let index = self.index_map.read().unwrap().get(&uuid).cloned();
@@ -109,7 +109,7 @@ impl IndexMapper {
 
     pub fn indexes(&self, rtxn: &RoTxn) -> Result<Vec<Index>> {
         self.index_mapping
-            .iter(&rtxn)?
+            .iter(rtxn)?
             .map(|ret| {
                 ret.map_err(Error::from)
                     .and_then(|(name, _)| self.index(rtxn, name))
@@ -122,11 +122,11 @@ impl IndexMapper {
         let lhs_uuid = self
             .index_mapping
             .get(wtxn, lhs)?
-            .ok_or(Error::IndexNotFound(lhs.to_string()))?;
+            .ok_or_else(|| Error::IndexNotFound(lhs.to_string()))?;
         let rhs_uuid = self
             .index_mapping
             .get(wtxn, rhs)?
-            .ok_or(Error::IndexNotFound(rhs.to_string()))?;
+            .ok_or_else(|| Error::IndexNotFound(rhs.to_string()))?;
 
         self.index_mapping.put(wtxn, lhs, &rhs_uuid)?;
         self.index_mapping.put(wtxn, rhs, &lhs_uuid)?;
