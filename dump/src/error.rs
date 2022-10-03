@@ -11,4 +11,6 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error(transparent)]
     Serde(#[from] serde_json::Error),
+    #[error(transparent)]
+    Uuid(#[from] uuid::Error),
 }

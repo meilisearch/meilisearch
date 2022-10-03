@@ -1,14 +1,16 @@
+use std::io::Read;
 use std::path::Path;
 use std::{fs::File, io::BufReader};
 
 use flate2::{bufread::GzDecoder, Compression};
-use index::{Settings, Unchecked};
+use index::{Checked, Settings, Unchecked};
 use index_scheduler::TaskView;
 use meilisearch_auth::Key;
 use serde::{Deserialize, Serialize};
 
 use tempfile::TempDir;
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 use crate::{Result, Version};
 
@@ -21,12 +23,12 @@ use crate::{Result, Version};
 mod v6;
 
 pub fn open(
-    dump_path: &Path,
+    dump: impl Read,
 ) -> Result<
     Box<
         dyn DumpReader<
             Document = serde_json::Map<String, serde_json::Value>,
-            Settings = Settings<Unchecked>,
+            Settings = Settings<Checked>,
             Task = TaskView,
             UpdateFile = File,
             Key = Key,
@@ -34,15 +36,13 @@ pub fn open(
     >,
 > {
     let path = TempDir::new()?;
-
-    let dump = File::open(dump_path)?;
     let mut dump = BufReader::new(dump);
-
     let gz = GzDecoder::new(&mut dump);
     let mut archive = tar::Archive::new(gz);
     archive.unpack(path.path())?;
 
     #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
     struct MetadataVersion {
         pub dump_version: Version,
     }
@@ -61,7 +61,7 @@ pub fn open(
                 as Box<
                     dyn DumpReader<
                         Document = serde_json::Map<String, serde_json::Value>,
-                        Settings = Settings<Unchecked>,
+                        Settings = Settings<Checked>,
                         Task = TaskView,
                         UpdateFile = File,
                         Key = Key,
@@ -85,8 +85,11 @@ pub trait DumpReader {
     /// Return the version of the dump.
     fn version(&self) -> Version;
 
-    /// Return at which date the index was created.
+    /// Return at which date the dump was created if there was one.
     fn date(&self) -> Option<OffsetDateTime>;
+
+    /// Return the instance-uid if there was one.
+    fn instance_uid(&self) -> Result<Option<Uuid>>;
 
     /// Return an iterator over each indexes.
     fn indexes(
