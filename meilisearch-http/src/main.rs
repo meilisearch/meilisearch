@@ -1,9 +1,9 @@
 use std::env;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use actix_web::http::KeepAlive;
 use actix_web::HttpServer;
-use clap::Parser;
 use meilisearch_auth::AuthController;
 use meilisearch_http::analytics;
 use meilisearch_http::analytics::Analytics;
@@ -29,7 +29,7 @@ fn setup(opt: &Opt) -> anyhow::Result<()> {
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
-    let opt = Opt::parse();
+    let (opt, config_read_from) = Opt::try_build()?;
 
     setup(&opt)?;
 
@@ -58,7 +58,7 @@ async fn main() -> anyhow::Result<()> {
     #[cfg(any(debug_assertions, not(feature = "analytics")))]
     let (analytics, user) = analytics::MockAnalytics::new(&opt);
 
-    print_launch_resume(&opt, &user);
+    print_launch_resume(&opt, &user, config_read_from);
 
     run_http(meilisearch, auth_controller, opt, analytics).await?;
 
@@ -97,7 +97,7 @@ async fn run_http(
     Ok(())
 }
 
-pub fn print_launch_resume(opt: &Opt, user: &str) {
+pub fn print_launch_resume(opt: &Opt, user: &str, config_read_from: Option<PathBuf>) {
     let commit_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
     let commit_date = option_env!("VERGEN_GIT_COMMIT_TIMESTAMP").unwrap_or("unknown");
     let protocol = if opt.ssl_cert_path.is_some() && opt.ssl_key_path.is_some() {
@@ -118,6 +118,12 @@ pub fn print_launch_resume(opt: &Opt, user: &str) {
 
     eprintln!("{}", ascii_name);
 
+    eprintln!(
+        "Config file path:\t{:?}",
+        config_read_from
+            .map(|config_file_path| config_file_path.display().to_string())
+            .unwrap_or_else(|| "none".to_string())
+    );
     eprintln!("Database path:\t\t{:?}", opt.db_path);
     eprintln!("Server listening on:\t\"{}://{}\"", protocol, opt.http_addr);
     eprintln!("Environment:\t\t{:?}", opt.env);

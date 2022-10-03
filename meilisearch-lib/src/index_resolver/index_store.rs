@@ -51,7 +51,7 @@ impl MapIndexStore {
 #[async_trait::async_trait]
 impl IndexStore for MapIndexStore {
     async fn create(&self, uuid: Uuid) -> Result<Index> {
-        // We need to keep the lock until we are sure the db file has been opened correclty, to
+        // We need to keep the lock until we are sure the db file has been opened correctly, to
         // ensure that another db is not created at the same time.
         let mut lock = self.index_store.write().await;
 

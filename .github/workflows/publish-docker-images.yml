@@ -53,7 +53,7 @@ jobs:
         uses: docker/metadata-action@v4
         with:
           images: getmeili/meilisearch
-          # The lastest and `vX.Y` tags are only pushed for the official Meilisearch releases
+          # The latest and `vX.Y` tags are only pushed for the official Meilisearch releases
           # See https://github.com/docker/metadata-action#latest-tag
           flavor: latest=false
           tags: |

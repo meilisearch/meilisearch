@@ -112,7 +112,7 @@ The full Meilisearch release process is described in [this guide](https://github
 ### Release assets
 
 For each release, the following assets are created:
-- Binaries for differents platforms (Linux, MacOS, Windows and ARM architectures) are attached to the GitHub release
+- Binaries for different platforms (Linux, MacOS, Windows and ARM architectures) are attached to the GitHub release
 - Binaries are pushed to HomeBrew and APT (not published for RC)
 - Docker tags are created/updated:
   - `vX.Y.Z`
