@@ -350,7 +350,7 @@ impl IndexScheduler {
             // matter.
             let index_name = task.indexes().unwrap()[0];
 
-            let _index = self.get_index(rtxn, &index_name)? & enqueued;
+            let _index = self.get_index(rtxn, index_name)? & enqueued;
 
             let enqueued = enqueued
                 .into_iter()
@@ -382,7 +382,7 @@ impl IndexScheduler {
                     | IndexOperation::DocumentClear { ref index_uid, .. } => {
                         // only get the index, don't create it
                         let rtxn = self.env.read_txn()?;
-                        self.index_mapper.index(&rtxn, &index_uid)?
+                        self.index_mapper.index(&rtxn, index_uid)?
                     }
                     IndexOperation::DocumentImport { ref index_uid, .. }
                     | IndexOperation::Settings { ref index_uid, .. }
@@ -390,7 +390,7 @@ impl IndexScheduler {
                     | IndexOperation::SettingsAndDocumentImport { ref index_uid, .. } => {
                         // create the index if it doesn't already exist
                         let mut wtxn = self.env.write_txn()?;
-                        let index = self.index_mapper.index(&mut wtxn, index_uid)?;
+                        let index = self.index_mapper.create_index(&mut wtxn, index_uid)?;
                         wtxn.commit()?;
                         index
                     }

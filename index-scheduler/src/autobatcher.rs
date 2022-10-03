@@ -207,7 +207,7 @@ impl BatchKind {
 
             (BatchKind::Settings { settings_ids }, Kind::DocumentClear) => {
                 ControlFlow::Continue(BatchKind::ClearAndSettings {
-                    settings_ids: settings_ids.clone(),
+                    settings_ids: settings_ids,
                     other: vec![id],
                 })
             }
