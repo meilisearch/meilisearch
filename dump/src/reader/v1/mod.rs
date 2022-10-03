@@ -5,7 +5,6 @@ use std::{
     path::Path,
 };
 
-use serde::Deserialize;
 use tempfile::TempDir;
 use time::OffsetDateTime;
 
@@ -26,9 +25,9 @@ pub struct V1Reader {
 
 struct V1IndexReader {
     name: String,
-    documents: File,
-    settings: File,
-    updates: File,
+    documents: BufReader<File>,
+    settings: BufReader<File>,
+    updates: BufReader<File>,
 
     current_update: Option<UpdateStatus>,
 }
@@ -37,9 +36,9 @@ impl V1IndexReader {
     pub fn new(name: String, path: &Path) -> Result<Self> {
         let mut ret = V1IndexReader {
             name,
-            documents: File::open(path.join("documents.jsonl"))?,
-            settings: File::open(path.join("settings.json"))?,
-            updates: File::open(path.join("updates.jsonl"))?,
+            documents: BufReader::new(File::open(path.join("documents.jsonl"))?),
+            settings: BufReader::new(File::open(path.join("settings.json"))?),
+            updates: BufReader::new(File::open(path.join("updates.jsonl"))?),
             current_update: None,
         };
         ret.next_update();
@@ -48,10 +47,7 @@ impl V1IndexReader {
     }
 
     pub fn next_update(&mut self) -> Result<Option<UpdateStatus>> {
-        let mut tasks = self.updates;
-        let mut reader = BufReader::new(&mut tasks);
-
-        let current_update = if let Some(line) = reader.lines().next() {
+        let current_update = if let Some(line) = self.updates.lines().next() {
             Some(serde_json::from_str(&line?)?)
         } else {
             None
@@ -90,10 +86,6 @@ impl V1Reader {
         })
     }
 
-    pub fn date(&self) -> Result<Option<OffsetDateTime>> {
-        Ok(None)
-    }
-
     fn next_update(&mut self) -> Result<Option<UpdateStatus>> {
         if let Some((idx, _)) = self
             .indexes
@@ -111,14 +103,14 @@ impl V1Reader {
 }
 
 impl IndexReader for &V1IndexReader {
-    type Document = serde_json::Value;
+    type Document = serde_json::Map<String, serde_json::Value>;
     type Settings = settings::Settings;
 
     fn name(&self) -> &str {
         todo!()
     }
 
-    fn documents(&self) -> Result<Box<dyn Iterator<Item = Self::Document>>> {
+    fn documents(&self) -> Result<Box<dyn Iterator<Item = Result<Self::Document>>>> {
         todo!()
     }
 
@@ -128,16 +120,16 @@ impl IndexReader for &V1IndexReader {
 }
 
 impl DumpReader for V1Reader {
-    type Document = serde_json::Value;
+    type Document = serde_json::Map<String, serde_json::Value>;
     type Settings = settings::Settings;
 
     type Task = update::UpdateStatus;
-    type UpdateFile = ();
+    type UpdateFile = Infallible;
 
     type Key = Infallible;
 
-    fn date(&self) -> Result<Option<OffsetDateTime>> {
-        Ok(None)
+    fn date(&self) -> Option<OffsetDateTime> {
+        None
     }
 
     fn version(&self) -> Version {
@@ -149,29 +141,33 @@ impl DumpReader for V1Reader {
     ) -> Result<
         Box<
             dyn Iterator<
-                Item = Box<
-                    dyn super::IndexReader<Document = Self::Document, Settings = Self::Settings>,
+                Item = Result<
+                    Box<
+                        dyn super::IndexReader<
+                            Document = Self::Document,
+                            Settings = Self::Settings,
+                        >,
+                    >,
                 >,
             >,
         >,
     > {
         Ok(Box::new(self.indexes.iter().map(|index| {
-            Box::new(index)
-                as Box<dyn IndexReader<Document = Self::Document, Settings = Self::Settings>>
+            let index = Box::new(index)
+                as Box<dyn IndexReader<Document = Self::Document, Settings = Self::Settings>>;
+            Ok(index)
         })))
     }
 
-    fn tasks(
-        &self,
-    ) -> Result<Box<dyn Iterator<Item = Result<(Self::Task, Option<Self::UpdateFile>)>>>> {
-        Ok(Box::new(std::iter::from_fn(|| {
+    fn tasks(&self) -> Box<dyn Iterator<Item = Result<(Self::Task, Option<Self::UpdateFile>)>>> {
+        Box::new(std::iter::from_fn(|| {
             self.next_update()
                 .transpose()
                 .map(|result| result.map(|task| (task, None)))
-        })))
+        }))
     }
 
-    fn keys(&self) -> Result<Box<dyn Iterator<Item = Self::Key>>> {
-        Ok(Box::new(std::iter::empty()))
+    fn keys(&self) -> Box<dyn Iterator<Item = Result<Self::Key>>> {
+        Box::new(std::iter::empty())
     }
 }

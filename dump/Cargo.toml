@@ -15,6 +15,10 @@ flate2 = "1.0.22"
 thiserror = "1.0.30"
 time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 tar = "0.4.38"
+anyhow = "1.0.65"
+log = "0.4.17"
+index-scheduler = { path = "../index-scheduler" }
+meilisearch-auth = { path = "../meilisearch-auth" }
 
 [dev-dependencies]
 insta = { version = "1.19.1", features = ["json", "redactions"] }
