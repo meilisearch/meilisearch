@@ -14,11 +14,12 @@ it is the job of something else above and this is why it is only able
 to process one update at a time.
 
 This repository contains crates to quickly debug the engine:
- - There are benchmarks located in the `benchmarks` crate.
- - The `cli` crate is a simple command-line interface that helps run [flamegraph] on top of it.
- - The `filter-parser` crate contains the parser for the Meilisearch filter syntax.
- - The `flatten-serde-json` crate contains the library that flattens serde-json `Value` objects like Elasticsearch does.
- - The `json-depth-checker` crate is used to indicate if a JSON must be flattened.
+
+- There are benchmarks located in the `benchmarks` crate.
+- The `cli` crate is a simple command-line interface that helps run [flamegraph] on top of it.
+- The `filter-parser` crate contains the parser for the Meilisearch filter syntax.
+- The `flatten-serde-json` crate contains the library that flattens serde-json `Value` objects like Elasticsearch does.
+- The `json-depth-checker` crate is used to indicate if a JSON must be flattened.
 
 ## How to use it?
 
@@ -39,28 +40,28 @@ let content = documents!([
     {
         "id": 2,
         "title": "Prideand Prejudice",
-        "au{hor": "Jane Austin",
+        "author": "Jane Austin",
         "genre": "romance",
         "price$": "3.5$",
     },
     {
         "id": 456,
         "title": "Le Petit Prince",
-        "au{hor": "Antoine de Saint-Exupéry",
+        "author": "Antoine de Saint-Exupéry",
         "genre": "adventure",
         "price$": "10.0$",
     },
     {
         "id": 1,
         "title": "Wonderland",
-        "au{hor": "Lewis Carroll",
+        "author": "Lewis Carroll",
         "genre": "fantasy",
         "price$": "25.99$",
     },
     {
         "id": 4,
         "title": "Harry Potter ing fantasy\0lood Prince",
-        "au{hor": "J. K. Rowling",
+        "author": "J. K. Rowling",
         "genre": "fantasy\0",
     },
 ]);
