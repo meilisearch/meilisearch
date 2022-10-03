@@ -235,16 +235,33 @@ pub struct Opt {
     #[serde(default = "default_snapshot_interval_sec")]
     pub snapshot_interval_sec: u64,
 
-    /// Import a dump from the specified path, must be a `.dump` file.
+    /// Imports the dump file located at the specified path. Path must point to a `.dump` file.
+    /// If a database already exists, Meilisearch will throw an error and abort launch.
+    ///
+    /// Meilisearch will only launch once the dump data has been fully indexed.
+    /// The time this takes depends on the size of the dump file.
+    ///
+    /// *This option is not available as an environment variable.*
     #[clap(long, env = MEILI_IMPORT_DUMP, conflicts_with = "import-snapshot")]
     pub import_dump: Option<PathBuf>,
 
-    /// If the dump doesn't exist, load or create the database specified by `db-path` instead.
+    /// Prevents Meilisearch from throwing an error when `--import-dump` does not point to
+    /// a valid dump file. Instead, Meilisearch will start normally without importing any dump.
+    ///
+    /// This option will trigger an error if `--import-dump` is not defined.
+    ///
+    /// *This option is not available as an environment variable.*
     #[clap(long, env = MEILI_IGNORE_MISSING_DUMP, requires = "import-dump")]
     #[serde(default)]
     pub ignore_missing_dump: bool,
 
-    /// Ignore the dump if a database already exists, and load that database instead.
+    /// Prevents a Meilisearch instance with an existing database from throwing an error
+    /// when using `--import-dump`. Instead, the dump will be ignored and Meilisearch will
+    /// launch using the existing database.
+    ///
+    /// This option will trigger an error if `--import-dump` is not defined.
+    ///
+    /// *This option is not available as an environment variable.*
     #[clap(long, env = MEILI_IGNORE_DUMP_IF_DB_EXISTS, requires = "import-dump")]
     #[serde(default)]
     pub ignore_dump_if_db_exists: bool,
@@ -254,7 +271,17 @@ pub struct Opt {
     #[serde(default = "default_dumps_dir")]
     pub dumps_dir: PathBuf,
 
-    /// Set the log level. # Possible values: [ERROR, WARN, INFO, DEBUG, TRACE]
+    /// Defines how much detail should be present in Meilisearch's logs.
+
+    /// Meilisearch currently supports four log levels, listed in order of increasing verbosity:
+    ///
+    /// `'ERROR'`: only log unexpected events indicating Meilisearch is not functioning as expected
+    /// `'WARN'`: log all unexpected events, regardless of their severity
+    /// `'INFO'`: log all events. This is the default value of --log-level
+    /// `'DEBUG'`: log all events and include detailed information on Meilisearch's internal processes.
+    ///     Useful when diagnosing issues and debugging
+    /// `'TRACE'`: log all events and include even more detailed information on Meilisearch's internal processes.
+    ///     We do not advise using this level as it is extremely verbose. Use `'DEBUG'` before considering `'TRACE'`.
     #[clap(long, env = MEILI_LOG_LEVEL, default_value_t = default_log_level())]
     #[serde(default = "default_log_level")]
     pub log_level: String,
