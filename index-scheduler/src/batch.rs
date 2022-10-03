@@ -388,6 +388,8 @@ impl IndexScheduler {
                     | IndexOperation::Settings { ref index_uid, .. }
                     | IndexOperation::DocumentClearAndSetting { ref index_uid, .. }
                     | IndexOperation::SettingsAndDocumentImport { ref index_uid, .. } => {
+                        // TODO check if the user was allowed to create an index.
+
                         // create the index if it doesn't already exist
                         let mut wtxn = self.env.write_txn()?;
                         let index = self.index_mapper.create_index(&mut wtxn, index_uid)?;
