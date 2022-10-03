@@ -36,9 +36,6 @@ pub enum BatchKind {
     IndexUpdate {
         id: TaskId,
     },
-    IndexRename {
-        id: TaskId,
-    },
     IndexSwap {
         id: TaskId,
     },
@@ -51,7 +48,6 @@ impl BatchKind {
             Kind::IndexCreation => (BatchKind::IndexCreation { id: task_id }, true),
             Kind::IndexDeletion => (BatchKind::IndexDeletion { ids: vec![task_id] }, true),
             Kind::IndexUpdate => (BatchKind::IndexUpdate { id: task_id }, true),
-            Kind::IndexRename => (BatchKind::IndexRename { id: task_id }, true),
             Kind::IndexSwap => (BatchKind::IndexSwap { id: task_id }, true),
             Kind::DocumentClear => (BatchKind::DocumentClear { ids: vec![task_id] }, false),
             Kind::DocumentAddition => (
@@ -89,10 +85,9 @@ impl BatchKind {
     fn accumulate(self, id: TaskId, kind: Kind) -> ControlFlow<Self, Self> {
         match (self, kind) {
             // We don't batch any of these operations
-            (
-                this,
-                Kind::IndexCreation | Kind::IndexRename | Kind::IndexUpdate | Kind::IndexSwap,
-            ) => ControlFlow::Break(this),
+            (this, Kind::IndexCreation | Kind::IndexUpdate | Kind::IndexSwap) => {
+                ControlFlow::Break(this)
+            }
             // The index deletion can batch with everything but must stop after
             (
                 BatchKind::DocumentClear { mut ids }
@@ -335,7 +330,6 @@ impl BatchKind {
                 BatchKind::IndexCreation { .. }
                 | BatchKind::IndexDeletion { .. }
                 | BatchKind::IndexUpdate { .. }
-                | BatchKind::IndexRename { .. }
                 | BatchKind::IndexSwap { .. },
                 _,
             ) => {
@@ -414,10 +408,6 @@ mod tests {
         assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, IndexUpdate]), @"Some(DocumentImport { method: UpdateDocuments, import_ids: [0] })");
         assert_smol_debug_snapshot!(autobatch_from([DocumentDeletion, IndexUpdate]), @"Some(DocumentDeletion { deletion_ids: [0] })");
 
-        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, IndexRename]), @"Some(DocumentImport { method: ReplaceDocuments, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, IndexRename]), @"Some(DocumentImport { method: UpdateDocuments, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([DocumentDeletion, IndexRename]), @"Some(DocumentDeletion { deletion_ids: [0] })");
-
         assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, IndexSwap]), @"Some(DocumentImport { method: ReplaceDocuments, import_ids: [0] })");
         assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, IndexSwap]), @"Some(DocumentImport { method: UpdateDocuments, import_ids: [0] })");
         assert_smol_debug_snapshot!(autobatch_from([DocumentDeletion, IndexSwap]), @"Some(DocumentDeletion { deletion_ids: [0] })");
@@ -446,8 +436,6 @@ mod tests {
         assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, Settings, IndexCreation]), @"Some(SettingsAndDocumentImport { settings_ids: [1], method: UpdateDocuments, import_ids: [0] })");
         assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, Settings, IndexUpdate]), @"Some(SettingsAndDocumentImport { settings_ids: [1], method: ReplaceDocuments, import_ids: [0] })");
         assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, Settings, IndexUpdate]), @"Some(SettingsAndDocumentImport { settings_ids: [1], method: UpdateDocuments, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, Settings, IndexRename]), @"Some(SettingsAndDocumentImport { settings_ids: [1], method: ReplaceDocuments, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, Settings, IndexRename]), @"Some(SettingsAndDocumentImport { settings_ids: [1], method: UpdateDocuments, import_ids: [0] })");
         assert_smol_debug_snapshot!(autobatch_from([DocumentAddition, Settings, IndexSwap]), @"Some(SettingsAndDocumentImport { settings_ids: [1], method: ReplaceDocuments, import_ids: [0] })");
         assert_smol_debug_snapshot!(autobatch_from([DocumentUpdate, Settings, IndexSwap]), @"Some(SettingsAndDocumentImport { settings_ids: [1], method: UpdateDocuments, import_ids: [0] })");
     }

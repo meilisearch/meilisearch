@@ -158,10 +158,6 @@ pub enum KindWithContent {
         index_uid: String,
         primary_key: Option<String>,
     },
-    IndexRename {
-        index_uid: String,
-        new_name: String,
-    },
     IndexSwap {
         lhs: String,
         rhs: String,
@@ -193,7 +189,6 @@ impl KindWithContent {
             KindWithContent::IndexCreation { .. } => Kind::IndexCreation,
             KindWithContent::IndexDeletion { .. } => Kind::IndexDeletion,
             KindWithContent::IndexUpdate { .. } => Kind::IndexUpdate,
-            KindWithContent::IndexRename { .. } => Kind::IndexRename,
             KindWithContent::IndexSwap { .. } => Kind::IndexSwap,
             KindWithContent::CancelTask { .. } => Kind::CancelTask,
             KindWithContent::DumpExport { .. } => Kind::DumpExport,
@@ -216,7 +211,6 @@ impl KindWithContent {
             | IndexCreation { .. }
             | IndexDeletion { .. }
             | IndexUpdate { .. }
-            | IndexRename { .. }
             | IndexSwap { .. }
             | CancelTask { .. }
             | DumpExport { .. }
@@ -239,7 +233,6 @@ impl KindWithContent {
             | Settings { .. }
             | IndexDeletion { .. }
             | IndexUpdate { .. }
-            | IndexRename { .. }
             | IndexSwap { .. }
             | CancelTask { .. }
             | DumpExport { .. }
@@ -259,11 +252,7 @@ impl KindWithContent {
             | IndexCreation { index_uid, .. }
             | IndexUpdate { index_uid, .. }
             | IndexDeletion { index_uid } => Some(vec![index_uid]),
-            IndexRename {
-                index_uid: lhs,
-                new_name: rhs,
-            }
-            | IndexSwap { lhs, rhs } => Some(vec![lhs, rhs]),
+            IndexSwap { lhs, rhs } => Some(vec![lhs, rhs]),
         }
     }
 }
@@ -279,7 +268,6 @@ pub enum Kind {
     IndexCreation,
     IndexDeletion,
     IndexUpdate,
-    IndexRename,
     IndexSwap,
     CancelTask,
     DumpExport,
@@ -299,7 +287,6 @@ impl FromStr for Kind {
             "index_creation" => Ok(Kind::IndexCreation),
             "index_deletion" => Ok(Kind::IndexDeletion),
             "index_update" => Ok(Kind::IndexUpdate),
-            "index_rename" => Ok(Kind::IndexRename),
             "index_swap" => Ok(Kind::IndexSwap),
             "cancel_task" => Ok(Kind::CancelTask),
             "dump_export" => Ok(Kind::DumpExport),
