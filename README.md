@@ -92,5 +92,5 @@ We're glad you're thinking about contributing to this repository! Feel free to p
 
 Also, we recommend following the [CONTRIBUTING.md](/CONTRIBUTING.md) to create your PR.
 
-[meilisearch]: https://github.com/meilisearch/meilisearch
+[Meilisearch]: https://github.com/meilisearch/meilisearch
 [flamegraph]: https://github.com/flamegraph-rs/flamegraph
