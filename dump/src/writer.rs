@@ -5,7 +5,11 @@ use std::{
 };
 
 use flate2::{write::GzEncoder, Compression};
+use index::{Checked, Settings};
+use index_scheduler::TaskView;
+use meilisearch_auth::Key;
 use serde::Serialize;
+use serde_json::{Map, Value};
 use tempfile::TempDir;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -73,8 +77,8 @@ impl KeyWriter {
         Ok(KeyWriter { file })
     }
 
-    pub fn push_key(&mut self, key: impl Serialize) -> Result<()> {
-        self.file.write_all(&serde_json::to_vec(&key)?)?;
+    pub fn push_key(&mut self, key: &Key) -> Result<()> {
+        self.file.write_all(&serde_json::to_vec(key)?)?;
         self.file.write_all(b"\n")?;
         Ok(())
     }
@@ -101,16 +105,15 @@ impl TaskWriter {
 
     /// Pushes tasks in the dump.
     /// If the tasks has an associated `update_file` it'll use the `task_id` as its name.
-    pub fn push_task(
-        &mut self,
-        task_id: u32,
-        task: impl Serialize,
-        update_file: Option<impl Read>,
-    ) -> Result<()> {
+    pub fn push_task(&mut self, task: &TaskView, update_file: Option<impl Read>) -> Result<()> {
+        // TODO: this could be removed the day we implements `Deserialize` on the Duration.
+        let mut task = task.clone();
+        task.duration = None;
+
         self.queue.write_all(&serde_json::to_vec(&task)?)?;
         self.queue.write_all(b"\n")?;
         if let Some(mut update_file) = update_file {
-            let mut file = File::create(&self.update_files.join(task_id.to_string()))?;
+            let mut file = File::create(&self.update_files.join(task.uid.to_string()))?;
             std::io::copy(&mut update_file, &mut file)?;
         }
         Ok(())
@@ -135,13 +138,13 @@ impl IndexWriter {
         })
     }
 
-    pub fn push_document(&mut self, document: impl Serialize) -> Result<()> {
-        self.documents.write_all(&serde_json::to_vec(&document)?)?;
+    pub fn push_document(&mut self, document: &Map<String, Value>) -> Result<()> {
+        self.documents.write_all(&serde_json::to_vec(document)?)?;
         self.documents.write_all(b"\n")?;
         Ok(())
     }
 
-    pub fn settings(mut self, settings: impl Serialize) -> Result<()> {
+    pub fn settings(mut self, settings: &Settings<Checked>) -> Result<()> {
         self.settings.write_all(&serde_json::to_vec(&settings)?)?;
         Ok(())
     }
@@ -149,14 +152,15 @@ impl IndexWriter {
 
 #[cfg(test)]
 pub(crate) mod test {
-    use std::{
-        fmt::Write,
-        io::{Seek, SeekFrom},
-        path::Path,
-    };
+    use std::{fmt::Write, io::BufReader, path::Path, str::FromStr};
 
-    use flate2::read::GzDecoder;
-    use serde_json::json;
+    use flate2::bufread::GzDecoder;
+    use index::Unchecked;
+
+    use crate::test::{
+        create_test_api_keys, create_test_documents, create_test_dump, create_test_instance_uid,
+        create_test_settings, create_test_tasks,
+    };
 
     use super::*;
 
@@ -221,62 +225,10 @@ pub(crate) mod test {
 
     #[test]
     fn test_creating_dump() {
-        let instance_uid = Uuid::parse_str("9e15e977-f2ae-4761-943f-1eaf75fd736d").unwrap();
-        let dump = DumpWriter::new(instance_uid.clone()).unwrap();
+        let file = create_test_dump();
+        let mut file = BufReader::new(file);
 
-        // ========== Adding an index
-        let documents = [
-            json!({ "id": 1, "race": "golden retriever" }),
-            json!({ "id": 2, "race": "bernese mountain" }),
-            json!({ "id": 3, "race": "great pyrenees" }),
-        ];
-        let settings = json!({ "the empty setting": [], "the null setting": null, "the string setting": "hello" });
-        let mut index = dump.create_index("doggos").unwrap();
-        for document in &documents {
-            index.push_document(document).unwrap();
-        }
-        index.settings(&settings).unwrap();
-
-        // ========== pushing the task queue
-        let tasks = [
-            (0, json!({ "is this a good task": "yes" }), None),
-            (
-                1,
-                json!({ "is this a good boi": "absolutely" }),
-                Some(br#"{ "id": 4, "race": "leonberg" }"#),
-            ),
-            (
-                3,
-                json!({ "and finally": "one last task with a missing id in the middle" }),
-                None,
-            ),
-        ];
-
-        // ========== pushing the task queue
-        let mut task_queue = dump.create_tasks_queue().unwrap();
-        for (task_id, task, update_file) in &tasks {
-            task_queue
-                .push_task(*task_id, task, update_file.map(|c| c.as_slice()))
-                .unwrap();
-        }
-
-        // ========== pushing the api keys
-        let api_keys = [
-            json!({ "one api key": 1, "for": "golden retriever" }),
-            json!({ "id": 2, "race": "bernese mountain" }),
-            json!({ "id": 3, "race": "great pyrenees" }),
-        ];
-        let mut keys = dump.create_keys().unwrap();
-        for key in &api_keys {
-            keys.push_key(key).unwrap();
-        }
-
-        // create the dump
-        let mut file = tempfile::tempfile().unwrap();
-        dump.persist_to(&mut file).unwrap();
-
-        // ============ testing we write everything in the correct place.
-        file.seek(SeekFrom::Start(0)).unwrap();
+        // ============ ensuring we wrote everything in the correct place.
         let dump = tempfile::tempdir().unwrap();
 
         let gz = GzDecoder::new(&mut file);
@@ -302,7 +254,6 @@ pub(crate) mod test {
         "###);
 
         // ==== checking the top level infos
-
         let metadata = fs::read_to_string(dump_path.join("metadata.json")).unwrap();
         let metadata: Metadata = serde_json::from_str(&metadata).unwrap();
         insta::assert_json_snapshot!(metadata, { ".dumpDate" => "[date]" }, @r###"
@@ -313,27 +264,37 @@ pub(crate) mod test {
         }
         "###);
 
+        let instance_uid = fs::read_to_string(dump_path.join("instance-uid")).unwrap();
         assert_eq!(
-            instance_uid.to_string(),
-            fs::read_to_string(dump_path.join("instance-uid")).unwrap()
+            Uuid::from_str(&instance_uid).unwrap(),
+            create_test_instance_uid()
         );
 
         // ==== checking the index
-
         let docs = fs::read_to_string(dump_path.join("indexes/doggos/documents.jsonl")).unwrap();
-        for (document, expected) in docs.lines().zip(documents) {
-            assert_eq!(document, serde_json::to_string(&expected).unwrap());
+        for (document, expected) in docs.lines().zip(create_test_documents()) {
+            assert_eq!(
+                serde_json::from_str::<Map<String, Value>>(document).unwrap(),
+                expected
+            );
         }
         let test_settings =
             fs::read_to_string(dump_path.join("indexes/doggos/settings.json")).unwrap();
-        assert_eq!(test_settings, serde_json::to_string(&settings).unwrap());
+        assert_eq!(
+            serde_json::from_str::<Settings<Unchecked>>(&test_settings).unwrap(),
+            create_test_settings().into_unchecked()
+        );
 
         // ==== checking the task queue
         let tasks_queue = fs::read_to_string(dump_path.join("tasks/queue.jsonl")).unwrap();
-        for (task, expected) in tasks_queue.lines().zip(tasks) {
-            assert_eq!(task, serde_json::to_string(&expected.1).unwrap());
-            if let Some(expected_update) = expected.2 {
-                let path = dump_path.join(format!("tasks/update_files/{}", expected.0));
+        for (task, mut expected) in tasks_queue.lines().zip(create_test_tasks()) {
+            // TODO: This can be removed once `Duration` from the `TaskView` is implemented.
+            expected.0.duration = None;
+            dbg!(&task);
+            assert_eq!(serde_json::from_str::<TaskView>(task).unwrap(), expected.0);
+
+            if let Some(expected_update) = expected.1 {
+                let path = dump_path.join(format!("tasks/update_files/{}", expected.0.uid));
                 println!("trying to open {}", path.display());
                 let update = fs::read(path).unwrap();
                 assert_eq!(update, expected_update);
@@ -341,10 +302,9 @@ pub(crate) mod test {
         }
 
         // ==== checking the keys
-
         let keys = fs::read_to_string(dump_path.join("keys.jsonl")).unwrap();
-        for (key, expected) in keys.lines().zip(api_keys) {
-            assert_eq!(key, serde_json::to_string(&expected).unwrap());
+        for (key, expected) in keys.lines().zip(create_test_api_keys()) {
+            assert_eq!(serde_json::from_str::<Key>(key).unwrap(), expected);
         }
     }
 }
