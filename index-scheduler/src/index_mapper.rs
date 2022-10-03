@@ -5,6 +5,8 @@ use std::sync::Arc;
 use std::sync::RwLock;
 
 use index::Index;
+use uuid::Uuid;
+
 use milli::heed::types::SerdeBincode;
 use milli::heed::types::Str;
 use milli::heed::Database;
@@ -12,11 +14,10 @@ use milli::heed::Env;
 use milli::heed::RoTxn;
 use milli::heed::RwTxn;
 use milli::update::IndexerConfig;
-use uuid::Uuid;
 
-use crate::index_scheduler::db_name;
-use crate::Error;
-use crate::Result;
+use crate::{Error, Result};
+
+const INDEX_MAPPING: &str = "index-mapping";
 
 #[derive(Clone)]
 pub struct IndexMapper {
@@ -41,7 +42,7 @@ impl IndexMapper {
     ) -> Result<Self> {
         Ok(Self {
             index_map: Arc::default(),
-            index_mapping: env.create_database(Some(db_name::INDEX_MAPPING))?,
+            index_mapping: env.create_database(Some(INDEX_MAPPING))?,
             base_path,
             index_size,
             indexer_config: Arc::new(indexer_config),
