@@ -5,15 +5,13 @@ use std::{
 };
 
 use flate2::{write::GzEncoder, Compression};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tempfile::TempDir;
-use thiserror::Error;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{Metadata, Result, CURRENT_DUMP_VERSION};
 
-#[must_use]
 pub struct DumpWriter {
     dir: TempDir,
 }
@@ -27,7 +25,7 @@ impl DumpWriter {
         )?;
 
         let metadata = Metadata {
-            dump_version: CURRENT_DUMP_VERSION.to_string(),
+            dump_version: CURRENT_DUMP_VERSION,
             db_version: env!("CARGO_PKG_VERSION").to_string(),
             dump_date: OffsetDateTime::now_utc(),
         };
@@ -45,17 +43,14 @@ impl DumpWriter {
         IndexWriter::new(self.dir.path().join("indexes").join(index_name))
     }
 
-    #[must_use]
     pub fn create_keys(&self) -> Result<KeyWriter> {
         KeyWriter::new(self.dir.path().to_path_buf())
     }
 
-    #[must_use]
     pub fn create_tasks_queue(&self) -> Result<TaskWriter> {
         TaskWriter::new(self.dir.path().join("tasks"))
     }
 
-    #[must_use]
     pub fn persist_to(self, mut writer: impl Write) -> Result<()> {
         let gz_encoder = GzEncoder::new(&mut writer, Compression::default());
         let mut tar_encoder = tar::Builder::new(gz_encoder);
@@ -68,7 +63,6 @@ impl DumpWriter {
     }
 }
 
-#[must_use]
 pub struct KeyWriter {
     file: File,
 }
@@ -86,7 +80,6 @@ impl KeyWriter {
     }
 }
 
-#[must_use]
 pub struct TaskWriter {
     queue: File,
     update_files: PathBuf,
@@ -124,7 +117,6 @@ impl TaskWriter {
     }
 }
 
-#[must_use]
 pub struct IndexWriter {
     documents: File,
     settings: File,
@@ -149,7 +141,6 @@ impl IndexWriter {
         Ok(())
     }
 
-    #[must_use]
     pub fn settings(mut self, settings: impl Serialize) -> Result<()> {
         self.settings.write_all(&serde_json::to_vec(&settings)?)?;
         Ok(())
