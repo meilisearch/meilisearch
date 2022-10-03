@@ -1144,9 +1144,13 @@ checksum = "1435fa1053d8b2fbbe9be7e97eca7f33d37b28409959813daefc1446a14247f1"
 name = "dump"
 version = "0.29.0"
 dependencies = [
+ "anyhow",
  "flate2",
  "index",
+ "index-scheduler",
  "insta",
+ "log",
+ "meilisearch-auth",
  "serde",
  "serde_json",
  "tar",

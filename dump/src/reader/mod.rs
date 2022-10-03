@@ -17,18 +17,20 @@ use crate::{Result, Version};
 // pub mod error;
 // mod compat;
 // mod loaders;
-mod v1;
-// mod v6;
+// mod v1;
+mod v6;
 
 pub fn open(
     dump_path: &Path,
 ) -> Result<
-    impl DumpReader<
-        Document = serde_json::Value,
-        Settings = Settings<Unchecked>,
-        Task = TaskView,
-        UpdateFile = (),
-        Key = Key,
+    Box<
+        dyn DumpReader<
+            Document = serde_json::Map<String, serde_json::Value>,
+            Settings = Settings<Unchecked>,
+            Task = TaskView,
+            UpdateFile = File,
+            Key = Key,
+        >,
     >,
 > {
     let path = TempDir::new()?;
@@ -54,10 +56,21 @@ pub fn open(
         Version::V3 => todo!(),
         Version::V4 => todo!(),
         Version::V5 => todo!(),
-        Version::V6 => todo!(),
-    };
+        Version::V6 => {
+            let dump_reader = Box::new(v6::V6Reader::open(path)?)
+                as Box<
+                    dyn DumpReader<
+                        Document = serde_json::Map<String, serde_json::Value>,
+                        Settings = Settings<Unchecked>,
+                        Task = TaskView,
+                        UpdateFile = File,
+                        Key = Key,
+                    >,
+                >;
 
-    todo!()
+            Ok(dump_reader)
+        }
+    }
 }
 
 pub trait DumpReader {
@@ -73,7 +86,7 @@ pub trait DumpReader {
     fn version(&self) -> Version;
 
     /// Return at which date the index was created.
-    fn date(&self) -> Result<Option<OffsetDateTime>>;
+    fn date(&self) -> Option<OffsetDateTime>;
 
     /// Return an iterator over each indexes.
     fn indexes(
@@ -81,18 +94,20 @@ pub trait DumpReader {
     ) -> Result<
         Box<
             dyn Iterator<
-                Item = Box<dyn IndexReader<Document = Self::Document, Settings = Self::Settings>>,
+                Item = Result<
+                    Box<dyn IndexReader<Document = Self::Document, Settings = Self::Settings>>,
+                >,
             >,
         >,
     >;
 
     /// Return all the tasks in the dump with a possible update file.
     fn tasks(
-        &self,
-    ) -> Result<Box<dyn Iterator<Item = Result<(Self::Task, Option<Self::UpdateFile>)>>>>;
+        &mut self,
+    ) -> Box<dyn Iterator<Item = Result<(Self::Task, Option<Self::UpdateFile>)>> + '_>;
 
     /// Return all the keys.
-    fn keys(&self) -> Result<Box<dyn Iterator<Item = Self::Key>>>;
+    fn keys(&mut self) -> Box<dyn Iterator<Item = Result<Self::Key>> + '_>;
 }
 
 pub trait IndexReader {
@@ -100,6 +115,6 @@ pub trait IndexReader {
     type Settings;
 
     fn name(&self) -> &str;
-    fn documents(&self) -> Result<Box<dyn Iterator<Item = Self::Document>>>;
-    fn settings(&self) -> Result<Self::Settings>;
+    fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<Self::Document>> + '_>>;
+    fn settings(&mut self) -> Result<Self::Settings>;
 }
