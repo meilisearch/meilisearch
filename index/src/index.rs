@@ -256,10 +256,10 @@ impl Index {
         &self,
         rtxn: &'a RoTxn,
     ) -> Result<impl Iterator<Item = Result<Document>> + 'a> {
-        let fields_ids_map = self.fields_ids_map(&rtxn)?;
+        let fields_ids_map = self.fields_ids_map(rtxn)?;
         let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
 
-        Ok(self.inner.all_documents(&rtxn)?.map(move |ret| {
+        Ok(self.inner.all_documents(rtxn)?.map(move |ret| {
             ret.map_err(IndexError::from)
                 .and_then(|(_key, document)| -> Result<_> {
                     Ok(obkv_to_json(&all_fields, &fields_ids_map, document)?)
