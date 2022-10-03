@@ -2,18 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
 
-use log::{debug, info, trace};
-use milli::documents::DocumentsBatchReader;
-use milli::update::{
-    DocumentAdditionResult, DocumentDeletionResult, IndexDocumentsConfig, IndexDocumentsMethod,
-    Setting,
-};
+use milli::update::Setting;
 use serde::{Deserialize, Serialize, Serializer};
-use uuid::Uuid;
-
-use super::error::{IndexError, Result};
-use super::index::Index;
-use file_store::FileStore;
 
 fn serialize_with_wildcard<S>(
     field: &Setting<Vec<String>>,
@@ -244,126 +234,6 @@ impl Settings<Unchecked> {
 pub struct Facets {
     pub level_group_size: Option<NonZeroUsize>,
     pub min_level_size: Option<NonZeroUsize>,
-}
-
-impl Index {
-    fn update_primary_key_txn<'a, 'b>(
-        &'a self,
-        txn: &mut milli::heed::RwTxn<'a, 'b>,
-        primary_key: String,
-    ) -> Result<()> {
-        let mut builder = milli::update::Settings::new(txn, self, self.indexer_config.as_ref());
-        builder.set_primary_key(primary_key);
-        builder.execute(|_| ())?;
-        Ok(())
-    }
-
-    pub fn update_primary_key(&self, primary_key: String) -> Result<()> {
-        let mut txn = self.write_txn()?;
-        self.update_primary_key_txn(&mut txn, primary_key)?;
-        txn.commit()?;
-        Ok(())
-    }
-
-    /// Deletes `ids` from the index, and returns how many documents were deleted.
-    pub fn delete_documents(&self, ids: &[String]) -> Result<DocumentDeletionResult> {
-        let mut txn = self.write_txn()?;
-        let mut builder = milli::update::DeleteDocuments::new(&mut txn, self)?;
-
-        // We ignore unexisting document ids
-        ids.iter().for_each(|id| {
-            builder.delete_external_id(id);
-        });
-
-        let deleted = builder.execute()?;
-
-        txn.commit()?;
-
-        Ok(deleted)
-    }
-
-    pub fn clear_documents(&self) -> Result<()> {
-        let mut txn = self.write_txn()?;
-        milli::update::ClearDocuments::new(&mut txn, self).execute()?;
-        txn.commit()?;
-
-        Ok(())
-    }
-
-    pub fn update_documents(
-        &self,
-        method: IndexDocumentsMethod,
-        primary_key: Option<String>,
-        file_store: FileStore,
-        contents: impl IntoIterator<Item = Uuid>,
-    ) -> Result<Vec<Result<DocumentAdditionResult>>> {
-        trace!("performing document addition");
-        let mut txn = self.write_txn()?;
-
-        if let Some(primary_key) = primary_key {
-            if self.inner.primary_key(&txn)?.is_none() {
-                self.update_primary_key_txn(&mut txn, primary_key)?;
-            }
-        }
-
-        let config = IndexDocumentsConfig {
-            update_method: method,
-            ..Default::default()
-        };
-
-        let indexing_callback = |indexing_step| debug!("update: {:?}", indexing_step);
-        let mut builder = milli::update::IndexDocuments::new(
-            &mut txn,
-            self,
-            self.indexer_config.as_ref(),
-            config,
-            indexing_callback,
-        )?;
-
-        let mut results = Vec::new();
-        for content_uuid in contents.into_iter() {
-            let content_file = file_store.get_update(content_uuid)?;
-            let reader = DocumentsBatchReader::from_reader(content_file)?;
-            let (new_builder, user_result) = builder.add_documents(reader)?;
-            builder = new_builder;
-
-            let user_result = match user_result {
-                Ok(count) => {
-                    let addition = DocumentAdditionResult {
-                        indexed_documents: count,
-                        number_of_documents: count,
-                    };
-                    info!("document addition done: {:?}", addition);
-                    Ok(addition)
-                }
-                Err(e) => Err(IndexError::from(e)),
-            };
-
-            results.push(user_result);
-        }
-
-        if results.iter().any(Result::is_ok) {
-            let _addition = builder.execute()?;
-            txn.commit()?;
-        }
-
-        Ok(results)
-    }
-
-    pub fn update_settings(&self, settings: &Settings<Checked>) -> Result<()> {
-        // We must use the write transaction of the update here.
-        let mut txn = self.write_txn()?;
-        let mut builder =
-            milli::update::Settings::new(&mut txn, self, self.indexer_config.as_ref());
-
-        apply_settings_to_builder(settings, &mut builder);
-
-        builder.execute(|indexing_step| debug!("update: {:?}", indexing_step))?;
-
-        txn.commit()?;
-
-        Ok(())
-    }
 }
 
 pub fn apply_settings_to_builder(
