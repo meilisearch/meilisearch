@@ -17,7 +17,6 @@ use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 use file_store::{File, FileStore};
-use index::Index;
 use roaring::RoaringBitmap;
 use serde::Deserialize;
 use synchronoise::SignalEvent;
@@ -27,7 +26,7 @@ use uuid::Uuid;
 use milli::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
 use milli::heed::{self, Database, Env};
 use milli::update::IndexerConfig;
-use milli::{RoaringBitmapCodec, BEU32};
+use milli::{Index, RoaringBitmapCodec, BEU32};
 
 use crate::index_mapper::IndexMapper;
 use crate::task::Task;
