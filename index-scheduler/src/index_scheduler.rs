@@ -189,10 +189,10 @@ impl IndexScheduler {
             processing_tasks: self.processing_tasks.clone(),
             file_store: self.file_store.clone(),
             env: self.env.clone(),
-            all_tasks: self.all_tasks.clone(),
-            status: self.status.clone(),
-            kind: self.kind.clone(),
-            index_tasks: self.index_tasks.clone(),
+            all_tasks: self.all_tasks,
+            status: self.status,
+            kind: self.kind,
+            index_tasks: self.index_tasks,
             index_mapper: self.index_mapper.clone(),
             wake_up: self.wake_up.clone(),
 
@@ -279,7 +279,7 @@ impl IndexScheduler {
                 .map(|task| match processing.contains(task.uid) {
                     true => TaskView {
                         status: Status::Processing,
-                        started_at: Some(started_at.clone()),
+                        started_at: Some(started_at),
                         ..task
                     },
                     false => task,
@@ -309,7 +309,9 @@ impl IndexScheduler {
 
         if let Some(indexes) = task.indexes() {
             for index in indexes {
-                self.update_index(&mut wtxn, index, |bitmap| drop(bitmap.insert(task.uid)))?;
+                self.update_index(&mut wtxn, index, |bitmap| {
+                    bitmap.insert(task.uid);
+                })?;
             }
         }
 

@@ -239,13 +239,12 @@ async fn document_addition(
             return Err(MeilisearchHttpError::InvalidContentType(
                 format!("{}/{}", type_, subtype),
                 ACCEPTED_CONTENT_TYPE.clone(),
-            )
-            .into())
+            ))
         }
         None => {
-            return Err(
-                MeilisearchHttpError::MissingContentType(ACCEPTED_CONTENT_TYPE.clone()).into(),
-            )
+            return Err(MeilisearchHttpError::MissingContentType(
+                ACCEPTED_CONTENT_TYPE.clone(),
+            ))
         }
     };
 
@@ -277,7 +276,7 @@ async fn document_addition(
         Ok(Ok(documents_count)) => documents_count,
         Ok(Err(e)) => {
             index_scheduler.delete_update_file(uuid)?;
-            return Err(e.into());
+            return Err(e);
         }
         Err(e) => {
             index_scheduler.delete_update_file(uuid)?;
