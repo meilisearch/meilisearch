@@ -6,8 +6,8 @@ use std::time::Instant;
 use either::Either;
 use milli::tokenizer::TokenizerBuilder;
 use milli::{
-    AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, MatchBounds, MatcherBuilder, SortError,
-    TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
+    AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, Index, MatchBounds, MatcherBuilder,
+    SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -16,7 +16,6 @@ use serde_json::{json, Value};
 use crate::error::FacetError;
 
 use super::error::{IndexError, Result};
-use super::index::Index;
 
 pub type Document = serde_json::Map<String, Value>;
 type MatchesPosition = BTreeMap<String, Vec<MatchBounds>>;
@@ -106,183 +105,181 @@ pub struct SearchResult {
     pub facet_distribution: Option<BTreeMap<String, BTreeMap<String, u64>>>,
 }
 
-impl Index {
-    pub fn perform_search(&self, query: SearchQuery) -> Result<SearchResult> {
-        let before_search = Instant::now();
-        let rtxn = self.read_txn()?;
+pub fn perform_search(index: &Index, query: SearchQuery) -> Result<SearchResult> {
+    let before_search = Instant::now();
+    let rtxn = index.read_txn()?;
 
-        let mut search = self.search(&rtxn);
+    let mut search = index.search(&rtxn);
 
-        if let Some(ref query) = query.q {
-            search.query(query);
-        }
-
-        search.terms_matching_strategy(query.matching_strategy.into());
-
-        let max_total_hits = self
-            .pagination_max_total_hits(&rtxn)?
-            .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
-
-        // Make sure that a user can't get more documents than the hard limit,
-        // we align that on the offset too.
-        let offset = min(query.offset.unwrap_or(0), max_total_hits);
-        let limit = min(query.limit, max_total_hits.saturating_sub(offset));
-
-        search.offset(offset);
-        search.limit(limit);
-
-        if let Some(ref filter) = query.filter {
-            if let Some(facets) = parse_filter(filter)? {
-                search.filter(facets);
-            }
-        }
-
-        if let Some(ref sort) = query.sort {
-            let sort = match sort.iter().map(|s| AscDesc::from_str(s)).collect() {
-                Ok(sorts) => sorts,
-                Err(asc_desc_error) => {
-                    return Err(IndexError::Milli(SortError::from(asc_desc_error).into()))
-                }
-            };
-
-            search.sort_criteria(sort);
-        }
-
-        let milli::SearchResult {
-            documents_ids,
-            matching_words,
-            candidates,
-            ..
-        } = search.execute()?;
-
-        let fields_ids_map = self.fields_ids_map(&rtxn).unwrap();
-
-        let displayed_ids = self
-            .displayed_fields_ids(&rtxn)?
-            .map(|fields| fields.into_iter().collect::<BTreeSet<_>>())
-            .unwrap_or_else(|| fields_ids_map.iter().map(|(id, _)| id).collect());
-
-        let fids = |attrs: &BTreeSet<String>| {
-            let mut ids = BTreeSet::new();
-            for attr in attrs {
-                if attr == "*" {
-                    ids = displayed_ids.clone();
-                    break;
-                }
-
-                if let Some(id) = fields_ids_map.id(attr) {
-                    ids.insert(id);
-                }
-            }
-            ids
-        };
-
-        // The attributes to retrieve are the ones explicitly marked as to retrieve (all by default),
-        // but these attributes must be also be present
-        // - in the fields_ids_map
-        // - in the the displayed attributes
-        let to_retrieve_ids: BTreeSet<_> = query
-            .attributes_to_retrieve
-            .as_ref()
-            .map(fids)
-            .unwrap_or_else(|| displayed_ids.clone())
-            .intersection(&displayed_ids)
-            .cloned()
-            .collect();
-
-        let attr_to_highlight = query.attributes_to_highlight.unwrap_or_default();
-
-        let attr_to_crop = query.attributes_to_crop.unwrap_or_default();
-
-        // Attributes in `formatted_options` correspond to the attributes that will be in `_formatted`
-        // These attributes are:
-        // - the attributes asked to be highlighted or cropped (with `attributesToCrop` or `attributesToHighlight`)
-        // - the attributes asked to be retrieved: these attributes will not be highlighted/cropped
-        // But these attributes must be also present in displayed attributes
-        let formatted_options = compute_formatted_options(
-            &attr_to_highlight,
-            &attr_to_crop,
-            query.crop_length,
-            &to_retrieve_ids,
-            &fields_ids_map,
-            &displayed_ids,
-        );
-
-        let tokenizer = TokenizerBuilder::default().build();
-
-        let mut formatter_builder = MatcherBuilder::new(matching_words, tokenizer);
-        formatter_builder.crop_marker(query.crop_marker);
-        formatter_builder.highlight_prefix(query.highlight_pre_tag);
-        formatter_builder.highlight_suffix(query.highlight_post_tag);
-
-        let mut documents = Vec::new();
-
-        let documents_iter = self.documents(&rtxn, documents_ids)?;
-
-        for (_id, obkv) in documents_iter {
-            // First generate a document with all the displayed fields
-            let displayed_document = make_document(&displayed_ids, &fields_ids_map, obkv)?;
-
-            // select the attributes to retrieve
-            let attributes_to_retrieve = to_retrieve_ids
-                .iter()
-                .map(|&fid| fields_ids_map.name(fid).expect("Missing field name"));
-            let mut document =
-                permissive_json_pointer::select_values(&displayed_document, attributes_to_retrieve);
-
-            let (matches_position, formatted) = format_fields(
-                &displayed_document,
-                &fields_ids_map,
-                &formatter_builder,
-                &formatted_options,
-                query.show_matches_position,
-                &displayed_ids,
-            )?;
-
-            if let Some(sort) = query.sort.as_ref() {
-                insert_geo_distance(sort, &mut document);
-            }
-
-            let hit = SearchHit {
-                document,
-                formatted,
-                matches_position,
-            };
-            documents.push(hit);
-        }
-
-        let estimated_total_hits = candidates.len();
-
-        let facet_distribution = match query.facets {
-            Some(ref fields) => {
-                let mut facet_distribution = self.facets_distribution(&rtxn);
-
-                let max_values_by_facet = self
-                    .max_values_per_facet(&rtxn)?
-                    .unwrap_or(DEFAULT_VALUES_PER_FACET);
-                facet_distribution.max_values_per_facet(max_values_by_facet);
-
-                if fields.iter().all(|f| f != "*") {
-                    facet_distribution.facets(fields);
-                }
-                let distribution = facet_distribution.candidates(candidates).execute()?;
-
-                Some(distribution)
-            }
-            None => None,
-        };
-
-        let result = SearchResult {
-            hits: documents,
-            estimated_total_hits,
-            query: query.q.clone().unwrap_or_default(),
-            limit: query.limit,
-            offset: query.offset.unwrap_or_default(),
-            processing_time_ms: before_search.elapsed().as_millis(),
-            facet_distribution,
-        };
-        Ok(result)
+    if let Some(ref query) = query.q {
+        search.query(query);
     }
+
+    search.terms_matching_strategy(query.matching_strategy.into());
+
+    let max_total_hits = index
+        .pagination_max_total_hits(&rtxn)?
+        .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
+
+    // Make sure that a user can't get more documents than the hard limit,
+    // we align that on the offset too.
+    let offset = min(query.offset.unwrap_or(0), max_total_hits);
+    let limit = min(query.limit, max_total_hits.saturating_sub(offset));
+
+    search.offset(offset);
+    search.limit(limit);
+
+    if let Some(ref filter) = query.filter {
+        if let Some(facets) = parse_filter(filter)? {
+            search.filter(facets);
+        }
+    }
+
+    if let Some(ref sort) = query.sort {
+        let sort = match sort.iter().map(|s| AscDesc::from_str(s)).collect() {
+            Ok(sorts) => sorts,
+            Err(asc_desc_error) => {
+                return Err(IndexError::Milli(SortError::from(asc_desc_error).into()))
+            }
+        };
+
+        search.sort_criteria(sort);
+    }
+
+    let milli::SearchResult {
+        documents_ids,
+        matching_words,
+        candidates,
+        ..
+    } = search.execute()?;
+
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+
+    let displayed_ids = index
+        .displayed_fields_ids(&rtxn)?
+        .map(|fields| fields.into_iter().collect::<BTreeSet<_>>())
+        .unwrap_or_else(|| fields_ids_map.iter().map(|(id, _)| id).collect());
+
+    let fids = |attrs: &BTreeSet<String>| {
+        let mut ids = BTreeSet::new();
+        for attr in attrs {
+            if attr == "*" {
+                ids = displayed_ids.clone();
+                break;
+            }
+
+            if let Some(id) = fields_ids_map.id(attr) {
+                ids.insert(id);
+            }
+        }
+        ids
+    };
+
+    // The attributes to retrieve are the ones explicitly marked as to retrieve (all by default),
+    // but these attributes must be also be present
+    // - in the fields_ids_map
+    // - in the the displayed attributes
+    let to_retrieve_ids: BTreeSet<_> = query
+        .attributes_to_retrieve
+        .as_ref()
+        .map(fids)
+        .unwrap_or_else(|| displayed_ids.clone())
+        .intersection(&displayed_ids)
+        .cloned()
+        .collect();
+
+    let attr_to_highlight = query.attributes_to_highlight.unwrap_or_default();
+
+    let attr_to_crop = query.attributes_to_crop.unwrap_or_default();
+
+    // Attributes in `formatted_options` correspond to the attributes that will be in `_formatted`
+    // These attributes are:
+    // - the attributes asked to be highlighted or cropped (with `attributesToCrop` or `attributesToHighlight`)
+    // - the attributes asked to be retrieved: these attributes will not be highlighted/cropped
+    // But these attributes must be also present in displayed attributes
+    let formatted_options = compute_formatted_options(
+        &attr_to_highlight,
+        &attr_to_crop,
+        query.crop_length,
+        &to_retrieve_ids,
+        &fields_ids_map,
+        &displayed_ids,
+    );
+
+    let tokenizer = TokenizerBuilder::default().build();
+
+    let mut formatter_builder = MatcherBuilder::new(matching_words, tokenizer);
+    formatter_builder.crop_marker(query.crop_marker);
+    formatter_builder.highlight_prefix(query.highlight_pre_tag);
+    formatter_builder.highlight_suffix(query.highlight_post_tag);
+
+    let mut documents = Vec::new();
+
+    let documents_iter = index.documents(&rtxn, documents_ids)?;
+
+    for (_id, obkv) in documents_iter {
+        // First generate a document with all the displayed fields
+        let displayed_document = make_document(&displayed_ids, &fields_ids_map, obkv)?;
+
+        // select the attributes to retrieve
+        let attributes_to_retrieve = to_retrieve_ids
+            .iter()
+            .map(|&fid| fields_ids_map.name(fid).expect("Missing field name"));
+        let mut document =
+            permissive_json_pointer::select_values(&displayed_document, attributes_to_retrieve);
+
+        let (matches_position, formatted) = format_fields(
+            &displayed_document,
+            &fields_ids_map,
+            &formatter_builder,
+            &formatted_options,
+            query.show_matches_position,
+            &displayed_ids,
+        )?;
+
+        if let Some(sort) = query.sort.as_ref() {
+            insert_geo_distance(sort, &mut document);
+        }
+
+        let hit = SearchHit {
+            document,
+            formatted,
+            matches_position,
+        };
+        documents.push(hit);
+    }
+
+    let estimated_total_hits = candidates.len();
+
+    let facet_distribution = match query.facets {
+        Some(ref fields) => {
+            let mut facet_distribution = index.facets_distribution(&rtxn);
+
+            let max_values_by_facet = index
+                .max_values_per_facet(&rtxn)?
+                .unwrap_or(DEFAULT_VALUES_PER_FACET);
+            facet_distribution.max_values_per_facet(max_values_by_facet);
+
+            if fields.iter().all(|f| f != "*") {
+                facet_distribution.facets(fields);
+            }
+            let distribution = facet_distribution.candidates(candidates).execute()?;
+
+            Some(distribution)
+        }
+        None => None,
+    };
+
+    let result = SearchResult {
+        hits: documents,
+        estimated_total_hits,
+        query: query.q.clone().unwrap_or_default(),
+        limit: query.limit,
+        offset: query.offset.unwrap_or_default(),
+        processing_time_ms: before_search.elapsed().as_millis(),
+        facet_distribution,
+    };
+    Ok(result)
 }
 
 fn insert_geo_distance(sorts: &[String], document: &mut Document) {

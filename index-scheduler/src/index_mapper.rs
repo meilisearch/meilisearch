@@ -1,18 +1,14 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::fs;
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
-use index::Index;
+use milli::Index;
 use uuid::Uuid;
 
-use milli::heed::types::SerdeBincode;
-use milli::heed::types::Str;
-use milli::heed::Database;
-use milli::heed::Env;
-use milli::heed::RoTxn;
-use milli::heed::RwTxn;
+use milli::heed::types::{SerdeBincode, Str};
+use milli::heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn};
 use milli::update::IndexerConfig;
 
 use crate::{Error, Result};
@@ -56,12 +52,12 @@ impl IndexMapper {
             Err(Error::IndexNotFound(_)) => {
                 let uuid = Uuid::new_v4();
                 self.index_mapping.put(wtxn, name, &uuid)?;
-                Index::open(
-                    self.base_path.join(uuid.to_string()),
-                    name.to_string(),
-                    self.index_size,
-                    self.indexer_config.clone(),
-                )?
+
+                let index_path = self.base_path.join(uuid.to_string());
+                fs::create_dir_all(&index_path)?;
+                let mut options = EnvOpenOptions::new();
+                options.map_size(self.index_size);
+                milli::Index::new(options, &index_path)?
             }
             error => return error,
         };
@@ -91,12 +87,12 @@ impl IndexMapper {
                 // the entry method.
                 match index_map.entry(uuid) {
                     Entry::Vacant(entry) => {
-                        let index = Index::open(
-                            self.base_path.join(uuid.to_string()),
-                            name.to_string(),
-                            self.index_size,
-                            self.indexer_config.clone(),
-                        )?;
+                        let index_path = self.base_path.join(uuid.to_string());
+                        fs::create_dir_all(&index_path)?;
+                        let mut options = EnvOpenOptions::new();
+                        options.map_size(self.index_size);
+                        let index = milli::Index::new(options, &index_path)?;
+
                         entry.insert(index.clone());
                         index
                     }
