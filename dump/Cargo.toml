@@ -21,4 +21,7 @@ index-scheduler = { path = "../index-scheduler" }
 meilisearch-auth = { path = "../meilisearch-auth" }
 
 [dev-dependencies]
+big_s = "1.0.2"
 insta = { version = "1.19.1", features = ["json", "redactions"] }
+maplit = "1.0.2"
+meilisearch-types = { path = "../meilisearch-types" }

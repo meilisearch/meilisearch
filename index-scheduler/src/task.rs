@@ -14,32 +14,36 @@ use crate::{Error, TaskId};
 #[serde(rename_all = "camelCase")]
 pub struct TaskView {
     pub uid: TaskId,
+    #[serde(default)]
     pub index_uid: Option<String>,
     pub status: Status,
     // TODO use our own Kind for the user
     #[serde(rename = "type")]
     pub kind: Kind,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub details: Option<Details>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub error: Option<ResponseError>,
 
     #[serde(
         serialize_with = "serialize_duration",
-        skip_serializing_if = "Option::is_none"
+        skip_serializing_if = "Option::is_none",
+        default
     )]
     pub duration: Option<Duration>,
     #[serde(with = "time::serde::rfc3339")]
     pub enqueued_at: OffsetDateTime,
     #[serde(
         with = "time::serde::rfc3339::option",
-        skip_serializing_if = "Option::is_none"
+        skip_serializing_if = "Option::is_none",
+        default
     )]
     pub started_at: Option<OffsetDateTime>,
     #[serde(
         with = "time::serde::rfc3339::option",
-        skip_serializing_if = "Option::is_none"
+        skip_serializing_if = "Option::is_none",
+        default
     )]
     pub finished_at: Option<OffsetDateTime>,
 }

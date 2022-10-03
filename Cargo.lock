@@ -1145,12 +1145,15 @@ name = "dump"
 version = "0.29.0"
 dependencies = [
  "anyhow",
+ "big_s",
  "flate2",
  "index",
  "index-scheduler",
  "insta",
  "log",
+ "maplit",
  "meilisearch-auth",
+ "meilisearch-types",
  "serde",
  "serde_json",
  "tar",
