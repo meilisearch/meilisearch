@@ -27,7 +27,7 @@ pub const DEFAULT_CROP_MARKER: fn() -> String = || "…".to_string();
 pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 
-/// The maximimum number of results that the engine
+/// The maximum number of results that the engine
 /// will be able to return in one search call.
 pub const DEFAULT_PAGINATION_MAX_TOTAL_HITS: usize = 1000;
 

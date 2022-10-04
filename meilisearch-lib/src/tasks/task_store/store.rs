@@ -63,7 +63,7 @@ impl Store {
     /// Returns the id for the next task.
     ///
     /// The required `mut txn` acts as a reservation system. It guarantees that as long as you commit
-    /// the task to the store in the same transaction, no one else will hav this task id.
+    /// the task to the store in the same transaction, no one else will have this task id.
     pub fn next_task_id(&self, txn: &mut RwTxn) -> Result<TaskId> {
         let id = self
             .tasks

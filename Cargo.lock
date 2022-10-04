@@ -2091,6 +2091,7 @@ dependencies = [
  "time 0.3.14",
  "tokio",
  "tokio-stream",
+ "toml",
  "urlencoding",
  "uuid",
  "vergen",

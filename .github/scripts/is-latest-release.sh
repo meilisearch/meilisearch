@@ -85,7 +85,7 @@ get_latest() {
     latest=""
     current_tag=""
     for release_info in $releases; do
-        if [ $i -eq 0 ]; then # Cheking tag_name
+        if [ $i -eq 0 ]; then # Checking tag_name
             if echo "$release_info" | grep -q "$GREP_SEMVER_REGEXP"; then # If it's not an alpha or beta release
                 current_tag=$release_info
             else

@@ -57,10 +57,10 @@ fn patch_updates(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result
     let updates_path = src.as_ref().join("updates/data.jsonl");
     let output_updates_path = dst.as_ref().join("updates/data.jsonl");
     create_dir_all(output_updates_path.parent().unwrap())?;
-    let udpates_file = File::open(updates_path)?;
+    let updates_file = File::open(updates_path)?;
     let mut output_update_file = File::create(output_updates_path)?;
 
-    serde_json::Deserializer::from_reader(udpates_file)
+    serde_json::Deserializer::from_reader(updates_file)
         .into_iter::<compat::v4::Task>()
         .try_for_each(|task| -> anyhow::Result<()> {
             let task: Task = task?.into();

@@ -1,0 +1,47 @@
+name: Update Meilisearch version in all Cargo.toml files
+
+on:
+  workflow_dispatch:
+    inputs:
+      new_version:
+        description: 'The new version (vX.Y.Z)'
+        required: true
+
+env:
+  NEW_VERSION: ${{ github.event.inputs.new_version }}
+  NEW_BRANCH: update-version-${{ github.event.inputs.new_version }}
+  GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
+
+jobs:
+
+  update-version-cargo-toml:
+    name: Update version in Cargo.toml files
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: Install sd
+        run: cargo install sd
+      - name: Update Cargo.toml files
+        run: |
+          raw_new_version=$(echo $NEW_VERSION | cut -d 'v' -f 2)
+          new_string="version = \"$raw_new_version\""
+          sd '^version = "\d+.\d+.\w+"$' "$new_string" */Cargo.toml
+      - name: Build Meilisearch to update Cargo.lock
+        run: cargo build
+      - name: Commit and push the changes to the ${{ env.NEW_BRANCH }} branch
+        uses: EndBug/add-and-commit@v9
+        with:
+          message: "Update version for the next release (${{ env.NEW_VERSION }}) in Cargo.toml files"
+          new_branch: ${{ env.NEW_BRANCH }}
+      - name: Create the PR pointing to ${{ github.ref_name }}
+        run: |
+          gh pr create \
+            --title "Update version for the next release ($NEW_VERSION) in Cargo.toml files" \
+            --body '⚠️ This PR is automatically generated. Check the new version is the expected one before merging.' \
+            --label 'skip changelog' \
+            --milestone $NEW_VERSION

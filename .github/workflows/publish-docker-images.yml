@@ -12,7 +12,7 @@ jobs:
   docker:
     runs-on: docker
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       # Check if the tag has the v<nmumber>.<number>.<number> format. If yes, it means we are publishing an official release.
       # In this situation, we need to set `output.stable` to create/update the following tags (additionally to the `vX.Y.Z` Docker tag):
@@ -53,7 +53,7 @@ jobs:
         uses: docker/metadata-action@v4
         with:
           images: getmeili/meilisearch
-          # The lastest and `vX.Y` tags are only pushed for the official Meilisearch releases
+          # The latest and `vX.Y` tags are only pushed for the official Meilisearch releases
           # See https://github.com/docker/metadata-action#latest-tag
           flavor: latest=false
           tags: |
@@ -62,10 +62,19 @@ jobs:
             type=raw,value=latest,enable=${{ steps.check-tag-format.outputs.stable == 'true' }}
 
       - name: Build and push
-        id: docker_build
         uses: docker/build-push-action@v3
         with:
           # We do not push tags for the cron jobs, this is only for test purposes
           push: ${{ github.event_name != 'schedule' }}
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
+
+      # /!\ Don't touch this without checking with Cloud team
+      - name: Send CI information to Cloud team
+        if: github.event_name != 'schedule'
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.MEILI_BOT_GH_PAT }}
+          repository: meilisearch/meilisearch-cloud
+          event-type: cloud-docker-build
+          client-payload: '{ "meilisearch_version": "${{ steps.meta.outputs.tags }}", "stable": "${{ steps.check-tag-format.outputs.stable }}" }'
