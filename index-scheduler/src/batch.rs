@@ -407,7 +407,26 @@ impl IndexScheduler {
                 index_uid,
                 primary_key,
                 task,
-            } => todo!(),
+            } => {
+                let mut wtxn = self.env.write_txn()?;
+                let index = self.index_mapper.create_index(&mut wtxn, &index_uid)?;
+
+                if let Some(primary_key) = primary_key {
+                    let mut index_wtxn = index.write_txn()?;
+                    let mut builder = milli::update::Settings::new(
+                        &mut index_wtxn,
+                        &index,
+                        self.index_mapper.indexer_config(),
+                    );
+                    builder.set_primary_key(primary_key);
+                    builder.execute(|_| ())?;
+                    index_wtxn.commit()?;
+                }
+
+                wtxn.commit()?;
+
+                Ok(vec![task])
+            }
             Batch::IndexUpdate {
                 index_uid,
                 primary_key,
@@ -450,6 +469,7 @@ impl IndexScheduler {
                 mut tasks,
             } => {
                 let indexer_config = self.index_mapper.indexer_config();
+                // TODO use the code from the IndexCreate operation
                 if let Some(primary_key) = primary_key {
                     if index.primary_key(index_wtxn)?.is_none() {
                         let mut builder =
