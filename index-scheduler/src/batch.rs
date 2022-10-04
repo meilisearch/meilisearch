@@ -440,7 +440,13 @@ impl IndexScheduler {
 
                 Ok(vec![task])
             }
-            Batch::IndexDeletion { index_uid, tasks } => todo!(),
+            Batch::IndexDeletion { index_uid, tasks } => {
+                let wtxn = self.env.write_txn()?;
+                // The write transaction is directly owned and commited here.
+                let index = self.index_mapper.delete_index(wtxn, &index_uid)?;
+
+                todo!("update the tasks and mark them as succeeded");
+            }
         }
     }
 
