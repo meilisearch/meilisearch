@@ -1,7 +1,7 @@
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use index::{
-    MatchingStrategy, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    perform_search, MatchingStrategy, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
     DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
 };
 use index_scheduler::IndexScheduler;
@@ -151,7 +151,7 @@ pub async fn search_with_url_query(
     let mut aggregate = SearchAggregator::from_query(&query, &req);
 
     let index = index_scheduler.index(&index_uid)?;
-    let search_result = index.perform_search(query);
+    let search_result = perform_search(&index, query);
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
@@ -185,7 +185,7 @@ pub async fn search_with_post(
     let mut aggregate = SearchAggregator::from_query(&query, &req);
 
     let index = index_scheduler.index(&index_uid)?;
-    let search_result = index.perform_search(query);
+    let search_result = perform_search(&index, query);
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
