@@ -2483,6 +2483,7 @@ name = "meilisearch-types"
 version = "0.29.1"
 dependencies = [
  "actix-web",
+ "milli 0.33.0",
  "proptest",
  "proptest-derive",
  "serde",

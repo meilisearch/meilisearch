@@ -351,6 +351,47 @@ impl ErrorCode for JoinError {
     }
 }
 
+impl ErrorCode for milli::Error {
+    fn error_code(&self) -> Code {
+        use milli::{Error, UserError};
+
+        match self {
+            Error::InternalError(_) => Code::Internal,
+            Error::IoError(_) => Code::Internal,
+            Error::UserError(ref error) => {
+                match error {
+                    // TODO: wait for spec for new error codes.
+                    UserError::SerdeJson(_)
+                    | UserError::InvalidLmdbOpenOptions
+                    | UserError::DocumentLimitReached
+                    | UserError::AccessingSoftDeletedDocument { .. }
+                    | UserError::UnknownInternalDocumentId { .. } => Code::Internal,
+                    UserError::InvalidStoreFile => Code::InvalidStore,
+                    UserError::NoSpaceLeftOnDevice => Code::NoSpaceLeftOnDevice,
+                    UserError::MaxDatabaseSizeReached => Code::DatabaseSizeLimitReached,
+                    UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
+                    UserError::InvalidFilter(_) => Code::Filter,
+                    UserError::MissingDocumentId { .. } => Code::MissingDocumentId,
+                    UserError::InvalidDocumentId { .. } | UserError::TooManyDocumentIds { .. } => {
+                        Code::InvalidDocumentId
+                    }
+                    UserError::MissingPrimaryKey => Code::MissingPrimaryKey,
+                    UserError::PrimaryKeyCannotBeChanged(_) => Code::PrimaryKeyAlreadyPresent,
+                    UserError::SortRankingRuleMissing => Code::Sort,
+                    UserError::InvalidFacetsDistribution { .. } => Code::BadRequest,
+                    UserError::InvalidSortableAttribute { .. } => Code::Sort,
+                    UserError::CriterionError(_) => Code::InvalidRankingRule,
+                    UserError::InvalidGeoField { .. } => Code::InvalidGeoField,
+                    UserError::SortError(_) => Code::Sort,
+                    UserError::InvalidMinTypoWordLenSetting(_, _) => {
+                        Code::InvalidMinWordLengthForTypo
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[cfg(feature = "test-traits")]
 mod strategy {
     use proptest::strategy::Strategy;
