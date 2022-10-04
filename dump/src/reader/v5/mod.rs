@@ -46,13 +46,15 @@ use uuid::Uuid;
 use crate::{IndexMetadata, Result, Version};
 
 use self::{
-    meta::IndexUuid,
+    keys::Key,
+    meta::{DumpMeta, IndexUuid},
     settings::{Checked, Settings, Unchecked},
     tasks::Task,
 };
 
 use super::{DumpReader, IndexReader};
 
+mod keys;
 mod meta;
 mod settings;
 mod tasks;
@@ -73,27 +75,6 @@ pub struct V5Reader {
     tasks: BufReader<File>,
     keys: BufReader<File>,
     index_uuid: Vec<IndexUuid>,
-}
-
-struct V5IndexReader {
-    metadata: IndexMetadata,
-
-    documents: BufReader<File>,
-    settings: BufReader<File>,
-}
-
-impl V5IndexReader {
-    pub fn new(name: String, path: &Path) -> Result<Self> {
-        let metadata = File::open(path.join("metadata.json"))?;
-
-        let ret = V5IndexReader {
-            metadata: serde_json::from_reader(metadata)?,
-            documents: BufReader::new(File::open(path.join("documents.jsonl"))?),
-            settings: BufReader::new(File::open(path.join("settings.json"))?),
-        };
-
-        Ok(ret)
-    }
 }
 
 impl V5Reader {
@@ -124,8 +105,7 @@ impl DumpReader for V5Reader {
     type Task = Task;
     type UpdateFile = File;
 
-    // TODO: remove this
-    type Key = meilisearch_auth::Key;
+    type Key = Key;
 
     fn version(&self) -> Version {
         Version::V5
@@ -190,13 +170,42 @@ impl DumpReader for V5Reader {
         }))
     }
 
-    // TODO: do it
     fn keys(&mut self) -> Box<dyn Iterator<Item = Result<Self::Key>> + '_> {
         Box::new(
             (&mut self.keys)
                 .lines()
                 .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) }),
         )
+    }
+}
+
+struct V5IndexReader {
+    metadata: IndexMetadata,
+    settings: Settings<Checked>,
+
+    documents: BufReader<File>,
+}
+
+impl V5IndexReader {
+    pub fn new(name: String, path: &Path) -> Result<Self> {
+        let meta = File::open(path.join("meta.json"))?;
+        let meta: DumpMeta = serde_json::from_reader(meta)?;
+
+        let metadata = IndexMetadata {
+            uid: name,
+            primary_key: meta.primary_key,
+            // FIXME: Iterate over the whole task queue to find the creation and last update date.
+            created_at: OffsetDateTime::now_utc(),
+            updated_at: OffsetDateTime::now_utc(),
+        };
+
+        let ret = V5IndexReader {
+            metadata,
+            settings: meta.settings.check(),
+            documents: BufReader::new(File::open(path.join("documents.jsonl"))?),
+        };
+
+        Ok(ret)
     }
 }
 
@@ -215,7 +224,6 @@ impl IndexReader for V5IndexReader {
     }
 
     fn settings(&mut self) -> Result<Self::Settings> {
-        let settings: Settings<Unchecked> = serde_json::from_reader(&mut self.settings)?;
-        Ok(settings.check())
+        Ok(self.settings.clone())
     }
 }
