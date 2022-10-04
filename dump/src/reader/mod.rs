@@ -12,7 +12,7 @@ use tempfile::TempDir;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{Result, Version};
+use crate::{IndexMetadata, Result, Version};
 
 // use self::loaders::{v2, v3, v4, v5};
 
@@ -20,6 +20,7 @@ use crate::{Result, Version};
 // mod compat;
 // mod loaders;
 // mod v1;
+mod v5;
 mod v6;
 
 pub fn open(
@@ -97,10 +98,13 @@ pub trait DumpReader {
     ) -> Result<
         Box<
             dyn Iterator<
-                Item = Result<
-                    Box<dyn IndexReader<Document = Self::Document, Settings = Self::Settings>>,
-                >,
-            >,
+                    Item = Result<
+                        Box<
+                            dyn IndexReader<Document = Self::Document, Settings = Self::Settings>
+                                + '_,
+                        >,
+                    >,
+                > + '_,
         >,
     >;
 
@@ -117,7 +121,7 @@ pub trait IndexReader {
     type Document;
     type Settings;
 
-    fn name(&self) -> &str;
+    fn metadata(&self) -> &IndexMetadata;
     fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<Self::Document>> + '_>>;
     fn settings(&mut self) -> Result<Self::Settings>;
 }
