@@ -13,7 +13,6 @@ pub mod metrics;
 pub mod route_metrics;
 
 use std::sync::{atomic::AtomicBool, Arc};
-use std::time::Duration;
 
 use crate::error::MeilisearchHttpError;
 use actix_web::error::JsonPayloadError;
@@ -21,7 +20,6 @@ use actix_web::web::Data;
 use analytics::Analytics;
 use error::PayloadError;
 use http::header::CONTENT_TYPE;
-use index_scheduler::milli::update::IndexerConfig;
 pub use option::Opt;
 
 use actix_web::{web, HttpRequest};
@@ -29,7 +27,6 @@ use actix_web::{web, HttpRequest};
 use extractors::payload::PayloadConfig;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
-use sysinfo::{RefreshKind, System, SystemExt};
 
 pub static AUTOBATCHING_ENABLED: AtomicBool = AtomicBool::new(false);
 
