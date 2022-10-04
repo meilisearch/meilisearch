@@ -410,6 +410,21 @@ impl IndexScheduler {
             } => {
                 let mut wtxn = self.env.write_txn()?;
                 let index = self.index_mapper.create_index(&mut wtxn, &index_uid)?;
+                wtxn.commit()?;
+
+                self.process_batch(Batch::IndexUpdate {
+                    index_uid,
+                    primary_key,
+                    task,
+                })
+            }
+            Batch::IndexUpdate {
+                index_uid,
+                primary_key,
+                task,
+            } => {
+                let rtxn = self.env.read_txn()?;
+                let index = self.index_mapper.index(&rtxn, &index_uid)?;
 
                 if let Some(primary_key) = primary_key {
                     let mut index_wtxn = index.write_txn()?;
@@ -423,15 +438,8 @@ impl IndexScheduler {
                     index_wtxn.commit()?;
                 }
 
-                wtxn.commit()?;
-
                 Ok(vec![task])
             }
-            Batch::IndexUpdate {
-                index_uid,
-                primary_key,
-                task,
-            } => todo!(),
             Batch::IndexDeletion { index_uid, tasks } => todo!(),
         }
     }
