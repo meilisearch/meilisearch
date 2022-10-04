@@ -8,13 +8,12 @@ use flate2::{write::GzEncoder, Compression};
 use index::{Checked, Settings};
 use index_scheduler::TaskView;
 use meilisearch_auth::Key;
-use serde::Serialize;
 use serde_json::{Map, Value};
 use tempfile::TempDir;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{Metadata, Result, CURRENT_DUMP_VERSION};
+use crate::{IndexMetadata, Metadata, Result, CURRENT_DUMP_VERSION};
 
 pub struct DumpWriter {
     dir: TempDir,
@@ -23,8 +22,9 @@ pub struct DumpWriter {
 impl DumpWriter {
     pub fn new(instance_uuid: Uuid) -> Result<DumpWriter> {
         let dir = TempDir::new()?;
+
         fs::write(
-            dir.path().join("instance-uid"),
+            dir.path().join("instance_uid.uuid"),
             &instance_uuid.as_hyphenated().to_string(),
         )?;
 
@@ -43,8 +43,8 @@ impl DumpWriter {
         Ok(DumpWriter { dir })
     }
 
-    pub fn create_index(&self, index_name: &str) -> Result<IndexWriter> {
-        IndexWriter::new(self.dir.path().join("indexes").join(index_name))
+    pub fn create_index(&self, index_name: &str, metadata: &IndexMetadata) -> Result<IndexWriter> {
+        IndexWriter::new(self.dir.path().join("indexes").join(index_name), metadata)
     }
 
     pub fn create_keys(&self) -> Result<KeyWriter> {
@@ -126,8 +126,11 @@ pub struct IndexWriter {
 }
 
 impl IndexWriter {
-    pub(crate) fn new(path: PathBuf) -> Result<Self> {
+    pub(self) fn new(path: PathBuf, metadata: &IndexMetadata) -> Result<Self> {
         std::fs::create_dir(&path)?;
+
+        let metadata_file = File::create(path.join("metadata.json"))?;
+        serde_json::to_writer(metadata_file, metadata)?;
 
         let documents = File::create(path.join("documents.jsonl"))?;
         let settings = File::create(path.join("settings.json"))?;
@@ -243,14 +246,15 @@ pub(crate) mod test {
         ├---- indexes/
         │    └---- doggos/
         │    │    ├---- settings.json
-        │    │    └---- documents.jsonl
+        │    │    ├---- documents.jsonl
+        │    │    └---- metadata.json
         ├---- tasks/
         │    ├---- update_files/
         │    │    └---- 1
         │    └---- queue.jsonl
         ├---- keys.jsonl
         ├---- metadata.json
-        └---- instance-uid
+        └---- instance_uid.uuid
         "###);
 
         // ==== checking the top level infos
@@ -264,7 +268,7 @@ pub(crate) mod test {
         }
         "###);
 
-        let instance_uid = fs::read_to_string(dump_path.join("instance-uid")).unwrap();
+        let instance_uid = fs::read_to_string(dump_path.join("instance_uid.uuid")).unwrap();
         assert_eq!(
             Uuid::from_str(&instance_uid).unwrap(),
             create_test_instance_uid()
@@ -284,6 +288,16 @@ pub(crate) mod test {
             serde_json::from_str::<Settings<Unchecked>>(&test_settings).unwrap(),
             create_test_settings().into_unchecked()
         );
+        let metadata = fs::read_to_string(dump_path.join("indexes/doggos/metadata.json")).unwrap();
+        let metadata: IndexMetadata = serde_json::from_str(&metadata).unwrap();
+        insta::assert_json_snapshot!(metadata, { ".createdAt" => "[date]", ".updatedAt" => "[date]" }, @r###"
+        {
+          "uid": "doggo",
+          "primaryKey": null,
+          "createdAt": "[date]",
+          "updatedAt": "[date]"
+        }
+        "###);
 
         // ==== checking the task queue
         let tasks_queue = fs::read_to_string(dump_path.join("tasks/queue.jsonl")).unwrap();
