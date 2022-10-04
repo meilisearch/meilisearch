@@ -5,7 +5,7 @@ use std::ops::Deref;
 use std::pin::Pin;
 
 use actix_web::FromRequest;
-use error::AuthenticationError;
+pub use error::AuthenticationError;
 use futures::future::err;
 use futures::Future;
 use meilisearch_auth::{AuthController, AuthFilter};
