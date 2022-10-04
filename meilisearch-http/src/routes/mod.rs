@@ -5,14 +5,11 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use index::{Settings, Unchecked};
 use index_scheduler::{IndexScheduler, Query, Status};
 use log::debug;
-use serde::{Deserialize, Serialize};
-
-use serde_json::json;
-use time::OffsetDateTime;
-
-use index::{Settings, Unchecked};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::star_or::StarOr;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use time::OffsetDateTime;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
@@ -270,25 +267,26 @@ async fn get_stats(
         .first()
         .and_then(|task| task.index_uid.clone());
 
-    for index in index_scheduler.indexes()? {
-        if !search_rules.is_index_authorized(&index.name) {
+    for (name, index) in index_scheduler.indexes()? {
+        if !search_rules.is_index_authorized(&name) {
             continue;
         }
 
-        database_size += index.size()?;
+        database_size += index.on_disk_size()?;
 
+        let rtxn = index.read_txn()?;
         let stats = IndexStats {
-            number_of_documents: index.number_of_documents()?,
+            number_of_documents: index.number_of_documents(&rtxn)?,
             is_indexing: processing_index
                 .as_deref()
-                .map_or(false, |index_name| index.name == index_name),
-            field_distribution: index.field_distribution()?,
+                .map_or(false, |index_name| name == index_name),
+            field_distribution: index.field_distribution(&rtxn)?,
         };
 
-        let updated_at = index.updated_at()?;
+        let updated_at = index.updated_at(&rtxn)?;
         last_task = last_task.map_or(Some(updated_at), |last| Some(last.max(updated_at)));
 
-        indexes.insert(index.name.clone(), stats);
+        indexes.insert(name, stats);
     }
 
     let stats = Stats {

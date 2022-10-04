@@ -231,7 +231,7 @@ impl IndexScheduler {
     }
 
     /// Return and open all the indexes.
-    pub fn indexes(&self) -> Result<Vec<Index>> {
+    pub fn indexes(&self) -> Result<Vec<(String, Index)>> {
         let rtxn = self.env.read_txn()?;
         self.index_mapper.indexes(&rtxn)
     }
