@@ -16,7 +16,7 @@ use meilisearch_types::star_or::StarOr;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
 
-use self::indexes::{IndexStats, IndexView};
+use self::indexes::IndexStats;
 
 mod api_key;
 mod dump;
