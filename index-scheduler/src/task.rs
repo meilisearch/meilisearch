@@ -131,7 +131,7 @@ pub enum KindWithContent {
         primary_key: Option<String>,
         method: IndexDocumentsMethod,
         content_file: Uuid,
-        documents_count: usize,
+        documents_count: u64,
         allow_index_creation: bool,
     },
     DocumentDeletion {
@@ -253,6 +253,45 @@ impl KindWithContent {
             | IndexUpdate { index_uid, .. }
             | IndexDeletion { index_uid } => Some(vec![index_uid]),
             IndexSwap { lhs, rhs } => Some(vec![lhs, rhs]),
+        }
+    }
+
+    /// Returns the default `Details` that correspond to this `KindWithContent`,
+    /// `None` if it cannot be generated.
+    pub fn default_details(&self) -> Option<Details> {
+        match self {
+            KindWithContent::DocumentImport {
+                documents_count, ..
+            } => Some(Details::DocumentAddition {
+                received_documents: *documents_count,
+                indexed_documents: 0,
+            }),
+            KindWithContent::DocumentDeletion {
+                index_uid: _,
+                documents_ids,
+            } => Some(Details::DocumentDeletion {
+                received_document_ids: documents_ids.len(),
+                deleted_documents: None,
+            }),
+            KindWithContent::DocumentClear { .. } => Some(Details::ClearAll {
+                deleted_documents: None,
+            }),
+            KindWithContent::Settings { new_settings, .. } => Some(Details::Settings {
+                settings: new_settings.clone(),
+            }),
+            KindWithContent::IndexDeletion { .. } => Some(Details::IndexInfo { primary_key: None }),
+            KindWithContent::IndexCreation { primary_key, .. }
+            | KindWithContent::IndexUpdate { primary_key, .. } => Some(Details::IndexInfo {
+                primary_key: primary_key.clone(),
+            }),
+            KindWithContent::IndexSwap { .. } => {
+                todo!()
+            }
+            KindWithContent::CancelTask { .. } => {
+                todo!()
+            }
+            KindWithContent::DumpExport { .. } => None,
+            KindWithContent::Snapshot => None,
         }
     }
 }

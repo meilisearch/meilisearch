@@ -274,7 +274,7 @@ async fn document_addition(
         .await;
 
     let documents_count = match documents_count {
-        Ok(Ok(documents_count)) => documents_count,
+        Ok(Ok(documents_count)) => documents_count as u64,
         Ok(Err(e)) => {
             index_scheduler.delete_update_file(uuid)?;
             return Err(e);
