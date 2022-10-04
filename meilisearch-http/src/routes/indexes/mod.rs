@@ -1,9 +1,5 @@
-use std::convert::TryFrom;
-use std::sync::Arc;
-
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use index::Index;
 use index_scheduler::milli::FieldDistribution;
 use index_scheduler::{IndexScheduler, KindWithContent, Query, Status};
 use log::debug;
@@ -74,7 +70,6 @@ pub async fn list_indexes(
 ) -> Result<HttpResponse, ResponseError> {
     let search_rules = &index_scheduler.filters().search_rules;
     let indexes: Vec<_> = index_scheduler.indexes()?;
-    let nb_indexes = indexes.len();
     let indexes = indexes
         .iter()
         .filter(|index| search_rules.is_index_authorized(&index.name))
