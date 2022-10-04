@@ -1,8 +1,9 @@
-use enum_iterator::IntoEnumIterator;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 
-#[derive(IntoEnumIterator, Copy, Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Hash)]
+#[derive(
+    enum_iterator::Sequence, Copy, Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Hash,
+)]
 #[repr(u8)]
 pub enum Action {
     #[serde(rename = "*")]
