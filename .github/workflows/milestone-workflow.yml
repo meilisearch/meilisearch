@@ -129,7 +129,7 @@ jobs:
             label_description="$label_description released on $date"
           fi
 
-          gh api repos/curquiza/meilisearch/labels \
+          gh api repos/meilisearch/meilisearch/labels \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -f name="$MILESTONE_VERSION" \
