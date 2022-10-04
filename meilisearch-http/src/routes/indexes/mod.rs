@@ -1,6 +1,6 @@
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use index_scheduler::milli::FieldDistribution;
+use index_scheduler::milli::{FieldDistribution, Index};
 use index_scheduler::{IndexScheduler, KindWithContent, Query, Status};
 use log::debug;
 use meilisearch_types::error::ResponseError;
@@ -11,7 +11,6 @@ use time::OffsetDateTime;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
-use index_scheduler::task::TaskView;
 
 use super::Pagination;
 
@@ -51,15 +50,14 @@ pub struct IndexView {
     pub primary_key: Option<String>,
 }
 
-impl TryFrom<&Index> for IndexView {
-    type Error = index::error::IndexError;
-
-    fn try_from(index: &Index) -> Result<IndexView, Self::Error> {
+impl IndexView {
+    fn new(uid: String, index: &Index) -> Result<IndexView, index::error::IndexError> {
+        let rtxn = index.read_txn()?;
         Ok(IndexView {
-            uid: index.name.clone(),
-            created_at: index.created_at()?,
-            updated_at: index.updated_at()?,
-            primary_key: index.primary_key()?,
+            uid,
+            created_at: index.created_at(&rtxn)?,
+            updated_at: index.updated_at(&rtxn)?,
+            primary_key: index.primary_key(&rtxn)?.map(String::from),
         })
     }
 }
@@ -71,9 +69,9 @@ pub async fn list_indexes(
     let search_rules = &index_scheduler.filters().search_rules;
     let indexes: Vec<_> = index_scheduler.indexes()?;
     let indexes = indexes
-        .iter()
-        .filter(|index| search_rules.is_index_authorized(&index.name))
-        .map(IndexView::try_from)
+        .into_iter()
+        .filter(|(name, _)| search_rules.is_index_authorized(name))
+        .map(|(name, index)| IndexView::new(name, &index))
         .collect::<Result<Vec<_>, _>>()?;
 
     let ret = paginate.auto_paginate_sized(indexes.into_iter());
@@ -130,7 +128,7 @@ pub async fn get_index(
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = index_scheduler.index(&index_uid)?;
-    let index_view: IndexView = (&index).try_into()?;
+    let index_view = IndexView::new(index_uid.into_inner(), &index)?;
 
     debug!("returns: {:?}", index_view);
 
@@ -216,10 +214,11 @@ impl IndexStats {
         let is_processing = !processing_task.is_empty();
 
         let index = index_scheduler.index(&index_uid)?;
+        let rtxn = index.read_txn()?;
         Ok(IndexStats {
-            number_of_documents: index.number_of_documents()?,
+            number_of_documents: index.number_of_documents(&rtxn)?,
             is_indexing: is_processing,
-            field_distribution: index.field_distribution()?,
+            field_distribution: index.field_distribution(&rtxn)?,
         })
     }
 }

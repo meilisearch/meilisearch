@@ -8,6 +8,7 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use bstr::ByteSlice;
 use document_formats::{read_csv, read_json, read_ndjson, PayloadType};
 use futures::{Stream, StreamExt};
+use index::{retrieve_document, retrieve_documents};
 use index_scheduler::milli::update::IndexDocumentsMethod;
 use index_scheduler::IndexScheduler;
 use index_scheduler::{KindWithContent, TaskView};
@@ -103,7 +104,7 @@ pub async fn get_document(
     let attributes_to_retrieve = fields.and_then(fold_star_or);
 
     let index = index_scheduler.index(&path.index_uid)?;
-    let document = index.retrieve_document(&path.document_id, attributes_to_retrieve)?;
+    let document = retrieve_document(&index, &path.document_id, attributes_to_retrieve)?;
     debug!("returns: {:?}", document);
     Ok(HttpResponse::Ok().json(document))
 }
@@ -149,7 +150,7 @@ pub async fn get_all_documents(
     let attributes_to_retrieve = fields.and_then(fold_star_or);
 
     let index = index_scheduler.index(&index_uid)?;
-    let (total, documents) = index.retrieve_documents(offset, limit, attributes_to_retrieve)?;
+    let (total, documents) = retrieve_documents(&index, offset, limit, attributes_to_retrieve)?;
 
     let ret = PaginationView::new(offset, limit, total as usize, documents);
 
