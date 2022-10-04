@@ -97,7 +97,8 @@ macro_rules! make_setting_route {
                 index_uid: actix_web::web::Path<String>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
                 let index = index_scheduler.index(&index_uid)?;
-                let settings = index.settings()?;
+                let rtxn = index.read_txn()?;
+                let settings = index::settings(&index, &rtxn)?;
 
                 debug!("returns: {:?}", settings);
                 let mut json = serde_json::json!(&settings);
@@ -454,7 +455,8 @@ pub async fn get_all(
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = index_scheduler.index(&index_uid)?;
-    let new_settings = index.settings()?;
+    let rtxn = index.read_txn()?;
+    let new_settings = index::settings(&index, &rtxn)?;
     debug!("returns: {:?}", new_settings);
     Ok(HttpResponse::Ok().json(new_settings))
 }

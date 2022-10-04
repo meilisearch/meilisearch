@@ -1,19 +1,25 @@
 use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::marker::PhantomData;
 use std::str::FromStr;
 use std::time::Instant;
 
 use either::Either;
+use fst::IntoStreamer;
+use milli::heed::RoTxn;
 use milli::tokenizer::TokenizerBuilder;
+use milli::update::Setting;
 use milli::{
-    AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, Index, MatchBounds, MatcherBuilder,
-    SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
+    obkv_to_json, AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, Index, MatchBounds,
+    MatcherBuilder, SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::error::FacetError;
+use crate::updates::{FacetingSettings, MinWordSizeTyposSetting, PaginationSettings, TypoSettings};
+use crate::{Checked, Settings};
 
 use super::error::{IndexError, Result};
 
@@ -280,6 +286,184 @@ pub fn perform_search(index: &Index, query: SearchQuery) -> Result<SearchResult>
         facet_distribution,
     };
     Ok(result)
+}
+
+pub fn all_documents<'a>(
+    index: &Index,
+    rtxn: &'a RoTxn,
+) -> Result<impl Iterator<Item = Result<Document>> + 'a> {
+    let fields_ids_map = index.fields_ids_map(rtxn)?;
+    let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
+
+    Ok(index.all_documents(rtxn)?.map(move |ret| {
+        ret.map_err(IndexError::from)
+            .and_then(|(_key, document)| -> Result<_> {
+                Ok(obkv_to_json(&all_fields, &fields_ids_map, document)?)
+            })
+    }))
+}
+
+pub fn retrieve_documents<S: AsRef<str>>(
+    index: &Index,
+    offset: usize,
+    limit: usize,
+    attributes_to_retrieve: Option<Vec<S>>,
+) -> Result<(u64, Vec<Document>)> {
+    let rtxn = index.read_txn()?;
+
+    let mut documents = Vec::new();
+    for document in all_documents(index, &rtxn)?.skip(offset).take(limit) {
+        let document = match &attributes_to_retrieve {
+            Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
+                &document?,
+                attributes_to_retrieve.iter().map(|s| s.as_ref()),
+            ),
+            None => document?,
+        };
+        documents.push(document);
+    }
+
+    let number_of_documents = index.number_of_documents(&rtxn)?;
+    Ok((number_of_documents, documents))
+}
+
+pub fn retrieve_document<S: AsRef<str>>(
+    index: &Index,
+    doc_id: &str,
+    attributes_to_retrieve: Option<Vec<S>>,
+) -> Result<Document> {
+    let txn = index.read_txn()?;
+
+    let fields_ids_map = index.fields_ids_map(&txn)?;
+    let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
+
+    let internal_id = index
+        .external_documents_ids(&txn)?
+        .get(doc_id.as_bytes())
+        .ok_or_else(|| IndexError::DocumentNotFound(doc_id.to_string()))?;
+
+    let document = index
+        .documents(&txn, std::iter::once(internal_id))?
+        .into_iter()
+        .next()
+        .map(|(_, d)| d)
+        .ok_or_else(|| IndexError::DocumentNotFound(doc_id.to_string()))?;
+
+    let document = obkv_to_json(&all_fields, &fields_ids_map, document)?;
+    let document = match &attributes_to_retrieve {
+        Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
+            &document,
+            attributes_to_retrieve.iter().map(|s| s.as_ref()),
+        ),
+        None => document,
+    };
+
+    Ok(document)
+}
+
+pub fn settings(index: &Index, rtxn: &RoTxn) -> Result<Settings<Checked>> {
+    let displayed_attributes = index
+        .displayed_fields(rtxn)?
+        .map(|fields| fields.into_iter().map(String::from).collect());
+
+    let searchable_attributes = index
+        .user_defined_searchable_fields(rtxn)?
+        .map(|fields| fields.into_iter().map(String::from).collect());
+
+    let filterable_attributes = index.filterable_fields(rtxn)?.into_iter().collect();
+
+    let sortable_attributes = index.sortable_fields(rtxn)?.into_iter().collect();
+
+    let criteria = index
+        .criteria(rtxn)?
+        .into_iter()
+        .map(|c| c.to_string())
+        .collect();
+
+    let stop_words = index
+        .stop_words(rtxn)?
+        .map(|stop_words| -> Result<BTreeSet<_>> {
+            Ok(stop_words.stream().into_strs()?.into_iter().collect())
+        })
+        .transpose()?
+        .unwrap_or_default();
+    let distinct_field = index.distinct_field(rtxn)?.map(String::from);
+
+    // in milli each word in the synonyms map were split on their separator. Since we lost
+    // this information we are going to put space between words.
+    let synonyms = index
+        .synonyms(rtxn)?
+        .iter()
+        .map(|(key, values)| {
+            (
+                key.join(" "),
+                values.iter().map(|value| value.join(" ")).collect(),
+            )
+        })
+        .collect();
+
+    let min_typo_word_len = MinWordSizeTyposSetting {
+        one_typo: Setting::Set(index.min_word_len_one_typo(rtxn)?),
+        two_typos: Setting::Set(index.min_word_len_two_typos(rtxn)?),
+    };
+
+    let disabled_words = match index.exact_words(rtxn)? {
+        Some(fst) => fst.into_stream().into_strs()?.into_iter().collect(),
+        None => BTreeSet::new(),
+    };
+
+    let disabled_attributes = index
+        .exact_attributes(rtxn)?
+        .into_iter()
+        .map(String::from)
+        .collect();
+
+    let typo_tolerance = TypoSettings {
+        enabled: Setting::Set(index.authorize_typos(rtxn)?),
+        min_word_size_for_typos: Setting::Set(min_typo_word_len),
+        disable_on_words: Setting::Set(disabled_words),
+        disable_on_attributes: Setting::Set(disabled_attributes),
+    };
+
+    let faceting = FacetingSettings {
+        max_values_per_facet: Setting::Set(
+            index
+                .max_values_per_facet(rtxn)?
+                .unwrap_or(DEFAULT_VALUES_PER_FACET),
+        ),
+    };
+
+    let pagination = PaginationSettings {
+        max_total_hits: Setting::Set(
+            index
+                .pagination_max_total_hits(rtxn)?
+                .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS),
+        ),
+    };
+
+    Ok(Settings {
+        displayed_attributes: match displayed_attributes {
+            Some(attrs) => Setting::Set(attrs),
+            None => Setting::Reset,
+        },
+        searchable_attributes: match searchable_attributes {
+            Some(attrs) => Setting::Set(attrs),
+            None => Setting::Reset,
+        },
+        filterable_attributes: Setting::Set(filterable_attributes),
+        sortable_attributes: Setting::Set(sortable_attributes),
+        ranking_rules: Setting::Set(criteria),
+        stop_words: Setting::Set(stop_words),
+        distinct_attribute: match distinct_field {
+            Some(field) => Setting::Set(field),
+            None => Setting::Reset,
+        },
+        synonyms: Setting::Set(synonyms),
+        typo_tolerance: Setting::Set(typo_tolerance),
+        faceting: Setting::Set(faceting),
+        pagination: Setting::Set(pagination),
+        _kind: PhantomData,
+    })
 }
 
 fn insert_geo_distance(sorts: &[String], document: &mut Document) {
