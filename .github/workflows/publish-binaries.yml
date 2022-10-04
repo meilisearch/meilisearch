@@ -76,8 +76,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - build: aarch64
-            os: macos-latest
+          - os: macos-latest
             target: aarch64-apple-darwin
             asset_name: meilisearch-macos-apple-silicon
 
