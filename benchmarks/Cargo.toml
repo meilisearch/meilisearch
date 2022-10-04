@@ -5,24 +5,24 @@ edition = "2018"
 publish = false
 
 [dependencies]
-anyhow = "1.0.56"
+anyhow = "1.0.65"
 csv = "1.1.6"
 milli = { path = "../milli", default-features = false }
 mimalloc = { version = "0.1.29", default-features = false }
-serde_json = { version = "1.0.79", features = ["preserve_order"] }
+serde_json = { version = "1.0.85", features = ["preserve_order"] }
 
 [dev-dependencies]
-criterion = { version = "0.3.5", features = ["html_reports"] }
+criterion = { version = "0.4.0", features = ["html_reports"] }
 rand = "0.8.5"
 rand_chacha = "0.3.1"
-roaring = "0.9.0"
+roaring = "0.10.1"
 
 [build-dependencies]
-anyhow = "1.0.56"
-bytes = "1.1.0"
-convert_case = "0.5.0"
-flate2 = "1.0.22"
-reqwest = { version = "0.11.9", features = ["blocking", "rustls-tls"], default-features = false }
+anyhow = "1.0.65"
+bytes = "1.2.1"
+convert_case = "0.6.0"
+flate2 = "1.0.24"
+reqwest = { version = "0.11.12", features = ["blocking", "rustls-tls"], default-features = false }
 
 [features]
 default = ["milli/default"]

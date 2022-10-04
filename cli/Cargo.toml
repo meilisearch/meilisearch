@@ -8,15 +8,15 @@ publish = false
 [dependencies]
 bimap = "0.6.2"
 byte-unit = { version = "4.0.14", features = ["serde"] }
-color-eyre = "0.6.1"
+color-eyre = "0.6.2"
 csv = "1.1.6"
-eyre = "0.6.7"
-indicatif = "0.16.2"
+eyre = "0.6.8"
+indicatif = "0.17.1"
 milli = { path = "../milli", default-features = false }
 mimalloc = { version = "0.1.29", default-features = false }
-serde = "1.0.136"
-serde_json = "1.0.79"
-stderrlog = "0.5.1"
+serde = "1.0.145"
+serde_json = "1.0.85"
+stderrlog = "0.5.3"
 structopt = "0.3.26"
 
 [features]
