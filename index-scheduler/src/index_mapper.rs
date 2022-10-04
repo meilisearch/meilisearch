@@ -104,12 +104,14 @@ impl IndexMapper {
         Ok(index)
     }
 
-    pub fn indexes(&self, rtxn: &RoTxn) -> Result<Vec<Index>> {
+    pub fn indexes(&self, rtxn: &RoTxn) -> Result<Vec<(String, Index)>> {
         self.index_mapping
             .iter(rtxn)?
             .map(|ret| {
-                ret.map_err(Error::from)
-                    .and_then(|(name, _)| self.index(rtxn, name))
+                ret.map_err(Error::from).and_then(|(name, _)| {
+                    self.index(rtxn, name)
+                        .map(|index| (name.to_string(), index))
+                })
             })
             .collect()
     }

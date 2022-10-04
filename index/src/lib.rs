@@ -1,4 +1,5 @@
 pub use search::{
+    all_documents, perform_search, retrieve_document, retrieve_documents, settings,
     MatchingStrategy, SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
     DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
 };
