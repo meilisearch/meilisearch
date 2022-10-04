@@ -2,7 +2,10 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use super::settings::{Settings, Unchecked};
+use super::{
+    meta::IndexUid,
+    settings::{Settings, Unchecked},
+};
 
 pub type TaskId = u32;
 pub type BatchId = u32;
@@ -55,9 +58,6 @@ pub enum TaskContent {
         uid: String,
     },
 }
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub struct IndexUid(String);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum IndexDocumentsMethod {
