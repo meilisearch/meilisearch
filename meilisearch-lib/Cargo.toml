@@ -11,7 +11,7 @@ async-trait = "0.1.57"
 atomic_refcell = "0.1.8"
 byte-unit = { version = "4.0.14", default-features = false, features = ["std", "serde"] }
 bytes = "1.2.1"
-clap = { version = "3.2.8", features = ["derive", "env"] }
+clap = { version = "4.0.9", features = ["derive", "env"] }
 crossbeam-channel = "0.5.6"
 csv = "1.1.6"
 derivative = "2.2.0"
