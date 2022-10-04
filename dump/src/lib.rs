@@ -21,6 +21,17 @@ struct Metadata {
     pub dump_date: OffsetDateTime,
 }
 
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexMetadata {
+    pub uid: String,
+    pub primary_key: Option<String>,
+    #[serde(with = "time::serde::rfc3339")]
+    pub created_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    pub updated_at: OffsetDateTime,
+}
+
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub enum Version {
     V1,
@@ -49,10 +60,19 @@ pub(crate) mod test {
     use time::{macros::datetime, Duration};
     use uuid::Uuid;
 
-    use crate::{reader, DumpWriter, Version};
+    use crate::{reader, DumpWriter, IndexMetadata, Version};
 
     pub fn create_test_instance_uid() -> Uuid {
         Uuid::parse_str("9e15e977-f2ae-4761-943f-1eaf75fd736d").unwrap()
+    }
+
+    pub fn create_test_index_metadata() -> IndexMetadata {
+        IndexMetadata {
+            uid: S("doggo"),
+            primary_key: None,
+            created_at: datetime!(2022-11-20 12:00 UTC),
+            updated_at: datetime!(2022-11-21 00:00 UTC),
+        }
     }
 
     pub fn create_test_documents() -> Vec<Map<String, Value>> {
@@ -186,7 +206,9 @@ pub(crate) mod test {
         let documents = create_test_documents();
         let settings = create_test_settings();
 
-        let mut index = dump.create_index("doggos").unwrap();
+        let mut index = dump
+            .create_index("doggos", &create_test_index_metadata())
+            .unwrap();
         for document in &documents {
             index.push_document(document).unwrap();
         }
@@ -217,7 +239,7 @@ pub(crate) mod test {
     }
 
     #[test]
-    fn test_creating_dump() {
+    fn test_creating_and_read_dump() {
         let mut file = create_test_dump();
         let mut dump = reader::open(&mut file).unwrap();
 
@@ -234,12 +256,14 @@ pub(crate) mod test {
         let mut index = indexes.next().unwrap().unwrap();
         assert!(indexes.next().is_none()); // there was only one index in the dump
 
-        assert_eq!(index.name(), "doggos");
-
         for (document, expected) in index.documents().unwrap().zip(create_test_documents()) {
             assert_eq!(document.unwrap(), expected);
         }
         assert_eq!(index.settings().unwrap(), create_test_settings());
+        assert_eq!(index.metadata(), &create_test_index_metadata());
+
+        drop(index);
+        drop(indexes);
 
         // ==== checking the task queue
         for (task, expected) in dump.tasks().zip(create_test_tasks()) {
