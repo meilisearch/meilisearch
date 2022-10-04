@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
+use index::{Settings, Unchecked};
 use index_scheduler::{IndexScheduler, Query, Status};
 use log::debug;
 use serde::{Deserialize, Serialize};

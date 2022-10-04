@@ -2,6 +2,7 @@ use std::fmt;
 
 use actix_web::{self as aweb, http::StatusCode, HttpResponseBuilder};
 use aweb::rt::task::JoinError;
+use milli::heed::{Error as HeedError, MdbError};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -388,6 +389,22 @@ impl ErrorCode for milli::Error {
                     }
                 }
             }
+        }
+    }
+}
+
+impl ErrorCode for HeedError {
+    fn error_code(&self) -> Code {
+        match self {
+            HeedError::Mdb(MdbError::MapFull) => Code::DatabaseSizeLimitReached,
+            HeedError::Mdb(MdbError::Invalid) => Code::InvalidStore,
+            HeedError::Io(_)
+            | HeedError::Mdb(_)
+            | HeedError::Encoding
+            | HeedError::Decoding
+            | HeedError::InvalidDatabaseTyping
+            | HeedError::DatabaseClosing
+            | HeedError::BadOpenOptions => Code::Internal,
         }
     }
 }
