@@ -6,6 +6,7 @@
 *.csv
 *.mmdb
 *.svg
+!*/logo-black.svg
 
 # Snapshots
 ## ... large
