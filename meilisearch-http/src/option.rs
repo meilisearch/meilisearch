@@ -273,7 +273,7 @@ pub struct Opt {
 
     /// Defines how much detail should be present in Meilisearch's logs.
 
-    /// Meilisearch currently supports four log levels, listed in order of increasing verbosity:
+    /// Meilisearch currently supports five log levels, listed in order of increasing verbosity:
     ///
     /// `'ERROR'`: only log unexpected events indicating Meilisearch is not functioning as expected
     /// `'WARN'`: log all unexpected events, regardless of their severity
