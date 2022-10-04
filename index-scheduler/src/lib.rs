@@ -400,7 +400,6 @@ impl IndexScheduler {
                 for mut task in tasks {
                     task.started_at = Some(started_at);
                     task.finished_at = Some(finished_at);
-                    task.status = Status::Succeeded;
                     // the info field should've been set by the process_batch function
 
                     self.update_task(&mut wtxn, &task)?;
@@ -616,7 +615,7 @@ mod tests {
 
         let (uuid, mut file) = index_scheduler.create_update_file().unwrap();
         let documents_count =
-            document_formats::read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            document_formats::read_json(content.as_bytes(), file.as_file_mut()).unwrap() as u64;
         index_scheduler
             .register(KindWithContent::DocumentImport {
                 index_uid: S("doggos"),

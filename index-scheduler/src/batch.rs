@@ -39,6 +39,7 @@ pub(crate) enum IndexOperation {
         index_uid: String,
         primary_key: Option<String>,
         method: IndexDocumentsMethod,
+        documents_counts: Vec<u64>,
         content_files: Vec<Uuid>,
         tasks: Vec<Task>,
     },
@@ -70,6 +71,7 @@ pub(crate) enum IndexOperation {
 
         primary_key: Option<String>,
         method: IndexDocumentsMethod,
+        documents_counts: Vec<u64>,
         content_files: Vec<Uuid>,
         document_import_tasks: Vec<Task>,
 
@@ -130,19 +132,27 @@ impl IndexScheduler {
                     KindWithContent::DocumentImport { primary_key, .. } => primary_key.clone(),
                     _ => unreachable!(),
                 };
-                let content_files = tasks
-                    .iter()
-                    .map(|task| match task.kind {
-                        KindWithContent::DocumentImport { content_file, .. } => content_file,
-                        _ => unreachable!(),
-                    })
-                    .collect();
+
+                let mut documents_counts = Vec::new();
+                let mut content_files = Vec::new();
+                for task in &tasks {
+                    if let KindWithContent::DocumentImport {
+                        content_file,
+                        documents_count,
+                        ..
+                    } = task.kind
+                    {
+                        documents_counts.push(documents_count);
+                        content_files.push(content_file);
+                    }
+                }
 
                 Ok(Some(Batch::IndexOperation(
                     IndexOperation::DocumentImport {
                         index_uid,
                         primary_key,
                         method,
+                        documents_counts,
                         content_files,
                         tasks,
                     },
@@ -249,6 +259,7 @@ impl IndexScheduler {
                     (
                         Some(Batch::IndexOperation(IndexOperation::DocumentImport {
                             primary_key,
+                            documents_counts,
                             content_files,
                             tasks: document_import_tasks,
                             ..
@@ -263,6 +274,7 @@ impl IndexScheduler {
                             index_uid,
                             primary_key,
                             method,
+                            documents_counts,
                             content_files,
                             document_import_tasks,
                             settings,
@@ -409,7 +421,7 @@ impl IndexScheduler {
                 task,
             } => {
                 let mut wtxn = self.env.write_txn()?;
-                let index = self.index_mapper.create_index(&mut wtxn, &index_uid)?;
+                self.index_mapper.create_index(&mut wtxn, &index_uid)?;
                 wtxn.commit()?;
 
                 self.process_batch(Batch::IndexUpdate {
@@ -421,12 +433,12 @@ impl IndexScheduler {
             Batch::IndexUpdate {
                 index_uid,
                 primary_key,
-                task,
+                mut task,
             } => {
                 let rtxn = self.env.read_txn()?;
                 let index = self.index_mapper.index(&rtxn, &index_uid)?;
 
-                if let Some(primary_key) = primary_key {
+                if let Some(primary_key) = primary_key.clone() {
                     let mut index_wtxn = index.write_txn()?;
                     let mut builder = milli::update::Settings::new(
                         &mut index_wtxn,
@@ -438,14 +450,28 @@ impl IndexScheduler {
                     index_wtxn.commit()?;
                 }
 
+                task.status = Status::Succeeded;
+                task.details = Some(Details::IndexInfo { primary_key });
+
                 Ok(vec![task])
             }
-            Batch::IndexDeletion { index_uid, tasks } => {
+            Batch::IndexDeletion {
+                index_uid,
+                mut tasks,
+            } => {
                 let wtxn = self.env.write_txn()?;
-                // The write transaction is directly owned and commited here.
-                let index = self.index_mapper.delete_index(wtxn, &index_uid)?;
+                // The write transaction is directly owned and commited inside.
+                self.index_mapper.delete_index(wtxn, &index_uid)?;
 
-                todo!("update the tasks and mark them as succeeded");
+                // We set all the tasks details to the default value.
+                for task in &mut tasks {
+                    task.status = Status::Succeeded;
+                    // TODO should we put a details = None, here?
+                    // TODO we are putting Details::IndexInfo with a primary_key = None, this is not cool bro'
+                    task.details = task.kind.default_details();
+                }
+
+                Ok(tasks)
             }
         }
     }
@@ -457,28 +483,30 @@ impl IndexScheduler {
         operation: IndexOperation,
     ) -> Result<Vec<Task>> {
         match operation {
-            IndexOperation::DocumentClear {
-                index_uid,
-                mut tasks,
-            } => {
+            IndexOperation::DocumentClear { mut tasks, .. } => {
                 let result = milli::update::ClearDocuments::new(index_wtxn, index).execute();
                 for task in &mut tasks {
                     match result {
                         Ok(deleted_documents) => {
+                            task.status = Status::Succeeded;
                             task.details = Some(Details::ClearAll {
                                 deleted_documents: Some(deleted_documents),
-                            })
+                            });
                         }
-                        Err(ref error) => task.error = Some(MilliError(error).into()),
+                        Err(ref error) => {
+                            task.status = Status::Failed;
+                            task.error = Some(MilliError(error).into())
+                        }
                     }
                 }
 
                 Ok(tasks)
             }
             IndexOperation::DocumentImport {
-                index_uid,
+                index_uid: _,
                 primary_key,
                 method,
+                documents_counts,
                 content_files,
                 mut tasks,
             } => {
@@ -515,13 +543,10 @@ impl IndexScheduler {
                     builder = new_builder;
 
                     let user_result = match user_result {
-                        Ok(count) => {
-                            let addition = DocumentAdditionResult {
-                                indexed_documents: count,
-                                number_of_documents: count,
-                            };
-                            Ok(addition)
-                        }
+                        Ok(count) => Ok(DocumentAdditionResult {
+                            indexed_documents: count,
+                            number_of_documents: count,
+                        }),
                         Err(e) => Err(IndexError::from(e)),
                     };
 
@@ -533,25 +558,36 @@ impl IndexScheduler {
                     info!("document addition done: {:?}", addition);
                 }
 
-                for (task, ret) in tasks.iter_mut().zip(results) {
+                for (task, (ret, count)) in tasks
+                    .iter_mut()
+                    .zip(results.into_iter().zip(documents_counts))
+                {
                     match ret {
                         Ok(DocumentAdditionResult {
                             indexed_documents,
                             number_of_documents,
                         }) => {
+                            task.status = Status::Succeeded;
                             task.details = Some(Details::DocumentAddition {
                                 received_documents: number_of_documents,
                                 indexed_documents,
-                            })
+                            });
                         }
-                        Err(error) => task.error = Some(error.into()),
+                        Err(error) => {
+                            task.status = Status::Failed;
+                            task.details = Some(Details::DocumentAddition {
+                                received_documents: count,
+                                indexed_documents: count,
+                            });
+                            task.error = Some(error.into())
+                        }
                     }
                 }
 
                 Ok(tasks)
             }
             IndexOperation::DocumentDeletion {
-                index_uid,
+                index_uid: _,
                 documents,
                 mut tasks,
             } => {
@@ -559,27 +595,31 @@ impl IndexScheduler {
                 documents.iter().for_each(|id| {
                     builder.delete_external_id(id);
                 });
-                let result = builder.execute();
 
+                let result = builder.execute();
                 for (task, documents) in tasks.iter_mut().zip(documents) {
                     match result {
                         Ok(DocumentDeletionResult {
                             deleted_documents,
                             remaining_documents: _,
                         }) => {
+                            task.status = Status::Succeeded;
                             task.details = Some(Details::DocumentDeletion {
                                 received_document_ids: documents.len(),
                                 deleted_documents: Some(deleted_documents),
                             });
                         }
-                        Err(ref error) => task.error = Some(MilliError(error).into()),
+                        Err(ref error) => {
+                            task.status = Status::Failed;
+                            task.error = Some(MilliError(error).into());
+                        }
                     }
                 }
 
                 Ok(tasks)
             }
             IndexOperation::Settings {
-                index_uid,
+                index_uid: _,
                 settings,
                 mut tasks,
             } => {
@@ -596,8 +636,12 @@ impl IndexScheduler {
                         debug!("update: {:?}", indexing_step);
                     });
 
-                    if let Err(ref error) = result {
-                        task.error = Some(MilliError(error).into());
+                    match result {
+                        Ok(_) => task.status = Status::Succeeded,
+                        Err(ref error) => {
+                            task.status = Status::Failed;
+                            task.error = Some(MilliError(error).into());
+                        }
                     }
                 }
 
@@ -607,6 +651,7 @@ impl IndexScheduler {
                 index_uid,
                 primary_key,
                 method,
+                documents_counts,
                 content_files,
                 document_import_tasks,
                 settings,
@@ -629,6 +674,7 @@ impl IndexScheduler {
                         index_uid,
                         primary_key,
                         method,
+                        documents_counts,
                         content_files,
                         tasks: document_import_tasks,
                     },
