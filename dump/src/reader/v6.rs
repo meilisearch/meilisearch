@@ -2,6 +2,7 @@ use std::{
     fs::{self, File},
     io::{BufRead, BufReader},
     path::Path,
+    str::FromStr,
 };
 
 use index::{Checked, Unchecked};
@@ -9,54 +10,53 @@ use tempfile::TempDir;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{Error, Result, Version};
+use crate::{Error, IndexMetadata, Result, Version};
 
 use super::{DumpReader, IndexReader};
 
 type Metadata = crate::Metadata;
 
-pub fn date(dump: &Path) -> Result<OffsetDateTime> {
-    let metadata = fs::read(dump.join("metadata.json"))?;
-    let metadata: Metadata = serde_json::from_reader(&*metadata)?;
-    Ok(metadata.dump_date)
-}
-
 pub struct V6Reader {
     dump: TempDir,
+    instance_uid: Uuid,
     metadata: Metadata,
     tasks: BufReader<File>,
     keys: BufReader<File>,
 }
 
 struct V6IndexReader {
-    name: String,
+    metadata: IndexMetadata,
     documents: BufReader<File>,
     settings: BufReader<File>,
-}
-
-impl V6IndexReader {
-    pub fn new(name: String, path: &Path) -> Result<Self> {
-        let ret = V6IndexReader {
-            name,
-            documents: BufReader::new(File::open(path.join("documents.jsonl"))?),
-            settings: BufReader::new(File::open(path.join("settings.json"))?),
-        };
-
-        Ok(ret)
-    }
 }
 
 impl V6Reader {
     pub fn open(dump: TempDir) -> Result<Self> {
         let meta_file = fs::read(dump.path().join("metadata.json"))?;
-        let metadata = serde_json::from_reader(&*meta_file)?;
+        let instance_uid = fs::read_to_string(dump.path().join("instance_uid.uuid"))?;
+        let instance_uid = Uuid::from_str(&instance_uid)?;
 
         Ok(V6Reader {
-            metadata,
+            metadata: serde_json::from_reader(&*meta_file)?,
+            instance_uid,
             tasks: BufReader::new(File::open(dump.path().join("tasks").join("queue.jsonl"))?),
             keys: BufReader::new(File::open(dump.path().join("keys.jsonl"))?),
             dump,
         })
+    }
+}
+
+impl V6IndexReader {
+    pub fn new(name: String, path: &Path) -> Result<Self> {
+        let metadata = File::open(path.join("metadata.json"))?;
+
+        let ret = V6IndexReader {
+            metadata: serde_json::from_reader(metadata)?,
+            documents: BufReader::new(File::open(path.join("documents.jsonl"))?),
+            settings: BufReader::new(File::open(path.join("settings.json"))?),
+        };
+
+        Ok(ret)
     }
 }
 
@@ -78,8 +78,7 @@ impl DumpReader for V6Reader {
     }
 
     fn instance_uid(&self) -> Result<Option<Uuid>> {
-        let uuid = fs::read_to_string(self.dump.path().join("instance-uid"))?;
-        Ok(Some(Uuid::parse_str(&uuid)?))
+        Ok(Some(self.instance_uid))
     }
 
     fn indexes(
@@ -87,15 +86,15 @@ impl DumpReader for V6Reader {
     ) -> Result<
         Box<
             dyn Iterator<
-                Item = Result<
-                    Box<
-                        dyn super::IndexReader<
-                            Document = Self::Document,
-                            Settings = Self::Settings,
+                    Item = Result<
+                        Box<
+                            dyn super::IndexReader<
+                                    Document = Self::Document,
+                                    Settings = Self::Settings,
+                                > + '_,
                         >,
                     >,
-                >,
-            >,
+                > + '_,
         >,
     > {
         let entries = fs::read_dir(self.dump.path().join("indexes"))?;
@@ -164,8 +163,8 @@ impl IndexReader for V6IndexReader {
     type Document = serde_json::Map<String, serde_json::Value>;
     type Settings = index::Settings<Checked>;
 
-    fn name(&self) -> &str {
-        &self.name
+    fn metadata(&self) -> &IndexMetadata {
+        &self.metadata
     }
 
     fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<Self::Document>> + '_>> {
