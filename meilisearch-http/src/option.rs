@@ -82,7 +82,7 @@ pub struct Opt {
     pub master_key: Option<String>,
 
     /// Configures the instance's environment. Value must be either `production` or `development`.
-    #[clap(long, env = MEILI_ENV, default_value_t = default_env(), possible_values = &POSSIBLE_ENV)]
+    #[clap(long, env = MEILI_ENV, default_value_t = default_env(), value_parser = POSSIBLE_ENV)]
     #[serde(default = "default_env")]
     pub env: String,
 
@@ -115,24 +115,24 @@ pub struct Opt {
 
     /// Sets the server's SSL certificates.
     #[serde(skip_serializing)]
-    #[clap(long, env = MEILI_SSL_CERT_PATH, parse(from_os_str))]
+    #[clap(long, env = MEILI_SSL_CERT_PATH, value_parser)]
     pub ssl_cert_path: Option<PathBuf>,
 
     /// Sets the server's SSL key files.
     #[serde(skip_serializing)]
-    #[clap(long, env = MEILI_SSL_KEY_PATH, parse(from_os_str))]
+    #[clap(long, env = MEILI_SSL_KEY_PATH, value_parser)]
     pub ssl_key_path: Option<PathBuf>,
 
     /// Enables client authentication in the specified path.
     #[serde(skip_serializing)]
-    #[clap(long, env = MEILI_SSL_AUTH_PATH, parse(from_os_str))]
+    #[clap(long, env = MEILI_SSL_AUTH_PATH, value_parser)]
     pub ssl_auth_path: Option<PathBuf>,
 
     /// Sets the server's OCSP file. *Optional*
     ///
     /// Reads DER-encoded OCSP response from OCSPFILE and staple to certificate.
     #[serde(skip_serializing)]
-    #[clap(long, env = MEILI_SSL_OCSP_PATH, parse(from_os_str))]
+    #[clap(long, env = MEILI_SSL_OCSP_PATH, value_parser)]
     pub ssl_ocsp_path: Option<PathBuf>,
 
     /// Makes SSL authentication mandatory.
