@@ -266,9 +266,15 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.pagination_max_total_hits = Setting::Reset;
     }
 
-    fn reindex<F>(&mut self, cb: &F, old_fields_ids_map: FieldsIdsMap) -> Result<()>
+    fn reindex<FP, FA>(
+        &mut self,
+        progress_callback: &FP,
+        should_abort: &FA,
+        old_fields_ids_map: FieldsIdsMap,
+    ) -> Result<()>
     where
-        F: Fn(UpdateIndexingStep) + Sync,
+        FP: Fn(UpdateIndexingStep) + Sync,
+        FA: Fn() -> bool + Sync,
     {
         let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
         // if the settings are set before any document update, we don't need to do anything, and
@@ -305,7 +311,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             self.index,
             &self.indexer_config,
             IndexDocumentsConfig::default(),
-            &cb,
+            &progress_callback,
+            &should_abort,
         )?;
         indexing_builder.execute_raw(output)?;
 
@@ -660,9 +667,10 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         Ok(())
     }
 
-    pub fn execute<F>(mut self, progress_callback: F) -> Result<()>
+    pub fn execute<FP, FA>(mut self, progress_callback: FP, should_abort: FA) -> Result<()>
     where
-        F: Fn(UpdateIndexingStep) + Sync,
+        FP: Fn(UpdateIndexingStep) + Sync,
+        FA: Fn() -> bool + Sync,
     {
         self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
@@ -698,7 +706,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             || searchable_updated
             || exact_attributes_updated
         {
-            self.reindex(&progress_callback, old_fields_ids_map)?;
+            self.reindex(&progress_callback, &should_abort, old_fields_ids_map)?;
         }
 
         Ok(())

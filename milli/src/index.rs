@@ -1245,6 +1245,7 @@ pub(crate) mod tests {
                 &self.indexer_config,
                 self.index_documents_config.clone(),
                 |_| (),
+                || false,
             )
             .unwrap();
             let (builder, user_error) = builder.add_documents(documents).unwrap();
@@ -1281,7 +1282,7 @@ pub(crate) mod tests {
         ) -> Result<(), crate::error::Error> {
             let mut builder = update::Settings::new(wtxn, &self.inner, &self.indexer_config);
             update(&mut builder);
-            builder.execute(drop)?;
+            builder.execute(drop, || false)?;
             Ok(())
         }
     }

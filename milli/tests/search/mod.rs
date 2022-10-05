@@ -57,13 +57,14 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
         S("america") => vec![S("the united states")],
     });
     builder.set_searchable_fields(vec![S("title"), S("description")]);
-    builder.execute(|_| ()).unwrap();
+    builder.execute(|_| (), || false).unwrap();
 
     // index documents
     let config = IndexerConfig { max_memory: Some(10 * 1024 * 1024), ..Default::default() };
     let indexing_config = IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
 
-    let builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
+    let builder =
+        IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| (), || false).unwrap();
     let mut documents_builder = DocumentsBatchBuilder::new(Vec::new());
     let reader = Cursor::new(CONTENT.as_bytes());
 

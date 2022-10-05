@@ -56,6 +56,8 @@ pub enum InternalError {
     Store(#[from] MdbError),
     #[error(transparent)]
     Utf8(#[from] str::Utf8Error),
+    #[error("An indexation process was explicitly aborted.")]
+    AbortedIndexation,
 }
 
 #[derive(Error, Debug)]

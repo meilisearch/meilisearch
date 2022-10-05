@@ -138,15 +138,17 @@ impl<'a, 'i> Transform<'a, 'i> {
         })
     }
 
-    pub fn read_documents<R, F>(
+    pub fn read_documents<R, FP, FA>(
         &mut self,
         reader: EnrichedDocumentsBatchReader<R>,
         wtxn: &mut heed::RwTxn,
-        progress_callback: F,
+        progress_callback: FP,
+        should_abort: FA,
     ) -> Result<usize>
     where
         R: Read + Seek,
-        F: Fn(UpdateIndexingStep) + Sync,
+        FP: Fn(UpdateIndexingStep) + Sync,
+        FA: Fn() -> bool + Sync,
     {
         let (mut cursor, fields_index) = reader.into_cursor_and_fields_index();
 
@@ -164,6 +166,10 @@ impl<'a, 'i> Transform<'a, 'i> {
         let mut field_buffer: Vec<(u16, Cow<[u8]>)> = Vec::new();
         while let Some(enriched_document) = cursor.next_enriched_document()? {
             let EnrichedDocument { document, document_id } = enriched_document;
+
+            if should_abort() {
+                return Err(Error::InternalError(InternalError::AbortedIndexation));
+            }
 
             // drop_and_reuse is called instead of .clear() to communicate to the compiler that field_buffer
             // does not keep references from the cursor between loop iterations
