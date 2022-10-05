@@ -7,6 +7,7 @@ use super::meta::{IndexUid, StarOr};
 pub type KeyId = Uuid;
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(serde::Serialize))]
 pub struct Key {
     pub description: Option<String>,
     pub name: Option<String>,
@@ -22,6 +23,7 @@ pub struct Key {
 }
 
 #[derive(Copy, Clone, Deserialize, Debug, Eq, PartialEq, Hash)]
+#[cfg_attr(test, derive(serde::Serialize))]
 #[repr(u8)]
 pub enum Action {
     #[serde(rename = "*")]
