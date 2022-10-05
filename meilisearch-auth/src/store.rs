@@ -9,7 +9,6 @@ use std::path::Path;
 use std::str;
 use std::sync::Arc;
 
-use enum_iterator::IntoEnumIterator;
 use hmac::{Hmac, Mac};
 use meilisearch_types::star_or::StarOr;
 use milli::heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
@@ -92,7 +91,7 @@ impl HeedAuthStore {
         let mut actions = HashSet::new();
         for action in &key.actions {
             match action {
-                Action::All => actions.extend(Action::into_enum_iter()),
+                Action::All => actions.extend(enum_iterator::all::<Action>()),
                 Action::DocumentsAll => {
                     actions.extend(
                         [

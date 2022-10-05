@@ -4,14 +4,14 @@ version = "0.29.0"
 edition = "2021"
 
 [dependencies]
-enum-iterator = "0.7.0"
+enum-iterator = "1.1.2"
 hmac = "0.12.1"
 meilisearch-types = { path = "../meilisearch-types" }
 milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.33.4", default-features = false }
-rand = "0.8.4"
-serde = { version = "1.0.136", features = ["derive"] }
+rand = "0.8.5"
+serde = { version = "1.0.145", features = ["derive"] }
 serde_json = { version = "1.0.85", features = ["preserve_order"] }
-sha2 = "0.10.2"
-thiserror = "1.0.30"
-time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
+sha2 = "0.10.6"
+thiserror = "1.0.37"
+time = { version = "0.3.15", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 uuid = { version = "1.1.2", features = ["serde", "v4"] }
