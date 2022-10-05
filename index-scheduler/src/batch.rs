@@ -136,14 +136,16 @@ impl IndexScheduler {
                 let mut documents_counts = Vec::new();
                 let mut content_files = Vec::new();
                 for task in &tasks {
-                    if let KindWithContent::DocumentImport {
-                        content_file,
-                        documents_count,
-                        ..
-                    } = task.kind
-                    {
-                        documents_counts.push(documents_count);
-                        content_files.push(content_file);
+                    match task.kind {
+                        KindWithContent::DocumentImport {
+                            content_file,
+                            documents_count,
+                            ..
+                        } => {
+                            documents_counts.push(documents_count);
+                            content_files.push(content_file);
+                        }
+                        _ => unreachable!(),
                     }
                 }
 
