@@ -496,20 +496,16 @@ impl IndexScheduler {
     ) -> Result<Vec<Task>> {
         match operation {
             IndexOperation::DocumentClear { mut tasks, .. } => {
-                let result = milli::update::ClearDocuments::new(index_wtxn, index).execute();
+                let count = milli::update::ClearDocuments::new(index_wtxn, index).execute()?;
+
                 for task in &mut tasks {
-                    match result {
-                        Ok(deleted_documents) => {
-                            task.status = Status::Succeeded;
-                            task.details = Some(Details::ClearAll {
-                                deleted_documents: Some(deleted_documents),
-                            });
-                        }
-                        Err(ref error) => {
-                            task.status = Status::Failed;
-                            task.error = Some(MilliError(error).into())
-                        }
-                    }
+                    task.status = Status::Succeeded;
+                    task.details = match &task.kind {
+                        KindWithContent::DocumentClear { .. } => Some(Details::ClearAll {
+                            deleted_documents: Some(count),
+                        }),
+                        otherwise => otherwise.default_details(),
+                    };
                 }
 
                 Ok(tasks)
@@ -608,24 +604,16 @@ impl IndexScheduler {
                     builder.delete_external_id(id);
                 });
 
-                let result = builder.execute();
+                let DocumentDeletionResult {
+                    deleted_documents, ..
+                } = builder.execute()?;
+
                 for (task, documents) in tasks.iter_mut().zip(documents) {
-                    match result {
-                        Ok(DocumentDeletionResult {
-                            deleted_documents,
-                            remaining_documents: _,
-                        }) => {
-                            task.status = Status::Succeeded;
-                            task.details = Some(Details::DocumentDeletion {
-                                received_document_ids: documents.len(),
-                                deleted_documents: Some(deleted_documents),
-                            });
-                        }
-                        Err(ref error) => {
-                            task.status = Status::Failed;
-                            task.error = Some(MilliError(error).into());
-                        }
-                    }
+                    task.status = Status::Succeeded;
+                    task.details = Some(Details::DocumentDeletion {
+                        received_document_ids: documents.len(),
+                        deleted_documents: Some(deleted_documents),
+                    });
                 }
 
                 Ok(tasks)
@@ -644,17 +632,11 @@ impl IndexScheduler {
                     let mut builder =
                         milli::update::Settings::new(index_wtxn, index, indexer_config);
                     apply_settings_to_builder(&checked_settings, &mut builder);
-                    let result = builder.execute(|indexing_step| {
+                    builder.execute(|indexing_step| {
                         debug!("update: {:?}", indexing_step);
-                    });
+                    })?;
 
-                    match result {
-                        Ok(_) => task.status = Status::Succeeded,
-                        Err(ref error) => {
-                            task.status = Status::Failed;
-                            task.error = Some(MilliError(error).into());
-                        }
-                    }
+                    task.status = Status::Succeeded;
                 }
 
                 Ok(tasks)
