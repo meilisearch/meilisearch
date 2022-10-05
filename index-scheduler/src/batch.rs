@@ -462,15 +462,25 @@ impl IndexScheduler {
                 mut tasks,
             } => {
                 let wtxn = self.env.write_txn()?;
+
+                let number_of_documents = {
+                    let index = self.index_mapper.index(&wtxn, &index_uid)?;
+                    let index_rtxn = index.read_txn()?;
+                    index.number_of_documents(&index_rtxn)?
+                };
+
                 // The write transaction is directly owned and commited inside.
                 self.index_mapper.delete_index(wtxn, &index_uid)?;
 
                 // We set all the tasks details to the default value.
                 for task in &mut tasks {
                     task.status = Status::Succeeded;
-                    // TODO should we put a details = None, here?
-                    // TODO we are putting Details::IndexInfo with a primary_key = None, this is not cool bro'
-                    task.details = task.kind.default_details();
+                    task.details = match &task.kind {
+                        KindWithContent::IndexDeletion { .. } => Some(Details::ClearAll {
+                            deleted_documents: Some(number_of_documents),
+                        }),
+                        otherwise => otherwise.default_details(),
+                    };
                 }
 
                 Ok(tasks)
