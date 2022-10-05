@@ -5,7 +5,6 @@ use std::{
     str::FromStr,
 };
 
-use index::{Checked, Unchecked};
 use tempfile::TempDir;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -14,7 +13,38 @@ use crate::{Error, IndexMetadata, Result, Version};
 
 use super::{DumpReader, IndexReader};
 
-type Metadata = crate::Metadata;
+pub type Metadata = crate::Metadata;
+
+pub type Document = serde_json::Map<String, serde_json::Value>;
+pub type Settings<T> = index::Settings<T>;
+pub type Checked = index::Checked;
+pub type Unchecked = index::Unchecked;
+
+pub type Task = index_scheduler::TaskView;
+pub type UpdateFile = File;
+pub type Key = meilisearch_auth::Key;
+
+// ===== Other types to clarify the code of the compat module
+// everything related to the tasks
+pub type Status = index_scheduler::Status;
+pub type Kind = index_scheduler::Kind;
+pub type Details = index_scheduler::Details;
+
+// everything related to the settings
+pub type Setting<T> = index::Setting<T>;
+pub type TypoTolerance = index::updates::TypoSettings;
+pub type MinWordSizeForTypos = index::updates::MinWordSizeTyposSetting;
+pub type FacetingSettings = index::updates::FacetingSettings;
+pub type PaginationSettings = index::updates::PaginationSettings;
+
+// everything related to the api keys
+pub type Action = meilisearch_auth::Action;
+pub type StarOr<T> = meilisearch_types::star_or::StarOr<T>;
+pub type IndexUid = meilisearch_types::index_uid::IndexUid;
+
+// everything related to the errors
+pub type ResponseError = meilisearch_types::error::ResponseError;
+pub type Code = meilisearch_types::error::Code;
 
 pub struct V6Reader {
     dump: TempDir,
@@ -62,12 +92,12 @@ impl V6IndexReader {
 
 impl DumpReader for V6Reader {
     type Document = serde_json::Map<String, serde_json::Value>;
-    type Settings = index::Settings<Checked>;
+    type Settings = Settings<Checked>;
 
-    type Task = index_scheduler::TaskView;
+    type Task = Task;
     type UpdateFile = File;
 
-    type Key = meilisearch_auth::Key;
+    type Key = Key;
 
     fn version(&self) -> Version {
         Version::V6
@@ -161,7 +191,7 @@ impl DumpReader for V6Reader {
 
 impl IndexReader for V6IndexReader {
     type Document = serde_json::Map<String, serde_json::Value>;
-    type Settings = index::Settings<Checked>;
+    type Settings = Settings<Checked>;
 
     fn metadata(&self) -> &IndexMetadata {
         &self.metadata

@@ -45,19 +45,20 @@ use uuid::Uuid;
 
 use crate::{IndexMetadata, Result, Version};
 
-use self::{
-    keys::Key,
-    meta::{DumpMeta, IndexUuid},
-    settings::{Checked, Settings, Unchecked},
-    tasks::Task,
-};
-
 use super::{DumpReader, IndexReader};
 
 mod keys;
 mod meta;
 mod settings;
 mod tasks;
+
+pub use keys::*;
+pub use meta::*;
+pub use settings::*;
+pub use tasks::*;
+
+pub type Document = serde_json::Map<String, serde_json::Value>;
+pub type UpdateFile = File;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]

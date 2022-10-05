@@ -11,7 +11,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub type TaskId = u32;
 
 pub use error::Error;
-pub use task::{Kind, KindWithContent, Status, TaskView};
+pub use task::{Details, Kind, KindWithContent, Status, TaskView};
 
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
