@@ -1,0 +1,885 @@
+---
+source: dump/src/reader/v5/mod.rs
+expression: tasks
+---
+[
+  {
+    "id": 21,
+    "content": {
+      "Dump": {
+        "uid": "20221004-155510279"
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:55:10.281165892Z"
+      },
+      {
+        "Batched": {
+          "timestamp": "2022-10-04T15:55:10.340501133Z",
+          "batch_id": 21
+        }
+      },
+      {
+        "Processing": "2022-10-04T15:55:10.340507253Z"
+      }
+    ]
+  },
+  {
+    "id": 20,
+    "content": {
+      "DocumentAddition": {
+        "index_uid": "movies_2",
+        "content_uuid": "c83a004a-da98-4b94-b245-3256266c7281",
+        "merge_strategy": "ReplaceDocuments",
+        "primary_key": null,
+        "documents_count": 200,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:55:10.272276202Z"
+      }
+    ]
+  },
+  {
+    "id": 19,
+    "content": {
+      "DocumentAddition": {
+        "index_uid": "movies",
+        "content_uuid": "eec3f3ed-cbc9-4b29-95d1-99e7224b1c18",
+        "merge_strategy": "ReplaceDocuments",
+        "primary_key": null,
+        "documents_count": 100,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:55:10.259722791Z"
+      },
+      {
+        "Batched": {
+          "timestamp": "2022-10-04T15:55:10.273271829Z",
+          "batch_id": 19
+        }
+      },
+      {
+        "Processing": "2022-10-04T15:55:10.273278199Z"
+      },
+      {
+        "Succeeded": {
+          "result": {
+            "DocumentAddition": {
+              "indexed_documents": 100
+            }
+          },
+          "timestamp": "2022-10-04T15:55:10.33561842Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 18,
+    "content": {
+      "DocumentAddition": {
+        "index_uid": "dnd_spells",
+        "content_uuid": "b9a17abc-6034-497c-a09d-2295bfadebb8",
+        "merge_strategy": "ReplaceDocuments",
+        "primary_key": "index",
+        "documents_count": 10,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:55:02.364638737Z"
+      },
+      {
+        "Batched": {
+          "timestamp": "2022-10-04T15:55:02.37723066Z",
+          "batch_id": 18
+        }
+      },
+      {
+        "Processing": "2022-10-04T15:55:02.37723266Z"
+      },
+      {
+        "Succeeded": {
+          "result": {
+            "DocumentAddition": {
+              "indexed_documents": 10
+            }
+          },
+          "timestamp": "2022-10-04T15:55:02.394503431Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 17,
+    "content": {
+      "DocumentAddition": {
+        "index_uid": "dnd_spells",
+        "content_uuid": "3f905db8-3052-4a01-a52d-440d8c5d8333",
+        "merge_strategy": "ReplaceDocuments",
+        "primary_key": null,
+        "documents_count": 10,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:55:02.116014762Z"
+      },
+      {
+        "Batched": {
+          "timestamp": "2022-10-04T15:55:02.128681906Z",
+          "batch_id": 17
+        }
+      },
+      {
+        "Processing": "2022-10-04T15:55:02.128683566Z"
+      },
+      {
+        "Succeeded": {
+          "result": {
+            "DocumentAddition": {
+              "indexed_documents": 10
+            }
+          },
+          "timestamp": "2022-10-04T15:55:02.145816865Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 16,
+    "content": {
+      "DocumentAddition": {
+        "index_uid": "products",
+        "content_uuid": "a7d5925b-460d-4331-b11f-c8639fa6629c",
+        "merge_strategy": "ReplaceDocuments",
+        "primary_key": "sku",
+        "documents_count": 10,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:55:01.867101853Z"
+      },
+      {
+        "Batched": {
+          "timestamp": "2022-10-04T15:55:01.879802098Z",
+          "batch_id": 16
+        }
+      },
+      {
+        "Processing": "2022-10-04T15:55:01.879803378Z"
+      },
+      {
+        "Succeeded": {
+          "result": {
+            "DocumentAddition": {
+              "indexed_documents": 10
+            }
+          },
+          "timestamp": "2022-10-04T15:55:01.897325373Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 15,
+    "content": {
+      "DocumentAddition": {
+        "index_uid": "products",
+        "content_uuid": "15ba7b99-e0a6-4376-be83-1e4f1ada4613",
+        "merge_strategy": "ReplaceDocuments",
+        "primary_key": null,
+        "documents_count": 10,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:55:01.245884922Z"
+      },
+      {
+        "Batched": {
+          "timestamp": "2022-10-04T15:55:01.258597317Z",
+          "batch_id": 15
+        }
+      },
+      {
+        "Processing": "2022-10-04T15:55:01.258598227Z"
+      },
+      {
+        "Succeeded": {
+          "result": {
+            "DocumentAddition": {
+              "indexed_documents": 10
+            }
+          },
+          "timestamp": "2022-10-04T15:55:01.270564108Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 14,
+    "content": {
+      "SettingsUpdate": {
+        "index_uid": "products",
+        "settings": {
+          "displayedAttributes": "NotSet",
+          "searchableAttributes": "NotSet",
+          "filterableAttributes": "NotSet",
+          "sortableAttributes": "NotSet",
+          "rankingRules": "NotSet",
+          "stopWords": "NotSet",
+          "synonyms": {
+            "Set": {
+              "android": [
+                "phone",
+                "smartphone"
+              ],
+              "iphone": [
+                "phone",
+                "smartphone"
+              ],
+              "phone": [
+                "smartphone",
+                "iphone",
+                "android"
+              ]
+            }
+          },
+          "distinctAttribute": "NotSet",
+          "typoTolerance": "NotSet",
+          "faceting": "NotSet",
+          "pagination": "NotSet"
+        },
+        "is_deletion": false,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:55:00.630109164Z"
+      },
+      {
+        "Batched": {
+          "timestamp": "2022-10-04T15:55:00.643607641Z",
+          "batch_id": 14
+        }
+      },
+      {
+        "Processing": "2022-10-04T15:55:00.643609011Z"
+      },
+      {
+        "Succeeded": {
+          "result": "Other",
+          "timestamp": "2022-10-04T15:55:00.654385523Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 13,
+    "content": {
+      "SettingsUpdate": {
+        "index_uid": "movies",
+        "settings": {
+          "displayedAttributes": "NotSet",
+          "searchableAttributes": "NotSet",
+          "filterableAttributes": "NotSet",
+          "sortableAttributes": "NotSet",
+          "rankingRules": {
+            "Set": [
+              "words",
+              "typo",
+              "proximity",
+              "attribute",
+              "sort",
+              "exactness",
+              "release_date:asc"
+            ]
+          },
+          "stopWords": "NotSet",
+          "synonyms": "NotSet",
+          "distinctAttribute": "NotSet",
+          "typoTolerance": "NotSet",
+          "faceting": "NotSet",
+          "pagination": "NotSet"
+        },
+        "is_deletion": false,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:55:00.412114406Z"
+      },
+      {
+        "Batched": {
+          "timestamp": "2022-10-04T15:55:00.425715225Z",
+          "batch_id": 13
+        }
+      },
+      {
+        "Processing": "2022-10-04T15:55:00.425716285Z"
+      },
+      {
+        "Succeeded": {
+          "result": "Other",
+          "timestamp": "2022-10-04T15:55:00.436408825Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 12,
+    "content": {
+      "SettingsUpdate": {
+        "index_uid": "movies",
+        "settings": {
+          "displayedAttributes": "NotSet",
+          "searchableAttributes": "NotSet",
+          "filterableAttributes": {
+            "Set": [
+              "genres",
+              "id"
+            ]
+          },
+          "sortableAttributes": {
+            "Set": [
+              "release_date"
+            ]
+          },
+          "rankingRules": "NotSet",
+          "stopWords": "NotSet",
+          "synonyms": "NotSet",
+          "distinctAttribute": "NotSet",
+          "typoTolerance": "NotSet",
+          "faceting": "NotSet",
+          "pagination": "NotSet"
+        },
+        "is_deletion": false,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:55:00.18896188Z"
+      },
+      {
+        "Batched": {
+          "timestamp": "2022-10-04T15:55:00.207803798Z",
+          "batch_id": 12
+        }
+      },
+      {
+        "Processing": "2022-10-04T15:55:00.207804798Z"
+      },
+      {
+        "Succeeded": {
+          "result": "Other",
+          "timestamp": "2022-10-04T15:55:00.218448708Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 11,
+    "content": {
+      "DocumentAddition": {
+        "index_uid": "movies",
+        "content_uuid": "f6fc7f47-f46d-4161-aabb-5b9909c175e7",
+        "merge_strategy": "ReplaceDocuments",
+        "primary_key": null,
+        "documents_count": 10,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:54:59.971297669Z"
+      },
+      {
+        "Batched": {
+          "timestamp": "2022-10-04T15:54:59.984797797Z",
+          "batch_id": 11
+        }
+      },
+      {
+        "Processing": "2022-10-04T15:54:59.984799097Z"
+      },
+      {
+        "Succeeded": {
+          "result": {
+            "DocumentAddition": {
+              "indexed_documents": 10
+            }
+          },
+          "timestamp": "2022-10-04T15:55:00.002941623Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 10,
+    "content": {
+      "DocumentAddition": {
+        "index_uid": "movies",
+        "content_uuid": "f86fa59e-8557-4057-8fc0-212b2218746f",
+        "merge_strategy": "ReplaceDocuments",
+        "primary_key": null,
+        "documents_count": 100,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:51:44.147743385Z"
+      },
+      {
+        "Batched": {
+          "timestamp": "2022-10-04T15:51:44.458468546Z",
+          "batch_id": 10
+        }
+      },
+      {
+        "Processing": "2022-10-04T15:51:44.458473756Z"
+      },
+      {
+        "Succeeded": {
+          "result": {
+            "DocumentAddition": {
+              "indexed_documents": 100
+            }
+          },
+          "timestamp": "2022-10-04T15:51:44.825304055Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 9,
+    "content": {
+      "DocumentAddition": {
+        "index_uid": "movies",
+        "content_uuid": "d0a0e14c-c668-4fc7-866d-5bac5bdb563a",
+        "merge_strategy": "ReplaceDocuments",
+        "primary_key": null,
+        "documents_count": 90,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:51:44.142779621Z"
+      },
+      {
+        "Batched": {
+          "timestamp": "2022-10-04T15:51:44.14804443Z",
+          "batch_id": 9
+        }
+      },
+      {
+        "Processing": "2022-10-04T15:51:44.14805041Z"
+      },
+      {
+        "Succeeded": {
+          "result": {
+            "DocumentAddition": {
+              "indexed_documents": 90
+            }
+          },
+          "timestamp": "2022-10-04T15:51:44.453183668Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 8,
+    "content": {
+      "Dump": {
+        "uid": "20221004-155144042"
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:51:44.042750953Z"
+      },
+      {
+        "Batched": {
+          "timestamp": "2022-10-04T15:51:44.056655459Z",
+          "batch_id": 8
+        }
+      },
+      {
+        "Processing": "2022-10-04T15:51:44.056661399Z"
+      },
+      {
+        "Succeeded": {
+          "result": "Other",
+          "timestamp": "2022-10-04T15:51:44.078996365Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 7,
+    "content": {
+      "DocumentAddition": {
+        "index_uid": "dnd_spells",
+        "content_uuid": "50db5436-0812-4047-a3b7-cf0278e7a9fd",
+        "merge_strategy": "ReplaceDocuments",
+        "primary_key": "index",
+        "documents_count": 10,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:51:37.628596827Z"
+      },
+      {
+        "Batched": {
+          "timestamp": "2022-10-04T15:51:37.638649517Z",
+          "batch_id": 7
+        }
+      },
+      {
+        "Processing": "2022-10-04T15:51:37.638650617Z"
+      },
+      {
+        "Succeeded": {
+          "result": {
+            "DocumentAddition": {
+              "indexed_documents": 10
+            }
+          },
+          "timestamp": "2022-10-04T15:51:37.67796098Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 6,
+    "content": {
+      "DocumentAddition": {
+        "index_uid": "dnd_spells",
+        "content_uuid": "06201cce-3d0c-4c4f-85c3-a4eccb505b62",
+        "merge_strategy": "ReplaceDocuments",
+        "primary_key": null,
+        "documents_count": 10,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:51:37.381094632Z"
+      },
+      {
+        "Batched": {
+          "timestamp": "2022-10-04T15:51:37.394320725Z",
+          "batch_id": 6
+        }
+      },
+      {
+        "Processing": "2022-10-04T15:51:37.394321835Z"
+      },
+      {
+        "Failed": {
+          "error": {
+            "message": "The primary key inference process failed because the engine did not find any fields containing `id` substring in their name. If your document identifier does not contain any `id` substring, you can set the primary key of the index.",
+            "code": "primary_key_inference_failed",
+            "type": "invalid_request",
+            "link": "https://docs.meilisearch.com/errors#primary_key_inference_failed"
+          },
+          "timestamp": "2022-10-04T15:51:37.522389886Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 5,
+    "content": {
+      "DocumentAddition": {
+        "index_uid": "products",
+        "content_uuid": "3a38827b-6c9a-41ac-9a19-979bc19a32aa",
+        "merge_strategy": "ReplaceDocuments",
+        "primary_key": "sku",
+        "documents_count": 10,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:51:37.132755272Z"
+      },
+      {
+        "Batched": {
+          "timestamp": "2022-10-04T15:51:37.146030327Z",
+          "batch_id": 5
+        }
+      },
+      {
+        "Processing": "2022-10-04T15:51:37.146031377Z"
+      },
+      {
+        "Succeeded": {
+          "result": {
+            "DocumentAddition": {
+              "indexed_documents": 10
+            }
+          },
+          "timestamp": "2022-10-04T15:51:37.167878265Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 4,
+    "content": {
+      "DocumentAddition": {
+        "index_uid": "products",
+        "content_uuid": "9696c1a6-4ff9-4ce9-8c68-06b6daa5e0dc",
+        "merge_strategy": "ReplaceDocuments",
+        "primary_key": null,
+        "documents_count": 10,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:51:36.53155275Z"
+      },
+      {
+        "Batched": {
+          "timestamp": "2022-10-04T15:51:36.544818974Z",
+          "batch_id": 4
+        }
+      },
+      {
+        "Processing": "2022-10-04T15:51:36.544820074Z"
+      },
+      {
+        "Failed": {
+          "error": {
+            "message": "The primary key inference process failed because the engine did not find any fields containing `id` substring in their name. If your document identifier does not contain any `id` substring, you can set the primary key of the index.",
+            "code": "primary_key_inference_failed",
+            "type": "invalid_request",
+            "link": "https://docs.meilisearch.com/errors#primary_key_inference_failed"
+          },
+          "timestamp": "2022-10-04T15:51:36.550259665Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "content": {
+      "SettingsUpdate": {
+        "index_uid": "products",
+        "settings": {
+          "displayedAttributes": "NotSet",
+          "searchableAttributes": "NotSet",
+          "filterableAttributes": "NotSet",
+          "sortableAttributes": "NotSet",
+          "rankingRules": "NotSet",
+          "stopWords": "NotSet",
+          "synonyms": {
+            "Set": {
+              "android": [
+                "phone",
+                "smartphone"
+              ],
+              "iphone": [
+                "phone",
+                "smartphone"
+              ],
+              "phone": [
+                "smartphone",
+                "iphone",
+                "android"
+              ]
+            }
+          },
+          "distinctAttribute": "NotSet",
+          "typoTolerance": "NotSet",
+          "faceting": "NotSet",
+          "pagination": "NotSet"
+        },
+        "is_deletion": false,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:51:35.939396731Z"
+      },
+      {
+        "Batched": {
+          "timestamp": "2022-10-04T15:51:35.952669434Z",
+          "batch_id": 3
+        }
+      },
+      {
+        "Processing": "2022-10-04T15:51:35.952670314Z"
+      },
+      {
+        "Succeeded": {
+          "result": "Other",
+          "timestamp": "2022-10-04T15:51:36.087768554Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "content": {
+      "SettingsUpdate": {
+        "index_uid": "movies",
+        "settings": {
+          "displayedAttributes": "NotSet",
+          "searchableAttributes": "NotSet",
+          "filterableAttributes": "NotSet",
+          "sortableAttributes": "NotSet",
+          "rankingRules": {
+            "Set": [
+              "words",
+              "typo",
+              "proximity",
+              "attribute",
+              "sort",
+              "exactness",
+              "release_date:asc"
+            ]
+          },
+          "stopWords": "NotSet",
+          "synonyms": "NotSet",
+          "distinctAttribute": "NotSet",
+          "typoTolerance": "NotSet",
+          "faceting": "NotSet",
+          "pagination": "NotSet"
+        },
+        "is_deletion": false,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:51:35.721766758Z"
+      },
+      {
+        "Batched": {
+          "timestamp": "2022-10-04T15:51:35.735028862Z",
+          "batch_id": 2
+        }
+      },
+      {
+        "Processing": "2022-10-04T15:51:35.735030412Z"
+      },
+      {
+        "Succeeded": {
+          "result": "Other",
+          "timestamp": "2022-10-04T15:51:35.745160333Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "content": {
+      "SettingsUpdate": {
+        "index_uid": "movies",
+        "settings": {
+          "displayedAttributes": "NotSet",
+          "searchableAttributes": "NotSet",
+          "filterableAttributes": {
+            "Set": [
+              "genres",
+              "id"
+            ]
+          },
+          "sortableAttributes": {
+            "Set": [
+              "release_date"
+            ]
+          },
+          "rankingRules": "NotSet",
+          "stopWords": "NotSet",
+          "synonyms": "NotSet",
+          "distinctAttribute": "NotSet",
+          "typoTolerance": "NotSet",
+          "faceting": "NotSet",
+          "pagination": "NotSet"
+        },
+        "is_deletion": false,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:51:35.50733827Z"
+      },
+      {
+        "Batched": {
+          "timestamp": "2022-10-04T15:51:35.517545782Z",
+          "batch_id": 1
+        }
+      },
+      {
+        "Processing": "2022-10-04T15:51:35.517547002Z"
+      },
+      {
+        "Succeeded": {
+          "result": "Other",
+          "timestamp": "2022-10-04T15:51:35.539766447Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 0,
+    "content": {
+      "DocumentAddition": {
+        "index_uid": "movies",
+        "content_uuid": "8b328d9d-ba52-4e16-b22d-e45145733ae0",
+        "merge_strategy": "ReplaceDocuments",
+        "primary_key": null,
+        "documents_count": 10,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-04T15:51:35.291992167Z"
+      },
+      {
+        "Batched": {
+          "timestamp": "2022-10-04T15:51:35.302592417Z",
+          "batch_id": 0
+        }
+      },
+      {
+        "Processing": "2022-10-04T15:51:35.302593877Z"
+      },
+      {
+        "Succeeded": {
+          "result": {
+            "DocumentAddition": {
+              "indexed_documents": 10
+            }
+          },
+          "timestamp": "2022-10-04T15:51:35.459210749Z"
+        }
+      }
+    ]
+  }
+]

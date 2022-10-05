@@ -90,8 +90,10 @@ impl V5Reader {
 
         Ok(V5Reader {
             metadata,
-            tasks: BufReader::new(File::open(dump.path().join("tasks").join("queue.jsonl"))?),
-            keys: BufReader::new(File::open(dump.path().join("keys.jsonl"))?),
+            tasks: BufReader::new(
+                File::open(dump.path().join("updates").join("data.jsonl")).unwrap(),
+            ),
+            keys: BufReader::new(File::open(dump.path().join("keys"))?),
             index_uuid,
             dump,
         })
@@ -156,14 +158,19 @@ impl DumpReader for V5Reader {
     ) -> Box<dyn Iterator<Item = Result<(Self::Task, Option<Self::UpdateFile>)>> + '_> {
         Box::new((&mut self.tasks).lines().map(|line| -> Result<_> {
             let task: Self::Task = serde_json::from_str(&line?)?;
-            if let Some(uuid) = task.get_content_uuid() {
-                let update_file_path = self
-                    .dump
-                    .path()
-                    .join("updates")
-                    .join("update_files")
-                    .join(uuid.to_string());
-                Ok((task, Some(File::open(update_file_path)?)))
+            if !task.is_finished() {
+                if let Some(uuid) = task.get_content_uuid() {
+                    let update_file_path = self
+                        .dump
+                        .path()
+                        .join("updates")
+                        .join("updates_files")
+                        .join(uuid.to_string());
+                    dbg!(&update_file_path);
+                    Ok((task, Some(File::open(update_file_path).unwrap())))
+                } else {
+                    Ok((task, None))
+                }
             } else {
                 Ok((task, None))
             }
@@ -225,5 +232,111 @@ impl IndexReader for V5IndexReader {
 
     fn settings(&mut self) -> Result<Self::Settings> {
         Ok(self.settings.clone())
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod test {
+    use std::{fs::File, io::BufReader};
+
+    use flate2::bufread::GzDecoder;
+    use tempfile::TempDir;
+
+    use super::*;
+
+    #[test]
+    fn read_dump_v5() {
+        let dump = File::open("tests/assets/v5.dump").unwrap();
+        let dir = TempDir::new().unwrap();
+        let mut dump = BufReader::new(dump);
+        let gz = GzDecoder::new(&mut dump);
+        let mut archive = tar::Archive::new(gz);
+        archive.unpack(dir.path()).unwrap();
+
+        let mut dump = V5Reader::open(dir).unwrap();
+
+        // top level infos
+        insta::assert_display_snapshot!(dump.date().unwrap(), @"2022-10-04 15:55:10.344982459 +00:00:00");
+        insta::assert_display_snapshot!(dump.instance_uid().unwrap().unwrap(), @"9e15e977-f2ae-4761-943f-1eaf75fd736d");
+
+        // tasks
+        let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();
+        let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
+        insta::assert_json_snapshot!(tasks);
+        assert_eq!(update_files.len(), 22);
+        assert!(update_files[0].is_none()); // the dump creation
+        assert!(update_files[1].is_some()); // the enqueued document addition
+        assert!(update_files[2..].iter().all(|u| u.is_none())); // everything already processed
+
+        // keys
+        let keys = dump.keys().collect::<Result<Vec<_>>>().unwrap();
+        insta::assert_json_snapshot!(keys);
+
+        // indexes
+        let mut indexes = dump.indexes().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        // the index are not ordered in any way by default
+        indexes.sort_by_key(|index| index.metadata().uid.to_string());
+
+        let mut products = indexes.pop().unwrap();
+        let mut movies = indexes.pop().unwrap();
+        let mut spells = indexes.pop().unwrap();
+        assert!(indexes.is_empty());
+
+        // products
+        insta::assert_json_snapshot!(products.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        {
+          "uid": "products",
+          "primaryKey": "sku",
+          "createdAt": "[now]",
+          "updatedAt": "[now]"
+        }
+        "###);
+
+        insta::assert_debug_snapshot!(products.settings());
+        let documents = products
+            .documents()
+            .unwrap()
+            .collect::<Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(documents.len(), 10);
+        insta::assert_json_snapshot!(documents);
+
+        // movies
+        insta::assert_json_snapshot!(movies.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        {
+          "uid": "movies",
+          "primaryKey": "id",
+          "createdAt": "[now]",
+          "updatedAt": "[now]"
+        }
+        "###);
+
+        insta::assert_debug_snapshot!(movies.settings());
+        let documents = movies
+            .documents()
+            .unwrap()
+            .collect::<Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(documents.len(), 200);
+        insta::assert_debug_snapshot!(documents);
+
+        // spells
+        insta::assert_json_snapshot!(spells.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        {
+          "uid": "dnd_spells",
+          "primaryKey": "index",
+          "createdAt": "[now]",
+          "updatedAt": "[now]"
+        }
+        "###);
+
+        insta::assert_debug_snapshot!(spells.settings());
+        let documents = spells
+            .documents()
+            .unwrap()
+            .collect::<Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(documents.len(), 10);
+        insta::assert_json_snapshot!(documents);
     }
 }
