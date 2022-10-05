@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -11,6 +11,7 @@ pub type TaskId = u32;
 pub type BatchId = u32;
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(serde::Serialize))]
 pub struct Task {
     pub id: TaskId,
     /// The name of the index the task is targeting. If it isn't targeting any index (i.e Dump task)
@@ -22,6 +23,7 @@ pub struct Task {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(serde::Serialize))]
 #[allow(clippy::large_enum_variant)]
 pub enum TaskContent {
     DocumentAddition {
@@ -59,7 +61,8 @@ pub enum TaskContent {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
+#[cfg_attr(test, derive(serde::Serialize))]
 pub enum IndexDocumentsMethod {
     /// Replace the previous document with the new one,
     /// removing all the already known attributes.
@@ -70,13 +73,15 @@ pub enum IndexDocumentsMethod {
     UpdateDocuments,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[cfg_attr(test, derive(serde::Serialize))]
 pub enum DocumentDeletion {
     Clear,
     Ids(Vec<String>),
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[cfg_attr(test, derive(serde::Serialize))]
 pub enum TaskEvent {
     Created(#[serde(with = "time::serde::rfc3339")] OffsetDateTime),
     Batched {
@@ -97,7 +102,8 @@ pub enum TaskEvent {
     },
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[cfg_attr(test, derive(serde::Serialize))]
 pub enum TaskResult {
     DocumentAddition { indexed_documents: u64 },
     DocumentDeletion { deleted_documents: u64 },
@@ -105,7 +111,8 @@ pub enum TaskResult {
     Other,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(serde::Serialize))]
 #[serde(rename_all = "camelCase")]
 pub struct ResponseError {
     message: String,
