@@ -81,20 +81,7 @@ pub struct Opt {
     #[clap(long, env = MEILI_MASTER_KEY)]
     pub master_key: Option<String>,
 
-    /// Configures the instance's environment. Value must be either production or development.
-    /// `production`
-    /// * Setting a master key is mandatory
-    /// * The search preview interface is disabled
-    ///
-    /// `development`:
-    /// Setting a master key is optional
-    /// Search preview is enabled
-    ///
-    /// # TIP
-    ///
-    /// When the server environment is set to development, providing a master key is not mandatory.
-    /// This is useful when debugging and prototyping, but dangerous otherwise since API routes
-    /// are unprotected.
+    /// Configures the instance's environment. Value must be either `production` or `development`.
     #[clap(long, env = MEILI_ENV, default_value_t = default_env(), possible_values = &POSSIBLE_ENV)]
     #[serde(default = "default_env")]
     pub env: String,
@@ -109,43 +96,29 @@ pub struct Opt {
     #[clap(long, env = MEILI_NO_ANALYTICS)]
     pub no_analytics: bool,
 
-    /// Sets the maximum size of the index. Value must be given in bytes or explicitly stating a base unit.
-    ///
-    /// For example, the default value can be written as `107374182400`, `'107.7Gb'`, or `'107374 Mb'`.
-    ///
-    /// The index stores processed data and is different from the task database, which handles pending tasks.
+    /// Sets the maximum size of the index. Value must be given in bytes or explicitly stating a base unit (for instance: 107374182400, '107.7Gb', or '107374 Mb').
     #[clap(long, env = MEILI_MAX_INDEX_SIZE, default_value_t = default_max_index_size())]
     #[serde(default = "default_max_index_size")]
     pub max_index_size: Byte,
 
     /// Sets the maximum size of the task database. Value must be given in bytes or explicitly stating a
-    /// base unit. For example, the default value can be written as `107374182400`, `'107.7Gb'`, or
-    /// `'107374 Mb'`.
-    ///
-    /// The task database handles pending tasks. This is different from the index database, which only
-    /// stores processed data.
+    /// base unit (for instance: 107374182400, '107.7Gb', or '107374 Mb').
     #[clap(long, env = MEILI_MAX_TASK_DB_SIZE, default_value_t = default_max_task_db_size())]
     #[serde(default = "default_max_task_db_size")]
     pub max_task_db_size: Byte,
 
     /// Sets the maximum size of accepted payloads. Value must be given in bytes or explicitly stating a
-    /// base unit. For example, the default value can be written as `107374182400`, `'107.7Gb'`, or
-    /// `'107374 Mb'`.
+    /// base unit (for instance: 107374182400, '107.7Gb', or '107374 Mb').
     #[clap(long, env = MEILI_HTTP_PAYLOAD_SIZE_LIMIT, default_value_t = default_http_payload_size_limit())]
     #[serde(default = "default_http_payload_size_limit")]
     pub http_payload_size_limit: Byte,
 
     /// Sets the server's SSL certificates.
-    ///
-    /// Value must be a path to PEM-formatted certificates. The first certificate should certify the
-    /// KEYFILE supplied by --ssl-key-path. The last certificate should be a root CA.
     #[serde(skip_serializing)]
     #[clap(long, env = MEILI_SSL_CERT_PATH, parse(from_os_str))]
     pub ssl_cert_path: Option<PathBuf>,
 
     /// Sets the server's SSL key files.
-    ///
-    /// Value must be a path to an RSA private key or PKCS8-encoded private key, both in PEM format.
     #[serde(skip_serializing)]
     #[clap(long, env = MEILI_SSL_KEY_PATH, parse(from_os_str))]
     pub ssl_key_path: Option<PathBuf>,
@@ -162,8 +135,6 @@ pub struct Opt {
     pub ssl_ocsp_path: Option<PathBuf>,
 
     /// Makes SSL authentication mandatory.
-    ///
-    /// Sends a fatal alert if the client does not complete client authentication.
     #[serde(skip_serializing, default)]
     #[clap(long, env = MEILI_SSL_REQUIRE_AUTH)]
     pub ssl_require_auth: bool,
@@ -179,15 +150,6 @@ pub struct Opt {
     pub ssl_tickets: bool,
 
     /// Launches Meilisearch after importing a previously-generated snapshot at the given filepath.
-    ///
-    /// This command will throw an error if:
-    /// * A database already exists
-    /// * No valid snapshot can be found in the specified path
-    ///
-    /// This behavior can be modified with the `--ignore-snapshot-if-db-exists` and
-    /// `--ignore-missing-snapshot` options, respectively.
-    ///
-    /// *This option is not available as an environment variable.*
     #[clap(long, env = MEILI_IMPORT_SNAPSHOT)]
     pub import_snapshot: Option<PathBuf>,
 
@@ -195,8 +157,6 @@ pub struct Opt {
     /// does not point to a valid snapshot file.
     ///
     /// This command will throw an error if `--import-snapshot` is not defined.
-    ///
-    /// *This option is not available as an environment variable.*
     #[clap(
         long,
         env = MEILI_IGNORE_MISSING_SNAPSHOT,
@@ -210,8 +170,6 @@ pub struct Opt {
     /// and Meilisearch will launch using the existing database.
     ///
     /// This command will throw an error if `--import-snapshot` is not defined.
-    ///
-    /// *This option is not available as an environment variable.*
     #[clap(
         long,
         env = MEILI_IGNORE_SNAPSHOT_IF_DB_EXISTS,
@@ -237,11 +195,6 @@ pub struct Opt {
 
     /// Imports the dump file located at the specified path. Path must point to a `.dump` file.
     /// If a database already exists, Meilisearch will throw an error and abort launch.
-    ///
-    /// Meilisearch will only launch once the dump data has been fully indexed.
-    /// The time this takes depends on the size of the dump file.
-    ///
-    /// *This option is not available as an environment variable.*
     #[clap(long, env = MEILI_IMPORT_DUMP, conflicts_with = "import-snapshot")]
     pub import_dump: Option<PathBuf>,
 
@@ -260,8 +213,6 @@ pub struct Opt {
     /// launch using the existing database.
     ///
     /// This option will trigger an error if `--import-dump` is not defined.
-    ///
-    /// *This option is not available as an environment variable.*
     #[clap(long, env = MEILI_IGNORE_DUMP_IF_DB_EXISTS, requires = "import-dump")]
     #[serde(default)]
     pub ignore_dump_if_db_exists: bool,
@@ -272,16 +223,8 @@ pub struct Opt {
     pub dumps_dir: PathBuf,
 
     /// Defines how much detail should be present in Meilisearch's logs.
-
-    /// Meilisearch currently supports five log levels, listed in order of increasing verbosity:
     ///
-    /// `'ERROR'`: only log unexpected events indicating Meilisearch is not functioning as expected
-    /// `'WARN'`: log all unexpected events, regardless of their severity
-    /// `'INFO'`: log all events. This is the default value of --log-level
-    /// `'DEBUG'`: log all events and include detailed information on Meilisearch's internal processes.
-    ///     Useful when diagnosing issues and debugging
-    /// `'TRACE'`: log all events and include even more detailed information on Meilisearch's internal processes.
-    ///     We do not advise using this level as it is extremely verbose. Use `'DEBUG'` before considering `'TRACE'`.
+    /// Meilisearch currently supports five log levels, listed in order of increasing verbosity: ERROR, WARN, INFO, DEBUG, TRACE.
     #[clap(long, env = MEILI_LOG_LEVEL, default_value_t = default_log_level())]
     #[serde(default = "default_log_level")]
     pub log_level: String,
