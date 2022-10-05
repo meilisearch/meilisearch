@@ -1,27 +1,27 @@
 use std::io::Read;
-use std::path::Path;
 use std::{fs::File, io::BufReader};
 
-use flate2::{bufread::GzDecoder, Compression};
-use index::{Checked, Settings, Unchecked};
+use flate2::bufread::GzDecoder;
 use index_scheduler::TaskView;
 use meilisearch_auth::Key;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use tempfile::TempDir;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+use crate::reader::compat::Compat;
 use crate::{IndexMetadata, Result, Version};
 
 // use self::loaders::{v2, v3, v4, v5};
 
 // pub mod error;
-// mod compat;
+mod compat;
 // mod loaders;
 // mod v1;
-mod v5;
-mod v6;
+pub(self) mod v4;
+pub(self) mod v5;
+pub(self) mod v6;
 
 pub fn open(
     dump: impl Read,
@@ -29,7 +29,7 @@ pub fn open(
     Box<
         dyn DumpReader<
             Document = serde_json::Map<String, serde_json::Value>,
-            Settings = Settings<Checked>,
+            Settings = v6::Settings<v6::Checked>,
             Task = TaskView,
             UpdateFile = File,
             Key = Key,
@@ -56,16 +56,37 @@ pub fn open(
         Version::V2 => todo!(),
         Version::V3 => todo!(),
         Version::V4 => todo!(),
-        Version::V5 => todo!(),
+        Version::V5 => {
+            let dump_reader = Box::new(v5::V5Reader::open(path)?);
+            let dump_reader = Box::new(Compat::<
+                dyn DumpReader<
+                    Document = v5::Document,
+                    Settings = v5::Settings<v5::Checked>,
+                    Task = v5::Task,
+                    UpdateFile = v5::UpdateFile,
+                    Key = v5::Key,
+                >,
+            >::new(dump_reader))
+                as Box<
+                    dyn DumpReader<
+                        Document = v6::Document,
+                        Settings = v6::Settings<v6::Checked>,
+                        Task = v6::Task,
+                        UpdateFile = v6::UpdateFile,
+                        Key = v6::Key,
+                    >,
+                >;
+            Ok(dump_reader)
+        }
         Version::V6 => {
             let dump_reader = Box::new(v6::V6Reader::open(path)?)
                 as Box<
                     dyn DumpReader<
-                        Document = serde_json::Map<String, serde_json::Value>,
-                        Settings = Settings<Checked>,
-                        Task = TaskView,
-                        UpdateFile = File,
-                        Key = Key,
+                        Document = v6::Document,
+                        Settings = v6::Settings<v6::Checked>,
+                        Task = v6::Task,
+                        UpdateFile = v6::UpdateFile,
+                        Key = v6::Key,
                     >,
                 >;
 

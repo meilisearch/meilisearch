@@ -14,7 +14,7 @@ type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct Metadata {
+pub struct Metadata {
     pub dump_version: Version,
     pub db_version: String,
     #[serde(with = "time::serde::rfc3339")]
