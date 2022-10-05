@@ -153,16 +153,8 @@ impl AuthController {
         match self
             .store
             // check if the key has access to all indexes.
-            .get_expiration_date(uid, action, None)?
-            .or(match index {
-                // else check if the key has access to the requested index.
-                Some(index) => {
-                    self.store
-                        .get_expiration_date(uid, action, Some(index.as_bytes()))?
-                }
-                // or to any index if no index has been requested.
-                None => self.store.prefix_first_expiration_date(uid, action)?,
-            }) {
+            .get_expiration_date(uid, action, index)?
+        {
             // check expiration date.
             Some(Some(exp)) => Ok(OffsetDateTime::now_utc() < exp),
             // no expiration date.

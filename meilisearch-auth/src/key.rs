@@ -2,7 +2,7 @@ use crate::action::Action;
 use crate::error::{AuthControllerError, Result};
 use crate::store::KeyId;
 
-use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::index_uid::IndexType;
 use meilisearch_types::star_or::StarOr;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_value, Value};
@@ -19,7 +19,7 @@ pub struct Key {
     pub name: Option<String>,
     pub uid: KeyId,
     pub actions: Vec<Action>,
-    pub indexes: Vec<StarOr<IndexUid>>,
+    pub indexes: Vec<StarOr<IndexType>>,
     #[serde(with = "time::serde::rfc3339::option")]
     pub expires_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339")]

@@ -448,6 +448,54 @@ async fn list_authorized_indexes_no_index_restriction() {
 }
 
 #[actix_rt::test]
+async fn access_authorized_index_patterns() {
+    let mut server = Server::new_auth().await;
+    server.use_admin_key("MASTER_KEY").await;
+
+    // create key with all document access on indices with product_* pattern.
+    let content = json!({
+        "indexes": ["products_*"],
+        "actions": ["documents.*","indexes.*"],
+        "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
+    });
+
+    // Register the key
+    let (response, code) = server.add_api_key(content).await;
+    assert_eq!(201, code, "{:?}", &response);
+    assert!(response["key"].is_string());
+
+    // use created key.
+    let key = response["key"].as_str().unwrap();
+    server.use_api_key(&key);
+
+    // create product_1 index
+    let index = server.index("product_1");
+    let (response, code) = index.create(Some("id")).await;
+
+    assert_eq!(202, code, "{:?}", &response);
+
+    // index.wait_task(0).await;
+
+    // try to create a index via add documents route
+    let documents = json!([
+        {
+            "id": 1,
+            "content": "foo",
+        }
+    ]);
+
+    let (response, code) = index.add_documents(documents, None).await;
+    assert_eq!(202, code, "{:?}", &response);
+    let task_id = response["taskUid"].as_u64().unwrap();
+
+    index.wait_task(task_id).await;
+
+    let (response, code) = index.get_task(task_id).await;
+    assert_eq!(200, code, "{:?}", &response);
+    assert_eq!(response["status"], "succeeded");
+}
+
+#[actix_rt::test]
 async fn list_authorized_tasks_restricted_index() {
     let mut server = Server::new_auth().await;
     server.use_admin_key("MASTER_KEY").await;

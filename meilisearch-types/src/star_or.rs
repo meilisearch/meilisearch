@@ -7,7 +7,7 @@ use std::str::FromStr;
 
 /// A type that tries to match either a star (*) or
 /// any other thing that implements `FromStr`.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum StarOr<T> {
     Star,
     Other(T),
@@ -55,6 +55,15 @@ impl<T: PartialEq> PartialEq for StarOr<T> {
     }
 }
 
+impl<T: PartialEq<str>> PartialEq<str> for StarOr<T> {
+    fn eq(&self, other: &str) -> bool {
+        match (self, other) {
+            (Self::Star, _) => true,
+            (Self::Other(x), y) => x == y,
+        }
+    }
+}
+
 impl<T: PartialEq + Eq> Eq for StarOr<T> {}
 
 impl<'de, T, E> Deserialize<'de> for StarOr<T>
@@ -91,7 +100,7 @@ where
                 match v {
                     "*" => Ok(StarOr::Star),
                     v => {
-                        let other = FromStr::from_str(v).map_err(|e: T::Err| {
+                        let other = T::from_str(v).map_err(|e: T::Err| {
                             SE::custom(format!("Invalid `other` value: {}", e))
                         })?;
                         Ok(StarOr::Other(other))
