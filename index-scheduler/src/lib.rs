@@ -17,6 +17,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 use file_store::{File, FileStore};
+use meilisearch_types::error::ResponseError;
 use roaring::RoaringBitmap;
 use serde::Deserialize;
 use synchronoise::SignalEvent;
@@ -407,14 +408,14 @@ impl IndexScheduler {
                 }
             }
             // In case of a failure we must get back and patch all the tasks with the error.
-            Err(_err) => {
+            Err(err) => {
+                let error: ResponseError = err.into();
                 for id in ids {
                     let mut task = self.get_task(&wtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
                     task.started_at = Some(started_at);
                     task.finished_at = Some(finished_at);
                     task.status = Status::Failed;
-                    // TODO: TAMO: set the error correctly
-                    // task.error = Some(err);
+                    task.error = Some(error.clone());
 
                     self.update_task(&mut wtxn, &task)?;
                     task.remove_data()?;
