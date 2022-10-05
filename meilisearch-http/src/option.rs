@@ -71,12 +71,12 @@ pub struct Opt {
     #[serde(default = "default_db_path")]
     pub db_path: PathBuf,
 
-    /// The address on which the http server will listen.
+    /// Sets the HTTP address and port Meilisearch will use.
     #[clap(long, env = MEILI_HTTP_ADDR, default_value_t = default_http_addr())]
     #[serde(default = "default_http_addr")]
     pub http_addr: String,
 
-    /// Sets the instance's master key, automatically protecting all routes except GET /health
+    /// Sets the instance's master key, automatically protecting all routes except `GET /health`.
     #[serde(skip_serializing)]
     #[clap(long, env = MEILI_MASTER_KEY)]
     pub master_key: Option<String>,
@@ -128,8 +128,9 @@ pub struct Opt {
     #[clap(long, env = MEILI_SSL_AUTH_PATH, parse(from_os_str))]
     pub ssl_auth_path: Option<PathBuf>,
 
-    /// Read DER-encoded OCSP response from OCSPFILE and staple to certificate.
-    /// Optional
+    /// Sets the server's OCSP file. *Optional*
+    ///
+    /// Reads DER-encoded OCSP response from OCSPFILE and staple to certificate.
     #[serde(skip_serializing)]
     #[clap(long, env = MEILI_SSL_OCSP_PATH, parse(from_os_str))]
     pub ssl_ocsp_path: Option<PathBuf>,
@@ -217,7 +218,7 @@ pub struct Opt {
     #[serde(default)]
     pub ignore_dump_if_db_exists: bool,
 
-    /// Folder where dumps are created when the dump route is called.
+    /// Sets the directory where Meilisearch will create dump files.
     #[clap(long, env = MEILI_DUMPS_DIR, default_value_os_t = default_dumps_dir())]
     #[serde(default = "default_dumps_dir")]
     pub dumps_dir: PathBuf,
@@ -243,7 +244,7 @@ pub struct Opt {
     #[clap(flatten)]
     pub scheduler_options: SchedulerConfig,
 
-    /// The path to a configuration file that should be used to setup the engine.
+    /// Set the path to a configuration file that should be used to setup the engine.
     /// Format must be TOML.
     #[serde(skip_serializing)]
     #[clap(long)]
