@@ -15,6 +15,7 @@ pub struct Unchecked;
 /// whose validity is guaranteed, or `Unchecked` if they need to be validated. In the later case, a
 /// call to `check` will return a `Settings<Checked>` from a `Settings<Unchecked>`.
 #[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(serde::Serialize))]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[serde(bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'static>"))]
@@ -65,6 +66,7 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
+#[cfg_attr(test, derive(serde::Serialize))]
 pub enum Setting<T> {
     Set(T),
     Reset,
@@ -119,6 +121,7 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Setting<T> {
 }
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(serde::Serialize))]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct MinWordSizeTyposSetting {
@@ -129,6 +132,7 @@ pub struct MinWordSizeTyposSetting {
 }
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(serde::Serialize))]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct TypoSettings {
@@ -143,6 +147,7 @@ pub struct TypoSettings {
 }
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(serde::Serialize))]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct FacetingSettings {
@@ -151,6 +156,7 @@ pub struct FacetingSettings {
 }
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(serde::Serialize))]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct PaginationSettings {

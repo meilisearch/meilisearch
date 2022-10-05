@@ -10,12 +10,14 @@ use uuid::Uuid;
 use super::settings::{Settings, Unchecked};
 
 #[derive(Deserialize, Debug)]
+#[cfg_attr(test, derive(serde::Serialize))]
 pub struct IndexUuid {
     pub uid: String,
     pub index_meta: IndexMeta,
 }
 
 #[derive(Deserialize, Debug)]
+#[cfg_attr(test, derive(serde::Serialize))]
 pub struct IndexMeta {
     pub uuid: Uuid,
     pub creation_task_id: usize,
@@ -23,12 +25,14 @@ pub struct IndexMeta {
 
 // There is one in each indexes under `meta.json`.
 #[derive(Deserialize)]
+#[cfg_attr(test, derive(serde::Serialize))]
 pub struct DumpMeta {
     pub settings: Settings<Unchecked>,
     pub primary_key: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(serde::Serialize))]
 pub struct IndexUid(pub String);
 
 impl TryFrom<String> for IndexUid {
@@ -84,6 +88,7 @@ impl std::error::Error for IndexUidFormatError {}
 /// A type that tries to match either a star (*) or
 /// any other thing that implements `FromStr`.
 #[derive(Debug)]
+#[cfg_attr(test, derive(serde::Serialize))]
 pub enum StarOr<T> {
     Star,
     Other(T),
