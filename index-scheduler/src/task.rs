@@ -279,7 +279,7 @@ impl KindWithContent {
             KindWithContent::Settings { new_settings, .. } => Some(Details::Settings {
                 settings: new_settings.clone(),
             }),
-            KindWithContent::IndexDeletion { .. } => Some(Details::IndexInfo { primary_key: None }),
+            KindWithContent::IndexDeletion { .. } => None,
             KindWithContent::IndexCreation { primary_key, .. }
             | KindWithContent::IndexUpdate { primary_key, .. } => Some(Details::IndexInfo {
                 primary_key: primary_key.clone(),
