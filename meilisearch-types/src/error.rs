@@ -157,6 +157,8 @@ pub enum Code {
 
     DumpAlreadyInProgress,
     DumpProcessFailed,
+    // Only used when importing a dump
+    UnretrievableErrorCode,
 
     InvalidContentType,
     MissingContentType,
@@ -266,6 +268,10 @@ impl Code {
                 ErrCode::invalid("invalid_content_type", StatusCode::UNSUPPORTED_MEDIA_TYPE)
             }
             MissingPayload => ErrCode::invalid("missing_payload", StatusCode::BAD_REQUEST),
+            // This one can only happen when importing a dump and encountering an unknown code in the task queue.
+            UnretrievableErrorCode => {
+                ErrCode::invalid("unretrievable_error_code", StatusCode::BAD_REQUEST)
+            }
 
             // error related to keys
             ApiKeyNotFound => ErrCode::invalid("api_key_not_found", StatusCode::NOT_FOUND),
