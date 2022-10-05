@@ -184,7 +184,7 @@ pub struct Opt {
     /// * A database already exists
     /// * No valid snapshot can be found in the specified path
     ///
-    /// This behavior can be modified with the `--ignore-snapshot-if-db-exists` and 
+    /// This behavior can be modified with the `--ignore-snapshot-if-db-exists` and
     /// `--ignore-missing-snapshot` options, respectively.
     ///
     /// *This option is not available as an environment variable.*
