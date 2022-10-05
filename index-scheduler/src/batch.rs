@@ -498,12 +498,19 @@ impl IndexScheduler {
             IndexOperation::DocumentClear { mut tasks, .. } => {
                 let count = milli::update::ClearDocuments::new(index_wtxn, index).execute()?;
 
+                let mut first_clear_found = false;
                 for task in &mut tasks {
                     task.status = Status::Succeeded;
+                    // The first document clear will effectively delete every documents
+                    // in the database but the next ones will clear 0 documents.
                     task.details = match &task.kind {
-                        KindWithContent::DocumentClear { .. } => Some(Details::ClearAll {
-                            deleted_documents: Some(count),
-                        }),
+                        KindWithContent::DocumentClear { .. } => {
+                            let count = if first_clear_found { 0 } else { count };
+                            first_clear_found = true;
+                            Some(Details::ClearAll {
+                                deleted_documents: Some(count),
+                            })
+                        }
                         otherwise => otherwise.default_details(),
                     };
                 }
