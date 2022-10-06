@@ -203,8 +203,6 @@ pub struct Opt {
     /// a valid dump file. Instead, Meilisearch will start normally without importing any dump.
     ///
     /// This option will trigger an error if `--import-dump` is not defined.
-    ///
-    /// *This option is not available as an environment variable.*
     #[clap(long, env = MEILI_IGNORE_MISSING_DUMP, requires = "import-dump")]
     #[serde(default)]
     pub ignore_missing_dump: bool,
