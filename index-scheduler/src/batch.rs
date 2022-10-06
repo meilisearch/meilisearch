@@ -7,14 +7,16 @@ use index::apply_settings_to_builder;
 use index::error::IndexError;
 use index::{Settings, Unchecked};
 use log::{debug, info};
-use milli::documents::DocumentsBatchReader;
 use milli::heed::{RoTxn, RwTxn};
 use milli::update::IndexDocumentsConfig;
 use milli::update::{DocumentAdditionResult, DocumentDeletionResult, IndexDocumentsMethod};
+use milli::{documents::DocumentsBatchReader, BEU32};
+use roaring::RoaringBitmap;
 use uuid::Uuid;
 
 pub(crate) enum Batch {
     Cancel(Task),
+    DeleteTasks(Task),
     Snapshot(Vec<Task>),
     Dump(Vec<Task>),
     IndexOperation(IndexOperation),
@@ -89,6 +91,7 @@ impl Batch {
     pub fn ids(&self) -> Vec<TaskId> {
         match self {
             Batch::Cancel(task)
+            | Batch::DeleteTasks(task)
             | Batch::IndexCreation { task, .. }
             | Batch::IndexUpdate { task, .. } => vec![task.uid],
             Batch::Snapshot(tasks) | Batch::Dump(tasks) | Batch::IndexDeletion { tasks, .. } => {
@@ -355,9 +358,10 @@ impl IndexScheduler {
 
     /// Create the next batch to be processed;
     /// 1. We get the *last* task to cancel.
-    /// 2. We get the *next* snapshot to process.
-    /// 3. We get the *next* dump to process.
-    /// 4. We get the *next* tasks to process for a specific index.
+    /// 2. We get the *next* task to delete.
+    /// 3. We get the *next* snapshot to process.
+    /// 4. We get the *next* dump to process.
+    /// 5. We get the *next* tasks to process for a specific index.
     pub(crate) fn create_next_batch(&self, rtxn: &RoTxn) -> Result<Option<Batch>> {
         let enqueued = &self.get_status(rtxn, Status::Enqueued)?;
         let to_cancel = self.get_kind(rtxn, Kind::CancelTask)? & enqueued;
@@ -370,7 +374,17 @@ impl IndexScheduler {
             )));
         }
 
-        // 2. we batch the snapshot.
+        // 2. we get the next task to delete
+        let to_delete = self.get_kind(rtxn, Kind::DeleteTasks)?;
+        if let Some(task_id) = to_delete.min() {
+            let task = self
+                .get_task(rtxn, task_id)?
+                .ok_or(Error::CorruptedTaskQueue)?;
+            println!("DeletionTask: {task:?}");
+            return Ok(Some(Batch::DeleteTasks(task)));
+        }
+
+        // 3. we batch the snapshot.
         let to_snapshot = self.get_kind(rtxn, Kind::Snapshot)? & enqueued;
         if !to_snapshot.is_empty() {
             return Ok(Some(Batch::Snapshot(
@@ -378,13 +392,13 @@ impl IndexScheduler {
             )));
         }
 
-        // 3. we batch the dumps.
+        // 4. we batch the dumps.
         let to_dump = self.get_kind(rtxn, Kind::DumpExport)? & enqueued;
         if !to_dump.is_empty() {
             return Ok(Some(Batch::Dump(self.get_existing_tasks(rtxn, to_dump)?)));
         }
 
-        // 4. We take the next task and try to batch all the tasks associated with this index.
+        // 5. We take the next task and try to batch all the tasks associated with this index.
         if let Some(task_id) = enqueued.min() {
             let task = self
                 .get_task(rtxn, task_id)?
@@ -427,6 +441,34 @@ impl IndexScheduler {
     pub(crate) fn process_batch(&self, batch: Batch) -> Result<Vec<Task>> {
         match batch {
             Batch::Cancel(_) => todo!(),
+            Batch::DeleteTasks(mut task) => {
+                println!("delete task: {task:?}");
+                // 1. Retrieve the tasks that matched the quety at enqueue-time
+                let matched_tasks =
+                    if let KindWithContent::DeleteTasks { tasks, query: _ } = &task.kind {
+                        tasks
+                    } else {
+                        unreachable!()
+                    };
+                println!("matched tasks: {matched_tasks:?}");
+                let mut wtxn = self.env.write_txn()?;
+                let nbr_deleted_tasks = self.delete_matched_tasks(&mut wtxn, matched_tasks)?;
+                println!("nbr_deleted_tasks: {nbr_deleted_tasks}");
+                task.status = Status::Succeeded;
+                match &mut task.details {
+                    Some(Details::DeleteTasks {
+                        matched_tasks: _,
+                        deleted_tasks,
+                        original_query: _,
+                    }) => {
+                        *deleted_tasks = Some(nbr_deleted_tasks);
+                    }
+                    _ => unreachable!(),
+                }
+
+                wtxn.commit()?;
+                Ok(vec![task])
+            }
             Batch::Snapshot(_) => todo!(),
             Batch::Dump(_) => todo!(),
             Batch::IndexOperation(operation) => {
@@ -481,6 +523,7 @@ impl IndexScheduler {
                 primary_key,
                 mut task,
             } => {
+                println!("IndexUpdate task: {task:?}");
                 let rtxn = self.env.read_txn()?;
                 let index = self.index_mapper.index(&rtxn, &index_uid)?;
 
@@ -766,5 +809,56 @@ impl IndexScheduler {
                 Ok(tasks)
             }
         }
+    }
+
+    /// Delete each given task from all the databases (if it is deleteable).
+    ///
+    /// Return the number of tasks that were actually deleted
+    fn delete_matched_tasks(&self, wtxn: &mut RwTxn, matched_tasks: &[u32]) -> Result<usize> {
+        // 1. Remove from this list the tasks that we are not allowed to delete
+        let enqueued_tasks = self.get_status(wtxn, Status::Enqueued)?;
+
+        let processing_tasks = &self.processing_tasks.read().unwrap().1;
+        let to_delete_tasks = matched_tasks
+            .iter()
+            .filter(|&&task_id| {
+                !processing_tasks.contains(task_id) && !enqueued_tasks.contains(task_id)
+            })
+            .copied();
+        let to_delete_tasks = RoaringBitmap::from_iter(to_delete_tasks);
+        // 2. We now have a list of tasks to delete, delete them
+
+        for task_id in to_delete_tasks.iter() {
+            let task = self.all_tasks.get(wtxn, &BEU32::new(task_id))?.unwrap();
+            self.delete_task(wtxn, &task)?;
+        }
+
+        Ok(to_delete_tasks.len() as usize)
+    }
+
+    /// Delete the given task from all the databases
+    fn delete_task(&self, wtxn: &mut RwTxn, task: &Task) -> Result<()> {
+        let task_id = BEU32::new(task.uid);
+
+        if let Some(indexes) = task.indexes() {
+            for index in indexes {
+                self.update_index(wtxn, index, |bitmap| {
+                    bitmap.remove(task.uid);
+                })?;
+            }
+        }
+
+        self.update_status(wtxn, task.status, |bitmap| {
+            bitmap.remove(task.uid);
+        })?;
+
+        self.update_kind(wtxn, task.kind.as_kind(), |bitmap| {
+            (bitmap.remove(task.uid));
+        })?;
+
+        task.remove_data()?;
+        self.all_tasks.delete(wtxn, &task_id)?;
+
+        Ok(())
     }
 }

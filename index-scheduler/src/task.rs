@@ -8,7 +8,7 @@ use std::{fmt::Write, path::PathBuf, str::FromStr};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
-use crate::{Error, TaskId};
+use crate::{Error, Query, TaskId};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -166,6 +166,10 @@ pub enum KindWithContent {
     CancelTask {
         tasks: Vec<TaskId>,
     },
+    DeleteTasks {
+        query: String,
+        tasks: Vec<TaskId>,
+    },
     DumpExport {
         output: PathBuf,
     },
@@ -196,6 +200,7 @@ impl KindWithContent {
             KindWithContent::IndexUpdate { .. } => Kind::IndexUpdate,
             KindWithContent::IndexSwap { .. } => Kind::IndexSwap,
             KindWithContent::CancelTask { .. } => Kind::CancelTask,
+            KindWithContent::DeleteTasks { .. } => Kind::DeleteTasks,
             KindWithContent::DumpExport { .. } => Kind::DumpExport,
             KindWithContent::Snapshot => Kind::Snapshot,
         }
@@ -218,6 +223,7 @@ impl KindWithContent {
             | IndexUpdate { .. }
             | IndexSwap { .. }
             | CancelTask { .. }
+            | DeleteTasks { .. }
             | DumpExport { .. }
             | Snapshot => Ok(()), // There is nothing to persist for all these tasks
         }
@@ -240,6 +246,7 @@ impl KindWithContent {
             | IndexUpdate { .. }
             | IndexSwap { .. }
             | CancelTask { .. }
+            | DeleteTasks { .. }
             | DumpExport { .. }
             | Snapshot => Ok(()), // There is no data associated with all these tasks
         }
@@ -249,7 +256,7 @@ impl KindWithContent {
         use KindWithContent::*;
 
         match self {
-            DumpExport { .. } | Snapshot | CancelTask { .. } => None,
+            DumpExport { .. } | Snapshot | CancelTask { .. } | DeleteTasks { .. } => None,
             DocumentImport { index_uid, .. }
             | DocumentDeletion { index_uid, .. }
             | DocumentClear { index_uid }
@@ -295,6 +302,11 @@ impl KindWithContent {
             KindWithContent::CancelTask { .. } => {
                 todo!()
             }
+            KindWithContent::DeleteTasks { query, tasks } => Some(Details::DeleteTasks {
+                matched_tasks: tasks.len(),
+                deleted_tasks: None,
+                original_query: query.clone(),
+            }),
             KindWithContent::DumpExport { .. } => None,
             KindWithContent::Snapshot => None,
         }
@@ -318,6 +330,7 @@ pub enum Kind {
     IndexUpdate,
     IndexSwap,
     CancelTask,
+    DeleteTasks,
     DumpExport,
     Snapshot,
 }
@@ -348,6 +361,7 @@ impl FromStr for Kind {
             "index_update" => Ok(Kind::IndexUpdate),
             "index_swap" => Ok(Kind::IndexSwap),
             "cancel_task" => Ok(Kind::CancelTask),
+            "delete_tasks" => Ok(Kind::DeleteTasks),
             "dump_export" => Ok(Kind::DumpExport),
             "snapshot" => Ok(Kind::Snapshot),
             s => Err(Error::InvalidKind(s.to_string())),
@@ -379,6 +393,12 @@ pub enum Details {
     },
     #[serde(rename_all = "camelCase")]
     ClearAll { deleted_documents: Option<u64> },
+    #[serde(rename_all = "camelCase")]
+    DeleteTasks {
+        matched_tasks: usize,
+        deleted_tasks: Option<usize>,
+        original_query: String,
+    },
     #[serde(rename_all = "camelCase")]
     Dump { dump_uid: String },
 }
@@ -431,5 +451,27 @@ fn serialize_duration<S: Serializer>(
             serializer.serialize_str(&res)
         }
         None => serializer.serialize_none(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use milli::heed::{types::SerdeJson, BytesDecode, BytesEncode};
+
+    use crate::assert_smol_debug_snapshot;
+
+    use super::Details;
+
+    #[test]
+    fn bad_deser() {
+        let details = Details::DeleteTasks {
+            matched_tasks: 1,
+            deleted_tasks: None,
+            original_query: "hello".to_owned(),
+        };
+        let serialised = SerdeJson::<Details>::bytes_encode(&details).unwrap();
+        let deserialised = SerdeJson::<Details>::bytes_decode(&serialised).unwrap();
+        assert_smol_debug_snapshot!(details, @r###"DeleteTasks { matched_tasks: 1, deleted_tasks: None, original_query: "hello" }"###);
+        assert_smol_debug_snapshot!(deserialised, @"Settings { settings: Settings { displayed_attributes: NotSet, searchable_attributes: NotSet, filterable_attributes: NotSet, sortable_attributes: NotSet, ranking_rules: NotSet, stop_words: NotSet, synonyms: NotSet, distinct_attribute: NotSet, typo_tolerance: NotSet, faceting: NotSet, pagination: NotSet, _kind: PhantomData } }");
     }
 }
