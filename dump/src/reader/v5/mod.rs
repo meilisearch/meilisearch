@@ -45,7 +45,7 @@ use uuid::Uuid;
 
 use crate::{IndexMetadata, Result, Version};
 
-use super::{DumpReader, IndexReader};
+use super::{compat::v5_to_v6::CompatV5ToV6, DumpReader, IndexReader};
 
 mod keys;
 mod meta;
@@ -100,20 +100,24 @@ impl V5Reader {
         })
     }
 
-    fn version(&self) -> Version {
+    pub fn to_v6(self) -> CompatV5ToV6 {
+        CompatV5ToV6::new(self)
+    }
+
+    pub fn version(&self) -> Version {
         Version::V5
     }
 
-    fn date(&self) -> Option<OffsetDateTime> {
+    pub fn date(&self) -> Option<OffsetDateTime> {
         Some(self.metadata.dump_date)
     }
 
-    fn instance_uid(&self) -> Result<Option<Uuid>> {
+    pub fn instance_uid(&self) -> Result<Option<Uuid>> {
         let uuid = fs::read_to_string(self.dump.path().join("instance-uid"))?;
         Ok(Some(Uuid::parse_str(&uuid)?))
     }
 
-    fn indexes(&self) -> Result<impl Iterator<Item = Result<V5IndexReader>> + '_> {
+    pub fn indexes(&self) -> Result<impl Iterator<Item = Result<V5IndexReader>> + '_> {
         Ok(self.index_uuid.iter().map(|index| -> Result<_> {
             Ok(V5IndexReader::new(
                 index.uid.clone(),
@@ -126,7 +130,7 @@ impl V5Reader {
         }))
     }
 
-    fn tasks(&mut self) -> impl Iterator<Item = Result<(Task, Option<UpdateFile>)>> + '_ {
+    pub fn tasks(&mut self) -> impl Iterator<Item = Result<(Task, Option<UpdateFile>)>> + '_ {
         (&mut self.tasks).lines().map(|line| -> Result<_> {
             let task: Task = serde_json::from_str(&line?)?;
             if !task.is_finished() {
@@ -148,14 +152,14 @@ impl V5Reader {
         })
     }
 
-    fn keys(&mut self) -> impl Iterator<Item = Result<Key>> + '_ {
+    pub fn keys(&mut self) -> impl Iterator<Item = Result<Key>> + '_ {
         (&mut self.keys)
             .lines()
             .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) })
     }
 }
 
-struct V5IndexReader {
+pub struct V5IndexReader {
     metadata: IndexMetadata,
     settings: Settings<Checked>,
 
@@ -184,17 +188,17 @@ impl V5IndexReader {
         Ok(ret)
     }
 
-    fn metadata(&self) -> &IndexMetadata {
+    pub fn metadata(&self) -> &IndexMetadata {
         &self.metadata
     }
 
-    fn documents(&mut self) -> Result<impl Iterator<Item = Result<Document>> + '_> {
+    pub fn documents(&mut self) -> Result<impl Iterator<Item = Result<Document>> + '_> {
         Ok((&mut self.documents)
             .lines()
             .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) }))
     }
 
-    fn settings(&mut self) -> Result<Settings<Checked>> {
+    pub fn settings(&mut self) -> Result<Settings<Checked>> {
         Ok(self.settings.clone())
     }
 }
