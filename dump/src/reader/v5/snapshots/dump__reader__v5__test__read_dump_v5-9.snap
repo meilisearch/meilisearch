@@ -72,6 +72,6 @@ Ok(
                 ),
             },
         ),
-        _kind: PhantomData,
+        _kind: PhantomData<dump::reader::v5::settings::Checked>,
     },
 )
