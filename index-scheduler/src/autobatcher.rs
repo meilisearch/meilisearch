@@ -1,5 +1,5 @@
 use milli::update::IndexDocumentsMethod::{self, ReplaceDocuments, UpdateDocuments};
-use std::ops::ControlFlow;
+use std::ops::ControlFlow::{self, Break, Continue};
 
 use crate::{task::Kind, TaskId};
 
@@ -42,52 +42,37 @@ pub enum BatchKind {
 }
 
 impl BatchKind {
-    /// return true if you must stop right there.
-    pub fn new(task_id: TaskId, kind: Kind) -> (Self, bool) {
+    /// Returns a `ControlFlow::Break` if you must stop right now.
+    pub fn new(task_id: TaskId, kind: Kind) -> ControlFlow<BatchKind, BatchKind> {
         match kind {
-            Kind::IndexCreation => (BatchKind::IndexCreation { id: task_id }, true),
-            Kind::IndexDeletion => (BatchKind::IndexDeletion { ids: vec![task_id] }, true),
-            Kind::IndexUpdate => (BatchKind::IndexUpdate { id: task_id }, true),
-            Kind::IndexSwap => (BatchKind::IndexSwap { id: task_id }, true),
-            Kind::DocumentClear => (BatchKind::DocumentClear { ids: vec![task_id] }, false),
-            Kind::DocumentAddition => (
-                BatchKind::DocumentImport {
-                    method: ReplaceDocuments,
-                    import_ids: vec![task_id],
-                },
-                false,
-            ),
-            Kind::DocumentUpdate => (
-                BatchKind::DocumentImport {
-                    method: UpdateDocuments,
-                    import_ids: vec![task_id],
-                },
-                false,
-            ),
-            Kind::DocumentDeletion => (
-                BatchKind::DocumentDeletion {
-                    deletion_ids: vec![task_id],
-                },
-                false,
-            ),
-            Kind::Settings => (
-                BatchKind::Settings {
-                    settings_ids: vec![task_id],
-                },
-                false,
-            ),
-
+            Kind::IndexCreation => Break(BatchKind::IndexCreation { id: task_id }),
+            Kind::IndexDeletion => Break(BatchKind::IndexDeletion { ids: vec![task_id] }),
+            Kind::IndexUpdate => Break(BatchKind::IndexUpdate { id: task_id }),
+            Kind::IndexSwap => Break(BatchKind::IndexSwap { id: task_id }),
+            Kind::DocumentClear => Continue(BatchKind::DocumentClear { ids: vec![task_id] }),
+            Kind::DocumentAddition => Continue(BatchKind::DocumentImport {
+                method: ReplaceDocuments,
+                import_ids: vec![task_id],
+            }),
+            Kind::DocumentUpdate => Continue(BatchKind::DocumentImport {
+                method: UpdateDocuments,
+                import_ids: vec![task_id],
+            }),
+            Kind::DocumentDeletion => Continue(BatchKind::DocumentDeletion {
+                deletion_ids: vec![task_id],
+            }),
+            Kind::Settings => Continue(BatchKind::Settings {
+                settings_ids: vec![task_id],
+            }),
             Kind::DumpExport | Kind::Snapshot | Kind::CancelTask => unreachable!(),
         }
     }
 
-    /// Return true if you must stop.
-    fn accumulate(self, id: TaskId, kind: Kind) -> ControlFlow<Self, Self> {
+    /// Returns a `ControlFlow::Break` if you must stop right now.
+    fn accumulate(self, id: TaskId, kind: Kind) -> ControlFlow<BatchKind, BatchKind> {
         match (self, kind) {
             // We don't batch any of these operations
-            (this, Kind::IndexCreation | Kind::IndexUpdate | Kind::IndexSwap) => {
-                ControlFlow::Break(this)
-            }
+            (this, Kind::IndexCreation | Kind::IndexUpdate | Kind::IndexSwap) => Break(this),
             // The index deletion can batch with everything but must stop after
             (
                 BatchKind::DocumentClear { mut ids }
@@ -104,7 +89,7 @@ impl BatchKind {
                 Kind::IndexDeletion,
             ) => {
                 ids.push(id);
-                ControlFlow::Break(BatchKind::IndexDeletion { ids })
+                Break(BatchKind::IndexDeletion { ids })
             }
             (
                 BatchKind::ClearAndSettings {
@@ -120,7 +105,7 @@ impl BatchKind {
             ) => {
                 ids.push(id);
                 ids.append(&mut other);
-                ControlFlow::Break(BatchKind::IndexDeletion { ids })
+                Break(BatchKind::IndexDeletion { ids })
             }
 
             (
@@ -128,12 +113,12 @@ impl BatchKind {
                 Kind::DocumentClear | Kind::DocumentDeletion,
             ) => {
                 ids.push(id);
-                ControlFlow::Continue(BatchKind::DocumentClear { ids })
+                Continue(BatchKind::DocumentClear { ids })
             }
             (
                 this @ BatchKind::DocumentClear { .. },
                 Kind::DocumentAddition | Kind::DocumentUpdate | Kind::Settings,
-            ) => ControlFlow::Break(this),
+            ) => Break(this),
             (
                 BatchKind::DocumentImport {
                     method: _,
@@ -142,7 +127,7 @@ impl BatchKind {
                 Kind::DocumentClear,
             ) => {
                 ids.push(id);
-                ControlFlow::Continue(BatchKind::DocumentClear { ids })
+                Continue(BatchKind::DocumentClear { ids })
             }
 
             // we can autobatch the same kind of document additions / updates
@@ -154,7 +139,7 @@ impl BatchKind {
                 Kind::DocumentAddition,
             ) => {
                 import_ids.push(id);
-                ControlFlow::Continue(BatchKind::DocumentImport {
+                Continue(BatchKind::DocumentImport {
                     method: ReplaceDocuments,
                     import_ids,
                 })
@@ -167,7 +152,7 @@ impl BatchKind {
                 Kind::DocumentUpdate,
             ) => {
                 import_ids.push(id);
-                ControlFlow::Continue(BatchKind::DocumentImport {
+                Continue(BatchKind::DocumentImport {
                     method: UpdateDocuments,
                     import_ids,
                 })
@@ -177,9 +162,9 @@ impl BatchKind {
             (
                 this @ BatchKind::DocumentImport { .. },
                 Kind::DocumentDeletion | Kind::DocumentAddition | Kind::DocumentUpdate,
-            ) => ControlFlow::Break(this),
+            ) => Break(this),
             (BatchKind::DocumentImport { method, import_ids }, Kind::Settings) => {
-                ControlFlow::Continue(BatchKind::SettingsAndDocumentImport {
+                Continue(BatchKind::SettingsAndDocumentImport {
                     settings_ids: vec![id],
                     method,
                     import_ids,
@@ -188,20 +173,20 @@ impl BatchKind {
 
             (BatchKind::DocumentDeletion { mut deletion_ids }, Kind::DocumentClear) => {
                 deletion_ids.push(id);
-                ControlFlow::Continue(BatchKind::DocumentClear { ids: deletion_ids })
+                Continue(BatchKind::DocumentClear { ids: deletion_ids })
             }
             (
                 this @ BatchKind::DocumentDeletion { .. },
                 Kind::DocumentAddition | Kind::DocumentUpdate,
-            ) => ControlFlow::Break(this),
+            ) => Break(this),
             (BatchKind::DocumentDeletion { mut deletion_ids }, Kind::DocumentDeletion) => {
                 deletion_ids.push(id);
-                ControlFlow::Continue(BatchKind::DocumentDeletion { deletion_ids })
+                Continue(BatchKind::DocumentDeletion { deletion_ids })
             }
-            (this @ BatchKind::DocumentDeletion { .. }, Kind::Settings) => ControlFlow::Break(this),
+            (this @ BatchKind::DocumentDeletion { .. }, Kind::Settings) => Break(this),
 
             (BatchKind::Settings { settings_ids }, Kind::DocumentClear) => {
-                ControlFlow::Continue(BatchKind::ClearAndSettings {
+                Continue(BatchKind::ClearAndSettings {
                     settings_ids: settings_ids,
                     other: vec![id],
                 })
@@ -209,10 +194,10 @@ impl BatchKind {
             (
                 this @ BatchKind::Settings { .. },
                 Kind::DocumentAddition | Kind::DocumentUpdate | Kind::DocumentDeletion,
-            ) => ControlFlow::Break(this),
+            ) => Break(this),
             (BatchKind::Settings { mut settings_ids }, Kind::Settings) => {
                 settings_ids.push(id);
-                ControlFlow::Continue(BatchKind::Settings { settings_ids })
+                Continue(BatchKind::Settings { settings_ids })
             }
 
             (
@@ -223,7 +208,7 @@ impl BatchKind {
                 Kind::DocumentClear,
             ) => {
                 other.push(id);
-                ControlFlow::Continue(BatchKind::ClearAndSettings {
+                Continue(BatchKind::ClearAndSettings {
                     other,
                     settings_ids,
                 })
@@ -231,7 +216,7 @@ impl BatchKind {
             (
                 this @ BatchKind::ClearAndSettings { .. },
                 Kind::DocumentAddition | Kind::DocumentUpdate,
-            ) => ControlFlow::Break(this),
+            ) => Break(this),
             (
                 BatchKind::ClearAndSettings {
                     mut other,
@@ -240,7 +225,7 @@ impl BatchKind {
                 Kind::DocumentDeletion,
             ) => {
                 other.push(id);
-                ControlFlow::Continue(BatchKind::ClearAndSettings {
+                Continue(BatchKind::ClearAndSettings {
                     other,
                     settings_ids,
                 })
@@ -253,7 +238,7 @@ impl BatchKind {
                 Kind::Settings,
             ) => {
                 settings_ids.push(id);
-                ControlFlow::Continue(BatchKind::ClearAndSettings {
+                Continue(BatchKind::ClearAndSettings {
                     other,
                     settings_ids,
                 })
@@ -267,7 +252,7 @@ impl BatchKind {
                 Kind::DocumentClear,
             ) => {
                 other.push(id);
-                ControlFlow::Continue(BatchKind::ClearAndSettings {
+                Continue(BatchKind::ClearAndSettings {
                     settings_ids,
                     other,
                 })
@@ -283,7 +268,7 @@ impl BatchKind {
                 Kind::DocumentAddition,
             ) => {
                 import_ids.push(id);
-                ControlFlow::Continue(BatchKind::SettingsAndDocumentImport {
+                Continue(BatchKind::SettingsAndDocumentImport {
                     settings_ids,
                     method: ReplaceDocuments,
                     import_ids,
@@ -298,7 +283,7 @@ impl BatchKind {
                 Kind::DocumentUpdate,
             ) => {
                 import_ids.push(id);
-                ControlFlow::Continue(BatchKind::SettingsAndDocumentImport {
+                Continue(BatchKind::SettingsAndDocumentImport {
                     settings_ids,
                     method: UpdateDocuments,
                     import_ids,
@@ -309,7 +294,7 @@ impl BatchKind {
             (
                 this @ BatchKind::SettingsAndDocumentImport { .. },
                 Kind::DocumentDeletion | Kind::DocumentAddition | Kind::DocumentUpdate,
-            ) => ControlFlow::Break(this),
+            ) => Break(this),
             (
                 BatchKind::SettingsAndDocumentImport {
                     mut settings_ids,
@@ -319,7 +304,7 @@ impl BatchKind {
                 Kind::Settings,
             ) => {
                 settings_ids.push(id);
-                ControlFlow::Continue(BatchKind::SettingsAndDocumentImport {
+                Continue(BatchKind::SettingsAndDocumentImport {
                     settings_ids,
                     method,
                     import_ids,
@@ -342,15 +327,15 @@ impl BatchKind {
 pub fn autobatch(enqueued: Vec<(TaskId, Kind)>) -> Option<BatchKind> {
     let mut enqueued = enqueued.into_iter();
     let (id, kind) = enqueued.next()?;
-    let (mut acc, is_finished) = BatchKind::new(id, kind);
-    if is_finished {
-        return Some(acc);
-    }
+    let mut acc = match BatchKind::new(id, kind) {
+        Continue(acc) => acc,
+        Break(acc) => return Some(acc),
+    };
 
     for (id, kind) in enqueued {
         acc = match acc.accumulate(id, kind) {
-            ControlFlow::Continue(acc) => acc,
-            ControlFlow::Break(acc) => return Some(acc),
+            Continue(acc) => acc,
+            Break(acc) => return Some(acc),
         };
     }
 
