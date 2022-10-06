@@ -21,11 +21,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-20.04, macos-latest, windows-latest]
+        os: [ubuntu-18.04, macos-latest, windows-latest]
     steps:
     - uses: actions/checkout@v3
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2.0.0
+    # - name: Cache dependencies
+    #   uses: Swatinem/rust-cache@v2.0.0
     - name: Run cargo check without any default features
       uses: actions-rs/cargo@v1
       with:
@@ -40,7 +40,7 @@ jobs:
   # We run tests in debug also, to make sure that the debug_assertions are hit
   test-debug:
     name: Run tests in debug
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
@@ -48,8 +48,8 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.0.0
+      # - name: Cache dependencies
+      #   uses: Swatinem/rust-cache@v2.0.0
       - name: Run tests in debug
         uses: actions-rs/cargo@v1
         with:
@@ -58,7 +58,7 @@ jobs:
 
   clippy:
     name: Run Clippy
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
@@ -67,8 +67,8 @@ jobs:
           toolchain: stable
           override: true
           components: clippy
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.0.0
+      # - name: Cache dependencies
+      #   uses: Swatinem/rust-cache@v2.0.0
       - name: Run cargo clippy
         uses: actions-rs/cargo@v1
         with:
@@ -77,7 +77,7 @@ jobs:
 
   fmt:
     name: Run Rustfmt
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
@@ -86,7 +86,7 @@ jobs:
           toolchain: stable
           override: true
           components: rustfmt
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.0.0
+      # - name: Cache dependencies
+      #   uses: Swatinem/rust-cache@v2.0.0
       - name: Run cargo fmt
         run: cargo fmt --all -- --check
