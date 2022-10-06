@@ -10,32 +10,20 @@ use tempfile::TempDir;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::reader::compat::Compat;
+// use crate::reader::compat::Compat;
 use crate::{IndexMetadata, Result, Version};
 
 // use self::loaders::{v2, v3, v4, v5};
 
 // pub mod error;
-mod compat;
+// mod compat;
 // mod loaders;
 // mod v1;
 pub(self) mod v4;
 pub(self) mod v5;
 pub(self) mod v6;
 
-pub fn open(
-    dump: impl Read,
-) -> Result<
-    Box<
-        dyn DumpReader<
-            Document = serde_json::Map<String, serde_json::Value>,
-            Settings = v6::Settings<v6::Checked>,
-            Task = TaskView,
-            UpdateFile = File,
-            Key = Key,
-        >,
-    >,
-> {
+pub fn open(dump: impl Read) -> Result<Box<dyn DumpReader>> {
     let path = TempDir::new()?;
     let mut dump = BufReader::new(dump);
     let gz = GzDecoder::new(&mut dump);
@@ -57,6 +45,7 @@ pub fn open(
         Version::V3 => todo!(),
         Version::V4 => todo!(),
         Version::V5 => {
+            /*
             let dump_reader = Box::new(v5::V5Reader::open(path)?);
             let dump_reader = Box::new(Compat::<
                 dyn DumpReader<
@@ -77,33 +66,14 @@ pub fn open(
                     >,
                 >;
             Ok(dump_reader)
+            */
+            todo!()
         }
-        Version::V6 => {
-            let dump_reader = Box::new(v6::V6Reader::open(path)?)
-                as Box<
-                    dyn DumpReader<
-                        Document = v6::Document,
-                        Settings = v6::Settings<v6::Checked>,
-                        Task = v6::Task,
-                        UpdateFile = v6::UpdateFile,
-                        Key = v6::Key,
-                    >,
-                >;
-
-            Ok(dump_reader)
-        }
+        Version::V6 => Ok(Box::new(v6::V6Reader::open(path)?)),
     }
 }
 
 pub trait DumpReader {
-    type Document;
-    type Settings;
-
-    type Task;
-    type UpdateFile;
-
-    type Key;
-
     /// Return the version of the dump.
     fn version(&self) -> Version;
 
@@ -114,35 +84,19 @@ pub trait DumpReader {
     fn instance_uid(&self) -> Result<Option<Uuid>>;
 
     /// Return an iterator over each indexes.
-    fn indexes(
-        &self,
-    ) -> Result<
-        Box<
-            dyn Iterator<
-                    Item = Result<
-                        Box<
-                            dyn IndexReader<Document = Self::Document, Settings = Self::Settings>
-                                + '_,
-                        >,
-                    >,
-                > + '_,
-        >,
-    >;
+    fn indexes(&self) -> Result<Box<dyn Iterator<Item = Result<Box<dyn IndexReader + '_>>> + '_>>;
 
     /// Return all the tasks in the dump with a possible update file.
     fn tasks(
         &mut self,
-    ) -> Box<dyn Iterator<Item = Result<(Self::Task, Option<Self::UpdateFile>)>> + '_>;
+    ) -> Box<dyn Iterator<Item = Result<(v6::Task, Option<v6::UpdateFile>)>> + '_>;
 
     /// Return all the keys.
-    fn keys(&mut self) -> Box<dyn Iterator<Item = Result<Self::Key>> + '_>;
+    fn keys(&mut self) -> Box<dyn Iterator<Item = Result<v6::Key>> + '_>;
 }
 
 pub trait IndexReader {
-    type Document;
-    type Settings;
-
     fn metadata(&self) -> &IndexMetadata;
-    fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<Self::Document>> + '_>>;
-    fn settings(&mut self) -> Result<Self::Settings>;
+    fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<v6::Document>> + '_>>;
+    fn settings(&mut self) -> Result<v6::Settings<v6::Checked>>;
 }
