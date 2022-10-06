@@ -99,16 +99,6 @@ impl V5Reader {
             dump,
         })
     }
-}
-
-impl DumpReader for V5Reader {
-    type Document = serde_json::Map<String, serde_json::Value>;
-    type Settings = Settings<Checked>;
-
-    type Task = Task;
-    type UpdateFile = File;
-
-    type Key = Key;
 
     fn version(&self) -> Version {
         Version::V5
@@ -123,24 +113,9 @@ impl DumpReader for V5Reader {
         Ok(Some(Uuid::parse_str(&uuid)?))
     }
 
-    fn indexes(
-        &self,
-    ) -> Result<
-        Box<
-            dyn Iterator<
-                    Item = Result<
-                        Box<
-                            dyn super::IndexReader<
-                                    Document = Self::Document,
-                                    Settings = Self::Settings,
-                                > + '_,
-                        >,
-                    >,
-                > + '_,
-        >,
-    > {
-        Ok(Box::new(self.index_uuid.iter().map(|index| -> Result<_> {
-            Ok(Box::new(V5IndexReader::new(
+    fn indexes(&self) -> Result<impl Iterator<Item = Result<V5IndexReader>> + '_> {
+        Ok(self.index_uuid.iter().map(|index| -> Result<_> {
+            Ok(V5IndexReader::new(
                 index.uid.clone(),
                 &self
                     .dump
@@ -148,17 +123,12 @@ impl DumpReader for V5Reader {
                     .join("indexes")
                     .join(index.index_meta.uuid.to_string()),
             )?)
-                as Box<
-                    dyn IndexReader<Document = Self::Document, Settings = Self::Settings>,
-                >)
-        })))
+        }))
     }
 
-    fn tasks(
-        &mut self,
-    ) -> Box<dyn Iterator<Item = Result<(Self::Task, Option<Self::UpdateFile>)>> + '_> {
-        Box::new((&mut self.tasks).lines().map(|line| -> Result<_> {
-            let task: Self::Task = serde_json::from_str(&line?)?;
+    fn tasks(&mut self) -> impl Iterator<Item = Result<(Task, Option<UpdateFile>)>> + '_ {
+        (&mut self.tasks).lines().map(|line| -> Result<_> {
+            let task: Task = serde_json::from_str(&line?)?;
             if !task.is_finished() {
                 if let Some(uuid) = task.get_content_uuid() {
                     let update_file_path = self
@@ -175,15 +145,13 @@ impl DumpReader for V5Reader {
             } else {
                 Ok((task, None))
             }
-        }))
+        })
     }
 
-    fn keys(&mut self) -> Box<dyn Iterator<Item = Result<Self::Key>> + '_> {
-        Box::new(
-            (&mut self.keys)
-                .lines()
-                .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) }),
-        )
+    fn keys(&mut self) -> impl Iterator<Item = Result<Key>> + '_ {
+        (&mut self.keys)
+            .lines()
+            .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) })
     }
 }
 
@@ -215,23 +183,18 @@ impl V5IndexReader {
 
         Ok(ret)
     }
-}
-
-impl IndexReader for V5IndexReader {
-    type Document = serde_json::Map<String, serde_json::Value>;
-    type Settings = Settings<Checked>;
 
     fn metadata(&self) -> &IndexMetadata {
         &self.metadata
     }
 
-    fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<Self::Document>> + '_>> {
-        Ok(Box::new((&mut self.documents).lines().map(
-            |line| -> Result<_> { Ok(serde_json::from_str(&line?)?) },
-        )))
+    fn documents(&mut self) -> Result<impl Iterator<Item = Result<Document>> + '_> {
+        Ok((&mut self.documents)
+            .lines()
+            .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) }))
     }
 
-    fn settings(&mut self) -> Result<Self::Settings> {
+    fn settings(&mut self) -> Result<Settings<Checked>> {
         Ok(self.settings.clone())
     }
 }
