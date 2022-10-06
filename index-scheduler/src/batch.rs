@@ -234,8 +234,8 @@ impl IndexScheduler {
                     Batch::IndexOperation(IndexOperation::Settings {
                         index_uid,
                         settings,
-                        allow_index_creation,
                         tasks,
+                        ..
                     }) => (index_uid, settings, tasks),
                     _ => unreachable!(),
                 };
@@ -422,6 +422,7 @@ impl IndexScheduler {
             Batch::Snapshot(_) => todo!(),
             Batch::Dump(_) => todo!(),
             Batch::IndexOperation(operation) => {
+                #[rustfmt::skip]
                 let index = match operation {
                     IndexOperation::DocumentDeletion { ref index_uid, .. }
                     | IndexOperation::DocumentClear { ref index_uid, .. } => {
@@ -429,17 +430,20 @@ impl IndexScheduler {
                         let rtxn = self.env.read_txn()?;
                         self.index_mapper.index(&rtxn, index_uid)?
                     }
-                    IndexOperation::DocumentImport { ref index_uid, .. }
-                    | IndexOperation::Settings { ref index_uid, .. }
-                    | IndexOperation::DocumentClearAndSetting { ref index_uid, .. }
-                    | IndexOperation::SettingsAndDocumentImport { ref index_uid, .. } => {
-                        // TODO check if the user was allowed to create an index.
-
-                        // create the index if it doesn't already exist
-                        let mut wtxn = self.env.write_txn()?;
-                        let index = self.index_mapper.create_index(&mut wtxn, index_uid)?;
-                        wtxn.commit()?;
-                        index
+                    IndexOperation::DocumentImport { ref index_uid, allow_index_creation, .. }
+                    | IndexOperation::Settings { ref index_uid, allow_index_creation, .. }
+                    | IndexOperation::DocumentClearAndSetting { ref index_uid, allow_index_creation, .. }
+                    | IndexOperation::SettingsAndDocumentImport {ref index_uid, allow_index_creation, .. } => {
+                        if allow_index_creation {
+                            // create the index if it doesn't already exist
+                            let mut wtxn = self.env.write_txn()?;
+                            let index = self.index_mapper.create_index(&mut wtxn, index_uid)?;
+                            wtxn.commit()?;
+                            index
+                        } else {
+                            let rtxn = self.env.read_txn()?;
+                            self.index_mapper.index(&rtxn, index_uid)?
+                        }
                     }
                 };
 
@@ -553,7 +557,7 @@ impl IndexScheduler {
                 index_uid: _,
                 primary_key,
                 method,
-                allow_index_creation,
+                allow_index_creation: _,
                 documents_counts,
                 content_files,
                 mut tasks,
@@ -661,7 +665,7 @@ impl IndexScheduler {
             IndexOperation::Settings {
                 index_uid: _,
                 settings,
-                allow_index_creation,
+                allow_index_creation: _,
                 mut tasks,
             } => {
                 let indexer_config = self.index_mapper.indexer_config();
