@@ -304,7 +304,6 @@ pub(crate) mod test {
         for (task, mut expected) in tasks_queue.lines().zip(create_test_tasks()) {
             // TODO: This can be removed once `Duration` from the `TaskView` is implemented.
             expected.0.duration = None;
-            dbg!(&task);
             assert_eq!(serde_json::from_str::<TaskView>(task).unwrap(), expected.0);
 
             if let Some(expected_update) = expected.1 {
