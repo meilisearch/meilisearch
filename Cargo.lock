@@ -1050,6 +1050,7 @@ dependencies = [
  "anyhow",
  "big_s",
  "flate2",
+ "http",
  "index",
  "index-scheduler",
  "insta",
