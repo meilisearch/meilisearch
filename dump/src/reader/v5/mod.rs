@@ -47,18 +47,41 @@ use crate::{IndexMetadata, Result, Version};
 
 use super::{compat::v5_to_v6::CompatV5ToV6, DumpReader, IndexReader};
 
-mod keys;
-mod meta;
-mod settings;
-mod tasks;
-
-pub use keys::*;
-pub use meta::*;
-pub use settings::*;
-pub use tasks::*;
+pub mod keys;
+pub mod meta;
+pub mod settings;
+pub mod tasks;
 
 pub type Document = serde_json::Map<String, serde_json::Value>;
+pub type Settings<T> = settings::Settings<T>;
+pub type Checked = settings::Checked;
+pub type Unchecked = settings::Unchecked;
+
+pub type Task = tasks::Task;
 pub type UpdateFile = File;
+pub type Key = keys::Key;
+
+// ===== Other types to clarify the code of the compat module
+// everything related to the tasks
+pub type Status = tasks::TaskStatus;
+pub type Kind = tasks::TaskType;
+pub type Details = tasks::TaskDetails;
+
+// everything related to the settings
+pub type Setting<T> = settings::Setting<T>;
+pub type TypoTolerance = settings::TypoSettings;
+pub type MinWordSizeForTypos = settings::MinWordSizeTyposSetting;
+pub type FacetingSettings = settings::FacetingSettings;
+pub type PaginationSettings = settings::PaginationSettings;
+
+// everything related to the api keys
+pub type Action = keys::Action;
+pub type StarOr<T> = meta::StarOr<T>;
+pub type IndexUid = meta::IndexUid;
+
+// everything related to the errors
+pub type ResponseError = tasks::ResponseError;
+pub type Code = meilisearch_types::error::Code;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -75,7 +98,7 @@ pub struct V5Reader {
     metadata: Metadata,
     tasks: BufReader<File>,
     keys: BufReader<File>,
-    index_uuid: Vec<IndexUuid>,
+    index_uuid: Vec<meta::IndexUuid>,
 }
 
 impl V5Reader {
@@ -168,7 +191,7 @@ pub struct V5IndexReader {
 impl V5IndexReader {
     pub fn new(name: String, path: &Path) -> Result<Self> {
         let meta = File::open(path.join("meta.json"))?;
-        let meta: DumpMeta = serde_json::from_reader(meta)?;
+        let meta: meta::DumpMeta = serde_json::from_reader(meta)?;
 
         let metadata = IndexMetadata {
             uid: name,
