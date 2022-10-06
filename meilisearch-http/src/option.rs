@@ -66,98 +66,98 @@ const DEFAULT_LOG_LEVEL: &str = "INFO";
 #[clap(version)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct Opt {
-    /// The destination where the database must be created.
+    /// Designates the location where database files will be created and retrieved.
     #[clap(long, env = MEILI_DB_PATH, default_value_os_t = default_db_path())]
     #[serde(default = "default_db_path")]
     pub db_path: PathBuf,
 
-    /// The address on which the http server will listen.
+    /// Sets the HTTP address and port Meilisearch will use.
     #[clap(long, env = MEILI_HTTP_ADDR, default_value_t = default_http_addr())]
     #[serde(default = "default_http_addr")]
     pub http_addr: String,
 
-    /// Sets the instance's master key, automatically protecting all routes except GET /health
+    /// Sets the instance's master key, automatically protecting all routes except `GET /health`.
     #[serde(skip_serializing)]
     #[clap(long, env = MEILI_MASTER_KEY)]
     pub master_key: Option<String>,
 
-    /// This environment variable must be set to `production` if you are running in production.
-    /// More logs wiil be displayed if the server is running in development mode. Setting the master
-    /// key is optional; hence no security on the updates routes. This
-    /// is useful to debug when integrating the engine with another service
+    /// Configures the instance's environment. Value must be either `production` or `development`.
     #[clap(long, env = MEILI_ENV, default_value_t = default_env(), possible_values = &POSSIBLE_ENV)]
     #[serde(default = "default_env")]
     pub env: String,
 
-    /// Do not send analytics to Meili.
+    /// Deactivates Meilisearch's built-in telemetry when provided.
+    ///
+    /// Meilisearch automatically collects data from all instances that do not opt out using this flag.
+    /// All gathered data is used solely for the purpose of improving Meilisearch, and can be deleted
+    /// at any time.
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     #[serde(skip_serializing, default)] // we can't send true
     #[clap(long, env = MEILI_NO_ANALYTICS)]
     pub no_analytics: bool,
 
-    /// The maximum size, in bytes, of the main LMDB database directory
+    /// Sets the maximum size of the index. Value must be given in bytes or explicitly stating a base unit (for instance: 107374182400, '107.7Gb', or '107374 Mb').
     #[clap(long, env = MEILI_MAX_INDEX_SIZE, default_value_t = default_max_index_size())]
     #[serde(default = "default_max_index_size")]
     pub max_index_size: Byte,
 
-    /// The maximum size, in bytes, of the update LMDB database directory
+    /// Sets the maximum size of the task database. Value must be given in bytes or explicitly stating a
+    /// base unit (for instance: 107374182400, '107.7Gb', or '107374 Mb').
     #[clap(long, env = MEILI_MAX_TASK_DB_SIZE, default_value_t = default_max_task_db_size())]
     #[serde(default = "default_max_task_db_size")]
     pub max_task_db_size: Byte,
 
-    /// The maximum size, in bytes, of accepted JSON payloads
+    /// Sets the maximum size of accepted payloads. Value must be given in bytes or explicitly stating a
+    /// base unit (for instance: 107374182400, '107.7Gb', or '107374 Mb').
     #[clap(long, env = MEILI_HTTP_PAYLOAD_SIZE_LIMIT, default_value_t = default_http_payload_size_limit())]
     #[serde(default = "default_http_payload_size_limit")]
     pub http_payload_size_limit: Byte,
 
-    /// Read server certificates from CERTFILE.
-    /// This should contain PEM-format certificates
-    /// in the right order (the first certificate should
-    /// certify KEYFILE, the last should be a root CA).
+    /// Sets the server's SSL certificates.
     #[serde(skip_serializing)]
     #[clap(long, env = MEILI_SSL_CERT_PATH, parse(from_os_str))]
     pub ssl_cert_path: Option<PathBuf>,
 
-    /// Read the private key from KEYFILE.  This should be an RSA
-    /// private key or PKCS8-encoded private key, in PEM format.
+    /// Sets the server's SSL key files.
     #[serde(skip_serializing)]
     #[clap(long, env = MEILI_SSL_KEY_PATH, parse(from_os_str))]
     pub ssl_key_path: Option<PathBuf>,
 
-    /// Enable client authentication, and accept certificates
-    /// signed by those roots provided in CERTFILE.
+    /// Enables client authentication in the specified path.
     #[serde(skip_serializing)]
     #[clap(long, env = MEILI_SSL_AUTH_PATH, parse(from_os_str))]
     pub ssl_auth_path: Option<PathBuf>,
 
-    /// Read DER-encoded OCSP response from OCSPFILE and staple to certificate.
-    /// Optional
+    /// Sets the server's OCSP file. *Optional*
+    ///
+    /// Reads DER-encoded OCSP response from OCSPFILE and staple to certificate.
     #[serde(skip_serializing)]
     #[clap(long, env = MEILI_SSL_OCSP_PATH, parse(from_os_str))]
     pub ssl_ocsp_path: Option<PathBuf>,
 
-    /// Send a fatal alert if the client does not complete client authentication.
+    /// Makes SSL authentication mandatory.
     #[serde(skip_serializing, default)]
     #[clap(long, env = MEILI_SSL_REQUIRE_AUTH)]
     pub ssl_require_auth: bool,
 
-    /// SSL support session resumption
+    /// Activates SSL session resumption.
     #[serde(skip_serializing, default)]
     #[clap(long, env = MEILI_SSL_RESUMPTION)]
     pub ssl_resumption: bool,
 
-    /// SSL support tickets.
+    /// Activates SSL tickets.
     #[serde(skip_serializing, default)]
     #[clap(long, env = MEILI_SSL_TICKETS)]
     pub ssl_tickets: bool,
 
-    /// Defines the path of the snapshot file to import.
-    /// This option will, by default, stop the process if a database already exists, or if no snapshot exists at
-    /// the given path. If this option is not specified, no snapshot is imported.
+    /// Launches Meilisearch after importing a previously-generated snapshot at the given filepath.
     #[clap(long, env = MEILI_IMPORT_SNAPSHOT)]
     pub import_snapshot: Option<PathBuf>,
 
-    /// The engine will ignore a missing snapshot and not return an error in such a case.
+    /// Prevents a Meilisearch instance from throwing an error when `--import-snapshot`
+    /// does not point to a valid snapshot file.
+    ///
+    /// This command will throw an error if `--import-snapshot` is not defined.
     #[clap(
         long,
         env = MEILI_IGNORE_MISSING_SNAPSHOT,
@@ -166,7 +166,11 @@ pub struct Opt {
     #[serde(default)]
     pub ignore_missing_snapshot: bool,
 
-    /// The engine will skip snapshot importation and not return an error in such case.
+    /// Prevents a Meilisearch instance with an existing database from throwing an
+    /// error when using `--import-snapshot`. Instead, the snapshot will be ignored
+    /// and Meilisearch will launch using the existing database.
+    ///
+    /// This command will throw an error if `--import-snapshot` is not defined.
     #[clap(
         long,
         env = MEILI_IGNORE_SNAPSHOT_IF_DB_EXISTS,
@@ -175,42 +179,51 @@ pub struct Opt {
     #[serde(default)]
     pub ignore_snapshot_if_db_exists: bool,
 
-    /// Defines the directory path where Meilisearch will create a snapshot each snapshot-interval-sec.
+    /// Sets the directory where Meilisearch will store snapshots.
     #[clap(long, env = MEILI_SNAPSHOT_DIR, default_value_os_t = default_snapshot_dir())]
     #[serde(default = "default_snapshot_dir")]
     pub snapshot_dir: PathBuf,
 
-    /// Activate snapshot scheduling.
+    /// Activates scheduled snapshots when provided. Snapshots are disabled by default.
     #[clap(long, env = MEILI_SCHEDULE_SNAPSHOT)]
     #[serde(default)]
     pub schedule_snapshot: bool,
 
-    /// Defines time interval, in seconds, between each snapshot creation.
+    /// Defines the interval between each snapshot. Value must be given in seconds.
     #[clap(long, env = MEILI_SNAPSHOT_INTERVAL_SEC, default_value_t = default_snapshot_interval_sec())]
     #[serde(default = "default_snapshot_interval_sec")]
-    // 24h
     pub snapshot_interval_sec: u64,
 
-    /// Import a dump from the specified path, must be a `.dump` file.
+    /// Imports the dump file located at the specified path. Path must point to a `.dump` file.
+    /// If a database already exists, Meilisearch will throw an error and abort launch.
     #[clap(long, env = MEILI_IMPORT_DUMP, conflicts_with = "import-snapshot")]
     pub import_dump: Option<PathBuf>,
 
-    /// If the dump doesn't exist, load or create the database specified by `db-path` instead.
+    /// Prevents Meilisearch from throwing an error when `--import-dump` does not point to
+    /// a valid dump file. Instead, Meilisearch will start normally without importing any dump.
+    ///
+    /// This option will trigger an error if `--import-dump` is not defined.
     #[clap(long, env = MEILI_IGNORE_MISSING_DUMP, requires = "import-dump")]
     #[serde(default)]
     pub ignore_missing_dump: bool,
 
-    /// Ignore the dump if a database already exists, and load that database instead.
+    /// Prevents a Meilisearch instance with an existing database from throwing an error
+    /// when using `--import-dump`. Instead, the dump will be ignored and Meilisearch will
+    /// launch using the existing database.
+    ///
+    /// This option will trigger an error if `--import-dump` is not defined.
     #[clap(long, env = MEILI_IGNORE_DUMP_IF_DB_EXISTS, requires = "import-dump")]
     #[serde(default)]
     pub ignore_dump_if_db_exists: bool,
 
-    /// Folder where dumps are created when the dump route is called.
+    /// Sets the directory where Meilisearch will create dump files.
     #[clap(long, env = MEILI_DUMPS_DIR, default_value_os_t = default_dumps_dir())]
     #[serde(default = "default_dumps_dir")]
     pub dumps_dir: PathBuf,
 
-    /// Set the log level. # Possible values: [ERROR, WARN, INFO, DEBUG, TRACE]
+    /// Defines how much detail should be present in Meilisearch's logs.
+    ///
+    /// Meilisearch currently supports five log levels, listed in order of increasing verbosity: ERROR, WARN, INFO, DEBUG, TRACE.
     #[clap(long, env = MEILI_LOG_LEVEL, default_value_t = default_log_level())]
     #[serde(default = "default_log_level")]
     pub log_level: String,
@@ -229,7 +242,7 @@ pub struct Opt {
     #[clap(flatten)]
     pub scheduler_options: SchedulerConfig,
 
-    /// The path to a configuration file that should be used to setup the engine.
+    /// Set the path to a configuration file that should be used to setup the engine.
     /// Format must be TOML.
     #[serde(skip_serializing)]
     #[clap(long)]
