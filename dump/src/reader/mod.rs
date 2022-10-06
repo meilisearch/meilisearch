@@ -13,6 +13,8 @@ use uuid::Uuid;
 // use crate::reader::compat::Compat;
 use crate::{IndexMetadata, Result, Version};
 
+use self::compat::Compat;
+
 // use self::loaders::{v2, v3, v4, v5};
 
 // pub mod error;
@@ -23,7 +25,7 @@ pub(self) mod v4;
 pub(self) mod v5;
 pub(self) mod v6;
 
-pub fn open(dump: impl Read) -> Result<Box<dyn DumpReader>> {
+pub fn open(dump: impl Read) -> Result<Compat> {
     let path = TempDir::new()?;
     let mut dump = BufReader::new(dump);
     let gz = GzDecoder::new(&mut dump);
@@ -44,8 +46,8 @@ pub fn open(dump: impl Read) -> Result<Box<dyn DumpReader>> {
         Version::V2 => todo!(),
         Version::V3 => todo!(),
         Version::V4 => todo!(),
-        Version::V5 => Ok(Box::new(v5::V5Reader::open(path)?.to_v6())),
-        Version::V6 => Ok(Box::new(v6::V6Reader::open(path)?)),
+        Version::V5 => Ok(v5::V5Reader::open(path)?.to_v6().into()),
+        Version::V6 => Ok(v6::V6Reader::open(path)?.into()),
     }
 }
 
