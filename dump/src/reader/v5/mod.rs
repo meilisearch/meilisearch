@@ -141,7 +141,6 @@ impl V5Reader {
                         .join("updates")
                         .join("updates_files")
                         .join(uuid.to_string());
-                    dbg!(&update_file_path);
                     Ok((task, Some(File::open(update_file_path).unwrap())))
                 } else {
                     Ok((task, None))
