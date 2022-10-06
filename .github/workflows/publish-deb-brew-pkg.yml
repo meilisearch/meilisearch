@@ -15,7 +15,7 @@ jobs:
 
   debian:
     name: Publish debian packagge
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-18.04
     needs: check-version
     steps:
     - uses: hecrj/setup-rust-action@master
@@ -38,7 +38,7 @@ jobs:
 
   homebrew:
     name: Bump Homebrew formula
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-18.04
     needs: check-version
     steps:
       - name: Create PR to Homebrew
