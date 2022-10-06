@@ -16,6 +16,7 @@ pub struct TaskView {
     pub uid: TaskId,
     pub index_uid: Option<String>,
     pub status: Status,
+    // TODO use our own Kind for the user
     #[serde(rename = "type")]
     pub kind: Kind,
 
@@ -175,17 +176,21 @@ impl KindWithContent {
     pub fn as_kind(&self) -> Kind {
         match self {
             KindWithContent::DocumentImport {
-                method: IndexDocumentsMethod::ReplaceDocuments,
+                method,
+                allow_index_creation,
                 ..
-            } => Kind::DocumentAddition,
-            KindWithContent::DocumentImport {
-                method: IndexDocumentsMethod::UpdateDocuments,
-                ..
-            } => Kind::DocumentUpdate,
-            KindWithContent::DocumentImport { .. } => unreachable!(),
+            } => Kind::DocumentImport {
+                method: *method,
+                allow_index_creation: *allow_index_creation,
+            },
             KindWithContent::DocumentDeletion { .. } => Kind::DocumentDeletion,
             KindWithContent::DocumentClear { .. } => Kind::DocumentClear,
-            KindWithContent::Settings { .. } => Kind::Settings,
+            KindWithContent::Settings {
+                allow_index_creation,
+                ..
+            } => Kind::Settings {
+                allow_index_creation: *allow_index_creation,
+            },
             KindWithContent::IndexCreation { .. } => Kind::IndexCreation,
             KindWithContent::IndexDeletion { .. } => Kind::IndexDeletion,
             KindWithContent::IndexUpdate { .. } => Kind::IndexUpdate,
@@ -299,11 +304,15 @@ impl KindWithContent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Kind {
-    DocumentAddition,
-    DocumentUpdate,
+    DocumentImport {
+        method: IndexDocumentsMethod,
+        allow_index_creation: bool,
+    },
     DocumentDeletion,
     DocumentClear,
-    Settings,
+    Settings {
+        allow_index_creation: bool,
+    },
     IndexCreation,
     IndexDeletion,
     IndexUpdate,
@@ -318,11 +327,22 @@ impl FromStr for Kind {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "document_addition" => Ok(Kind::DocumentAddition),
-            "document_update" => Ok(Kind::DocumentUpdate),
+            "document_addition" => Ok(Kind::DocumentImport {
+                method: IndexDocumentsMethod::ReplaceDocuments,
+                // TODO this doesn't make sense
+                allow_index_creation: false,
+            }),
+            "document_update" => Ok(Kind::DocumentImport {
+                method: IndexDocumentsMethod::UpdateDocuments,
+                // TODO this doesn't make sense
+                allow_index_creation: false,
+            }),
             "document_deletion" => Ok(Kind::DocumentDeletion),
             "document_clear" => Ok(Kind::DocumentClear),
-            "settings" => Ok(Kind::Settings),
+            "settings" => Ok(Kind::Settings {
+                // TODO this doesn't make sense
+                allow_index_creation: false,
+            }),
             "index_creation" => Ok(Kind::IndexCreation),
             "index_deletion" => Ok(Kind::IndexDeletion),
             "index_update" => Ok(Kind::IndexUpdate),
