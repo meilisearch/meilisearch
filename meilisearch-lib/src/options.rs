@@ -17,7 +17,7 @@ const DEFAULT_LOG_EVERY_N: usize = 100000;
 #[derive(Debug, Clone, Parser, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct IndexerOpts {
-    /// The amount of documents to skip before printing
+    /// Sets the amount of documents to skip before printing
     /// a log regarding the indexing advancement.
     #[serde(skip_serializing, default = "default_log_every_n")]
     #[clap(long, default_value_t = default_log_every_n(), hide = true)] // 100k
@@ -28,20 +28,15 @@ pub struct IndexerOpts {
     #[clap(long, hide = true)]
     pub max_nb_chunks: Option<usize>,
 
-    /// The maximum amount of memory the indexer will use.
-    ///
-    /// In case the engine is unable to retrieve the available memory the engine will
-    /// try to use the memory it needs but without real limit, this can lead to
-    /// Out-Of-Memory issues and it is recommended to specify the amount of memory to use.
+    /// Sets the maximum amount of RAM Meilisearch can use when indexing. By default, Meilisearch
+    /// uses no more than two thirds of available memory.
     #[clap(long, env = MEILI_MAX_INDEXING_MEMORY, default_value_t)]
     #[serde(default)]
     pub max_indexing_memory: MaxMemory,
 
-    /// The maximum number of threads the indexer will use.
-    /// If the number set is higher than the real number of cores available in the machine,
-    /// it will use the maximum number of available cores.
-    ///
-    /// It defaults to half of the available threads.
+    /// Sets the maximum number of threads Meilisearch can use during indexation. By default, the
+    /// indexer avoids using more than half of a machine's total processing units. This ensures
+    /// Meilisearch is always ready to perform searches, even while you are updating an index.
     #[clap(long, env = MEILI_MAX_INDEXING_THREADS, default_value_t)]
     #[serde(default)]
     pub max_indexing_threads: MaxThreads,
@@ -50,8 +45,7 @@ pub struct IndexerOpts {
 #[derive(Debug, Clone, Parser, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct SchedulerConfig {
-    /// The engine will disable task auto-batching,
-    /// and will sequencialy compute each task one by one.
+    /// Deactivates auto-batching when provided.
     #[clap(long, env = DISABLE_AUTO_BATCHING)]
     #[serde(default)]
     pub disable_auto_batching: bool,
