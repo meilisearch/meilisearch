@@ -47,6 +47,7 @@ use crate::{IndexMetadata, Result, Version};
 
 use super::{compat::v5_to_v6::CompatV5ToV6, DumpReader, IndexReader};
 
+pub mod errors;
 pub mod keys;
 pub mod meta;
 pub mod settings;
@@ -80,8 +81,8 @@ pub type StarOr<T> = meta::StarOr<T>;
 pub type IndexUid = meta::IndexUid;
 
 // everything related to the errors
-pub type ResponseError = tasks::ResponseError;
-pub type Code = meilisearch_types::error::Code;
+pub type ResponseError = errors::ResponseError;
+pub type Code = errors::Code;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -124,7 +125,7 @@ impl V5Reader {
     }
 
     pub fn to_v6(self) -> CompatV5ToV6 {
-        CompatV5ToV6::new(self)
+        CompatV5ToV6::new_v5(self)
     }
 
     pub fn version(&self) -> Version {
@@ -153,8 +154,8 @@ impl V5Reader {
         }))
     }
 
-    pub fn tasks(&mut self) -> impl Iterator<Item = Result<(Task, Option<UpdateFile>)>> + '_ {
-        (&mut self.tasks).lines().map(|line| -> Result<_> {
+    pub fn tasks(&mut self) -> Box<dyn Iterator<Item = Result<(Task, Option<UpdateFile>)>> + '_> {
+        Box::new((&mut self.tasks).lines().map(|line| -> Result<_> {
             let task: Task = serde_json::from_str(&line?)?;
             if !task.is_finished() {
                 if let Some(uuid) = task.get_content_uuid() {
@@ -171,13 +172,15 @@ impl V5Reader {
             } else {
                 Ok((task, None))
             }
-        })
+        }))
     }
 
-    pub fn keys(&mut self) -> impl Iterator<Item = Result<Key>> + '_ {
-        (&mut self.keys)
-            .lines()
-            .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) })
+    pub fn keys(&mut self) -> Box<dyn Iterator<Item = Result<Key>> + '_> {
+        Box::new(
+            (&mut self.keys)
+                .lines()
+                .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) }),
+        )
     }
 }
 

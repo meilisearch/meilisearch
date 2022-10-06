@@ -9,10 +9,11 @@ use tempfile::TempDir;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-mod keys;
-mod meta;
-mod settings;
-mod tasks;
+pub mod errors;
+pub mod keys;
+pub mod meta;
+pub mod settings;
+pub mod tasks;
 
 use crate::{IndexMetadata, Result, Version};
 
@@ -46,7 +47,7 @@ pub type StarOr<T> = meta::StarOr<T>;
 pub type IndexUid = meta::IndexUid;
 
 // everything related to the errors
-pub type ResponseError = tasks::ResponseError;
+pub type ResponseError = errors::ResponseError;
 pub type Code = meilisearch_types::error::Code;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -119,8 +120,8 @@ impl V4Reader {
         }))
     }
 
-    pub fn tasks(&mut self) -> impl Iterator<Item = Result<(Task, Option<UpdateFile>)>> + '_ {
-        (&mut self.tasks).lines().map(|line| -> Result<_> {
+    pub fn tasks(&mut self) -> Box<dyn Iterator<Item = Result<(Task, Option<UpdateFile>)>> + '_> {
+        Box::new((&mut self.tasks).lines().map(|line| -> Result<_> {
             let task: Task = serde_json::from_str(&line?)?;
             if !task.is_finished() {
                 if let Some(uuid) = task.get_content_uuid() {
@@ -137,13 +138,15 @@ impl V4Reader {
             } else {
                 Ok((task, None))
             }
-        })
+        }))
     }
 
-    pub fn keys(&mut self) -> impl Iterator<Item = Result<Key>> + '_ {
-        (&mut self.keys)
-            .lines()
-            .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) })
+    pub fn keys(&mut self) -> Box<dyn Iterator<Item = Result<Key>> + '_> {
+        Box::new(
+            (&mut self.keys)
+                .lines()
+                .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) }),
+        )
     }
 }
 
