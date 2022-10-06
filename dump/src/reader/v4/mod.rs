@@ -16,17 +16,38 @@ mod tasks;
 
 use crate::{IndexMetadata, Result, Version};
 
-use self::{
-    keys::Key,
-    meta::{DumpMeta, IndexUuid},
-    settings::{Checked, Settings},
-    tasks::Task,
-};
+use self::meta::{DumpMeta, IndexUuid};
 
 use super::{/* compat::v4_to_v5::CompatV4ToV5, */ DumpReader, IndexReader};
 
 pub type Document = serde_json::Map<String, serde_json::Value>;
+pub type Settings<T> = settings::Settings<T>;
+pub type Checked = settings::Checked;
+pub type Unchecked = settings::Unchecked;
+
+pub type Task = tasks::Task;
 pub type UpdateFile = File;
+pub type Key = keys::Key;
+
+// ===== Other types to clarify the code of the compat module
+// everything related to the tasks
+pub type Status = tasks::TaskStatus;
+pub type Kind = tasks::TaskType;
+pub type Details = tasks::TaskDetails;
+
+// everything related to the settings
+pub type Setting<T> = settings::Setting<T>;
+pub type TypoTolerance = settings::TypoSettings;
+pub type MinWordSizeForTypos = settings::MinWordSizeTyposSetting;
+
+// everything related to the api keys
+pub type Action = keys::Action;
+pub type StarOr<T> = meta::StarOr<T>;
+pub type IndexUid = meta::IndexUid;
+
+// everything related to the errors
+pub type ResponseError = tasks::ResponseError;
+pub type Code = meilisearch_types::error::Code;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
