@@ -161,7 +161,7 @@ pub struct Opt {
     #[clap(
         long,
         env = MEILI_IGNORE_MISSING_SNAPSHOT,
-        requires = "import-snapshot"
+        requires = "import_snapshot"
     )]
     #[serde(default)]
     pub ignore_missing_snapshot: bool,
@@ -174,7 +174,7 @@ pub struct Opt {
     #[clap(
         long,
         env = MEILI_IGNORE_SNAPSHOT_IF_DB_EXISTS,
-        requires = "import-snapshot"
+        requires = "import_snapshot"
     )]
     #[serde(default)]
     pub ignore_snapshot_if_db_exists: bool,
@@ -196,14 +196,14 @@ pub struct Opt {
 
     /// Imports the dump file located at the specified path. Path must point to a `.dump` file.
     /// If a database already exists, Meilisearch will throw an error and abort launch.
-    #[clap(long, env = MEILI_IMPORT_DUMP, conflicts_with = "import-snapshot")]
+    #[clap(long, env = MEILI_IMPORT_DUMP, conflicts_with = "import_snapshot")]
     pub import_dump: Option<PathBuf>,
 
     /// Prevents Meilisearch from throwing an error when `--import-dump` does not point to
     /// a valid dump file. Instead, Meilisearch will start normally without importing any dump.
     ///
     /// This option will trigger an error if `--import-dump` is not defined.
-    #[clap(long, env = MEILI_IGNORE_MISSING_DUMP, requires = "import-dump")]
+    #[clap(long, env = MEILI_IGNORE_MISSING_DUMP, requires = "import_dump")]
     #[serde(default)]
     pub ignore_missing_dump: bool,
 
@@ -212,7 +212,7 @@ pub struct Opt {
     /// launch using the existing database.
     ///
     /// This option will trigger an error if `--import-dump` is not defined.
-    #[clap(long, env = MEILI_IGNORE_DUMP_IF_DB_EXISTS, requires = "import-dump")]
+    #[clap(long, env = MEILI_IGNORE_DUMP_IF_DB_EXISTS, requires = "import_dump")]
     #[serde(default)]
     pub ignore_dump_if_db_exists: bool,
 
