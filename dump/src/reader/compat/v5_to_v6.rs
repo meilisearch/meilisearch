@@ -1,5 +1,3 @@
-use std::fs::File;
-
 use crate::reader::{v5, v6, DumpReader, IndexReader};
 use crate::Result;
 
@@ -44,52 +42,52 @@ impl DumpReader for CompatV5ToV6 {
     ) -> Box<dyn Iterator<Item = Result<(v6::Task, Option<v6::UpdateFile>)>> + '_> {
         Box::new(self.from.tasks().map(|task| {
             task.map(|(task, content_file)| {
-                let task_view: v5::TaskView = task.into();
+                let task_view: v5::tasks::TaskView = task.into();
 
                 let task = v6::Task {
                     uid: task_view.uid,
                     index_uid: task_view.index_uid,
                     status: match task_view.status {
-                        v5::TaskStatus::Enqueued => v6::Status::Enqueued,
-                        v5::TaskStatus::Processing => v6::Status::Enqueued,
-                        v5::TaskStatus::Succeeded => v6::Status::Succeeded,
-                        v5::TaskStatus::Failed => v6::Status::Failed,
+                        v5::Status::Enqueued => v6::Status::Enqueued,
+                        v5::Status::Processing => v6::Status::Enqueued,
+                        v5::Status::Succeeded => v6::Status::Succeeded,
+                        v5::Status::Failed => v6::Status::Failed,
                     },
                     kind: match task_view.task_type {
-                        v5::TaskType::IndexCreation => v6::Kind::IndexCreation,
-                        v5::TaskType::IndexUpdate => v6::Kind::IndexUpdate,
-                        v5::TaskType::IndexDeletion => v6::Kind::IndexDeletion,
+                        v5::Kind::IndexCreation => v6::Kind::IndexCreation,
+                        v5::Kind::IndexUpdate => v6::Kind::IndexUpdate,
+                        v5::Kind::IndexDeletion => v6::Kind::IndexDeletion,
                         // TODO: this is a `DocumentAdditionOrUpdate` but we still don't have this type in the `TaskView`.
-                        v5::TaskType::DocumentAdditionOrUpdate => v6::Kind::DocumentAddition,
-                        v5::TaskType::DocumentDeletion => v6::Kind::DocumentDeletion,
-                        v5::TaskType::SettingsUpdate => v6::Kind::Settings,
-                        v5::TaskType::DumpCreation => v6::Kind::DumpExport,
+                        v5::Kind::DocumentAdditionOrUpdate => v6::Kind::DocumentAddition,
+                        v5::Kind::DocumentDeletion => v6::Kind::DocumentDeletion,
+                        v5::Kind::SettingsUpdate => v6::Kind::Settings,
+                        v5::Kind::DumpCreation => v6::Kind::DumpExport,
                     },
                     details: task_view.details.map(|details| match details {
-                        v5::TaskDetails::DocumentAddition {
+                        v5::Details::DocumentAddition {
                             received_documents,
                             indexed_documents,
                         } => v6::Details::DocumentAddition {
                             received_documents: received_documents as u64,
                             indexed_documents: indexed_documents.map_or(0, |i| i as u64),
                         },
-                        v5::TaskDetails::Settings { settings } => v6::Details::Settings {
+                        v5::Details::Settings { settings } => v6::Details::Settings {
                             settings: settings.into(),
                         },
-                        v5::TaskDetails::IndexInfo { primary_key } => {
+                        v5::Details::IndexInfo { primary_key } => {
                             v6::Details::IndexInfo { primary_key }
                         }
-                        v5::TaskDetails::DocumentDeletion {
+                        v5::Details::DocumentDeletion {
                             received_document_ids,
                             deleted_documents,
                         } => v6::Details::DocumentDeletion {
                             received_document_ids,
                             deleted_documents,
                         },
-                        v5::TaskDetails::ClearAll { deleted_documents } => {
+                        v5::Details::ClearAll { deleted_documents } => {
                             v6::Details::ClearAll { deleted_documents }
                         }
-                        v5::TaskDetails::Dump { dump_uid } => v6::Details::Dump { dump_uid },
+                        v5::Details::Dump { dump_uid } => v6::Details::Dump { dump_uid },
                     }),
                     error: task_view.error.map(|e| e.into()),
                     duration: task_view.duration,

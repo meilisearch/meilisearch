@@ -52,7 +52,7 @@ pub enum TaskContent {
 #[cfg_attr(test, derive(serde::Serialize))]
 #[cfg_attr(test, serde(untagged))]
 #[allow(clippy::large_enum_variant)]
-enum TaskDetails {
+pub enum TaskDetails {
     #[cfg_attr(test, serde(rename_all = "camelCase"))]
     DocumentAddition {
         received_documents: usize,
@@ -77,7 +77,7 @@ enum TaskDetails {
 #[derive(Debug)]
 #[cfg_attr(test, derive(serde::Serialize))]
 #[cfg_attr(test, serde(rename_all = "camelCase"))]
-enum TaskStatus {
+pub enum TaskStatus {
     Enqueued,
     Processing,
     Succeeded,
@@ -87,7 +87,7 @@ enum TaskStatus {
 #[derive(Debug)]
 #[cfg_attr(test, derive(serde::Serialize))]
 #[cfg_attr(test, serde(rename_all = "camelCase"))]
-enum TaskType {
+pub enum TaskType {
     IndexCreation,
     IndexUpdate,
     IndexDeletion,
