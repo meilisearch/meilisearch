@@ -5,6 +5,7 @@ use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 use super::{
+    errors::ResponseError,
     meta::IndexUid,
     settings::{Settings, Unchecked},
 };
@@ -111,19 +112,6 @@ pub enum TaskResult {
     DocumentDeletion { deleted_documents: u64 },
     ClearAll { deleted_documents: u64 },
     Other,
-}
-
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
-#[cfg_attr(test, derive(serde::Serialize))]
-#[serde(rename_all = "camelCase")]
-pub struct ResponseError {
-    pub message: String,
-    #[serde(rename = "code")]
-    pub error_code: String,
-    #[serde(rename = "type")]
-    pub error_type: String,
-    #[serde(rename = "link")]
-    pub error_link: String,
 }
 
 impl Task {
