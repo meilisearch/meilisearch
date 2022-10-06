@@ -16,7 +16,7 @@ use crate::{IndexMetadata, Result, Version};
 // use self::loaders::{v2, v3, v4, v5};
 
 // pub mod error;
-// mod compat;
+mod compat;
 // mod loaders;
 // mod v1;
 pub(self) mod v4;
@@ -44,31 +44,7 @@ pub fn open(dump: impl Read) -> Result<Box<dyn DumpReader>> {
         Version::V2 => todo!(),
         Version::V3 => todo!(),
         Version::V4 => todo!(),
-        Version::V5 => {
-            /*
-            let dump_reader = Box::new(v5::V5Reader::open(path)?);
-            let dump_reader = Box::new(Compat::<
-                dyn DumpReader<
-                    Document = v5::Document,
-                    Settings = v5::Settings<v5::Checked>,
-                    Task = v5::Task,
-                    UpdateFile = v5::UpdateFile,
-                    Key = v5::Key,
-                >,
-            >::new(dump_reader))
-                as Box<
-                    dyn DumpReader<
-                        Document = v6::Document,
-                        Settings = v6::Settings<v6::Checked>,
-                        Task = v6::Task,
-                        UpdateFile = v6::UpdateFile,
-                        Key = v6::Key,
-                    >,
-                >;
-            Ok(dump_reader)
-            */
-            todo!()
-        }
+        Version::V5 => Ok(Box::new(v5::V5Reader::open(path)?.to_v6())),
         Version::V6 => Ok(Box::new(v6::V6Reader::open(path)?)),
     }
 }
