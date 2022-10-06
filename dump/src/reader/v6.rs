@@ -54,12 +54,6 @@ pub struct V6Reader {
     keys: BufReader<File>,
 }
 
-struct V6IndexReader {
-    metadata: IndexMetadata,
-    documents: BufReader<File>,
-    settings: BufReader<File>,
-}
-
 impl V6Reader {
     pub fn open(dump: TempDir) -> Result<Self> {
         let meta_file = fs::read(dump.path().join("metadata.json"))?;
@@ -74,31 +68,6 @@ impl V6Reader {
             dump,
         })
     }
-}
-
-impl V6IndexReader {
-    pub fn new(name: String, path: &Path) -> Result<Self> {
-        let metadata = File::open(path.join("metadata.json"))?;
-
-        let ret = V6IndexReader {
-            metadata: serde_json::from_reader(metadata)?,
-            documents: BufReader::new(File::open(path.join("documents.jsonl"))?),
-            settings: BufReader::new(File::open(path.join("settings.json"))?),
-        };
-
-        Ok(ret)
-    }
-}
-
-impl DumpReader for V6Reader {
-    type Document = serde_json::Map<String, serde_json::Value>;
-    type Settings = Settings<Checked>;
-
-    type Task = Task;
-    type UpdateFile = File;
-
-    type Key = Key;
-
     fn version(&self) -> Version {
         Version::V6
     }
@@ -111,55 +80,30 @@ impl DumpReader for V6Reader {
         Ok(Some(self.instance_uid))
     }
 
-    fn indexes(
-        &self,
-    ) -> Result<
-        Box<
-            dyn Iterator<
-                    Item = Result<
-                        Box<
-                            dyn super::IndexReader<
-                                    Document = Self::Document,
-                                    Settings = Self::Settings,
-                                > + '_,
-                        >,
-                    >,
-                > + '_,
-        >,
-    > {
+    fn indexes(&self) -> Result<impl Iterator<Item = Result<V6IndexReader>> + '_> {
         let entries = fs::read_dir(self.dump.path().join("indexes"))?;
-        Ok(Box::new(
-            entries
-                .map(|entry| -> Result<Option<_>> {
-                    let entry = entry?;
-                    if entry.file_type()?.is_dir() {
-                        let index = Box::new(V6IndexReader::new(
-                            entry
-                                .file_name()
-                                .to_str()
-                                .ok_or(Error::BadIndexName)?
-                                .to_string(),
-                            &entry.path(),
-                        )?)
-                            as Box<
-                                dyn IndexReader<
-                                    Document = Self::Document,
-                                    Settings = Self::Settings,
-                                >,
-                            >;
-                        Ok(Some(index))
-                    } else {
-                        Ok(None)
-                    }
-                })
-                .filter_map(|entry| entry.transpose()),
-        ))
+        Ok(entries
+            .map(|entry| -> Result<Option<_>> {
+                let entry = entry?;
+                if entry.file_type()?.is_dir() {
+                    let index = V6IndexReader::new(
+                        entry
+                            .file_name()
+                            .to_str()
+                            .ok_or(Error::BadIndexName)?
+                            .to_string(),
+                        &entry.path(),
+                    )?;
+                    Ok(Some(index))
+                } else {
+                    Ok(None)
+                }
+            })
+            .filter_map(|entry| entry.transpose()))
     }
 
-    fn tasks(
-        &mut self,
-    ) -> Box<dyn Iterator<Item = Result<(Self::Task, Option<Self::UpdateFile>)>> + '_> {
-        Box::new((&mut self.tasks).lines().map(|line| -> Result<_> {
+    fn tasks(&mut self) -> impl Iterator<Item = Result<(Task, Option<UpdateFile>)>> + '_ {
+        (&mut self.tasks).lines().map(|line| -> Result<_> {
             let mut task: index_scheduler::TaskView = serde_json::from_str(&line?)?;
             // TODO: this can be removed once we can `Deserialize` the duration from the `TaskView`.
             if let Some((started_at, finished_at)) = task.started_at.zip(task.finished_at) {
@@ -177,34 +121,96 @@ impl DumpReader for V6Reader {
             } else {
                 Ok((task, None))
             }
-        }))
+        })
     }
 
-    fn keys(&mut self) -> Box<dyn Iterator<Item = Result<Self::Key>> + '_> {
-        Box::new(
-            (&mut self.keys)
-                .lines()
-                .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) }),
-        )
+    fn keys(&mut self) -> impl Iterator<Item = Result<Key>> + '_ {
+        (&mut self.keys)
+            .lines()
+            .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) })
     }
 }
 
-impl IndexReader for V6IndexReader {
-    type Document = serde_json::Map<String, serde_json::Value>;
-    type Settings = Settings<Checked>;
+impl DumpReader for V6Reader {
+    fn version(&self) -> Version {
+        self.version()
+    }
+
+    fn date(&self) -> Option<OffsetDateTime> {
+        self.date()
+    }
+
+    fn instance_uid(&self) -> Result<Option<Uuid>> {
+        self.instance_uid()
+    }
+
+    fn indexes(
+        &self,
+    ) -> Result<Box<dyn Iterator<Item = Result<Box<dyn super::IndexReader + '_>>> + '_>> {
+        self.indexes().map(|iter| {
+            Box::new(iter.map(|result| {
+                result.map(|index| Box::new(index) as Box<dyn super::IndexReader + '_>)
+            })) as Box<dyn Iterator<Item = _>>
+        })
+    }
+
+    fn tasks(
+        &mut self,
+    ) -> Box<dyn Iterator<Item = Result<(self::Task, Option<self::UpdateFile>)>> + '_> {
+        Box::new(self.tasks())
+    }
+
+    fn keys(&mut self) -> Box<dyn Iterator<Item = Result<self::Key>> + '_> {
+        Box::new(self.keys())
+    }
+}
+
+struct V6IndexReader {
+    metadata: IndexMetadata,
+    documents: BufReader<File>,
+    settings: BufReader<File>,
+}
+
+impl V6IndexReader {
+    pub fn new(name: String, path: &Path) -> Result<Self> {
+        let metadata = File::open(path.join("metadata.json"))?;
+
+        let ret = V6IndexReader {
+            metadata: serde_json::from_reader(metadata)?,
+            documents: BufReader::new(File::open(path.join("documents.jsonl"))?),
+            settings: BufReader::new(File::open(path.join("settings.json"))?),
+        };
+
+        Ok(ret)
+    }
 
     fn metadata(&self) -> &IndexMetadata {
         &self.metadata
     }
 
-    fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<Self::Document>> + '_>> {
-        Ok(Box::new((&mut self.documents).lines().map(
-            |line| -> Result<_> { Ok(serde_json::from_str(&line?)?) },
-        )))
+    fn documents(&mut self) -> Result<impl Iterator<Item = Result<Document>> + '_> {
+        Ok((&mut self.documents)
+            .lines()
+            .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) }))
     }
 
-    fn settings(&mut self) -> Result<Self::Settings> {
-        let settings: index::Settings<Unchecked> = serde_json::from_reader(&mut self.settings)?;
+    fn settings(&mut self) -> Result<Settings<Checked>> {
+        let settings: Settings<Unchecked> = serde_json::from_reader(&mut self.settings)?;
         Ok(settings.check())
+    }
+}
+
+impl IndexReader for V6IndexReader {
+    fn metadata(&self) -> &IndexMetadata {
+        self.metadata()
+    }
+
+    fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<Document>> + '_>> {
+        self.documents()
+            .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<Document>> + '_>)
+    }
+
+    fn settings(&mut self) -> Result<Settings<Checked>> {
+        self.settings()
     }
 }
