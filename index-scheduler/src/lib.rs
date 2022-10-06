@@ -446,7 +446,7 @@ impl IndexScheduler {
 mod tests {
     use big_s::S;
     use insta::*;
-    use milli::update::IndexDocumentsMethod::{self, ReplaceDocuments, UpdateDocuments};
+    use milli::update::IndexDocumentsMethod::ReplaceDocuments;
     use tempfile::TempDir;
     use uuid::Uuid;
 
