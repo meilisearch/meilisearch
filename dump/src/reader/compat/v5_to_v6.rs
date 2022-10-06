@@ -3,61 +3,17 @@ use std::fs::File;
 use crate::reader::{v5, v6, DumpReader, IndexReader};
 use crate::Result;
 
-use super::Compat;
+pub struct CompatV5ToV6 {
+    from: v5::V5Reader,
+}
 
-impl
-    Compat<
-        dyn DumpReader<
-            Document = v5::Document,
-            Settings = v5::Settings<v5::Checked>,
-            Task = v5::Task,
-            UpdateFile = v5::UpdateFile,
-            Key = v5::Key,
-        >,
-    >
-{
-    pub fn new(
-        v5: Box<
-            dyn DumpReader<
-                Document = v5::Document,
-                Settings = v5::Settings<v5::Checked>,
-                Task = v5::Task,
-                UpdateFile = v5::UpdateFile,
-                Key = v5::Key,
-            >,
-        >,
-    ) -> Compat<
-        dyn DumpReader<
-            Document = v5::Document,
-            Settings = v5::Settings<v5::Checked>,
-            Task = v5::Task,
-            UpdateFile = v5::UpdateFile,
-            Key = v5::Key,
-        >,
-    > {
-        Compat { from: v5 }
+impl CompatV5ToV6 {
+    pub fn new(v5: v5::V5Reader) -> CompatV5ToV6 {
+        CompatV5ToV6 { from: v5 }
     }
 }
 
-impl DumpReader
-    for Compat<
-        dyn DumpReader<
-            Document = v5::Document,
-            Settings = v5::Settings<v5::Checked>,
-            Task = v5::Task,
-            UpdateFile = v5::UpdateFile,
-            Key = v5::Key,
-        >,
-    >
-{
-    type Document = v6::Document;
-    type Settings = v6::Settings<v6::Checked>;
-
-    type Task = v6::Task;
-    type UpdateFile = File;
-
-    type Key = v6::Key;
-
+impl DumpReader for CompatV5ToV6 {
     fn version(&self) -> crate::Version {
         self.from.version()
     }
@@ -72,31 +28,12 @@ impl DumpReader
 
     fn indexes(
         &self,
-    ) -> Result<
-        Box<
-            dyn Iterator<
-                    Item = Result<
-                        Box<
-                            dyn crate::reader::IndexReader<
-                                    Document = Self::Document,
-                                    Settings = Self::Settings,
-                                > + '_,
-                        >,
-                    >,
-                > + '_,
-        >,
-    > {
+    ) -> Result<Box<dyn Iterator<Item = Result<Box<dyn crate::reader::IndexReader + '_>>> + '_>>
+    {
         Ok(Box::new(self.from.indexes()?.map(
             |index_reader| -> Result<_> {
-                let compat = Box::new(Compat::<
-                    dyn IndexReader<Document = v5::Document, Settings = v5::Settings<v5::Checked>>,
-                >::new(index_reader?))
-                    as Box<
-                        dyn crate::reader::IndexReader<
-                                Document = Self::Document,
-                                Settings = Self::Settings,
-                            > + '_,
-                    >;
+                let compat = Box::new(CompatIndexV5ToV6::new(index_reader?))
+                    as Box<dyn crate::reader::IndexReader + '_>;
                 Ok(compat)
             },
         )))
@@ -104,7 +41,7 @@ impl DumpReader
 
     fn tasks(
         &mut self,
-    ) -> Box<dyn Iterator<Item = Result<(Self::Task, Option<Self::UpdateFile>)>> + '_> {
+    ) -> Box<dyn Iterator<Item = Result<(v6::Task, Option<v6::UpdateFile>)>> + '_> {
         Box::new(self.from.tasks().map(|task| {
             task.map(|(task, content_file)| {
                 let task_view: v5::TaskView = task.into();
@@ -166,7 +103,7 @@ impl DumpReader
         }))
     }
 
-    fn keys(&mut self) -> Box<dyn Iterator<Item = Result<Self::Key>> + '_> {
+    fn keys(&mut self) -> Box<dyn Iterator<Item = Result<v6::Key>> + '_> {
         Box::new(self.from.keys().map(|key| {
             key.map(|key| v6::Key {
                 description: key.description,
@@ -195,30 +132,28 @@ impl DumpReader
     }
 }
 
-impl Compat<dyn IndexReader<Document = v5::Document, Settings = v5::Settings<v5::Checked>>> {
-    pub fn new(
-        v5: Box<dyn IndexReader<Document = v5::Document, Settings = v5::Settings<v5::Checked>>>,
-    ) -> Compat<dyn IndexReader<Document = v5::Document, Settings = v5::Settings<v5::Checked>>>
-    {
-        Compat { from: v5 }
+pub struct CompatIndexV5ToV6 {
+    from: v5::V5IndexReader,
+}
+
+impl CompatIndexV5ToV6 {
+    pub fn new(v5: v5::V5IndexReader) -> CompatIndexV5ToV6 {
+        CompatIndexV5ToV6 { from: v5 }
     }
 }
 
-impl IndexReader
-    for Compat<dyn IndexReader<Document = v5::Document, Settings = v5::Settings<v5::Checked>>>
-{
-    type Document = v6::Document;
-    type Settings = v6::Settings<v6::Checked>;
-
+impl IndexReader for CompatIndexV5ToV6 {
     fn metadata(&self) -> &crate::IndexMetadata {
         self.from.metadata()
     }
 
-    fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<Self::Document>> + '_>> {
-        self.from.documents()
+    fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<v6::Document>> + '_>> {
+        self.from
+            .documents()
+            .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<v6::Document>> + '_>)
     }
 
-    fn settings(&mut self) -> Result<Self::Settings> {
+    fn settings(&mut self) -> Result<v6::Settings<v6::Checked>> {
         Ok(v6::Settings::<v6::Unchecked>::from(self.from.settings()?).check())
     }
 }
@@ -390,25 +325,7 @@ pub(crate) mod test {
         let mut archive = tar::Archive::new(gz);
         archive.unpack(dir.path()).unwrap();
 
-        let dump = Box::new(v5::V5Reader::open(dir).unwrap());
-        let mut dump = Box::new(Compat::<
-            dyn DumpReader<
-                Document = v5::Document,
-                Settings = v5::Settings<v5::Checked>,
-                Task = v5::Task,
-                UpdateFile = v5::UpdateFile,
-                Key = v5::Key,
-            >,
-        >::new(dump))
-            as Box<
-                dyn DumpReader<
-                    Document = v6::Document,
-                    Settings = v6::Settings<v6::Checked>,
-                    Task = v6::Task,
-                    UpdateFile = v6::UpdateFile,
-                    Key = v6::Key,
-                >,
-            >;
+        let mut dump = v5::V5Reader::open(dir).unwrap().to_v6();
 
         // top level infos
         insta::assert_display_snapshot!(dump.date().unwrap(), @"2022-10-04 15:55:10.344982459 +00:00:00");
