@@ -52,7 +52,7 @@ const MEILI_LOG_LEVEL: &str = "MEILI_LOG_LEVEL";
 const MEILI_ENABLE_METRICS_ROUTE: &str = "MEILI_ENABLE_METRICS_ROUTE";
 
 const DEFAULT_DB_PATH: &str = "./data.ms";
-const DEFAULT_HTTP_ADDR: &str = "127.0.0.1:7700";
+const DEFAULT_HTTP_ADDR: &str = "localhost:7700";
 const DEFAULT_ENV: &str = "development";
 const DEFAULT_MAX_INDEX_SIZE: &str = "100 GiB";
 const DEFAULT_MAX_TASK_DB_SIZE: &str = "100 GiB";
@@ -483,7 +483,7 @@ fn default_db_path() -> PathBuf {
     PathBuf::from(DEFAULT_DB_PATH)
 }
 
-fn default_http_addr() -> String {
+pub fn default_http_addr() -> String {
     DEFAULT_HTTP_ADDR.to_string()
 }
 

@@ -26,6 +26,7 @@ use tokio::sync::mpsc::{self, Receiver, Sender};
 use uuid::Uuid;
 
 use crate::analytics::Analytics;
+use crate::option::default_http_addr;
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
 use crate::Opt;
 
@@ -235,7 +236,7 @@ impl Segment {
             let dumps_dir = opt.dumps_dir != PathBuf::from("dumps/");
             let import_snapshot = opt.import_snapshot.is_some();
             let snapshots_dir = opt.snapshot_dir != PathBuf::from("snapshots/");
-            let http_addr = opt.http_addr != "127.0.0.1:7700";
+            let http_addr = opt.http_addr != default_http_addr();
 
             let mut infos = serde_json::to_value(opt).unwrap();
 
