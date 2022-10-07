@@ -371,7 +371,7 @@ pub(crate) mod test {
 
         // keys
         let keys = dump.keys().collect::<Result<Vec<_>>>().unwrap();
-        insta::assert_json_snapshot!(keys);
+        insta::assert_json_snapshot!(keys, { "[].uid" => "[uuid]" });
 
         // indexes
         let mut indexes = dump.indexes().unwrap().collect::<Result<Vec<_>>>().unwrap();

@@ -6,7 +6,7 @@ expression: keys
   {
     "description": "Default Search API Key (Use it to search from the frontend)",
     "name": null,
-    "uid": "2b8d662e-8089-4115-873f-6a4e517053b8",
+    "uid": "[uuid]",
     "actions": [
       "search"
     ],
@@ -20,7 +20,7 @@ expression: keys
   {
     "description": "Default Admin API Key (Use it for all other operations. Caution! Do not use it on a public frontend)",
     "name": null,
-    "uid": "a711024d-ef01-43ff-bd35-e05434e703f7",
+    "uid": "[uuid]",
     "actions": [
       "*"
     ],
