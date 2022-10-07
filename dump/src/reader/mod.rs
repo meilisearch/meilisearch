@@ -21,6 +21,7 @@ use self::compat::Compat;
 mod compat;
 // mod loaders;
 // mod v1;
+pub(self) mod v3;
 pub(self) mod v4;
 pub(self) mod v5;
 pub(self) mod v6;
