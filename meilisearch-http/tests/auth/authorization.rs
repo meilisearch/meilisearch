@@ -452,10 +452,16 @@ async fn access_authorized_index_patterns() {
     let mut server = Server::new_auth().await;
     server.use_admin_key("MASTER_KEY").await;
 
+    // create product_1 index
+    let index_1 = server.index("products_1");
+    let (response, code) = index_1.create(Some("id")).await;
+    println!("{response}");
+    assert_eq!(202, code, "{:?}", &response);
+
     // create key with all document access on indices with product_* pattern.
     let content = json!({
         "indexes": ["products_*"],
-        "actions": ["documents.*","indexes.*"],
+        "actions": ["documents.*"],
         "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
     });
 
@@ -468,13 +474,8 @@ async fn access_authorized_index_patterns() {
     let key = response["key"].as_str().unwrap();
     server.use_api_key(&key);
 
-    // create product_1 index
-    let index = server.index("product_1");
-    let (response, code) = index.create(Some("id")).await;
-
-    assert_eq!(202, code, "{:?}", &response);
-
-    // index.wait_task(0).await;
+    // refer to products_1 with modified api key.
+    let index_1 = server.index("products_1");
 
     // try to create a index via add documents route
     let documents = json!([
@@ -484,13 +485,18 @@ async fn access_authorized_index_patterns() {
         }
     ]);
 
-    let (response, code) = index.add_documents(documents, None).await;
+    let (response, code) = index_1.add_documents(documents, None).await;
     assert_eq!(202, code, "{:?}", &response);
     let task_id = response["taskUid"].as_u64().unwrap();
 
-    index.wait_task(task_id).await;
+    server.use_api_key("MASTER_KEY");
 
-    let (response, code) = index.get_task(task_id).await;
+    // refer to products_1 with modified api key.
+    let index_1 = server.index("products_1");
+
+    index_1.wait_task(task_id).await;
+
+    let (response, code) = index_1.get_task(task_id).await;
     assert_eq!(200, code, "{:?}", &response);
     assert_eq!(response["status"], "succeeded");
 }
