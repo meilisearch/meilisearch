@@ -127,6 +127,17 @@ fn document_word_positions_into_sorter<'b>(
             // Advance the head and push it in the heap.
             if let Some(mut head) = ordered_peeked_word_positions.pop() {
                 if let Some(next_position) = head.iter.next() {
+                    let prox = positions_proximity(head.position, next_position);
+
+                    if prox > 0 && prox < MAX_DISTANCE {
+                        word_pair_proximity
+                            .entry((head.word.clone(), head.word.clone()))
+                            .and_modify(|p| {
+                                *p = cmp::min(*p, prox);
+                            })
+                            .or_insert(prox);
+                    }
+
                     word_positions_heap.push(PeekedWordPosition {
                         word: head.word,
                         position: next_position,
