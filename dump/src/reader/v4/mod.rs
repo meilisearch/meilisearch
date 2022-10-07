@@ -19,7 +19,10 @@ use crate::{IndexMetadata, Result, Version};
 
 use self::meta::{DumpMeta, IndexUuid};
 
-use super::{/* compat::v4_to_v5::CompatV4ToV5, */ DumpReader, IndexReader};
+use super::{
+    compat::v4_to_v5::CompatV4ToV5, /* compat::v4_to_v5::CompatV4ToV5, */ DumpReader,
+    IndexReader,
+};
 
 pub type Document = serde_json::Map<String, serde_json::Value>;
 pub type Settings<T> = settings::Settings<T>;
@@ -90,9 +93,9 @@ impl V4Reader {
         })
     }
 
-    // pub fn to_v5(self) -> CompatV4ToV5 {
-    //     CompatV4ToV5::new(self)
-    // }
+    pub fn to_v5(self) -> CompatV4ToV5 {
+        CompatV4ToV5::new(self)
+    }
 
     pub fn version(&self) -> Version {
         Version::V4
