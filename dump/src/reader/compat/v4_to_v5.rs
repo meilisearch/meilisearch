@@ -358,17 +358,16 @@ pub(crate) mod test {
         let mut dump = v4::V4Reader::open(dir).unwrap().to_v5();
 
         // top level infos
-        insta::assert_display_snapshot!(dump.date().unwrap(), @"2022-10-04 15:55:10.344982459 +00:00:00");
+        insta::assert_display_snapshot!(dump.date().unwrap(), @"2022-10-06 12:53:49.131989609 +00:00:00");
         insta::assert_display_snapshot!(dump.instance_uid().unwrap().unwrap(), @"9e15e977-f2ae-4761-943f-1eaf75fd736d");
 
         // tasks
         let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
         insta::assert_json_snapshot!(tasks);
-        assert_eq!(update_files.len(), 22);
-        assert!(update_files[0].is_none()); // the dump creation
-        assert!(update_files[1].is_some()); // the enqueued document addition
-        assert!(update_files[2..].iter().all(|u| u.is_none())); // everything already processed
+        assert_eq!(update_files.len(), 10);
+        assert!(update_files[0].is_some()); // the enqueued document addition
+        assert!(update_files[1..].iter().all(|u| u.is_none())); // everything already processed
 
         // keys
         let keys = dump.keys().collect::<Result<Vec<_>>>().unwrap();
@@ -419,7 +418,7 @@ pub(crate) mod test {
             .unwrap()
             .collect::<Result<Vec<_>>>()
             .unwrap();
-        assert_eq!(documents.len(), 200);
+        assert_eq!(documents.len(), 110);
         insta::assert_debug_snapshot!(documents);
 
         // spells
