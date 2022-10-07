@@ -26,6 +26,7 @@ use tokio::sync::mpsc::{self, Receiver, Sender};
 use uuid::Uuid;
 
 use crate::analytics::Analytics;
+use crate::option::default_http_addr;
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
 use crate::Opt;
 

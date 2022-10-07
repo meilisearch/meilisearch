@@ -465,7 +465,7 @@ fn default_db_path() -> PathBuf {
     PathBuf::from(DEFAULT_DB_PATH)
 }
 
-fn default_http_addr() -> String {
+pub fn default_http_addr() -> String {
     DEFAULT_HTTP_ADDR.to_string()
 }
 
