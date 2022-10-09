@@ -61,7 +61,7 @@ impl CompatV5ToV6 {
         };
         Box::new(tasks.map(|task| {
             task.map(|(task, content_file)| {
-                let task_view: v5::tasks::TaskView = task.into();
+                let task_view: v5::tasks::TaskView = task.clone().into();
 
                 let task = v6::Task {
                     uid: task_view.uid,
@@ -72,15 +72,35 @@ impl CompatV5ToV6 {
                         v5::Status::Succeeded => v6::Status::Succeeded,
                         v5::Status::Failed => v6::Status::Failed,
                     },
-                    kind: match task_view.task_type {
-                        v5::Kind::IndexCreation => v6::Kind::IndexCreation,
-                        v5::Kind::IndexUpdate => v6::Kind::IndexUpdate,
-                        v5::Kind::IndexDeletion => v6::Kind::IndexDeletion,
-                        // TODO: this is a `DocumentAdditionOrUpdate` but we still don't have this type in the `TaskView`.
-                        v5::Kind::DocumentAdditionOrUpdate => v6::Kind::DocumentAddition,
-                        v5::Kind::DocumentDeletion => v6::Kind::DocumentDeletion,
-                        v5::Kind::SettingsUpdate => v6::Kind::Settings,
-                        v5::Kind::DumpCreation => v6::Kind::DumpExport,
+                    kind: match &task.content {
+                        v5::tasks::TaskContent::IndexCreation { .. } => v6::Kind::IndexCreation,
+                        v5::tasks::TaskContent::IndexUpdate { .. } => v6::Kind::IndexUpdate,
+                        v5::tasks::TaskContent::IndexDeletion { .. } => v6::Kind::IndexDeletion,
+                        v5::tasks::TaskContent::DocumentAddition {
+                            merge_strategy,
+                            allow_index_creation,
+                            ..
+                        } => v6::Kind::DocumentImport {
+                            method: match merge_strategy {
+                                v5::tasks::IndexDocumentsMethod::ReplaceDocuments => {
+                                    v6::index::milli::update::IndexDocumentsMethod::ReplaceDocuments
+                                }
+                                v5::tasks::IndexDocumentsMethod::UpdateDocuments => {
+                                    v6::index::milli::update::IndexDocumentsMethod::UpdateDocuments
+                                }
+                            },
+                            allow_index_creation: allow_index_creation.clone(),
+                        },
+                        v5::tasks::TaskContent::DocumentDeletion { .. } => {
+                            v6::Kind::DocumentDeletion
+                        }
+                        v5::tasks::TaskContent::SettingsUpdate {
+                            allow_index_creation,
+                            ..
+                        } => v6::Kind::Settings {
+                            allow_index_creation: allow_index_creation.clone(),
+                        },
+                        v5::tasks::TaskContent::Dump { .. } => v6::Kind::DumpExport,
                     },
                     details: task_view.details.map(|details| match details {
                         v5::Details::DocumentAddition {

@@ -12,6 +12,7 @@ use uuid::Uuid;
 use crate::{Error, IndexMetadata, Result, Version};
 
 use super::{DumpReader, IndexReader};
+pub use index;
 
 pub type Metadata = crate::Metadata;
 
@@ -31,7 +32,7 @@ pub type Kind = index_scheduler::Kind;
 pub type Details = index_scheduler::Details;
 
 // everything related to the settings
-pub type Setting<T> = index::Setting<T>;
+pub type Setting<T> = index::milli::update::Setting<T>;
 pub type TypoTolerance = index::updates::TypoSettings;
 pub type MinWordSizeForTypos = index::updates::MinWordSizeTyposSetting;
 pub type FacetingSettings = index::updates::FacetingSettings;
