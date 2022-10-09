@@ -1,0 +1,44 @@
+---
+source: dump/src/reader/v2/mod.rs
+expression: spells.settings()
+---
+Ok(
+    Settings {
+        displayed_attributes: Some(
+            None,
+        ),
+        searchable_attributes: Some(
+            None,
+        ),
+        filterable_attributes: Some(
+            Some(
+                {},
+            ),
+        ),
+        ranking_rules: Some(
+            Some(
+                [
+                    "words",
+                    "typo",
+                    "proximity",
+                    "attribute",
+                    "exactness",
+                ],
+            ),
+        ),
+        stop_words: Some(
+            Some(
+                {},
+            ),
+        ),
+        synonyms: Some(
+            Some(
+                {},
+            ),
+        ),
+        distinct_attribute: Some(
+            None,
+        ),
+        _kind: PhantomData<dump::reader::v2::settings::Checked>,
+    },
+)
