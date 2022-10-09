@@ -1,6 +1,7 @@
 use crate::common::{GetAllDocumentsOptions, Server};
 
 use serde_json::json;
+use crate::common::encoder::Encoder;
 
 #[actix_rt::test]
 async fn error_document_update_create_index_bad_uid() {
@@ -52,6 +53,47 @@ async fn document_update_with_primary_key() {
 async fn update_document() {
     let server = Server::new().await;
     let index = server.index("test");
+
+    let documents = json!([
+        {
+            "doc_id": 1,
+            "content": "foo",
+        }
+    ]);
+
+    let (_response, code) = index.add_documents(documents, None).await;
+    assert_eq!(code, 202);
+
+    index.wait_task(0).await;
+
+    let documents = json!([
+        {
+            "doc_id": 1,
+            "other": "bar",
+        }
+    ]);
+
+    let (response, code) = index.update_documents(documents, None).await;
+    assert_eq!(code, 202, "response: {}", response);
+
+    index.wait_task(1).await;
+
+    let (response, code) = index.get_task(1).await;
+    assert_eq!(code, 200);
+    assert_eq!(response["status"], "succeeded");
+
+    let (response, code) = index.get_document(1, None).await;
+    assert_eq!(code, 200);
+    assert_eq!(
+        response.to_string(),
+        r##"{"doc_id":1,"content":"foo","other":"bar"}"##
+    );
+}
+
+#[actix_rt::test]
+async fn update_document_gzip_encoded() {
+    let server = Server::new().await;
+    let index = server.index_with_encoder("test", Encoder::Gzip);
 
     let documents = json!([
         {

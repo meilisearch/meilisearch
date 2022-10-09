@@ -1,13 +1,14 @@
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use actix_http::encoding::Decoder as Decompress;
 use actix_web::error::PayloadError;
 use actix_web::{dev, web, FromRequest, HttpRequest};
 use futures::future::{ready, Ready};
 use futures::Stream;
 
 pub struct Payload {
-    payload: dev::Payload,
+    payload: Decompress<dev::Payload>,
     limit: usize,
 }
 
@@ -39,7 +40,7 @@ impl FromRequest for Payload {
             .map(|c| c.limit)
             .unwrap_or(PayloadConfig::default().limit);
         ready(Ok(Payload {
-            payload: payload.take(),
+            payload: Decompress::from_headers(payload.take(), req.headers()),
             limit,
         }))
     }

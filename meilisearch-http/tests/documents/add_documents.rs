@@ -4,6 +4,7 @@ use actix_web::test;
 use meilisearch_http::{analytics, create_app};
 use serde_json::{json, Value};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
+use crate::common::encoder::Encoder;
 
 /// This is the basic usage of our API and every other tests uses the content-type application/json
 #[actix_rt::test]
@@ -95,6 +96,98 @@ async fn add_single_document_test_json_content_types() {
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     assert_eq!(status_code, 202);
     assert_eq!(response["taskUid"], 1);
+}
+
+/// Here we try sending encoded (compressed) document request
+#[actix_rt::test]
+async fn add_single_document_gzip_encoded() {
+    let document = json!({
+        "id": 1,
+        "content": "Bouvier Bernois",
+    });
+
+    // this is a what is expected and should work
+    let server = Server::new().await;
+    let app = test::init_service(create_app!(
+        &server.service.meilisearch,
+        &server.service.auth,
+        true,
+        server.service.options,
+        analytics::MockAnalytics::new(&server.service.options).0
+    ))
+        .await;
+    // post
+    let document = serde_json::to_string(&document).unwrap();
+    let encoder = Encoder::Gzip;
+    let req = test::TestRequest::post()
+        .uri("/indexes/dog/documents")
+        .set_payload(encoder.encode(document.clone()))
+        .insert_header(("content-type", "application/json"))
+        .insert_header(encoder.header().unwrap())
+        .to_request();
+    let res = test::call_service(&app, req).await;
+    let status_code = res.status();
+    let body = test::read_body(res).await;
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+    assert_eq!(status_code, 202);
+    assert_eq!(response["taskUid"], 0);
+
+    // put
+    let req = test::TestRequest::put()
+        .uri("/indexes/dog/documents")
+        .set_payload(encoder.encode(document))
+        .insert_header(("content-type", "application/json"))
+        .insert_header(encoder.header().unwrap())
+        .to_request();
+    let res = test::call_service(&app, req).await;
+    let status_code = res.status();
+    let body = test::read_body(res).await;
+    let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+    assert_eq!(status_code, 202);
+    assert_eq!(response["taskUid"], 1);
+}
+
+/// Here we try document request with every encoding
+#[actix_rt::test]
+async fn add_single_document_with_every_encoding() {
+    let document = json!({
+        "id": 1,
+        "content": "Bouvier Bernois",
+    });
+
+    // this is a what is expected and should work
+    let server = Server::new().await;
+    let app = test::init_service(create_app!(
+        &server.service.meilisearch,
+        &server.service.auth,
+        true,
+        server.service.options,
+        analytics::MockAnalytics::new(&server.service.options).0
+    ))
+        .await;
+    // post
+    let mut task_uid = 0;
+    let document = serde_json::to_string(&document).unwrap();
+
+    for encoder in Encoder::iterator() {
+        let mut req = test::TestRequest::post()
+            .uri("/indexes/dog/documents")
+            .set_payload(encoder.encode(document.clone()))
+            .insert_header(("content-type", "application/json"));
+        req = match encoder.header() {
+            Some(header) => req.insert_header(header),
+            None => req
+        };
+        let req = req.to_request();
+        let res = test::call_service(&app, req).await;
+        let status_code = res.status();
+        let body = test::read_body(res).await;
+        let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+        assert_eq!(status_code, 202);
+        assert_eq!(response["taskUid"], task_uid);
+        task_uid += 1;
+    }
+
 }
 
 /// any other content-type is must be refused
