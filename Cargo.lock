@@ -2038,6 +2038,7 @@ name = "meilisearch-http"
 version = "0.29.1"
 dependencies = [
  "actix-cors",
+ "actix-http",
  "actix-rt",
  "actix-web",
  "actix-web-static-files",
@@ -2045,6 +2046,7 @@ dependencies = [
  "assert-json-diff",
  "async-stream",
  "async-trait",
+ "brotli",
  "bstr 1.0.1",
  "byte-unit",
  "bytes",

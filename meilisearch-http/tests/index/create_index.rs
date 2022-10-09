@@ -1,3 +1,4 @@
+use crate::common::encoder::Encoder;
 use crate::common::Server;
 use serde_json::{json, Value};
 
@@ -5,6 +6,57 @@ use serde_json::{json, Value};
 async fn create_index_no_primary_key() {
     let server = Server::new().await;
     let index = server.index("test");
+    let (response, code) = index.create(None).await;
+
+    assert_eq!(code, 202);
+
+    assert_eq!(response["status"], "enqueued");
+
+    let response = index.wait_task(0).await;
+
+    assert_eq!(response["status"], "succeeded");
+    assert_eq!(response["type"], "indexCreation");
+    assert_eq!(response["details"]["primaryKey"], Value::Null);
+}
+
+#[actix_rt::test]
+async fn create_index_with_gzip_encoded_request() {
+    let server = Server::new().await;
+    let index = server.index_with_encoder("test", Encoder::Gzip);
+    let (response, code) = index.create(None).await;
+
+    assert_eq!(code, 202);
+
+    assert_eq!(response["status"], "enqueued");
+
+    let response = index.wait_task(0).await;
+
+    assert_eq!(response["status"], "succeeded");
+    assert_eq!(response["type"], "indexCreation");
+    assert_eq!(response["details"]["primaryKey"], Value::Null);
+}
+
+#[actix_rt::test]
+async fn create_index_with_zlib_encoded_request() {
+    let server = Server::new().await;
+    let index = server.index_with_encoder("test", Encoder::Deflate);
+    let (response, code) = index.create(None).await;
+
+    assert_eq!(code, 202);
+
+    assert_eq!(response["status"], "enqueued");
+
+    let response = index.wait_task(0).await;
+
+    assert_eq!(response["status"], "succeeded");
+    assert_eq!(response["type"], "indexCreation");
+    assert_eq!(response["details"]["primaryKey"], Value::Null);
+}
+
+#[actix_rt::test]
+async fn create_index_with_brotli_encoded_request() {
+    let server = Server::new().await;
+    let index = server.index_with_encoder("test", Encoder::Brotli);
     let (response, code) = index.create(None).await;
 
     assert_eq!(code, 202);
