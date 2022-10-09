@@ -1,3 +1,4 @@
+pub use milli;
 pub use search::{
     all_documents, perform_search, retrieve_document, retrieve_documents, settings,
     MatchingStrategy, SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
