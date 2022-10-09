@@ -3,7 +3,6 @@ use std::{fs::File, io::BufReader};
 
 use flate2::bufread::GzDecoder;
 
-
 use serde::Deserialize;
 
 use tempfile::TempDir;
@@ -21,6 +20,7 @@ use self::compat::Compat;
 mod compat;
 // mod loaders;
 // mod v1;
+pub(self) mod v2;
 pub(self) mod v3;
 pub(self) mod v4;
 pub(self) mod v5;

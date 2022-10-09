@@ -1,0 +1,48 @@
+---
+source: dump/src/reader/v3/mod.rs
+expression: products.settings()
+---
+Ok(
+    Settings {
+        displayed_attributes: Reset,
+        searchable_attributes: Reset,
+        filterable_attributes: Set(
+            {},
+        ),
+        sortable_attributes: Set(
+            {},
+        ),
+        ranking_rules: Set(
+            [
+                "words",
+                "typo",
+                "proximity",
+                "attribute",
+                "sort",
+                "exactness",
+            ],
+        ),
+        stop_words: Set(
+            {},
+        ),
+        synonyms: Set(
+            {
+                "android": [
+                    "phone",
+                    "smartphone",
+                ],
+                "iphone": [
+                    "phone",
+                    "smartphone",
+                ],
+                "phone": [
+                    "android",
+                    "iphone",
+                    "smartphone",
+                ],
+            },
+        ),
+        distinct_attribute: Reset,
+        _kind: PhantomData<dump::reader::v3::settings::Checked>,
+    },
+)

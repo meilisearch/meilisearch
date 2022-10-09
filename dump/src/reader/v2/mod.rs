@@ -1,16 +1,16 @@
 //! ```text
 //! .
 //! ├── indexes
-//! │   ├── 01d7dd17-8241-4f1f-a7d1-2d1cb255f5b0
+//! │   ├── index-40d14c5f-37ae-4873-9d51-b69e014a0d30
 //! │   │   ├── documents.jsonl
 //! │   │   └── meta.json
-//! │   ├── 78be64a3-cae1-449e-b7ed-13e77c9a8a0c
+//! │   ├── index-88202369-4524-4410-9b3d-3e924c867fec
 //! │   │   ├── documents.jsonl
 //! │   │   └── meta.json
-//! │   ├── ba553439-18fe-4733-ba53-44eed898280c
+//! │   ├── index-b7f2d03b-bf9b-40d9-a25b-94dc5ec60c32
 //! │   │   ├── documents.jsonl
 //! │   │   └── meta.json
-//! │   └── c408bc22-5859-49d1-8e9f-c88e2fa95cb0
+//! │   └── index-dc9070b3-572d-4f30-ab45-d4903ab71708
 //! │       ├── documents.jsonl
 //! │       └── meta.json
 //! ├── index_uuids
@@ -18,8 +18,8 @@
 //! ├── metadata.json
 //! └── updates
 //!     ├── data.jsonl
-//!     └── updates_files
-//!         └── 66d3f12d-fcf3-4b53-88cb-407017373de7
+//!     └── update_files
+//!         └── update_202573df-718b-4d80-9a65-2ee397c23dc3
 //! ```
 
 use std::{
@@ -41,7 +41,7 @@ use crate::{IndexMetadata, Result, Version};
 
 use self::meta::{DumpMeta, IndexUuid};
 
-use super::{compat::v3_to_v4::CompatV3ToV4, IndexReader};
+use super::IndexReader;
 
 pub type Document = serde_json::Map<String, serde_json::Value>;
 pub type Settings<T> = settings::Settings<T>;
@@ -54,15 +54,12 @@ pub type UpdateFile = File;
 // ===== Other types to clarify the code of the compat module
 // everything related to the tasks
 pub type Status = updates::UpdateStatus;
-pub type Kind = updates::Update;
+// pub type Kind = updates::Update;
 pub type Details = updates::UpdateResult;
 
-// everything related to the settings
-pub type Setting<T> = settings::Setting<T>;
-
 // everything related to the errors
-// pub type ResponseError = errors::ResponseError;
-pub type Code = errors::Code;
+pub type ResponseError = errors::ResponseError;
+// pub type Code = errors::Code;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -74,14 +71,14 @@ pub struct Metadata {
     dump_date: OffsetDateTime,
 }
 
-pub struct V3Reader {
+pub struct V2Reader {
     dump: TempDir,
     metadata: Metadata,
     tasks: BufReader<File>,
     pub index_uuid: Vec<IndexUuid>,
 }
 
-impl V3Reader {
+impl V2Reader {
     pub fn open(dump: TempDir) -> Result<Self> {
         let meta_file = fs::read(dump.path().join("metadata.json"))?;
         let metadata = serde_json::from_reader(&*meta_file)?;
@@ -92,35 +89,39 @@ impl V3Reader {
             .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) })
             .collect::<Result<Vec<_>>>()?;
 
-        Ok(V3Reader {
+        Ok(V2Reader {
             metadata,
-            tasks: BufReader::new(File::open(dump.path().join("updates").join("data.jsonl"))?),
+            tasks: BufReader::new(
+                File::open(dump.path().join("updates").join("data.jsonl")).unwrap(),
+            ),
             index_uuid,
             dump,
         })
     }
 
-    pub fn to_v4(self) -> CompatV3ToV4 {
-        CompatV3ToV4::new(self)
+    /*
+    pub fn to_v3(self) -> CompatV2ToV3 {
+        CompatV2ToV3::new(self)
     }
+    */
 
     pub fn version(&self) -> Version {
-        Version::V3
+        Version::V2
     }
 
     pub fn date(&self) -> Option<OffsetDateTime> {
         Some(self.metadata.dump_date)
     }
 
-    pub fn indexes(&self) -> Result<impl Iterator<Item = Result<V3IndexReader>> + '_> {
+    pub fn indexes(&self) -> Result<impl Iterator<Item = Result<V2IndexReader>> + '_> {
         Ok(self.index_uuid.iter().map(|index| -> Result<_> {
-            Ok(V3IndexReader::new(
+            Ok(V2IndexReader::new(
                 index.uid.clone(),
                 &self
                     .dump
                     .path()
                     .join("indexes")
-                    .join(index.uuid.to_string()),
+                    .join(format!("index-{}", index.uuid.to_string())),
             )?)
         }))
     }
@@ -134,8 +135,8 @@ impl V3Reader {
                         .dump
                         .path()
                         .join("updates")
-                        .join("updates_files")
-                        .join(uuid.to_string());
+                        .join("update_files")
+                        .join(format!("update_{}", uuid.to_string()));
                     Ok((task, Some(File::open(update_file_path).unwrap())))
                 } else {
                     Ok((task, None))
@@ -147,14 +148,14 @@ impl V3Reader {
     }
 }
 
-pub struct V3IndexReader {
+pub struct V2IndexReader {
     metadata: IndexMetadata,
     settings: Settings<Checked>,
 
     documents: BufReader<File>,
 }
 
-impl V3IndexReader {
+impl V2IndexReader {
     pub fn new(name: String, path: &Path) -> Result<Self> {
         let meta = File::open(path.join("meta.json"))?;
         let meta: DumpMeta = serde_json::from_reader(meta)?;
@@ -167,7 +168,7 @@ impl V3IndexReader {
             updated_at: OffsetDateTime::now_utc(),
         };
 
-        let ret = V3IndexReader {
+        let ret = V2IndexReader {
             metadata,
             settings: meta.settings.check(),
             documents: BufReader::new(File::open(path.join("documents.jsonl"))?),
@@ -201,24 +202,24 @@ pub(crate) mod test {
     use super::*;
 
     #[test]
-    fn read_dump_v3() {
-        let dump = File::open("tests/assets/v3.dump").unwrap();
+    fn read_dump_v2() {
+        let dump = File::open("tests/assets/v2.dump").unwrap();
         let dir = TempDir::new().unwrap();
         let mut dump = BufReader::new(dump);
         let gz = GzDecoder::new(&mut dump);
         let mut archive = tar::Archive::new(gz);
         archive.unpack(dir.path()).unwrap();
 
-        let mut dump = V3Reader::open(dir).unwrap();
+        let mut dump = V2Reader::open(dir).unwrap();
 
         // top level infos
-        insta::assert_display_snapshot!(dump.date().unwrap(), @"2022-10-07 11:39:03.709153554 +00:00:00");
+        insta::assert_display_snapshot!(dump.date().unwrap(), @"2022-10-09 20:27:59.904096267 +00:00:00");
 
         // tasks
         let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
         insta::assert_json_snapshot!(tasks);
-        assert_eq!(update_files.len(), 10);
+        assert_eq!(update_files.len(), 9);
         assert!(update_files[0].is_some()); // the enqueued document addition
         assert!(update_files[1..].iter().all(|u| u.is_none())); // everything already processed
 
