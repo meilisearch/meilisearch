@@ -1,6 +1,6 @@
-use std::fs::File;
 
-use uuid::Uuid;
+
+
 
 use crate::reader::{v3, v4, DumpReader, IndexReader};
 use crate::Result;
@@ -327,7 +327,7 @@ pub(crate) mod test {
 
         let mut products = indexes.pop().unwrap();
         let mut movies2 = indexes.pop().unwrap();
-        let mut movies = indexes.pop().unwrap();
+        let movies = indexes.pop().unwrap();
         let mut spells = indexes.pop().unwrap();
         assert!(indexes.is_empty());
 

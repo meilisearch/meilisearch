@@ -2,8 +2,8 @@ use std::io::Read;
 use std::{fs::File, io::BufReader};
 
 use flate2::bufread::GzDecoder;
-use index_scheduler::TaskView;
-use meilisearch_auth::Key;
+
+
 use serde::Deserialize;
 
 use tempfile::TempDir;
