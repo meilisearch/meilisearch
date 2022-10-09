@@ -1,0 +1,321 @@
+---
+source: dump/src/reader/compat/v3_to_v4.rs
+expression: tasks
+---
+[
+  {
+    "id": 0,
+    "index_uid": "movies_2",
+    "content": {
+      "DocumentAddition": {
+        "content_uuid": "66d3f12d-fcf3-4b53-88cb-407017373de7",
+        "merge_strategy": "ReplaceDocuments",
+        "primary_key": null,
+        "documents_count": 0,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-07T11:39:03.703667164Z"
+      }
+    ]
+  },
+  {
+    "id": 0,
+    "index_uid": "movies",
+    "content": {
+      "DocumentAddition": {
+        "content_uuid": "378e1055-84e1-40e6-9328-176b1781850e",
+        "merge_strategy": "ReplaceDocuments",
+        "primary_key": null,
+        "documents_count": 0,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-07T11:38:54.004402239Z"
+      },
+      {
+        "Processing": "2022-10-07T11:38:54.011081233Z"
+      },
+      {
+        "Succeded": {
+          "result": {
+            "DocumentAddition": {
+              "indexed_documents": 10
+            }
+          },
+          "timestamp": "2022-10-07T11:38:54.026649575Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "index_uid": "movies",
+    "content": {
+      "SettingsUpdate": {
+        "settings": {
+          "filterableAttributes": [
+            "genres",
+            "id"
+          ],
+          "sortableAttributes": [
+            "release_date"
+          ]
+        },
+        "is_deletion": false,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-07T11:38:54.217852146Z"
+      },
+      {
+        "Processing": "2022-10-07T11:38:54.23264073Z"
+      },
+      {
+        "Succeded": {
+          "result": "Other",
+          "timestamp": "2022-10-07T11:38:54.245649334Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "index_uid": "movies",
+    "content": {
+      "SettingsUpdate": {
+        "settings": {
+          "rankingRules": [
+            "words",
+            "typo",
+            "proximity",
+            "attribute",
+            "sort",
+            "exactness",
+            "release_date:asc"
+          ]
+        },
+        "is_deletion": false,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-07T11:38:54.438833927Z"
+      },
+      {
+        "Processing": "2022-10-07T11:38:54.453596791Z"
+      },
+      {
+        "Succeded": {
+          "result": "Other",
+          "timestamp": "2022-10-07T11:38:54.456346121Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "index_uid": "movies",
+    "content": {
+      "DocumentAddition": {
+        "content_uuid": "48997745-7615-4349-9a50-4324cc3745c0",
+        "merge_strategy": "ReplaceDocuments",
+        "primary_key": null,
+        "documents_count": 0,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-07T11:39:03.695252071Z"
+      },
+      {
+        "Processing": "2022-10-07T11:39:03.698139272Z"
+      },
+      {
+        "Succeded": {
+          "result": {
+            "DocumentAddition": {
+              "indexed_documents": 100
+            }
+          },
+          "timestamp": "2022-10-07T11:39:04.188852537Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 0,
+    "index_uid": "products",
+    "content": {
+      "SettingsUpdate": {
+        "settings": {
+          "synonyms": {
+            "android": [
+              "phone",
+              "smartphone"
+            ],
+            "iphone": [
+              "phone",
+              "smartphone"
+            ],
+            "phone": [
+              "smartphone",
+              "iphone",
+              "android"
+            ]
+          }
+        },
+        "is_deletion": false,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-07T11:38:54.734594617Z"
+      },
+      {
+        "Processing": "2022-10-07T11:38:54.737274016Z"
+      },
+      {
+        "Succeded": {
+          "result": "Other",
+          "timestamp": "2022-10-07T11:38:54.74389899Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "index_uid": "products",
+    "content": {
+      "DocumentAddition": {
+        "content_uuid": "94b720e4-d6ad-49e1-ba02-34773eecab2a",
+        "merge_strategy": "ReplaceDocuments",
+        "primary_key": null,
+        "documents_count": 0,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-07T11:38:55.350510177Z"
+      },
+      {
+        "Processing": "2022-10-07T11:38:55.353402439Z"
+      },
+      {
+        "Failed": {
+          "error": {
+            "message": "The primary key inference process failed because the engine did not find any fields containing `id` substring in their name. If your document identifier does not contain any `id` substring, you can set the primary key of the index.",
+            "code": "primary_key_inference_failed",
+            "type": "invalid_request",
+            "link": "https://docs.meilisearch.com/errors#primary_key_inference_failed"
+          },
+          "timestamp": "2022-10-07T11:38:55.35349514Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "index_uid": "products",
+    "content": {
+      "DocumentAddition": {
+        "content_uuid": "0b65a2d5-04e2-4529-b123-df01831ca2c0",
+        "merge_strategy": "ReplaceDocuments",
+        "primary_key": "sku",
+        "documents_count": 0,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-07T11:38:55.940610428Z"
+      },
+      {
+        "Processing": "2022-10-07T11:38:55.951485379Z"
+      },
+      {
+        "Succeded": {
+          "result": {
+            "DocumentAddition": {
+              "indexed_documents": 10
+            }
+          },
+          "timestamp": "2022-10-07T11:38:55.963185778Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 0,
+    "index_uid": "dnd_spells",
+    "content": {
+      "DocumentAddition": {
+        "content_uuid": "d95dc3d2-30be-40d1-b3b3-057083499f71",
+        "merge_strategy": "ReplaceDocuments",
+        "primary_key": null,
+        "documents_count": 0,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-07T11:38:56.263041061Z"
+      },
+      {
+        "Processing": "2022-10-07T11:38:56.265837882Z"
+      },
+      {
+        "Failed": {
+          "error": {
+            "message": "The primary key inference process failed because the engine did not find any fields containing `id` substring in their name. If your document identifier does not contain any `id` substring, you can set the primary key of the index.",
+            "code": "primary_key_inference_failed",
+            "type": "invalid_request",
+            "link": "https://docs.meilisearch.com/errors#primary_key_inference_failed"
+          },
+          "timestamp": "2022-10-07T11:38:56.265951133Z"
+        }
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "index_uid": "dnd_spells",
+    "content": {
+      "DocumentAddition": {
+        "content_uuid": "39aa01c5-c4e1-42af-8063-b6f6afbf5b98",
+        "merge_strategy": "ReplaceDocuments",
+        "primary_key": "index",
+        "documents_count": 0,
+        "allow_index_creation": true
+      }
+    },
+    "events": [
+      {
+        "Created": "2022-10-07T11:38:56.501949087Z"
+      },
+      {
+        "Processing": "2022-10-07T11:38:56.504677498Z"
+      },
+      {
+        "Succeded": {
+          "result": {
+            "DocumentAddition": {
+              "indexed_documents": 10
+            }
+          },
+          "timestamp": "2022-10-07T11:38:56.521004328Z"
+        }
+      }
+    ]
+  }
+]
