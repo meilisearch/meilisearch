@@ -18,7 +18,12 @@ expression: tasks
     "uid": 20,
     "indexUid": "movies_2",
     "status": "enqueued",
-    "type": "documentAddition",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
     "details": {
       "receivedDocuments": 200,
       "indexedDocuments": 0
@@ -29,7 +34,12 @@ expression: tasks
     "uid": 19,
     "indexUid": "movies",
     "status": "succeeded",
-    "type": "documentAddition",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
     "details": {
       "receivedDocuments": 100,
       "indexedDocuments": 100
@@ -43,7 +53,12 @@ expression: tasks
     "uid": 18,
     "indexUid": "dnd_spells",
     "status": "succeeded",
-    "type": "documentAddition",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
     "details": {
       "receivedDocuments": 10,
       "indexedDocuments": 10
@@ -57,7 +72,12 @@ expression: tasks
     "uid": 17,
     "indexUid": "dnd_spells",
     "status": "succeeded",
-    "type": "documentAddition",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
     "details": {
       "receivedDocuments": 10,
       "indexedDocuments": 10
@@ -71,7 +91,12 @@ expression: tasks
     "uid": 16,
     "indexUid": "products",
     "status": "succeeded",
-    "type": "documentAddition",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
     "details": {
       "receivedDocuments": 10,
       "indexedDocuments": 10
@@ -85,7 +110,12 @@ expression: tasks
     "uid": 15,
     "indexUid": "products",
     "status": "succeeded",
-    "type": "documentAddition",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
     "details": {
       "receivedDocuments": 10,
       "indexedDocuments": 10
@@ -99,7 +129,11 @@ expression: tasks
     "uid": 14,
     "indexUid": "products",
     "status": "succeeded",
-    "type": "settings",
+    "type": {
+      "settings": {
+        "allow_index_creation": true
+      }
+    },
     "details": {
       "synonyms": {
         "android": [
@@ -126,7 +160,11 @@ expression: tasks
     "uid": 13,
     "indexUid": "movies",
     "status": "succeeded",
-    "type": "settings",
+    "type": {
+      "settings": {
+        "allow_index_creation": true
+      }
+    },
     "details": {
       "rankingRules": [
         "words",
@@ -147,7 +185,11 @@ expression: tasks
     "uid": 12,
     "indexUid": "movies",
     "status": "succeeded",
-    "type": "settings",
+    "type": {
+      "settings": {
+        "allow_index_creation": true
+      }
+    },
     "details": {
       "filterableAttributes": [
         "genres",
@@ -166,7 +208,12 @@ expression: tasks
     "uid": 11,
     "indexUid": "movies",
     "status": "succeeded",
-    "type": "documentAddition",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
     "details": {
       "receivedDocuments": 10,
       "indexedDocuments": 10
@@ -180,7 +227,12 @@ expression: tasks
     "uid": 10,
     "indexUid": "movies",
     "status": "succeeded",
-    "type": "documentAddition",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
     "details": {
       "receivedDocuments": 100,
       "indexedDocuments": 100
@@ -194,7 +246,12 @@ expression: tasks
     "uid": 9,
     "indexUid": "movies",
     "status": "succeeded",
-    "type": "documentAddition",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
     "details": {
       "receivedDocuments": 90,
       "indexedDocuments": 90
@@ -221,7 +278,12 @@ expression: tasks
     "uid": 7,
     "indexUid": "dnd_spells",
     "status": "succeeded",
-    "type": "documentAddition",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
     "details": {
       "receivedDocuments": 10,
       "indexedDocuments": 10
@@ -235,7 +297,12 @@ expression: tasks
     "uid": 6,
     "indexUid": "dnd_spells",
     "status": "failed",
-    "type": "documentAddition",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
     "details": {
       "receivedDocuments": 10,
       "indexedDocuments": 0
@@ -255,7 +322,12 @@ expression: tasks
     "uid": 5,
     "indexUid": "products",
     "status": "succeeded",
-    "type": "documentAddition",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
     "details": {
       "receivedDocuments": 10,
       "indexedDocuments": 10
@@ -269,7 +341,12 @@ expression: tasks
     "uid": 4,
     "indexUid": "products",
     "status": "failed",
-    "type": "documentAddition",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
     "details": {
       "receivedDocuments": 10,
       "indexedDocuments": 0
@@ -289,7 +366,11 @@ expression: tasks
     "uid": 3,
     "indexUid": "products",
     "status": "succeeded",
-    "type": "settings",
+    "type": {
+      "settings": {
+        "allow_index_creation": true
+      }
+    },
     "details": {
       "synonyms": {
         "android": [
@@ -316,7 +397,11 @@ expression: tasks
     "uid": 2,
     "indexUid": "movies",
     "status": "succeeded",
-    "type": "settings",
+    "type": {
+      "settings": {
+        "allow_index_creation": true
+      }
+    },
     "details": {
       "rankingRules": [
         "words",
@@ -337,7 +422,11 @@ expression: tasks
     "uid": 1,
     "indexUid": "movies",
     "status": "succeeded",
-    "type": "settings",
+    "type": {
+      "settings": {
+        "allow_index_creation": true
+      }
+    },
     "details": {
       "filterableAttributes": [
         "genres",
@@ -356,7 +445,12 @@ expression: tasks
     "uid": 0,
     "indexUid": "movies",
     "status": "succeeded",
-    "type": "documentAddition",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
     "details": {
       "receivedDocuments": 10,
       "indexedDocuments": 10
