@@ -3,15 +3,17 @@ use std::fs::File;
 use crate::reader::{v4, v5, DumpReader, IndexReader};
 use crate::Result;
 
+use super::v3_to_v4::{CompatIndexV3ToV4, CompatV3ToV4};
 use super::v5_to_v6::CompatV5ToV6;
 
-pub struct CompatV4ToV5 {
-    from: v4::V4Reader,
+pub enum CompatV4ToV5 {
+    V4(v4::V4Reader),
+    Compat(CompatV3ToV4),
 }
 
 impl CompatV4ToV5 {
     pub fn new(v4: v4::V4Reader) -> CompatV4ToV5 {
-        CompatV4ToV5 { from: v4 }
+        CompatV4ToV5::V4(v4)
     }
 
     pub fn to_v6(self) -> CompatV5ToV6 {
@@ -19,28 +21,52 @@ impl CompatV4ToV5 {
     }
 
     pub fn version(&self) -> crate::Version {
-        self.from.version()
+        match self {
+            CompatV4ToV5::V4(v4) => v4.version(),
+            CompatV4ToV5::Compat(compat) => compat.version(),
+        }
     }
 
     pub fn date(&self) -> Option<time::OffsetDateTime> {
-        self.from.date()
+        match self {
+            CompatV4ToV5::V4(v4) => v4.date(),
+            CompatV4ToV5::Compat(compat) => compat.date(),
+        }
     }
 
     pub fn instance_uid(&self) -> Result<Option<uuid::Uuid>> {
-        self.from.instance_uid()
+        match self {
+            CompatV4ToV5::V4(v4) => v4.instance_uid(),
+            CompatV4ToV5::Compat(compat) => compat.instance_uid(),
+        }
     }
 
-    pub fn indexes(&self) -> Result<impl Iterator<Item = Result<CompatIndexV4ToV5>> + '_> {
-        Ok(self.from.indexes()?.map(|index_reader| -> Result<_> {
-            let compat = CompatIndexV4ToV5::new(index_reader?);
-            Ok(compat)
-        }))
+    pub fn indexes(&self) -> Result<Box<dyn Iterator<Item = Result<CompatIndexV4ToV5>> + '_>> {
+        let indexes = match self {
+            CompatV4ToV5::V4(v4) => Box::new(
+                v4.indexes()?
+                    .map(|index| index.map(CompatIndexV4ToV5::from)),
+            )
+                as Box<dyn Iterator<Item = Result<CompatIndexV4ToV5>> + '_>,
+
+            CompatV4ToV5::Compat(compat) => Box::new(
+                compat
+                    .indexes()?
+                    .map(|index| index.map(CompatIndexV4ToV5::from)),
+            )
+                as Box<dyn Iterator<Item = Result<CompatIndexV4ToV5>> + '_>,
+        };
+        Ok(indexes)
     }
 
     pub fn tasks(
         &mut self,
     ) -> Box<dyn Iterator<Item = Result<(v5::Task, Option<v5::UpdateFile>)>> + '_> {
-        Box::new(self.from.tasks().map(|task| {
+        let tasks = match self {
+            CompatV4ToV5::V4(v4) => v4.tasks(),
+            CompatV4ToV5::Compat(compat) => compat.tasks(),
+        };
+        Box::new(tasks.map(|task| {
             task.map(|(task, content_file)| {
                 // let task_view: v4::tasks::TaskView = task.into();
 
@@ -165,7 +191,11 @@ impl CompatV4ToV5 {
     }
 
     pub fn keys(&mut self) -> Box<dyn Iterator<Item = Result<v5::Key>> + '_> {
-        Box::new(self.from.keys().map(|key| {
+        let keys = match self {
+            CompatV4ToV5::V4(v4) => v4.keys(),
+            CompatV4ToV5::Compat(compat) => compat.keys(),
+        };
+        Box::new(keys.map(|key| {
             key.map(|key| v5::Key {
                 description: key.description,
                 name: None,
@@ -191,27 +221,47 @@ impl CompatV4ToV5 {
     }
 }
 
-pub struct CompatIndexV4ToV5 {
-    from: v4::V4IndexReader,
+pub enum CompatIndexV4ToV5 {
+    V4(v4::V4IndexReader),
+    Compat(CompatIndexV3ToV4),
+}
+
+impl From<v4::V4IndexReader> for CompatIndexV4ToV5 {
+    fn from(index_reader: v4::V4IndexReader) -> Self {
+        Self::V4(index_reader)
+    }
+}
+
+impl From<CompatIndexV3ToV4> for CompatIndexV4ToV5 {
+    fn from(index_reader: CompatIndexV3ToV4) -> Self {
+        Self::Compat(index_reader)
+    }
 }
 
 impl CompatIndexV4ToV5 {
-    pub fn new(v4: v4::V4IndexReader) -> CompatIndexV4ToV5 {
-        CompatIndexV4ToV5 { from: v4 }
-    }
-
     pub fn metadata(&self) -> &crate::IndexMetadata {
-        self.from.metadata()
+        match self {
+            CompatIndexV4ToV5::V4(v4) => v4.metadata(),
+            CompatIndexV4ToV5::Compat(compat) => compat.metadata(),
+        }
     }
 
     pub fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<v5::Document>> + '_>> {
-        self.from
-            .documents()
-            .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<v5::Document>> + '_>)
+        match self {
+            CompatIndexV4ToV5::V4(v4) => v4
+                .documents()
+                .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<v5::Document>> + '_>),
+            CompatIndexV4ToV5::Compat(compat) => compat
+                .documents()
+                .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<v5::Document>> + '_>),
+        }
     }
 
     pub fn settings(&mut self) -> Result<v5::Settings<v5::Checked>> {
-        Ok(v5::Settings::<v5::Unchecked>::from(self.from.settings()?).check())
+        match self {
+            CompatIndexV4ToV5::V4(v4) => Ok(v5::Settings::from(v4.settings()?).check()),
+            CompatIndexV4ToV5::Compat(compat) => Ok(v5::Settings::from(compat.settings()?).check()),
+        }
     }
 }
 

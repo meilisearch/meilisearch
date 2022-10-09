@@ -34,7 +34,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 pub mod errors;
-mod meta;
+pub mod meta;
 pub mod settings;
 pub mod updates;
 
@@ -42,7 +42,7 @@ use crate::{IndexMetadata, Result, Version};
 
 use self::meta::{DumpMeta, IndexUuid};
 
-use super::{DumpReader, IndexReader};
+use super::{compat::v3_to_v4::CompatV3ToV4, IndexReader};
 
 pub type Document = serde_json::Map<String, serde_json::Value>;
 pub type Settings<T> = settings::Settings<T>;
@@ -63,7 +63,7 @@ pub type Setting<T> = settings::Setting<T>;
 
 // everything related to the errors
 // pub type ResponseError = errors::ResponseError;
-pub type Code = meilisearch_types::error::Code;
+pub type Code = errors::Code;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -79,7 +79,7 @@ pub struct V3Reader {
     dump: TempDir,
     metadata: Metadata,
     tasks: BufReader<File>,
-    index_uuid: Vec<IndexUuid>,
+    pub index_uuid: Vec<IndexUuid>,
 }
 
 impl V3Reader {
@@ -103,9 +103,9 @@ impl V3Reader {
         })
     }
 
-    // pub fn to_v4(self) -> CompatV3ToV4 {
-    //     CompatV3ToV4::new(self)
-    // }
+    pub fn to_v4(self) -> CompatV3ToV4 {
+        CompatV3ToV4::new(self)
+    }
 
     pub fn version(&self) -> Version {
         Version::V3
