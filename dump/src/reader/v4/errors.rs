@@ -153,6 +153,8 @@ pub enum Code {
     InvalidApiKeyIndexes,
     InvalidApiKeyExpiresAt,
     InvalidApiKeyDescription,
+
+    UnretrievableErrorCode,
 }
 
 impl Code {
@@ -261,6 +263,9 @@ impl Code {
             }
             InvalidMinWordLengthForTypo => {
                 ErrCode::invalid("invalid_min_word_length_for_typo", StatusCode::BAD_REQUEST)
+            }
+            UnretrievableErrorCode => {
+                ErrCode::invalid("unretrievable_error_code", StatusCode::BAD_REQUEST)
             }
         }
     }

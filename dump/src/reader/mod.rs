@@ -45,8 +45,8 @@ pub fn open(dump: impl Read) -> Result<Compat> {
         // Version::V1 => Ok(Box::new(v1::Reader::open(path)?)),
         Version::V1 => todo!(),
         Version::V2 => todo!(),
-        Version::V3 => todo!(),
-        Version::V4 => todo!(),
+        Version::V3 => Ok(v3::V3Reader::open(path)?.to_v4().to_v5().to_v6().into()),
+        Version::V4 => Ok(v4::V4Reader::open(path)?.to_v5().to_v6().into()),
         Version::V5 => Ok(v5::V5Reader::open(path)?.to_v6().into()),
         Version::V6 => Ok(v6::V6Reader::open(path)?.into()),
     }
