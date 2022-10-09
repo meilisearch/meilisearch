@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use super::Settings;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[cfg_attr(test, derive(serde::Serialize))]
 pub struct IndexUuid {
     pub uid: String,

@@ -61,6 +61,13 @@ impl UpdateStatus {
         }
     }
 
+    pub fn is_finished(&self) -> bool {
+        match self {
+            UpdateStatus::Processing(_) | UpdateStatus::Enqueued(_) => false,
+            UpdateStatus::Aborted(_) | UpdateStatus::Failed(_) | UpdateStatus::Processed(_) => true,
+        }
+    }
+
     pub fn processed(&self) -> Option<&Processed> {
         match self {
             UpdateStatus::Processed(p) => Some(p),
