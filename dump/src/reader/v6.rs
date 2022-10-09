@@ -178,7 +178,7 @@ pub struct V6IndexReader {
 }
 
 impl V6IndexReader {
-    pub fn new(name: String, path: &Path) -> Result<Self> {
+    pub fn new(_name: String, path: &Path) -> Result<Self> {
         let metadata = File::open(path.join("metadata.json"))?;
 
         let ret = V6IndexReader {

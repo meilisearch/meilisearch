@@ -117,7 +117,10 @@ pub(crate) mod test {
                     uid: 0,
                     index_uid: Some(S("doggos")),
                     status: Status::Succeeded,
-                    kind: Kind::DocumentAddition,
+                    kind: Kind::DocumentImport {
+                        method: index::milli::update::IndexDocumentsMethod::UpdateDocuments,
+                        allow_index_creation: true,
+                    },
                     details: Some(Details::DocumentAddition {
                         received_documents: 10_000,
                         indexed_documents: 3,
@@ -135,7 +138,10 @@ pub(crate) mod test {
                     uid: 1,
                     index_uid: Some(S("doggos")),
                     status: Status::Enqueued,
-                    kind: Kind::DocumentAddition,
+                    kind: Kind::DocumentImport {
+                        method: index::milli::update::IndexDocumentsMethod::UpdateDocuments,
+                        allow_index_creation: true,
+                    },
                     details: None,
                     error: None,
                     duration: Some(Duration::DAY),
