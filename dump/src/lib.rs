@@ -6,6 +6,7 @@ mod reader;
 mod writer;
 
 pub use error::Error;
+pub use reader::open;
 pub use writer::DumpWriter;
 
 const CURRENT_DUMP_VERSION: Version = Version::V6;
