@@ -604,6 +604,43 @@ mod tests {
         assert_eq!(tasks[2].status, Status::Enqueued);
     }
 
+    /// We send a lot of tasks but notify the tasks scheduler only once as
+    /// we send them very fast, we must make sure that they are all processed.
+    #[test]
+    fn process_tasks_inserted_without_new_signal() {
+        let (index_scheduler, handle) = IndexScheduler::test();
+
+        index_scheduler
+            .register(KindWithContent::IndexCreation {
+                index_uid: S("doggos"),
+                primary_key: None,
+            })
+            .unwrap();
+        index_scheduler
+            .register(KindWithContent::IndexCreation {
+                index_uid: S("cattos"),
+                primary_key: None,
+            })
+            .unwrap();
+        index_scheduler
+            .register(KindWithContent::IndexDeletion {
+                index_uid: S("doggos"),
+            })
+            .unwrap();
+
+        handle.wait_till(Breakpoint::Start);
+        handle.wait_till(Breakpoint::AfterProcessing);
+        handle.wait_till(Breakpoint::AfterProcessing);
+        handle.wait_till(Breakpoint::AfterProcessing);
+
+        let mut tasks = index_scheduler.get_tasks(Query::default()).unwrap();
+        tasks.reverse();
+        assert_eq!(tasks.len(), 3);
+        assert_eq!(tasks[0].status, Status::Succeeded);
+        assert_eq!(tasks[1].status, Status::Succeeded);
+        assert_eq!(tasks[2].status, Status::Succeeded);
+    }
+
     #[test]
     fn document_addition() {
         let (index_scheduler, handle) = IndexScheduler::test();
