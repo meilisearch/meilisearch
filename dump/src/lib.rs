@@ -236,12 +236,15 @@ pub(crate) mod test {
         // ========== pushing the task queue
         let tasks = create_test_tasks();
 
-        /*
         let mut task_queue = dump.create_tasks_queue().unwrap();
         for (task, update_file) in &tasks {
-            task_queue.push_task(task, update_file.map(|c| c)).unwrap();
+            let mut update = task_queue.push_task(task).unwrap();
+            if let Some(update_file) = update_file {
+                for u in update_file {
+                    update.push_document(u).unwrap();
+                }
+            }
         }
-        */
 
         // ========== pushing the api keys
         let api_keys = create_test_api_keys();

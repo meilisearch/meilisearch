@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File},
-    io::{Read, Write},
+    io::{BufReader, BufWriter, Read, Write},
     path::PathBuf,
 };
 
@@ -13,7 +13,7 @@ use tempfile::TempDir;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{IndexMetadata, Metadata, Result, CURRENT_DUMP_VERSION};
+use crate::{reader::Document, IndexMetadata, Metadata, Result, CURRENT_DUMP_VERSION};
 
 pub struct DumpWriter {
     dir: TempDir,
@@ -105,16 +105,41 @@ impl TaskWriter {
 
     /// Pushes tasks in the dump.
     /// If the tasks has an associated `update_file` it'll use the `task_id` as its name.
-    pub fn push_task(&mut self, task: &TaskView, update_file: Option<impl Read>) -> Result<()> {
+    pub fn push_task(&mut self, task: &TaskView) -> Result<UpdateFile> {
         // TODO: this could be removed the day we implements `Deserialize` on the Duration.
         let mut task = task.clone();
         task.duration = None;
 
         self.queue.write_all(&serde_json::to_vec(&task)?)?;
         self.queue.write_all(b"\n")?;
-        if let Some(mut update_file) = update_file {
-            let mut file = File::create(&self.update_files.join(task.uid.to_string()))?;
-            std::io::copy(&mut update_file, &mut file)?;
+
+        Ok(UpdateFile::new(
+            self.update_files
+                .join(format!("{}.jsonl", task.uid.to_string())),
+        ))
+    }
+}
+
+pub struct UpdateFile {
+    path: PathBuf,
+    writer: Option<BufWriter<File>>,
+}
+
+impl UpdateFile {
+    pub(crate) fn new(path: PathBuf) -> UpdateFile {
+        UpdateFile { path, writer: None }
+    }
+
+    pub fn push_document(&mut self, document: &Document) -> Result<()> {
+        if let Some(writer) = self.writer.as_mut() {
+            writer.write_all(&serde_json::to_vec(document)?)?;
+            writer.write_all(b"\n")?;
+            writer.flush()?;
+        } else {
+            dbg!(&self.path);
+            let file = File::create(&self.path).unwrap();
+            self.writer = Some(BufWriter::new(file));
+            self.push_document(document)?;
         }
         Ok(())
     }
@@ -253,7 +278,7 @@ pub(crate) mod test {
         │    │    └---- metadata.json
         ├---- tasks/
         │    ├---- update_files/
-        │    │    └---- 1
+        │    │    └---- 1.jsonl
         │    └---- queue.jsonl
         ├---- keys.jsonl
         ├---- metadata.json
@@ -310,7 +335,7 @@ pub(crate) mod test {
             assert_eq!(serde_json::from_str::<TaskView>(task).unwrap(), expected.0);
 
             if let Some(expected_update) = expected.1 {
-                let path = dump_path.join(format!("tasks/update_files/{}", expected.0.uid));
+                let path = dump_path.join(format!("tasks/update_files/{}.jsonl", expected.0.uid));
                 println!("trying to open {}", path.display());
                 let update = fs::read_to_string(path).unwrap();
                 let documents: Vec<Document> = update
