@@ -1,4 +1,4 @@
-use crate::reader::{v3, v4, DumpReader, IndexReader};
+use crate::reader::{v3, v4};
 use crate::Result;
 
 use super::v2_to_v3::{CompatIndexV2ToV3, CompatV2ToV3};
