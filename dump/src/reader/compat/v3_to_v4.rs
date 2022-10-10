@@ -1,4 +1,4 @@
-use crate::reader::{v3, v4};
+use crate::reader::{v3, v4, UpdateFile};
 use crate::Result;
 
 use super::v2_to_v3::{CompatIndexV2ToV3, CompatV2ToV3};
@@ -55,7 +55,7 @@ impl CompatV3ToV4 {
 
     pub fn tasks(
         &mut self,
-    ) -> Box<dyn Iterator<Item = Result<(v4::Task, Option<v4::UpdateFile>)>> + '_> {
+    ) -> Box<dyn Iterator<Item = Result<(v4::Task, Option<Box<UpdateFile>>)>> + '_> {
         let indexes = match self {
             CompatV3ToV4::V3(v3) => v3.index_uuid(),
             CompatV3ToV4::Compat(compat) => compat.index_uuid(),
@@ -364,11 +364,18 @@ pub(crate) mod test {
 
         // tasks
         let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();
-        let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
+        let (tasks, mut update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
         insta::assert_json_snapshot!(tasks);
         assert_eq!(update_files.len(), 10);
         assert!(update_files[0].is_some()); // the enqueued document addition
         assert!(update_files[1..].iter().all(|u| u.is_none())); // everything already processed
+
+        let update_file = update_files
+            .remove(0)
+            .unwrap()
+            .collect::<Result<Vec<_>>>()
+            .unwrap();
+        insta::assert_json_snapshot!(update_file);
 
         // keys
         let keys = dump.keys().collect::<Result<Vec<_>>>().unwrap();

@@ -1,0 +1,308 @@
+---
+source: dump/src/reader/v3/mod.rs
+expression: documents
+---
+[
+  {
+    "sku": 127687,
+    "name": "Duracell - AA Batteries (8-Pack)",
+    "type": "HardGood",
+    "price": 7.49,
+    "upc": "041333825014",
+    "category": [
+      {
+        "id": "pcmcat312300050015",
+        "name": "Connected Home & Housewares"
+      },
+      {
+        "id": "pcmcat248700050021",
+        "name": "Housewares"
+      },
+      {
+        "id": "pcmcat303600050001",
+        "name": "Household Batteries"
+      },
+      {
+        "id": "abcat0208002",
+        "name": "Alkaline Batteries"
+      }
+    ],
+    "shipping": 5.49,
+    "description": "Compatible with select electronic devices; AA size; DURALOCK Power Preserve technology; 8-pack",
+    "manufacturer": "Duracell",
+    "model": "MN1500B8Z",
+    "url": "http://www.bestbuy.com/site/duracell-aa-batteries-8-pack/127687.p?id=1051384045676&skuId=127687&cmp=RMXCC",
+    "image": "http://img.bbystatic.com/BestBuy_US/images/products/1276/127687_sa.jpg"
+  },
+  {
+    "sku": 150115,
+    "name": "Energizer - MAX Batteries AA (4-Pack)",
+    "type": "HardGood",
+    "price": 4.99,
+    "upc": "039800011329",
+    "category": [
+      {
+        "id": "pcmcat312300050015",
+        "name": "Connected Home & Housewares"
+      },
+      {
+        "id": "pcmcat248700050021",
+        "name": "Housewares"
+      },
+      {
+        "id": "pcmcat303600050001",
+        "name": "Household Batteries"
+      },
+      {
+        "id": "abcat0208002",
+        "name": "Alkaline Batteries"
+      }
+    ],
+    "shipping": 5.49,
+    "description": "4-pack AA alkaline batteries; battery tester included",
+    "manufacturer": "Energizer",
+    "model": "E91BP-4",
+    "url": "http://www.bestbuy.com/site/energizer-max-batteries-aa-4-pack/150115.p?id=1051384046217&skuId=150115&cmp=RMXCC",
+    "image": "http://img.bbystatic.com/BestBuy_US/images/products/1501/150115_sa.jpg"
+  },
+  {
+    "sku": 185230,
+    "name": "Duracell - C Batteries (4-Pack)",
+    "type": "HardGood",
+    "price": 8.99,
+    "upc": "041333440019",
+    "category": [
+      {
+        "id": "pcmcat312300050015",
+        "name": "Connected Home & Housewares"
+      },
+      {
+        "id": "pcmcat248700050021",
+        "name": "Housewares"
+      },
+      {
+        "id": "pcmcat303600050001",
+        "name": "Household Batteries"
+      },
+      {
+        "id": "abcat0208002",
+        "name": "Alkaline Batteries"
+      }
+    ],
+    "shipping": 5.49,
+    "description": "Compatible with select electronic devices; C size; DURALOCK Power Preserve technology; 4-pack",
+    "manufacturer": "Duracell",
+    "model": "MN1400R4Z",
+    "url": "http://www.bestbuy.com/site/duracell-c-batteries-4-pack/185230.p?id=1051384046486&skuId=185230&cmp=RMXCC",
+    "image": "http://img.bbystatic.com/BestBuy_US/images/products/1852/185230_sa.jpg"
+  },
+  {
+    "sku": 185267,
+    "name": "Duracell - D Batteries (4-Pack)",
+    "type": "HardGood",
+    "price": 9.99,
+    "upc": "041333430010",
+    "category": [
+      {
+        "id": "pcmcat312300050015",
+        "name": "Connected Home & Housewares"
+      },
+      {
+        "id": "pcmcat248700050021",
+        "name": "Housewares"
+      },
+      {
+        "id": "pcmcat303600050001",
+        "name": "Household Batteries"
+      },
+      {
+        "id": "abcat0208002",
+        "name": "Alkaline Batteries"
+      }
+    ],
+    "shipping": 5.99,
+    "description": "Compatible with select electronic devices; D size; DURALOCK Power Preserve technology; 4-pack",
+    "manufacturer": "Duracell",
+    "model": "MN1300R4Z",
+    "url": "http://www.bestbuy.com/site/duracell-d-batteries-4-pack/185267.p?id=1051384046551&skuId=185267&cmp=RMXCC",
+    "image": "http://img.bbystatic.com/BestBuy_US/images/products/1852/185267_sa.jpg"
+  },
+  {
+    "sku": 312290,
+    "name": "Duracell - 9V Batteries (2-Pack)",
+    "type": "HardGood",
+    "price": 7.99,
+    "upc": "041333216010",
+    "category": [
+      {
+        "id": "pcmcat312300050015",
+        "name": "Connected Home & Housewares"
+      },
+      {
+        "id": "pcmcat248700050021",
+        "name": "Housewares"
+      },
+      {
+        "id": "pcmcat303600050001",
+        "name": "Household Batteries"
+      },
+      {
+        "id": "abcat0208002",
+        "name": "Alkaline Batteries"
+      }
+    ],
+    "shipping": 5.49,
+    "description": "Compatible with select electronic devices; alkaline chemistry; 9V size; DURALOCK Power Preserve technology; 2-pack",
+    "manufacturer": "Duracell",
+    "model": "MN1604B2Z",
+    "url": "http://www.bestbuy.com/site/duracell-9v-batteries-2-pack/312290.p?id=1051384050321&skuId=312290&cmp=RMXCC",
+    "image": "http://img.bbystatic.com/BestBuy_US/images/products/3122/312290_sa.jpg"
+  },
+  {
+    "sku": 324884,
+    "name": "Directed Electronics - Viper Audio Glass Break Sensor",
+    "type": "HardGood",
+    "price": 39.99,
+    "upc": "093207005060",
+    "category": [
+      {
+        "id": "pcmcat113100050015",
+        "name": "Carfi Instore Only"
+      }
+    ],
+    "shipping": 0,
+    "description": "From our expanded online assortment; compatible with Directed Electronics alarm systems; microphone and microprocessor detect and analyze intrusions; detects quiet glass breaks",
+    "manufacturer": "Directed Electronics",
+    "model": "506T",
+    "url": "http://www.bestbuy.com/site/directed-electronics-viper-audio-glass-break-sensor/324884.p?id=1112808077651&skuId=324884&cmp=RMXCC",
+    "image": "http://img.bbystatic.com/BestBuy_US/images/products/3248/324884_rc.jpg"
+  },
+  {
+    "sku": 333179,
+    "name": "Energizer - N Cell E90 Batteries (2-Pack)",
+    "type": "HardGood",
+    "price": 5.99,
+    "upc": "039800013200",
+    "category": [
+      {
+        "id": "pcmcat312300050015",
+        "name": "Connected Home & Housewares"
+      },
+      {
+        "id": "pcmcat248700050021",
+        "name": "Housewares"
+      },
+      {
+        "id": "pcmcat303600050001",
+        "name": "Household Batteries"
+      },
+      {
+        "id": "abcat0208006",
+        "name": "Specialty Batteries"
+      }
+    ],
+    "shipping": 5.49,
+    "description": "Alkaline batteries; 1.5V",
+    "manufacturer": "Energizer",
+    "model": "E90BP-2",
+    "url": "http://www.bestbuy.com/site/energizer-n-cell-e90-batteries-2-pack/333179.p?id=1185268509951&skuId=333179&cmp=RMXCC",
+    "image": "http://img.bbystatic.com/BestBuy_US/images/products/3331/333179_sa.jpg"
+  },
+  {
+    "sku": 346575,
+    "name": "Metra - Radio Installation Dash Kit for Most 1989-2000 Ford, Lincoln & Mercury Vehicles - Black",
+    "type": "HardGood",
+    "price": 16.99,
+    "upc": "086429002757",
+    "category": [
+      {
+        "id": "abcat0300000",
+        "name": "Car Electronics & GPS"
+      },
+      {
+        "id": "pcmcat165900050023",
+        "name": "Car Installation Parts & Accessories"
+      },
+      {
+        "id": "pcmcat331600050007",
+        "name": "Car Audio Installation Parts"
+      },
+      {
+        "id": "pcmcat165900050031",
+        "name": "Deck Installation Parts"
+      },
+      {
+        "id": "pcmcat165900050033",
+        "name": "Dash Installation Kits"
+      }
+    ],
+    "shipping": 0,
+    "description": "From our expanded online assortment; compatible with most 1989-2000 Ford, Lincoln and Mercury vehicles; snap-in TurboKit offers fast installation; spacer/trim ring; rear support bracket",
+    "manufacturer": "Metra",
+    "model": "99-5512",
+    "url": "http://www.bestbuy.com/site/metra-radio-installation-dash-kit-for-most-1989-2000-ford-lincoln-mercury-vehicles-black/346575.p?id=1218118704590&skuId=346575&cmp=RMXCC",
+    "image": "http://img.bbystatic.com/BestBuy_US/images/products/3465/346575_rc.jpg"
+  },
+  {
+    "sku": 43900,
+    "name": "Duracell - AAA Batteries (4-Pack)",
+    "type": "HardGood",
+    "price": 5.49,
+    "upc": "041333424019",
+    "category": [
+      {
+        "id": "pcmcat312300050015",
+        "name": "Connected Home & Housewares"
+      },
+      {
+        "id": "pcmcat248700050021",
+        "name": "Housewares"
+      },
+      {
+        "id": "pcmcat303600050001",
+        "name": "Household Batteries"
+      },
+      {
+        "id": "abcat0208002",
+        "name": "Alkaline Batteries"
+      }
+    ],
+    "shipping": 5.49,
+    "description": "Compatible with select electronic devices; AAA size; DURALOCK Power Preserve technology; 4-pack",
+    "manufacturer": "Duracell",
+    "model": "MN2400B4Z",
+    "url": "http://www.bestbuy.com/site/duracell-aaa-batteries-4-pack/43900.p?id=1051384074145&skuId=43900&cmp=RMXCC",
+    "image": "http://img.bbystatic.com/BestBuy_US/images/products/4390/43900_sa.jpg"
+  },
+  {
+    "sku": 48530,
+    "name": "Duracell - AA 1.5V CopperTop Batteries (4-Pack)",
+    "type": "HardGood",
+    "price": 5.49,
+    "upc": "041333415017",
+    "category": [
+      {
+        "id": "pcmcat312300050015",
+        "name": "Connected Home & Housewares"
+      },
+      {
+        "id": "pcmcat248700050021",
+        "name": "Housewares"
+      },
+      {
+        "id": "pcmcat303600050001",
+        "name": "Household Batteries"
+      },
+      {
+        "id": "abcat0208002",
+        "name": "Alkaline Batteries"
+      }
+    ],
+    "shipping": 5.49,
+    "description": "Long-lasting energy; DURALOCK Power Preserve technology; for toys, clocks, radios, games, remotes, PDAs and more",
+    "manufacturer": "Duracell",
+    "model": "MN1500B4Z",
+    "url": "http://www.bestbuy.com/site/duracell-aa-1-5v-coppertop-batteries-4-pack/48530.p?id=1099385268988&skuId=48530&cmp=RMXCC",
+    "image": "http://img.bbystatic.com/BestBuy_US/images/products/4853/48530_sa.jpg"
+  }
+]
