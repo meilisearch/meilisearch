@@ -1,0 +1,32 @@
+---
+source: dump/src/reader/mod.rs
+expression: keys
+---
+[
+  {
+    "description": "Default Search API Key (Use it to search from the frontend)",
+    "uid": "7bc06c90-ca16-4eb9-838e-2be2d17e51a9",
+    "actions": [
+      "search"
+    ],
+    "indexes": [
+      "*"
+    ],
+    "expires_at": null,
+    "created_at": "2022-10-06T12:53:33.424274047Z",
+    "updated_at": "2022-10-06T12:53:33.424274047Z"
+  },
+  {
+    "description": "Default Admin API Key (Use it for all other operations. Caution! Do not use it on a public frontend)",
+    "uid": "ab9d6a00-7940-4278-b824-1755c98c1849",
+    "actions": [
+      "*"
+    ],
+    "indexes": [
+      "*"
+    ],
+    "expires_at": null,
+    "created_at": "2022-10-06T12:53:33.417707446Z",
+    "updated_at": "2022-10-06T12:53:33.417707446Z"
+  }
+]
