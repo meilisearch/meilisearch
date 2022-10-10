@@ -2,6 +2,7 @@ status = [
     'Tests on ubuntu-20.04',
     'Tests on macos-latest',
     'Tests on windows-latest',
+    'Run Clippy',
     'Run Rustfmt',
 ]
 # 3 hours timeout
