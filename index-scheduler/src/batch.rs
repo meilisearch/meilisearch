@@ -397,8 +397,16 @@ impl IndexScheduler {
 
             let _index = self.get_index(rtxn, index_name)? & enqueued;
 
+            // If the autobatching is disabled we only take one task at a time.
+            let tasks_limit = if self.autobatching_enabled {
+                usize::MAX
+            } else {
+                1
+            };
+
             let enqueued = enqueued
                 .into_iter()
+                .take(tasks_limit)
                 .map(|task_id| {
                     self.get_task(rtxn, task_id)
                         .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))
