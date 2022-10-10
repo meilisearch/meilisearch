@@ -348,7 +348,8 @@ impl IndexScheduler {
             }
         }
 
-        self.notify();
+        // notify the scheduler loop to execute a new tick
+        self.wake_up.signal();
 
         Ok(task.as_task_view())
     }
@@ -437,11 +438,6 @@ impl IndexScheduler {
             .unwrap();
 
         Ok(processed_tasks)
-    }
-
-    /// Notify the scheduler there is or may be work to do.
-    pub fn notify(&self) {
-        self.wake_up.signal()
     }
 }
 
