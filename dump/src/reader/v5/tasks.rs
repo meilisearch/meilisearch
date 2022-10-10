@@ -1,6 +1,4 @@
-use std::fmt::Write;
-
-use serde::{Deserialize, Serializer};
+use serde::Deserialize;
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
@@ -427,10 +425,13 @@ pub enum TaskDetails {
 /// Serialize a `time::Duration` as a best effort ISO 8601 while waiting for
 /// https://github.com/time-rs/time/issues/378.
 /// This code is a port of the old code of time that was removed in 0.2.
-fn serialize_duration<S: Serializer>(
+#[cfg(test)]
+fn serialize_duration<S: serde::Serializer>(
     duration: &Option<Duration>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
+    use std::fmt::Write;
+
     match duration {
         Some(duration) => {
             // technically speaking, negative duration is not valid ISO 8601

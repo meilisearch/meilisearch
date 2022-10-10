@@ -45,7 +45,7 @@ use uuid::Uuid;
 
 use crate::{IndexMetadata, Result, Version};
 
-use super::{compat::v5_to_v6::CompatV5ToV6, DumpReader, IndexReader};
+use super::compat::v5_to_v6::CompatV5ToV6;
 
 pub mod errors;
 pub mod keys;
@@ -65,20 +65,16 @@ pub type Key = keys::Key;
 // ===== Other types to clarify the code of the compat module
 // everything related to the tasks
 pub type Status = tasks::TaskStatus;
-pub type Kind = tasks::TaskType;
 pub type Details = tasks::TaskDetails;
 
 // everything related to the settings
 pub type Setting<T> = settings::Setting<T>;
 pub type TypoTolerance = settings::TypoSettings;
 pub type MinWordSizeForTypos = settings::MinWordSizeTyposSetting;
-pub type FacetingSettings = settings::FacetingSettings;
-pub type PaginationSettings = settings::PaginationSettings;
 
 // everything related to the api keys
 pub type Action = keys::Action;
 pub type StarOr<T> = meta::StarOr<T>;
-pub type IndexUid = meta::IndexUid;
 
 // everything related to the errors
 pub type ResponseError = errors::ResponseError;

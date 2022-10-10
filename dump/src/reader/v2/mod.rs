@@ -41,7 +41,7 @@ use crate::{IndexMetadata, Result, Version};
 
 use self::meta::{DumpMeta, IndexUuid};
 
-use super::{compat::v2_to_v3::CompatV2ToV3, IndexReader};
+use super::compat::v2_to_v3::CompatV2ToV3;
 
 pub type Document = serde_json::Map<String, serde_json::Value>;
 pub type Settings<T> = settings::Settings<T>;
@@ -51,15 +51,8 @@ pub type Unchecked = settings::Unchecked;
 pub type Task = updates::UpdateEntry;
 pub type UpdateFile = File;
 
-// ===== Other types to clarify the code of the compat module
-// everything related to the tasks
-pub type Status = updates::UpdateStatus;
-// pub type Kind = updates::Update;
-pub type Details = updates::UpdateResult;
-
 // everything related to the errors
 pub type ResponseError = errors::ResponseError;
-// pub type Code = errors::Code;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
