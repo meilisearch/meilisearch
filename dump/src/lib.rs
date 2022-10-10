@@ -47,7 +47,7 @@ pub enum Version {
 pub(crate) mod test {
     use std::{
         fs::File,
-        io::{Read, Seek, SeekFrom},
+        io::{Seek, SeekFrom},
         str::FromStr,
     };
 
