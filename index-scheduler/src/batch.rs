@@ -380,7 +380,7 @@ impl IndexScheduler {
             let task = self
                 .get_task(rtxn, task_id)?
                 .ok_or(Error::CorruptedTaskQueue)?;
-            println!("DeletionTask: {task:?}");
+
             return Ok(Some(Batch::DeleteTasks(task)));
         }
 
@@ -442,7 +442,6 @@ impl IndexScheduler {
         match batch {
             Batch::Cancel(_) => todo!(),
             Batch::DeleteTasks(mut task) => {
-                println!("delete task: {task:?}");
                 // 1. Retrieve the tasks that matched the quety at enqueue-time
                 let matched_tasks =
                     if let KindWithContent::DeleteTasks { tasks, query: _ } = &task.kind {
@@ -450,10 +449,10 @@ impl IndexScheduler {
                     } else {
                         unreachable!()
                     };
-                println!("matched tasks: {matched_tasks:?}");
+
                 let mut wtxn = self.env.write_txn()?;
                 let nbr_deleted_tasks = self.delete_matched_tasks(&mut wtxn, matched_tasks)?;
-                println!("nbr_deleted_tasks: {nbr_deleted_tasks}");
+
                 task.status = Status::Succeeded;
                 match &mut task.details {
                     Some(Details::DeleteTasks {
@@ -523,7 +522,6 @@ impl IndexScheduler {
                 primary_key,
                 mut task,
             } => {
-                println!("IndexUpdate task: {task:?}");
                 let rtxn = self.env.read_txn()?;
                 let index = self.index_mapper.index(&rtxn, &index_uid)?;
 
