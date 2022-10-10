@@ -11,18 +11,16 @@ use uuid::Uuid;
 
 use crate::{Error, IndexMetadata, Result, Version};
 
-use super::{DumpReader, IndexReader};
+use super::Document;
 pub use index;
 
 pub type Metadata = crate::Metadata;
 
-pub type Document = serde_json::Map<String, serde_json::Value>;
 pub type Settings<T> = index::Settings<T>;
 pub type Checked = index::Checked;
 pub type Unchecked = index::Unchecked;
 
 pub type Task = index_scheduler::TaskView;
-pub type UpdateFile = File;
 pub type Key = meilisearch_auth::Key;
 
 // ===== Other types to clarify the code of the compat module
@@ -106,7 +104,9 @@ impl V6Reader {
         ))
     }
 
-    pub fn tasks(&mut self) -> Box<dyn Iterator<Item = Result<(Task, Option<UpdateFile>)>> + '_> {
+    pub fn tasks(
+        &mut self,
+    ) -> Box<dyn Iterator<Item = Result<(Task, Option<Box<super::UpdateFile>>)>> + '_> {
         Box::new((&mut self.tasks).lines().map(|line| -> Result<_> {
             let mut task: index_scheduler::TaskView = serde_json::from_str(&line?)?;
             // TODO: this can be removed once we can `Deserialize` the duration from the `TaskView`.
@@ -121,7 +121,10 @@ impl V6Reader {
                 .join(task.uid.to_string());
 
             if update_file_path.exists() {
-                Ok((task, Some(File::open(update_file_path)?)))
+                Ok((
+                    task,
+                    Some(Box::new(UpdateFile::new(&update_file_path)?) as Box<super::UpdateFile>),
+                ))
             } else {
                 Ok((task, None))
             }
@@ -137,37 +140,29 @@ impl V6Reader {
     }
 }
 
-impl DumpReader for V6Reader {
-    fn version(&self) -> Version {
-        self.version()
-    }
+pub struct UpdateFile {
+    reader: BufReader<File>,
+}
 
-    fn date(&self) -> Option<OffsetDateTime> {
-        self.date()
-    }
-
-    fn instance_uid(&self) -> Result<Option<Uuid>> {
-        self.instance_uid()
-    }
-
-    fn indexes(
-        &self,
-    ) -> Result<Box<dyn Iterator<Item = Result<Box<dyn super::IndexReader + '_>>> + '_>> {
-        self.indexes().map(|iter| {
-            Box::new(iter.map(|result| {
-                result.map(|index| Box::new(index) as Box<dyn super::IndexReader + '_>)
-            })) as Box<dyn Iterator<Item = _>>
+impl UpdateFile {
+    fn new(path: &Path) -> Result<Self> {
+        Ok(UpdateFile {
+            reader: BufReader::new(File::open(path)?),
         })
     }
+}
 
-    fn tasks(
-        &mut self,
-    ) -> Box<dyn Iterator<Item = Result<(self::Task, Option<self::UpdateFile>)>> + '_> {
-        Box::new(self.tasks())
-    }
+impl Iterator for UpdateFile {
+    type Item = Result<Document>;
 
-    fn keys(&mut self) -> Box<dyn Iterator<Item = Result<self::Key>> + '_> {
-        Box::new(self.keys())
+    fn next(&mut self) -> Option<Self::Item> {
+        (&mut self.reader)
+            .lines()
+            .map(|line| {
+                line.map_err(Error::from)
+                    .and_then(|line| serde_json::from_str(&line).map_err(Error::from))
+            })
+            .next()
     }
 }
 
@@ -203,20 +198,5 @@ impl V6IndexReader {
     pub fn settings(&mut self) -> Result<Settings<Checked>> {
         let settings: Settings<Unchecked> = serde_json::from_reader(&mut self.settings)?;
         Ok(settings.check())
-    }
-}
-
-impl IndexReader for V6IndexReader {
-    fn metadata(&self) -> &IndexMetadata {
-        self.metadata()
-    }
-
-    fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<Document>> + '_>> {
-        self.documents()
-            .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<Document>> + '_>)
-    }
-
-    fn settings(&mut self) -> Result<Settings<Checked>> {
-        self.settings()
     }
 }

@@ -43,9 +43,9 @@ use tempfile::TempDir;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{IndexMetadata, Result, Version};
+use crate::{Error, IndexMetadata, Result, Version};
 
-use super::compat::v5_to_v6::CompatV5ToV6;
+use super::{compat::v5_to_v6::CompatV5ToV6, Document};
 
 pub mod errors;
 pub mod keys;
@@ -53,13 +53,11 @@ pub mod meta;
 pub mod settings;
 pub mod tasks;
 
-pub type Document = serde_json::Map<String, serde_json::Value>;
 pub type Settings<T> = settings::Settings<T>;
 pub type Checked = settings::Checked;
 pub type Unchecked = settings::Unchecked;
 
 pub type Task = tasks::Task;
-pub type UpdateFile = File;
 pub type Key = keys::Key;
 
 // ===== Other types to clarify the code of the compat module
@@ -150,7 +148,9 @@ impl V5Reader {
         }))
     }
 
-    pub fn tasks(&mut self) -> Box<dyn Iterator<Item = Result<(Task, Option<UpdateFile>)>> + '_> {
+    pub fn tasks(
+        &mut self,
+    ) -> Box<dyn Iterator<Item = Result<(Task, Option<Box<super::UpdateFile>>)>> + '_> {
         Box::new((&mut self.tasks).lines().map(|line| -> Result<_> {
             let task: Task = serde_json::from_str(&line?)?;
             if !task.is_finished() {
@@ -161,7 +161,12 @@ impl V5Reader {
                         .join("updates")
                         .join("updates_files")
                         .join(uuid.to_string());
-                    Ok((task, Some(File::open(update_file_path).unwrap())))
+                    Ok((
+                        task,
+                        Some(
+                            Box::new(UpdateFile::new(&update_file_path)?) as Box<super::UpdateFile>
+                        ),
+                    ))
                 } else {
                     Ok((task, None))
                 }
@@ -221,6 +226,32 @@ impl V5IndexReader {
 
     pub fn settings(&mut self) -> Result<Settings<Checked>> {
         Ok(self.settings.clone())
+    }
+}
+
+pub struct UpdateFile {
+    reader: BufReader<File>,
+}
+
+impl UpdateFile {
+    fn new(path: &Path) -> Result<Self> {
+        Ok(UpdateFile {
+            reader: BufReader::new(File::open(path)?),
+        })
+    }
+}
+
+impl Iterator for UpdateFile {
+    type Item = Result<Document>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        (&mut self.reader)
+            .lines()
+            .map(|line| {
+                line.map_err(Error::from)
+                    .and_then(|line| serde_json::from_str(&line).map_err(Error::from))
+            })
+            .next()
     }
 }
 

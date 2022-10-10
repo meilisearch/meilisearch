@@ -160,9 +160,12 @@ pub(crate) mod test {
     use flate2::bufread::GzDecoder;
     use index::Unchecked;
 
-    use crate::test::{
-        create_test_api_keys, create_test_documents, create_test_dump, create_test_instance_uid,
-        create_test_settings, create_test_tasks,
+    use crate::{
+        reader::Document,
+        test::{
+            create_test_api_keys, create_test_documents, create_test_dump,
+            create_test_instance_uid, create_test_settings, create_test_tasks,
+        },
     };
 
     use super::*;
@@ -309,8 +312,12 @@ pub(crate) mod test {
             if let Some(expected_update) = expected.1 {
                 let path = dump_path.join(format!("tasks/update_files/{}", expected.0.uid));
                 println!("trying to open {}", path.display());
-                let update = fs::read(path).unwrap();
-                assert_eq!(update, expected_update);
+                let update = fs::read_to_string(path).unwrap();
+                let documents: Vec<Document> = update
+                    .lines()
+                    .map(|line| serde_json::from_str(line).unwrap())
+                    .collect();
+                assert_eq!(documents, expected_update);
             }
         }
 
