@@ -1,0 +1,26 @@
+---
+source: index-scheduler/src/lib.rs
+expression: snapshot_index_scheduler(&index_scheduler)
+---
+### Processing Tasks:
+[0,]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, status: enqueued, kind: Snapshot}
+1 {uid: 1, status: enqueued, kind: Snapshot}
+2 {uid: 2, status: enqueued, kind: IndexDeletion { index_uid: "doggos" }}
+----------------------------------------------------------------------
+### Status:
+enqueued [0,1,2,]
+----------------------------------------------------------------------
+### Kind:
+"indexDeletion" [2,]
+"snapshot" [0,1,]
+----------------------------------------------------------------------
+### Index Tasks:
+doggos [2,]
+----------------------------------------------------------------------
+### Index Mapper:
+[]
+----------------------------------------------------------------------
+
