@@ -155,6 +155,7 @@ pub enum Code {
     InvalidApiKeyDescription,
 
     UnretrievableErrorCode,
+    MalformedDump,
 }
 
 impl Code {
@@ -267,6 +268,7 @@ impl Code {
             UnretrievableErrorCode => {
                 ErrCode::invalid("unretrievable_error_code", StatusCode::BAD_REQUEST)
             }
+            MalformedDump => ErrCode::invalid("malformed_dump", StatusCode::BAD_REQUEST),
         }
     }
 

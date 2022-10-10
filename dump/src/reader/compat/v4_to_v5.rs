@@ -40,7 +40,7 @@ impl CompatV4ToV5 {
     }
 
     pub fn indexes(&self) -> Result<Box<dyn Iterator<Item = Result<CompatIndexV4ToV5>> + '_>> {
-        let indexes = match self {
+        Ok(match self {
             CompatV4ToV5::V4(v4) => Box::new(
                 v4.indexes()?
                     .map(|index| index.map(CompatIndexV4ToV5::from)),
@@ -53,8 +53,7 @@ impl CompatV4ToV5 {
                     .map(|index| index.map(CompatIndexV4ToV5::from)),
             )
                 as Box<dyn Iterator<Item = Result<CompatIndexV4ToV5>> + '_>,
-        };
-        Ok(indexes)
+        })
     }
 
     pub fn tasks(

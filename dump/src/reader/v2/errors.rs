@@ -6,9 +6,9 @@ use serde::Deserialize;
 #[serde(rename_all = "camelCase")]
 pub struct ResponseError {
     #[serde(skip)]
-    code: StatusCode,
-    message: String,
-    error_code: String,
-    error_type: String,
-    error_link: String,
+    pub code: StatusCode,
+    pub message: String,
+    pub error_code: String,
+    pub error_type: String,
+    pub error_link: String,
 }
