@@ -772,7 +772,7 @@ mod tests {
 
         let docs = index.documents(&rtxn, vec![0, 1, 2]).unwrap();
         let (_id, obkv) = docs.iter().find(|(_id, kv)| kv.get(0) == Some(br#""kevin""#)).unwrap();
-        let kevin_uuid: String = serde_json::from_slice(&obkv.get(1).unwrap()).unwrap();
+        let kevin_uuid: String = serde_json::from_slice(obkv.get(1).unwrap()).unwrap();
         drop(rtxn);
 
         // Second we send 1 document with the generated uuid, to erase the previous ones.
@@ -1811,7 +1811,7 @@ mod tests {
         let long_word = "lol".repeat(1000);
         let doc1 = documents! {[{
             "id": "1",
-            "title": long_word.clone(),
+            "title": long_word,
         }]};
 
         index.add_documents(doc1).unwrap();

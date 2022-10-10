@@ -19,7 +19,7 @@ mod query_criteria;
 mod sort;
 mod typo_tolerance;
 
-pub const TEST_QUERY: &'static str = "hello world america";
+pub const TEST_QUERY: &str = "hello world america";
 
 pub const EXTERNAL_DOCUMENTS_IDS: &[&str; 17] =
     &["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q"];
@@ -177,7 +177,7 @@ fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
         {
             id = Some(document.id.clone())
         }
-    } else if let Some((field, filter)) = filter.split_once("=") {
+    } else if let Some((field, filter)) = filter.split_once('=') {
         if field == "tag" && document.tag == filter {
             id = Some(document.id.clone())
         } else if field == "asc_desc_rank"
@@ -185,11 +185,11 @@ fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
         {
             id = Some(document.id.clone())
         }
-    } else if let Some(("asc_desc_rank", filter)) = filter.split_once("<") {
+    } else if let Some(("asc_desc_rank", filter)) = filter.split_once('<') {
         if document.asc_desc_rank < filter.parse().unwrap() {
             id = Some(document.id.clone())
         }
-    } else if let Some(("asc_desc_rank", filter)) = filter.split_once(">") {
+    } else if let Some(("asc_desc_rank", filter)) = filter.split_once('>') {
         if document.asc_desc_rank > filter.parse().unwrap() {
             id = Some(document.id.clone())
         }

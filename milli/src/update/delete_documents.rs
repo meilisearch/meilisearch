@@ -641,7 +641,7 @@ mod tests {
         external_ids: &[&str],
         disable_soft_deletion: bool,
     ) -> Vec<u32> {
-        let external_document_ids = index.external_documents_ids(&wtxn).unwrap();
+        let external_document_ids = index.external_documents_ids(wtxn).unwrap();
         let ids_to_delete: Vec<u32> = external_ids
             .iter()
             .map(|id| external_document_ids.get(id.as_bytes()).unwrap())
@@ -858,7 +858,7 @@ mod tests {
         assert!(!results.documents_ids.is_empty());
         for id in results.documents_ids.iter() {
             assert!(
-                !deleted_internal_ids.contains(&id),
+                !deleted_internal_ids.contains(id),
                 "The document {} was supposed to be deleted",
                 id
             );
@@ -922,7 +922,7 @@ mod tests {
         assert!(!results.documents_ids.is_empty());
         for id in results.documents_ids.iter() {
             assert!(
-                !deleted_internal_ids.contains(&id),
+                !deleted_internal_ids.contains(id),
                 "The document {} was supposed to be deleted",
                 id
             );
@@ -986,7 +986,7 @@ mod tests {
         assert!(!results.documents_ids.is_empty());
         for id in results.documents_ids.iter() {
             assert!(
-                !deleted_internal_ids.contains(&id),
+                !deleted_internal_ids.contains(id),
                 "The document {} was supposed to be deleted",
                 id
             );

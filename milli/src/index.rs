@@ -1234,7 +1234,7 @@ pub(crate) mod tests {
         {
             let builder = IndexDocuments::new(
                 wtxn,
-                &self,
+                self,
                 &self.indexer_config,
                 self.index_documents_config.clone(),
                 |_| (),

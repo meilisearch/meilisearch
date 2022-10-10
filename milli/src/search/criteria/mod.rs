@@ -610,7 +610,11 @@ fn query_pair_proximity_docids(
         }
         (QueryKind::Exact { word: left, .. }, QueryKind::Tolerant { typo, word: right }) => {
             let r_words = word_derivations(right, prefix, *typo, ctx.words_fst(), wdcache)?;
+<<<<<<< HEAD
             all_word_pair_overall_proximity_docids(ctx, &[(left, 0)], r_words, proximity)
+=======
+            all_word_pair_proximity_docids(ctx, &[(left, 0)], r_words, proximity)
+>>>>>>> 08fe530b (Execute cargo clippy --fix)
         }
         (
             QueryKind::Tolerant { typo: l_typo, word: left },
@@ -866,7 +870,7 @@ pub mod test {
 
             let mut keys = word_docids.keys().collect::<Vec<_>>();
             keys.sort_unstable();
-            let words_fst = fst::Set::from_iter(keys).unwrap().map_data(|v| Cow::Owned(v)).unwrap();
+            let words_fst = fst::Set::from_iter(keys).unwrap().map_data(Cow::Owned).unwrap();
 
             TestContext {
                 words_fst,
