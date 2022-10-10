@@ -17,6 +17,7 @@ meilisearch-types = { path = "../meilisearch-types" }
 document-formats = { path = "../document-formats" }
 roaring = "0.9.0"
 serde = { version = "1.0.136", features = ["derive"] }
+serde_json = { version = "1.0.85", features = ["preserve_order"] }
 tempfile = "3.3.0"
 thiserror = "1.0.30"
 time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
