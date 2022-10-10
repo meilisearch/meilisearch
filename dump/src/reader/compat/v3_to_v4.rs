@@ -67,7 +67,10 @@ impl CompatV3ToV4 {
 
         Box::new(
             tasks
-                .map(move |task| {
+                // we need to override the old task ids that were generated
+                // by index in favor of a global unique incremental ID.
+                .enumerate()
+                .map(move |(task_id, task)| {
                     task.map(|(task, content_file)| {
                         let index_uid = indexes
                             .iter()
@@ -97,7 +100,7 @@ impl CompatV3ToV4 {
                         };
 
                         let task = v4::Task {
-                            id: task.update.id() as u32,
+                            id: task_id as u32,
                             index_uid: v4::meta::IndexUid(index_uid),
                             content: match task.update.meta() {
                                 v3::Kind::DeleteDocuments(documents) => {
