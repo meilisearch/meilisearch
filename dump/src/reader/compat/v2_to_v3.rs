@@ -4,7 +4,7 @@ use std::str::FromStr;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::reader::{v2, v3};
+use crate::reader::{v2, v3, Document};
 use crate::Result;
 
 use super::v3_to_v4::CompatV3ToV4;
@@ -54,7 +54,10 @@ impl CompatV2ToV3 {
 
     pub fn tasks(
         &mut self,
-    ) -> Box<dyn Iterator<Item = Result<(v3::Task, Option<v3::UpdateFile>)>> + '_> {
+    ) -> Box<
+        dyn Iterator<Item = Result<(v3::Task, Option<Box<dyn Iterator<Item = Result<Document>>>>)>>
+            + '_,
+    > {
         let _indexes = self.from.index_uuid.clone();
 
         Box::new(
@@ -67,7 +70,12 @@ impl CompatV2ToV3 {
                             update: task.update.into(),
                         };
 
-                        Some((task, content_file))
+                        Some((
+                            task,
+                            content_file.map(|content_file| {
+                                Box::new(content_file) as Box<dyn Iterator<Item = Result<Document>>>
+                            }),
+                        ))
                     })
                 })
                 .filter_map(|res| res.transpose()),
@@ -88,10 +96,10 @@ impl CompatIndexV2ToV3 {
         self.from.metadata()
     }
 
-    pub fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<v3::Document>> + '_>> {
+    pub fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<Document>> + '_>> {
         self.from
             .documents()
-            .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<v3::Document>> + '_>)
+            .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<Document>> + '_>)
     }
 
     pub fn settings(&mut self) -> Result<v3::Settings<v3::Checked>> {
@@ -379,11 +387,18 @@ pub(crate) mod test {
 
         // tasks
         let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();
-        let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
+        let (tasks, mut update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
         insta::assert_json_snapshot!(tasks);
         assert_eq!(update_files.len(), 9);
         assert!(update_files[0].is_some()); // the enqueued document addition
         assert!(update_files[1..].iter().all(|u| u.is_none())); // everything already processed
+
+        let update_file = update_files
+            .remove(0)
+            .unwrap()
+            .collect::<Result<Vec<_>>>()
+            .unwrap();
+        insta::assert_json_snapshot!(update_file);
 
         // indexes
         let mut indexes = dump.indexes().unwrap().collect::<Result<Vec<_>>>().unwrap();

@@ -57,7 +57,7 @@ impl CompatV5ToV6 {
     ) -> Box<dyn Iterator<Item = Result<(v6::Task, Option<v6::UpdateFile>)>> + '_> {
         let tasks = match self {
             CompatV5ToV6::V5(v5) => v5.tasks(),
-            CompatV5ToV6::Compat(compat) => compat.tasks(),
+            CompatV5ToV6::Compat(compat) => todo!(), // compat.tasks(),
         };
         Box::new(tasks.map(|task| {
             task.map(|(task, content_file)| {
