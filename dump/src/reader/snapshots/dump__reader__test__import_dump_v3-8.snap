@@ -1,0 +1,43 @@
+---
+source: dump/src/reader/mod.rs
+expression: movies.settings()
+---
+Ok(
+    Settings {
+        displayed_attributes: Reset,
+        searchable_attributes: Reset,
+        filterable_attributes: Set(
+            {
+                "genres",
+                "id",
+            },
+        ),
+        sortable_attributes: Set(
+            {
+                "release_date",
+            },
+        ),
+        ranking_rules: Set(
+            [
+                "words",
+                "typo",
+                "proximity",
+                "attribute",
+                "sort",
+                "exactness",
+                "release_date:asc",
+            ],
+        ),
+        stop_words: Set(
+            {},
+        ),
+        synonyms: Set(
+            {},
+        ),
+        distinct_attribute: Reset,
+        typo_tolerance: NotSet,
+        faceting: NotSet,
+        pagination: NotSet,
+        _kind: PhantomData<index::updates::Checked>,
+    },
+)
