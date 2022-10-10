@@ -1,0 +1,200 @@
+---
+source: dump/src/reader/compat/v2_to_v3.rs
+expression: tasks
+---
+[
+  {
+    "uuid": "5867e9f1-1ebb-4145-b0ec-b61b29da43e9",
+    "update": {
+      "status": "enqueued",
+      "updateId": 0,
+      "meta": {
+        "DocumentAddition": {
+          "primary_key": null,
+          "method": "ReplaceDocuments",
+          "content_uuid": "1d0832b1-02f7-4c56-849e-d150d266ab46"
+        }
+      },
+      "enqueuedAt": "2022-10-09T20:27:59.828915609Z"
+    }
+  },
+  {
+    "uuid": "5661371a-21ab-4363-b2e5-5ca66126e5e0",
+    "update": {
+      "status": "processed",
+      "success": "Other",
+      "processedAt": "2022-10-09T20:27:22.688964637Z",
+      "updateId": 0,
+      "meta": {
+        "Settings": {
+          "synonyms": {
+            "android": [
+              "phone",
+              "smartphone"
+            ],
+            "iphone": [
+              "phone",
+              "smartphone"
+            ],
+            "phone": [
+              "smartphone",
+              "iphone",
+              "android"
+            ]
+          }
+        }
+      },
+      "enqueuedAt": "2022-10-09T20:27:22.597296237Z",
+      "startedProcessingAt": "2022-10-09T20:27:22.610066114Z"
+    }
+  },
+  {
+    "uuid": "5661371a-21ab-4363-b2e5-5ca66126e5e0",
+    "update": {
+      "status": "failed",
+      "updateId": 1,
+      "meta": {
+        "DocumentAddition": {
+          "primary_key": null,
+          "method": "ReplaceDocuments",
+          "content_uuid": "00112233-4455-6677-8899-aabbccddeeff"
+        }
+      },
+      "enqueuedAt": "2022-10-09T20:27:23.305963122Z",
+      "startedProcessingAt": "2022-10-09T20:27:23.312497053Z",
+      "msg": "missing primary key",
+      "code": "UnretrievableErrorCode",
+      "failedAt": "2022-10-09T20:27:23.31297828Z"
+    }
+  },
+  {
+    "uuid": "5661371a-21ab-4363-b2e5-5ca66126e5e0",
+    "update": {
+      "status": "processed",
+      "success": {
+        "DocumentsAddition": {
+          "nb_documents": 10
+        }
+      },
+      "processedAt": "2022-10-09T20:27:23.951017769Z",
+      "updateId": 2,
+      "meta": {
+        "DocumentAddition": {
+          "primary_key": "sku",
+          "method": "ReplaceDocuments",
+          "content_uuid": "00112233-4455-6677-8899-aabbccddeeff"
+        }
+      },
+      "enqueuedAt": "2022-10-09T20:27:23.91528854Z",
+      "startedProcessingAt": "2022-10-09T20:27:23.921493715Z"
+    }
+  },
+  {
+    "uuid": "bb33e237-be17-453c-83a2-4fef67d03220",
+    "update": {
+      "status": "processed",
+      "success": {
+        "DocumentsAddition": {
+          "nb_documents": 10
+        }
+      },
+      "processedAt": "2022-10-09T20:27:22.197788495Z",
+      "updateId": 0,
+      "meta": {
+        "DocumentAddition": {
+          "primary_key": null,
+          "method": "ReplaceDocuments",
+          "content_uuid": "00112233-4455-6677-8899-aabbccddeeff"
+        }
+      },
+      "enqueuedAt": "2022-10-09T20:27:22.075264451Z",
+      "startedProcessingAt": "2022-10-09T20:27:22.085751162Z"
+    }
+  },
+  {
+    "uuid": "bb33e237-be17-453c-83a2-4fef67d03220",
+    "update": {
+      "status": "processed",
+      "success": "Other",
+      "processedAt": "2022-10-09T20:27:22.411761344Z",
+      "updateId": 1,
+      "meta": {
+        "Settings": {
+          "rankingRules": [
+            "words",
+            "typo",
+            "proximity",
+            "attribute",
+            "exactness",
+            "asc(release_date)"
+          ]
+        }
+      },
+      "enqueuedAt": "2022-10-09T20:27:22.380218549Z",
+      "startedProcessingAt": "2022-10-09T20:27:22.393023806Z"
+    }
+  },
+  {
+    "uuid": "bb33e237-be17-453c-83a2-4fef67d03220",
+    "update": {
+      "status": "processed",
+      "success": {
+        "DocumentsAddition": {
+          "nb_documents": 100
+        }
+      },
+      "processedAt": "2022-10-09T20:28:01.93111053Z",
+      "updateId": 2,
+      "meta": {
+        "DocumentAddition": {
+          "primary_key": null,
+          "method": "ReplaceDocuments",
+          "content_uuid": "00112233-4455-6677-8899-aabbccddeeff"
+        }
+      },
+      "enqueuedAt": "2022-10-09T20:27:59.817923645Z",
+      "startedProcessingAt": "2022-10-09T20:27:59.829038211Z"
+    }
+  },
+  {
+    "uuid": "f20c9936-a26e-4960-8a1f-3bdb390608f2",
+    "update": {
+      "status": "failed",
+      "updateId": 0,
+      "meta": {
+        "DocumentAddition": {
+          "primary_key": null,
+          "method": "ReplaceDocuments",
+          "content_uuid": "00112233-4455-6677-8899-aabbccddeeff"
+        }
+      },
+      "enqueuedAt": "2022-10-09T20:27:24.157663206Z",
+      "startedProcessingAt": "2022-10-09T20:27:24.162839906Z",
+      "msg": "missing primary key",
+      "code": "UnretrievableErrorCode",
+      "failedAt": "2022-10-09T20:27:24.242683494Z"
+    }
+  },
+  {
+    "uuid": "f20c9936-a26e-4960-8a1f-3bdb390608f2",
+    "update": {
+      "status": "processed",
+      "success": {
+        "DocumentsAddition": {
+          "nb_documents": 10
+        }
+      },
+      "processedAt": "2022-10-09T20:27:24.312809641Z",
+      "updateId": 1,
+      "meta": {
+        "DocumentAddition": {
+          "primary_key": "index",
+          "method": "ReplaceDocuments",
+          "content_uuid": "00112233-4455-6677-8899-aabbccddeeff"
+        }
+      },
+      "enqueuedAt": "2022-10-09T20:27:24.283289037Z",
+      "startedProcessingAt": "2022-10-09T20:27:24.285985108Z"
+    }
+  }
+]

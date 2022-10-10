@@ -179,6 +179,17 @@ impl<T> Default for Setting<T> {
 }
 
 impl<T> Setting<T> {
+    pub fn map<U, F>(self, f: F) -> Setting<U>
+    where
+        F: FnOnce(T) -> U,
+    {
+        match self {
+            Setting::Set(t) => Setting::Set(f(t)),
+            Setting::Reset => Setting::Reset,
+            Setting::NotSet => Setting::NotSet,
+        }
+    }
+
     pub fn set(self) -> Option<T> {
         match self {
             Self::Set(value) => Some(value),

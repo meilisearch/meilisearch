@@ -4,8 +4,10 @@ use thiserror::Error;
 pub enum Error {
     #[error("The version 1 of the dumps is not supported anymore. You can re-export your dump from a version between 0.21 and 0.24, or start fresh from a version 0.25 onwards.")]
     DumpV1Unsupported,
-    #[error("Bad index name")]
+    #[error("Bad index name.")]
     BadIndexName,
+    #[error("Malformed task.")]
+    MalformedTask,
 
     #[error(transparent)]
     Io(#[from] std::io::Error),

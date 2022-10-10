@@ -78,7 +78,7 @@ pub struct V3Reader {
     dump: TempDir,
     metadata: Metadata,
     tasks: BufReader<File>,
-    pub index_uuid: Vec<IndexUuid>,
+    index_uuid: Vec<IndexUuid>,
 }
 
 impl V3Reader {
@@ -98,6 +98,10 @@ impl V3Reader {
             index_uuid,
             dump,
         })
+    }
+
+    pub fn index_uuid(&self) -> Vec<IndexUuid> {
+        self.index_uuid.clone()
     }
 
     pub fn to_v4(self) -> CompatV3ToV4 {
