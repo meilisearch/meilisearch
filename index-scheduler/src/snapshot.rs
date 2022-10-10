@@ -13,7 +13,7 @@ use crate::{
     IndexScheduler, Kind, Status,
 };
 
-pub fn snapshot_index(scheduler: &IndexScheduler) -> String {
+pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     let IndexScheduler {
         processing_tasks,
         file_store: _,
