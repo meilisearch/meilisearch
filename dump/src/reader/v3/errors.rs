@@ -91,6 +91,9 @@ pub enum Code {
     MissingContentType,
     MalformedPayload,
     MissingPayload,
+
+    MalformedDump,
+    UnretrievableErrorCode,
 }
 
 impl Code {
@@ -181,6 +184,10 @@ impl Code {
                 ErrCode::invalid("invalid_content_type", StatusCode::UNSUPPORTED_MEDIA_TYPE)
             }
             MissingPayload => ErrCode::invalid("missing_payload", StatusCode::BAD_REQUEST),
+            UnretrievableErrorCode => {
+                ErrCode::invalid("unretrievable_error_code", StatusCode::BAD_REQUEST)
+            }
+            MalformedDump => ErrCode::invalid("malformed_dump", StatusCode::BAD_REQUEST),
         }
     }
 
