@@ -313,7 +313,7 @@ impl KindWithContent {
                 todo!()
             }
             KindWithContent::CancelTask { .. } => {
-                todo!()
+                None // TODO: check correctness of this return value
             }
             KindWithContent::DeleteTasks { query, tasks } => Some(Details::DeleteTasks {
                 matched_tasks: tasks.len(),
