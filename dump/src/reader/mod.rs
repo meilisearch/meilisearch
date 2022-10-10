@@ -6,20 +6,14 @@ use flate2::bufread::GzDecoder;
 use serde::Deserialize;
 
 use tempfile::TempDir;
-use time::OffsetDateTime;
-use uuid::Uuid;
 
-// use crate::reader::compat::Compat;
-use crate::{IndexMetadata, Result, Version};
+use crate::{Result, Version};
 
 use self::compat::Compat;
 
-// use self::loaders::{v2, v3, v4, v5};
-
-// pub mod error;
 mod compat;
-// mod loaders;
-// mod v1;
+
+// pub(self) mod v1;
 pub(self) mod v2;
 pub(self) mod v3;
 pub(self) mod v4;
@@ -47,38 +41,15 @@ pub fn open(dump: impl Read) -> Result<Compat> {
     match dump_version {
         // Version::V1 => Ok(Box::new(v1::Reader::open(path)?)),
         Version::V1 => todo!(),
-        Version::V2 => todo!(),
+        Version::V2 => Ok(v2::V2Reader::open(path)?
+            .to_v3()
+            .to_v4()
+            .to_v5()
+            .to_v6()
+            .into()),
         Version::V3 => Ok(v3::V3Reader::open(path)?.to_v4().to_v5().to_v6().into()),
         Version::V4 => Ok(v4::V4Reader::open(path)?.to_v5().to_v6().into()),
         Version::V5 => Ok(v5::V5Reader::open(path)?.to_v6().into()),
         Version::V6 => Ok(v6::V6Reader::open(path)?.into()),
     }
-}
-
-pub trait DumpReader {
-    /// Return the version of the dump.
-    fn version(&self) -> Version;
-
-    /// Return at which date the dump was created if there was one.
-    fn date(&self) -> Option<OffsetDateTime>;
-
-    /// Return the instance-uid if there was one.
-    fn instance_uid(&self) -> Result<Option<Uuid>>;
-
-    /// Return an iterator over each indexes.
-    fn indexes(&self) -> Result<Box<dyn Iterator<Item = Result<Box<dyn IndexReader + '_>>> + '_>>;
-
-    /// Return all the tasks in the dump with a possible update file.
-    fn tasks(
-        &mut self,
-    ) -> Box<dyn Iterator<Item = Result<(v6::Task, Option<v6::UpdateFile>)>> + '_>;
-
-    /// Return all the keys.
-    fn keys(&mut self) -> Box<dyn Iterator<Item = Result<v6::Key>> + '_>;
-}
-
-pub trait IndexReader {
-    fn metadata(&self) -> &IndexMetadata;
-    fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<v6::Document>> + '_>>;
-    fn settings(&mut self) -> Result<v6::Settings<v6::Checked>>;
 }
