@@ -11,6 +11,7 @@ use self::{
 use super::{
     v5::V5Reader,
     v6::{self, V6IndexReader, V6Reader},
+    Document, UpdateFile,
 };
 
 pub mod v2_to_v3;
@@ -62,7 +63,7 @@ impl Compat {
 
     pub fn tasks(
         &mut self,
-    ) -> Box<dyn Iterator<Item = Result<(v6::Task, Option<v6::UpdateFile>)>> + '_> {
+    ) -> Box<dyn Iterator<Item = Result<(v6::Task, Option<Box<UpdateFile>>)>> + '_> {
         match self {
             Compat::Current(current) => current.tasks(),
             Compat::Compat(compat) => compat.tasks(),
@@ -118,14 +119,14 @@ impl CompatIndex {
         }
     }
 
-    pub fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<v6::Document>> + '_>> {
+    pub fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<Document>> + '_>> {
         match self {
             CompatIndex::Current(v6) => v6
                 .documents()
-                .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<v6::Document>> + '_>),
+                .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<Document>> + '_>),
             CompatIndex::Compat(compat) => compat
                 .documents()
-                .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<v6::Document>> + '_>),
+                .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<Document>> + '_>),
         }
     }
 

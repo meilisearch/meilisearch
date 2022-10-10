@@ -1,4 +1,4 @@
-use crate::reader::{v4, v5};
+use crate::reader::{v4, v5, Document};
 use crate::Result;
 
 use super::v3_to_v4::{CompatIndexV3ToV4, CompatV3ToV4};
@@ -66,8 +66,6 @@ impl CompatV4ToV5 {
         };
         Box::new(tasks.map(|task| {
             task.map(|(task, content_file)| {
-                // let task_view: v4::tasks::TaskView = task.into();
-
                 let task = v5::Task {
                     id: task.id,
                     content: match task.content {
@@ -244,14 +242,14 @@ impl CompatIndexV4ToV5 {
         }
     }
 
-    pub fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<v5::Document>> + '_>> {
+    pub fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<Document>> + '_>> {
         match self {
             CompatIndexV4ToV5::V4(v4) => v4
                 .documents()
-                .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<v5::Document>> + '_>),
+                .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<Document>> + '_>),
             CompatIndexV4ToV5::Compat(compat) => compat
                 .documents()
-                .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<v5::Document>> + '_>),
+                .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<Document>> + '_>),
         }
     }
 

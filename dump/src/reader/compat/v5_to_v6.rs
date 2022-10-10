@@ -1,4 +1,4 @@
-use crate::reader::{v5, v6};
+use crate::reader::{v5, v6, Document, UpdateFile};
 use crate::Result;
 
 use super::v4_to_v5::{CompatIndexV4ToV5, CompatV4ToV5};
@@ -54,10 +54,10 @@ impl CompatV5ToV6 {
 
     pub fn tasks(
         &mut self,
-    ) -> Box<dyn Iterator<Item = Result<(v6::Task, Option<v6::UpdateFile>)>> + '_> {
+    ) -> Box<dyn Iterator<Item = Result<(v6::Task, Option<Box<UpdateFile>>)>> + '_> {
         let tasks = match self {
             CompatV5ToV6::V5(v5) => v5.tasks(),
-            CompatV5ToV6::Compat(compat) => todo!(), // compat.tasks(),
+            CompatV5ToV6::Compat(compat) => compat.tasks(),
         };
         Box::new(tasks.map(|task| {
             task.map(|(task, content_file)| {
@@ -202,14 +202,14 @@ impl CompatIndexV5ToV6 {
         }
     }
 
-    pub fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<v6::Document>> + '_>> {
+    pub fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<Document>> + '_>> {
         match self {
             CompatIndexV5ToV6::V5(v5) => v5
                 .documents()
-                .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<v6::Document>> + '_>),
+                .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<Document>> + '_>),
             CompatIndexV5ToV6::Compat(compat) => compat
                 .documents()
-                .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<v6::Document>> + '_>),
+                .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<Document>> + '_>),
         }
     }
 

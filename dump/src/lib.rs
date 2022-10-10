@@ -61,7 +61,10 @@ pub(crate) mod test {
     use time::{macros::datetime, Duration};
     use uuid::Uuid;
 
-    use crate::{reader, DumpWriter, IndexMetadata, Version};
+    use crate::{
+        reader::{self, Document},
+        DumpWriter, IndexMetadata, Version,
+    };
 
     pub fn create_test_instance_uid() -> Uuid {
         Uuid::parse_str("9e15e977-f2ae-4761-943f-1eaf75fd736d").unwrap()
@@ -111,7 +114,7 @@ pub(crate) mod test {
         settings.check()
     }
 
-    pub fn create_test_tasks() -> Vec<(TaskView, Option<&'static [u8]>)> {
+    pub fn create_test_tasks() -> Vec<(TaskView, Option<Vec<Document>>)> {
         vec![
             (
                 TaskView {
@@ -150,7 +153,16 @@ pub(crate) mod test {
                     started_at: Some(datetime!(2022-11-20 0:00 UTC)),
                     finished_at: Some(datetime!(2022-11-21 0:00 UTC)),
                 },
-                Some(br#"{ "id": 4, "race": "leonberg" }"#),
+                Some(vec![
+                    json!({ "id": 4, "race": "leonberg" })
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                    json!({ "id": 5, "race": "patou" })
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                ]),
             ),
             (
                 TaskView {
@@ -224,10 +236,12 @@ pub(crate) mod test {
         // ========== pushing the task queue
         let tasks = create_test_tasks();
 
+        /*
         let mut task_queue = dump.create_tasks_queue().unwrap();
         for (task, update_file) in &tasks {
             task_queue.push_task(task, update_file.map(|c| c)).unwrap();
         }
+        */
 
         // ========== pushing the api keys
         let api_keys = create_test_api_keys();
@@ -283,9 +297,11 @@ pub(crate) mod test {
                     "A content file was expected for the task {}.",
                     expected.0.uid
                 );
-                let mut update = Vec::new();
-                content_file.unwrap().read_to_end(&mut update).unwrap();
-                assert_eq!(update, expected_update);
+                let updates = content_file
+                    .unwrap()
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap();
+                assert_eq!(updates, expected_update);
             }
         }
 
