@@ -1,0 +1,31 @@
+---
+source: dump/src/reader/compat/v2_to_v3.rs
+expression: spells.settings()
+---
+Ok(
+    Settings {
+        displayed_attributes: Reset,
+        searchable_attributes: Reset,
+        filterable_attributes: Set(
+            {},
+        ),
+        sortable_attributes: NotSet,
+        ranking_rules: Set(
+            [
+                "words",
+                "typo",
+                "proximity",
+                "attribute",
+                "exactness",
+            ],
+        ),
+        stop_words: Set(
+            {},
+        ),
+        synonyms: Set(
+            {},
+        ),
+        distinct_attribute: Reset,
+        _kind: PhantomData<dump::reader::v3::settings::Checked>,
+    },
+)

@@ -41,7 +41,7 @@ use crate::{IndexMetadata, Result, Version};
 
 use self::meta::{DumpMeta, IndexUuid};
 
-use super::IndexReader;
+use super::{compat::v2_to_v3::CompatV2ToV3, IndexReader};
 
 pub type Document = serde_json::Map<String, serde_json::Value>;
 pub type Settings<T> = settings::Settings<T>;
@@ -99,11 +99,13 @@ impl V2Reader {
         })
     }
 
-    /*
     pub fn to_v3(self) -> CompatV2ToV3 {
         CompatV2ToV3::new(self)
     }
-    */
+
+    pub fn index_uuid(&self) -> Vec<IndexUuid> {
+        self.index_uuid.clone()
+    }
 
     pub fn version(&self) -> Version {
         Version::V2

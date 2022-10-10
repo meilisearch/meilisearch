@@ -7,8 +7,8 @@ use super::{ResponseError, Settings, Unchecked};
 #[derive(Deserialize)]
 #[cfg_attr(test, derive(serde::Serialize))]
 pub struct UpdateEntry {
-    uuid: Uuid,
-    update: UpdateStatus,
+    pub uuid: Uuid,
+    pub update: UpdateStatus,
 }
 
 impl UpdateEntry {
@@ -153,7 +153,7 @@ impl Processing {
 #[serde(rename_all = "camelCase")]
 pub struct Aborted {
     #[serde(flatten)]
-    from: Enqueued,
+    pub from: Enqueued,
     #[serde(with = "time::serde::rfc3339")]
     pub aborted_at: OffsetDateTime,
 }
