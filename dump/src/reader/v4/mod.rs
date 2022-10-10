@@ -15,7 +15,7 @@ pub mod meta;
 pub mod settings;
 pub mod tasks;
 
-use crate::{IndexMetadata, Result, Version};
+use crate::{Error, IndexMetadata, Result, Version};
 
 use self::meta::{DumpMeta, IndexUuid};
 
@@ -27,7 +27,6 @@ pub type Checked = settings::Checked;
 pub type Unchecked = settings::Unchecked;
 
 pub type Task = tasks::Task;
-pub type UpdateFile = File;
 pub type Key = keys::Key;
 
 // everything related to the settings
@@ -110,7 +109,9 @@ impl V4Reader {
         }))
     }
 
-    pub fn tasks(&mut self) -> Box<dyn Iterator<Item = Result<(Task, Option<UpdateFile>)>> + '_> {
+    pub fn tasks(
+        &mut self,
+    ) -> Box<dyn Iterator<Item = Result<(Task, Option<Box<super::UpdateFile>>)>> + '_> {
         Box::new((&mut self.tasks).lines().map(|line| -> Result<_> {
             let task: Task = serde_json::from_str(&line?)?;
             if !task.is_finished() {
@@ -121,7 +122,12 @@ impl V4Reader {
                         .join("updates")
                         .join("updates_files")
                         .join(uuid.to_string());
-                    Ok((task, Some(File::open(update_file_path).unwrap())))
+                    Ok((
+                        task,
+                        Some(
+                            Box::new(UpdateFile::new(&update_file_path)?) as Box<super::UpdateFile>
+                        ),
+                    ))
                 } else {
                     Ok((task, None))
                 }
@@ -184,6 +190,32 @@ impl V4IndexReader {
     }
 }
 
+pub struct UpdateFile {
+    reader: BufReader<File>,
+}
+
+impl UpdateFile {
+    fn new(path: &Path) -> Result<Self> {
+        Ok(UpdateFile {
+            reader: BufReader::new(File::open(path)?),
+        })
+    }
+}
+
+impl Iterator for UpdateFile {
+    type Item = Result<Document>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        (&mut self.reader)
+            .lines()
+            .map(|line| {
+                line.map_err(Error::from)
+                    .and_then(|line| serde_json::from_str(&line).map_err(Error::from))
+            })
+            .next()
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod test {
     use std::{fs::File, io::BufReader};
@@ -210,11 +242,18 @@ pub(crate) mod test {
 
         // tasks
         let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();
-        let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
+        let (tasks, mut update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
         insta::assert_json_snapshot!(tasks);
         assert_eq!(update_files.len(), 10);
         assert!(update_files[0].is_some()); // the enqueued document addition
         assert!(update_files[1..].iter().all(|u| u.is_none())); // everything already processed
+
+        let update_file = update_files
+            .remove(0)
+            .unwrap()
+            .collect::<Result<Vec<_>>>()
+            .unwrap();
+        insta::assert_json_snapshot!(update_file);
 
         // keys
         let keys = dump.keys().collect::<Result<Vec<_>>>().unwrap();

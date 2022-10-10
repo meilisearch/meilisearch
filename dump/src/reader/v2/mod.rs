@@ -41,15 +41,13 @@ use crate::{IndexMetadata, Result, Version};
 
 use self::meta::{DumpMeta, IndexUuid};
 
-use super::compat::v2_to_v3::CompatV2ToV3;
+use super::{compat::v2_to_v3::CompatV2ToV3, Document};
 
-pub type Document = serde_json::Map<String, serde_json::Value>;
 pub type Settings<T> = settings::Settings<T>;
 pub type Checked = settings::Checked;
 pub type Unchecked = settings::Unchecked;
 
 pub type Task = updates::UpdateEntry;
-pub type UpdateFile = File;
 
 // everything related to the errors
 pub type ResponseError = errors::ResponseError;
@@ -132,7 +130,7 @@ impl V2Reader {
                         .join("updates")
                         .join("update_files")
                         .join(format!("update_{}", uuid.to_string()));
-                    Ok((task, Some(File::open(update_file_path).unwrap())))
+                    Ok((task, Some(UpdateFile::new(&update_file_path)?)))
                 } else {
                     Ok((task, None))
                 }
@@ -187,6 +185,30 @@ impl V2IndexReader {
     }
 }
 
+pub struct UpdateFile {
+    documents: Vec<Document>,
+    index: usize,
+}
+
+impl UpdateFile {
+    fn new(path: &Path) -> Result<Self> {
+        let reader = BufReader::new(File::open(path)?);
+        Ok(UpdateFile {
+            documents: serde_json::from_reader(reader)?,
+            index: 0,
+        })
+    }
+}
+
+impl Iterator for UpdateFile {
+    type Item = Result<Document>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.index += 1;
+        self.documents.get(self.index - 1).cloned().map(Ok)
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod test {
     use std::{fs::File, io::BufReader};
@@ -212,11 +234,18 @@ pub(crate) mod test {
 
         // tasks
         let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();
-        let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
+        let (tasks, mut update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
         insta::assert_json_snapshot!(tasks);
         assert_eq!(update_files.len(), 9);
         assert!(update_files[0].is_some()); // the enqueued document addition
         assert!(update_files[1..].iter().all(|u| u.is_none())); // everything already processed
+
+        let update_file = update_files
+            .remove(0)
+            .unwrap()
+            .collect::<Result<Vec<_>>>()
+            .unwrap();
+        insta::assert_json_snapshot!(update_file);
 
         // indexes
         let mut indexes = dump.indexes().unwrap().collect::<Result<Vec<_>>>().unwrap();
