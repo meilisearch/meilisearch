@@ -26,6 +26,9 @@ pub(self) mod v4;
 pub(self) mod v5;
 pub(self) mod v6;
 
+pub type Document = serde_json::Map<String, serde_json::Value>;
+pub type UpdateFile = dyn Iterator<Item = Result<Document>>;
+
 pub fn open(dump: impl Read) -> Result<Compat> {
     let path = TempDir::new()?;
     let mut dump = BufReader::new(dump);

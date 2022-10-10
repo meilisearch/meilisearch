@@ -58,7 +58,8 @@ impl CompatV4ToV5 {
 
     pub fn tasks(
         &mut self,
-    ) -> Box<dyn Iterator<Item = Result<(v5::Task, Option<v5::UpdateFile>)>> + '_> {
+    ) -> Box<dyn Iterator<Item = Result<(v5::Task, Option<Box<crate::reader::UpdateFile>>)>> + '_>
+    {
         let tasks = match self {
             CompatV4ToV5::V4(v4) => v4.tasks(),
             CompatV4ToV5::Compat(compat) => compat.tasks(),

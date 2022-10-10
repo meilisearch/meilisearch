@@ -1,5 +1,5 @@
 ---
-source: dump/src/reader/compat/v3_to_v4.rs
+source: dump/src/reader/v3/mod.rs
 expression: update_file
 ---
 [
