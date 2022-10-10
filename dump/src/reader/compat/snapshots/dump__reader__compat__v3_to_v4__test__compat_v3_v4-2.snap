@@ -22,7 +22,7 @@ expression: tasks
     ]
   },
   {
-    "id": 0,
+    "id": 1,
     "index_uid": "movies",
     "content": {
       "DocumentAddition": {
@@ -53,7 +53,7 @@ expression: tasks
     ]
   },
   {
-    "id": 1,
+    "id": 2,
     "index_uid": "movies",
     "content": {
       "SettingsUpdate": {
@@ -86,7 +86,7 @@ expression: tasks
     ]
   },
   {
-    "id": 2,
+    "id": 3,
     "index_uid": "movies",
     "content": {
       "SettingsUpdate": {
@@ -121,7 +121,7 @@ expression: tasks
     ]
   },
   {
-    "id": 3,
+    "id": 4,
     "index_uid": "movies",
     "content": {
       "DocumentAddition": {
@@ -152,7 +152,7 @@ expression: tasks
     ]
   },
   {
-    "id": 0,
+    "id": 5,
     "index_uid": "products",
     "content": {
       "SettingsUpdate": {
@@ -193,7 +193,7 @@ expression: tasks
     ]
   },
   {
-    "id": 1,
+    "id": 6,
     "index_uid": "products",
     "content": {
       "DocumentAddition": {
@@ -225,7 +225,7 @@ expression: tasks
     ]
   },
   {
-    "id": 2,
+    "id": 7,
     "index_uid": "products",
     "content": {
       "DocumentAddition": {
@@ -256,7 +256,7 @@ expression: tasks
     ]
   },
   {
-    "id": 0,
+    "id": 8,
     "index_uid": "dnd_spells",
     "content": {
       "DocumentAddition": {
@@ -288,7 +288,7 @@ expression: tasks
     ]
   },
   {
-    "id": 1,
+    "id": 9,
     "index_uid": "dnd_spells",
     "content": {
       "DocumentAddition": {
