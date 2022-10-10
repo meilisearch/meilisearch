@@ -3,7 +3,7 @@ use std::{
     marker::PhantomData,
 };
 
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize};
 
 #[derive(Clone, Default, Debug, Serialize, PartialEq, Eq)]
 pub struct Checked;
@@ -47,22 +47,6 @@ pub struct Settings<T> {
 
     #[serde(skip)]
     pub _kind: PhantomData<T>,
-}
-
-fn serialize_with_wildcard<S>(
-    field: &Setting<Vec<String>>,
-    s: S,
-) -> std::result::Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    let wildcard = vec!["*".to_string()];
-    match field {
-        Setting::Set(value) => Some(value),
-        Setting::Reset => Some(&wildcard),
-        Setting::NotSet => None,
-    }
-    .serialize(s)
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
