@@ -1,10 +1,10 @@
-use std::io::Write;
 use actix_http::header::TryIntoHeaderPair;
 use bytes::Bytes;
 use flate2::write::{GzEncoder, ZlibEncoder};
 use flate2::Compression;
+use std::io::Write;
 
-#[derive(Clone,Copy)]
+#[derive(Clone, Copy)]
 pub enum Encoder {
     Plain,
     Gzip,
@@ -17,18 +17,24 @@ impl Encoder {
         match self {
             Self::Gzip => {
                 let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-                encoder.write_all(&body.into()).expect("Failed to encode request body");
+                encoder
+                    .write_all(&body.into())
+                    .expect("Failed to encode request body");
                 encoder.finish().expect("Failed to encode request body")
             }
             Self::Deflate => {
                 let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-                encoder.write_all(&body.into()).expect("Failed to encode request body");
+                encoder
+                    .write_all(&body.into())
+                    .expect("Failed to encode request body");
                 encoder.finish().unwrap()
             }
             Self::Plain => Vec::from(body.into()),
             Self::Brotli => {
                 let mut encoder = brotli::CompressorWriter::new(Vec::new(), 32 * 1024, 3, 22);
-                encoder.write_all(&body.into()).expect("Failed to encode request body");
+                encoder
+                    .write_all(&body.into())
+                    .expect("Failed to encode request body");
                 encoder.flush().expect("Failed to encode request body");
                 encoder.into_inner()
             }
@@ -45,6 +51,8 @@ impl Encoder {
     }
 
     pub fn iterator() -> impl Iterator<Item = Self> {
-        [Self::Plain, Self::Gzip, Self::Deflate, Self::Brotli].iter().copied()
+        [Self::Plain, Self::Gzip, Self::Deflate, Self::Brotli]
+            .iter()
+            .copied()
     }
 }

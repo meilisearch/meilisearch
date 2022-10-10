@@ -1,10 +1,10 @@
 use crate::common::{GetAllDocumentsOptions, Server};
 use actix_web::test;
 
+use crate::common::encoder::Encoder;
 use meilisearch_http::{analytics, create_app};
 use serde_json::{json, Value};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
-use crate::common::encoder::Encoder;
 
 /// This is the basic usage of our API and every other tests uses the content-type application/json
 #[actix_rt::test]
@@ -115,7 +115,7 @@ async fn add_single_document_gzip_encoded() {
         server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0
     ))
-        .await;
+    .await;
     // post
     let document = serde_json::to_string(&document).unwrap();
     let encoder = Encoder::Gzip;
@@ -164,19 +164,18 @@ async fn add_single_document_with_every_encoding() {
         server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0
     ))
-        .await;
+    .await;
     // post
-    let mut task_uid = 0;
     let document = serde_json::to_string(&document).unwrap();
 
-    for encoder in Encoder::iterator() {
+    for (task_uid, encoder) in Encoder::iterator().enumerate() {
         let mut req = test::TestRequest::post()
             .uri("/indexes/dog/documents")
             .set_payload(encoder.encode(document.clone()))
             .insert_header(("content-type", "application/json"));
         req = match encoder.header() {
             Some(header) => req.insert_header(header),
-            None => req
+            None => req,
         };
         let req = req.to_request();
         let res = test::call_service(&app, req).await;
@@ -185,9 +184,7 @@ async fn add_single_document_with_every_encoding() {
         let response: Value = serde_json::from_slice(&body).unwrap_or_default();
         assert_eq!(status_code, 202);
         assert_eq!(response["taskUid"], task_uid);
-        task_uid += 1;
     }
-
 }
 
 /// any other content-type is must be refused

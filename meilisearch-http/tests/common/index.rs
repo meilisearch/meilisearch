@@ -190,7 +190,9 @@ impl Index<'_> {
 
     pub async fn update_settings(&self, settings: Value) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/settings", urlencode(self.uid.as_ref()));
-        self.service.patch_encoded(url, settings, self.encoder).await
+        self.service
+            .patch_encoded(url, settings, self.encoder)
+            .await
     }
 
     pub async fn delete_settings(&self) -> (Value, StatusCode) {
@@ -230,7 +232,11 @@ impl Index<'_> {
 
     pub async fn search_get(&self, query: Value) -> (Value, StatusCode) {
         let params = yaup::to_string(&query).unwrap();
-        let url = format!("/indexes/{}/search?{}", urlencode(self.uid.as_ref()), params);
+        let url = format!(
+            "/indexes/{}/search?{}",
+            urlencode(self.uid.as_ref()),
+            params
+        );
         self.service.get(url).await
     }
 

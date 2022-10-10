@@ -1,7 +1,7 @@
 use crate::common::{GetAllDocumentsOptions, Server};
 
-use serde_json::json;
 use crate::common::encoder::Encoder;
+use serde_json::json;
 
 #[actix_rt::test]
 async fn error_document_update_create_index_bad_uid() {
