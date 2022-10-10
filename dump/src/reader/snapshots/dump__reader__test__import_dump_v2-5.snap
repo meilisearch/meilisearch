@@ -1,0 +1,48 @@
+---
+source: dump/src/reader/mod.rs
+expression: products.settings()
+---
+Ok(
+    Settings {
+        displayed_attributes: Reset,
+        searchable_attributes: Reset,
+        filterable_attributes: Set(
+            {},
+        ),
+        sortable_attributes: NotSet,
+        ranking_rules: Set(
+            [
+                "words",
+                "typo",
+                "proximity",
+                "attribute",
+                "exactness",
+            ],
+        ),
+        stop_words: Set(
+            {},
+        ),
+        synonyms: Set(
+            {
+                "android": [
+                    "phone",
+                    "smartphone",
+                ],
+                "iphone": [
+                    "phone",
+                    "smartphone",
+                ],
+                "phone": [
+                    "android",
+                    "iphone",
+                    "smartphone",
+                ],
+            },
+        ),
+        distinct_attribute: Reset,
+        typo_tolerance: NotSet,
+        faceting: NotSet,
+        pagination: NotSet,
+        _kind: PhantomData<index::updates::Checked>,
+    },
+)
