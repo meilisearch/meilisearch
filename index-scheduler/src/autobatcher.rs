@@ -71,7 +71,9 @@ impl BatchKind {
                 allow_index_creation,
                 settings_ids: vec![task_id],
             }),
-            Kind::DumpExport | Kind::Snapshot | Kind::CancelTask | Kind::DeleteTasks => unreachable!(),
+            Kind::DumpExport | Kind::Snapshot | Kind::CancelTask | Kind::DeleteTasks => {
+                unreachable!()
+            }
         }
     }
 
