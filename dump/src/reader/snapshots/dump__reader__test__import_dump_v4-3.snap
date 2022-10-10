@@ -1,0 +1,227 @@
+---
+source: dump/src/reader/mod.rs
+expression: tasks
+---
+[
+  {
+    "uid": 9,
+    "indexUid": "movies_2",
+    "status": "enqueued",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "receivedDocuments": 200,
+      "indexedDocuments": 0
+    },
+    "enqueuedAt": "2022-10-06T12:53:49.125132233Z"
+  },
+  {
+    "uid": 8,
+    "indexUid": "movies",
+    "status": "succeeded",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "receivedDocuments": 100,
+      "indexedDocuments": 100
+    },
+    "duration": "PT0.659932S",
+    "enqueuedAt": "2022-10-06T12:53:49.114226973Z",
+    "startedAt": "2022-10-06T12:53:49.125930546Z",
+    "finishedAt": "2022-10-06T12:53:49.785862546Z"
+  },
+  {
+    "uid": 7,
+    "indexUid": "dnd_spells",
+    "status": "succeeded",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "receivedDocuments": 10,
+      "indexedDocuments": 10
+    },
+    "duration": "PT0.030472225S",
+    "enqueuedAt": "2022-10-06T12:53:41.070732179Z",
+    "startedAt": "2022-10-06T12:53:41.085563961Z",
+    "finishedAt": "2022-10-06T12:53:41.116036186Z"
+  },
+  {
+    "uid": 6,
+    "indexUid": "dnd_spells",
+    "status": "failed",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "receivedDocuments": 10,
+      "indexedDocuments": 0
+    },
+    "error": {
+      "message": "The primary key inference process failed because the engine did not find any fields containing `id` substring in their name. If your document identifier does not contain any `id` substring, you can set the primary key of the index.",
+      "code": "unretrievable_error_code",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#unretrievable_error_code"
+    },
+    "duration": "PT0.070868346S",
+    "enqueuedAt": "2022-10-06T12:53:40.831649057Z",
+    "startedAt": "2022-10-06T12:53:40.834516572Z",
+    "finishedAt": "2022-10-06T12:53:40.905384918Z"
+  },
+  {
+    "uid": 5,
+    "indexUid": "products",
+    "status": "succeeded",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "receivedDocuments": 10,
+      "indexedDocuments": 10
+    },
+    "duration": "PT0.015439821S",
+    "enqueuedAt": "2022-10-06T12:53:40.576727649Z",
+    "startedAt": "2022-10-06T12:53:40.587596158Z",
+    "finishedAt": "2022-10-06T12:53:40.603035979Z"
+  },
+  {
+    "uid": 4,
+    "indexUid": "products",
+    "status": "failed",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "receivedDocuments": 10,
+      "indexedDocuments": 0
+    },
+    "error": {
+      "message": "The primary key inference process failed because the engine did not find any fields containing `id` substring in their name. If your document identifier does not contain any `id` substring, you can set the primary key of the index.",
+      "code": "unretrievable_error_code",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#unretrievable_error_code"
+    },
+    "duration": "PT0.003055807S",
+    "enqueuedAt": "2022-10-06T12:53:39.979427178Z",
+    "startedAt": "2022-10-06T12:53:39.986160113Z",
+    "finishedAt": "2022-10-06T12:53:39.98921592Z"
+  },
+  {
+    "uid": 3,
+    "indexUid": "products",
+    "status": "succeeded",
+    "type": {
+      "settings": {
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "synonyms": {
+        "android": [
+          "phone",
+          "smartphone"
+        ],
+        "iphone": [
+          "phone",
+          "smartphone"
+        ],
+        "phone": [
+          "smartphone",
+          "iphone",
+          "android"
+        ]
+      }
+    },
+    "duration": "PT0.078589947S",
+    "enqueuedAt": "2022-10-06T12:53:39.360187055Z",
+    "startedAt": "2022-10-06T12:53:39.371250918Z",
+    "finishedAt": "2022-10-06T12:53:39.449840865Z"
+  },
+  {
+    "uid": 2,
+    "indexUid": "movies",
+    "status": "succeeded",
+    "type": {
+      "settings": {
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "rankingRules": [
+        "words",
+        "typo",
+        "proximity",
+        "attribute",
+        "sort",
+        "exactness",
+        "release_date:asc"
+      ]
+    },
+    "duration": "PT0.005458596S",
+    "enqueuedAt": "2022-10-06T12:53:39.143829637Z",
+    "startedAt": "2022-10-06T12:53:39.154804558Z",
+    "finishedAt": "2022-10-06T12:53:39.160263154Z"
+  },
+  {
+    "uid": 1,
+    "indexUid": "movies",
+    "status": "succeeded",
+    "type": {
+      "settings": {
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "filterableAttributes": [
+        "genres",
+        "id"
+      ],
+      "sortableAttributes": [
+        "release_date"
+      ]
+    },
+    "duration": "PT0.015852918S",
+    "enqueuedAt": "2022-10-06T12:53:38.922837679Z",
+    "startedAt": "2022-10-06T12:53:38.937713141Z",
+    "finishedAt": "2022-10-06T12:53:38.953566059Z"
+  },
+  {
+    "uid": 0,
+    "indexUid": "movies",
+    "status": "succeeded",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "receivedDocuments": 10,
+      "indexedDocuments": 10
+    },
+    "duration": "PT0.094231101S",
+    "enqueuedAt": "2022-10-06T12:53:38.710611568Z",
+    "startedAt": "2022-10-06T12:53:38.717456194Z",
+    "finishedAt": "2022-10-06T12:53:38.811687295Z"
+  }
+]

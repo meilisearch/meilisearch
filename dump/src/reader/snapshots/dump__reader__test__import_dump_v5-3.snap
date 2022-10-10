@@ -1,0 +1,463 @@
+---
+source: dump/src/reader/mod.rs
+expression: tasks
+---
+[
+  {
+    "uid": 21,
+    "indexUid": null,
+    "status": "enqueued",
+    "type": "dumpExport",
+    "details": {
+      "dumpUid": "20221004-155510279"
+    },
+    "enqueuedAt": "2022-10-04T15:55:10.281165892Z",
+    "startedAt": "2022-10-04T15:55:10.340507253Z"
+  },
+  {
+    "uid": 20,
+    "indexUid": "movies_2",
+    "status": "enqueued",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "receivedDocuments": 200,
+      "indexedDocuments": 0
+    },
+    "enqueuedAt": "2022-10-04T15:55:10.272276202Z"
+  },
+  {
+    "uid": 19,
+    "indexUid": "movies",
+    "status": "succeeded",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "receivedDocuments": 100,
+      "indexedDocuments": 100
+    },
+    "duration": "PT0.062340221S",
+    "enqueuedAt": "2022-10-04T15:55:10.259722791Z",
+    "startedAt": "2022-10-04T15:55:10.273278199Z",
+    "finishedAt": "2022-10-04T15:55:10.33561842Z"
+  },
+  {
+    "uid": 18,
+    "indexUid": "dnd_spells",
+    "status": "succeeded",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "receivedDocuments": 10,
+      "indexedDocuments": 10
+    },
+    "duration": "PT0.017270771S",
+    "enqueuedAt": "2022-10-04T15:55:02.364638737Z",
+    "startedAt": "2022-10-04T15:55:02.37723266Z",
+    "finishedAt": "2022-10-04T15:55:02.394503431Z"
+  },
+  {
+    "uid": 17,
+    "indexUid": "dnd_spells",
+    "status": "succeeded",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "receivedDocuments": 10,
+      "indexedDocuments": 10
+    },
+    "duration": "PT0.017133299S",
+    "enqueuedAt": "2022-10-04T15:55:02.116014762Z",
+    "startedAt": "2022-10-04T15:55:02.128683566Z",
+    "finishedAt": "2022-10-04T15:55:02.145816865Z"
+  },
+  {
+    "uid": 16,
+    "indexUid": "products",
+    "status": "succeeded",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "receivedDocuments": 10,
+      "indexedDocuments": 10
+    },
+    "duration": "PT0.017521995S",
+    "enqueuedAt": "2022-10-04T15:55:01.867101853Z",
+    "startedAt": "2022-10-04T15:55:01.879803378Z",
+    "finishedAt": "2022-10-04T15:55:01.897325373Z"
+  },
+  {
+    "uid": 15,
+    "indexUid": "products",
+    "status": "succeeded",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "receivedDocuments": 10,
+      "indexedDocuments": 10
+    },
+    "duration": "PT0.011965881S",
+    "enqueuedAt": "2022-10-04T15:55:01.245884922Z",
+    "startedAt": "2022-10-04T15:55:01.258598227Z",
+    "finishedAt": "2022-10-04T15:55:01.270564108Z"
+  },
+  {
+    "uid": 14,
+    "indexUid": "products",
+    "status": "succeeded",
+    "type": {
+      "settings": {
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "synonyms": {
+        "android": [
+          "phone",
+          "smartphone"
+        ],
+        "iphone": [
+          "phone",
+          "smartphone"
+        ],
+        "phone": [
+          "smartphone",
+          "iphone",
+          "android"
+        ]
+      }
+    },
+    "duration": "PT0.010776512S",
+    "enqueuedAt": "2022-10-04T15:55:00.630109164Z",
+    "startedAt": "2022-10-04T15:55:00.643609011Z",
+    "finishedAt": "2022-10-04T15:55:00.654385523Z"
+  },
+  {
+    "uid": 13,
+    "indexUid": "movies",
+    "status": "succeeded",
+    "type": {
+      "settings": {
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "rankingRules": [
+        "words",
+        "typo",
+        "proximity",
+        "attribute",
+        "sort",
+        "exactness",
+        "release_date:asc"
+      ]
+    },
+    "duration": "PT0.010692540S",
+    "enqueuedAt": "2022-10-04T15:55:00.412114406Z",
+    "startedAt": "2022-10-04T15:55:00.425716285Z",
+    "finishedAt": "2022-10-04T15:55:00.436408825Z"
+  },
+  {
+    "uid": 12,
+    "indexUid": "movies",
+    "status": "succeeded",
+    "type": {
+      "settings": {
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "filterableAttributes": [
+        "genres",
+        "id"
+      ],
+      "sortableAttributes": [
+        "release_date"
+      ]
+    },
+    "duration": "PT0.010643910S",
+    "enqueuedAt": "2022-10-04T15:55:00.18896188Z",
+    "startedAt": "2022-10-04T15:55:00.207804798Z",
+    "finishedAt": "2022-10-04T15:55:00.218448708Z"
+  },
+  {
+    "uid": 11,
+    "indexUid": "movies",
+    "status": "succeeded",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "receivedDocuments": 10,
+      "indexedDocuments": 10
+    },
+    "duration": "PT0.018142526S",
+    "enqueuedAt": "2022-10-04T15:54:59.971297669Z",
+    "startedAt": "2022-10-04T15:54:59.984799097Z",
+    "finishedAt": "2022-10-04T15:55:00.002941623Z"
+  },
+  {
+    "uid": 10,
+    "indexUid": "movies",
+    "status": "succeeded",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "receivedDocuments": 100,
+      "indexedDocuments": 100
+    },
+    "duration": "PT0.366830299S",
+    "enqueuedAt": "2022-10-04T15:51:44.147743385Z",
+    "startedAt": "2022-10-04T15:51:44.458473756Z",
+    "finishedAt": "2022-10-04T15:51:44.825304055Z"
+  },
+  {
+    "uid": 9,
+    "indexUid": "movies",
+    "status": "succeeded",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "receivedDocuments": 90,
+      "indexedDocuments": 90
+    },
+    "duration": "PT0.305133258S",
+    "enqueuedAt": "2022-10-04T15:51:44.142779621Z",
+    "startedAt": "2022-10-04T15:51:44.14805041Z",
+    "finishedAt": "2022-10-04T15:51:44.453183668Z"
+  },
+  {
+    "uid": 8,
+    "indexUid": null,
+    "status": "succeeded",
+    "type": "dumpExport",
+    "details": {
+      "dumpUid": "20221004-155144042"
+    },
+    "duration": "PT0.022334966S",
+    "enqueuedAt": "2022-10-04T15:51:44.042750953Z",
+    "startedAt": "2022-10-04T15:51:44.056661399Z",
+    "finishedAt": "2022-10-04T15:51:44.078996365Z"
+  },
+  {
+    "uid": 7,
+    "indexUid": "dnd_spells",
+    "status": "succeeded",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "receivedDocuments": 10,
+      "indexedDocuments": 10
+    },
+    "duration": "PT0.039310363S",
+    "enqueuedAt": "2022-10-04T15:51:37.628596827Z",
+    "startedAt": "2022-10-04T15:51:37.638650617Z",
+    "finishedAt": "2022-10-04T15:51:37.67796098Z"
+  },
+  {
+    "uid": 6,
+    "indexUid": "dnd_spells",
+    "status": "failed",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "receivedDocuments": 10,
+      "indexedDocuments": 0
+    },
+    "error": {
+      "message": "The primary key inference process failed because the engine did not find any fields containing `id` substring in their name. If your document identifier does not contain any `id` substring, you can set the primary key of the index.",
+      "code": "unretrievable_error_code",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#unretrievable_error_code"
+    },
+    "duration": "PT0.128068051S",
+    "enqueuedAt": "2022-10-04T15:51:37.381094632Z",
+    "startedAt": "2022-10-04T15:51:37.394321835Z",
+    "finishedAt": "2022-10-04T15:51:37.522389886Z"
+  },
+  {
+    "uid": 5,
+    "indexUid": "products",
+    "status": "succeeded",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "receivedDocuments": 10,
+      "indexedDocuments": 10
+    },
+    "duration": "PT0.021846888S",
+    "enqueuedAt": "2022-10-04T15:51:37.132755272Z",
+    "startedAt": "2022-10-04T15:51:37.146031377Z",
+    "finishedAt": "2022-10-04T15:51:37.167878265Z"
+  },
+  {
+    "uid": 4,
+    "indexUid": "products",
+    "status": "failed",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "receivedDocuments": 10,
+      "indexedDocuments": 0
+    },
+    "error": {
+      "message": "The primary key inference process failed because the engine did not find any fields containing `id` substring in their name. If your document identifier does not contain any `id` substring, you can set the primary key of the index.",
+      "code": "unretrievable_error_code",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#unretrievable_error_code"
+    },
+    "duration": "PT0.005439591S",
+    "enqueuedAt": "2022-10-04T15:51:36.53155275Z",
+    "startedAt": "2022-10-04T15:51:36.544820074Z",
+    "finishedAt": "2022-10-04T15:51:36.550259665Z"
+  },
+  {
+    "uid": 3,
+    "indexUid": "products",
+    "status": "succeeded",
+    "type": {
+      "settings": {
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "synonyms": {
+        "android": [
+          "phone",
+          "smartphone"
+        ],
+        "iphone": [
+          "phone",
+          "smartphone"
+        ],
+        "phone": [
+          "smartphone",
+          "iphone",
+          "android"
+        ]
+      }
+    },
+    "duration": "PT0.135098240S",
+    "enqueuedAt": "2022-10-04T15:51:35.939396731Z",
+    "startedAt": "2022-10-04T15:51:35.952670314Z",
+    "finishedAt": "2022-10-04T15:51:36.087768554Z"
+  },
+  {
+    "uid": 2,
+    "indexUid": "movies",
+    "status": "succeeded",
+    "type": {
+      "settings": {
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "rankingRules": [
+        "words",
+        "typo",
+        "proximity",
+        "attribute",
+        "sort",
+        "exactness",
+        "release_date:asc"
+      ]
+    },
+    "duration": "PT0.010129921S",
+    "enqueuedAt": "2022-10-04T15:51:35.721766758Z",
+    "startedAt": "2022-10-04T15:51:35.735030412Z",
+    "finishedAt": "2022-10-04T15:51:35.745160333Z"
+  },
+  {
+    "uid": 1,
+    "indexUid": "movies",
+    "status": "succeeded",
+    "type": {
+      "settings": {
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "filterableAttributes": [
+        "genres",
+        "id"
+      ],
+      "sortableAttributes": [
+        "release_date"
+      ]
+    },
+    "duration": "PT0.022219445S",
+    "enqueuedAt": "2022-10-04T15:51:35.50733827Z",
+    "startedAt": "2022-10-04T15:51:35.517547002Z",
+    "finishedAt": "2022-10-04T15:51:35.539766447Z"
+  },
+  {
+    "uid": 0,
+    "indexUid": "movies",
+    "status": "succeeded",
+    "type": {
+      "documentImport": {
+        "method": "ReplaceDocuments",
+        "allow_index_creation": true
+      }
+    },
+    "details": {
+      "receivedDocuments": 10,
+      "indexedDocuments": 10
+    },
+    "duration": "PT0.156616872S",
+    "enqueuedAt": "2022-10-04T15:51:35.291992167Z",
+    "startedAt": "2022-10-04T15:51:35.302593877Z",
+    "finishedAt": "2022-10-04T15:51:35.459210749Z"
+  }
+]
