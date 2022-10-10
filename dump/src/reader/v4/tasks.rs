@@ -1,7 +1,5 @@
-use std::fmt::Write;
-
-use serde::{Deserialize, Serializer};
-use time::{Duration, OffsetDateTime};
+use serde::Deserialize;
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 use super::{
@@ -47,56 +45,6 @@ pub enum TaskContent {
     IndexUpdate {
         primary_key: Option<String>,
     },
-}
-
-#[derive(Debug)]
-#[cfg_attr(test, derive(serde::Serialize))]
-#[cfg_attr(test, serde(untagged))]
-#[allow(clippy::large_enum_variant)]
-pub enum TaskDetails {
-    #[cfg_attr(test, serde(rename_all = "camelCase"))]
-    DocumentAddition {
-        received_documents: usize,
-        indexed_documents: Option<u64>,
-    },
-    #[cfg_attr(test, serde(rename_all = "camelCase"))]
-    Settings {
-        #[cfg_attr(test, serde(flatten))]
-        settings: Settings<Unchecked>,
-    },
-    #[cfg_attr(test, serde(rename_all = "camelCase"))]
-    IndexInfo { primary_key: Option<String> },
-    #[cfg_attr(test, serde(rename_all = "camelCase"))]
-    DocumentDeletion {
-        received_document_ids: usize,
-        deleted_documents: Option<u64>,
-    },
-    #[cfg_attr(test, serde(rename_all = "camelCase"))]
-    ClearAll { deleted_documents: Option<u64> },
-}
-
-#[derive(Debug)]
-#[cfg_attr(test, derive(serde::Serialize))]
-#[cfg_attr(test, serde(rename_all = "camelCase"))]
-pub enum TaskStatus {
-    Enqueued,
-    Processing,
-    Succeeded,
-    Failed,
-}
-
-#[derive(Debug)]
-#[cfg_attr(test, derive(serde::Serialize))]
-#[cfg_attr(test, serde(rename_all = "camelCase"))]
-pub enum TaskType {
-    IndexCreation,
-    IndexUpdate,
-    IndexDeletion,
-    DocumentAddition,
-    DocumentPartial,
-    DocumentDeletion,
-    SettingsUpdate,
-    ClearAll,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
@@ -189,214 +137,17 @@ impl std::ops::Deref for IndexUid {
     }
 }
 
-#[derive(Debug)]
-#[cfg_attr(test, derive(serde::Serialize))]
-#[cfg_attr(test, serde(rename_all = "camelCase"))]
-pub struct TaskView {
-    uid: TaskId,
-    index_uid: String,
-    status: TaskStatus,
-    #[cfg_attr(test, serde(rename = "type"))]
-    task_type: TaskType,
-    #[cfg_attr(test, serde(skip_serializing_if = "Option::is_none"))]
-    details: Option<TaskDetails>,
-    #[cfg_attr(test, serde(skip_serializing_if = "Option::is_none"))]
-    error: Option<ResponseError>,
-    #[cfg_attr(test, serde(serialize_with = "serialize_duration"))]
-    duration: Option<Duration>,
-    #[cfg_attr(test, serde(serialize_with = "time::serde::rfc3339::serialize"))]
-    enqueued_at: OffsetDateTime,
-    #[cfg_attr(
-        test,
-        serde(serialize_with = "time::serde::rfc3339::option::serialize")
-    )]
-    started_at: Option<OffsetDateTime>,
-    #[cfg_attr(
-        test,
-        serde(serialize_with = "time::serde::rfc3339::option::serialize")
-    )]
-    finished_at: Option<OffsetDateTime>,
-    #[cfg_attr(test, serde(skip_serializing_if = "Option::is_none"))]
-    batch_uid: Option<Option<BatchId>>,
-}
-
-impl From<Task> for TaskView {
-    fn from(task: Task) -> Self {
-        let Task {
-            id,
-            index_uid,
-            content,
-            events,
-        } = task;
-
-        let (task_type, mut details) = match content {
-            TaskContent::DocumentAddition {
-                merge_strategy,
-                documents_count,
-                ..
-            } => {
-                let details = TaskDetails::DocumentAddition {
-                    received_documents: documents_count,
-                    indexed_documents: None,
-                };
-
-                let task_type = match merge_strategy {
-                    IndexDocumentsMethod::UpdateDocuments => TaskType::DocumentPartial,
-                    IndexDocumentsMethod::ReplaceDocuments => TaskType::DocumentAddition,
-                    _ => unreachable!("Unexpected document merge strategy."),
-                };
-
-                (task_type, Some(details))
-            }
-            TaskContent::DocumentDeletion(DocumentDeletion::Ids(ids)) => (
-                TaskType::DocumentDeletion,
-                Some(TaskDetails::DocumentDeletion {
-                    received_document_ids: ids.len(),
-                    deleted_documents: None,
-                }),
-            ),
-            TaskContent::DocumentDeletion(DocumentDeletion::Clear) => (
-                TaskType::ClearAll,
-                Some(TaskDetails::ClearAll {
-                    deleted_documents: None,
-                }),
-            ),
-            TaskContent::IndexDeletion => (
-                TaskType::IndexDeletion,
-                Some(TaskDetails::ClearAll {
-                    deleted_documents: None,
-                }),
-            ),
-            TaskContent::SettingsUpdate { settings, .. } => (
-                TaskType::SettingsUpdate,
-                Some(TaskDetails::Settings { settings }),
-            ),
-            TaskContent::IndexCreation { primary_key } => (
-                TaskType::IndexCreation,
-                Some(TaskDetails::IndexInfo { primary_key }),
-            ),
-            TaskContent::IndexUpdate { primary_key } => (
-                TaskType::IndexUpdate,
-                Some(TaskDetails::IndexInfo { primary_key }),
-            ),
-        };
-
-        // An event always has at least one event: "Created"
-        let (status, error, finished_at) = match events.last().unwrap() {
-            TaskEvent::Created(_) => (TaskStatus::Enqueued, None, None),
-            TaskEvent::Batched { .. } => (TaskStatus::Enqueued, None, None),
-            TaskEvent::Processing(_) => (TaskStatus::Processing, None, None),
-            TaskEvent::Succeded { timestamp, result } => {
-                match (result, &mut details) {
-                    (
-                        TaskResult::DocumentAddition {
-                            indexed_documents: num,
-                            ..
-                        },
-                        Some(TaskDetails::DocumentAddition {
-                            ref mut indexed_documents,
-                            ..
-                        }),
-                    ) => {
-                        indexed_documents.replace(*num);
-                    }
-                    (
-                        TaskResult::DocumentDeletion {
-                            deleted_documents: docs,
-                            ..
-                        },
-                        Some(TaskDetails::DocumentDeletion {
-                            ref mut deleted_documents,
-                            ..
-                        }),
-                    ) => {
-                        deleted_documents.replace(*docs);
-                    }
-                    (
-                        TaskResult::ClearAll {
-                            deleted_documents: docs,
-                        },
-                        Some(TaskDetails::ClearAll {
-                            ref mut deleted_documents,
-                        }),
-                    ) => {
-                        deleted_documents.replace(*docs);
-                    }
-                    _ => (),
-                }
-                (TaskStatus::Succeeded, None, Some(*timestamp))
-            }
-            TaskEvent::Failed { timestamp, error } => {
-                match details {
-                    Some(TaskDetails::DocumentDeletion {
-                        ref mut deleted_documents,
-                        ..
-                    }) => {
-                        deleted_documents.replace(0);
-                    }
-                    Some(TaskDetails::ClearAll {
-                        ref mut deleted_documents,
-                        ..
-                    }) => {
-                        deleted_documents.replace(0);
-                    }
-                    Some(TaskDetails::DocumentAddition {
-                        ref mut indexed_documents,
-                        ..
-                    }) => {
-                        indexed_documents.replace(0);
-                    }
-                    _ => (),
-                }
-                (TaskStatus::Failed, Some(error.clone()), Some(*timestamp))
-            }
-        };
-
-        let enqueued_at = match events.first() {
-            Some(TaskEvent::Created(ts)) => *ts,
-            _ => unreachable!("A task must always have a creation event."),
-        };
-
-        let started_at = events.iter().find_map(|e| match e {
-            TaskEvent::Processing(ts) => Some(*ts),
-            _ => None,
-        });
-
-        let duration = finished_at.zip(started_at).map(|(tf, ts)| (tf - ts));
-
-        let batch_uid = if true {
-            let id = events.iter().find_map(|e| match e {
-                TaskEvent::Batched { batch_id, .. } => Some(*batch_id),
-                _ => None,
-            });
-            Some(id)
-        } else {
-            None
-        };
-
-        Self {
-            uid: id,
-            index_uid: index_uid.into_inner(),
-            status,
-            task_type,
-            details,
-            error,
-            duration,
-            enqueued_at,
-            started_at,
-            finished_at,
-            batch_uid,
-        }
-    }
-}
-
 /// Serialize a `time::Duration` as a best effort ISO 8601 while waiting for
 /// https://github.com/time-rs/time/issues/378.
 /// This code is a port of the old code of time that was removed in 0.2.
-fn serialize_duration<S: Serializer>(
-    duration: &Option<Duration>,
+#[cfg(test)]
+fn serialize_duration<S: serde::Serializer>(
+    duration: &Option<time::Duration>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
+    use std::fmt::Write;
+    use time::Duration;
+
     match duration {
         Some(duration) => {
             // technically speaking, negative duration is not valid ISO 8601

@@ -4,7 +4,7 @@ use std::str::FromStr;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::reader::{v2, v3, DumpReader, IndexReader};
+use crate::reader::{v2, v3};
 use crate::Result;
 
 use super::v3_to_v4::CompatV3ToV4;
@@ -19,7 +19,8 @@ impl CompatV2ToV3 {
     }
 
     pub fn index_uuid(&self) -> Vec<v3::meta::IndexUuid> {
-        self.index_uuid()
+        self.from
+            .index_uuid()
             .into_iter()
             .map(|index| v3::meta::IndexUuid {
                 uid: index.uid,
@@ -54,7 +55,7 @@ impl CompatV2ToV3 {
     pub fn tasks(
         &mut self,
     ) -> Box<dyn Iterator<Item = Result<(v3::Task, Option<v3::UpdateFile>)>> + '_> {
-        let indexes = self.from.index_uuid.clone();
+        let _indexes = self.from.index_uuid.clone();
 
         Box::new(
             self.from
@@ -241,7 +242,7 @@ pub fn update_from_unchecked_update_meta(update: v2::updates::UpdateMeta) -> v3:
     match update {
         v2::updates::UpdateMeta::DocumentsAddition {
             method,
-            format,
+            format: _,
             primary_key,
         } => v3::updates::Update::DocumentAddition {
             primary_key,
