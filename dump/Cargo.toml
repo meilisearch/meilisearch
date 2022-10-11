@@ -24,5 +24,6 @@ http = "0.2.8"
 [dev-dependencies]
 big_s = "1.0.2"
 insta = { version = "1.19.1", features = ["json", "redactions"] }
+meili-snap = { path = "../meili-snap" }
 maplit = "1.0.2"
 meilisearch-types = { path = "../meilisearch-types" }
