@@ -1,10 +1,10 @@
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::{IndexScheduler, TaskId};
-use index_scheduler::{Kind, Status};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::star_or::StarOr;
+use meilisearch_types::tasks::{Kind, Status};
 use serde::Deserialize;
 use serde_cs::vec::CS;
 use serde_json::json;

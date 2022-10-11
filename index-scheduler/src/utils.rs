@@ -4,10 +4,8 @@ use meilisearch_types::heed::{types::DecodeIgnore, RoTxn, RwTxn};
 use meilisearch_types::milli::BEU32;
 use roaring::RoaringBitmap;
 
-use crate::{
-    task::{Kind, Status, Task},
-    Error, IndexScheduler, Result, TaskId,
-};
+use crate::{Error, IndexScheduler, Result, Task, TaskId};
+use meilisearch_types::tasks::{Kind, Status};
 
 impl IndexScheduler {
     pub(crate) fn last_task_id(&self, rtxn: &RoTxn) -> Result<Option<TaskId>> {
