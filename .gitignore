@@ -7,3 +7,10 @@
 /data.ms
 /snapshots
 /dumps
+
+
+# Snapshots
+## ... large
+*.full.snap
+##  ... unreviewed
+*.snap.new
