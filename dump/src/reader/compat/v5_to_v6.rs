@@ -102,9 +102,7 @@ impl CompatV5ToV6 {
                         },
                         v5::tasks::TaskContent::Dump { .. } => v6::Kind::DumpExport,
                     },
-                    details: todo!(),
-                    /*
-                    task_view.details.map(|details| match details {
+                    details: task_view.details.map(|details| match details {
                         v5::Details::DocumentAddition {
                             received_documents,
                             indexed_documents,
@@ -130,9 +128,7 @@ impl CompatV5ToV6 {
                         }
                         v5::Details::Dump { dump_uid } => v6::Details::Dump { dump_uid },
                     }),
-                    */
                     error: task_view.error.map(|e| e.into()),
-                    duration: task_view.duration,
                     enqueued_at: task_view.enqueued_at,
                     started_at: task_view.started_at,
                     finished_at: task_view.finished_at,

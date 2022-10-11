@@ -13,6 +13,7 @@ proptest = { version = "1.0.0", optional = true }
 proptest-derive = { version = "0.3.0", optional = true }
 serde = { version = "1.0.145", features = ["derive"] }
 serde_json = "1.0.85"
+time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 tokio = "1.0"
 
 [dev-dependencies]

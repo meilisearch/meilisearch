@@ -52,14 +52,12 @@ pub(crate) mod test {
     };
 
     use big_s::S;
-    use index_scheduler::{
-        task::{Details, DetailsView},
-        Kind, Status, TaskView,
-    };
+    use index_scheduler::task::Details;
     use maplit::btreeset;
     use meilisearch_auth::{Action, Key};
     use meilisearch_types::milli::{self, update::Setting};
     use meilisearch_types::settings::{Checked, Settings};
+    use meilisearch_types::tasks::{DetailsView, Kind, Status, TaskView};
     use meilisearch_types::{index_uid::IndexUid, star_or::StarOr};
     use serde_json::{json, Map, Value};
     use time::{macros::datetime, Duration};

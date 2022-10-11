@@ -11,7 +11,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub type TaskId = u32;
 
 pub use error::Error;
-pub use task::{Details, Kind, KindWithContent, Status, TaskView};
+use meilisearch_types::tasks::{Kind, Status, TaskView};
+pub use task::KindWithContent;
 
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -34,7 +35,7 @@ use crate::task::Task;
 
 const DEFAULT_LIMIT: fn() -> u32 = || 20;
 
-#[derive(derive_builder::Builder, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Query {
     #[serde(default = "DEFAULT_LIMIT")]
