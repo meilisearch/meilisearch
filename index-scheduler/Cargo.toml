@@ -11,10 +11,7 @@ bincode = "1.3.3"
 csv = "1.1.6"
 file-store = { path = "../file-store" }
 log = "0.4.14"
-milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.33.0" }
-index = { path = "../index" }
 meilisearch-types = { path = "../meilisearch-types" }
-document-formats = { path = "../document-formats" }
 roaring = "0.9.0"
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = { version = "1.0.85", features = ["preserve_order"] }

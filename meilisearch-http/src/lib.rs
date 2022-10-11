@@ -6,6 +6,7 @@ pub mod analytics;
 pub mod extractors;
 pub mod option;
 pub mod routes;
+pub mod search;
 
 #[cfg(feature = "metrics")]
 pub mod metrics;
@@ -38,6 +39,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<IndexScheduler> {
         opt.db_path.join("indexes"),
         opt.max_index_size.get_bytes() as usize,
         (&opt.indexer_options).try_into()?,
+        true,
         #[cfg(test)]
         todo!("We'll see later"),
     )?;
@@ -45,8 +47,6 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<IndexScheduler> {
     /*
     TODO: We should start a thread to handle the snapshots.
     meilisearch
-        .set_max_index_size(opt.max_index_size.get_bytes() as usize)
-        .set_max_task_store_size(opt.max_task_db_size.get_bytes() as usize)
         // snapshot
         .set_ignore_missing_snapshot(opt.ignore_missing_snapshot)
         .set_ignore_snapshot_if_db_exists(opt.ignore_snapshot_if_db_exists)
