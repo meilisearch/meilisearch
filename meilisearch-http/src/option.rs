@@ -1,13 +1,11 @@
 use std::convert::TryFrom;
-use std::env;
-use std::fs;
 use std::io::{BufReader, Read};
 use std::num::ParseIntError;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::{fmt, fs};
+use std::{env, fmt, fs};
 
 use byte_unit::{Byte, ByteError};
 use clap::Parser;
@@ -644,6 +642,17 @@ fn load_ocsp(filename: &Option<PathBuf>) -> anyhow::Result<Vec<u8>> {
     }
 
     Ok(ret)
+}
+
+/// Checks if the key is defined in the environment variables.
+/// If not, inserts it with the given value.
+pub fn export_to_env_if_not_present<T>(key: &str, value: T)
+where
+    T: AsRef<OsStr>,
+{
+    if let Err(VarError::NotPresent) = std::env::var(key) {
+        std::env::set_var(key, value);
+    }
 }
 
 /// Functions used to get default value for `Opt` fields, needs to be function because of serde's default attribute.
