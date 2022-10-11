@@ -2,11 +2,12 @@ use std::collections::BTreeMap;
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use index_scheduler::{IndexScheduler, Query, Status};
+use index_scheduler::{IndexScheduler, Query};
 use log::debug;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::star_or::StarOr;
+use meilisearch_types::tasks::Status;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;

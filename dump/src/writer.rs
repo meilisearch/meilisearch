@@ -5,9 +5,9 @@ use std::{
 };
 
 use flate2::{write::GzEncoder, Compression};
-use index_scheduler::TaskView;
 use meilisearch_auth::Key;
 use meilisearch_types::settings::{Checked, Settings};
+use meilisearch_types::tasks::TaskDump;
 use serde_json::{Map, Value};
 use tempfile::TempDir;
 use time::OffsetDateTime;
@@ -105,17 +105,12 @@ impl TaskWriter {
 
     /// Pushes tasks in the dump.
     /// If the tasks has an associated `update_file` it'll use the `task_id` as its name.
-    pub fn push_task(&mut self, task: &TaskView) -> Result<UpdateFile> {
-        // TODO: this could be removed the day we implements `Deserialize` on the Duration.
-        let mut task = task.clone();
-        task.duration = None;
-
-        self.queue.write_all(&serde_json::to_vec(&task)?)?;
+    pub fn push_task(&mut self, task: &TaskDump) -> Result<UpdateFile> {
+        self.queue.write_all(&serde_json::to_vec(task)?)?;
         self.queue.write_all(b"\n")?;
 
         Ok(UpdateFile::new(
-            self.update_files
-                .join(format!("{}.jsonl", task.uid.to_string())),
+            self.update_files.join(format!("{}.jsonl", task.uid)),
         ))
     }
 }

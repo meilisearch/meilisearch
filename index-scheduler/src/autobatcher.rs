@@ -1,9 +1,8 @@
 use meilisearch_types::milli::update::IndexDocumentsMethod::{
     self, ReplaceDocuments, UpdateDocuments,
 };
+use meilisearch_types::tasks::{Kind, TaskId};
 use std::ops::ControlFlow::{self, Break, Continue};
-
-use crate::{task::Kind, TaskId};
 
 #[derive(Debug)]
 pub enum BatchKind {
