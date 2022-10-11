@@ -2,6 +2,7 @@
 source: index-scheduler/src/lib.rs
 expression: snapshot_index_scheduler(&index_scheduler)
 ---
+### Autobatching Enabled = true
 ### Processing Tasks:
 []
 ----------------------------------------------------------------------

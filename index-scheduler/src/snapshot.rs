@@ -15,6 +15,7 @@ use crate::{
 
 pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     let IndexScheduler {
+        autobatching_enabled,
         processing_tasks,
         file_store: _,
         env,
@@ -32,6 +33,9 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     let mut snap = String::new();
 
     let (_time, processing_tasks) = processing_tasks.read().unwrap().clone();
+    snap.push_str(&format!(
+        "### Autobatching Enabled = {autobatching_enabled}\n"
+    ));
     snap.push_str("### Processing Tasks:\n");
     snap.push_str(&snapshot_bitmap(&processing_tasks));
     snap.push_str("\n----------------------------------------------------------------------\n");
