@@ -11,14 +11,15 @@ use uuid::Uuid;
 
 use crate::{Error, IndexMetadata, Result, Version};
 
+pub use meilisearch_types::milli;
+
 use super::Document;
-pub use index;
 
 pub type Metadata = crate::Metadata;
 
-pub type Settings<T> = index::Settings<T>;
-pub type Checked = index::Checked;
-pub type Unchecked = index::Unchecked;
+pub type Settings<T> = meilisearch_types::settings::Settings<T>;
+pub type Checked = meilisearch_types::settings::Checked;
+pub type Unchecked = meilisearch_types::settings::Unchecked;
 
 pub type Task = index_scheduler::TaskView;
 pub type Key = meilisearch_auth::Key;
@@ -30,11 +31,11 @@ pub type Kind = index_scheduler::Kind;
 pub type Details = index_scheduler::Details;
 
 // everything related to the settings
-pub type Setting<T> = index::milli::update::Setting<T>;
-pub type TypoTolerance = index::updates::TypoSettings;
-pub type MinWordSizeForTypos = index::updates::MinWordSizeTyposSetting;
-pub type FacetingSettings = index::updates::FacetingSettings;
-pub type PaginationSettings = index::updates::PaginationSettings;
+pub type Setting<T> = meilisearch_types::milli::update::Setting<T>;
+pub type TypoTolerance = meilisearch_types::settings::TypoSettings;
+pub type MinWordSizeForTypos = meilisearch_types::settings::MinWordSizeTyposSetting;
+pub type FacetingSettings = meilisearch_types::settings::FacetingSettings;
+pub type PaginationSettings = meilisearch_types::settings::PaginationSettings;
 
 // everything related to the api keys
 pub type Action = meilisearch_auth::Action;
@@ -108,8 +109,8 @@ impl V6Reader {
         &mut self,
     ) -> Box<dyn Iterator<Item = Result<(Task, Option<Box<super::UpdateFile>>)>> + '_> {
         Box::new((&mut self.tasks).lines().map(|line| -> Result<_> {
-            let mut task: index_scheduler::TaskView = serde_json::from_str(&line?)?;
-            // TODO: this can be removed once we can `Deserialize` the duration from the `TaskView`.
+            let mut task: index_scheduler::TaskView = todo!(); // serde_json::from_str(&line?)?;
+                                                               // TODO: this can be removed once we can `Deserialize` the duration from the `TaskView`.
             if let Some((started_at, finished_at)) = task.started_at.zip(task.finished_at) {
                 task.duration = Some(finished_at - started_at);
             }
