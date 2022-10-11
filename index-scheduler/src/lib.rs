@@ -570,7 +570,7 @@ mod tests {
     #[test]
     fn register() {
         // In this test, the handle doesn't make any progress, we only check that the tasks are registered
-        let (index_scheduler, _handle) = IndexScheduler::test();
+        let (index_scheduler, _handle) = IndexScheduler::test(true);
 
         let kinds = [
             index_creation_task("catto", "mouse"),
@@ -688,7 +688,7 @@ mod tests {
 
     #[test]
     fn task_deletion_undeleteable() {
-        let (index_scheduler, handle) = IndexScheduler::test();
+        let (index_scheduler, handle) = IndexScheduler::test(true);
 
         let to_enqueue = [
             index_creation_task("catto", "mouse"),
@@ -730,7 +730,7 @@ mod tests {
 
     #[test]
     fn task_deletion_deleteable() {
-        let (index_scheduler, handle) = IndexScheduler::test();
+        let (index_scheduler, handle) = IndexScheduler::test(true);
 
         let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
         let (file1, documents_count1) = sample_documents(&index_scheduler, 1, 1);
