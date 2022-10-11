@@ -44,6 +44,7 @@ fn task_type_matches_content(type_: &TaskType, content: &TaskContent) -> bool {
         | (TaskType::DocumentAdditionOrUpdate, TaskContent::DocumentAddition { .. })
         | (TaskType::DocumentDeletion, TaskContent::DocumentDeletion{ .. })
         | (TaskType::SettingsUpdate, TaskContent::SettingsUpdate { .. })
+        | (TaskType::DumpCreation, TaskContent::Dump { .. })
     )
 }
 
