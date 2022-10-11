@@ -1111,6 +1111,7 @@ dependencies = [
  "insta",
  "log",
  "maplit",
+ "meili-snap",
  "meilisearch-auth",
  "meilisearch-types",
  "serde",
