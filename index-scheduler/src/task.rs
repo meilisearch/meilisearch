@@ -1,16 +1,20 @@
 use anyhow::Result;
-use index::{Settings, Unchecked};
 use meilisearch_types::error::ResponseError;
-use milli::update::IndexDocumentsMethod;
+use meilisearch_types::milli::update::IndexDocumentsMethod;
+use meilisearch_types::settings::{Settings, Unchecked};
 
 use serde::{Deserialize, Serialize, Serializer};
-use std::{fmt::Write, path::PathBuf, str::FromStr};
+use std::{
+    fmt::{Display, Write},
+    path::PathBuf,
+    str::FromStr,
+};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 use crate::{Error, TaskId};
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskView {
     pub uid: TaskId,
@@ -21,9 +25,9 @@ pub struct TaskView {
     #[serde(rename = "type")]
     pub kind: Kind,
 
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub details: Option<Details>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<DetailsView>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<ResponseError>,
 
     #[serde(
@@ -92,7 +96,7 @@ impl Task {
                 .and_then(|vec| vec.first().map(|i| i.to_string())),
             status: self.status,
             kind: self.kind.as_kind(),
-            details: self.details.clone(),
+            details: self.details.as_ref().map(Details::as_details_view),
             error: self.error.clone(),
             duration: self
                 .started_at
@@ -113,7 +117,16 @@ pub enum Status {
     Succeeded,
     Failed,
 }
-
+impl Display for Status {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Status::Enqueued => write!(f, "enqueued"),
+            Status::Processing => write!(f, "processing"),
+            Status::Succeeded => write!(f, "succeeded"),
+            Status::Failed => write!(f, "failed"),
+        }
+    }
+}
 impl FromStr for Status {
     type Err = Error;
 
@@ -170,6 +183,10 @@ pub enum KindWithContent {
     CancelTask {
         tasks: Vec<TaskId>,
     },
+    DeleteTasks {
+        query: String,
+        tasks: Vec<TaskId>,
+    },
     DumpExport {
         output: PathBuf,
     },
@@ -200,6 +217,7 @@ impl KindWithContent {
             KindWithContent::IndexUpdate { .. } => Kind::IndexUpdate,
             KindWithContent::IndexSwap { .. } => Kind::IndexSwap,
             KindWithContent::CancelTask { .. } => Kind::CancelTask,
+            KindWithContent::DeleteTasks { .. } => Kind::DeleteTasks,
             KindWithContent::DumpExport { .. } => Kind::DumpExport,
             KindWithContent::Snapshot => Kind::Snapshot,
         }
@@ -222,6 +240,7 @@ impl KindWithContent {
             | IndexUpdate { .. }
             | IndexSwap { .. }
             | CancelTask { .. }
+            | DeleteTasks { .. }
             | DumpExport { .. }
             | Snapshot => Ok(()), // There is nothing to persist for all these tasks
         }
@@ -244,6 +263,7 @@ impl KindWithContent {
             | IndexUpdate { .. }
             | IndexSwap { .. }
             | CancelTask { .. }
+            | DeleteTasks { .. }
             | DumpExport { .. }
             | Snapshot => Ok(()), // There is no data associated with all these tasks
         }
@@ -253,7 +273,7 @@ impl KindWithContent {
         use KindWithContent::*;
 
         match self {
-            DumpExport { .. } | Snapshot | CancelTask { .. } => None,
+            DumpExport { .. } | Snapshot | CancelTask { .. } | DeleteTasks { .. } => None,
             DocumentImport { index_uid, .. }
             | DocumentDeletion { index_uid, .. }
             | DocumentClear { index_uid }
@@ -297,8 +317,13 @@ impl KindWithContent {
                 todo!()
             }
             KindWithContent::CancelTask { .. } => {
-                todo!()
+                None // TODO: check correctness of this return value
             }
+            KindWithContent::DeleteTasks { query, tasks } => Some(Details::DeleteTasks {
+                matched_tasks: tasks.len(),
+                deleted_tasks: None,
+                original_query: query.clone(),
+            }),
             KindWithContent::DumpExport { .. } => None,
             KindWithContent::Snapshot => None,
         }
@@ -322,6 +347,7 @@ pub enum Kind {
     IndexUpdate,
     IndexSwap,
     CancelTask,
+    DeleteTasks,
     DumpExport,
     Snapshot,
 }
@@ -352,6 +378,7 @@ impl FromStr for Kind {
             "index_update" => Ok(Kind::IndexUpdate),
             "index_swap" => Ok(Kind::IndexSwap),
             "cancel_task" => Ok(Kind::CancelTask),
+            "delete_tasks" => Ok(Kind::DeleteTasks),
             "dump_export" => Ok(Kind::DumpExport),
             "snapshot" => Ok(Kind::Snapshot),
             s => Err(Error::InvalidKind(s.to_string())),
@@ -360,31 +387,107 @@ impl FromStr for Kind {
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
 #[allow(clippy::large_enum_variant)]
 pub enum Details {
-    #[serde(rename_all = "camelCase")]
     DocumentAddition {
         received_documents: u64,
         indexed_documents: u64,
     },
-    #[serde(rename_all = "camelCase")]
     Settings {
-        #[serde(flatten)]
         settings: Settings<Unchecked>,
     },
-    #[serde(rename_all = "camelCase")]
-    IndexInfo { primary_key: Option<String> },
-    #[serde(rename_all = "camelCase")]
+    IndexInfo {
+        primary_key: Option<String>,
+    },
     DocumentDeletion {
         received_document_ids: usize,
         // TODO why is this optional?
         deleted_documents: Option<u64>,
     },
-    #[serde(rename_all = "camelCase")]
-    ClearAll { deleted_documents: Option<u64> },
-    #[serde(rename_all = "camelCase")]
-    Dump { dump_uid: String },
+    ClearAll {
+        deleted_documents: Option<u64>,
+    },
+    DeleteTasks {
+        matched_tasks: usize,
+        deleted_tasks: Option<usize>,
+        original_query: String,
+    },
+    Dump {
+        dump_uid: String,
+    },
+}
+#[derive(Default, Debug, PartialEq, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DetailsView {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    received_documents: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    indexed_documents: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    primary_key: Option<Option<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    received_document_ids: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    deleted_documents: Option<Option<u64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    matched_tasks: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    deleted_tasks: Option<Option<usize>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    original_query: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dump_uid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(flatten)]
+    settings: Option<Settings<Unchecked>>,
+}
+impl Details {
+    fn as_details_view(&self) -> DetailsView {
+        match self.clone() {
+            Details::DocumentAddition {
+                received_documents,
+                indexed_documents,
+            } => DetailsView {
+                received_documents: Some(received_documents),
+                indexed_documents: Some(indexed_documents),
+                ..DetailsView::default()
+            },
+            Details::Settings { settings } => DetailsView {
+                settings: Some(settings),
+                ..DetailsView::default()
+            },
+            Details::IndexInfo { primary_key } => DetailsView {
+                primary_key: Some(primary_key),
+                ..DetailsView::default()
+            },
+            Details::DocumentDeletion {
+                received_document_ids,
+                deleted_documents,
+            } => DetailsView {
+                received_document_ids: Some(received_document_ids),
+                deleted_documents: Some(deleted_documents),
+                ..DetailsView::default()
+            },
+            Details::ClearAll { deleted_documents } => DetailsView {
+                deleted_documents: Some(deleted_documents),
+                ..DetailsView::default()
+            },
+            Details::DeleteTasks {
+                matched_tasks,
+                deleted_tasks,
+                original_query,
+            } => DetailsView {
+                matched_tasks: Some(matched_tasks),
+                deleted_tasks: Some(deleted_tasks),
+                original_query: Some(original_query),
+                ..DetailsView::default()
+            },
+            Details::Dump { dump_uid } => DetailsView {
+                dump_uid: Some(dump_uid),
+                ..DetailsView::default()
+            },
+        }
+    }
 }
 
 /// Serialize a `time::Duration` as a best effort ISO 8601 while waiting for
@@ -435,5 +538,27 @@ fn serialize_duration<S: Serializer>(
             serializer.serialize_str(&res)
         }
         None => serializer.serialize_none(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use meilisearch_types::heed::{types::SerdeJson, BytesDecode, BytesEncode};
+
+    use crate::assert_smol_debug_snapshot;
+
+    use super::Details;
+
+    #[test]
+    fn bad_deser() {
+        let details = Details::DeleteTasks {
+            matched_tasks: 1,
+            deleted_tasks: None,
+            original_query: "hello".to_owned(),
+        };
+        let serialised = SerdeJson::<Details>::bytes_encode(&details).unwrap();
+        let deserialised = SerdeJson::<Details>::bytes_decode(&serialised).unwrap();
+        assert_smol_debug_snapshot!(details, @r###"DeleteTasks { matched_tasks: 1, deleted_tasks: None, original_query: "hello" }"###);
+        assert_smol_debug_snapshot!(deserialised, @r###"DeleteTasks { matched_tasks: 1, deleted_tasks: None, original_query: "hello" }"###);
     }
 }

@@ -2,10 +2,10 @@ mod autobatcher;
 mod batch;
 pub mod error;
 mod index_mapper;
+#[cfg(test)]
+mod snapshot;
 pub mod task;
 mod utils;
-
-pub use milli;
 
 pub type Result<T> = std::result::Result<T, Error>;
 pub type TaskId = u32;
@@ -19,22 +19,22 @@ use std::sync::{Arc, RwLock};
 use file_store::{File, FileStore};
 use meilisearch_types::error::ResponseError;
 use roaring::RoaringBitmap;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use synchronoise::SignalEvent;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use milli::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
-use milli::heed::{self, Database, Env};
-use milli::update::IndexerConfig;
-use milli::{Index, RoaringBitmapCodec, BEU32};
+use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
+use meilisearch_types::heed::{self, Database, Env};
+use meilisearch_types::milli::update::IndexerConfig;
+use meilisearch_types::milli::{Index, RoaringBitmapCodec, BEU32};
 
 use crate::index_mapper::IndexMapper;
 use crate::task::Task;
 
 const DEFAULT_LIMIT: fn() -> u32 = || 20;
 
-#[derive(derive_builder::Builder, Debug, Clone, Deserialize)]
+#[derive(derive_builder::Builder, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Query {
     #[serde(default = "DEFAULT_LIMIT")]
@@ -138,6 +138,9 @@ pub struct IndexScheduler {
     /// Get a signal when a batch needs to be processed.
     pub(crate) wake_up: Arc<SignalEvent>,
 
+    /// Weither autobatching is enabled or not.
+    pub(crate) autobatching_enabled: bool,
+
     // ================= test
     /// The next entry is dedicated to the tests.
     /// It provide a way to break in multiple part of the scheduler.
@@ -161,6 +164,7 @@ impl IndexScheduler {
         indexes_path: PathBuf,
         index_size: usize,
         indexer_config: IndexerConfig,
+        autobatching_enabled: bool,
         #[cfg(test)] test_breakpoint_sdr: crossbeam::channel::Sender<Breakpoint>,
     ) -> Result<Self> {
         std::fs::create_dir_all(&tasks_path)?;
@@ -187,6 +191,7 @@ impl IndexScheduler {
             env,
             // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
             wake_up: Arc::new(SignalEvent::auto(true)),
+            autobatching_enabled,
 
             #[cfg(test)]
             test_breakpoint_sdr,
@@ -208,6 +213,7 @@ impl IndexScheduler {
             index_tasks: self.index_tasks,
             index_mapper: self.index_mapper.clone(),
             wake_up: self.wake_up.clone(),
+            autobatching_enabled: self.autobatching_enabled,
 
             #[cfg(test)]
             test_breakpoint_sdr: self.test_breakpoint_sdr.clone(),
@@ -217,7 +223,8 @@ impl IndexScheduler {
             run.wake_up.wait();
 
             match run.tick() {
-                Ok(()) => (),
+                Ok(0) => (),
+                Ok(_) => run.wake_up.signal(),
                 Err(e) => log::error!("{}", e),
             }
         });
@@ -312,11 +319,10 @@ impl IndexScheduler {
             started_at: None,
             finished_at: None,
             error: None,
-            details: None,
+            details: task.default_details(),
             status: Status::Enqueued,
             kind: task,
         };
-
         self.all_tasks
             .append(&mut wtxn, &BEU32::new(task.uid), &task)?;
 
@@ -347,7 +353,8 @@ impl IndexScheduler {
             }
         }
 
-        self.notify();
+        // notify the scheduler loop to execute a new tick
+        self.wake_up.signal();
 
         Ok(task.as_task_view())
     }
@@ -355,20 +362,26 @@ impl IndexScheduler {
     pub fn create_update_file(&self) -> Result<(Uuid, File)> {
         Ok(self.file_store.new_update()?)
     }
+    #[cfg(test)]
+    pub fn create_update_file_with_uuid(&self, uuid: u128) -> Result<(Uuid, File)> {
+        Ok(self.file_store.new_update_with_uuid(uuid)?)
+    }
 
     pub fn delete_update_file(&self, uuid: Uuid) -> Result<()> {
         Ok(self.file_store.delete(uuid)?)
     }
 
     /// Create and execute and store the result of one batch of registered tasks.
-    fn tick(&self) -> Result<()> {
+    ///
+    /// Returns the number of processed tasks.
+    fn tick(&self) -> Result<usize> {
         #[cfg(test)]
         self.test_breakpoint_sdr.send(Breakpoint::Start).unwrap();
 
         let rtxn = self.env.read_txn()?;
         let batch = match self.create_next_batch(&rtxn)? {
             Some(batch) => batch,
-            None => return Ok(()),
+            None => return Ok(0),
         };
         // we don't need this transaction any longer.
         drop(rtxn);
@@ -376,6 +389,7 @@ impl IndexScheduler {
         // 1. store the starting date with the bitmap of processing tasks.
         let mut ids = batch.ids();
         ids.sort_unstable();
+        let processed_tasks = ids.len();
         let processing_tasks = RoaringBitmap::from_sorted_iter(ids.iter().copied()).unwrap();
         let started_at = OffsetDateTime::now_utc();
         *self.processing_tasks.write().unwrap() = (started_at, processing_tasks);
@@ -392,17 +406,14 @@ impl IndexScheduler {
 
         // 2. Process the tasks
         let res = self.process_batch(batch);
-
         let mut wtxn = self.env.write_txn()?;
-
         let finished_at = OffsetDateTime::now_utc();
         match res {
             Ok(tasks) => {
                 for mut task in tasks {
                     task.started_at = Some(started_at);
                     task.finished_at = Some(finished_at);
-                    // the info field should've been set by the process_batch function
-
+                    // TODO the info field should've been set by the process_batch function
                     self.update_task(&mut wtxn, &task)?;
                     task.remove_data()?;
                 }
@@ -422,9 +433,7 @@ impl IndexScheduler {
                 }
             }
         }
-
         *self.processing_tasks.write().unwrap() = (finished_at, RoaringBitmap::new());
-
         wtxn.commit()?;
         log::info!("A batch of tasks was successfully completed.");
 
@@ -433,12 +442,7 @@ impl IndexScheduler {
             .send(Breakpoint::AfterProcessing)
             .unwrap();
 
-        Ok(())
-    }
-
-    /// Notify the scheduler there is or may be work to do.
-    pub fn notify(&self) {
-        self.wake_up.signal()
+        Ok(processed_tasks)
     }
 }
 
@@ -446,16 +450,73 @@ impl IndexScheduler {
 mod tests {
     use big_s::S;
     use insta::*;
-    use milli::update::IndexDocumentsMethod::ReplaceDocuments;
+    use meilisearch_types::milli::update::IndexDocumentsMethod::ReplaceDocuments;
     use tempfile::TempDir;
     use uuid::Uuid;
 
-    use crate::assert_smol_debug_snapshot;
+    use crate::snapshot::snapshot_index_scheduler;
 
     use super::*;
 
+    /// Return a `KindWithContent::IndexCreation` task
+    fn index_creation_task(index: &'static str, primary_key: &'static str) -> KindWithContent {
+        KindWithContent::IndexCreation {
+            index_uid: S(index),
+            primary_key: Some(S(primary_key)),
+        }
+    }
+    /// Create a `KindWithContent::DocumentImport` task that imports documents.
+    ///
+    /// - `index_uid` is given as parameter
+    /// - `primary_key` is given as parameter
+    /// - `method` is set to `ReplaceDocuments`
+    /// - `content_file` is given as parameter
+    /// - `documents_count` is given as parameter
+    /// - `allow_index_creation` is set to `true`
+    fn replace_document_import_task(
+        index: &'static str,
+        primary_key: Option<&'static str>,
+        content_file_uuid: u128,
+        documents_count: u64,
+    ) -> KindWithContent {
+        KindWithContent::DocumentImport {
+            index_uid: S(index),
+            primary_key: primary_key.map(ToOwned::to_owned),
+            method: ReplaceDocuments,
+            content_file: Uuid::from_u128(content_file_uuid),
+            documents_count: documents_count,
+            allow_index_creation: true,
+        }
+    }
+
+    /// Create an update file with the given file uuid.
+    ///
+    /// The update file contains just one simple document whose id is given by `document_id`.
+    ///
+    /// The uuid of the file and its documents count is returned.
+    fn sample_documents(
+        index_scheduler: &IndexScheduler,
+        file_uuid: u128,
+        document_id: usize,
+    ) -> (File, u64) {
+        let content = format!(
+            r#"
+        {{
+            "id" : "{document_id}"
+        }}"#
+        );
+
+        let (_uuid, mut file) = index_scheduler
+            .create_update_file_with_uuid(file_uuid)
+            .unwrap();
+        let documents_count =
+            meilisearch_types::document_formats::read_json(content.as_bytes(), file.as_file_mut())
+                .unwrap() as u64;
+        (file, documents_count)
+    }
+
     impl IndexScheduler {
-        pub fn test() -> (Self, IndexSchedulerHandle) {
+        pub fn test(autobatching: bool) -> (Self, IndexSchedulerHandle) {
             let tempdir = TempDir::new().unwrap();
             let (sender, receiver) = crossbeam::channel::bounded(0);
 
@@ -465,6 +526,7 @@ mod tests {
                 tempdir.path().join("indexes"),
                 1024 * 1024,
                 IndexerConfig::default(),
+                autobatching, // enable autobatching
                 sender,
             )
             .unwrap();
@@ -489,6 +551,7 @@ mod tests {
             self.test_breakpoint_rcv.iter().find(|b| *b == breakpoint);
         }
 
+        #[allow(unused)]
         /// Wait until the provided breakpoint is reached.
         fn next_breakpoint(&self) -> Breakpoint {
             self.test_breakpoint_rcv.recv().unwrap()
@@ -505,41 +568,16 @@ mod tests {
 
     #[test]
     fn register() {
-        let (index_scheduler, handle) = IndexScheduler::test();
-        handle.dont_block();
+        // In this test, the handle doesn't make any progress, we only check that the tasks are registered
+        let (index_scheduler, _handle) = IndexScheduler::test(true);
 
         let kinds = [
-            KindWithContent::IndexCreation {
-                index_uid: S("catto"),
-                primary_key: Some(S("mouse")),
-            },
-            KindWithContent::DocumentImport {
-                index_uid: S("catto"),
-                primary_key: None,
-                method: ReplaceDocuments,
-                content_file: Uuid::new_v4(),
-                documents_count: 12,
-                allow_index_creation: true,
-            },
+            index_creation_task("catto", "mouse"),
+            replace_document_import_task("catto", None, 0, 12),
             KindWithContent::CancelTask { tasks: vec![0, 1] },
-            KindWithContent::DocumentImport {
-                index_uid: S("catto"),
-                primary_key: None,
-                method: ReplaceDocuments,
-                content_file: Uuid::new_v4(),
-                documents_count: 50,
-                allow_index_creation: true,
-            },
-            KindWithContent::DocumentImport {
-                index_uid: S("doggo"),
-                primary_key: Some(S("bone")),
-                method: ReplaceDocuments,
-                content_file: Uuid::new_v4(),
-                documents_count: 5000,
-                allow_index_creation: true,
-            },
+            replace_document_import_task("catto", None, 1, 50),
+            replace_document_import_task("doggo", Some("bone"), 2, 5000),
         ];
-        let mut inserted_tasks = Vec::new();
         for (idx, kind) in kinds.into_iter().enumerate() {
             let k = kind.as_kind();
             let task = index_scheduler.register(kind).unwrap();
@@ -547,44 +585,14 @@ mod tests {
             assert_eq!(task.uid, idx as u32);
             assert_eq!(task.status, Status::Enqueued);
             assert_eq!(task.kind, k);
-
-            inserted_tasks.push(task);
         }
 
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-        let mut all_tasks = Vec::new();
-        for ret in index_scheduler.all_tasks.iter(&rtxn).unwrap() {
-            all_tasks.push(ret.unwrap().0);
-        }
-
-        // we can't assert on the content of the tasks because there is the date and uuid that changes everytime.
-        assert_smol_debug_snapshot!(all_tasks, @"[U32(0), U32(1), U32(2), U32(3), U32(4)]");
-
-        let mut status = Vec::new();
-        for ret in index_scheduler.status.iter(&rtxn).unwrap() {
-            status.push(ret.unwrap());
-        }
-
-        assert_smol_debug_snapshot!(status, @"[(Enqueued, RoaringBitmap<[0, 1, 2, 3, 4]>)]");
-
-        let mut kind = Vec::new();
-        for ret in index_scheduler.kind.iter(&rtxn).unwrap() {
-            kind.push(ret.unwrap());
-        }
-
-        assert_smol_debug_snapshot!(kind, @"[(DocumentAddition, RoaringBitmap<[1, 3, 4]>), (IndexCreation, RoaringBitmap<[0]>), (CancelTask, RoaringBitmap<[2]>)]");
-
-        let mut index_tasks = Vec::new();
-        for ret in index_scheduler.index_tasks.iter(&rtxn).unwrap() {
-            index_tasks.push(ret.unwrap());
-        }
-
-        assert_smol_debug_snapshot!(index_tasks, @r###"[("catto", RoaringBitmap<[0, 1, 3]>), ("doggo", RoaringBitmap<[4]>)]"###);
+        assert_snapshot!(snapshot_index_scheduler(&index_scheduler));
     }
 
     #[test]
     fn insert_task_while_another_task_is_processing() {
-        let (index_scheduler, handle) = IndexScheduler::test();
+        let (index_scheduler, handle) = IndexScheduler::test(true);
 
         index_scheduler.register(KindWithContent::Snapshot).unwrap();
         handle.wait_till(Breakpoint::BatchCreated);
@@ -596,17 +604,171 @@ mod tests {
             })
             .unwrap();
 
+        assert_snapshot!(snapshot_index_scheduler(&index_scheduler));
+    }
+
+    /// We send a lot of tasks but notify the tasks scheduler only once as
+    /// we send them very fast, we must make sure that they are all processed.
+    #[test]
+    fn process_tasks_inserted_without_new_signal() {
+        let (index_scheduler, handle) = IndexScheduler::test(true);
+
+        index_scheduler
+            .register(KindWithContent::IndexCreation {
+                index_uid: S("doggos"),
+                primary_key: None,
+            })
+            .unwrap();
+        index_scheduler
+            .register(KindWithContent::IndexCreation {
+                index_uid: S("cattos"),
+                primary_key: None,
+            })
+            .unwrap();
+        index_scheduler
+            .register(KindWithContent::IndexDeletion {
+                index_uid: S("doggos"),
+            })
+            .unwrap();
+
+        handle.wait_till(Breakpoint::Start);
+        handle.wait_till(Breakpoint::AfterProcessing);
+        handle.wait_till(Breakpoint::AfterProcessing);
+        handle.wait_till(Breakpoint::AfterProcessing);
+
         let mut tasks = index_scheduler.get_tasks(Query::default()).unwrap();
         tasks.reverse();
         assert_eq!(tasks.len(), 3);
-        assert_eq!(tasks[0].status, Status::Processing);
-        assert_eq!(tasks[1].status, Status::Enqueued);
-        assert_eq!(tasks[2].status, Status::Enqueued);
+        assert_eq!(tasks[0].status, Status::Succeeded);
+        assert_eq!(tasks[1].status, Status::Succeeded);
+        assert_eq!(tasks[2].status, Status::Succeeded);
+    }
+
+    #[test]
+    fn process_tasks_without_autobatching() {
+        let (index_scheduler, handle) = IndexScheduler::test(false);
+
+        index_scheduler
+            .register(KindWithContent::IndexCreation {
+                index_uid: S("doggos"),
+                primary_key: None,
+            })
+            .unwrap();
+        index_scheduler
+            .register(KindWithContent::DocumentClear {
+                index_uid: S("doggos"),
+            })
+            .unwrap();
+        index_scheduler
+            .register(KindWithContent::DocumentClear {
+                index_uid: S("doggos"),
+            })
+            .unwrap();
+        index_scheduler
+            .register(KindWithContent::DocumentClear {
+                index_uid: S("doggos"),
+            })
+            .unwrap();
+
+        handle.wait_till(Breakpoint::Start);
+        handle.wait_till(Breakpoint::AfterProcessing);
+        handle.wait_till(Breakpoint::AfterProcessing);
+        handle.wait_till(Breakpoint::AfterProcessing);
+        handle.wait_till(Breakpoint::AfterProcessing);
+
+        let mut tasks = index_scheduler.get_tasks(Query::default()).unwrap();
+        tasks.reverse();
+        assert_eq!(tasks.len(), 4);
+        assert_eq!(tasks[0].status, Status::Succeeded);
+        assert_eq!(tasks[1].status, Status::Succeeded);
+        assert_eq!(tasks[2].status, Status::Succeeded);
+        assert_eq!(tasks[3].status, Status::Succeeded);
+    }
+
+    #[test]
+    fn task_deletion_undeleteable() {
+        let (index_scheduler, handle) = IndexScheduler::test(true);
+
+        let to_enqueue = [
+            index_creation_task("catto", "mouse"),
+            replace_document_import_task("catto", None, 0, 12),
+            replace_document_import_task("doggo", Some("bone"), 1, 5000),
+        ];
+        for task in to_enqueue {
+            let _ = index_scheduler.register(task).unwrap();
+        }
+
+        // here we have registered all the tasks, but the index scheduler
+        // has not progressed at all
+        assert_snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        index_scheduler
+            .register(KindWithContent::DeleteTasks {
+                query: "test_query".to_owned(),
+                tasks: vec![0, 1],
+            })
+            .unwrap();
+
+        // again, no progress made at all, but one more task is registered
+        assert_snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // now we create the first batch
+        handle.wait_till(Breakpoint::BatchCreated);
+
+        // the task deletion should now be "processing"
+        assert_snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        handle.wait_till(Breakpoint::AfterProcessing);
+
+        // after the task deletion is processed, no task should actually have been deleted,
+        // because the tasks with ids 0 and 1 were still "enqueued", and thus undeleteable
+        // the "task deletion" task should be marked as "succeeded" and, in its details, the
+        // number of deleted tasks should be 0
+        assert_snapshot!(snapshot_index_scheduler(&index_scheduler));
+    }
+
+    #[test]
+    fn task_deletion_deleteable() {
+        let (index_scheduler, handle) = IndexScheduler::test(true);
+
+        let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
+        let (file1, documents_count1) = sample_documents(&index_scheduler, 1, 1);
+
+        let to_enqueue = [
+            replace_document_import_task("catto", None, 0, documents_count0),
+            replace_document_import_task("doggo", Some("bone"), 1, documents_count1),
+        ];
+
+        for task in to_enqueue {
+            let _ = index_scheduler.register(task).unwrap();
+        }
+        file0.persist().unwrap();
+        file1.persist().unwrap();
+
+        assert_snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        handle.wait_till(Breakpoint::AfterProcessing);
+        // first addition of documents should be successful
+        // TODO: currently the result of this operation is incorrect!
+        // only the first task should be successful, because it should not be batched with
+        // the second task, that operates on a different index!
+        assert_snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // Now we delete the first task
+        index_scheduler
+            .register(KindWithContent::DeleteTasks {
+                query: "test_query".to_owned(),
+                tasks: vec![0],
+            })
+            .unwrap();
+
+        handle.wait_till(Breakpoint::AfterProcessing);
+        assert_snapshot!(snapshot_index_scheduler(&index_scheduler));
     }
 
     #[test]
     fn document_addition() {
-        let (index_scheduler, handle) = IndexScheduler::test();
+        let (index_scheduler, handle) = IndexScheduler::test(true);
 
         let content = r#"
         {
@@ -614,9 +776,10 @@ mod tests {
             "doggo": "bob"
         }"#;
 
-        let (uuid, mut file) = index_scheduler.create_update_file().unwrap();
+        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
         let documents_count =
-            document_formats::read_json(content.as_bytes(), file.as_file_mut()).unwrap() as u64;
+            meilisearch_types::document_formats::read_json(content.as_bytes(), file.as_file_mut())
+                .unwrap() as u64;
         index_scheduler
             .register(KindWithContent::DocumentImport {
                 index_uid: S("doggos"),
@@ -629,74 +792,15 @@ mod tests {
             .unwrap();
         file.persist().unwrap();
 
-        // After registering the task we should see the update being enqueued
-        let task = index_scheduler.get_tasks(Query::default()).unwrap();
-        assert_json_snapshot!(task,
-            { "[].enqueuedAt" => "date", "[].startedAt" => "date", "[].finishedAt" => "date", "[].duration" => "duration" }
-            ,@r###"
-        [
-          {
-            "uid": 0,
-            "indexUid": "doggos",
-            "status": "enqueued",
-            "type": "documentAddition",
-            "enqueuedAt": "date"
-          }
-        ]
-        "###);
+        assert_snapshot!(snapshot_index_scheduler(&index_scheduler));
 
         handle.wait_till(Breakpoint::BatchCreated);
 
-        // Once the task has started being batched it should be marked as processing
-        let task = index_scheduler.get_tasks(Query::default()).unwrap();
-        assert_json_snapshot!(task,
-            { "[].enqueuedAt" => "date", "[].startedAt" => "date", "[].finishedAt" => "date", "[].duration" => "duration" }
-            ,@r###"
-        [
-          {
-            "uid": 0,
-            "indexUid": "doggos",
-            "status": "processing",
-            "type": "documentAddition",
-            "enqueuedAt": "date",
-            "startedAt": "date"
-          }
-        ]
-        "###);
+        assert_snapshot!(snapshot_index_scheduler(&index_scheduler));
+
         handle.wait_till(Breakpoint::AfterProcessing);
 
-        let task = index_scheduler.get_tasks(Query::default()).unwrap();
-        assert_json_snapshot!(task,
-            { "[].enqueuedAt" => "date", "[].startedAt" => "date", "[].finishedAt" => "date", "[].duration" => "duration" }
-            ,@r###"
-        [
-          {
-            "uid": 0,
-            "indexUid": "doggos",
-            "status": "succeeded",
-            "type": "documentAddition",
-            "details": {
-              "receivedDocuments": 1,
-              "indexedDocuments": 1
-            },
-            "duration": "duration",
-            "enqueuedAt": "date",
-            "startedAt": "date",
-            "finishedAt": "date"
-          }
-        ]
-        "###);
-
-        let doggos = index_scheduler.index("doggos").unwrap();
-
-        let rtxn = doggos.read_txn().unwrap();
-        let documents: Vec<_> = doggos
-            .all_documents(&rtxn)
-            .unwrap()
-            .collect::<std::result::Result<_, _>>()
-            .unwrap();
-
-        assert_smol_debug_snapshot!(documents, @r###"[{"id": Number(1), "doggo": String("bob")}]"###);
+        assert_snapshot!(snapshot_index_scheduler(&index_scheduler));
     }
 
     #[macro_export]
@@ -717,6 +821,6 @@ mod tests {
 
     #[test]
     fn simple_new() {
-        crate::IndexScheduler::test();
+        crate::IndexScheduler::test(true);
     }
 }
