@@ -1,7 +1,7 @@
 use anyhow::Result;
-use index::{Settings, Unchecked};
 use meilisearch_types::error::ResponseError;
-use milli::update::IndexDocumentsMethod;
+use meilisearch_types::milli::update::IndexDocumentsMethod;
+use meilisearch_types::settings::{Settings, Unchecked};
 
 use serde::{Deserialize, Serialize, Serializer};
 use std::{
@@ -543,7 +543,7 @@ fn serialize_duration<S: Serializer>(
 
 #[cfg(test)]
 mod tests {
-    use milli::heed::{types::SerdeJson, BytesDecode, BytesEncode};
+    use meilisearch_types::heed::{types::SerdeJson, BytesDecode, BytesEncode};
 
     use crate::assert_smol_debug_snapshot;
 

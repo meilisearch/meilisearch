@@ -1,7 +1,8 @@
 use actix_web as aweb;
 use aweb::error::{JsonPayloadError, QueryPayloadError};
-use document_formats::DocumentFormatError;
+use meilisearch_types::document_formats::DocumentFormatError;
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
+use serde_json::Value;
 use tokio::task::JoinError;
 
 #[derive(Debug, thiserror::Error)]
@@ -14,8 +15,18 @@ pub enum MeilisearchHttpError {
         .1.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
     )]
     InvalidContentType(String, Vec<String>),
+    #[error("Document `{0}` not found.")]
+    DocumentNotFound(String),
+    #[error("Invalid syntax for the filter parameter: `expected {}, found: {1}`.", .0.join(", "))]
+    InvalidExpression(&'static [&'static str], Value),
+    #[error(transparent)]
+    SerdeJson(#[from] serde_json::Error),
+    #[error(transparent)]
+    HeedError(#[from] meilisearch_types::heed::Error),
     #[error(transparent)]
     IndexScheduler(#[from] index_scheduler::Error),
+    #[error(transparent)]
+    Milli(#[from] meilisearch_types::milli::Error),
     #[error(transparent)]
     Payload(#[from] PayloadError),
     #[error(transparent)]
@@ -31,7 +42,12 @@ impl ErrorCode for MeilisearchHttpError {
         match self {
             MeilisearchHttpError::MissingContentType(_) => Code::MissingContentType,
             MeilisearchHttpError::InvalidContentType(_, _) => Code::InvalidContentType,
+            MeilisearchHttpError::DocumentNotFound(_) => Code::DocumentNotFound,
+            MeilisearchHttpError::InvalidExpression(_, _) => Code::Filter,
+            MeilisearchHttpError::SerdeJson(_) => Code::Internal,
+            MeilisearchHttpError::HeedError(_) => Code::Internal,
             MeilisearchHttpError::IndexScheduler(e) => e.error_code(),
+            MeilisearchHttpError::Milli(e) => e.error_code(),
             MeilisearchHttpError::Payload(e) => e.error_code(),
             MeilisearchHttpError::FileStore(_) => Code::Internal,
             MeilisearchHttpError::DocumentFormat(e) => e.error_code(),

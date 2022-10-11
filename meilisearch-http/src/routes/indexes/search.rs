@@ -1,10 +1,5 @@
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use index::{
-    perform_search, MatchingStrategy, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
-    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
-    DEFAULT_SEARCH_OFFSET,
-};
 use index_scheduler::IndexScheduler;
 use log::debug;
 use meilisearch_auth::IndexSearchRules;
@@ -16,6 +11,11 @@ use serde_json::Value;
 use crate::analytics::{Analytics, SearchAggregator};
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::search::{
+    perform_search, MatchingStrategy, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
+    DEFAULT_SEARCH_OFFSET
+};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(

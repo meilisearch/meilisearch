@@ -1,5 +1,6 @@
 use meilisearch_types::error::{Code, ErrorCode};
-use milli::heed;
+use meilisearch_types::heed;
+use meilisearch_types::milli;
 use thiserror::Error;
 
 use crate::TaskId;
@@ -26,8 +27,6 @@ pub enum Error {
     #[error(transparent)]
     Milli(#[from] milli::Error),
     #[error(transparent)]
-    IndexError(#[from] index::error::IndexError),
-    #[error(transparent)]
     FileStore(#[from] file_store::Error),
     #[error(transparent)]
     IoError(#[from] std::io::Error),
@@ -48,7 +47,6 @@ impl ErrorCode for Error {
             // TODO: TAMO: are all these errors really internal?
             Error::Heed(_) => Code::Internal,
             Error::Milli(_) => Code::Internal,
-            Error::IndexError(_) => Code::Internal,
             Error::FileStore(_) => Code::Internal,
             Error::IoError(_) => Code::Internal,
             Error::Anyhow(_) => Code::Internal,
