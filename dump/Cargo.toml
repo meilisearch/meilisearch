@@ -6,7 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-index = { path = "../index" }
 uuid = { version = "1.1.2", features = ["serde", "v4"] }
 serde_json = { version = "1.0.85", features = ["preserve_order"] }
 serde = { version = "1.0.136", features = ["derive"] }

@@ -83,10 +83,10 @@ impl CompatV5ToV6 {
                         } => v6::Kind::DocumentImport {
                             method: match merge_strategy {
                                 v5::tasks::IndexDocumentsMethod::ReplaceDocuments => {
-                                    v6::index::milli::update::IndexDocumentsMethod::ReplaceDocuments
+                                    v6::milli::update::IndexDocumentsMethod::ReplaceDocuments
                                 }
                                 v5::tasks::IndexDocumentsMethod::UpdateDocuments => {
-                                    v6::index::milli::update::IndexDocumentsMethod::UpdateDocuments
+                                    v6::milli::update::IndexDocumentsMethod::UpdateDocuments
                                 }
                             },
                             allow_index_creation: allow_index_creation.clone(),
@@ -102,7 +102,9 @@ impl CompatV5ToV6 {
                         },
                         v5::tasks::TaskContent::Dump { .. } => v6::Kind::DumpExport,
                     },
-                    details: task_view.details.map(|details| match details {
+                    details: todo!(),
+                    /*
+                    task_view.details.map(|details| match details {
                         v5::Details::DocumentAddition {
                             received_documents,
                             indexed_documents,
@@ -128,6 +130,7 @@ impl CompatV5ToV6 {
                         }
                         v5::Details::Dump { dump_uid } => v6::Details::Dump { dump_uid },
                     }),
+                    */
                     error: task_view.error.map(|e| e.into()),
                     duration: task_view.duration,
                     enqueued_at: task_view.enqueued_at,
