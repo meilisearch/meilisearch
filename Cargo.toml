@@ -4,6 +4,7 @@ members = [
     "meilisearch-http",
     "meilisearch-types",
     "meilisearch-auth",
+    "meili-snap",
     "index-scheduler",
     "file-store",
     "permissive-json-pointer",
