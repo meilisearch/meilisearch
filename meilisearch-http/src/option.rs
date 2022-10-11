@@ -52,7 +52,7 @@ const MEILI_LOG_LEVEL: &str = "MEILI_LOG_LEVEL";
 #[cfg(feature = "metrics")]
 const MEILI_ENABLE_METRICS_ROUTE: &str = "MEILI_ENABLE_METRICS_ROUTE";
 
-const DEFAULT_CONFIG_FILE_PATH: &str = "./config.yml";
+const DEFAULT_CONFIG_FILE_PATH: &str = "./config.toml";
 const DEFAULT_DB_PATH: &str = "./data.ms";
 const DEFAULT_HTTP_ADDR: &str = "127.0.0.1:7700";
 const DEFAULT_ENV: &str = "development";
