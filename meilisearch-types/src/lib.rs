@@ -3,6 +3,7 @@ pub mod error;
 pub mod index_uid;
 pub mod settings;
 pub mod star_or;
+pub mod tasks;
 
 pub use milli;
 pub use milli::heed;

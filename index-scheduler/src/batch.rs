@@ -1,8 +1,11 @@
 use crate::{
     autobatcher::BatchKind,
-    task::{Details, Kind, KindWithContent, Status, Task},
+    task::{KindWithContent, Task},
     Error, IndexScheduler, Result, TaskId,
 };
+
+use meilisearch_types::tasks::{Details, Kind, Status};
+
 use log::{debug, info};
 use meilisearch_types::milli::update::IndexDocumentsConfig;
 use meilisearch_types::milli::update::{

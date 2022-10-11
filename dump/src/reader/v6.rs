@@ -21,14 +21,14 @@ pub type Settings<T> = meilisearch_types::settings::Settings<T>;
 pub type Checked = meilisearch_types::settings::Checked;
 pub type Unchecked = meilisearch_types::settings::Unchecked;
 
-pub type Task = index_scheduler::TaskView;
+pub type Task = meilisearch_types::tasks::TaskDump;
 pub type Key = meilisearch_auth::Key;
 
 // ===== Other types to clarify the code of the compat module
 // everything related to the tasks
-pub type Status = index_scheduler::Status;
-pub type Kind = index_scheduler::Kind;
-pub type Details = index_scheduler::Details;
+pub type Status = meilisearch_types::tasks::Status;
+pub type Kind = meilisearch_types::tasks::Kind;
+pub type Details = meilisearch_types::tasks::Details;
 
 // everything related to the settings
 pub type Setting<T> = meilisearch_types::milli::update::Setting<T>;
@@ -109,11 +109,8 @@ impl V6Reader {
         &mut self,
     ) -> Box<dyn Iterator<Item = Result<(Task, Option<Box<super::UpdateFile>>)>> + '_> {
         Box::new((&mut self.tasks).lines().map(|line| -> Result<_> {
-            let mut task: index_scheduler::TaskView = todo!(); // serde_json::from_str(&line?)?;
-                                                               // TODO: this can be removed once we can `Deserialize` the duration from the `TaskView`.
-            if let Some((started_at, finished_at)) = task.started_at.zip(task.finished_at) {
-                task.duration = Some(finished_at - started_at);
-            }
+            let task: Task = serde_json::from_str(&line?)?;
+
             let update_file_path = self
                 .dump
                 .path()
