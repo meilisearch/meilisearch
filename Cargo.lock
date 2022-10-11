@@ -939,17 +939,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "derivative"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcc3dd5e9e9c0b295d6e1e4d811fb6f157d5ffd784b8d202fc62eac8035a770b"
-dependencies = [
- "proc-macro2 1.0.39",
- "quote 1.0.18",
- "syn 1.0.96",
-]
-
-[[package]]
 name = "derive_builder"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1029,18 +1018,6 @@ dependencies = [
  "libc",
  "redox_users",
  "winapi",
-]
-
-[[package]]
-name = "document-formats"
-version = "0.1.0"
-dependencies = [
- "csv",
- "either",
- "meilisearch-types",
- "milli",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -1672,35 +1649,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "index"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bincode",
- "csv",
- "derivative",
- "either",
- "file-store",
- "fst",
- "indexmap",
- "lazy_static",
- "log",
- "meilisearch-types",
- "milli",
- "nelson",
- "obkv",
- "permissive-json-pointer",
- "proptest",
- "proptest-derive",
- "regex",
- "serde",
- "serde_json",
- "thiserror",
- "time 0.3.14",
- "uuid 1.1.2",
-]
-
-[[package]]
 name = "index-scheduler"
 version = "0.1.0"
 dependencies = [
@@ -1710,13 +1658,10 @@ dependencies = [
  "crossbeam",
  "csv",
  "derive_builder",
- "document-formats",
  "file-store",
- "index",
  "insta",
  "log",
  "meilisearch-types",
- "milli",
  "nelson",
  "roaring",
  "serde",
@@ -2213,7 +2158,6 @@ dependencies = [
  "cargo_toml",
  "clap",
  "crossbeam-channel",
- "document-formats",
  "either",
  "env_logger",
  "file-store",
@@ -2223,7 +2167,6 @@ dependencies = [
  "futures-util",
  "hex",
  "http",
- "index",
  "index-scheduler",
  "indexmap",
  "itertools",
@@ -2240,6 +2183,7 @@ dependencies = [
  "obkv",
  "once_cell",
  "parking_lot",
+ "permissive-json-pointer",
  "pin-project-lite",
  "platform-dirs",
  "prometheus",
@@ -2278,6 +2222,8 @@ name = "meilisearch-types"
 version = "0.29.0"
 dependencies = [
  "actix-web",
+ "csv",
+ "either",
  "milli",
  "proptest",
  "proptest-derive",

@@ -9,7 +9,7 @@ use std::{fmt, fs};
 
 use byte_unit::{Byte, ByteError};
 use clap::Parser;
-use index_scheduler::milli::update::IndexerConfig;
+use meilisearch_types::milli::update::IndexerConfig;
 use rustls::{
     server::{
         AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient,

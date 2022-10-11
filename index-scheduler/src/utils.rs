@@ -1,9 +1,7 @@
 //! Utility functions on the DBs. Mainly getter and setters.
 
-use milli::{
-    heed::{types::DecodeIgnore, RoTxn, RwTxn},
-    BEU32,
-};
+use meilisearch_types::heed::{types::DecodeIgnore, RoTxn, RwTxn};
+use meilisearch_types::milli::BEU32;
 use roaring::RoaringBitmap;
 
 use crate::{

@@ -5,12 +5,11 @@ use std::sync::{Arc, RwLock};
 use std::{fs, thread};
 
 use log::error;
-use milli::Index;
+use meilisearch_types::heed::types::{SerdeBincode, Str};
+use meilisearch_types::heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn};
+use meilisearch_types::milli::update::IndexerConfig;
+use meilisearch_types::milli::Index;
 use uuid::Uuid;
-
-use milli::heed::types::{SerdeBincode, Str};
-use milli::heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn};
-use milli::update::IndexerConfig;
 
 use self::IndexStatus::{Available, BeingDeleted};
 use crate::{Error, Result};
@@ -70,7 +69,7 @@ impl IndexMapper {
                 fs::create_dir_all(&index_path)?;
                 let mut options = EnvOpenOptions::new();
                 options.map_size(self.index_size);
-                Ok(milli::Index::new(options, &index_path)?)
+                Ok(Index::new(options, &index_path)?)
             }
             error => error,
         }
@@ -153,7 +152,7 @@ impl IndexMapper {
                         fs::create_dir_all(&index_path)?;
                         let mut options = EnvOpenOptions::new();
                         options.map_size(self.index_size);
-                        let index = milli::Index::new(options, &index_path)?;
+                        let index = Index::new(options, &index_path)?;
                         entry.insert(Available(index.clone()));
                         index
                     }

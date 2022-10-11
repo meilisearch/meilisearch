@@ -1,14 +1,26 @@
+use std::collections::BTreeSet;
+use std::marker::PhantomData;
+
 use actix_web::web::Data;
+use fst::IntoStreamer;
 use log::debug;
 
 use actix_web::{web, HttpRequest, HttpResponse};
-use index::{Settings, Unchecked};
 use index_scheduler::{IndexScheduler, KindWithContent};
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::heed::RoTxn;
+use meilisearch_types::milli::update::Setting;
+use meilisearch_types::milli::{self, DEFAULT_VALUES_PER_FACET};
+use meilisearch_types::settings::{
+    Checked, FacetingSettings, MinWordSizeTyposSetting, PaginationSettings, Settings, TypoSettings,
+    Unchecked,
+};
+use meilisearch_types::Index;
 use serde_json::json;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
+use crate::search::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 
 #[macro_export]
 macro_rules! make_setting_route {
@@ -18,14 +30,15 @@ macro_rules! make_setting_route {
             use actix_web::{web, HttpRequest, HttpResponse, Resource};
             use log::debug;
 
-            use index::Settings;
-            use index_scheduler::milli::update::Setting;
             use index_scheduler::{IndexScheduler, KindWithContent};
+            use meilisearch_types::milli::update::Setting;
+            use meilisearch_types::settings::Settings;
 
             use meilisearch_types::error::ResponseError;
             use $crate::analytics::Analytics;
             use $crate::extractors::authentication::{policies::*, GuardedData};
             use $crate::extractors::sequential_extractor::SeqHandler;
+            use $crate::routes::indexes::settings::settings;
 
             pub async fn delete(
                 index_scheduler: GuardedData<
@@ -98,7 +111,7 @@ macro_rules! make_setting_route {
             ) -> std::result::Result<HttpResponse, ResponseError> {
                 let index = index_scheduler.index(&index_uid)?;
                 let rtxn = index.read_txn()?;
-                let settings = index::settings(&index, &rtxn)?;
+                let settings = settings(&index, &rtxn)?;
 
                 debug!("returns: {:?}", settings);
                 let mut json = serde_json::json!(&settings);
@@ -185,11 +198,11 @@ make_setting_route!(
 make_setting_route!(
     "/typo-tolerance",
     patch,
-    index::updates::TypoSettings,
+    meilisearch_types::settings::TypoSettings,
     typo_tolerance,
     "typoTolerance",
     analytics,
-    |setting: &Option<index::updates::TypoSettings>, req: &HttpRequest| {
+    |setting: &Option<meilisearch_types::settings::TypoSettings>, req: &HttpRequest| {
         use serde_json::json;
 
         analytics.publish(
@@ -295,11 +308,11 @@ make_setting_route!(
 make_setting_route!(
     "/faceting",
     patch,
-    index::updates::FacetingSettings,
+    meilisearch_types::settings::FacetingSettings,
     faceting,
     "faceting",
     analytics,
-    |setting: &Option<index::updates::FacetingSettings>, req: &HttpRequest| {
+    |setting: &Option<meilisearch_types::settings::FacetingSettings>, req: &HttpRequest| {
         use serde_json::json;
 
         analytics.publish(
@@ -317,11 +330,11 @@ make_setting_route!(
 make_setting_route!(
     "/pagination",
     patch,
-    index::updates::PaginationSettings,
+    meilisearch_types::settings::PaginationSettings,
     pagination,
     "pagination",
     analytics,
-    |setting: &Option<index::updates::PaginationSettings>, req: &HttpRequest| {
+    |setting: &Option<meilisearch_types::settings::PaginationSettings>, req: &HttpRequest| {
         use serde_json::json;
 
         analytics.publish(
@@ -456,7 +469,7 @@ pub async fn get_all(
 ) -> Result<HttpResponse, ResponseError> {
     let index = index_scheduler.index(&index_uid)?;
     let rtxn = index.read_txn()?;
-    let new_settings = index::settings(&index, &rtxn)?;
+    let new_settings = settings(&index, &rtxn)?;
     debug!("returns: {:?}", new_settings);
     Ok(HttpResponse::Ok().json(new_settings))
 }
@@ -478,4 +491,109 @@ pub async fn delete_all(
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
+}
+
+pub fn settings(index: &Index, rtxn: &RoTxn) -> Result<Settings<Checked>, milli::Error> {
+    let displayed_attributes = index
+        .displayed_fields(rtxn)?
+        .map(|fields| fields.into_iter().map(String::from).collect());
+
+    let searchable_attributes = index
+        .user_defined_searchable_fields(rtxn)?
+        .map(|fields| fields.into_iter().map(String::from).collect());
+
+    let filterable_attributes = index.filterable_fields(rtxn)?.into_iter().collect();
+
+    let sortable_attributes = index.sortable_fields(rtxn)?.into_iter().collect();
+
+    let criteria = index
+        .criteria(rtxn)?
+        .into_iter()
+        .map(|c| c.to_string())
+        .collect();
+
+    let stop_words = index
+        .stop_words(rtxn)?
+        .map(|stop_words| -> Result<BTreeSet<_>, milli::Error> {
+            Ok(stop_words.stream().into_strs()?.into_iter().collect())
+        })
+        .transpose()?
+        .unwrap_or_default();
+    let distinct_field = index.distinct_field(rtxn)?.map(String::from);
+
+    // in milli each word in the synonyms map were split on their separator. Since we lost
+    // this information we are going to put space between words.
+    let synonyms = index
+        .synonyms(rtxn)?
+        .iter()
+        .map(|(key, values)| {
+            (
+                key.join(" "),
+                values.iter().map(|value| value.join(" ")).collect(),
+            )
+        })
+        .collect();
+
+    let min_typo_word_len = MinWordSizeTyposSetting {
+        one_typo: Setting::Set(index.min_word_len_one_typo(rtxn)?),
+        two_typos: Setting::Set(index.min_word_len_two_typos(rtxn)?),
+    };
+
+    let disabled_words = match index.exact_words(rtxn)? {
+        Some(fst) => fst.into_stream().into_strs()?.into_iter().collect(),
+        None => BTreeSet::new(),
+    };
+
+    let disabled_attributes = index
+        .exact_attributes(rtxn)?
+        .into_iter()
+        .map(String::from)
+        .collect();
+
+    let typo_tolerance = TypoSettings {
+        enabled: Setting::Set(index.authorize_typos(rtxn)?),
+        min_word_size_for_typos: Setting::Set(min_typo_word_len),
+        disable_on_words: Setting::Set(disabled_words),
+        disable_on_attributes: Setting::Set(disabled_attributes),
+    };
+
+    let faceting = FacetingSettings {
+        max_values_per_facet: Setting::Set(
+            index
+                .max_values_per_facet(rtxn)?
+                .unwrap_or(DEFAULT_VALUES_PER_FACET),
+        ),
+    };
+
+    let pagination = PaginationSettings {
+        max_total_hits: Setting::Set(
+            index
+                .pagination_max_total_hits(rtxn)?
+                .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS),
+        ),
+    };
+
+    Ok(Settings {
+        displayed_attributes: match displayed_attributes {
+            Some(attrs) => Setting::Set(attrs),
+            None => Setting::Reset,
+        },
+        searchable_attributes: match searchable_attributes {
+            Some(attrs) => Setting::Set(attrs),
+            None => Setting::Reset,
+        },
+        filterable_attributes: Setting::Set(filterable_attributes),
+        sortable_attributes: Setting::Set(sortable_attributes),
+        ranking_rules: Setting::Set(criteria),
+        stop_words: Setting::Set(stop_words),
+        distinct_attribute: match distinct_field {
+            Some(field) => Setting::Set(field),
+            None => Setting::Reset,
+        },
+        synonyms: Setting::Set(synonyms),
+        typo_tolerance: Setting::Set(typo_tolerance),
+        faceting: Setting::Set(faceting),
+        pagination: Setting::Set(pagination),
+        _kind: PhantomData,
+    })
 }
