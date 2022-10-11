@@ -442,7 +442,7 @@ impl IndexScheduler {
         match batch {
             Batch::Cancel(_) => todo!(),
             Batch::DeleteTasks(mut task) => {
-                // 1. Retrieve the tasks that matched the quety at enqueue-time
+                // 1. Retrieve the tasks that matched the query at enqueue-time.
                 let matched_tasks =
                     if let KindWithContent::DeleteTasks { tasks, query: _ } = &task.kind {
                         tasks
