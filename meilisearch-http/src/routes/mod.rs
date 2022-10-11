@@ -2,10 +2,10 @@ use std::collections::BTreeMap;
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use index::{Settings, Unchecked};
 use index_scheduler::{IndexScheduler, Query, Status};
 use log::debug;
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::star_or::StarOr;
 use serde::{Deserialize, Serialize};
 use serde_json::json;

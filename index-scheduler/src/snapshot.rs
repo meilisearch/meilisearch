@@ -1,10 +1,8 @@
-use milli::{
-    heed::{
-        types::{OwnedType, SerdeBincode, SerdeJson, Str},
-        Database, RoTxn,
-    },
-    RoaringBitmapCodec, BEU32,
+use meilisearch_types::heed::{
+    types::{OwnedType, SerdeBincode, SerdeJson, Str},
+    Database, RoTxn,
 };
+use meilisearch_types::milli::{RoaringBitmapCodec, BEU32};
 use roaring::RoaringBitmap;
 
 use crate::{

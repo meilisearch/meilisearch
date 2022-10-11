@@ -356,12 +356,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "atomic_refcell"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73b5e5f48b927f04e952dedc932f31995a65a0bf65ec971c74436e51bf6e970d"
-
-[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1024,17 +1018,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "derivative"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcc3dd5e9e9c0b295d6e1e4d811fb6f157d5ffd784b8d202fc62eac8035a770b"
-dependencies = [
- "proc-macro2 1.0.46",
- "quote 1.0.21",
- "syn 1.0.101",
-]
-
-[[package]]
 name = "derive_builder"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1085,12 +1068,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08ff6a4480d42625e59bc4e8b5dc3723279fd24d83afe8aa20df217276261cd6"
 
 [[package]]
-name = "difflib"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6184e33543162437515c2e2b48714794e37845ec9851711914eec9d308f6ebe8"
-
-[[package]]
 name = "digest"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1123,24 +1100,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "document-formats"
-version = "0.1.0"
-dependencies = [
- "csv",
- "either",
- "meilisearch-types",
- "milli 0.33.0",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "downcast"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1435fa1053d8b2fbbe9be7e97eca7f33d37b28409959813daefc1446a14247f1"
-
-[[package]]
 name = "dump"
 version = "0.29.0"
 dependencies = [
@@ -1148,7 +1107,6 @@ dependencies = [
  "big_s",
  "flate2",
  "http",
- "index",
  "index-scheduler",
  "insta",
  "log",
@@ -1351,15 +1309,6 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "0.33.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.0#a79ff8a1a98a807f40f970131c8de2ab11560de5"
-dependencies = [
- "nom",
- "nom_locate",
-]
-
-[[package]]
-name = "filter-parser"
 version = "0.33.4"
 source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.4#4fc6331cb6526c07f3137584564cfe3493fb25bd"
 dependencies = [
@@ -1379,27 +1328,10 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "0.33.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.0#a79ff8a1a98a807f40f970131c8de2ab11560de5"
-dependencies = [
- "serde_json",
-]
-
-[[package]]
-name = "flatten-serde-json"
 version = "0.33.4"
 source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.4#4fc6331cb6526c07f3137584564cfe3493fb25bd"
 dependencies = [
  "serde_json",
-]
-
-[[package]]
-name = "float-cmp"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4"
-dependencies = [
- "num-traits",
 ]
 
 [[package]]
@@ -1416,18 +1348,6 @@ checksum = "a9c384f161156f5260c24a097c56119f9be8c798586aecc13afbcbe7b7e26bf8"
 dependencies = [
  "percent-encoding",
 ]
-
-[[package]]
-name = "fragile"
-version = "1.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85dcb89d2b10c5f6133de2efd8c11959ce9dbb46a2f7a4cab208c4eeda6ce1ab"
-
-[[package]]
-name = "fs_extra"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2022715d62ab30faffd124d40b76f4134a550a87792276512b18d63272333394"
 
 [[package]]
 name = "fst"
@@ -1823,35 +1743,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "index"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bincode",
- "csv",
- "derivative",
- "either",
- "file-store",
- "fst",
- "indexmap",
- "lazy_static",
- "log",
- "meilisearch-types",
- "milli 0.33.0",
- "nelson",
- "obkv",
- "permissive-json-pointer",
- "proptest",
- "proptest-derive",
- "regex",
- "serde",
- "serde_json",
- "thiserror",
- "time",
- "uuid 1.1.2",
-]
-
-[[package]]
 name = "index-scheduler"
 version = "0.1.0"
 dependencies = [
@@ -1861,13 +1752,10 @@ dependencies = [
  "crossbeam",
  "csv",
  "derive_builder",
- "document-formats",
  "file-store",
- "index",
  "insta",
  "log",
  "meilisearch-types",
- "milli 0.33.0",
  "nelson",
  "roaring",
  "serde",
@@ -1973,14 +1861,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49409df3e3bf0856b916e2ceaca09ee28e6871cf7d9ce97a692cacfdb2a25a47"
 dependencies = [
  "wasm-bindgen",
-]
-
-[[package]]
-name = "json-depth-checker"
-version = "0.33.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.0#a79ff8a1a98a807f40f970131c8de2ab11560de5"
-dependencies = [
- "serde_json",
 ]
 
 [[package]]
@@ -2338,7 +2218,7 @@ dependencies = [
  "enum-iterator",
  "hmac",
  "meilisearch-types",
- "milli 0.33.4",
+ "milli",
  "rand",
  "serde",
  "serde_json",
@@ -2368,7 +2248,6 @@ dependencies = [
  "cargo_toml",
  "clap 4.0.9",
  "crossbeam-channel",
- "document-formats",
  "either",
  "env_logger",
  "file-store",
@@ -2378,7 +2257,6 @@ dependencies = [
  "futures-util",
  "hex",
  "http",
- "index",
  "index-scheduler",
  "indexmap",
  "itertools",
@@ -2388,7 +2266,6 @@ dependencies = [
  "manifest-dir-macros",
  "maplit",
  "meilisearch-auth",
- "meilisearch-lib",
  "meilisearch-types",
  "mimalloc",
  "mime",
@@ -2396,6 +2273,7 @@ dependencies = [
  "obkv",
  "once_cell",
  "parking_lot",
+ "permissive-json-pointer",
  "pin-project-lite",
  "platform-dirs",
  "prometheus",
@@ -2432,77 +2310,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "meilisearch-lib"
-version = "0.29.1"
-dependencies = [
- "actix-rt",
- "actix-web",
- "anyhow",
- "async-stream",
- "async-trait",
- "atomic_refcell",
- "byte-unit",
- "bytes",
- "clap 4.0.9",
- "crossbeam-channel",
- "csv",
- "derivative",
- "either",
- "file-store",
- "flate2",
- "fs_extra",
- "fst",
- "futures",
- "futures-util",
- "http",
- "index",
- "index-scheduler",
- "indexmap",
- "itertools",
- "lazy_static",
- "log",
- "meilisearch-auth",
- "meilisearch-types",
- "milli 0.33.4",
- "mime",
- "mockall",
- "nelson",
- "num_cpus",
- "obkv",
- "once_cell",
- "page_size",
- "parking_lot",
- "paste",
- "permissive-json-pointer",
- "proptest",
- "proptest-derive",
- "rand",
- "rayon",
- "regex",
- "reqwest",
- "roaring",
- "rustls",
- "serde",
- "serde_json",
- "siphasher",
- "slice-group-by",
- "sysinfo",
- "tar",
- "tempfile",
- "thiserror",
- "time",
- "tokio",
- "uuid 1.1.2",
- "walkdir",
- "whoami",
-]
-
-[[package]]
 name = "meilisearch-types"
 version = "0.29.1"
 dependencies = [
  "actix-web",
- "milli 0.33.0",
+ "csv",
+ "either",
+ "milli",
  "proptest",
  "proptest-derive",
  "serde",
@@ -2536,51 +2350,6 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.33.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.0#a79ff8a1a98a807f40f970131c8de2ab11560de5"
-dependencies = [
- "bimap",
- "bincode",
- "bstr 0.2.17",
- "byteorder",
- "charabia",
- "concat-arrays",
- "crossbeam-channel",
- "csv",
- "either",
- "filter-parser 0.33.0",
- "flatten-serde-json 0.33.0",
- "fst",
- "fxhash",
- "geoutils",
- "grenad",
- "heed",
- "itertools",
- "json-depth-checker 0.33.0",
- "levenshtein_automata",
- "log",
- "logging_timer",
- "memmap2",
- "obkv",
- "once_cell",
- "ordered-float",
- "rayon",
- "roaring",
- "rstar",
- "serde",
- "serde_json",
- "slice-group-by",
- "smallstr",
- "smallvec",
- "smartstring",
- "tempfile",
- "thiserror",
- "time",
- "uuid 1.1.2",
-]
-
-[[package]]
-name = "milli"
 version = "0.33.4"
 source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.4#4fc6331cb6526c07f3137584564cfe3493fb25bd"
 dependencies = [
@@ -2593,15 +2362,15 @@ dependencies = [
  "crossbeam-channel",
  "csv",
  "either",
- "filter-parser 0.33.4",
- "flatten-serde-json 0.33.4",
+ "filter-parser",
+ "flatten-serde-json",
  "fst",
  "fxhash",
  "geoutils",
  "grenad",
  "heed",
  "itertools",
- "json-depth-checker 0.33.4",
+ "json-depth-checker",
  "levenshtein_automata",
  "log",
  "logging_timer",
@@ -2677,33 +2446,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mockall"
-version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2be9a9090bc1cac2930688fa9478092a64c6a92ddc6ae0692d46b37d9cab709"
-dependencies = [
- "cfg-if",
- "downcast",
- "fragile",
- "lazy_static",
- "mockall_derive",
- "predicates",
- "predicates-tree",
-]
-
-[[package]]
-name = "mockall_derive"
-version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86d702a0530a0141cf4ed147cf5ec7be6f2c187d4e37fcbefc39cf34116bfe8f"
-dependencies = [
- "cfg-if",
- "proc-macro2 1.0.46",
- "quote 1.0.21",
- "syn 1.0.101",
-]
-
-[[package]]
 name = "nb"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2743,12 +2485,6 @@ dependencies = [
  "memchr",
  "nom",
 ]
-
-[[package]]
-name = "normalize-line-endings"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61807f77802ff30975e01f4f071c8ba10c022052f98b3294119f3e615d13e5be"
 
 [[package]]
 name = "ntapi"
@@ -3065,36 +2801,6 @@ name = "ppv-lite86"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eb9f9e6e233e5c4a35559a617bf40a4ec447db2e84c20b55a6f83167b7e57872"
-
-[[package]]
-name = "predicates"
-version = "2.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5aab5be6e4732b473071984b3164dbbfb7a3674d30ea5ff44410b6bcd960c3c"
-dependencies = [
- "difflib",
- "float-cmp",
- "itertools",
- "normalize-line-endings",
- "predicates-core",
- "regex",
-]
-
-[[package]]
-name = "predicates-core"
-version = "1.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da1c2388b1513e1b605fcec39a95e0a9e8ef088f71443ef37099fa9ae6673fcb"
-
-[[package]]
-name = "predicates-tree"
-version = "1.0.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d86de6de25020a36c6d3643a86d9a6a9f552107c0559c60ea03551b5e16c032"
-dependencies = [
- "predicates-core",
- "termtree",
-]
 
 [[package]]
 name = "proc-macro-error"
@@ -3916,12 +3622,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "termtree"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "507e9898683b6c43a9aa55b64259b721b52ba226e0f3779137e50ad114a4c90b"
-
-[[package]]
 name = "textwrap"
 version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4385,17 +4085,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "349357fdf0f049dcb402da4a4c5a5aae80a7f6b3e5976b38475ce4ac18e5cd2f"
 dependencies = [
  "hashbrown 0.7.2",
-]
-
-[[package]]
-name = "whoami"
-version = "1.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6631b6a2fd59b1841b622e8f1a7ad241ef0a46f2d580464ce8140ac94cbd571"
-dependencies = [
- "bumpalo",
- "wasm-bindgen",
- "web-sys",
 ]
 
 [[package]]

@@ -1,9 +1,9 @@
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use index_scheduler::milli::{FieldDistribution, Index};
 use index_scheduler::{IndexScheduler, KindWithContent, Query, Status};
 use log::debug;
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::milli::{self, FieldDistribution, Index};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
@@ -51,7 +51,7 @@ pub struct IndexView {
 }
 
 impl IndexView {
-    fn new(uid: String, index: &Index) -> Result<IndexView, index::error::IndexError> {
+    fn new(uid: String, index: &Index) -> Result<IndexView, milli::Error> {
         let rtxn = index.read_txn()?;
         Ok(IndexView {
             uid,

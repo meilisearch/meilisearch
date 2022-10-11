@@ -1,26 +1,24 @@
 use std::io::Cursor;
 
-use actix_web::error::PayloadError;
 use actix_web::http::header::CONTENT_TYPE;
-use actix_web::web::{Bytes, Data};
+use actix_web::web::Data;
 use actix_web::HttpMessage;
 use actix_web::{web, HttpRequest, HttpResponse};
 use bstr::ByteSlice;
-use document_formats::{read_csv, read_json, read_ndjson, PayloadType};
-use futures::{Stream, StreamExt};
-use index::{retrieve_document, retrieve_documents};
-use index_scheduler::milli::update::IndexDocumentsMethod;
-use index_scheduler::IndexScheduler;
-use index_scheduler::{KindWithContent, TaskView};
+use futures::StreamExt;
+use index_scheduler::{IndexScheduler, KindWithContent, TaskView};
 use log::debug;
+use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::heed::RoTxn;
+use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::star_or::StarOr;
+use meilisearch_types::{milli, Document, Index};
 use mime::Mime;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_cs::vec::CS;
 use serde_json::Value;
-use tokio::sync::mpsc;
 
 use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
@@ -36,17 +34,6 @@ static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
         "text/csv".to_string(),
     ]
 });
-
-/// This is required because Payload is not Sync nor Send
-fn payload_to_stream(mut payload: Payload) -> impl Stream<Item = Result<Bytes, PayloadError>> {
-    let (snd, recv) = mpsc::channel(1);
-    tokio::task::spawn_local(async move {
-        while let Some(data) = payload.next().await {
-            let _ = snd.send(data).await;
-        }
-    });
-    tokio_stream::wrappers::ReceiverStream::new(recv)
-}
 
 /// Extracts the mime type from the content type and return
 /// a meilisearch error if anything bad happen.
@@ -343,4 +330,77 @@ pub async fn clear_all_documents(
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
+}
+
+fn all_documents<'a>(
+    index: &Index,
+    rtxn: &'a RoTxn,
+) -> Result<impl Iterator<Item = Result<Document, ResponseError>> + 'a, ResponseError> {
+    let fields_ids_map = index.fields_ids_map(rtxn)?;
+    let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
+
+    Ok(index.all_documents(rtxn)?.map(move |ret| {
+        ret.map_err(ResponseError::from)
+            .and_then(|(_key, document)| -> Result<_, ResponseError> {
+                Ok(milli::obkv_to_json(&all_fields, &fields_ids_map, document)?)
+            })
+    }))
+}
+
+fn retrieve_documents<S: AsRef<str>>(
+    index: &Index,
+    offset: usize,
+    limit: usize,
+    attributes_to_retrieve: Option<Vec<S>>,
+) -> Result<(u64, Vec<Document>), ResponseError> {
+    let rtxn = index.read_txn()?;
+
+    let mut documents = Vec::new();
+    for document in all_documents(index, &rtxn)?.skip(offset).take(limit) {
+        let document = match &attributes_to_retrieve {
+            Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
+                &document?,
+                attributes_to_retrieve.iter().map(|s| s.as_ref()),
+            ),
+            None => document?,
+        };
+        documents.push(document);
+    }
+
+    let number_of_documents = index.number_of_documents(&rtxn)?;
+    Ok((number_of_documents, documents))
+}
+
+fn retrieve_document<S: AsRef<str>>(
+    index: &Index,
+    doc_id: &str,
+    attributes_to_retrieve: Option<Vec<S>>,
+) -> Result<Document, ResponseError> {
+    let txn = index.read_txn()?;
+
+    let fields_ids_map = index.fields_ids_map(&txn)?;
+    let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
+
+    let internal_id = index
+        .external_documents_ids(&txn)?
+        .get(doc_id.as_bytes())
+        .ok_or_else(|| MeilisearchHttpError::DocumentNotFound(doc_id.to_string()))?;
+
+    let document = index
+        .documents(&txn, std::iter::once(internal_id))?
+        .into_iter()
+        .next()
+        .map(|(_, d)| d)
+        .ok_or_else(|| MeilisearchHttpError::DocumentNotFound(doc_id.to_string()))?;
+
+    let document = meilisearch_types::milli::obkv_to_json(&all_fields, &fields_ids_map, document)?;
+    let document = match &attributes_to_retrieve {
+        Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
+            &document,
+            attributes_to_retrieve.iter().map(|s| s.as_ref()),
+        ),
+        None => document,
+    };
+
+    Ok(document)
 }

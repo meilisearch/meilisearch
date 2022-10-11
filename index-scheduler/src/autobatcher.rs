@@ -1,4 +1,6 @@
-use milli::update::IndexDocumentsMethod::{self, ReplaceDocuments, UpdateDocuments};
+use meilisearch_types::milli::update::IndexDocumentsMethod::{
+    self, ReplaceDocuments, UpdateDocuments,
+};
 use std::ops::ControlFlow::{self, Break, Continue};
 
 use crate::{task::Kind, TaskId};
