@@ -366,7 +366,7 @@ impl IndexScheduler {
     }
     #[cfg(test)]
     pub fn create_update_file_with_uuid(&self, uuid: u128) -> Result<(Uuid, File)> {
-        Ok(self.file_store.new_update_woth_uuid(uuid)?)
+        Ok(self.file_store.new_update_with_uuid(uuid)?)
     }
 
     pub fn delete_update_file(&self, uuid: Uuid) -> Result<()> {
@@ -726,8 +726,6 @@ mod tests {
         // the "task deletion" task should be marked as "succeeded" and, in its details, the
         // number of deleted tasks should be 0
         assert_snapshot!(snapshot_index_scheduler(&index_scheduler));
-
-        handle.dont_block();
     }
 
     #[test]
@@ -767,8 +765,6 @@ mod tests {
 
         handle.wait_till(Breakpoint::AfterProcessing);
         assert_snapshot!(snapshot_index_scheduler(&index_scheduler));
-
-        handle.dont_block();
     }
 
     #[test]
