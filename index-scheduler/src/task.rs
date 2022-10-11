@@ -416,6 +416,7 @@ pub enum Details {
         dump_uid: String,
     },
 }
+
 #[derive(Default, Debug, PartialEq, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DetailsView {
@@ -441,6 +442,7 @@ pub struct DetailsView {
     #[serde(flatten)]
     settings: Option<Settings<Unchecked>>,
 }
+
 impl Details {
     fn as_details_view(&self) -> DetailsView {
         match self.clone() {

@@ -52,10 +52,14 @@ pub(crate) mod test {
     };
 
     use big_s::S;
-    use index::{Checked, Settings};
-    use index_scheduler::{milli::update::Setting, task::Details, Kind, Status, TaskView};
+    use index_scheduler::{
+        task::{Details, DetailsView},
+        Kind, Status, TaskView,
+    };
     use maplit::btreeset;
     use meilisearch_auth::{Action, Key};
+    use meilisearch_types::milli::{self, update::Setting};
+    use meilisearch_types::settings::{Checked, Settings};
     use meilisearch_types::{index_uid::IndexUid, star_or::StarOr};
     use serde_json::{json, Map, Value};
     use time::{macros::datetime, Duration};
@@ -122,13 +126,16 @@ pub(crate) mod test {
                     index_uid: Some(S("doggos")),
                     status: Status::Succeeded,
                     kind: Kind::DocumentImport {
-                        method: index::milli::update::IndexDocumentsMethod::UpdateDocuments,
+                        method: milli::update::IndexDocumentsMethod::UpdateDocuments,
                         allow_index_creation: true,
                     },
-                    details: Some(Details::DocumentAddition {
+                    details: todo!(),
+                    /*
+                    Some(DetailsView::DocumentAddition {
                         received_documents: 10_000,
                         indexed_documents: 3,
                     }),
+                    */
                     error: None,
                     duration: Some(Duration::DAY),
                     enqueued_at: datetime!(2022-11-11 0:00 UTC),
@@ -143,7 +150,7 @@ pub(crate) mod test {
                     index_uid: Some(S("doggos")),
                     status: Status::Enqueued,
                     kind: Kind::DocumentImport {
-                        method: index::milli::update::IndexDocumentsMethod::UpdateDocuments,
+                        method: milli::update::IndexDocumentsMethod::UpdateDocuments,
                         allow_index_creation: true,
                     },
                     details: None,
