@@ -72,7 +72,7 @@ pub(crate) mod test {
         // tasks
         let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
-        insta::assert_json_snapshot!(tasks);
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"");
         assert_eq!(update_files.len(), 22);
         assert!(update_files[0].is_none()); // the dump creation
         assert!(update_files[1].is_some()); // the enqueued document addition
@@ -80,7 +80,7 @@ pub(crate) mod test {
 
         // keys
         let keys = dump.keys().collect::<Result<Vec<_>>>().unwrap();
-        insta::assert_json_snapshot!(keys);
+        meili_snap::snapshot_hash!(meili_snap::json_string!(keys), @"");
 
         // indexes
         let mut indexes = dump.indexes().unwrap().collect::<Result<Vec<_>>>().unwrap();
@@ -102,14 +102,14 @@ pub(crate) mod test {
         }
         "###);
 
-        insta::assert_debug_snapshot!(products.settings());
+        meili_snap::snapshot_hash!(format!("{:#?}", products.settings()), @"");
         let documents = products
             .documents()
             .unwrap()
             .collect::<Result<Vec<_>>>()
             .unwrap();
         assert_eq!(documents.len(), 10);
-        insta::assert_json_snapshot!(documents);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"");
 
         // movies
         insta::assert_json_snapshot!(movies.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
@@ -121,14 +121,14 @@ pub(crate) mod test {
         }
         "###);
 
-        insta::assert_debug_snapshot!(movies.settings());
+        meili_snap::snapshot_hash!(format!("{:#?}", movies.settings()), @"");
         let documents = movies
             .documents()
             .unwrap()
             .collect::<Result<Vec<_>>>()
             .unwrap();
         assert_eq!(documents.len(), 200);
-        insta::assert_debug_snapshot!(documents);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"");
 
         // spells
         insta::assert_json_snapshot!(spells.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
@@ -140,14 +140,14 @@ pub(crate) mod test {
         }
         "###);
 
-        insta::assert_debug_snapshot!(spells.settings());
+        meili_snap::snapshot_hash!(format!("{:#?}", spells.settings()), @"");
         let documents = spells
             .documents()
             .unwrap()
             .collect::<Result<Vec<_>>>()
             .unwrap();
         assert_eq!(documents.len(), 10);
-        insta::assert_json_snapshot!(documents);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"");
     }
 
     #[test]
@@ -162,14 +162,14 @@ pub(crate) mod test {
         // tasks
         let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
-        insta::assert_json_snapshot!(tasks);
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"");
         assert_eq!(update_files.len(), 10);
         assert!(update_files[0].is_some()); // the enqueued document addition
         assert!(update_files[1..].iter().all(|u| u.is_none())); // everything already processed
 
         // keys
         let keys = dump.keys().collect::<Result<Vec<_>>>().unwrap();
-        insta::assert_json_snapshot!(keys, { "[].uid" => "[uuid]" });
+        meili_snap::snapshot_hash!(meili_snap::json_string!(keys, { "[].uid" => "[uuid]" }), @"");
 
         // indexes
         let mut indexes = dump.indexes().unwrap().collect::<Result<Vec<_>>>().unwrap();
@@ -191,14 +191,14 @@ pub(crate) mod test {
         }
         "###);
 
-        insta::assert_debug_snapshot!(products.settings());
+        meili_snap::snapshot_hash!(format!("{:#?}", products.settings()), @"");
         let documents = products
             .documents()
             .unwrap()
             .collect::<Result<Vec<_>>>()
             .unwrap();
         assert_eq!(documents.len(), 10);
-        insta::assert_json_snapshot!(documents);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"");
 
         // movies
         insta::assert_json_snapshot!(movies.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
@@ -210,14 +210,14 @@ pub(crate) mod test {
         }
         "###);
 
-        insta::assert_debug_snapshot!(movies.settings());
+        meili_snap::snapshot_hash!(format!("{:#?}", movies.settings()), @"");
         let documents = movies
             .documents()
             .unwrap()
             .collect::<Result<Vec<_>>>()
             .unwrap();
         assert_eq!(documents.len(), 110);
-        insta::assert_debug_snapshot!(documents);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"");
 
         // spells
         insta::assert_json_snapshot!(spells.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
@@ -229,14 +229,14 @@ pub(crate) mod test {
         }
         "###);
 
-        insta::assert_debug_snapshot!(spells.settings());
+        meili_snap::snapshot_hash!(format!("{:#?}", spells.settings()), @"");
         let documents = spells
             .documents()
             .unwrap()
             .collect::<Result<Vec<_>>>()
             .unwrap();
         assert_eq!(documents.len(), 10);
-        insta::assert_json_snapshot!(documents);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"");
     }
 
     #[test]
@@ -251,14 +251,14 @@ pub(crate) mod test {
         // tasks
         let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
-        insta::assert_json_snapshot!(tasks);
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"");
         assert_eq!(update_files.len(), 10);
         assert!(update_files[0].is_some()); // the enqueued document addition
         assert!(update_files[1..].iter().all(|u| u.is_none())); // everything already processed
 
         // keys
         let keys = dump.keys().collect::<Result<Vec<_>>>().unwrap();
-        insta::assert_json_snapshot!(keys);
+        meili_snap::snapshot_hash!(meili_snap::json_string!(keys), @"");
 
         // indexes
         let mut indexes = dump.indexes().unwrap().collect::<Result<Vec<_>>>().unwrap();
@@ -281,14 +281,14 @@ pub(crate) mod test {
         }
         "###);
 
-        insta::assert_debug_snapshot!(products.settings());
+        meili_snap::snapshot_hash!(format!("{:#?}", products.settings()), @"");
         let documents = products
             .documents()
             .unwrap()
             .collect::<Result<Vec<_>>>()
             .unwrap();
         assert_eq!(documents.len(), 10);
-        insta::assert_json_snapshot!(documents);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"");
 
         // movies
         insta::assert_json_snapshot!(movies.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
@@ -300,14 +300,14 @@ pub(crate) mod test {
         }
         "###);
 
-        insta::assert_debug_snapshot!(movies.settings());
+        meili_snap::snapshot_hash!(format!("{:#?}", movies.settings()), @"");
         let documents = movies
             .documents()
             .unwrap()
             .collect::<Result<Vec<_>>>()
             .unwrap();
         assert_eq!(documents.len(), 110);
-        insta::assert_debug_snapshot!(documents);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"");
 
         // movies2
         insta::assert_json_snapshot!(movies2.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
@@ -319,14 +319,14 @@ pub(crate) mod test {
         }
         "###);
 
-        insta::assert_debug_snapshot!(movies2.settings());
+        meili_snap::snapshot_hash!(format!("{:#?}", movies2.settings()), @"");
         let documents = movies2
             .documents()
             .unwrap()
             .collect::<Result<Vec<_>>>()
             .unwrap();
         assert_eq!(documents.len(), 0);
-        insta::assert_debug_snapshot!(documents);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"");
 
         // spells
         insta::assert_json_snapshot!(spells.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
@@ -338,14 +338,14 @@ pub(crate) mod test {
         }
         "###);
 
-        insta::assert_debug_snapshot!(spells.settings());
+        meili_snap::snapshot_hash!(format!("{:#?}", spells.settings()), @"");
         let documents = spells
             .documents()
             .unwrap()
             .collect::<Result<Vec<_>>>()
             .unwrap();
         assert_eq!(documents.len(), 10);
-        insta::assert_json_snapshot!(documents);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"");
     }
 
     #[test]
@@ -360,14 +360,14 @@ pub(crate) mod test {
         // tasks
         let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
-        insta::assert_json_snapshot!(tasks);
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"");
         assert_eq!(update_files.len(), 9);
         assert!(update_files[0].is_some()); // the enqueued document addition
         assert!(update_files[1..].iter().all(|u| u.is_none())); // everything already processed
 
         // keys
         let keys = dump.keys().collect::<Result<Vec<_>>>().unwrap();
-        insta::assert_json_snapshot!(keys);
+        meili_snap::snapshot_hash!(meili_snap::json_string!(keys), @"");
 
         // indexes
         let mut indexes = dump.indexes().unwrap().collect::<Result<Vec<_>>>().unwrap();
@@ -390,14 +390,14 @@ pub(crate) mod test {
         }
         "###);
 
-        insta::assert_debug_snapshot!(products.settings());
+        meili_snap::snapshot_hash!(format!("{:#?}", products.settings()), @"");
         let documents = products
             .documents()
             .unwrap()
             .collect::<Result<Vec<_>>>()
             .unwrap();
         assert_eq!(documents.len(), 10);
-        insta::assert_json_snapshot!(documents);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"");
 
         // movies
         insta::assert_json_snapshot!(movies.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
@@ -409,14 +409,14 @@ pub(crate) mod test {
         }
         "###);
 
-        insta::assert_debug_snapshot!(movies.settings());
+        meili_snap::snapshot_hash!(format!("{:#?}", movies.settings()), @"");
         let documents = movies
             .documents()
             .unwrap()
             .collect::<Result<Vec<_>>>()
             .unwrap();
         assert_eq!(documents.len(), 110);
-        insta::assert_debug_snapshot!(documents);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"");
 
         // movies2
         insta::assert_json_snapshot!(movies2.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
@@ -428,14 +428,14 @@ pub(crate) mod test {
         }
         "###);
 
-        insta::assert_debug_snapshot!(movies2.settings());
+        meili_snap::snapshot_hash!(format!("{:#?}", movies2.settings()), @"");
         let documents = movies2
             .documents()
             .unwrap()
             .collect::<Result<Vec<_>>>()
             .unwrap();
         assert_eq!(documents.len(), 0);
-        insta::assert_debug_snapshot!(documents);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"");
 
         // spells
         insta::assert_json_snapshot!(spells.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
@@ -447,13 +447,13 @@ pub(crate) mod test {
         }
         "###);
 
-        insta::assert_debug_snapshot!(spells.settings());
+        meili_snap::snapshot_hash!(format!("{:#?}", spells.settings()), @"");
         let documents = spells
             .documents()
             .unwrap()
             .collect::<Result<Vec<_>>>()
             .unwrap();
         assert_eq!(documents.len(), 10);
-        insta::assert_json_snapshot!(documents);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"");
     }
 }
