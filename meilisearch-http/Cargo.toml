@@ -47,17 +47,15 @@ jsonwebtoken = "8.1.1"
 log = "0.4.17"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
-meilisearch-lib = { path = "../meilisearch-lib", default-features = false }
-index = { path = "../index" }
 index-scheduler = { path = "../index-scheduler" }
 file-store = { path = "../file-store" }
-document-formats = { path = "../document-formats" }
 mimalloc = { version = "0.1.29", default-features = false }
 mime = "0.3.16"
 num_cpus = "1.13.1"
 obkv = "0.2.0"
 once_cell = "1.15.0"
 parking_lot = "0.12.1"
+permissive-json-pointer = { path = "../permissive-json-pointer" }
 pin-project-lite = "0.2.9"
 platform-dirs = "0.3.0"
 rand = "0.8.5"
@@ -98,7 +96,7 @@ yaup = "0.2.1"
 temp-env = "0.3.1"
 
 [features]
-default = ["analytics", "meilisearch-lib/default", "mini-dashboard"]
+default = ["analytics", "meilisearch-types/default", "mini-dashboard"]
 metrics = ["prometheus"]
 analytics = ["segment"]
 mini-dashboard = [
@@ -112,10 +110,10 @@ mini-dashboard = [
     "tempfile",
     "zip",
 ]
-chinese = ["meilisearch-lib/chinese"]
-hebrew = ["meilisearch-lib/hebrew"]
-japanese = ["meilisearch-lib/japanese"]
-thai = ["meilisearch-lib/thai"]
+chinese = ["meilisearch-types/chinese"]
+hebrew = ["meilisearch-types/hebrew"]
+japanese = ["meilisearch-types/japanese"]
+thai = ["meilisearch-types/thai"]
 
 [package.metadata.mini-dashboard]
 assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.2/build.zip"

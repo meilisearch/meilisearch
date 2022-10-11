@@ -3,14 +3,19 @@ use crate::{
     task::{Details, Kind, KindWithContent, Status, Task},
     Error, IndexScheduler, Result, TaskId,
 };
-use index::apply_settings_to_builder;
-use index::error::IndexError;
-use index::{Settings, Unchecked};
 use log::{debug, info};
-use milli::heed::{RoTxn, RwTxn};
-use milli::update::IndexDocumentsConfig;
-use milli::update::{DocumentAdditionResult, DocumentDeletionResult, IndexDocumentsMethod};
-use milli::{documents::DocumentsBatchReader, BEU32};
+use meilisearch_types::milli::update::IndexDocumentsConfig;
+use meilisearch_types::milli::update::{
+    DocumentAdditionResult, DocumentDeletionResult, IndexDocumentsMethod,
+};
+use meilisearch_types::milli::{
+    self, documents::DocumentsBatchReader, update::Settings as MilliSettings, BEU32,
+};
+use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
+use meilisearch_types::{
+    heed::{RoTxn, RwTxn},
+    Index,
+};
 use roaring::RoaringBitmap;
 use uuid::Uuid;
 
@@ -527,7 +532,7 @@ impl IndexScheduler {
 
                 if let Some(primary_key) = primary_key.clone() {
                     let mut index_wtxn = index.write_txn()?;
-                    let mut builder = milli::update::Settings::new(
+                    let mut builder = MilliSettings::new(
                         &mut index_wtxn,
                         &index,
                         self.index_mapper.indexer_config(),
@@ -576,7 +581,7 @@ impl IndexScheduler {
     fn apply_index_operation<'txn, 'i>(
         &self,
         index_wtxn: &'txn mut RwTxn<'i, '_>,
-        index: &'i milli::Index,
+        index: &'i Index,
         operation: IndexOperation,
     ) -> Result<Vec<Task>> {
         match operation {
@@ -639,7 +644,7 @@ impl IndexScheduler {
                 for content_uuid in content_files.into_iter() {
                     let content_file = self.file_store.get_update(content_uuid)?;
                     let reader = DocumentsBatchReader::from_reader(content_file)
-                        .map_err(IndexError::from)?;
+                        .map_err(milli::Error::from)?;
                     let (new_builder, user_result) = builder.add_documents(reader)?;
                     builder = new_builder;
 
@@ -648,7 +653,7 @@ impl IndexScheduler {
                             indexed_documents: count,
                             number_of_documents: count,
                         }),
-                        Err(e) => Err(IndexError::from(e)),
+                        Err(e) => Err(milli::Error::from(e)),
                     };
 
                     results.push(user_result);

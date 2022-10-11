@@ -6,12 +6,24 @@ edition = "2021"
 
 [dependencies]
 actix-web = { version = "4.2.1", default-features = false }
-milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.33.0" }
+csv = "1.1.6"
+either = { version = "1.6.1", features = ["serde"] }
+milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.33.4", default-features = false }
 proptest = { version = "1.0.0", optional = true }
 proptest-derive = { version = "0.3.0", optional = true }
 serde = { version = "1.0.145", features = ["derive"] }
 serde_json = "1.0.85"
 tokio = "1.0"
 
+[dev-dependencies]
+proptest = "1.0.0"
+proptest-derive = "0.3.0"
+
 [features]
+default = ["milli/default"]
+
 test-traits = ["proptest", "proptest-derive"]
+chinese = ["milli/chinese"]
+hebrew = ["milli/hebrew"]
+japanese = ["milli/japanese"]
+thai = ["milli/thai"]

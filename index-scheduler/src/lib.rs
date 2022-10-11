@@ -7,8 +7,6 @@ mod snapshot;
 pub mod task;
 mod utils;
 
-pub use milli;
-
 pub type Result<T> = std::result::Result<T, Error>;
 pub type TaskId = u32;
 
@@ -26,10 +24,10 @@ use synchronoise::SignalEvent;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use milli::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
-use milli::heed::{self, Database, Env};
-use milli::update::IndexerConfig;
-use milli::{Index, RoaringBitmapCodec, BEU32};
+use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
+use meilisearch_types::heed::{self, Database, Env};
+use meilisearch_types::milli::update::IndexerConfig;
+use meilisearch_types::milli::{Index, RoaringBitmapCodec, BEU32};
 
 use crate::index_mapper::IndexMapper;
 use crate::task::Task;
@@ -452,7 +450,7 @@ impl IndexScheduler {
 mod tests {
     use big_s::S;
     use insta::*;
-    use milli::update::IndexDocumentsMethod::ReplaceDocuments;
+    use meilisearch_types::milli::update::IndexDocumentsMethod::ReplaceDocuments;
     use tempfile::TempDir;
     use uuid::Uuid;
 
@@ -512,7 +510,8 @@ mod tests {
             .create_update_file_with_uuid(file_uuid)
             .unwrap();
         let documents_count =
-            document_formats::read_json(content.as_bytes(), file.as_file_mut()).unwrap() as u64;
+            meilisearch_types::document_formats::read_json(content.as_bytes(), file.as_file_mut())
+                .unwrap() as u64;
         (file, documents_count)
     }
 
@@ -779,7 +778,8 @@ mod tests {
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
         let documents_count =
-            document_formats::read_json(content.as_bytes(), file.as_file_mut()).unwrap() as u64;
+            meilisearch_types::document_formats::read_json(content.as_bytes(), file.as_file_mut())
+                .unwrap() as u64;
         index_scheduler
             .register(KindWithContent::DocumentImport {
                 index_uid: S("doggos"),

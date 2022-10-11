@@ -11,11 +11,7 @@ use std::{fmt, fs};
 
 use byte_unit::{Byte, ByteError};
 use clap::Parser;
-use meilisearch_lib::{
-    export_to_env_if_not_present,
-    options::{IndexerOpts, SchedulerConfig},
-};
-use index_scheduler::milli::update::IndexerConfig;
+use meilisearch_types::milli::update::IndexerConfig;
 use rustls::{
     server::{
         AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient,
