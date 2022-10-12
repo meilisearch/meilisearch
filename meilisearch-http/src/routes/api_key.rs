@@ -6,8 +6,9 @@ use serde_json::Value;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use meilisearch_auth::{error::AuthControllerError, Action, AuthController, Key};
+use meilisearch_auth::{error::AuthControllerError, AuthController};
 use meilisearch_types::error::{Code, ResponseError};
+use meilisearch_types::keys::{Action, Key};
 
 use crate::extractors::{
     authentication::{policies::*, GuardedData},

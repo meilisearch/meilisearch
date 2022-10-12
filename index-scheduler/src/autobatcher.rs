@@ -1,7 +1,7 @@
 use meilisearch_types::milli::update::IndexDocumentsMethod::{
     self, ReplaceDocuments, UpdateDocuments,
 };
-use meilisearch_types::tasks::{Kind, TaskId};
+use meilisearch_types::tasks::TaskId;
 use std::ops::ControlFlow::{self, Break, Continue};
 
 use crate::KindWithContent;
@@ -50,7 +50,7 @@ impl From<KindWithContent> for AutobatchKind {
             KindWithContent::IndexDeletion { .. } => AutobatchKind::IndexDeletion,
             KindWithContent::IndexCreation { .. } => AutobatchKind::IndexCreation,
             KindWithContent::IndexUpdate { .. } => AutobatchKind::IndexUpdate,
-            KindWithContent::IndexSwap { lhs, rhs } => AutobatchKind::IndexSwap,
+            KindWithContent::IndexSwap { .. } => AutobatchKind::IndexSwap,
             KindWithContent::CancelTask { .. } => AutobatchKind::CancelTask,
             KindWithContent::DeleteTasks { .. } => AutobatchKind::DeleteTasks,
             KindWithContent::DumpExport { .. } => AutobatchKind::DumpExport,
