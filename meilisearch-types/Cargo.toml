@@ -13,11 +13,15 @@ proptest = { version = "1.0.0", optional = true }
 proptest-derive = { version = "0.3.0", optional = true }
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = "1.0.79"
+time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 tokio = "1.0"
+uuid = { version = "1.1.2", features = ["serde", "v4"] }
 
 [dev-dependencies]
 proptest = "1.0.0"
 proptest-derive = "0.3.0"
+meili-snap = { path = "../meili-snap" }
+insta = "1.19.1"
 
 [features]
 test-traits = ["proptest", "proptest-derive"]

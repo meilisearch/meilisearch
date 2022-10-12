@@ -11,7 +11,7 @@ use time::macros::{format_description, time};
 use time::{Date, OffsetDateTime, PrimitiveDateTime};
 use uuid::Uuid;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Key {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,

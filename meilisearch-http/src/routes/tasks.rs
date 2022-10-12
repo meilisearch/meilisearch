@@ -1,13 +1,15 @@
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::{IndexScheduler, TaskId};
-use index_scheduler::{Kind, Status};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::star_or::StarOr;
-use serde::Deserialize;
+use meilisearch_types::tasks::{serialize_duration, Details, Kind, Status, Task};
+use serde::{Deserialize, Serialize};
 use serde_cs::vec::CS;
 use serde_json::json;
+use time::{Duration, OffsetDateTime};
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
@@ -20,6 +22,140 @@ const DEFAULT_LIMIT: fn() -> u32 = || 20;
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::get().to(SeqHandler(get_tasks))))
         .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))));
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskView {
+    pub uid: TaskId,
+    #[serde(default)]
+    pub index_uid: Option<String>,
+    pub status: Status,
+    #[serde(rename = "type")]
+    pub kind: Kind,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<DetailsView>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ResponseError>,
+
+    #[serde(
+        serialize_with = "serialize_duration",
+        skip_serializing_if = "Option::is_none",
+        default
+    )]
+    pub duration: Option<Duration>,
+    #[serde(with = "time::serde::rfc3339")]
+    pub enqueued_at: OffsetDateTime,
+    #[serde(
+        with = "time::serde::rfc3339::option",
+        skip_serializing_if = "Option::is_none",
+        default
+    )]
+    pub started_at: Option<OffsetDateTime>,
+    #[serde(
+        with = "time::serde::rfc3339::option",
+        skip_serializing_if = "Option::is_none",
+        default
+    )]
+    pub finished_at: Option<OffsetDateTime>,
+}
+
+impl From<Task> for TaskView {
+    fn from(task: Task) -> Self {
+        TaskView {
+            uid: task.uid,
+            index_uid: task
+                .indexes()
+                .and_then(|vec| vec.first().map(|i| i.to_string())),
+            status: task.status,
+            kind: task.kind.as_kind(),
+            details: task.details.map(DetailsView::from),
+            error: task.error.clone(),
+            duration: task
+                .started_at
+                .zip(task.finished_at)
+                .map(|(start, end)| end - start),
+            enqueued_at: task.enqueued_at,
+            started_at: task.started_at,
+            finished_at: task.finished_at,
+        }
+    }
+}
+
+#[derive(Default, Debug, PartialEq, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DetailsView {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub received_documents: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub indexed_documents: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub primary_key: Option<Option<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub received_document_ids: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deleted_documents: Option<Option<u64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matched_tasks: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deleted_tasks: Option<Option<usize>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_query: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dump_uid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(flatten)]
+    pub settings: Option<Settings<Unchecked>>,
+}
+
+impl From<Details> for DetailsView {
+    fn from(details: Details) -> Self {
+        match details.clone() {
+            Details::DocumentAddition {
+                received_documents,
+                indexed_documents,
+            } => DetailsView {
+                received_documents: Some(received_documents),
+                indexed_documents: Some(indexed_documents),
+                ..DetailsView::default()
+            },
+            Details::Settings { settings } => DetailsView {
+                settings: Some(settings),
+                ..DetailsView::default()
+            },
+            Details::IndexInfo { primary_key } => DetailsView {
+                primary_key: Some(primary_key),
+                ..DetailsView::default()
+            },
+            Details::DocumentDeletion {
+                received_document_ids,
+                deleted_documents,
+            } => DetailsView {
+                received_document_ids: Some(received_document_ids),
+                deleted_documents: Some(deleted_documents),
+                ..DetailsView::default()
+            },
+            Details::ClearAll { deleted_documents } => DetailsView {
+                deleted_documents: Some(deleted_documents),
+                ..DetailsView::default()
+            },
+            Details::DeleteTasks {
+                matched_tasks,
+                deleted_tasks,
+                original_query,
+            } => DetailsView {
+                matched_tasks: Some(matched_tasks),
+                deleted_tasks: Some(deleted_tasks),
+                original_query: Some(original_query),
+                ..DetailsView::default()
+            },
+            Details::Dump { dump_uid } => DetailsView {
+                dump_uid: Some(dump_uid),
+                ..DetailsView::default()
+            },
+        }
+    }
 }
 
 #[derive(Deserialize, Debug)]

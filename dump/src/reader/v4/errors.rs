@@ -1,8 +1,6 @@
 use std::fmt;
 
-use actix_web::{self as aweb, http::StatusCode, HttpResponseBuilder};
-use aweb::rt::task::JoinError;
-use milli::heed::{Error as HeedError, MdbError};
+use http::StatusCode;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -14,14 +12,14 @@ pub struct ResponseError {
         feature = "test-traits",
         proptest(strategy = "strategy::status_code_strategy()")
     )]
-    code: StatusCode,
-    message: String,
+    pub code: StatusCode,
+    pub message: String,
     #[serde(rename = "code")]
-    error_code: String,
+    pub error_code: String,
     #[serde(rename = "type")]
-    error_type: String,
+    pub error_type: String,
     #[serde(rename = "link")]
-    error_link: String,
+    pub error_link: String,
 }
 
 impl ResponseError {
@@ -59,28 +57,15 @@ where
     }
 }
 
-impl aweb::error::ResponseError for ResponseError {
-    fn error_response(&self) -> aweb::HttpResponse {
-        let json = serde_json::to_vec(self).unwrap();
-        HttpResponseBuilder::new(self.status_code())
-            .content_type("application/json")
-            .body(json)
-    }
-
-    fn status_code(&self) -> StatusCode {
-        self.code
-    }
-}
-
 pub trait ErrorCode: std::error::Error {
     fn error_code(&self) -> Code;
 
-    /// returns the HTTP status code associated with the error
+    /// returns the HTTP status code ascociated with the error
     fn http_status(&self) -> StatusCode {
         self.error_code().http()
     }
 
-    /// returns the doc url associated with the error
+    /// returns the doc url ascociated with the error
     fn error_url(&self) -> String {
         self.error_code().url()
     }
@@ -156,8 +141,6 @@ pub enum Code {
 
     DumpAlreadyInProgress,
     DumpProcessFailed,
-    // Only used when importing a dump
-    UnretrievableErrorCode,
 
     InvalidContentType,
     MissingContentType,
@@ -170,14 +153,13 @@ pub enum Code {
     InvalidApiKeyIndexes,
     InvalidApiKeyExpiresAt,
     InvalidApiKeyDescription,
-    InvalidApiKeyName,
-    InvalidApiKeyUid,
-    ImmutableField,
-    ApiKeyAlreadyExists,
+
+    UnretrievableErrorCode,
+    MalformedDump,
 }
 
 impl Code {
-    /// associate a `Code` variant to the actual ErrCode
+    /// ascociate a `Code` variant to the actual ErrCode
     fn err_code(&self) -> ErrCode {
         use Code::*;
 
@@ -264,10 +246,6 @@ impl Code {
                 ErrCode::invalid("invalid_content_type", StatusCode::UNSUPPORTED_MEDIA_TYPE)
             }
             MissingPayload => ErrCode::invalid("missing_payload", StatusCode::BAD_REQUEST),
-            // This one can only happen when importing a dump and encountering an unknown code in the task queue.
-            UnretrievableErrorCode => {
-                ErrCode::invalid("unretrievable_error_code", StatusCode::BAD_REQUEST)
-            }
 
             // error related to keys
             ApiKeyNotFound => ErrCode::invalid("api_key_not_found", StatusCode::NOT_FOUND),
@@ -284,17 +262,17 @@ impl Code {
             InvalidApiKeyDescription => {
                 ErrCode::invalid("invalid_api_key_description", StatusCode::BAD_REQUEST)
             }
-            InvalidApiKeyName => ErrCode::invalid("invalid_api_key_name", StatusCode::BAD_REQUEST),
-            InvalidApiKeyUid => ErrCode::invalid("invalid_api_key_uid", StatusCode::BAD_REQUEST),
-            ApiKeyAlreadyExists => ErrCode::invalid("api_key_already_exists", StatusCode::CONFLICT),
-            ImmutableField => ErrCode::invalid("immutable_field", StatusCode::BAD_REQUEST),
             InvalidMinWordLengthForTypo => {
                 ErrCode::invalid("invalid_min_word_length_for_typo", StatusCode::BAD_REQUEST)
             }
+            UnretrievableErrorCode => {
+                ErrCode::invalid("unretrievable_error_code", StatusCode::BAD_REQUEST)
+            }
+            MalformedDump => ErrCode::invalid("malformed_dump", StatusCode::BAD_REQUEST),
         }
     }
 
-    /// return the HTTP status code associated with the `Code`
+    /// return the HTTP status code ascociated with the `Code`
     fn http(&self) -> StatusCode {
         self.err_code().status_code
     }
@@ -309,7 +287,7 @@ impl Code {
         self.err_code().error_type.to_string()
     }
 
-    /// return the doc url associated with the error
+    /// return the doc url ascociated with the error
     fn url(&self) -> String {
         format!("https://docs.meilisearch.com/errors#{}", self.name())
     }
@@ -345,92 +323,5 @@ impl ErrCode {
             error_name,
             error_type: ErrorType::InvalidRequestError,
         }
-    }
-}
-
-impl ErrorCode for JoinError {
-    fn error_code(&self) -> Code {
-        Code::Internal
-    }
-}
-
-impl ErrorCode for milli::Error {
-    fn error_code(&self) -> Code {
-        use milli::{Error, UserError};
-
-        match self {
-            Error::InternalError(_) => Code::Internal,
-            Error::IoError(_) => Code::Internal,
-            Error::UserError(ref error) => {
-                match error {
-                    // TODO: wait for spec for new error codes.
-                    UserError::SerdeJson(_)
-                    | UserError::InvalidLmdbOpenOptions
-                    | UserError::DocumentLimitReached
-                    | UserError::AccessingSoftDeletedDocument { .. }
-                    | UserError::UnknownInternalDocumentId { .. } => Code::Internal,
-                    UserError::InvalidStoreFile => Code::InvalidStore,
-                    UserError::NoSpaceLeftOnDevice => Code::NoSpaceLeftOnDevice,
-                    UserError::MaxDatabaseSizeReached => Code::DatabaseSizeLimitReached,
-                    UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
-                    UserError::InvalidFilter(_) => Code::Filter,
-                    UserError::MissingDocumentId { .. } => Code::MissingDocumentId,
-                    UserError::InvalidDocumentId { .. } | UserError::TooManyDocumentIds { .. } => {
-                        Code::InvalidDocumentId
-                    }
-                    UserError::MissingPrimaryKey => Code::MissingPrimaryKey,
-                    UserError::PrimaryKeyCannotBeChanged(_) => Code::PrimaryKeyAlreadyPresent,
-                    UserError::SortRankingRuleMissing => Code::Sort,
-                    UserError::InvalidFacetsDistribution { .. } => Code::BadRequest,
-                    UserError::InvalidSortableAttribute { .. } => Code::Sort,
-                    UserError::CriterionError(_) => Code::InvalidRankingRule,
-                    UserError::InvalidGeoField { .. } => Code::InvalidGeoField,
-                    UserError::SortError(_) => Code::Sort,
-                    UserError::InvalidMinTypoWordLenSetting(_, _) => {
-                        Code::InvalidMinWordLengthForTypo
-                    }
-                }
-            }
-        }
-    }
-}
-
-impl ErrorCode for HeedError {
-    fn error_code(&self) -> Code {
-        match self {
-            HeedError::Mdb(MdbError::MapFull) => Code::DatabaseSizeLimitReached,
-            HeedError::Mdb(MdbError::Invalid) => Code::InvalidStore,
-            HeedError::Io(_)
-            | HeedError::Mdb(_)
-            | HeedError::Encoding
-            | HeedError::Decoding
-            | HeedError::InvalidDatabaseTyping
-            | HeedError::DatabaseClosing
-            | HeedError::BadOpenOptions => Code::Internal,
-        }
-    }
-}
-
-#[cfg(feature = "test-traits")]
-mod strategy {
-    use proptest::strategy::Strategy;
-
-    use super::*;
-
-    pub(super) fn status_code_strategy() -> impl Strategy<Value = StatusCode> {
-        (100..999u16).prop_map(|i| StatusCode::from_u16(i).unwrap())
-    }
-}
-
-#[macro_export]
-macro_rules! internal_error {
-    ($target:ty : $($other:path), *) => {
-        $(
-            impl From<$other> for $target {
-                fn from(other: $other) -> Self {
-                    Self::Internal(Box::new(other))
-                }
-            }
-        )*
     }
 }

@@ -285,9 +285,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.64"
+version = "1.0.65"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9a8f622bcf6ff3df478e9deba3e03e4e04b300f8e6a139e192c05fa3490afc7"
+checksum = "98161a4e3e2184da77bb14f02184cdd111e83bbbcc9979dfee3c44b9a85f5602"
 dependencies = [
  "backtrace",
 ]
@@ -1018,6 +1018,30 @@ dependencies = [
  "libc",
  "redox_users",
  "winapi",
+]
+
+[[package]]
+name = "dump"
+version = "0.29.0"
+dependencies = [
+ "anyhow",
+ "big_s",
+ "flate2",
+ "http",
+ "index-scheduler",
+ "insta",
+ "log",
+ "maplit",
+ "meili-snap",
+ "meilisearch-auth",
+ "meilisearch-types",
+ "serde",
+ "serde_json",
+ "tar",
+ "tempfile",
+ "thiserror",
+ "time 0.3.14",
+ "uuid 1.1.2",
 ]
 
 [[package]]
@@ -2239,12 +2263,16 @@ dependencies = [
  "actix-web",
  "csv",
  "either",
+ "insta",
+ "meili-snap",
  "milli",
  "proptest",
  "proptest-derive",
  "serde",
  "serde_json",
+ "time 0.3.14",
  "tokio",
+ "uuid 1.1.2",
 ]
 
 [[package]]

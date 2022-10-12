@@ -1,0 +1,29 @@
+[package]
+name = "dump"
+version = "0.29.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+uuid = { version = "1.1.2", features = ["serde", "v4"] }
+serde_json = { version = "1.0.85", features = ["preserve_order"] }
+serde = { version = "1.0.136", features = ["derive"] }
+tempfile = "3.3.0"
+flate2 = "1.0.22"
+thiserror = "1.0.30"
+time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
+tar = "0.4.38"
+anyhow = "1.0.65"
+log = "0.4.17"
+index-scheduler = { path = "../index-scheduler" }
+meilisearch-auth = { path = "../meilisearch-auth" }
+meilisearch-types = { path = "../meilisearch-types" }
+http = "0.2.8"
+
+[dev-dependencies]
+big_s = "1.0.2"
+insta = { version = "1.19.1", features = ["json", "redactions"] }
+meili-snap = { path = "../meili-snap" }
+maplit = "1.0.2"
+meilisearch-types = { path = "../meilisearch-types" }
