@@ -8,6 +8,7 @@ mod roaring_bitmap_length;
 mod str_beu32_codec;
 mod str_ref;
 mod str_str_u8_codec;
+mod script_language_codec;
 
 pub use byte_slice_ref::ByteSliceRefCodec;
 pub use str_ref::StrRefCodec;
@@ -21,3 +22,4 @@ pub use self::roaring_bitmap_length::{
 };
 pub use self::str_beu32_codec::StrBEU32Codec;
 pub use self::str_str_u8_codec::{U8StrStrCodec, UncheckedU8StrStrCodec};
+pub use self::script_language_codec::ScriptLanguageCodec;

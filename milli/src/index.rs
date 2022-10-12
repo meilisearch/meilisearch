@@ -14,6 +14,7 @@ use time::OffsetDateTime;
 use crate::error::{InternalError, UserError};
 use crate::facet::FacetType;
 use crate::fields_ids_map::FieldsIdsMap;
+use crate::heed_codec::ScriptLanguageCodec;
 use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
     FieldIdCodec, OrderedF64Codec,
@@ -83,6 +84,7 @@ pub mod db_name {
     pub const FIELD_ID_DOCID_FACET_F64S: &str = "field-id-docid-facet-f64s";
     pub const FIELD_ID_DOCID_FACET_STRINGS: &str = "field-id-docid-facet-strings";
     pub const DOCUMENTS: &str = "documents";
+    pub const SCRIPT_LANGUAGE_DOCIDS: &str = "script_language_docids";
 }
 
 #[derive(Clone)]
@@ -122,6 +124,9 @@ pub struct Index {
     /// Maps the position of a word prefix with all the docids where this prefix appears.
     pub word_prefix_position_docids: Database<StrBEU32Codec, CboRoaringBitmapCodec>,
 
+    /// Maps the script and language with all the docids that corresponds to it. 
+    pub script_language_docids: Database<ScriptLanguageCodec, RoaringBitmapCodec>,
+
     /// Maps the facet field id and the docids for which this field exists
     pub facet_id_exists_docids: Database<FieldIdCodec, CboRoaringBitmapCodec>,
 
@@ -159,6 +164,7 @@ impl Index {
         let exact_word_prefix_docids = env.create_database(Some(EXACT_WORD_PREFIX_DOCIDS))?;
         let docid_word_positions = env.create_database(Some(DOCID_WORD_POSITIONS))?;
         let word_pair_proximity_docids = env.create_database(Some(WORD_PAIR_PROXIMITY_DOCIDS))?;
+        let script_language_docids = env.create_database(Some(SCRIPT_LANGUAGE_DOCIDS))?;
         let word_prefix_pair_proximity_docids =
             env.create_database(Some(WORD_PREFIX_PAIR_PROXIMITY_DOCIDS))?;
         let prefix_word_pair_proximity_docids =
@@ -186,6 +192,7 @@ impl Index {
             exact_word_prefix_docids,
             docid_word_positions,
             word_pair_proximity_docids,
+            script_language_docids,
             word_prefix_pair_proximity_docids,
             prefix_word_pair_proximity_docids,
             word_position_docids,
