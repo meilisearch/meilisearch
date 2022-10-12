@@ -263,10 +263,12 @@ impl Opt {
         // Parse the args to get the config_file_path.
         let mut opts = Opt::parse();
         let mut config_read_from = None;
-        let config_file_path = opts
+        let user_specified_config_file_path = opts
             .config_file_path
             .clone()
-            .or_else(|| env::var("MEILI_CONFIG_FILE_PATH").map(PathBuf::from).ok())
+            .or_else(|| env::var("MEILI_CONFIG_FILE_PATH").map(PathBuf::from).ok());
+        let config_file_path = user_specified_config_file_path
+            .clone()
             .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIG_FILE_PATH));
 
         match std::fs::read(&config_file_path) {
@@ -284,12 +286,17 @@ impl Opt {
                 opts = Opt::parse();
                 config_read_from = Some(config_file_path);
             }
-            // If we have an error while reading the file defined by the user.
-            Err(_) if opts.config_file_path.is_some() => anyhow::bail!(
-                "unable to open or read the {:?} configuration file.",
-                opts.config_file_path.unwrap().display().to_string()
-            ),
-            _ => (),
+            Err(e) => {
+                match user_specified_config_file_path {
+                    // If we have an error while reading the file defined by the user.
+                    Some(path) => anyhow::bail!(
+                        "unable to open or read the {:?} configuration file: {}.",
+                        path,
+                        e,
+                    ),
+                    None => (),
+                }
+            }
         }
 
         Ok((opts, config_read_from))
@@ -528,5 +535,28 @@ mod test {
     #[test]
     fn test_valid_opt() {
         assert!(Opt::try_parse_from(Some("")).is_ok());
+    }
+
+    #[test]
+    fn test_meilli_config_file_path_valid() {
+        temp_env::with_vars(
+            vec![("MEILI_CONFIG_FILE_PATH", Some("../config.toml"))], // Relative path in meilisearch_http package
+            || {
+                assert!(Opt::try_build().is_ok());
+            },
+        );
+    }
+
+    #[test]
+    fn test_meilli_config_file_path_invalid() {
+        temp_env::with_vars(
+            vec![("MEILI_CONFIG_FILE_PATH", Some("../configgg.toml"))],
+            || {
+                assert_eq!(
+                    Opt::try_build().unwrap_err().to_string(),
+                    "unable to open or read the \"../configgg.toml\" configuration file: No such file or directory (os error 2)."
+                );
+            },
+        );
     }
 }
