@@ -1,10 +1,6 @@
-use crate::{
-    autobatcher::BatchKind,
-    task::{KindWithContent, Task},
-    Error, IndexScheduler, Result, TaskId,
-};
+use crate::{autobatcher::BatchKind, Error, IndexScheduler, Result, TaskId};
 
-use meilisearch_types::tasks::{Details, Kind, Status};
+use meilisearch_types::tasks::{Details, Kind, KindWithContent, Status, Task};
 
 use log::{debug, info};
 use meilisearch_types::milli::update::IndexDocumentsConfig;
@@ -432,7 +428,7 @@ impl IndexScheduler {
                 .map(|task_id| {
                     self.get_task(rtxn, task_id)
                         .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))
-                        .map(|task| (task.uid, task.kind.as_kind()))
+                        .map(|task| (task.uid, task.kind))
                 })
                 .collect::<Result<Vec<_>>>()?;
 
@@ -862,9 +858,7 @@ impl IndexScheduler {
             (bitmap.remove(task.uid));
         })?;
 
-        task.remove_data()?;
         self.all_tasks.delete(wtxn, &task_id)?;
-
         Ok(())
     }
 }
