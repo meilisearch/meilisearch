@@ -5,22 +5,23 @@ use roaring::RoaringBitmap;
 
 use super::{get_first_facet_value, get_highest_level, get_last_facet_value};
 use crate::heed_codec::facet::{
-    ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
+    FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
 };
+use crate::heed_codec::ByteSliceRefCodec;
 
 /// See documentationg for [`ascending_facet_sort`](super::ascending_facet_sort).
 ///
 /// This function does the same thing, but in the opposite order.
 pub fn descending_facet_sort<'t>(
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
     candidates: RoaringBitmap,
 ) -> Result<Box<dyn Iterator<Item = Result<RoaringBitmap>> + 't>> {
     let highest_level = get_highest_level(rtxn, db, field_id)?;
-    if let Some(first_bound) = get_first_facet_value::<ByteSliceRef>(rtxn, db, field_id)? {
+    if let Some(first_bound) = get_first_facet_value::<ByteSliceRefCodec>(rtxn, db, field_id)? {
         let first_key = FacetGroupKey { field_id, level: highest_level, left_bound: first_bound };
-        let last_bound = get_last_facet_value::<ByteSliceRef>(rtxn, db, field_id)?.unwrap();
+        let last_bound = get_last_facet_value::<ByteSliceRefCodec>(rtxn, db, field_id)?.unwrap();
         let last_key = FacetGroupKey { field_id, level: highest_level, left_bound: last_bound };
         let iter = db.rev_range(rtxn, &(first_key..=last_key))?.take(usize::MAX);
         Ok(Box::new(DescendingFacetSort {
@@ -36,12 +37,12 @@ pub fn descending_facet_sort<'t>(
 
 struct DescendingFacetSort<'t> {
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
     stack: Vec<(
         RoaringBitmap,
         std::iter::Take<
-            heed::RoRevRange<'t, FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
+            heed::RoRevRange<'t, FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
         >,
         Bound<&'t [u8]>,
     )>,
@@ -97,7 +98,7 @@ impl<'t> Iterator for DescendingFacetSort<'t> {
                     *right_bound = Bound::Excluded(left_bound);
                     let iter = match self
                         .db
-                        .remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
+                        .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>()
                         .rev_range(
                             &self.rtxn,
                             &(Bound::Included(starting_key_below), end_key_kelow),
@@ -121,7 +122,8 @@ impl<'t> Iterator for DescendingFacetSort<'t> {
 mod tests {
     use roaring::RoaringBitmap;
 
-    use crate::heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec};
+    use crate::heed_codec::facet::FacetGroupKeyCodec;
+    use crate::heed_codec::ByteSliceRefCodec;
     use crate::milli_snap;
     use crate::search::facet::facet_sort_descending::descending_facet_sort;
     use crate::search::facet::tests::{get_random_looking_index, get_simple_index};
@@ -134,7 +136,7 @@ mod tests {
             let txn = index.env.read_txn().unwrap();
             let candidates = (200..=300).into_iter().collect::<RoaringBitmap>();
             let mut results = String::new();
-            let db = index.content.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>();
+            let db = index.content.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>();
             let iter = descending_facet_sort(&txn, db, 0, candidates).unwrap();
             for el in iter {
                 let docids = el.unwrap();

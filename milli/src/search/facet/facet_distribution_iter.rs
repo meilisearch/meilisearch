@@ -4,9 +4,8 @@ use heed::Result;
 use roaring::RoaringBitmap;
 
 use super::{get_first_facet_value, get_highest_level};
-use crate::heed_codec::facet::{
-    ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec,
-};
+use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec};
+use crate::heed_codec::ByteSliceRefCodec;
 use crate::DocumentId;
 
 /// Call the given closure on the facet distribution of the candidate documents.
@@ -22,7 +21,7 @@ use crate::DocumentId;
 /// keep iterating over the different facet values or stop.
 pub fn iterate_over_facet_distribution<'t, CB>(
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
     candidates: &RoaringBitmap,
     callback: CB,
@@ -31,10 +30,13 @@ where
     CB: FnMut(&'t [u8], u64, DocumentId) -> Result<ControlFlow<()>>,
 {
     let mut fd = FacetDistribution { rtxn, db, field_id, callback };
-    let highest_level =
-        get_highest_level(rtxn, db.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>(), field_id)?;
+    let highest_level = get_highest_level(
+        rtxn,
+        db.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
+        field_id,
+    )?;
 
-    if let Some(first_bound) = get_first_facet_value::<ByteSliceRef>(rtxn, db, field_id)? {
+    if let Some(first_bound) = get_first_facet_value::<ByteSliceRefCodec>(rtxn, db, field_id)? {
         fd.iterate(candidates, highest_level, first_bound, usize::MAX)?;
         return Ok(());
     } else {
@@ -47,7 +49,7 @@ where
     CB: FnMut(&'t [u8], u64, DocumentId) -> Result<ControlFlow<()>>,
 {
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
     callback: CB,
 }
@@ -72,11 +74,13 @@ where
             if key.field_id != self.field_id {
                 return Ok(ControlFlow::Break(()));
             }
+            // TODO: use real intersection and then take min()?
             let docids_in_common = value.bitmap.intersection_len(candidates);
             if docids_in_common > 0 {
+                // TODO: use min()
                 let any_docid = value.bitmap.iter().next().unwrap();
                 match (self.callback)(key.left_bound, docids_in_common, any_docid)? {
-                    ControlFlow::Continue(_) => {}
+                    ControlFlow::Continue(_) => (), // TODO use unit instead of empty scope
                     ControlFlow::Break(_) => return Ok(ControlFlow::Break(())),
                 }
             }

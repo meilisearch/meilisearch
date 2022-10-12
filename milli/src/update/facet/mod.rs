@@ -77,7 +77,8 @@ pub const FACET_MIN_LEVEL_SIZE: u8 = 5;
 use self::incremental::FacetsUpdateIncremental;
 use super::FacetsUpdateBulk;
 use crate::facet::FacetType;
-use crate::heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec, FacetGroupValueCodec};
+use crate::heed_codec::facet::{FacetGroupKeyCodec, FacetGroupValueCodec};
+use crate::heed_codec::ByteSliceRefCodec;
 use crate::{Index, Result};
 use std::fs::File;
 
@@ -87,7 +88,7 @@ pub mod incremental;
 
 pub struct FacetsUpdate<'i> {
     index: &'i Index,
-    database: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
+    database: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     facet_type: FacetType,
     new_data: grenad::Reader<File>,
     group_size: u8,
@@ -97,11 +98,11 @@ pub struct FacetsUpdate<'i> {
 impl<'i> FacetsUpdate<'i> {
     pub fn new(index: &'i Index, facet_type: FacetType, new_data: grenad::Reader<File>) -> Self {
         let database = match facet_type {
-            FacetType::String => {
-                index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
-            }
+            FacetType::String => index
+                .facet_id_string_docids
+                .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
             FacetType::Number => {
-                index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
+                index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>()
             }
         };
         Self {
@@ -159,8 +160,9 @@ pub(crate) mod tests {
 
     use super::bulk::FacetsUpdateBulkInner;
     use crate::heed_codec::facet::{
-        ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
+        FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
     };
+    use crate::heed_codec::ByteSliceRefCodec;
     use crate::search::facet::get_highest_level;
     use crate::snapshot_tests::display_bitmap;
     use crate::update::FacetsUpdateIncrementalInner;
@@ -173,7 +175,7 @@ pub(crate) mod tests {
             BytesEncode<'a> + BytesDecode<'a, DItem = <BoundCodec as BytesEncode<'a>>::EItem>,
     {
         pub env: Env,
-        pub content: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
+        pub content: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
         pub group_size: Cell<u8>,
         pub min_level_size: Cell<u8>,
         pub max_group_size: Cell<u8>,
@@ -327,7 +329,7 @@ pub(crate) mod tests {
                 let left_bound_bytes = BoundCodec::bytes_encode(left_bound).unwrap().into_owned();
                 let key: FacetGroupKey<&[u8]> =
                     FacetGroupKey { field_id: *field_id, level: 0, left_bound: &left_bound_bytes };
-                let key = FacetGroupKeyCodec::<ByteSliceRef>::bytes_encode(&key).unwrap();
+                let key = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_encode(&key).unwrap();
                 let value = CboRoaringBitmapCodec::bytes_encode(&docids).unwrap();
                 writer.insert(&key, &value).unwrap();
             }
@@ -362,7 +364,7 @@ pub(crate) mod tests {
                     .unwrap();
                 while let Some(el) = iter.next() {
                     let (key, value) = el.unwrap();
-                    let key = FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(&key).unwrap();
+                    let key = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(&key).unwrap();
 
                     let mut prefix_start_below = vec![];
                     prefix_start_below.extend_from_slice(&field_id.to_be_bytes());
@@ -379,7 +381,7 @@ pub(crate) mod tests {
                             )
                             .unwrap();
                         let (key_bytes, _) = start_below_iter.next().unwrap().unwrap();
-                        FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(&key_bytes).unwrap()
+                        FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(&key_bytes).unwrap()
                     };
 
                     assert!(value.size > 0);

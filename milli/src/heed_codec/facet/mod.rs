@@ -1,6 +1,5 @@
 mod field_doc_id_facet_codec;
 mod ordered_f64_codec;
-mod str_ref;
 
 use std::borrow::Cow;
 use std::convert::TryFrom;
@@ -12,8 +11,9 @@ use roaring::RoaringBitmap;
 
 pub use self::field_doc_id_facet_codec::FieldDocIdFacetCodec;
 pub use self::ordered_f64_codec::OrderedF64Codec;
-pub use self::str_ref::StrRefCodec;
 use crate::{CboRoaringBitmapCodec, BEU16};
+
+use super::StrRefCodec;
 
 pub type FieldDocIdFacetF64Codec = FieldDocIdFacetCodec<OrderedF64Codec>;
 pub type FieldDocIdFacetStringCodec = FieldDocIdFacetCodec<StrRefCodec>;
@@ -33,7 +33,7 @@ pub fn try_split_at(slice: &[u8], mid: usize) -> Option<(&[u8], &[u8])> {
 
 /// The key in the [`facet_id_string_docids` and `facet_id_f64_docids`][`Index::facet_id_string_docids`]
 /// databases.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)] // TODO: try removing PartialOrd and Ord
 pub struct FacetGroupKey<T> {
     pub field_id: u16,
     pub level: u8,
@@ -101,25 +101,5 @@ impl<'a> heed::BytesDecode<'a> for FacetGroupValueCodec {
         let size = bytes[0];
         let bitmap = CboRoaringBitmapCodec::deserialize_from(&bytes[1..]).ok()?;
         Some(FacetGroupValue { size, bitmap })
-    }
-}
-
-/// A codec for values of type `&[u8]`. Unlike `ByteSlice`, its `EItem` and `DItem` associated
-/// types are equivalent (= `&'a [u8]`) and these values can reside within another structure.
-pub struct ByteSliceRef;
-
-impl<'a> BytesEncode<'a> for ByteSliceRef {
-    type EItem = &'a [u8];
-
-    fn bytes_encode(item: &'a Self::EItem) -> Option<Cow<'a, [u8]>> {
-        Some(Cow::Borrowed(item))
-    }
-}
-
-impl<'a> BytesDecode<'a> for ByteSliceRef {
-    type DItem = &'a [u8];
-
-    fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-        Some(bytes)
     }
 }

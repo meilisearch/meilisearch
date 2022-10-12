@@ -9,9 +9,10 @@ use roaring::RoaringBitmap;
 use crate::error::UserError;
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{
-    ByteSliceRef, FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec,
-    FieldDocIdFacetStringCodec, OrderedF64Codec, StrRefCodec,
+    FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
+    OrderedF64Codec,
 };
+use crate::heed_codec::{ByteSliceRefCodec, StrRefCodec};
 use crate::search::facet::facet_distribution_iter;
 use crate::{FieldId, Index, Result};
 
@@ -137,7 +138,9 @@ impl<'a> FacetDistribution<'a> {
     ) -> heed::Result<()> {
         facet_distribution_iter::iterate_over_facet_distribution(
             self.rtxn,
-            self.index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>(),
+            self.index
+                .facet_id_f64_docids
+                .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
             field_id,
             candidates,
             |facet_key, nbr_docids, _| {
@@ -160,7 +163,9 @@ impl<'a> FacetDistribution<'a> {
     ) -> heed::Result<()> {
         facet_distribution_iter::iterate_over_facet_distribution(
             self.rtxn,
-            self.index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>(),
+            self.index
+                .facet_id_string_docids
+                .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
             field_id,
             candidates,
             |facet_key, nbr_docids, any_docid| {

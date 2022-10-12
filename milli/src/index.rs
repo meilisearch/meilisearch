@@ -16,8 +16,9 @@ use crate::facet::FacetType;
 use crate::fields_ids_map::FieldsIdsMap;
 use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
-    FieldIdCodec, OrderedF64Codec, StrRefCodec,
+    FieldIdCodec, OrderedF64Codec,
 };
+use crate::heed_codec::StrRefCodec;
 use crate::{
     default_criteria, BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec, Criterion,
     DocumentId, ExternalDocumentsIds, FacetDistribution, FieldDistribution, FieldId,

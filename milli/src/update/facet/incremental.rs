@@ -7,8 +7,9 @@ use roaring::RoaringBitmap;
 
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{
-    ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
+    FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
 };
+use crate::heed_codec::ByteSliceRefCodec;
 use crate::search::facet::get_highest_level;
 use crate::{CboRoaringBitmapCodec, FieldId, Index, Result};
 
@@ -50,10 +51,10 @@ impl<'i> FacetsUpdateIncremental<'i> {
                 db: match facet_type {
                     FacetType::String => index
                         .facet_id_string_docids
-                        .remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>(),
+                        .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
                     FacetType::Number => index
                         .facet_id_f64_docids
-                        .remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>(),
+                        .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
                 },
                 group_size,
                 max_group_size,
@@ -69,7 +70,7 @@ impl<'i> FacetsUpdateIncremental<'i> {
 
         let mut cursor = self.new_data.into_cursor()?;
         while let Some((key, value)) = cursor.move_on_next()? {
-            let key = FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(key)
+            let key = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(key)
                 .ok_or(heed::Error::Encoding)?;
             let docids = CboRoaringBitmapCodec::bytes_decode(value).ok_or(heed::Error::Encoding)?;
             self.inner.insert(wtxn, key.field_id, key.left_bound, &docids)?;
@@ -87,7 +88,7 @@ impl<'i> FacetsUpdateIncremental<'i> {
 
 /// Implementation of `FacetsUpdateIncremental` that is independent of milli's `Index` type
 pub struct FacetsUpdateIncrementalInner {
-    pub db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
+    pub db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     pub group_size: u8,
     pub min_level_size: u8,
     pub max_group_size: u8,
@@ -126,7 +127,7 @@ impl FacetsUpdateIncrementalInner {
         if let Some(e) = prefix_iter.next() {
             let (key_bytes, value) = e?;
             Ok((
-                FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(&key_bytes)
+                FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(&key_bytes)
                     .ok_or(Error::Encoding)?
                     .into_owned(),
                 value,
@@ -149,7 +150,7 @@ impl FacetsUpdateIncrementalInner {
                             )?;
                         let (key_bytes, value) = iter.next().unwrap()?;
                         Ok((
-                            FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(&key_bytes)
+                            FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(&key_bytes)
                                 .ok_or(Error::Encoding)?
                                 .into_owned(),
                             value,
@@ -411,7 +412,7 @@ impl FacetsUpdateIncrementalInner {
             let mut values = RoaringBitmap::new();
             for _ in 0..group_size {
                 let (key_bytes, value_i) = groups_iter.next().unwrap()?;
-                let key_i = FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(&key_bytes)
+                let key_i = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(&key_bytes)
                     .ok_or(Error::Encoding)?;
 
                 if first_key.is_none() {
@@ -434,7 +435,7 @@ impl FacetsUpdateIncrementalInner {
             let mut values = RoaringBitmap::new();
             for _ in 0..nbr_leftover_elements {
                 let (key_bytes, value_i) = groups_iter.next().unwrap()?;
-                let key_i = FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(&key_bytes)
+                let key_i = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(&key_bytes)
                     .ok_or(Error::Encoding)?;
 
                 if first_key.is_none() {
@@ -616,7 +617,7 @@ impl FacetsUpdateIncrementalInner {
         while let Some(el) = iter.next() {
             let (k, _) = el?;
             to_delete.push(
-                FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(k)
+                FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(k)
                     .ok_or(Error::Encoding)?
                     .into_owned(),
             );
@@ -655,7 +656,8 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use roaring::RoaringBitmap;
 
-    use crate::heed_codec::facet::{OrderedF64Codec, StrRefCodec};
+    use crate::heed_codec::facet::OrderedF64Codec;
+    use crate::heed_codec::StrRefCodec;
     use crate::milli_snap;
     use crate::update::facet::tests::FacetIndex;
 
@@ -1019,6 +1021,7 @@ mod tests {
 
     // fuzz tests
 }
+
 #[cfg(all(test, fuzzing))]
 mod fuzz {
     use std::borrow::Cow;

@@ -1,7 +1,8 @@
 use super::{FACET_GROUP_SIZE, FACET_MAX_GROUP_SIZE, FACET_MIN_LEVEL_SIZE};
 use crate::{
     facet::FacetType,
-    heed_codec::facet::{ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec},
+    heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec},
+    heed_codec::ByteSliceRefCodec,
     update::{FacetsUpdateBulk, FacetsUpdateIncrementalInner},
     FieldId, Index, Result,
 };
@@ -11,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 
 pub struct FacetsDelete<'i, 'b> {
     index: &'i Index,
-    database: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
+    database: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     facet_type: FacetType,
     affected_facet_values: HashMap<FieldId, HashSet<Vec<u8>>>,
     docids_to_delete: &'b RoaringBitmap,
@@ -27,11 +28,11 @@ impl<'i, 'b> FacetsDelete<'i, 'b> {
         docids_to_delete: &'b RoaringBitmap,
     ) -> Self {
         let database = match facet_type {
-            FacetType::String => {
-                index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
-            }
+            FacetType::String => index
+                .facet_id_string_docids
+                .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
             FacetType::Number => {
-                index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
+                index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>()
             }
         };
         Self {

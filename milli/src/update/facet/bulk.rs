@@ -11,8 +11,9 @@ use time::OffsetDateTime;
 use super::{FACET_GROUP_SIZE, FACET_MIN_LEVEL_SIZE};
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{
-    ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
+    FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
 };
+use crate::heed_codec::ByteSliceRefCodec;
 use crate::update::index_documents::{create_writer, writer_into_reader};
 use crate::{CboRoaringBitmapCodec, FieldId, Index, Result};
 
@@ -75,11 +76,11 @@ impl<'i> FacetsUpdateBulk<'i> {
         let Self { index, field_ids, group_size, min_level_size, facet_type, new_data } = self;
 
         let db = match facet_type {
-            FacetType::String => {
-                index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
-            }
+            FacetType::String => index
+                .facet_id_string_docids
+                .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
             FacetType::Number => {
-                index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>()
+                index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>()
             }
         };
 
@@ -98,7 +99,7 @@ impl<'i> FacetsUpdateBulk<'i> {
 
 /// Implementation of `FacetsUpdateBulk` that is independent of milli's `Index` type
 pub(crate) struct FacetsUpdateBulkInner<R: std::io::Read + std::io::Seek> {
-    pub db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
+    pub db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     pub new_data: Option<grenad::Reader<R>>,
     pub group_size: u8,
     pub min_level_size: u8,
@@ -216,7 +217,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
             .db
             .as_polymorph()
             .prefix_iter::<_, ByteSlice, ByteSlice>(rtxn, level_0_prefix.as_slice())?
-            .remap_types::<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>();
+            .remap_types::<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>();
 
         let mut left_bound: &[u8] = &[];
         let mut first_iteration_for_new_group = true;
@@ -299,7 +300,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
                     bitmaps.drain(..).zip(left_bounds.drain(..)).zip(group_sizes.drain(..))
                 {
                     let key = FacetGroupKey { field_id, level, left_bound };
-                    let key = FacetGroupKeyCodec::<ByteSliceRef>::bytes_encode(&key)
+                    let key = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_encode(&key)
                         .ok_or(Error::Encoding)?;
                     let value = FacetGroupValue { size: group_size, bitmap };
                     let value =
@@ -328,7 +329,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
                 bitmaps.drain(..).zip(left_bounds.drain(..)).zip(group_sizes.drain(..))
             {
                 let key = FacetGroupKey { field_id, level, left_bound };
-                let key = FacetGroupKeyCodec::<ByteSliceRef>::bytes_encode(&key)
+                let key = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_encode(&key)
                     .ok_or(Error::Encoding)?;
                 let value = FacetGroupValue { size: group_size, bitmap };
                 let value = FacetGroupValueCodec::bytes_encode(&value).ok_or(Error::Encoding)?;

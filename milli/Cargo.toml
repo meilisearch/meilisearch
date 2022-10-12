@@ -57,7 +57,7 @@ md5 = "0.7.0"
 rand = {version = "0.8.5", features = ["small_rng"] }
 
 [target.'cfg(fuzzing)'.dev-dependencies]
-fuzzcheck = { git = "https://github.com/loiclec/fuzzcheck-rs", branch = "main" }
+fuzzcheck = { git = "https://github.com/loiclec/fuzzcheck-rs", branch = "main" } # TODO: use released version
 
 [features]
 default = [ "charabia/default" ]

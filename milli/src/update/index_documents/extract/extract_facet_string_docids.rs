@@ -4,7 +4,8 @@ use std::io;
 use heed::BytesEncode;
 
 use super::helpers::{create_sorter, sorter_into_reader, try_split_array_at, GrenadParameters};
-use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, StrRefCodec};
+use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
+use crate::heed_codec::StrRefCodec;
 use crate::update::index_documents::merge_cbo_roaring_bitmaps;
 use crate::{FieldId, Result};
 

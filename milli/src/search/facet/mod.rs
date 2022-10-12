@@ -5,8 +5,8 @@ use heed::{BytesDecode, RoTxn};
 
 pub use self::facet_distribution::{FacetDistribution, DEFAULT_VALUES_PER_FACET};
 pub use self::filter::Filter;
-use crate::heed_codec::facet::{ByteSliceRef, FacetGroupKeyCodec, FacetGroupValueCodec};
-
+use crate::heed_codec::facet::{FacetGroupKeyCodec, FacetGroupValueCodec};
+use crate::heed_codec::ByteSliceRefCodec;
 mod facet_distribution;
 mod facet_distribution_iter;
 mod facet_range_search;
@@ -17,7 +17,7 @@ mod filter;
 /// Get the first facet value in the facet database
 pub(crate) fn get_first_facet_value<'t, BoundCodec>(
     txn: &'t RoTxn,
-    db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
 ) -> heed::Result<Option<BoundCodec::DItem>>
 where
@@ -42,7 +42,7 @@ where
 /// Get the last facet value in the facet database
 pub(crate) fn get_last_facet_value<'t, BoundCodec>(
     txn: &'t RoTxn,
-    db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
 ) -> heed::Result<Option<BoundCodec::DItem>>
 where
@@ -67,7 +67,7 @@ where
 /// Get the height of the highest level in the facet database
 pub(crate) fn get_highest_level<'t>(
     txn: &'t RoTxn<'t>,
-    db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
 ) -> heed::Result<u8> {
     let field_id_prefix = &field_id.to_be_bytes();
@@ -77,7 +77,7 @@ pub(crate) fn get_highest_level<'t>(
         .next()
         .map(|el| {
             let (key, _) = el.unwrap();
-            let key = FacetGroupKeyCodec::<ByteSliceRef>::bytes_decode(key).unwrap();
+            let key = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(key).unwrap();
             key.level
         })
         .unwrap_or(0))

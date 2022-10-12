@@ -4,9 +4,8 @@ use heed::BytesEncode;
 use roaring::RoaringBitmap;
 
 use super::{get_first_facet_value, get_highest_level, get_last_facet_value};
-use crate::heed_codec::facet::{
-    ByteSliceRef, FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec,
-};
+use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec};
+use crate::heed_codec::ByteSliceRefCodec;
 use crate::Result;
 
 /// Find all the document ids for which the given field contains a value contained within
@@ -47,13 +46,16 @@ where
         }
         Bound::Unbounded => Bound::Unbounded,
     };
-    let db = db.remap_key_type::<FacetGroupKeyCodec<ByteSliceRef>>();
+    let db = db.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>();
     let mut f = FacetRangeSearch { rtxn, db, field_id, left, right, docids };
     let highest_level = get_highest_level(rtxn, db, field_id)?;
 
-    if let Some(starting_left_bound) = get_first_facet_value::<ByteSliceRef>(rtxn, db, field_id)? {
-        let rightmost_bound =
-            Bound::Included(get_last_facet_value::<ByteSliceRef>(rtxn, db, field_id)?.unwrap()); // will not fail because get_first_facet_value succeeded
+    if let Some(starting_left_bound) =
+        get_first_facet_value::<ByteSliceRefCodec>(rtxn, db, field_id)?
+    {
+        let rightmost_bound = Bound::Included(
+            get_last_facet_value::<ByteSliceRefCodec>(rtxn, db, field_id)?.unwrap(),
+        ); // will not fail because get_first_facet_value succeeded
         let group_size = usize::MAX;
         f.run(highest_level, starting_left_bound, rightmost_bound, group_size)?;
         Ok(())
@@ -65,7 +67,7 @@ where
 /// Fetch the document ids that have a facet with a value between the two given bounds
 struct FacetRangeSearch<'t, 'b, 'bitmap> {
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetGroupKeyCodec<ByteSliceRef>, FacetGroupValueCodec>,
+    db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
     left: Bound<&'b [u8]>,
     right: Bound<&'b [u8]>,
