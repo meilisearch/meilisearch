@@ -4,19 +4,34 @@ members = ["milli", "filter-parser", "flatten-serde-json", "json-depth-checker",
 default-members = ["milli"]
 
 [profile.dev]
-opt-level = 3
+opt-level = 0 
 
 [profile.release]
 debug = true
 codegen-units = 1
 
-# Make sure that the build scripts and proc-macros are compiled with
-# all the optimizations. It speeds up the zip crate that we use in the build.rs.
-[profile.dev.build-override]
+[profile.dev.package.grenad]
 opt-level = 3
-[profile.release.build-override]
+[profile.dev.package.roaring]
 opt-level = 3
-[profile.bench.build-override]
+
+[profile.dev.package.lindera-ipadic-builder]
 opt-level = 3
-[profile.test.build-override]
+[profile.dev.package.encoding]
+opt-level = 3
+[profile.dev.package.yada]
+opt-level = 3
+
+[profile.release.package.lindera-ipadic-builder]
+opt-level = 3
+[profile.release.package.encoding]
+opt-level = 3
+[profile.release.package.yada]
+opt-level = 3
+
+[profile.bench.package.lindera-ipadic-builder]
+opt-level = 3
+[profile.bench.package.encoding]
+opt-level = 3
+[profile.bench.package.yada]
 opt-level = 3

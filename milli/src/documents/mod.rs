@@ -152,30 +152,33 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
+#[cfg(test)]
+pub fn objects_from_json_value(json: serde_json::Value) -> Vec<crate::Object> {
+    let documents = match json {
+        object @ serde_json::Value::Object(_) => vec![object],
+        serde_json::Value::Array(objects) => objects,
+        invalid => {
+            panic!("an array of objects must be specified, {:#?} is not an array", invalid)
+        }
+    };
+    let mut objects = vec![];
+    for document in documents {
+        let object = match document {
+            serde_json::Value::Object(object) => object,
+            invalid => panic!("an object must be specified, {:#?} is not an object", invalid),
+        };
+        objects.push(object);
+    }
+    objects
+}
+
 /// Macro used to generate documents, with the same syntax as `serde_json::json`
 #[cfg(test)]
 macro_rules! documents {
     ($data:tt) => {{
         let documents = serde_json::json!($data);
-        let documents = match documents {
-            object @ serde_json::Value::Object(_) => vec![object],
-            serde_json::Value::Array(objects) => objects,
-            invalid => {
-                panic!("an array of objects must be specified, {:#?} is not an array", invalid)
-            }
-        };
-
-        let mut builder = crate::documents::DocumentsBatchBuilder::new(Vec::new());
-        for document in documents {
-            let object = match document {
-                serde_json::Value::Object(object) => object,
-                invalid => panic!("an object must be specified, {:#?} is not an object", invalid),
-            };
-            builder.append_json_object(&object).unwrap();
-        }
-
-        let vector = builder.into_inner().unwrap();
-        crate::documents::DocumentsBatchReader::from_reader(std::io::Cursor::new(vector)).unwrap()
+        let documents = $crate::documents::objects_from_json_value(documents);
+        $crate::documents::documents_batch_reader_from_objects(documents)
     }};
 }
 
@@ -187,7 +190,8 @@ pub fn documents_batch_reader_from_objects(
     for object in objects {
         builder.append_json_object(&object).unwrap();
     }
-    DocumentsBatchReader::from_reader(std::io::Cursor::new(builder.into_inner().unwrap())).unwrap()
+    let vector = builder.into_inner().unwrap();
+    DocumentsBatchReader::from_reader(std::io::Cursor::new(vector)).unwrap()
 }
 
 #[cfg(test)]
