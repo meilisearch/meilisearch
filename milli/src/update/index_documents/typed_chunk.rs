@@ -1,8 +1,10 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fs::File;
 use std::io;
 
+use charabia::{Language, Script};
 use grenad::MergerBuilder;
 use heed::types::ByteSlice;
 use heed::{BytesDecode, RwTxn};
@@ -16,10 +18,7 @@ use super::{ClonableMmap, MergeFn};
 use crate::facet::FacetType;
 use crate::update::facet::FacetsUpdate;
 use crate::update::index_documents::helpers::as_cloneable_grenad;
-use crate::{
-    lat_lng_to_xyz, BoRoaringBitmapCodec, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index,
-    Result,
-};
+use crate::{BoRoaringBitmapCodec, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index, Result, lat_lng_to_xyz};
 
 pub(crate) enum TypedChunk {
     DocidWordPositions(grenad::Reader<CursorClonableMmap>),
@@ -38,6 +37,7 @@ pub(crate) enum TypedChunk {
     FieldIdFacetNumberDocids(grenad::Reader<File>),
     FieldIdFacetExistsDocids(grenad::Reader<File>),
     GeoPoints(grenad::Reader<File>),
+    ScriptLanguageDocids(HashMap<(Script, Language), RoaringBitmap>)
 }
 
 /// Write typed chunk in the corresponding LMDB database of the provided index.
@@ -210,6 +210,25 @@ pub(crate) fn write_typed_chunk_into_index(
             index.put_geo_rtree(wtxn, &rtree)?;
             index.put_geo_faceted_documents_ids(wtxn, &geo_faceted_docids)?;
         }
+        TypedChunk::ScriptLanguageDocids(hash_pair) => {
+            let mut buffer = Vec::new();
+            for (key, value) in hash_pair {
+                buffer.clear();
+                let final_value = match index.script_language_docids.get(wtxn, &key)? {
+                    Some(db_values) => {
+                        let mut db_value_buffer = Vec::new();
+                        serialize_roaring_bitmap(&db_values, &mut db_value_buffer)?;
+                        let mut new_value_buffer = Vec::new();
+                        serialize_roaring_bitmap(&value, &mut new_value_buffer)?;
+                        merge_roaring_bitmaps(&new_value_buffer, &db_value_buffer, &mut buffer)?;
+                        let merged_db_values = RoaringBitmap::deserialize_from(&buffer[..])?;
+                        merged_db_values
+                    }
+                    None => value
+                };
+                index.script_language_docids.put(wtxn, &key, &final_value)?;
+            }
+        } 
     }
 
     Ok((RoaringBitmap::new(), is_merged_database))
