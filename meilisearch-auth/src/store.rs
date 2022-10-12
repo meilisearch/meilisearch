@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use enum_iterator::IntoEnumIterator;
 use hmac::{Hmac, Mac};
+use meilisearch_types::keys::KeyId;
 use meilisearch_types::star_or::StarOr;
 use milli::heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
 use milli::heed::{Database, Env, EnvOpenOptions, RwTxn};
@@ -26,8 +27,6 @@ const AUTH_STORE_SIZE: usize = 1_073_741_824; //1GiB
 const AUTH_DB_PATH: &str = "auth";
 const KEY_DB_NAME: &str = "api-keys";
 const KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME: &str = "keyid-action-index-expiration";
-
-pub type KeyId = Uuid;
 
 #[derive(Clone)]
 pub struct HeedAuthStore {
