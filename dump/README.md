@@ -7,11 +7,11 @@ dump
 │   └── doggos
 │       ├── documents.jsonl
 │       └── settings.json
-├── instance-uid
+├── instance-uid.uuid
 ├── keys.jsonl
 ├── metadata.json
 └── tasks
     ├── update_files
-    │   └── [task_id]
+    │   └── [task_id].jsonl
     └── queue.jsonl
 ```
