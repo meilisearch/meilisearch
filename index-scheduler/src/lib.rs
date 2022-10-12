@@ -4,7 +4,6 @@ pub mod error;
 mod index_mapper;
 #[cfg(test)]
 mod snapshot;
-pub mod task;
 mod utils;
 
 pub type Result<T> = std::result::Result<T, Error>;
