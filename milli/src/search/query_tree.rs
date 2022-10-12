@@ -146,7 +146,12 @@ impl fmt::Debug for Query {
 
 trait Context {
     fn word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
-    fn word_pair_proximity_docids(&self, right_word: &str, left_word: &str, proximity: u8) -> heed::Result<Option<RoaringBitmap>>;
+    fn word_pair_proximity_docids(
+        &self,
+        right_word: &str,
+        left_word: &str,
+        proximity: u8,
+    ) -> heed::Result<Option<RoaringBitmap>>;
     fn synonyms<S: AsRef<str>>(&self, words: &[S]) -> heed::Result<Option<Vec<Vec<String>>>>;
     fn word_documents_count(&self, word: &str) -> heed::Result<Option<u64>> {
         match self.word_docids(word)? {
@@ -157,7 +162,12 @@ trait Context {
     /// Returns the minimum word len for 1 and 2 typos.
     fn min_word_len_for_typo(&self) -> heed::Result<(u8, u8)>;
     fn exact_words(&self) -> Option<&fst::Set<Cow<[u8]>>>;
-    fn word_pair_frequency(&self, left_word: &str, right_word: &str, proximity: u8) -> heed::Result<Option<u64>> {
+    fn word_pair_frequency(
+        &self,
+        left_word: &str,
+        right_word: &str,
+        proximity: u8,
+    ) -> heed::Result<Option<u64>> {
         match self.word_pair_proximity_docids(right_word, left_word, proximity)? {
             Some(rb) => Ok(Some(rb.len())),
             None => Ok(None),
@@ -180,7 +190,12 @@ impl<'a> Context for QueryTreeBuilder<'a> {
         self.index.word_docids.get(self.rtxn, word)
     }
 
-    fn word_pair_proximity_docids(&self, right_word: &str, left_word: &str, proximity: u8) -> heed::Result<Option<RoaringBitmap>> {
+    fn word_pair_proximity_docids(
+        &self,
+        right_word: &str,
+        left_word: &str,
+        proximity: u8,
+    ) -> heed::Result<Option<RoaringBitmap>> {
         self.index.word_pair_proximity_docids.get(self.rtxn, &(left_word, right_word, proximity))
     }
 
@@ -202,9 +217,17 @@ impl<'a> Context for QueryTreeBuilder<'a> {
         self.exact_words.as_ref()
     }
 
-    fn word_pair_frequency(&self, left_word: &str, right_word: &str, proximity: u8) -> heed::Result<Option<u64>> {
+    fn word_pair_frequency(
+        &self,
+        left_word: &str,
+        right_word: &str,
+        proximity: u8,
+    ) -> heed::Result<Option<u64>> {
         let key = (left_word, right_word, proximity);
-        self.index.word_pair_proximity_docids.remap_data_type::<CboRoaringBitmapLenCodec>().get(&self.rtxn, &key)
+        self.index
+            .word_pair_proximity_docids
+            .remap_data_type::<CboRoaringBitmapLenCodec>()
+            .get(&self.rtxn, &key)
     }
 }
 
@@ -838,7 +861,12 @@ mod test {
             Ok(self.postings.get(word).cloned())
         }
 
-        fn word_pair_proximity_docids(&self, right_word: &str, left_word: &str, _: u8) -> heed::Result<Option<RoaringBitmap>> {
+        fn word_pair_proximity_docids(
+            &self,
+            right_word: &str,
+            left_word: &str,
+            _: u8,
+        ) -> heed::Result<Option<RoaringBitmap>> {
             let bitmap = self.postings.get(&format!("{} {}", left_word, right_word));
             Ok(bitmap.cloned())
         }
