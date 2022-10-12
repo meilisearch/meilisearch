@@ -279,7 +279,7 @@ impl<'a> QueryTreeBuilder<'a> {
     }
 }
 
-/// Split the word depending on the frequency of subwords in the database documents.
+/// Split the word depending on the frequency of pairs near together in the database documents.
 fn split_best_frequency<'a>(
     ctx: &impl Context,
     word: &'a str,
