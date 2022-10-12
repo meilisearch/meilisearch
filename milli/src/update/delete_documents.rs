@@ -243,6 +243,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             facet_id_string_docids: _,
             field_id_docid_facet_f64s: _,
             field_id_docid_facet_strings: _,
+            script_language_docids,
             facet_id_exists_docids,
             documents,
         } = self.index;

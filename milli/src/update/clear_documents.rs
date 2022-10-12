@@ -30,6 +30,7 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
             word_position_docids,
             field_id_word_count_docids,
             word_prefix_position_docids,
+            script_language_docids,
             facet_id_f64_docids,
             facet_id_string_docids,
             facet_id_exists_docids,
@@ -82,6 +83,7 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         word_position_docids.clear(self.wtxn)?;
         field_id_word_count_docids.clear(self.wtxn)?;
         word_prefix_position_docids.clear(self.wtxn)?;
+        script_language_docids.clear(self.wtxn)?;
         facet_id_f64_docids.clear(self.wtxn)?;
         facet_id_exists_docids.clear(self.wtxn)?;
         facet_id_string_docids.clear(self.wtxn)?;
