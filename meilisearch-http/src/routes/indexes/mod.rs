@@ -1,10 +1,10 @@
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use index_scheduler::{IndexScheduler, KindWithContent, Query};
+use index_scheduler::{IndexScheduler, Query};
 use log::debug;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::milli::{self, FieldDistribution, Index};
-use meilisearch_types::tasks::Status;
+use meilisearch_types::tasks::{KindWithContent, Status};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;

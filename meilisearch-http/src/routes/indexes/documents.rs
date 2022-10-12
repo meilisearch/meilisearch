@@ -6,14 +6,14 @@ use actix_web::HttpMessage;
 use actix_web::{web, HttpRequest, HttpResponse};
 use bstr::ByteSlice;
 use futures::StreamExt;
-use index_scheduler::{IndexScheduler, KindWithContent};
+use index_scheduler::IndexScheduler;
 use log::debug;
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::star_or::StarOr;
-use meilisearch_types::tasks::TaskView;
+use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::{milli, Document, Index};
 use mime::Mime;
 use once_cell::sync::Lazy;
@@ -26,7 +26,7 @@ use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::payload::Payload;
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::{fold_star_or, PaginationView};
+use crate::routes::{fold_star_or, PaginationView, SummarizedTaskView};
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec![
@@ -216,7 +216,7 @@ async fn document_addition(
     mut body: Payload,
     method: IndexDocumentsMethod,
     allow_index_creation: bool,
-) -> Result<TaskView, MeilisearchHttpError> {
+) -> Result<SummarizedTaskView, MeilisearchHttpError> {
     let format = match mime_type
         .as_ref()
         .map(|m| (m.type_().as_str(), m.subtype().as_str()))
@@ -292,7 +292,7 @@ async fn document_addition(
     };
 
     debug!("returns: {:?}", task);
-    Ok(task)
+    Ok(task.into())
 }
 
 pub async fn delete_documents(

@@ -7,7 +7,7 @@ use log::debug;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::star_or::StarOr;
-use meilisearch_types::tasks::Status;
+use meilisearch_types::tasks::{Kind, Status, Task, TaskId};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
@@ -48,6 +48,30 @@ where
 }
 
 const PAGINATION_DEFAULT_LIMIT: fn() -> usize = || 20;
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SummarizedTaskView {
+    task_uid: TaskId,
+    index_uid: Option<String>,
+    status: Status,
+    #[serde(rename = "type")]
+    kind: Kind,
+    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
+    enqueued_at: OffsetDateTime,
+}
+
+impl From<Task> for SummarizedTaskView {
+    fn from(task: Task) -> Self {
+        SummarizedTaskView {
+            task_uid: task.uid,
+            index_uid: task.index_uid().map(|s| s.to_string()),
+            status: task.status,
+            kind: task.kind.as_kind(),
+            enqueued_at: task.enqueued_at,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -266,7 +290,7 @@ async fn get_stats(
     )?;
     let processing_index = processing_task
         .first()
-        .and_then(|task| task.index_uid.clone());
+        .and_then(|task| task.index_uid().clone());
 
     for (name, index) in index_scheduler.indexes()? {
         if !search_rules.is_index_authorized(&name) {
