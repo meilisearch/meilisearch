@@ -2,7 +2,8 @@ use actix_http::header::TryIntoHeaderPair;
 use bytes::Bytes;
 use flate2::write::{GzEncoder, ZlibEncoder};
 use flate2::Compression;
-use std::io::Write;
+use std::io::{Read, Write};
+use flate2::read::{GzDecoder, ZlibDecoder};
 
 #[derive(Clone, Copy)]
 pub enum Encoder {
@@ -39,6 +40,34 @@ impl Encoder {
                 encoder.into_inner()
             }
         }
+    }
+
+    pub fn decode(self: &Encoder, bytes: impl Into<Bytes>) -> impl Into<Bytes> {
+        let mut buffer = Vec::new();
+        let input = bytes.into();
+        match self {
+            Self::Gzip => {
+                GzDecoder::new(input.as_ref())
+                    .read_to_end(&mut buffer)
+                    .expect("Invalid gzip stream");
+            },
+            Self::Deflate => {
+                ZlibDecoder::new(input.as_ref())
+                    .read_to_end(&mut buffer)
+                    .expect("Invalid zlib stream");
+            },
+            Self::Plain => {
+                buffer
+                .write(input.as_ref())
+                .expect("Unexpected memory copying issue");
+            },
+            Self::Brotli => {
+                brotli::Decompressor::new(input.as_ref(), 4096 )
+                    .read_to_end(&mut buffer)
+                    .expect("Invalid brotli stream");
+            },
+        };
+        buffer
     }
 
     pub fn header(self: &Encoder) -> Option<impl TryIntoHeaderPair> {
