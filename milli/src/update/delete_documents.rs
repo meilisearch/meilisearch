@@ -54,7 +54,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
     }
 
     #[cfg(test)]
-    fn disable_soft_deletion(&mut self, disable: bool) {
+    pub fn disable_soft_deletion(&mut self, disable: bool) {
         self.disable_soft_deletion = disable;
     }
 

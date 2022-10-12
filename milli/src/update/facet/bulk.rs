@@ -4,9 +4,7 @@ use std::fs::File;
 use grenad::CompressionType;
 use heed::types::ByteSlice;
 use heed::{BytesEncode, Error, RoTxn, RwTxn};
-use log::debug;
 use roaring::RoaringBitmap;
-use time::OffsetDateTime;
 
 use super::{FACET_GROUP_SIZE, FACET_MIN_LEVEL_SIZE};
 use crate::facet::FacetType;
@@ -71,8 +69,6 @@ impl<'i> FacetsUpdateBulk<'i> {
 
     #[logging_timer::time("FacetsUpdateBulk::{}")]
     pub fn execute(self, wtxn: &mut heed::RwTxn) -> Result<()> {
-        debug!("Computing and writing the facet values levels docids into LMDB on disk...");
-
         let Self { index, field_ids, group_size, min_level_size, facet_type, new_data } = self;
 
         let db = match facet_type {
@@ -83,8 +79,6 @@ impl<'i> FacetsUpdateBulk<'i> {
                 index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>()
             }
         };
-
-        index.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
 
         let inner = FacetsUpdateBulkInner { db, new_data, group_size, min_level_size };
 

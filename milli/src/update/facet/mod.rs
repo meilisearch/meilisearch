@@ -78,6 +78,9 @@ pub const FACET_MIN_LEVEL_SIZE: u8 = 5;
 
 use std::fs::File;
 
+use log::debug;
+use time::OffsetDateTime;
+
 use self::incremental::FacetsUpdateIncremental;
 use super::FacetsUpdateBulk;
 use crate::facet::FacetType;
@@ -89,6 +92,10 @@ pub mod bulk;
 pub mod delete;
 pub mod incremental;
 
+/// A builder used to add new elements to the `facet_id_string_docids` or `facet_id_f64_docids` databases.
+///
+/// Depending on the number of new elements and the existing size of the database, we use either
+/// a bulk update method or an incremental update method.
 pub struct FacetsUpdate<'i> {
     index: &'i Index,
     database: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
@@ -123,6 +130,10 @@ impl<'i> FacetsUpdate<'i> {
         if self.new_data.is_empty() {
             return Ok(());
         }
+        debug!("Computing and writing the facet values levels docids into LMDB on disk...");
+        self.index.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
+
+        // See self::comparison_bench::benchmark_facet_indexing
         if self.new_data.len() >= (self.database.len(wtxn)? as u64 / 50) {
             let field_ids =
                 self.index.faceted_fields_ids(wtxn)?.iter().copied().collect::<Vec<_>>();
@@ -204,7 +215,7 @@ pub(crate) mod tests {
             let min_level_size = std::cmp::min(17, std::cmp::max(1, min_level_size)); // 1 <= x <= 17
 
             let mut options = heed::EnvOpenOptions::new();
-            let options = options.map_size(4096 * 4 * 10 * 100);
+            let options = options.map_size(4096 * 4 * 10 * 1000);
             unsafe {
                 options.flag(heed::flags::Flags::MdbAlwaysFreePages);
             }
@@ -230,7 +241,7 @@ pub(crate) mod tests {
             let max_group_size = std::cmp::min(127, std::cmp::max(group_size * 2, max_group_size)); // 2*group_size <= x <= 127
             let min_level_size = std::cmp::max(1, min_level_size); // 1 <= x <= inf
             let mut options = heed::EnvOpenOptions::new();
-            let options = options.map_size(4096 * 4 * 1000);
+            let options = options.map_size(4096 * 4 * 1000 * 100);
             let tempdir = tempfile::TempDir::new().unwrap();
             let env = options.open(tempdir.path()).unwrap();
             let content = env.create_database(None).unwrap();
@@ -440,12 +451,14 @@ mod comparison_bench {
 
     // This is a simple test to get an intuition on the relative speed
     // of the incremental vs. bulk indexer.
-    // It appears that the incremental indexer is about 50 times slower than the
+    //
+    // The benchmark shows the worst-case scenario for the incremental indexer, since
+    // each facet value contains only one document ID.
+    //
+    // In that scenario, it appears that the incremental indexer is about 50 times slower than the
     // bulk indexer.
     // #[test]
     fn benchmark_facet_indexing() {
-        // then we add 10_000 documents at a time and compare the speed of adding 1, 100, and 1000 documents to it
-
         let mut facet_value = 0;
 
         let mut r = rand::thread_rng();
