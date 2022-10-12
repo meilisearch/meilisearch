@@ -5,8 +5,8 @@ use std::{
 };
 
 use flate2::{write::GzEncoder, Compression};
-use meilisearch_auth::Key;
 use meilisearch_types::{
+    keys::Key,
     settings::{Checked, Settings},
     tasks::Task,
 };
