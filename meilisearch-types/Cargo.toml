@@ -20,6 +20,8 @@ uuid = { version = "1.1.2", features = ["serde", "v4"] }
 [dev-dependencies]
 proptest = "1.0.0"
 proptest-derive = "0.3.0"
+meili-snap = { path = "../meili-snap" }
+insta = "1.19.1"
 
 [features]
 test-traits = ["proptest", "proptest-derive"]

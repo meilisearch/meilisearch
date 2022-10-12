@@ -2263,6 +2263,8 @@ dependencies = [
  "actix-web",
  "csv",
  "either",
+ "insta",
+ "meili-snap",
  "milli",
  "proptest",
  "proptest-derive",

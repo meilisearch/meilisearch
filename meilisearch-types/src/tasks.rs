@@ -365,10 +365,8 @@ pub fn serialize_duration<S: Serializer>(
     }
 }
 
-/*
 #[cfg(test)]
 mod tests {
-    use crate::assert_smol_debug_snapshot;
     use crate::heed::{types::SerdeJson, BytesDecode, BytesEncode};
 
     use super::Details;
@@ -382,8 +380,7 @@ mod tests {
         };
         let serialised = SerdeJson::<Details>::bytes_encode(&details).unwrap();
         let deserialised = SerdeJson::<Details>::bytes_decode(&serialised).unwrap();
-        assert_smol_debug_snapshot!(details, @r###"DeleteTasks { matched_tasks: 1, deleted_tasks: None, original_query: "hello" }"###);
-        assert_smol_debug_snapshot!(deserialised, @r###"DeleteTasks { matched_tasks: 1, deleted_tasks: None, original_query: "hello" }"###);
+        meili_snap::snapshot!(format!("{:?}", details), @r###"DeleteTasks { matched_tasks: 1, deleted_tasks: None, original_query: "hello" }"###);
+        meili_snap::snapshot!(format!("{:?}", deserialised), @r###"DeleteTasks { matched_tasks: 1, deleted_tasks: None, original_query: "hello" }"###);
     }
 }
-*/
