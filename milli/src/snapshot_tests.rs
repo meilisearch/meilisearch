@@ -495,7 +495,7 @@ macro_rules! full_snap_of_db {
     ($index:ident, field_id_docid_facet_strings) => {{
         $crate::snapshot_tests::snap_field_id_docid_facet_strings(&$index)
     }};
-     ($index:ident, facet_id_exists_docids) => {{
+    ($index:ident, facet_id_exists_docids) => {{
         $crate::snapshot_tests::snap_facet_id_exists_docids(&$index)
     }};
     ($index:ident, documents_ids) => {{

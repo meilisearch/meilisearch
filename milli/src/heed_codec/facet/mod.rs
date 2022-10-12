@@ -11,9 +11,8 @@ use roaring::RoaringBitmap;
 
 pub use self::field_doc_id_facet_codec::FieldDocIdFacetCodec;
 pub use self::ordered_f64_codec::OrderedF64Codec;
-use crate::{CboRoaringBitmapCodec, BEU16};
-
 use super::StrRefCodec;
+use crate::{CboRoaringBitmapCodec, BEU16};
 
 pub type FieldDocIdFacetF64Codec = FieldDocIdFacetCodec<OrderedF64Codec>;
 pub type FieldDocIdFacetStringCodec = FieldDocIdFacetCodec<StrRefCodec>;
