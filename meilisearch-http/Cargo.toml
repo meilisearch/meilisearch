@@ -24,7 +24,7 @@ zip = { version = "0.6.2", optional = true }
 [dependencies]
 actix-cors = "0.6.3"
 actix-web = { version = "4.2.1", default-features = false, features = ["macros", "compress-brotli", "compress-gzip", "cookies", "rustls"] }
-actix-http = { version = "3.2.2" }
+actix-http = "3.2.2"
 actix-web-static-files = { git = "https://github.com/kilork/actix-web-static-files.git", rev = "2d3b6160", optional = true }
 anyhow = { version = "1.0.65", features = ["backtrace"] }
 async-stream = "0.3.3"
@@ -86,11 +86,11 @@ lazy_static = "1.4.0"
 [dev-dependencies]
 actix-rt = "2.7.0"
 assert-json-diff = "2.0.2"
+brotli = "3.3.4"
 manifest-dir-macros = "0.1.16"
 maplit = "1.0.2"
 urlencoding = "2.1.2"
 yaup = "0.2.1"
-brotli = "3.3.4"
 
 [features]
 default = ["analytics", "meilisearch-lib/default", "mini-dashboard"]
