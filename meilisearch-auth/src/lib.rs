@@ -1,7 +1,5 @@
-mod action;
 mod dump;
 pub mod error;
-mod key;
 mod store;
 
 use std::collections::{HashMap, HashSet};
@@ -9,14 +7,13 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
+use meilisearch_types::keys::{Action, Key};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-pub use action::{actions, Action};
 use error::{AuthControllerError, Result};
-pub use key::Key;
 use meilisearch_types::star_or::StarOr;
 use store::generate_key_as_hexa;
 pub use store::open_auth_store_env;

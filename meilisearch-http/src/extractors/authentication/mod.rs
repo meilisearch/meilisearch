@@ -134,9 +134,9 @@ pub mod policies {
     use uuid::Uuid;
 
     use crate::extractors::authentication::Policy;
-    use meilisearch_auth::{Action, AuthController, AuthFilter, SearchRules};
+    use meilisearch_auth::{AuthController, AuthFilter, SearchRules};
     // reexport actions in policies in order to be used in routes configuration.
-    pub use meilisearch_auth::actions;
+    pub use meilisearch_types::keys::{actions, Action};
 
     fn tenant_token_validation() -> Validation {
         let mut validation = Validation::default();
