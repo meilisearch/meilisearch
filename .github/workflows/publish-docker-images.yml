@@ -77,4 +77,4 @@ jobs:
           token: ${{ secrets.MEILI_BOT_GH_PAT }}
           repository: meilisearch/meilisearch-cloud
           event-type: cloud-docker-build
-          client-payload: '{ "meilisearch_version": "${{ steps.meta.outputs.tags }}", "stable": "${{ steps.check-tag-format.outputs.stable }}" }'
+          client-payload: '{ "meilisearch_version": "${{ github.ref_name }}", "stable": "${{ steps.check-tag-format.outputs.stable }}" }'
