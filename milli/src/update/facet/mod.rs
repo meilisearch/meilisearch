@@ -76,13 +76,14 @@ pub const FACET_MAX_GROUP_SIZE: u8 = 8;
 pub const FACET_GROUP_SIZE: u8 = 4;
 pub const FACET_MIN_LEVEL_SIZE: u8 = 5;
 
+use std::fs::File;
+
 use self::incremental::FacetsUpdateIncremental;
 use super::FacetsUpdateBulk;
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{FacetGroupKeyCodec, FacetGroupValueCodec};
 use crate::heed_codec::ByteSliceRefCodec;
 use crate::{Index, Result};
-use std::fs::File;
 
 pub mod bulk;
 pub mod delete;
@@ -153,6 +154,7 @@ impl<'i> FacetsUpdate<'i> {
 pub(crate) mod tests {
     use std::cell::Cell;
     use std::fmt::Display;
+    use std::iter::FromIterator;
     use std::marker::PhantomData;
     use std::rc::Rc;
 
@@ -170,7 +172,7 @@ pub(crate) mod tests {
     use crate::update::FacetsUpdateIncrementalInner;
     use crate::CboRoaringBitmapCodec;
 
-    // A dummy index that only contains the facet database, used for testing
+    /// A dummy index that only contains the facet database, used for testing
     pub struct FacetIndex<BoundCodec>
     where
         for<'a> BoundCodec:
@@ -287,17 +289,9 @@ pub(crate) mod tests {
             key: &'a <BoundCodec as BytesEncode<'a>>::EItem,
             docid: u32,
         ) {
-            let update = FacetsUpdateIncrementalInner {
-                db: self.content,
-                group_size: self.group_size.get(),
-                min_level_size: self.min_level_size.get(),
-                max_group_size: self.max_group_size.get(),
-            };
-            let key_bytes = BoundCodec::bytes_encode(&key).unwrap();
-            let mut docids = RoaringBitmap::new();
-            docids.insert(docid);
-            update.delete(wtxn, field_id, &key_bytes, &docids).unwrap();
+            self.delete(wtxn, field_id, key, &RoaringBitmap::from_iter(std::iter::once(docid)))
         }
+
         pub fn delete<'a>(
             &self,
             wtxn: &'a mut RwTxn,

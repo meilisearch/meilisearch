@@ -1018,25 +1018,26 @@ mod tests {
         txn.commit().unwrap();
         milli_snap!(format!("{index}"), "after_delete");
     }
-
-    // fuzz tests
 }
 
+// fuzz tests
 #[cfg(all(test, fuzzing))]
 mod fuzz {
     use std::borrow::Cow;
     use std::collections::{BTreeMap, HashMap};
     use std::convert::TryFrom;
+    use std::iter::FromIterator;
     use std::rc::Rc;
 
+    use fuzzcheck::mutators::integer::U8Mutator;
     use fuzzcheck::mutators::integer_within_range::{U16WithinRangeMutator, U8WithinRangeMutator};
+    use fuzzcheck::mutators::vector::VecMutator;
     use fuzzcheck::DefaultMutator;
     use heed::BytesEncode;
     use roaring::RoaringBitmap;
     use tempfile::TempDir;
 
     use super::*;
-    use crate::milli_snap;
     use crate::update::facet::tests::FacetIndex;
 
     struct NEU16Codec;
@@ -1074,10 +1075,10 @@ mod fuzz {
             *values |= new_values;
         }
         #[no_coverage]
-        pub fn delete(&mut self, field_id: u16, key: T, value: u32) {
+        pub fn delete(&mut self, field_id: u16, key: T, values_to_remove: &RoaringBitmap) {
             if let Some(values_field_id) = self.elements.get_mut(&field_id) {
                 if let Some(values) = values_field_id.get_mut(&key) {
-                    values.remove(value);
+                    *values -= values_to_remove;
                     if values.is_empty() {
                         values_field_id.remove(&key);
                     }
@@ -1103,8 +1104,14 @@ mod fuzz {
     }
     #[derive(Clone, DefaultMutator, serde::Serialize, serde::Deserialize)]
     enum OperationKind {
-        Insert(Vec<u8>),
-        Delete(u8),
+        Insert(
+            #[field_mutator(VecMutator<u8, U8Mutator> = { VecMutator::new(U8Mutator::default(), 0 ..= 10) })]
+             Vec<u8>,
+        ),
+        Delete(
+            #[field_mutator(VecMutator<u8, U8Mutator> = { VecMutator::new(U8Mutator::default(), 0 ..= 10) })]
+             Vec<u8>,
+        ),
     }
 
     #[no_coverage]
@@ -1131,12 +1138,22 @@ mod fuzz {
                     index.insert(&mut txn, *field_id, key, &bitmap);
                     trivial_db.insert(*field_id, *key, &bitmap);
                 }
-                OperationKind::Delete(value) => {
-                    if let Some(keys) = value_to_keys.get(value) {
-                        for key in keys {
-                            index.delete_single_docid(&mut txn, *field_id, key, *value as u32);
-                            trivial_db.delete(*field_id, *key, *value as u32);
+                OperationKind::Delete(values) => {
+                    let values = RoaringBitmap::from_iter(values.iter().copied().map(|x| x as u32));
+                    let mut values_per_key = HashMap::new();
+
+                    for value in values {
+                        if let Some(keys) = value_to_keys.get(&(value as u8)) {
+                            for key in keys {
+                                let values: &mut RoaringBitmap =
+                                    values_per_key.entry(key).or_default();
+                                values.insert(value);
+                            }
                         }
+                    }
+                    for (key, values) in values_per_key {
+                        index.delete(&mut txn, *field_id, &key, &values);
+                        trivial_db.delete(*field_id, *key, &values);
                     }
                 }
             }
@@ -1221,7 +1238,7 @@ mod fuzz {
         {"key":166, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[67]}},
         {"key":64, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[61]}},
         {"key":183, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[210]}},
-        {"key":250, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Delete":50}}
+        {"key":250, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Delete":[50]}}
         ]
         "#;
         let operations: Vec<Operation<u16>> = serde_json::from_str(operations).unwrap();
@@ -1250,7 +1267,7 @@ mod fuzz {
         {"key":200, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[5]}},
         {"key":93, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[98]}},
         {"key":162, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Insert":[5]}},
-        {"key":80, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Delete":210}}
+        {"key":80, "field_id": 0, "group_size":4, "max_group_size":8, "min_level_size":5, "kind":{"Delete":[210]}}
         ]
         "#;
         let operations: Vec<Operation<u16>> = serde_json::from_str(operations).unwrap();
@@ -1285,7 +1302,7 @@ mod fuzz {
         let operations = r#"[
         {"key":63499, "field_id": 0, "group_size":2, "max_group_size":1, "min_level_size":0, "kind":{"Insert":[87]}},
         {"key":25374, "field_id": 0, "group_size":2, "max_group_size":1, "min_level_size":0, "kind":{"Insert":[14]}},
-        {"key":64481, "field_id": 0, "group_size":2, "max_group_size":1, "min_level_size":0, "kind":{"Delete":87}},
+        {"key":64481, "field_id": 0, "group_size":2, "max_group_size":1, "min_level_size":0, "kind":{"Delete":[87]}},
         {"key":23038, "field_id": 0, "group_size":2, "max_group_size":1, "min_level_size":0, "kind":{"Insert":[173]}},
         {"key":14862, "field_id": 0, "group_size":2, "max_group_size":1, "min_level_size":0, "kind":{"Insert":[8]}},
         {"key":13145, "field_id": 0, "group_size":2, "max_group_size":1, "min_level_size":0, "kind":{"Insert":[5,64]}},
@@ -1337,7 +1354,7 @@ mod fuzz {
                 "max_group_size":4,
                 "min_level_size":25,
                 "field_id":3,
-                "kind":{"Delete":11}
+                "kind":{"Delete":[11]}
             }
         ]
         "#;
