@@ -72,15 +72,23 @@ impl CompatV5ToV6 {
                         v5::Status::Succeeded => v6::Status::Succeeded,
                         v5::Status::Failed => v6::Status::Failed,
                     },
-                    kind: match &task.content {
-                        v5::tasks::TaskContent::IndexCreation { .. } => v6::Kind::IndexCreation,
-                        v5::tasks::TaskContent::IndexUpdate { .. } => v6::Kind::IndexUpdate,
+                    kind: match task.content.clone() {
+                        v5::tasks::TaskContent::IndexCreation { primary_key, .. } => {
+                            v6::Kind::IndexCreation { primary_key }
+                        }
+                        v5::tasks::TaskContent::IndexUpdate { primary_key, .. } => {
+                            v6::Kind::IndexUpdate { primary_key }
+                        }
                         v5::tasks::TaskContent::IndexDeletion { .. } => v6::Kind::IndexDeletion,
                         v5::tasks::TaskContent::DocumentAddition {
                             merge_strategy,
                             allow_index_creation,
+                            primary_key,
+                            documents_count,
                             ..
                         } => v6::Kind::DocumentImport {
+                            primary_key,
+                            documents_count: documents_count as u64,
                             method: match merge_strategy {
                                 v5::tasks::IndexDocumentsMethod::ReplaceDocuments => {
                                     v6::milli::update::IndexDocumentsMethod::ReplaceDocuments
@@ -91,14 +99,22 @@ impl CompatV5ToV6 {
                             },
                             allow_index_creation: allow_index_creation.clone(),
                         },
-                        v5::tasks::TaskContent::DocumentDeletion { .. } => {
-                            v6::Kind::DocumentDeletion
-                        }
+                        v5::tasks::TaskContent::DocumentDeletion { deletion, .. } => match deletion
+                        {
+                            v5::tasks::DocumentDeletion::Clear => v6::Kind::DocumentClear,
+                            v5::tasks::DocumentDeletion::Ids(documents_ids) => {
+                                v6::Kind::DocumentDeletion { documents_ids }
+                            }
+                        },
                         v5::tasks::TaskContent::SettingsUpdate {
                             allow_index_creation,
+                            is_deletion,
+                            settings,
                             ..
                         } => v6::Kind::Settings {
-                            allow_index_creation: allow_index_creation.clone(),
+                            is_deletion,
+                            allow_index_creation,
+                            settings: settings.into(),
                         },
                         v5::tasks::TaskContent::Dump { .. } => v6::Kind::DumpExport,
                     },

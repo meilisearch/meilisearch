@@ -6,7 +6,7 @@ use fst::IntoStreamer;
 use log::debug;
 
 use actix_web::{web, HttpRequest, HttpResponse};
-use index_scheduler::{IndexScheduler, KindWithContent};
+use index_scheduler::IndexScheduler;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::milli::update::Setting;
@@ -15,6 +15,7 @@ use meilisearch_types::settings::{
     Checked, FacetingSettings, MinWordSizeTyposSetting, PaginationSettings, Settings, TypoSettings,
     Unchecked,
 };
+use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::Index;
 use serde_json::json;
 
@@ -30,9 +31,10 @@ macro_rules! make_setting_route {
             use actix_web::{web, HttpRequest, HttpResponse, Resource};
             use log::debug;
 
-            use index_scheduler::{IndexScheduler, KindWithContent};
+            use index_scheduler::IndexScheduler;
             use meilisearch_types::milli::update::Setting;
             use meilisearch_types::settings::Settings;
+            use meilisearch_types::tasks::KindWithContent;
 
             use meilisearch_types::error::ResponseError;
             use $crate::analytics::Analytics;

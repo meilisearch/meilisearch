@@ -6,8 +6,10 @@ use std::{
 
 use flate2::{write::GzEncoder, Compression};
 use meilisearch_auth::Key;
-use meilisearch_types::settings::{Checked, Settings};
-use meilisearch_types::tasks::TaskDump;
+use meilisearch_types::{
+    settings::{Checked, Settings},
+    tasks::Task,
+};
 use serde_json::{Map, Value};
 use tempfile::TempDir;
 use time::OffsetDateTime;
@@ -105,7 +107,7 @@ impl TaskWriter {
 
     /// Pushes tasks in the dump.
     /// If the tasks has an associated `update_file` it'll use the `task_id` as its name.
-    pub fn push_task(&mut self, task: &TaskDump) -> Result<UpdateFile> {
+    pub fn push_task(&mut self, task: &Task) -> Result<UpdateFile> {
         self.queue.write_all(&serde_json::to_vec(task)?)?;
         self.queue.write_all(b"\n")?;
 

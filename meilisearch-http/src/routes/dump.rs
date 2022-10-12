@@ -1,9 +1,9 @@
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::IndexScheduler;
-use index_scheduler::KindWithContent;
 use log::debug;
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::tasks::KindWithContent;
 use serde_json::json;
 
 use crate::analytics::Analytics;
