@@ -3,13 +3,10 @@ use meilisearch_types::heed::{
     Database, RoTxn,
 };
 use meilisearch_types::milli::{RoaringBitmapCodec, BEU32};
+use meilisearch_types::tasks::{Details, Task};
 use roaring::RoaringBitmap;
 
-use crate::{
-    index_mapper::IndexMapper,
-    task::{Details, Task},
-    IndexScheduler, Kind, Status,
-};
+use crate::{index_mapper::IndexMapper, IndexScheduler, Kind, Status};
 
 pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     let IndexScheduler {
