@@ -1081,7 +1081,7 @@ mod test {
         OR
           AND
             OR
-              PHRASE ["word", "split"]
+              PHRASE [Some("word"), Some("split")]
               Tolerant { word: "wordsplit", max typo: 2 }
             Exact { word: "fish" }
           Tolerant { word: "wordsplitfish", max typo: 1 }
@@ -1100,7 +1100,7 @@ mod test {
 
         insta::assert_debug_snapshot!(query_tree, @r###"
         OR
-          PHRASE ["quickbrown", "fox"]
+          PHRASE [Some("quickbrown"), Some("fox")]
           PrefixTolerant { word: "quickbrownfox", max typo: 2 }
         "###);
     }
@@ -1117,7 +1117,7 @@ mod test {
 
         insta::assert_debug_snapshot!(query_tree, @r###"
         AND
-          PHRASE ["hey", "friends"]
+          PHRASE [Some("hey"), Some("friends")]
           Exact { word: "wooop" }
         "###);
     }
@@ -1154,8 +1154,8 @@ mod test {
 
         insta::assert_debug_snapshot!(query_tree, @r###"
         AND
-          PHRASE ["hey", "friends"]
-          PHRASE ["wooop", "wooop"]
+          PHRASE [Some("hey"), Some("friends")]
+          PHRASE [Some("wooop"), Some("wooop")]
         "###);
     }
 
@@ -1203,7 +1203,7 @@ mod test {
             .unwrap();
 
         insta::assert_debug_snapshot!(query_tree, @r###"
-        PHRASE ["hey", "my"]
+        PHRASE [Some("hey"), Some("my")]
         "###);
     }
 
@@ -1268,7 +1268,7 @@ mod test {
 
         insta::assert_debug_snapshot!(query_tree, @r###"
         AND
-          PHRASE ["hey", "my"]
+          PHRASE [Some("hey"), Some("my")]
           Exact { word: "good" }
         "###);
     }
