@@ -1,27 +1,16 @@
-use std::collections::BTreeSet;
-use std::marker::PhantomData;
-
 use actix_web::web::Data;
-use fst::IntoStreamer;
 use log::debug;
 
 use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::IndexScheduler;
 use meilisearch_types::error::ResponseError;
-use meilisearch_types::heed::RoTxn;
-use meilisearch_types::milli::update::Setting;
-use meilisearch_types::milli::{self, DEFAULT_VALUES_PER_FACET};
-use meilisearch_types::settings::{
-    Checked, FacetingSettings, MinWordSizeTyposSetting, PaginationSettings, Settings, TypoSettings,
-    Unchecked,
-};
+use meilisearch_types::settings::{settings, Settings, Unchecked};
 use meilisearch_types::tasks::KindWithContent;
-use meilisearch_types::Index;
 use serde_json::json;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
-use crate::search::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
+use crate::routes::SummarizedTaskView;
 
 #[macro_export]
 macro_rules! make_setting_route {
@@ -33,14 +22,14 @@ macro_rules! make_setting_route {
 
             use index_scheduler::IndexScheduler;
             use meilisearch_types::milli::update::Setting;
-            use meilisearch_types::settings::Settings;
+            use meilisearch_types::settings::{settings, Settings};
             use meilisearch_types::tasks::KindWithContent;
 
             use meilisearch_types::error::ResponseError;
             use $crate::analytics::Analytics;
             use $crate::extractors::authentication::{policies::*, GuardedData};
             use $crate::extractors::sequential_extractor::SeqHandler;
-            use $crate::routes::indexes::settings::settings;
+            use $crate::routes::SummarizedTaskView;
 
             pub async fn delete(
                 index_scheduler: GuardedData<
@@ -61,8 +50,10 @@ macro_rules! make_setting_route {
                     is_deletion: true,
                     allow_index_creation,
                 };
-                let task =
-                    tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;
+                let task: SummarizedTaskView =
+                    tokio::task::spawn_blocking(move || index_scheduler.register(task))
+                        .await??
+                        .into();
 
                 debug!("returns: {:?}", task);
                 Ok(HttpResponse::Accepted().json(task))
@@ -97,8 +88,10 @@ macro_rules! make_setting_route {
                     is_deletion: false,
                     allow_index_creation,
                 };
-                let task =
-                    tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;
+                let task: SummarizedTaskView =
+                    tokio::task::spawn_blocking(move || index_scheduler.register(task))
+                        .await??
+                        .into();
 
                 debug!("returns: {:?}", task);
                 Ok(HttpResponse::Accepted().json(task))
@@ -459,7 +452,10 @@ pub async fn update_all(
         is_deletion: false,
         allow_index_creation,
     };
-    let task = tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;
+    let task: SummarizedTaskView =
+        tokio::task::spawn_blocking(move || index_scheduler.register(task))
+            .await??
+            .into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
@@ -489,113 +485,11 @@ pub async fn delete_all(
         is_deletion: true,
         allow_index_creation,
     };
-    let task = tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;
+    let task: SummarizedTaskView =
+        tokio::task::spawn_blocking(move || index_scheduler.register(task))
+            .await??
+            .into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
-}
-
-pub fn settings(index: &Index, rtxn: &RoTxn) -> Result<Settings<Checked>, milli::Error> {
-    let displayed_attributes = index
-        .displayed_fields(rtxn)?
-        .map(|fields| fields.into_iter().map(String::from).collect());
-
-    let searchable_attributes = index
-        .user_defined_searchable_fields(rtxn)?
-        .map(|fields| fields.into_iter().map(String::from).collect());
-
-    let filterable_attributes = index.filterable_fields(rtxn)?.into_iter().collect();
-
-    let sortable_attributes = index.sortable_fields(rtxn)?.into_iter().collect();
-
-    let criteria = index
-        .criteria(rtxn)?
-        .into_iter()
-        .map(|c| c.to_string())
-        .collect();
-
-    let stop_words = index
-        .stop_words(rtxn)?
-        .map(|stop_words| -> Result<BTreeSet<_>, milli::Error> {
-            Ok(stop_words.stream().into_strs()?.into_iter().collect())
-        })
-        .transpose()?
-        .unwrap_or_default();
-    let distinct_field = index.distinct_field(rtxn)?.map(String::from);
-
-    // in milli each word in the synonyms map were split on their separator. Since we lost
-    // this information we are going to put space between words.
-    let synonyms = index
-        .synonyms(rtxn)?
-        .iter()
-        .map(|(key, values)| {
-            (
-                key.join(" "),
-                values.iter().map(|value| value.join(" ")).collect(),
-            )
-        })
-        .collect();
-
-    let min_typo_word_len = MinWordSizeTyposSetting {
-        one_typo: Setting::Set(index.min_word_len_one_typo(rtxn)?),
-        two_typos: Setting::Set(index.min_word_len_two_typos(rtxn)?),
-    };
-
-    let disabled_words = match index.exact_words(rtxn)? {
-        Some(fst) => fst.into_stream().into_strs()?.into_iter().collect(),
-        None => BTreeSet::new(),
-    };
-
-    let disabled_attributes = index
-        .exact_attributes(rtxn)?
-        .into_iter()
-        .map(String::from)
-        .collect();
-
-    let typo_tolerance = TypoSettings {
-        enabled: Setting::Set(index.authorize_typos(rtxn)?),
-        min_word_size_for_typos: Setting::Set(min_typo_word_len),
-        disable_on_words: Setting::Set(disabled_words),
-        disable_on_attributes: Setting::Set(disabled_attributes),
-    };
-
-    let faceting = FacetingSettings {
-        max_values_per_facet: Setting::Set(
-            index
-                .max_values_per_facet(rtxn)?
-                .unwrap_or(DEFAULT_VALUES_PER_FACET),
-        ),
-    };
-
-    let pagination = PaginationSettings {
-        max_total_hits: Setting::Set(
-            index
-                .pagination_max_total_hits(rtxn)?
-                .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS),
-        ),
-    };
-
-    Ok(Settings {
-        displayed_attributes: match displayed_attributes {
-            Some(attrs) => Setting::Set(attrs),
-            None => Setting::Reset,
-        },
-        searchable_attributes: match searchable_attributes {
-            Some(attrs) => Setting::Set(attrs),
-            None => Setting::Reset,
-        },
-        filterable_attributes: Setting::Set(filterable_attributes),
-        sortable_attributes: Setting::Set(sortable_attributes),
-        ranking_rules: Setting::Set(criteria),
-        stop_words: Setting::Set(stop_words),
-        distinct_attribute: match distinct_field {
-            Some(field) => Setting::Set(field),
-            None => Setting::Reset,
-        },
-        synonyms: Setting::Set(synonyms),
-        typo_tolerance: Setting::Set(typo_tolerance),
-        faceting: Setting::Set(faceting),
-        pagination: Setting::Set(pagination),
-        _kind: PhantomData,
-    })
 }

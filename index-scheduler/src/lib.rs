@@ -154,6 +154,9 @@ pub struct IndexScheduler {
     /// Weither autobatching is enabled or not.
     pub(crate) autobatching_enabled: bool,
 
+    /// The path used to create the dumps.
+    pub(crate) dumps_path: PathBuf,
+
     // ================= test
     /// The next entry is dedicated to the tests.
     /// It provide a way to break in multiple part of the scheduler.
@@ -175,6 +178,7 @@ impl IndexScheduler {
         tasks_path: PathBuf,
         update_file_path: PathBuf,
         indexes_path: PathBuf,
+        dumps_path: PathBuf,
         index_size: usize,
         indexer_config: IndexerConfig,
         autobatching_enabled: bool,
@@ -183,6 +187,7 @@ impl IndexScheduler {
         std::fs::create_dir_all(&tasks_path)?;
         std::fs::create_dir_all(&update_file_path)?;
         std::fs::create_dir_all(&indexes_path)?;
+        std::fs::create_dir_all(&dumps_path)?;
 
         let mut options = heed::EnvOpenOptions::new();
         options.max_dbs(6);
@@ -205,6 +210,7 @@ impl IndexScheduler {
             // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
             wake_up: Arc::new(SignalEvent::auto(true)),
             autobatching_enabled,
+            dumps_path,
 
             #[cfg(test)]
             test_breakpoint_sdr,
@@ -227,6 +233,7 @@ impl IndexScheduler {
             index_mapper: self.index_mapper.clone(),
             wake_up: self.wake_up.clone(),
             autobatching_enabled: self.autobatching_enabled,
+            dumps_path: self.dumps_path.clone(),
 
             #[cfg(test)]
             test_breakpoint_sdr: self.test_breakpoint_sdr.clone(),
@@ -342,7 +349,7 @@ impl IndexScheduler {
             started_at: None,
             finished_at: None,
             error: None,
-            details: task.default_details(),
+            details: (&task).into(),
             status: Status::Enqueued,
             kind: task,
         };
@@ -367,9 +374,9 @@ impl IndexScheduler {
 
         match wtxn.commit() {
             Ok(()) => (),
-            e @ Err(_) => {
+            _e @ Err(_) => {
                 todo!("remove the data associated with the task");
-                e?;
+                // _e?;
             }
         }
 
@@ -436,6 +443,7 @@ impl IndexScheduler {
                     // TODO the info field should've been set by the process_batch function
                     self.update_task(&mut wtxn, &task)?;
                 }
+                log::info!("A batch of tasks was successfully completed.");
             }
             // In case of a failure we must get back and patch all the tasks with the error.
             Err(err) => {
@@ -453,7 +461,6 @@ impl IndexScheduler {
         }
         *self.processing_tasks.write().unwrap() = (finished_at, RoaringBitmap::new());
         wtxn.commit()?;
-        log::info!("A batch of tasks was successfully completed.");
 
         #[cfg(test)]
         self.test_breakpoint_sdr
@@ -542,6 +549,7 @@ mod tests {
                 tempdir.path().join("db_path"),
                 tempdir.path().join("file_store"),
                 tempdir.path().join("indexes"),
+                tempdir.path().join("dumps"),
                 1024 * 1024,
                 IndexerConfig::default(),
                 autobatching, // enable autobatching

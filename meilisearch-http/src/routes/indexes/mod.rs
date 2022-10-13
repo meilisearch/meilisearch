@@ -13,7 +13,7 @@ use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
 
-use super::Pagination;
+use super::{Pagination, SummarizedTaskView};
 
 pub mod documents;
 pub mod search;
@@ -108,7 +108,10 @@ pub async fn create_index(
             index_uid: uid,
             primary_key,
         };
-        let task = tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;
+        let task: SummarizedTaskView =
+            tokio::task::spawn_blocking(move || index_scheduler.register(task))
+            .await??
+            .into();
 
         Ok(HttpResponse::Accepted().json(task))
     } else {
@@ -156,7 +159,10 @@ pub async fn update_index(
         primary_key: body.primary_key,
     };
 
-    let task = tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;
+    let task: SummarizedTaskView =
+        tokio::task::spawn_blocking(move || index_scheduler.register(task))
+            .await??
+            .into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
@@ -169,7 +175,10 @@ pub async fn delete_index(
     let task = KindWithContent::IndexDeletion {
         index_uid: index_uid.into_inner(),
     };
-    let task = tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;
+    let task: SummarizedTaskView =
+        tokio::task::spawn_blocking(move || index_scheduler.register(task))
+            .await??
+            .into();
 
     Ok(HttpResponse::Accepted().json(task))
 }
