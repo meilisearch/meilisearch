@@ -175,7 +175,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let mut cursor = fid_docid_facet_number.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
                 if valid_lmdb_key(key) {
-                    index_fid_docid_facet_numbers.put(wtxn, key, &value)?;
+                    index_fid_docid_facet_numbers.put(wtxn, key, value)?;
                 }
             }
         }
@@ -185,7 +185,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let mut cursor = fid_docid_facet_string.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
                 if valid_lmdb_key(key) {
-                    index_fid_docid_facet_strings.put(wtxn, key, &value)?;
+                    index_fid_docid_facet_strings.put(wtxn, key, value)?;
                 }
             }
         }

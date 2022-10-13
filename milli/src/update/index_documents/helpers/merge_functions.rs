@@ -88,7 +88,7 @@ pub fn keep_latest_obkv<'a>(_key: &[u8], obkvs: &[Cow<'a, [u8]>]) -> Result<Cow<
 /// Merge all the obks in the order we see them.
 pub fn merge_obkvs<'a>(_key: &[u8], obkvs: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
     Ok(obkvs
-        .into_iter()
+        .iter()
         .cloned()
         .reduce(|acc, current| {
             let first = obkv::KvReader::new(&acc);

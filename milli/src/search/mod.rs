@@ -333,39 +333,36 @@ pub fn word_derivations<'c>(
                 } else if fst.contains(word) {
                     derived_words.push((word.to_string(), 0));
                 }
+            } else if max_typo == 1 {
+                let dfa = build_dfa(word, 1, is_prefix);
+                let starts = StartsWith(Str::new(get_first(word)));
+                let mut stream = fst.search_with_state(Intersection(starts, &dfa)).into_stream();
+
+                while let Some((word, state)) = stream.next() {
+                    let word = std::str::from_utf8(word)?;
+                    let d = dfa.distance(state.1);
+                    derived_words.push((word.to_string(), d.to_u8()));
+                }
             } else {
-                if max_typo == 1 {
-                    let dfa = build_dfa(word, 1, is_prefix);
-                    let starts = StartsWith(Str::new(get_first(word)));
-                    let mut stream =
-                        fst.search_with_state(Intersection(starts, &dfa)).into_stream();
+                let starts = StartsWith(Str::new(get_first(word)));
+                let first = Intersection(build_dfa(word, 1, is_prefix), Complement(&starts));
+                let second_dfa = build_dfa(word, 2, is_prefix);
+                let second = Intersection(&second_dfa, &starts);
+                let automaton = Union(first, &second);
 
-                    while let Some((word, state)) = stream.next() {
-                        let word = std::str::from_utf8(word)?;
-                        let d = dfa.distance(state.1);
-                        derived_words.push((word.to_string(), d.to_u8()));
-                    }
-                } else {
-                    let starts = StartsWith(Str::new(get_first(word)));
-                    let first = Intersection(build_dfa(word, 1, is_prefix), Complement(&starts));
-                    let second_dfa = build_dfa(word, 2, is_prefix);
-                    let second = Intersection(&second_dfa, &starts);
-                    let automaton = Union(first, &second);
+                let mut stream = fst.search_with_state(automaton).into_stream();
 
-                    let mut stream = fst.search_with_state(automaton).into_stream();
-
-                    while let Some((found_word, state)) = stream.next() {
-                        let found_word = std::str::from_utf8(found_word)?;
-                        // in the case the typo is on the first letter, we know the number of typo
-                        // is two
-                        if get_first(found_word) != get_first(word) {
-                            derived_words.push((found_word.to_string(), 2));
-                        } else {
-                            // Else, we know that it is the second dfa that matched and compute the
-                            // correct distance
-                            let d = second_dfa.distance((state.1).0);
-                            derived_words.push((found_word.to_string(), d.to_u8()));
-                        }
+                while let Some((found_word, state)) = stream.next() {
+                    let found_word = std::str::from_utf8(found_word)?;
+                    // in the case the typo is on the first letter, we know the number of typo
+                    // is two
+                    if get_first(found_word) != get_first(word) {
+                        derived_words.push((found_word.to_string(), 2));
+                    } else {
+                        // Else, we know that it is the second dfa that matched and compute the
+                        // correct distance
+                        let d = second_dfa.distance((state.1).0);
+                        derived_words.push((found_word.to_string(), d.to_u8()));
                     }
                 }
             }

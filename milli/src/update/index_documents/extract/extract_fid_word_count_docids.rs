@@ -40,7 +40,7 @@ pub fn extract_fid_word_count_docids<R: io::Read + io::Seek>(
     let mut cursor = docid_word_positions.into_cursor()?;
     while let Some((key, value)) = cursor.move_on_next()? {
         let (document_id_bytes, _word_bytes) = try_split_array_at(key)
-            .ok_or_else(|| SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
+            .ok_or(SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
         let document_id = u32::from_be_bytes(document_id_bytes);
 
         let curr_document_id = *current_document_id.get_or_insert(document_id);

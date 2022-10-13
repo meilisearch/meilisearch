@@ -60,5 +60,5 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
         }
     }
 
-    Ok(writer_into_reader(writer)?)
+    writer_into_reader(writer)
 }
