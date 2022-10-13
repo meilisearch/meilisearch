@@ -25,6 +25,8 @@ pub enum Error {
     InvalidKind(String),
 
     #[error(transparent)]
+    Dump(#[from] dump::Error),
+    #[error(transparent)]
     Heed(#[from] heed::Error),
     #[error(transparent)]
     Milli(#[from] milli::Error),
@@ -48,8 +50,9 @@ impl ErrorCode for Error {
             Error::InvalidKind(_) => Code::BadRequest,
 
             // TODO: TAMO: are all these errors really internal?
+            Error::Dump(e) => e.error_code(),
+            Error::Milli(e) => e.error_code(),
             Error::Heed(_) => Code::Internal,
-            Error::Milli(_) => Code::Internal,
             Error::FileStore(_) => Code::Internal,
             Error::IoError(_) => Code::Internal,
             Error::Anyhow(_) => Code::Internal,

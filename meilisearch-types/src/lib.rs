@@ -9,5 +9,7 @@ pub mod tasks;
 pub use milli;
 pub use milli::heed;
 pub use milli::Index;
+use uuid::Uuid;
 
 pub type Document = serde_json::Map<String, serde_json::Value>;
+pub type InstanceUid = Uuid;

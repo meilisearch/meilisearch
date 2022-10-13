@@ -13,6 +13,7 @@ file-store = { path = "../file-store" }
 log = "0.4.14"
 meilisearch-types = { path = "../meilisearch-types" }
 roaring = { version = "0.10.0", features = ["serde"] }
+dump = { path = "../dump" }
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = { version = "1.0.85", features = ["preserve_order"] }
 tempfile = "3.3.0"
