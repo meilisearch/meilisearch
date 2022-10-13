@@ -21,9 +21,12 @@ use super::fold_star_or;
 const DEFAULT_LIMIT: fn() -> u32 = || 20;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("").route(web::get().to(SeqHandler(get_tasks))))
-        .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))))
-        .service(web::resource("").route(web::delete().to(SeqHandler(delete_tasks))));
+    cfg.service(
+        web::resource("")
+            .route(web::get().to(SeqHandler(get_tasks)))
+            .route(web::delete().to(SeqHandler(delete_tasks))),
+    )
+    .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))));
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -63,8 +66,8 @@ pub struct TaskView {
     pub finished_at: Option<OffsetDateTime>,
 }
 
-impl From<Task> for TaskView {
-    fn from(task: Task) -> Self {
+impl TaskView {
+    fn from_task(task: &Task) -> TaskView {
         TaskView {
             uid: task.uid,
             index_uid: task
@@ -72,7 +75,7 @@ impl From<Task> for TaskView {
                 .and_then(|vec| vec.first().map(|i| i.to_string())),
             status: task.status,
             kind: task.kind.as_kind(),
-            details: task.details.map(DetailsView::from),
+            details: task.details.clone().map(DetailsView::from),
             error: task.error.clone(),
             duration: task
                 .started_at
@@ -172,38 +175,44 @@ pub struct TasksFilterQuery {
     from: Option<TaskId>,
 }
 
-#[rustfmt::skip]
-fn task_type_matches_content(type_: &TaskType, content: &TaskContent) -> bool {
-    matches!((type_, content),
-          (TaskType::IndexCreation, TaskContent::IndexCreation { .. })
-        | (TaskType::IndexUpdate, TaskContent::IndexUpdate { .. })
-        | (TaskType::IndexDeletion, TaskContent::IndexDeletion { .. })
-        | (TaskType::DocumentAdditionOrUpdate, TaskContent::DocumentAddition { .. })
-        | (TaskType::DocumentDeletion, TaskContent::DocumentDeletion{ .. })
-        | (TaskType::SettingsUpdate, TaskContent::SettingsUpdate { .. })
-        | (TaskType::DumpCreation, TaskContent::Dump { .. })
-    )
-}
-
-#[rustfmt::skip]
-fn task_status_matches_events(status: &TaskStatus, events: &[TaskEvent]) -> bool {
-    events.last().map_or(false, |event| {
-        matches!((status, event),
-              (TaskStatus::Enqueued, TaskEvent::Created(_))
-            | (TaskStatus::Processing, TaskEvent::Processing(_) | TaskEvent::Batched { .. })
-            | (TaskStatus::Succeeded, TaskEvent::Succeeded { .. })
-            | (TaskStatus::Failed, TaskEvent::Failed { .. }),
-        )
-    })
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TaskDeletionQuery {
+    #[serde(rename = "type")]
+    type_: Option<CS<Kind>>,
+    uid: Option<CS<u32>>,
+    status: Option<CS<Status>>,
+    index_uid: Option<CS<IndexUid>>,
 }
 
 async fn delete_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_DELETE }>, Data<IndexScheduler>>,
-    params: web::Query<Query>,
+    params: web::Query<TaskDeletionQuery>,
     _req: HttpRequest,
     _analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let query = params.into_inner();
+    let TaskDeletionQuery {
+        type_,
+        uid,
+        status,
+        index_uid,
+    } = params.into_inner();
+
+    let kind: Option<Vec<_>> = type_.map(|x| x.into_iter().collect());
+    let uid: Option<Vec<_>> = uid.map(|x| x.into_iter().collect());
+    let status: Option<Vec<_>> = status.map(|x| x.into_iter().collect());
+    let index_uid: Option<Vec<_>> =
+        index_uid.map(|x| x.into_iter().map(|x| x.to_string()).collect());
+
+    let query = Query {
+        limit: None,
+        from: None,
+        status,
+        kind,
+        index_uid,
+        uid,
+    };
+
     let filtered_query = filter_out_inaccessible_indexes_from_query(&index_scheduler, &query);
 
     let tasks = index_scheduler.get_task_ids(&filtered_query)?;
@@ -215,7 +224,7 @@ async fn delete_tasks(
     // TODO: Lo: analytics
     let task = index_scheduler.register(task_deletion)?;
 
-    let task_view: TaskView = task.into();
+    let task_view = TaskView::from_task(&task);
 
     Ok(HttpResponse::Ok().json(task_view))
 }
@@ -288,9 +297,13 @@ async fn get_tasks(
     filters.from = from;
     // We +1 just to know if there is more after this "page" or not.
     let limit = limit.saturating_add(1);
-    filters.limit = limit;
+    filters.limit = Some(limit);
 
-    let mut tasks_results: Vec<_> = index_scheduler.get_tasks(filters)?.into_iter().collect();
+    let mut tasks_results: Vec<TaskView> = index_scheduler
+        .get_tasks(filters)?
+        .into_iter()
+        .map(|t| TaskView::from_task(&t))
+        .collect();
 
     // If we were able to fetch the number +1 tasks we asked
     // it means that there is more to come.
@@ -338,7 +351,8 @@ async fn get_task(
     filters.uid = Some(vec![task_id]);
 
     if let Some(task) = index_scheduler.get_tasks(filters)?.first() {
-        Ok(HttpResponse::Ok().json(task))
+        let task_view = TaskView::from_task(&task);
+        Ok(HttpResponse::Ok().json(task_view))
     } else {
         Err(index_scheduler::Error::TaskNotFound(task_id).into())
     }
@@ -354,8 +368,6 @@ fn filter_out_inaccessible_indexes_from_query<const ACTION: u8>(
     let indexes = query.index_uid.take();
 
     let search_rules = &index_scheduler.filters().search_rules;
-
-    let mut query = index_scheduler::Query::default();
 
     // We filter on potential indexes and make sure that the search filter
     // restrictions are also applied.
