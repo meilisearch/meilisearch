@@ -276,7 +276,7 @@ impl IndexScheduler {
         if let Some(index) = query.index_uid {
             let mut index_tasks = RoaringBitmap::new();
             for index in index {
-                index_tasks |= self.get_index(&rtxn, &index)?;
+                index_tasks |= self.index_tasks(&rtxn, &index)?;
             }
             tasks &= index_tasks;
         }
