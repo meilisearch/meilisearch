@@ -160,7 +160,7 @@ trait Context {
         &self,
         left_word: &str,
         right_word: &str,
-        _proximity: u8,
+        proximity: u8,
     ) -> heed::Result<Option<u64>>;
 }
 
@@ -181,6 +181,10 @@ impl<'a> Context for QueryTreeBuilder<'a> {
 
     fn synonyms<S: AsRef<str>>(&self, words: &[S]) -> heed::Result<Option<Vec<Vec<String>>>> {
         self.index.words_synonyms(self.rtxn, words)
+    }
+
+    fn word_documents_count(&self, word: &str) -> heed::Result<Option<u64>> {
+        self.index.word_documents_count(self.rtxn, word)
     }
 
     fn min_word_len_for_typo(&self) -> heed::Result<(u8, u8)> {
@@ -511,7 +515,7 @@ fn create_query_tree(
                 .filter(|(_, part)| !part.is_phrase())
                 .max_by_key(|(_, part)| match part {
                     PrimitiveQueryPart::Word(s, _) => {
-                        ctx.word_documents_count(s).unwrap_or_default().unwrap_or(u64::max_value());
+                        ctx.word_documents_count(s).unwrap_or_default().unwrap_or(u64::max_value())
                     }
                     _ => unreachable!(),
                 })
