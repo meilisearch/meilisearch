@@ -20,6 +20,7 @@ use meilisearch_types::{
 use roaring::RoaringBitmap;
 use uuid::Uuid;
 
+#[derive(Debug)]
 pub(crate) enum Batch {
     Cancel(Task),
     TaskDeletion(Task),
@@ -42,6 +43,7 @@ pub(crate) enum Batch {
     },
 }
 
+#[derive(Debug)]
 pub(crate) enum IndexOperation {
     DocumentImport {
         index_uid: String,
@@ -381,7 +383,7 @@ impl IndexScheduler {
         }
 
         // 2. we get the next task to delete
-        let to_delete = self.get_kind(rtxn, Kind::TaskDeletion)?;
+        let to_delete = self.get_kind(rtxn, Kind::TaskDeletion)? & enqueued;
         if let Some(task_id) = to_delete.min() {
             let task = self
                 .get_task(rtxn, task_id)?
