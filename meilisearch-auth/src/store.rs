@@ -12,6 +12,7 @@ use std::sync::Arc;
 use hmac::{Hmac, Mac};
 use meilisearch_types::keys::KeyId;
 use meilisearch_types::star_or::StarOr;
+use meilisearch_types::milli;
 use milli::heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
 use milli::heed::{Database, Env, EnvOpenOptions, RwTxn};
 use sha2::Sha256;

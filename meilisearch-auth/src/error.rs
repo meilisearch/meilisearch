@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use meilisearch_types::error::{Code, ErrorCode};
-use meilisearch_types::{internal_error, keys};
+use meilisearch_types::{internal_error, keys, milli};
 
 pub type Result<T> = std::result::Result<T, AuthControllerError>;
 

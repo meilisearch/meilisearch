@@ -82,6 +82,7 @@ tokio-stream = "0.1.10"
 toml = "0.5.9"
 uuid = { version = "1.1.2", features = ["serde", "v4"] }
 walkdir = "2.3.2"
+yaup = "0.2.0"
 prometheus = { version = "0.13.2", features = ["process"], optional = true }
 lazy_static = "1.4.0"
 

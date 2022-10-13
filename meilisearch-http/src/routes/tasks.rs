@@ -1,11 +1,12 @@
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use index_scheduler::{IndexScheduler, TaskId};
+use env_logger::filter;
+use index_scheduler::{IndexScheduler, Query, TaskId};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::star_or::StarOr;
-use meilisearch_types::tasks::{serialize_duration, Details, Kind, Status, Task};
+use meilisearch_types::tasks::{serialize_duration, Details, Kind, KindWithContent, Status, Task};
 use serde::{Deserialize, Serialize};
 use serde_cs::vec::CS;
 use serde_json::json;
@@ -21,7 +22,8 @@ const DEFAULT_LIMIT: fn() -> u32 = || 20;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::get().to(SeqHandler(get_tasks))))
-        .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))));
+        .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))))
+        .service(web::resource("").route(web::delete().to(SeqHandler(delete_tasks))));
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -140,7 +142,7 @@ impl From<Details> for DetailsView {
                 deleted_documents: Some(deleted_documents),
                 ..DetailsView::default()
             },
-            Details::DeleteTasks {
+            Details::TaskDeletion {
                 matched_tasks,
                 deleted_tasks,
                 original_query,
@@ -193,6 +195,29 @@ fn task_status_matches_events(status: &TaskStatus, events: &[TaskEvent]) -> bool
             | (TaskStatus::Failed, TaskEvent::Failed { .. }),
         )
     })
+}
+
+async fn delete_tasks(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_DELETE }>, Data<IndexScheduler>>,
+    params: web::Query<Query>,
+    _req: HttpRequest,
+    _analytics: web::Data<dyn Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    let query = params.into_inner();
+    let filtered_query = filter_out_inaccessible_indexes_from_query(&index_scheduler, &query);
+
+    let tasks = index_scheduler.get_task_ids(&filtered_query)?;
+    let filtered_query_string = yaup::to_string(&filtered_query).unwrap();
+    let task_deletion = KindWithContent::TaskDeletion {
+        query: filtered_query_string,
+        tasks,
+    };
+    // TODO: Lo: analytics
+    let task = index_scheduler.register(task_deletion)?;
+
+    let task_view: TaskView = task.into();
+
+    Ok(HttpResponse::Ok().json(task_view))
 }
 
 async fn get_tasks(
@@ -317,4 +342,39 @@ async fn get_task(
     } else {
         Err(index_scheduler::Error::TaskNotFound(task_id).into())
     }
+}
+
+fn filter_out_inaccessible_indexes_from_query<const ACTION: u8>(
+    index_scheduler: &GuardedData<ActionPolicy<ACTION>, Data<IndexScheduler>>,
+    query: &Query,
+) -> Query {
+    let mut query = query.clone();
+
+    // First remove all indexes from the query, we will add them back later
+    let indexes = query.index_uid.take();
+
+    let search_rules = &index_scheduler.filters().search_rules;
+
+    let mut query = index_scheduler::Query::default();
+
+    // We filter on potential indexes and make sure that the search filter
+    // restrictions are also applied.
+    match indexes {
+        Some(indexes) => {
+            for name in indexes.iter() {
+                if search_rules.is_index_authorized(&name) {
+                    query = query.with_index(name.to_string());
+                }
+            }
+        }
+        None => {
+            if !search_rules.is_index_authorized("*") {
+                for (index, _policy) in search_rules.clone() {
+                    query = query.with_index(index.to_string());
+                }
+            }
+        }
+    };
+
+    query
 }
