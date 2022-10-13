@@ -12,7 +12,7 @@ mod reader;
 mod writer;
 
 pub use error::Error;
-pub use reader::open;
+pub use reader::DumpReader;
 pub use writer::DumpWriter;
 
 const CURRENT_DUMP_VERSION: Version = Version::V6;
@@ -193,27 +193,21 @@ pub(crate) mod test {
 
     use big_s::S;
     use maplit::btreeset;
-    use meilisearch_types::tasks::{Kind, Status};
+    use meilisearch_types::keys::{Action, Key};
+    use meilisearch_types::milli::{self, update::Setting};
+    use meilisearch_types::tasks::Status;
     use meilisearch_types::{index_uid::IndexUid, star_or::StarOr};
-    use meilisearch_types::{
-        keys::{Action, Key},
-        tasks::Task,
-    };
-    use meilisearch_types::{
-        milli::{self, update::Setting},
-        tasks::KindWithContent,
-    };
     use meilisearch_types::{
         settings::{Checked, Settings},
         tasks::Details,
     };
     use serde_json::{json, Map, Value};
-    use time::{macros::datetime, Duration};
+    use time::macros::datetime;
     use uuid::Uuid;
 
     use crate::{
         reader::{self, Document},
-        DumpWriter, IndexMetadata, KindDump, TaskDump, Version,
+        DumpReader, DumpWriter, IndexMetadata, KindDump, TaskDump, Version,
     };
 
     pub fn create_test_instance_uid() -> Uuid {
@@ -419,7 +413,7 @@ pub(crate) mod test {
     #[test]
     fn test_creating_and_read_dump() {
         let mut file = create_test_dump();
-        let mut dump = reader::open(&mut file).unwrap();
+        let mut dump = DumpReader::open(&mut file).unwrap();
 
         // ==== checking the top level infos
         assert_eq!(dump.version(), Version::V6);
