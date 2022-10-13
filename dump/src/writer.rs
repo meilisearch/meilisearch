@@ -15,7 +15,7 @@ use tempfile::TempDir;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{reader::Document, IndexMetadata, Metadata, Result, CURRENT_DUMP_VERSION};
+use crate::{reader::Document, IndexMetadata, Metadata, Result, TaskDump, CURRENT_DUMP_VERSION};
 
 pub struct DumpWriter {
     dir: TempDir,
@@ -109,7 +109,7 @@ impl TaskWriter {
 
     /// Pushes tasks in the dump.
     /// If the tasks has an associated `update_file` it'll use the `task_id` as its name.
-    pub fn push_task(&mut self, task: &Task) -> Result<UpdateFile> {
+    pub fn push_task(&mut self, task: &TaskDump) -> Result<UpdateFile> {
         self.queue.write_all(&serde_json::to_vec(task)?)?;
         self.queue.write_all(b"\n")?;
 
@@ -328,8 +328,6 @@ pub(crate) mod test {
         // ==== checking the task queue
         let tasks_queue = fs::read_to_string(dump_path.join("tasks/queue.jsonl")).unwrap();
         for (task, mut expected) in tasks_queue.lines().zip(create_test_tasks()) {
-            // TODO: This can be removed once `Duration` from the `TaskView` is implemented.
-            expected.0.duration = None;
             // TODO: uncomment this one once the we write the dump integration in the index-scheduler
             // assert_eq!(serde_json::from_str::<TaskView>(task).unwrap(), expected.0);
 

@@ -23,13 +23,13 @@ pub type Settings<T> = meilisearch_types::settings::Settings<T>;
 pub type Checked = meilisearch_types::settings::Checked;
 pub type Unchecked = meilisearch_types::settings::Unchecked;
 
-pub type Task = tasks::TaskDump;
+pub type Task = crate::TaskDump;
 pub type Key = meilisearch_types::keys::Key;
 
 // ===== Other types to clarify the code of the compat module
 // everything related to the tasks
 pub type Status = meilisearch_types::tasks::Status;
-pub type Kind = tasks::KindDump;
+pub type Kind = crate::KindDump;
 pub type Details = meilisearch_types::tasks::Details;
 
 // everything related to the settings
