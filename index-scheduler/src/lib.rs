@@ -663,7 +663,6 @@ mod tests {
             })
             .unwrap();
 
-        handle.wait_till(Breakpoint::Start);
         handle.wait_till(Breakpoint::AfterProcessing);
         handle.wait_till(Breakpoint::AfterProcessing);
         handle.wait_till(Breakpoint::AfterProcessing);
@@ -794,6 +793,43 @@ mod tests {
         handle.wait_till(Breakpoint::AfterProcessing);
 
         assert_snapshot!(snapshot_index_scheduler(&index_scheduler));
+    }
+
+    #[test]
+    fn do_not_batch_task_of_different_indexes() {
+        let (index_scheduler, handle) = IndexScheduler::test(true);
+        let index_names = ["doggos", "cattos", "girafos"];
+
+        for name in index_names {
+            index_scheduler
+                .register(KindWithContent::IndexCreation {
+                    index_uid: name.to_string(),
+                    primary_key: None,
+                })
+                .unwrap();
+        }
+
+        for name in index_names {
+            index_scheduler
+                .register(KindWithContent::DocumentClear {
+                    index_uid: name.to_string(),
+                })
+                .unwrap();
+        }
+
+        for _ in 0..(index_names.len() * 2) {
+            handle.wait_till(Breakpoint::AfterProcessing);
+        }
+
+        let mut tasks = index_scheduler.get_tasks(Query::default()).unwrap();
+        tasks.reverse();
+        assert_eq!(tasks.len(), 6);
+        assert_eq!(tasks[0].status, Status::Succeeded);
+        assert_eq!(tasks[1].status, Status::Succeeded);
+        assert_eq!(tasks[2].status, Status::Succeeded);
+        assert_eq!(tasks[3].status, Status::Succeeded);
+        assert_eq!(tasks[4].status, Status::Succeeded);
+        assert_eq!(tasks[5].status, Status::Succeeded);
     }
 
     #[macro_export]
