@@ -155,12 +155,7 @@ trait Context {
         left_word: &str,
         right_word: &str,
         _proximity: u8,
-    ) -> heed::Result<Option<u64>> {
-        match self.word_docids(&format!("{} {}", left_word, right_word))? {
-            Some(rb) => Ok(Some(rb.len())),
-            None => Ok(None),
-        }
-    }
+    ) -> heed::Result<Option<u64>>;
 }
 
 /// The query tree builder is the interface to build a query tree.
@@ -849,6 +844,18 @@ mod test {
 
         fn exact_words(&self) -> Option<&fst::Set<Cow<[u8]>>> {
             self.exact_words.as_ref()
+        }
+
+        fn word_pair_frequency(
+            &self,
+            left_word: &str,
+            right_word: &str,
+            _proximity: u8,
+        ) -> heed::Result<Option<u64>> {
+            match self.word_docids(&format!("{} {}", left_word, right_word))? {
+                Some(rb) => Ok(Some(rb.len())),
+                None => Ok(None),
+            }
         }
     }
 
