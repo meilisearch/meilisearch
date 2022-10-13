@@ -30,13 +30,10 @@ use meilisearch_types::milli::{Index, RoaringBitmapCodec, BEU32};
 
 use crate::index_mapper::IndexMapper;
 
-const DEFAULT_LIMIT: fn() -> u32 = || 20;
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Query {
-    #[serde(default = "DEFAULT_LIMIT")]
-    pub limit: u32,
+    pub limit: Option<u32>,
     pub from: Option<u32>,
     pub status: Option<Vec<Status>>,
     #[serde(rename = "type")]
@@ -48,7 +45,7 @@ pub struct Query {
 impl Default for Query {
     fn default() -> Self {
         Self {
-            limit: DEFAULT_LIMIT(),
+            limit: None,
             from: None,
             status: None,
             kind: None,
@@ -96,7 +93,10 @@ impl Query {
     }
 
     pub fn with_limit(self, limit: u32) -> Self {
-        Self { limit, ..self }
+        Self {
+            limit: Some(limit),
+            ..self
+        }
     }
 }
 
@@ -245,13 +245,20 @@ impl IndexScheduler {
     /// Return the task ids corresponding to the query
     pub fn get_task_ids(&self, query: &Query) -> Result<RoaringBitmap> {
         let rtxn = self.env.read_txn()?;
-        let last_task_id = match self.last_task_id(&rtxn)? {
-            Some(tid) => query.from.map(|from| from.min(tid)).unwrap_or(tid),
-            None => return Ok(RoaringBitmap::new()),
-        };
 
         // This is the list of all the tasks.
-        let mut tasks = RoaringBitmap::from_sorted_iter(0..last_task_id).unwrap();
+        let mut tasks = {
+            let mut all_tasks = RoaringBitmap::new();
+            for status in [
+                Status::Enqueued,
+                Status::Processing,
+                Status::Succeeded,
+                Status::Failed,
+            ] {
+                all_tasks |= self.get_status(&rtxn, status)?;
+            }
+            all_tasks
+        };
 
         if let Some(uids) = &query.uid {
             tasks &= RoaringBitmap::from_iter(uids);
@@ -289,8 +296,14 @@ impl IndexScheduler {
         let rtxn = self.env.read_txn()?;
         let tasks = self.get_task_ids(&query)?;
 
-        let tasks =
-            self.get_existing_tasks(&rtxn, tasks.into_iter().rev().take(query.limit as usize))?;
+        let tasks = self.get_existing_tasks(
+            &rtxn,
+            tasks
+                .into_iter()
+                .rev()
+                .take(query.limit.unwrap_or(u32::MAX) as usize),
+        )?;
+
         let (started_at, processing) = self
             .processing_tasks
             .read()
