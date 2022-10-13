@@ -146,19 +146,7 @@ impl fmt::Debug for Query {
 
 trait Context {
     fn word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
-    fn word_pair_proximity_docids(
-        &self,
-        right_word: &str,
-        left_word: &str,
-        proximity: u8,
-    ) -> heed::Result<Option<RoaringBitmap>>;
     fn synonyms<S: AsRef<str>>(&self, words: &[S]) -> heed::Result<Option<Vec<Vec<String>>>>;
-    fn word_documents_count(&self, word: &str) -> heed::Result<Option<u64>> {
-        match self.word_docids(word)? {
-            Some(rb) => Ok(Some(rb.len())),
-            None => Ok(None),
-        }
-    }
     /// Returns the minimum word len for 1 and 2 typos.
     fn min_word_len_for_typo(&self) -> heed::Result<(u8, u8)>;
     fn exact_words(&self) -> Option<&fst::Set<Cow<[u8]>>>;
@@ -166,9 +154,9 @@ trait Context {
         &self,
         left_word: &str,
         right_word: &str,
-        proximity: u8,
+        _proximity: u8,
     ) -> heed::Result<Option<u64>> {
-        match self.word_pair_proximity_docids(right_word, left_word, proximity)? {
+        match self.word_docids(&format!("{} {}", left_word, right_word))? {
             Some(rb) => Ok(Some(rb.len())),
             None => Ok(None),
         }
@@ -190,21 +178,8 @@ impl<'a> Context for QueryTreeBuilder<'a> {
         self.index.word_docids.get(self.rtxn, word)
     }
 
-    fn word_pair_proximity_docids(
-        &self,
-        right_word: &str,
-        left_word: &str,
-        proximity: u8,
-    ) -> heed::Result<Option<RoaringBitmap>> {
-        self.index.word_pair_proximity_docids.get(self.rtxn, &(left_word, right_word, proximity))
-    }
-
     fn synonyms<S: AsRef<str>>(&self, words: &[S]) -> heed::Result<Option<Vec<Vec<String>>>> {
         self.index.words_synonyms(self.rtxn, words)
-    }
-
-    fn word_documents_count(&self, word: &str) -> heed::Result<Option<u64>> {
-        self.index.word_documents_count(self.rtxn, word)
     }
 
     fn min_word_len_for_typo(&self) -> heed::Result<(u8, u8)> {
@@ -306,7 +281,7 @@ impl<'a> QueryTreeBuilder<'a> {
 fn split_best_frequency<'a>(
     ctx: &impl Context,
     word: &'a str,
-) -> heed::Result<Option<(&'a str, &'a str)>> {
+) -> heed::Result<Option<(u64, &'a str, &'a str)>> {
     let chars = word.char_indices().skip(1);
     let mut best = None;
 
@@ -320,7 +295,7 @@ fn split_best_frequency<'a>(
         }
     }
 
-    Ok(best.map(|(_, left, right)| (left, right)))
+    Ok(best)
 }
 
 #[derive(Clone)]
@@ -389,7 +364,7 @@ fn create_query_tree(
             // 4. wrap all in an OR operation
             PrimitiveQueryPart::Word(word, prefix) => {
                 let mut children = synonyms(ctx, &[&word])?.unwrap_or_default();
-                if let Some((left, right)) = split_best_frequency(ctx, &word)? {
+                if let Some((_, left, right)) = split_best_frequency(ctx, &word)? {
                     children.push(Operation::Phrase(vec![left.to_string(), right.to_string()]));
                 }
                 let (word_len_one_typo, word_len_two_typo) = ctx.min_word_len_for_typo()?;
@@ -535,7 +510,8 @@ fn create_query_tree(
                 .filter(|(_, part)| !part.is_phrase())
                 .max_by_key(|(_, part)| match part {
                     PrimitiveQueryPart::Word(s, _) => {
-                        ctx.word_documents_count(s).unwrap_or_default().unwrap_or(u64::max_value())
+                        let (pair_freq, _, _) = split_best_frequency(ctx, s).unwrap_or_default().unwrap_or_default();
+                        pair_freq
                     }
                     _ => unreachable!(),
                 })
@@ -582,7 +558,7 @@ fn create_matching_words(
                     }
                 }
 
-                if let Some((left, right)) = split_best_frequency(ctx, &word)? {
+                if let Some((_, left, right)) = split_best_frequency(ctx, &word)? {
                     let left = MatchingWord::new(left.to_string(), 0, false);
                     let right = MatchingWord::new(right.to_string(), 0, false);
                     matching_words.push((vec![left, right], vec![id]));
@@ -859,16 +835,6 @@ mod test {
     impl Context for TestContext {
         fn word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>> {
             Ok(self.postings.get(word).cloned())
-        }
-
-        fn word_pair_proximity_docids(
-            &self,
-            right_word: &str,
-            left_word: &str,
-            _: u8,
-        ) -> heed::Result<Option<RoaringBitmap>> {
-            let bitmap = self.postings.get(&format!("{} {}", left_word, right_word));
-            Ok(bitmap.cloned())
         }
 
         fn synonyms<S: AsRef<str>>(&self, words: &[S]) -> heed::Result<Option<Vec<Vec<String>>>> {
