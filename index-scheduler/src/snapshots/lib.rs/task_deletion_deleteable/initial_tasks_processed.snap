@@ -7,11 +7,11 @@ source: index-scheduler/src/lib.rs
 ----------------------------------------------------------------------
 ### All Tasks:
 0 {uid: 0, status: succeeded, details: { received_documents: 1, indexed_documents: 1 }, kind: DocumentImport { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
-1 {uid: 1, status: succeeded, details: { received_documents: 1, indexed_documents: 1 }, kind: DocumentImport { index_uid: "doggo", primary_key: Some("bone"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 1, allow_index_creation: true }}
+1 {uid: 1, status: enqueued, details: { received_documents: 1, indexed_documents: 0 }, kind: DocumentImport { index_uid: "doggo", primary_key: Some("bone"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 1, allow_index_creation: true }}
 ----------------------------------------------------------------------
 ### Status:
-enqueued []
-succeeded [0,1,]
+enqueued [1,]
+succeeded [0,]
 ----------------------------------------------------------------------
 ### Kind:
 "documentImport" [0,1,]

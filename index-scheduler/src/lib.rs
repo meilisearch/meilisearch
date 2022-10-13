@@ -762,9 +762,6 @@ mod tests {
 
         handle.wait_till(Breakpoint::AfterProcessing);
         // first addition of documents should be successful
-        // TODO: currently the result of this operation is incorrect!
-        // only the first task should be successful, because it should not be batched with
-        // the second task, that operates on a different index!
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_tasks_processed");
 
         // Now we delete the first task
