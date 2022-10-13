@@ -510,7 +510,8 @@ fn create_query_tree(
                 .filter(|(_, part)| !part.is_phrase())
                 .max_by_key(|(_, part)| match part {
                     PrimitiveQueryPart::Word(s, _) => {
-                        let (pair_freq, _, _) = split_best_frequency(ctx, s).unwrap_or_default().unwrap_or_default();
+                        let (pair_freq, _, _) =
+                            split_best_frequency(ctx, s).unwrap_or_default().unwrap_or_default();
                         pair_freq
                     }
                     _ => unreachable!(),
