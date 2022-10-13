@@ -298,10 +298,12 @@ fn attribute_start_with_docids(
                 pos += 1;
             }
             Phrase(phrase) => {
-                for word in phrase.iter().filter_map(|w| w.as_ref()) {
-                    let wc = ctx.word_position_docids(word, pos)?;
-                    if let Some(word_candidates) = wc {
-                        attribute_candidates_array.push(word_candidates);
+                for word in phrase {
+                    if let Some(word) = word {
+                        let wc = ctx.word_position_docids(word, pos)?;
+                        if let Some(word_candidates) = wc {
+                            attribute_candidates_array.push(word_candidates);
+                        }
                     }
                     pos += 1;
                 }
