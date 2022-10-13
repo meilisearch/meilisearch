@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::max;
-use std::{cmp, fmt, mem};
+use std::{fmt, mem};
 
 use charabia::classifier::ClassifiedTokenIter;
 use charabia::{SeparatorKind, TokenKind};
@@ -10,7 +10,7 @@ use slice_group_by::GroupBy;
 
 use crate::search::matches::matching_words::{MatchingWord, PrimitiveWordId};
 use crate::search::TermsMatchingStrategy;
-use crate::{Index, MatchingWords, Result};
+use crate::{CboRoaringBitmapLenCodec, Index, MatchingWords, Result};
 
 type IsOptionalWord = bool;
 type IsPrefix = bool;
@@ -156,6 +156,12 @@ trait Context {
     /// Returns the minimum word len for 1 and 2 typos.
     fn min_word_len_for_typo(&self) -> heed::Result<(u8, u8)>;
     fn exact_words(&self) -> Option<&fst::Set<Cow<[u8]>>>;
+    fn word_pair_frequency(
+        &self,
+        left_word: &str,
+        right_word: &str,
+        proximity: u8,
+    ) -> heed::Result<Option<u64>>;
 }
 
 /// The query tree builder is the interface to build a query tree.
@@ -189,6 +195,19 @@ impl<'a> Context for QueryTreeBuilder<'a> {
 
     fn exact_words(&self) -> Option<&fst::Set<Cow<[u8]>>> {
         self.exact_words.as_ref()
+    }
+
+    fn word_pair_frequency(
+        &self,
+        left_word: &str,
+        right_word: &str,
+        proximity: u8,
+    ) -> heed::Result<Option<u64>> {
+        let key = (left_word, right_word, proximity);
+        self.index
+            .word_pair_proximity_docids
+            .remap_data_type::<CboRoaringBitmapLenCodec>()
+            .get(&self.rtxn, &key)
     }
 }
 
@@ -263,7 +282,7 @@ impl<'a> QueryTreeBuilder<'a> {
     }
 }
 
-/// Split the word depending on the frequency of subwords in the database documents.
+/// Split the word depending on the frequency of pairs near together in the database documents.
 fn split_best_frequency<'a>(
     ctx: &impl Context,
     word: &'a str,
@@ -274,12 +293,10 @@ fn split_best_frequency<'a>(
     for (i, _) in chars {
         let (left, right) = word.split_at(i);
 
-        let left_freq = ctx.word_documents_count(left)?.unwrap_or(0);
-        let right_freq = ctx.word_documents_count(right)?.unwrap_or(0);
+        let pair_freq = ctx.word_pair_frequency(left, right, 1)?.unwrap_or(0);
 
-        let min_freq = cmp::min(left_freq, right_freq);
-        if min_freq != 0 && best.map_or(true, |(old, _, _)| min_freq > old) {
-            best = Some((min_freq, left, right));
+        if pair_freq != 0 && best.map_or(true, |(old, _, _)| pair_freq > old) {
+            best = Some((pair_freq, left, right));
         }
     }
 
@@ -836,6 +853,18 @@ mod test {
         fn exact_words(&self) -> Option<&fst::Set<Cow<[u8]>>> {
             self.exact_words.as_ref()
         }
+
+        fn word_pair_frequency(
+            &self,
+            left_word: &str,
+            right_word: &str,
+            _proximity: u8,
+        ) -> heed::Result<Option<u64>> {
+            match self.word_docids(&format!("{} {}", left_word, right_word))? {
+                Some(rb) => Ok(Some(rb.len())),
+                None => Ok(None),
+            }
+        }
     }
 
     impl Default for TestContext {
@@ -881,19 +910,22 @@ mod test {
                     ],
                 },
                 postings: hashmap! {
-                    String::from("hello")      => random_postings(rng,   1500),
-                    String::from("hi")         => random_postings(rng,   4000),
-                    String::from("word")       => random_postings(rng,   2500),
-                    String::from("split")      => random_postings(rng,    400),
-                    String::from("ngrams")     => random_postings(rng,   1400),
-                    String::from("world")      => random_postings(rng, 15_000),
-                    String::from("earth")      => random_postings(rng,   8000),
-                    String::from("2021")       => random_postings(rng,    100),
-                    String::from("2020")       => random_postings(rng,    500),
-                    String::from("is")         => random_postings(rng, 50_000),
-                    String::from("this")       => random_postings(rng, 50_000),
-                    String::from("good")       => random_postings(rng,   1250),
-                    String::from("morning")    => random_postings(rng,    125),
+                    String::from("hello")           => random_postings(rng,   1500),
+                    String::from("hi")              => random_postings(rng,   4000),
+                    String::from("word")            => random_postings(rng,   2500),
+                    String::from("split")           => random_postings(rng,    400),
+                    String::from("ngrams")          => random_postings(rng,   1400),
+                    String::from("world")           => random_postings(rng, 15_000),
+                    String::from("earth")           => random_postings(rng,   8000),
+                    String::from("2021")            => random_postings(rng,    100),
+                    String::from("2020")            => random_postings(rng,    500),
+                    String::from("is")              => random_postings(rng, 50_000),
+                    String::from("this")            => random_postings(rng, 50_000),
+                    String::from("good")            => random_postings(rng,   1250),
+                    String::from("morning")         => random_postings(rng,    125),
+                    String::from("word split")      => random_postings(rng,   5000),
+                    String::from("quick brownfox")  => random_postings(rng,   7000),
+                    String::from("quickbrown fox")  => random_postings(rng,   8000),
                 },
                 exact_words,
             }
@@ -1038,6 +1070,23 @@ mod test {
               Tolerant { word: "wordsplit", max typo: 2 }
             Exact { word: "fish" }
           Tolerant { word: "wordsplitfish", max typo: 1 }
+        "###);
+    }
+
+    #[test]
+    fn word_split_choose_pair_with_max_freq() {
+        let query = "quickbrownfox";
+        let tokens = query.tokenize();
+
+        let (query_tree, _) = TestContext::default()
+            .build(TermsMatchingStrategy::All, true, None, tokens)
+            .unwrap()
+            .unwrap();
+
+        insta::assert_debug_snapshot!(query_tree, @r###"
+        OR
+          PHRASE ["quickbrown", "fox"]
+          PrefixTolerant { word: "quickbrownfox", max typo: 2 }
         "###);
     }
 
