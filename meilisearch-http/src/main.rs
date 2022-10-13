@@ -52,15 +52,15 @@ async fn main() -> anyhow::Result<()> {
     let auth_controller = AuthController::new(&opt.db_path, &opt.master_key)?;
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
-    let (analytics, user) = if !opt.no_analytics {
+    let analytics = if !opt.no_analytics {
         analytics::SegmentAnalytics::new(&opt, &meilisearch).await
     } else {
         analytics::MockAnalytics::new(&opt)
     };
     #[cfg(any(debug_assertions, not(feature = "analytics")))]
-    let (analytics, user) = analytics::MockAnalytics::new(&opt);
+    let analytics = analytics::MockAnalytics::new(&opt);
 
-    print_launch_resume(&opt, &user);
+    print_launch_resume(&opt, analytics.clone());
 
     run_http(index_scheduler, auth_controller, opt, analytics).await?;
 
@@ -132,7 +132,7 @@ async fn run_http(
     Ok(())
 }
 
-pub fn print_launch_resume(opt: &Opt, user: &str) {
+pub fn print_launch_resume(opt: &Opt, analytics: Arc<dyn Analytics>) {
     let commit_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
     let commit_date = option_env!("VERGEN_GIT_COMMIT_TIMESTAMP").unwrap_or("unknown");
     let protocol = if opt.ssl_cert_path.is_some() && opt.ssl_key_path.is_some() {
@@ -179,8 +179,8 @@ Anonymous telemetry:\t\"Enabled\""
         }
     }
 
-    if !user.is_empty() {
-        eprintln!("Instance UID:\t\t\"{}\"", user);
+    if let Some(instance_uid) = analytics.instance_uid() {
+        eprintln!("Instance UID:\t\t\"{}\"", instance_uid.to_string());
     }
 
     eprintln!();

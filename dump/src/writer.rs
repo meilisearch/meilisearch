@@ -22,13 +22,15 @@ pub struct DumpWriter {
 }
 
 impl DumpWriter {
-    pub fn new(instance_uuid: Uuid) -> Result<DumpWriter> {
+    pub fn new(instance_uuid: Option<Uuid>) -> Result<DumpWriter> {
         let dir = TempDir::new()?;
 
-        fs::write(
-            dir.path().join("instance_uid.uuid"),
-            &instance_uuid.as_hyphenated().to_string(),
-        )?;
+        if let Some(instance_uuid) = instance_uuid {
+            fs::write(
+                dir.path().join("instance_uid.uuid"),
+                &instance_uuid.as_hyphenated().to_string(),
+            )?;
+        }
 
         let metadata = Metadata {
             dump_version: CURRENT_DUMP_VERSION,
@@ -133,7 +135,6 @@ impl UpdateFile {
             writer.write_all(b"\n")?;
             writer.flush()?;
         } else {
-            dbg!(&self.path);
             let file = File::create(&self.path).unwrap();
             self.writer = Some(BufWriter::new(file));
             self.push_document(document)?;

@@ -1,3 +1,4 @@
+use meilisearch_types::error::{Code, ErrorCode};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -15,4 +16,20 @@ pub enum Error {
     Serde(#[from] serde_json::Error),
     #[error(transparent)]
     Uuid(#[from] uuid::Error),
+}
+
+impl ErrorCode for Error {
+    fn error_code(&self) -> Code {
+        match self {
+            // Are these three really Internal errors?
+            Error::Io(_) => Code::Internal,
+            Error::Serde(_) => Code::Internal,
+            Error::Uuid(_) => Code::Internal,
+
+            // all these errors should never be raised when creating a dump, thus no error code should be associated.
+            Error::DumpV1Unsupported => Code::Internal,
+            Error::BadIndexName => Code::Internal,
+            Error::MalformedTask => Code::Internal,
+        }
+    }
 }
