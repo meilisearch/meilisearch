@@ -3,7 +3,6 @@ use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize, Serializer};
 use std::{
     fmt::{Display, Write},
-    path::PathBuf,
     str::FromStr,
 };
 use time::{Duration, OffsetDateTime};
@@ -11,7 +10,9 @@ use uuid::Uuid;
 
 use crate::{
     error::{Code, ResponseError},
+    keys::Key,
     settings::{Settings, Unchecked},
+    InstanceUid,
 };
 
 pub type TaskId = u32;
@@ -71,6 +72,26 @@ impl Task {
             IndexSwap { lhs, rhs } => Some(vec![lhs, rhs]),
         }
     }
+
+    /// Return the content-uuid if there is one
+    pub fn content_uuid(&self) -> Option<&Uuid> {
+        match self.kind {
+            KindWithContent::DocumentImport {
+                ref content_file, ..
+            } => Some(content_file),
+            KindWithContent::DocumentDeletion { .. }
+            | KindWithContent::DocumentClear { .. }
+            | KindWithContent::Settings { .. }
+            | KindWithContent::IndexDeletion { .. }
+            | KindWithContent::IndexCreation { .. }
+            | KindWithContent::IndexUpdate { .. }
+            | KindWithContent::IndexSwap { .. }
+            | KindWithContent::CancelTask { .. }
+            | KindWithContent::DeleteTasks { .. }
+            | KindWithContent::DumpExport { .. }
+            | KindWithContent::Snapshot => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -120,7 +141,9 @@ pub enum KindWithContent {
         tasks: RoaringBitmap,
     },
     DumpExport {
-        output: PathBuf,
+        dump_uid: String,
+        keys: Vec<Key>,
+        instance_uid: Option<InstanceUid>,
     },
     Snapshot,
 }
@@ -167,7 +190,7 @@ impl KindWithContent {
                 documents_count, ..
             } => Some(Details::DocumentAddition {
                 received_documents: *documents_count,
-                indexed_documents: 0,
+                indexed_documents: Some(0),
             }),
             KindWithContent::DocumentDeletion {
                 index_uid: _,
@@ -199,6 +222,38 @@ impl KindWithContent {
                 original_query: query.clone(),
             }),
             KindWithContent::DumpExport { .. } => None,
+            KindWithContent::Snapshot => None,
+        }
+    }
+}
+
+impl From<&KindWithContent> for Option<Details> {
+    fn from(kind: &KindWithContent) -> Self {
+        match kind {
+            KindWithContent::DocumentImport {
+                documents_count, ..
+            } => Some(Details::DocumentAddition {
+                received_documents: *documents_count,
+                indexed_documents: None,
+            }),
+            KindWithContent::DocumentDeletion { .. } => None,
+            KindWithContent::DocumentClear { .. } => None,
+            KindWithContent::Settings { new_settings, .. } => Some(Details::Settings {
+                settings: new_settings.clone(),
+            }),
+            KindWithContent::IndexDeletion { .. } => None,
+            KindWithContent::IndexCreation { primary_key, .. } => Some(Details::IndexInfo {
+                primary_key: primary_key.clone(),
+            }),
+            KindWithContent::IndexUpdate { primary_key, .. } => Some(Details::IndexInfo {
+                primary_key: primary_key.clone(),
+            }),
+            KindWithContent::IndexSwap { .. } => None,
+            KindWithContent::CancelTask { .. } => None,
+            KindWithContent::DeleteTasks { .. } => todo!(),
+            KindWithContent::DumpExport { dump_uid, .. } => Some(Details::Dump {
+                dump_uid: dump_uid.clone(),
+            }),
             KindWithContent::Snapshot => None,
         }
     }
@@ -289,7 +344,7 @@ impl FromStr for Kind {
 pub enum Details {
     DocumentAddition {
         received_documents: u64,
-        indexed_documents: u64,
+        indexed_documents: Option<u64>,
     },
     Settings {
         settings: Settings<Unchecked>,

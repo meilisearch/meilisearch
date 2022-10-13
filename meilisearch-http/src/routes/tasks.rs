@@ -121,7 +121,7 @@ impl From<Details> for DetailsView {
                 indexed_documents,
             } => DetailsView {
                 received_documents: Some(received_documents),
-                indexed_documents: Some(indexed_documents),
+                indexed_documents,
                 ..DetailsView::default()
             },
             Details::Settings { settings } => DetailsView {

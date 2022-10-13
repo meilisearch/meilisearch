@@ -4,6 +4,7 @@ use std::str::FromStr;
 use std::time::Instant;
 
 use either::Either;
+use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::TokenizerBuilder;
 use milli::{
@@ -23,10 +24,6 @@ pub const DEFAULT_CROP_LENGTH: fn() -> usize = || 10;
 pub const DEFAULT_CROP_MARKER: fn() -> String = || "…".to_string();
 pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
-
-/// The maximimum number of results that the engine
-/// will be able to return in one search call.
-pub const DEFAULT_PAGINATION_MAX_TOTAL_HITS: usize = 1000;
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

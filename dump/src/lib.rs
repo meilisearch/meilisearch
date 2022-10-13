@@ -52,12 +52,11 @@ pub(crate) mod test {
     };
 
     use big_s::S;
-    use index_scheduler::task::Details;
     use maplit::btreeset;
-    use meilisearch_auth::{Action, Key};
+    use meilisearch_types::keys::{Action, Key};
     use meilisearch_types::milli::{self, update::Setting};
     use meilisearch_types::settings::{Checked, Settings};
-    use meilisearch_types::tasks::{DetailsView, Kind, Status, TaskView};
+    use meilisearch_types::tasks::{Kind, Status};
     use meilisearch_types::{index_uid::IndexUid, star_or::StarOr};
     use serde_json::{json, Map, Value};
     use time::{macros::datetime, Duration};
@@ -116,7 +115,7 @@ pub(crate) mod test {
         settings.check()
     }
 
-    pub fn create_test_tasks() -> Vec<(TaskView, Option<Vec<Document>>)> {
+    pub fn create_test_tasks() -> Vec<(Task, Option<Vec<Document>>)> {
         vec![
             (
                 TaskView {
