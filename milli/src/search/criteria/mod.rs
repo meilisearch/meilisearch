@@ -425,7 +425,13 @@ pub fn resolve_phrase(ctx: &dyn Context, phrase: &[Option<String>]) -> Result<Ro
     for win in phrase.windows(winsize) {
         // Get all the documents with the matching distance for each word pairs.
         let mut bitmaps = Vec::with_capacity(winsize.pow(2));
-        for (offset, s1) in win.iter().filter_map(|w| w.as_ref()).enumerate() {
+        for (offset, s1) in win.iter().enumerate().filter_map(|(index, word)| {
+                if let Some(word) = word {
+                    Some((index, word))
+                } else {
+                    None
+                }
+            }) {
             for (dist, s2) in win.iter().skip(offset + 1).enumerate().filter_map(|(index, word)| {
                 if let Some(word) = word {
                     Some((index, word))
