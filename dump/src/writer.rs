@@ -8,7 +8,6 @@ use flate2::{write::GzEncoder, Compression};
 use meilisearch_types::{
     keys::Key,
     settings::{Checked, Settings},
-    tasks::Task,
 };
 use serde_json::{Map, Value};
 use tempfile::TempDir;
