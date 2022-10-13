@@ -44,14 +44,6 @@ You can check out the longer, more complete guideline documentation [here](https
 
 ## Development Workflow
 
-### Setup and run
-
-```bash
-cargo run --release
-```
-
-We recommend using the `--release` flag to test the full performance.
-
 ### Test
 
 ```bash
