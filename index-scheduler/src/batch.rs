@@ -413,16 +413,16 @@ impl IndexScheduler {
             // matter.
             let index_name = task.indexes().unwrap()[0];
 
-            let _index = self.get_index(rtxn, index_name)? & enqueued;
+            let index_tasks = self.index_tasks(rtxn, index_name)? & enqueued;
 
-            // If the autobatching is disabled we only take one task at a time.
+            // If autobatching is disabled we only take one task at a time.
             let tasks_limit = if self.autobatching_enabled {
                 usize::MAX
             } else {
                 1
             };
 
-            let enqueued = enqueued
+            let enqueued = index_tasks
                 .into_iter()
                 .take(tasks_limit)
                 .map(|task_id| {

@@ -73,7 +73,8 @@ impl IndexScheduler {
         Ok(())
     }
 
-    pub(crate) fn get_index(&self, rtxn: &RoTxn, index: &str) -> Result<RoaringBitmap> {
+    /// Returns the whole set of tasks that belongs to this index.
+    pub(crate) fn index_tasks(&self, rtxn: &RoTxn, index: &str) -> Result<RoaringBitmap> {
         Ok(self.index_tasks.get(rtxn, index)?.unwrap_or_default())
     }
 
@@ -92,7 +93,7 @@ impl IndexScheduler {
         index: &str,
         f: impl Fn(&mut RoaringBitmap),
     ) -> Result<()> {
-        let mut tasks = self.get_index(wtxn, index)?;
+        let mut tasks = self.index_tasks(wtxn, index)?;
         f(&mut tasks);
         self.put_index(wtxn, index, &tasks)?;
 
