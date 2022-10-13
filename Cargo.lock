@@ -1331,16 +1331,7 @@ dependencies = [
 [[package]]
 name = "filter-parser"
 version = "0.33.4"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.4#4fc6331cb6526c07f3137584564cfe3493fb25bd"
-dependencies = [
- "nom",
- "nom_locate",
-]
-
-[[package]]
-name = "filter-parser"
-version = "0.34.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.34.0#2bf867982ab548a6d749c7534f69b44d3552ef70"
+source = "git+https://github.com/meilisearch/milli.git?branch=indexation-abortion#fc03e536153d61da3224698f34fb8c6ee2312c2f"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1359,15 +1350,7 @@ dependencies = [
 [[package]]
 name = "flatten-serde-json"
 version = "0.33.4"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.4#4fc6331cb6526c07f3137584564cfe3493fb25bd"
-dependencies = [
- "serde_json",
-]
-
-[[package]]
-name = "flatten-serde-json"
-version = "0.34.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.34.0#2bf867982ab548a6d749c7534f69b44d3552ef70"
+source = "git+https://github.com/meilisearch/milli.git?branch=indexation-abortion#fc03e536153d61da3224698f34fb8c6ee2312c2f"
 dependencies = [
  "serde_json",
 ]
@@ -1500,12 +1483,6 @@ dependencies = [
  "typenum",
  "version_check",
 ]
-
-[[package]]
-name = "geoutils"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e006f616a407d396ace1d2ebb3f43ed73189db8b098079bd129928d7645dd1e"
 
 [[package]]
 name = "geoutils"
@@ -1799,9 +1776,10 @@ dependencies = [
  "file-store",
  "insta",
  "log",
+ "meili-snap",
  "meilisearch-types",
  "nelson",
- "roaring 0.9.0",
+ "roaring",
  "serde",
  "serde_json",
  "synchronoise",
@@ -1910,15 +1888,7 @@ dependencies = [
 [[package]]
 name = "json-depth-checker"
 version = "0.33.4"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.4#4fc6331cb6526c07f3137584564cfe3493fb25bd"
-dependencies = [
- "serde_json",
-]
-
-[[package]]
-name = "json-depth-checker"
-version = "0.34.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.34.0#2bf867982ab548a6d749c7534f69b44d3552ef70"
+source = "git+https://github.com/meilisearch/milli.git?branch=indexation-abortion#fc03e536153d61da3224698f34fb8c6ee2312c2f"
 dependencies = [
  "serde_json",
 ]
@@ -2285,7 +2255,6 @@ dependencies = [
  "enum-iterator 1.1.3",
  "hmac",
  "meilisearch-types",
- "milli 0.34.0",
  "rand",
  "serde",
  "serde_json",
@@ -2386,9 +2355,10 @@ dependencies = [
  "enum-iterator 0.7.0",
  "insta",
  "meili-snap",
- "milli 0.33.4",
+ "milli",
  "proptest",
  "proptest-derive",
+ "roaring",
  "serde",
  "serde_json",
  "thiserror",
@@ -2424,52 +2394,7 @@ dependencies = [
 [[package]]
 name = "milli"
 version = "0.33.4"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.4#4fc6331cb6526c07f3137584564cfe3493fb25bd"
-dependencies = [
- "bimap",
- "bincode",
- "bstr 0.2.17",
- "byteorder",
- "charabia",
- "concat-arrays",
- "crossbeam-channel",
- "csv",
- "either",
- "filter-parser 0.33.4",
- "flatten-serde-json 0.33.4",
- "fst",
- "fxhash",
- "geoutils 0.4.1",
- "grenad",
- "heed",
- "itertools",
- "json-depth-checker 0.33.4",
- "levenshtein_automata",
- "log",
- "logging_timer",
- "memmap2",
- "obkv",
- "once_cell",
- "ordered-float 2.10.0",
- "rayon",
- "roaring 0.9.0",
- "rstar",
- "serde",
- "serde_json",
- "slice-group-by",
- "smallstr",
- "smallvec",
- "smartstring",
- "tempfile",
- "thiserror",
- "time",
- "uuid 1.1.2",
-]
-
-[[package]]
-name = "milli"
-version = "0.34.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.34.0#2bf867982ab548a6d749c7534f69b44d3552ef70"
+source = "git+https://github.com/meilisearch/milli.git?branch=indexation-abortion#fc03e536153d61da3224698f34fb8c6ee2312c2f"
 dependencies = [
  "bimap",
  "bincode",
@@ -2480,24 +2405,24 @@ dependencies = [
  "crossbeam-channel",
  "csv",
  "either",
- "filter-parser 0.34.0",
- "flatten-serde-json 0.34.0",
+ "filter-parser",
+ "flatten-serde-json",
  "fst",
  "fxhash",
- "geoutils 0.5.1",
+ "geoutils",
  "grenad",
  "heed",
  "itertools",
- "json-depth-checker 0.34.0",
+ "json-depth-checker",
  "levenshtein_automata",
  "log",
  "logging_timer",
  "memmap2",
  "obkv",
  "once_cell",
- "ordered-float 3.3.0",
+ "ordered-float",
  "rayon",
- "roaring 0.10.1",
+ "roaring",
  "rstar",
  "serde",
  "serde_json",
@@ -2689,15 +2614,6 @@ name = "opaque-debug"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
-
-[[package]]
-name = "ordered-float"
-version = "2.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7940cf2ca942593318d07fcf2596cdca60a85c9e7fab408a5e21a4f9dcd40d87"
-dependencies = [
- "num-traits",
-]
 
 [[package]]
 name = "ordered-float"
@@ -3266,17 +3182,6 @@ dependencies = [
 
 [[package]]
 name = "roaring"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd539cab4e32019956fe7e0cf160bb6d4802f4be2b52c4253d76d3bb0f85a5f7"
-dependencies = [
- "bytemuck",
- "byteorder",
- "retain_mut",
-]
-
-[[package]]
-name = "roaring"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef0fb5e826a8bde011ecae6a8539dd333884335c57ff0f003fbe27c25bbe8f71"
@@ -3284,6 +3189,7 @@ dependencies = [
  "bytemuck",
  "byteorder",
  "retain_mut",
+ "serde",
 ]
 
 [[package]]

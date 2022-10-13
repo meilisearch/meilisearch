@@ -1,10 +1,9 @@
 ---
 source: index-scheduler/src/lib.rs
-expression: snapshot_index_scheduler(&index_scheduler)
 ---
 ### Autobatching Enabled = true
 ### Processing Tasks:
-[0,]
+[]
 ----------------------------------------------------------------------
 ### All Tasks:
 0 {uid: 0, status: enqueued, details: { received_documents: 1, indexed_documents: 0 }, kind: DocumentImport { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
@@ -13,7 +12,7 @@ expression: snapshot_index_scheduler(&index_scheduler)
 enqueued [0,]
 ----------------------------------------------------------------------
 ### Kind:
-{"documentImport":{"method":"ReplaceDocuments","allow_index_creation":true}} [0,]
+"documentImport" [0,]
 ----------------------------------------------------------------------
 ### Index Tasks:
 doggos [0,]
