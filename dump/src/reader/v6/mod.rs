@@ -11,8 +11,6 @@ use uuid::Uuid;
 
 use crate::{Error, IndexMetadata, Result, Version};
 
-mod tasks;
-
 pub use meilisearch_types::milli;
 
 use super::Document;
