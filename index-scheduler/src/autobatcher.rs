@@ -28,6 +28,17 @@ enum AutobatchKind {
     Snapshot,
 }
 
+impl AutobatchKind {
+    #[rustfmt::skip]
+    fn allow_index_creation(&self) -> Option<bool> {
+        match self {
+            AutobatchKind::DocumentImport { allow_index_creation, .. }
+            | AutobatchKind::Settings { allow_index_creation, .. } => Some(*allow_index_creation),
+            _ => None,
+        }
+    }
+}
+
 impl From<KindWithContent> for AutobatchKind {
     fn from(kind: KindWithContent) -> Self {
         match kind {
@@ -102,6 +113,19 @@ pub enum BatchKind {
 }
 
 impl BatchKind {
+    #[rustfmt::skip]
+    fn allow_index_creation(&self) -> Option<bool> {
+        match self {
+            BatchKind::DocumentImport { allow_index_creation, .. }
+            | BatchKind::ClearAndSettings { allow_index_creation, .. }
+            | BatchKind::SettingsAndDocumentImport { allow_index_creation, .. }
+            | BatchKind::Settings { allow_index_creation, .. } => Some(*allow_index_creation),
+            _ => None,
+        }
+    }
+}
+
+impl BatchKind {
     /// Returns a `ControlFlow::Break` if you must stop right now.
     pub fn new(task_id: TaskId, kind: KindWithContent) -> ControlFlow<BatchKind, BatchKind> {
         use AutobatchKind as K;
@@ -143,6 +167,10 @@ impl BatchKind {
         match (self, kind) {
             // We don't batch any of these operations
             (this, K::IndexCreation | K::IndexUpdate | K::IndexSwap) => Break(this),
+            // We must not batch tasks that don't have the same index creation rights
+            (this, kind) if this.allow_index_creation() == Some(false) && kind.allow_index_creation() == Some(true) => {
+                Break(this)
+            },
             // The index deletion can batch with everything but must stop after
             (
                 BatchKind::DocumentClear { mut ids }
@@ -183,13 +211,6 @@ impl BatchKind {
                 Continue(BatchKind::DocumentClear { ids })
             }
 
-            // We only want to batch together document imports that are allowed to create the index
-            // or document imports not allowed to create an index if the first operation can.
-            (
-                this @ BatchKind::DocumentImport { method: _, allow_index_creation: false, .. },
-                K::DocumentImport { method: _, allow_index_creation: true },
-            ) => Break(this),
-
             // we can autobatch the same kind of document additions / updates
             (
                 BatchKind::DocumentImport { method: ReplaceDocuments, allow_index_creation, mut import_ids },
@@ -221,12 +242,6 @@ impl BatchKind {
                 K::DocumentDeletion | K::DocumentImport { .. },
             ) => Break(this),
 
-            // We only want to batch together document imports that are allowed to create the index
-            // or document imports not allowed to create an index if the first operation can.
-            (
-                this @ BatchKind::DocumentImport { allow_index_creation: false, .. },
-                K::Settings { allow_index_creation: true },
-            ) => Break(this),
             (
                 BatchKind::DocumentImport { method, allow_index_creation, import_ids },
                 K::Settings { .. },
@@ -259,10 +274,6 @@ impl BatchKind {
             (
                 this @ BatchKind::Settings { .. },
                 K::DocumentImport { .. } | K::DocumentDeletion,
-            ) => Break(this),
-            (
-                this @ BatchKind::Settings { allow_index_creation: false, .. },
-                K::Settings { allow_index_creation: true },
             ) => Break(this),
             (
                 BatchKind::Settings { mut settings_ids, allow_index_creation },
@@ -303,12 +314,6 @@ impl BatchKind {
                 })
             }
             (
-                this @ BatchKind::ClearAndSettings { allow_index_creation: false, .. },
-                K::Settings {
-                    allow_index_creation: true,
-                },
-            ) => Break(this),
-            (
                 BatchKind::ClearAndSettings { mut settings_ids, other, allow_index_creation },
                 K::Settings { .. },
             ) => {
@@ -331,11 +336,6 @@ impl BatchKind {
                 })
             }
 
-            // we can batch the settings with a kind of document operation with the same kind of document operation
-            (
-                this @ BatchKind::SettingsAndDocumentImport { allow_index_creation: false, .. },
-                K::DocumentImport { allow_index_creation: true, .. },
-            ) => Break(this),
             (
                 BatchKind::SettingsAndDocumentImport { settings_ids, method: ReplaceDocuments, mut import_ids, allow_index_creation },
                 K::DocumentImport { method: ReplaceDocuments, .. },
@@ -365,10 +365,6 @@ impl BatchKind {
             (
                 this @ BatchKind::SettingsAndDocumentImport { .. },
                 K::DocumentDeletion | K::DocumentImport { .. },
-            ) => Break(this),
-            (
-                this @ BatchKind::SettingsAndDocumentImport { allow_index_creation: false, .. },
-                K::Settings { allow_index_creation: true },
             ) => Break(this),
             (
                 BatchKind::SettingsAndDocumentImport { mut settings_ids, method, allow_index_creation, import_ids },
