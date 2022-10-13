@@ -16,7 +16,6 @@ time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsi
 tar = "0.4.38"
 anyhow = "1.0.65"
 log = "0.4.17"
-index-scheduler = { path = "../index-scheduler" }
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
 http = "0.2.8"

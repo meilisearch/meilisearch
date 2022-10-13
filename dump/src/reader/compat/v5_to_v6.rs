@@ -124,7 +124,7 @@ impl CompatV5ToV6 {
                             indexed_documents,
                         } => v6::Details::DocumentAddition {
                             received_documents: received_documents as u64,
-                            indexed_documents: indexed_documents.map_or(0, |i| i as u64),
+                            indexed_documents: indexed_documents.map(|i| i as u64),
                         },
                         v5::Details::Settings { settings } => v6::Details::Settings {
                             settings: settings.into(),

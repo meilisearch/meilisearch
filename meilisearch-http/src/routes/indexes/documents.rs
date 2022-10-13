@@ -109,7 +109,10 @@ pub async fn delete_document(
         index_uid,
         documents_ids: vec![document_id],
     };
-    let task = tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;
+    let task: SummarizedTaskView =
+        tokio::task::spawn_blocking(move || index_scheduler.register(task))
+            .await??
+            .into();
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
 }
@@ -314,7 +317,10 @@ pub async fn delete_documents(
         index_uid: path.into_inner(),
         documents_ids: ids,
     };
-    let task = tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;
+    let task: SummarizedTaskView =
+        tokio::task::spawn_blocking(move || index_scheduler.register(task))
+            .await??
+            .into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
@@ -327,7 +333,10 @@ pub async fn clear_all_documents(
     let task = KindWithContent::DocumentClear {
         index_uid: path.into_inner(),
     };
-    let task = tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;
+    let task: SummarizedTaskView =
+        tokio::task::spawn_blocking(move || index_scheduler.register(task))
+            .await??
+            .into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
