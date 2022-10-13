@@ -1,3 +1,9 @@
+use meilisearch_types::{
+    error::ResponseError,
+    milli::update::IndexDocumentsMethod,
+    settings::Unchecked,
+    tasks::{Details, KindWithContent, Status, Task, TaskId},
+};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
@@ -43,6 +49,140 @@ pub enum Version {
     V6,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskDump {
+    pub uid: TaskId,
+    #[serde(default)]
+    pub index_uid: Option<String>,
+    pub status: Status,
+    // TODO use our own Kind for the user
+    #[serde(rename = "type")]
+    pub kind: KindDump,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<Details>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ResponseError>,
+
+    #[serde(with = "time::serde::rfc3339")]
+    pub enqueued_at: OffsetDateTime,
+    #[serde(
+        with = "time::serde::rfc3339::option",
+        skip_serializing_if = "Option::is_none",
+        default
+    )]
+    pub started_at: Option<OffsetDateTime>,
+    #[serde(
+        with = "time::serde::rfc3339::option",
+        skip_serializing_if = "Option::is_none",
+        default
+    )]
+    pub finished_at: Option<OffsetDateTime>,
+}
+
+// A `Kind` specific version made for the dump. If modified you may break the dump.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum KindDump {
+    DocumentImport {
+        primary_key: Option<String>,
+        method: IndexDocumentsMethod,
+        documents_count: u64,
+        allow_index_creation: bool,
+    },
+    DocumentDeletion {
+        documents_ids: Vec<String>,
+    },
+    DocumentClear,
+    Settings {
+        settings: meilisearch_types::settings::Settings<Unchecked>,
+        is_deletion: bool,
+        allow_index_creation: bool,
+    },
+    IndexDeletion,
+    IndexCreation {
+        primary_key: Option<String>,
+    },
+    IndexUpdate {
+        primary_key: Option<String>,
+    },
+    IndexSwap {
+        lhs: String,
+        rhs: String,
+    },
+    CancelTask {
+        tasks: Vec<TaskId>,
+    },
+    DeleteTasks {
+        query: String,
+        tasks: Vec<TaskId>,
+    },
+    DumpExport,
+    Snapshot,
+}
+
+impl From<Task> for TaskDump {
+    fn from(task: Task) -> Self {
+        TaskDump {
+            uid: task.uid,
+            index_uid: task.index_uid().map(|uid| uid.to_string()),
+            status: task.status,
+            kind: task.kind.into(),
+            details: task.details,
+            error: task.error,
+            enqueued_at: task.enqueued_at,
+            started_at: task.started_at,
+            finished_at: task.finished_at,
+        }
+    }
+}
+
+impl From<KindWithContent> for KindDump {
+    fn from(kind: KindWithContent) -> Self {
+        match kind {
+            KindWithContent::DocumentImport {
+                primary_key,
+                method,
+                documents_count,
+                allow_index_creation,
+                ..
+            } => KindDump::DocumentImport {
+                primary_key,
+                method,
+                documents_count,
+                allow_index_creation,
+            },
+            KindWithContent::DocumentDeletion { documents_ids, .. } => {
+                KindDump::DocumentDeletion { documents_ids }
+            }
+            KindWithContent::DocumentClear { .. } => KindDump::DocumentClear,
+            KindWithContent::Settings {
+                new_settings,
+                is_deletion,
+                allow_index_creation,
+                ..
+            } => KindDump::Settings {
+                settings: new_settings,
+                is_deletion,
+                allow_index_creation,
+            },
+            KindWithContent::IndexDeletion { .. } => KindDump::IndexDeletion,
+            KindWithContent::IndexCreation { primary_key, .. } => {
+                KindDump::IndexCreation { primary_key }
+            }
+            KindWithContent::IndexUpdate { primary_key, .. } => {
+                KindDump::IndexUpdate { primary_key }
+            }
+            KindWithContent::IndexSwap { lhs, rhs } => KindDump::IndexSwap { lhs, rhs },
+            KindWithContent::CancelTask { tasks } => KindDump::CancelTask { tasks },
+            KindWithContent::DeleteTasks { query, tasks } => KindDump::DeleteTasks { query, tasks },
+            KindWithContent::DumpExport { .. } => KindDump::DumpExport,
+            KindWithContent::Snapshot => KindDump::Snapshot,
+        }
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod test {
     use std::{
@@ -53,18 +193,27 @@ pub(crate) mod test {
 
     use big_s::S;
     use maplit::btreeset;
-    use meilisearch_types::keys::{Action, Key};
-    use meilisearch_types::milli::{self, update::Setting};
-    use meilisearch_types::settings::{Checked, Settings};
     use meilisearch_types::tasks::{Kind, Status};
     use meilisearch_types::{index_uid::IndexUid, star_or::StarOr};
+    use meilisearch_types::{
+        keys::{Action, Key},
+        tasks::Task,
+    };
+    use meilisearch_types::{
+        milli::{self, update::Setting},
+        tasks::KindWithContent,
+    };
+    use meilisearch_types::{
+        settings::{Checked, Settings},
+        tasks::Details,
+    };
     use serde_json::{json, Map, Value};
     use time::{macros::datetime, Duration};
     use uuid::Uuid;
 
     use crate::{
         reader::{self, Document},
-        DumpWriter, IndexMetadata, Version,
+        DumpWriter, IndexMetadata, KindDump, TaskDump, Version,
     };
 
     pub fn create_test_instance_uid() -> Uuid {
@@ -115,26 +264,24 @@ pub(crate) mod test {
         settings.check()
     }
 
-    pub fn create_test_tasks() -> Vec<(Task, Option<Vec<Document>>)> {
+    pub fn create_test_tasks() -> Vec<(TaskDump, Option<Vec<Document>>)> {
         vec![
             (
-                TaskView {
+                TaskDump {
                     uid: 0,
-                    index_uid: Some(S("doggos")),
+                    index_uid: Some(S("doggo")),
                     status: Status::Succeeded,
-                    kind: Kind::DocumentImport {
+                    kind: KindDump::DocumentImport {
                         method: milli::update::IndexDocumentsMethod::UpdateDocuments,
                         allow_index_creation: true,
+                        primary_key: Some(S("bone")),
+                        documents_count: 12,
                     },
-                    details: todo!(),
-                    /*
-                    Some(DetailsView::DocumentAddition {
-                        received_documents: 10_000,
-                        indexed_documents: 3,
+                    details: Some(Details::DocumentAddition {
+                        received_documents: 12,
+                        indexed_documents: Some(10),
                     }),
-                    */
                     error: None,
-                    duration: Some(Duration::DAY),
                     enqueued_at: datetime!(2022-11-11 0:00 UTC),
                     started_at: Some(datetime!(2022-11-20 0:00 UTC)),
                     finished_at: Some(datetime!(2022-11-21 0:00 UTC)),
@@ -142,20 +289,24 @@ pub(crate) mod test {
                 None,
             ),
             (
-                TaskView {
+                TaskDump {
                     uid: 1,
-                    index_uid: Some(S("doggos")),
+                    index_uid: Some(S("doggo")),
                     status: Status::Enqueued,
-                    kind: Kind::DocumentImport {
+                    kind: KindDump::DocumentImport {
                         method: milli::update::IndexDocumentsMethod::UpdateDocuments,
                         allow_index_creation: true,
+                        primary_key: None,
+                        documents_count: 2,
                     },
-                    details: None,
+                    details: Some(Details::DocumentAddition {
+                        received_documents: 2,
+                        indexed_documents: None,
+                    }),
                     error: None,
-                    duration: Some(Duration::DAY),
                     enqueued_at: datetime!(2022-11-11 0:00 UTC),
-                    started_at: Some(datetime!(2022-11-20 0:00 UTC)),
-                    finished_at: Some(datetime!(2022-11-21 0:00 UTC)),
+                    started_at: None,
+                    finished_at: None,
                 },
                 Some(vec![
                     json!({ "id": 4, "race": "leonberg" })
@@ -169,14 +320,13 @@ pub(crate) mod test {
                 ]),
             ),
             (
-                TaskView {
+                TaskDump {
                     uid: 5,
-                    index_uid: Some(S("doggos")),
+                    index_uid: Some(S("catto")),
                     status: Status::Enqueued,
-                    kind: Kind::IndexDeletion,
+                    kind: KindDump::IndexDeletion,
                     details: None,
                     error: None,
-                    duration: None,
                     enqueued_at: datetime!(2022-11-15 0:00 UTC),
                     started_at: None,
                     finished_at: None,
@@ -223,7 +373,7 @@ pub(crate) mod test {
 
     pub fn create_test_dump() -> File {
         let instance_uid = create_test_instance_uid();
-        let dump = DumpWriter::new(instance_uid.clone()).unwrap();
+        let dump = DumpWriter::new(Some(instance_uid.clone())).unwrap();
 
         // ========== Adding an index
         let documents = create_test_documents();
