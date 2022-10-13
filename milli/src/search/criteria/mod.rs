@@ -422,6 +422,11 @@ pub fn resolve_phrase(ctx: &dyn Context, phrase: &[Option<String>]) -> Result<Ro
     let mut candidates = RoaringBitmap::new();
     let mut first_iter = true;
     let winsize = phrase.len().min(3);
+
+    if phrase.is_empty() {
+        return Ok(candidates);
+    }
+
     for win in phrase.windows(winsize) {
         // Get all the documents with the matching distance for each word pairs.
         let mut bitmaps = Vec::with_capacity(winsize.pow(2));
