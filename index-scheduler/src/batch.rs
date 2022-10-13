@@ -503,11 +503,12 @@ impl IndexScheduler {
                 let mut tasks = dump.create_tasks_queue()?;
                 for ret in self.all_tasks.iter(&rtxn)? {
                     let (_, task) = ret?;
-                    let mut dump_content_file = tasks.push_task((&task).into())?;
+                    let content_file = task.content_uuid().map(|uuid| uuid.clone());
+                    let mut dump_content_file = tasks.push_task(&task.into())?;
 
                     // 2.1. Dump the `content_file` associated with the task if there is one.
-                    if let Some(content_file) = task.content_uuid() {
-                        let content_file = self.file_store.get_update(*content_file)?;
+                    if let Some(content_file) = content_file {
+                        let content_file = self.file_store.get_update(content_file)?;
 
                         let reader = DocumentsBatchReader::from_reader(content_file)
                             .map_err(milli::Error::from)?;
