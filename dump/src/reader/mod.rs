@@ -1,15 +1,15 @@
 use std::io::Read;
 use std::{fs::File, io::BufReader};
 
-use flate2::bufread::GzDecoder;
-
-use serde::Deserialize;
-
-use tempfile::TempDir;
-
+use self::compat::v4_to_v5::CompatV4ToV5;
+use self::compat::v5_to_v6::{CompatIndexV5ToV6, CompatV5ToV6};
+use self::v5::V5Reader;
+use self::v6::{V6IndexReader, V6Reader};
 use crate::{Result, Version};
 
-use self::compat::Compat;
+use flate2::bufread::GzDecoder;
+use serde::Deserialize;
+use tempfile::TempDir;
 
 mod compat;
 
@@ -23,34 +23,165 @@ pub(self) mod v6;
 pub type Document = serde_json::Map<String, serde_json::Value>;
 pub type UpdateFile = dyn Iterator<Item = Result<Document>>;
 
-pub fn open(dump: impl Read) -> Result<Compat> {
-    let path = TempDir::new()?;
-    let mut dump = BufReader::new(dump);
-    let gz = GzDecoder::new(&mut dump);
-    let mut archive = tar::Archive::new(gz);
-    archive.unpack(path.path())?;
+pub enum DumpReader {
+    Current(V6Reader),
+    Compat(CompatV5ToV6),
+}
 
-    #[derive(Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    struct MetadataVersion {
-        pub dump_version: Version,
+impl DumpReader {
+    pub fn open(dump: impl Read) -> Result<DumpReader> {
+        let path = TempDir::new()?;
+        let mut dump = BufReader::new(dump);
+        let gz = GzDecoder::new(&mut dump);
+        let mut archive = tar::Archive::new(gz);
+        archive.unpack(path.path())?;
+
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct MetadataVersion {
+            pub dump_version: Version,
+        }
+        let mut meta_file = File::open(path.path().join("metadata.json"))?;
+        let MetadataVersion { dump_version } = serde_json::from_reader(&mut meta_file)?;
+
+        match dump_version {
+            // Version::V1 => Ok(Box::new(v1::Reader::open(path)?)),
+            Version::V1 => todo!(),
+            Version::V2 => Ok(v2::V2Reader::open(path)?
+                .to_v3()
+                .to_v4()
+                .to_v5()
+                .to_v6()
+                .into()),
+            Version::V3 => Ok(v3::V3Reader::open(path)?.to_v4().to_v5().to_v6().into()),
+            Version::V4 => Ok(v4::V4Reader::open(path)?.to_v5().to_v6().into()),
+            Version::V5 => Ok(v5::V5Reader::open(path)?.to_v6().into()),
+            Version::V6 => Ok(v6::V6Reader::open(path)?.into()),
+        }
     }
-    let mut meta_file = File::open(path.path().join("metadata.json"))?;
-    let MetadataVersion { dump_version } = serde_json::from_reader(&mut meta_file)?;
 
-    match dump_version {
-        // Version::V1 => Ok(Box::new(v1::Reader::open(path)?)),
-        Version::V1 => todo!(),
-        Version::V2 => Ok(v2::V2Reader::open(path)?
-            .to_v3()
-            .to_v4()
-            .to_v5()
-            .to_v6()
-            .into()),
-        Version::V3 => Ok(v3::V3Reader::open(path)?.to_v4().to_v5().to_v6().into()),
-        Version::V4 => Ok(v4::V4Reader::open(path)?.to_v5().to_v6().into()),
-        Version::V5 => Ok(v5::V5Reader::open(path)?.to_v6().into()),
-        Version::V6 => Ok(v6::V6Reader::open(path)?.into()),
+    pub fn version(&self) -> crate::Version {
+        match self {
+            DumpReader::Current(current) => current.version(),
+            DumpReader::Compat(compat) => compat.version(),
+        }
+    }
+
+    pub fn date(&self) -> Option<time::OffsetDateTime> {
+        match self {
+            DumpReader::Current(current) => current.date(),
+            DumpReader::Compat(compat) => compat.date(),
+        }
+    }
+
+    pub fn instance_uid(&self) -> Result<Option<uuid::Uuid>> {
+        match self {
+            DumpReader::Current(current) => current.instance_uid(),
+            DumpReader::Compat(compat) => compat.instance_uid(),
+        }
+    }
+
+    pub fn indexes(&self) -> Result<Box<dyn Iterator<Item = Result<DumpIndexReader>> + '_>> {
+        match self {
+            DumpReader::Current(current) => {
+                let indexes = Box::new(current.indexes()?.map(|res| res.map(DumpIndexReader::from)))
+                    as Box<dyn Iterator<Item = Result<DumpIndexReader>> + '_>;
+                Ok(indexes)
+            }
+            DumpReader::Compat(compat) => {
+                let indexes = Box::new(compat.indexes()?.map(|res| res.map(DumpIndexReader::from)))
+                    as Box<dyn Iterator<Item = Result<DumpIndexReader>> + '_>;
+                Ok(indexes)
+            }
+        }
+    }
+
+    pub fn tasks(
+        &mut self,
+    ) -> Box<dyn Iterator<Item = Result<(v6::Task, Option<Box<UpdateFile>>)>> + '_> {
+        match self {
+            DumpReader::Current(current) => current.tasks(),
+            DumpReader::Compat(compat) => compat.tasks(),
+        }
+    }
+
+    pub fn keys(&mut self) -> Box<dyn Iterator<Item = Result<v6::Key>> + '_> {
+        match self {
+            DumpReader::Current(current) => current.keys(),
+            DumpReader::Compat(compat) => compat.keys(),
+        }
+    }
+}
+
+impl From<V6Reader> for DumpReader {
+    fn from(value: V6Reader) -> Self {
+        DumpReader::Current(value)
+    }
+}
+
+impl From<CompatV5ToV6> for DumpReader {
+    fn from(value: CompatV5ToV6) -> Self {
+        DumpReader::Compat(value)
+    }
+}
+
+impl From<V5Reader> for DumpReader {
+    fn from(value: V5Reader) -> Self {
+        DumpReader::Compat(value.to_v6())
+    }
+}
+
+impl From<CompatV4ToV5> for DumpReader {
+    fn from(value: CompatV4ToV5) -> Self {
+        DumpReader::Compat(value.to_v6())
+    }
+}
+
+pub enum DumpIndexReader {
+    Current(v6::V6IndexReader),
+    Compat(CompatIndexV5ToV6),
+}
+
+impl DumpIndexReader {
+    pub fn new_v6(v6: v6::V6IndexReader) -> DumpIndexReader {
+        DumpIndexReader::Current(v6)
+    }
+
+    pub fn metadata(&self) -> &crate::IndexMetadata {
+        match self {
+            DumpIndexReader::Current(v6) => v6.metadata(),
+            DumpIndexReader::Compat(compat) => compat.metadata(),
+        }
+    }
+
+    pub fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<Document>> + '_>> {
+        match self {
+            DumpIndexReader::Current(v6) => v6
+                .documents()
+                .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<Document>> + '_>),
+            DumpIndexReader::Compat(compat) => compat
+                .documents()
+                .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<Document>> + '_>),
+        }
+    }
+
+    pub fn settings(&mut self) -> Result<v6::Settings<v6::Checked>> {
+        match self {
+            DumpIndexReader::Current(v6) => v6.settings(),
+            DumpIndexReader::Compat(compat) => compat.settings(),
+        }
+    }
+}
+
+impl From<V6IndexReader> for DumpIndexReader {
+    fn from(value: V6IndexReader) -> Self {
+        DumpIndexReader::Current(value)
+    }
+}
+
+impl From<CompatIndexV5ToV6> for DumpIndexReader {
+    fn from(value: CompatIndexV5ToV6) -> Self {
+        DumpIndexReader::Compat(value)
     }
 }
 
@@ -63,7 +194,7 @@ pub(crate) mod test {
     #[test]
     fn import_dump_v5() {
         let dump = File::open("tests/assets/v5.dump").unwrap();
-        let mut dump = open(dump).unwrap();
+        let mut dump = DumpReader::open(dump).unwrap();
 
         // top level infos
         insta::assert_display_snapshot!(dump.date().unwrap(), @"2022-10-04 15:55:10.344982459 +00:00:00");
@@ -153,7 +284,7 @@ pub(crate) mod test {
     #[test]
     fn import_dump_v4() {
         let dump = File::open("tests/assets/v4.dump").unwrap();
-        let mut dump = open(dump).unwrap();
+        let mut dump = DumpReader::open(dump).unwrap();
 
         // top level infos
         insta::assert_display_snapshot!(dump.date().unwrap(), @"2022-10-06 12:53:49.131989609 +00:00:00");
@@ -242,7 +373,7 @@ pub(crate) mod test {
     #[test]
     fn import_dump_v3() {
         let dump = File::open("tests/assets/v3.dump").unwrap();
-        let mut dump = open(dump).unwrap();
+        let mut dump = DumpReader::open(dump).unwrap();
 
         // top level infos
         insta::assert_display_snapshot!(dump.date().unwrap(), @"2022-10-07 11:39:03.709153554 +00:00:00");
@@ -351,7 +482,7 @@ pub(crate) mod test {
     #[test]
     fn import_dump_v2() {
         let dump = File::open("tests/assets/v2.dump").unwrap();
-        let mut dump = open(dump).unwrap();
+        let mut dump = DumpReader::open(dump).unwrap();
 
         // top level infos
         insta::assert_display_snapshot!(dump.date().unwrap(), @"2022-10-09 20:27:59.904096267 +00:00:00");

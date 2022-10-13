@@ -220,6 +220,10 @@ impl IndexScheduler {
         Ok(this)
     }
 
+    pub fn import_dump(&self, dump_path: PathBuf) -> Result<()> {
+        todo!()
+    }
+
     /// This function will execute in a different thread and must be called only once.
     fn run(&self) {
         let run = Self {
