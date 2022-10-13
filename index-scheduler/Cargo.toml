@@ -12,7 +12,7 @@ csv = "1.1.6"
 file-store = { path = "../file-store" }
 log = "0.4.14"
 meilisearch-types = { path = "../meilisearch-types" }
-roaring = "0.9.0"
+roaring = { version = "0.10.0", features = ["serde"] }
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = { version = "1.0.85", features = ["preserve_order"] }
 tempfile = "3.3.0"
@@ -27,3 +27,4 @@ crossbeam = "0.8.2"
 nelson = { git = "https://github.com/meilisearch/nelson.git", rev = "675f13885548fb415ead8fbb447e9e6d9314000a"}
 insta = { version = "1.19.1", features = ["json", "redactions"] }
 big_s = "1.0.2"
+meili-snap = { path = "../meili-snap" }

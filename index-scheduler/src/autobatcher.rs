@@ -23,7 +23,7 @@ enum AutobatchKind {
     IndexUpdate,
     IndexSwap,
     CancelTask,
-    DeleteTasks,
+    TaskDeletion,
     DumpExport,
     Snapshot,
 }
@@ -63,7 +63,7 @@ impl From<KindWithContent> for AutobatchKind {
             KindWithContent::IndexUpdate { .. } => AutobatchKind::IndexUpdate,
             KindWithContent::IndexSwap { .. } => AutobatchKind::IndexSwap,
             KindWithContent::CancelTask { .. } => AutobatchKind::CancelTask,
-            KindWithContent::DeleteTasks { .. } => AutobatchKind::DeleteTasks,
+            KindWithContent::TaskDeletion { .. } => AutobatchKind::TaskDeletion,
             KindWithContent::DumpExport { .. } => AutobatchKind::DumpExport,
             KindWithContent::Snapshot => AutobatchKind::Snapshot,
         }
@@ -153,7 +153,7 @@ impl BatchKind {
                 allow_index_creation,
                 settings_ids: vec![task_id],
             }),
-            K::DumpExport | K::Snapshot | K::CancelTask | K::DeleteTasks => {
+            K::DumpExport | K::Snapshot | K::CancelTask | K::TaskDeletion => {
                 unreachable!()
             }
         }
@@ -378,7 +378,7 @@ impl BatchKind {
                     import_ids,
                 })
             }
-            (_, K::CancelTask | K::DeleteTasks | K::DumpExport | K::Snapshot) => {
+            (_, K::CancelTask | K::TaskDeletion | K::DumpExport | K::Snapshot) => {
                 unreachable!()
             }
             (
@@ -414,7 +414,7 @@ pub fn autobatch(enqueued: Vec<(TaskId, KindWithContent)>) -> Option<BatchKind> 
 
 #[cfg(test)]
 mod tests {
-    use crate::assert_smol_debug_snapshot;
+    use crate::debug_snapshot;
 
     use super::*;
     use uuid::Uuid;
@@ -492,129 +492,129 @@ mod tests {
     #[test]
     fn autobatch_simple_operation_together() {
         // we can autobatch one or multiple DocumentAddition together
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true)]), @"Some(DocumentImport { method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), doc_imp( ReplaceDocuments, true ), doc_imp(ReplaceDocuments, true )]), @"Some(DocumentImport { method: ReplaceDocuments, allow_index_creation: true, import_ids: [0, 1, 2] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true)]), @"Some(DocumentImport { method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), doc_imp( ReplaceDocuments, true ), doc_imp(ReplaceDocuments, true )]), @"Some(DocumentImport { method: ReplaceDocuments, allow_index_creation: true, import_ids: [0, 1, 2] })");
         // we can autobatch one or multiple DocumentUpdate together
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true)]), @"Some(DocumentImport { method: UpdateDocuments, allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), doc_imp(UpdateDocuments, true), doc_imp(UpdateDocuments, true)]), @"Some(DocumentImport { method: UpdateDocuments, allow_index_creation: true, import_ids: [0, 1, 2] })");
+        debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true)]), @"Some(DocumentImport { method: UpdateDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), doc_imp(UpdateDocuments, true), doc_imp(UpdateDocuments, true)]), @"Some(DocumentImport { method: UpdateDocuments, allow_index_creation: true, import_ids: [0, 1, 2] })");
         // we can autobatch one or multiple DocumentDeletion together
-        assert_smol_debug_snapshot!(autobatch_from([doc_del()]), @"Some(DocumentDeletion { deletion_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_del(), doc_del(), doc_del()]), @"Some(DocumentDeletion { deletion_ids: [0, 1, 2] })");
+        debug_snapshot!(autobatch_from([doc_del()]), @"Some(DocumentDeletion { deletion_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_del(), doc_del(), doc_del()]), @"Some(DocumentDeletion { deletion_ids: [0, 1, 2] })");
         // we can autobatch one or multiple Settings together
-        assert_smol_debug_snapshot!(autobatch_from([settings(true)]), @"Some(Settings { allow_index_creation: true, settings_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([settings(true), settings(true), settings(true)]), @"Some(Settings { allow_index_creation: true, settings_ids: [0, 1, 2] })");
+        debug_snapshot!(autobatch_from([settings(true)]), @"Some(Settings { allow_index_creation: true, settings_ids: [0] })");
+        debug_snapshot!(autobatch_from([settings(true), settings(true), settings(true)]), @"Some(Settings { allow_index_creation: true, settings_ids: [0, 1, 2] })");
     }
 
     #[test]
     fn simple_document_operation_dont_autobatch_with_other() {
         // addition, updates and deletion can't batch together
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), doc_imp(UpdateDocuments, true)]), @"Some(DocumentImport { method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), doc_del()]), @"Some(DocumentImport { method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), doc_imp(ReplaceDocuments, true)]), @"Some(DocumentImport { method: UpdateDocuments, allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), doc_del()]), @"Some(DocumentImport { method: UpdateDocuments, allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_del(), doc_imp(ReplaceDocuments, true)]), @"Some(DocumentDeletion { deletion_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_del(), doc_imp(UpdateDocuments, true)]), @"Some(DocumentDeletion { deletion_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), doc_imp(UpdateDocuments, true)]), @"Some(DocumentImport { method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), doc_del()]), @"Some(DocumentImport { method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), doc_imp(ReplaceDocuments, true)]), @"Some(DocumentImport { method: UpdateDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), doc_del()]), @"Some(DocumentImport { method: UpdateDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_del(), doc_imp(ReplaceDocuments, true)]), @"Some(DocumentDeletion { deletion_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_del(), doc_imp(UpdateDocuments, true)]), @"Some(DocumentDeletion { deletion_ids: [0] })");
 
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), idx_create()]), @"Some(DocumentImport { method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), idx_create()]), @"Some(DocumentImport { method: UpdateDocuments, allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_del(), idx_create()]), @"Some(DocumentDeletion { deletion_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), idx_create()]), @"Some(DocumentImport { method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), idx_create()]), @"Some(DocumentImport { method: UpdateDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_del(), idx_create()]), @"Some(DocumentDeletion { deletion_ids: [0] })");
 
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), idx_update()]), @"Some(DocumentImport { method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), idx_update()]), @"Some(DocumentImport { method: UpdateDocuments, allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_del(), idx_update()]), @"Some(DocumentDeletion { deletion_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), idx_update()]), @"Some(DocumentImport { method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), idx_update()]), @"Some(DocumentImport { method: UpdateDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_del(), idx_update()]), @"Some(DocumentDeletion { deletion_ids: [0] })");
 
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), idx_swap()]), @"Some(DocumentImport { method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), idx_swap()]), @"Some(DocumentImport { method: UpdateDocuments, allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_del(), idx_swap()]), @"Some(DocumentDeletion { deletion_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), idx_swap()]), @"Some(DocumentImport { method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), idx_swap()]), @"Some(DocumentImport { method: UpdateDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_del(), idx_swap()]), @"Some(DocumentDeletion { deletion_ids: [0] })");
     }
 
     #[test]
     fn document_addition_batch_with_settings() {
         // simple case
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true)]), @"Some(settingsAnddoc_im(Repl)eDocuments)allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), settings(true)]), @"Some(settingsAnddoc_im(Upda)Documents)allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true)]), @"Some(SettingsAndDocumentImport { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), settings(true)]), @"Some(SettingsAndDocumentImport { settings_ids: [1], method: UpdateDocuments, allow_index_creation: true, import_ids: [0] })");
 
         // multiple settings and doc addition
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), doc_imp(ReplaceDocuments, true), settings(true), settings(true)]), @"Some(settingsAnddoc_im(Repl)eDocuments)allow_index_creation: true, import_ids: [0, 1] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), doc_imp(ReplaceDocuments, true), settings(true), settings(true)]), @"Some(settingsAnddoc_im(Repl)eDocuments)allow_index_creation: true, import_ids: [0, 1] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), doc_imp(ReplaceDocuments, true), settings(true), settings(true)]), @"Some(SettingsAndDocumentImport { settings_ids: [2, 3], method: ReplaceDocuments, allow_index_creation: true, import_ids: [0, 1] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), doc_imp(ReplaceDocuments, true), settings(true), settings(true)]), @"Some(SettingsAndDocumentImport { settings_ids: [2, 3], method: ReplaceDocuments, allow_index_creation: true, import_ids: [0, 1] })");
 
         // addition and setting unordered
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true), doc_imp(ReplaceDocuments, true), settings(true)]), @"Some(settingsAnddoc_im(Repl)eDocuments)allow_index_creation: true, import_ids: [0, 2] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), settings(true), doc_imp(UpdateDocuments, true), settings(true)]), @"Some(settingsAnddoc_im(Upda)Documents)allow_index_creation: true, import_ids: [0, 2] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true), doc_imp(ReplaceDocuments, true), settings(true)]), @"Some(SettingsAndDocumentImport { settings_ids: [1, 3], method: ReplaceDocuments, allow_index_creation: true, import_ids: [0, 2] })");
+        debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), settings(true), doc_imp(UpdateDocuments, true), settings(true)]), @"Some(SettingsAndDocumentImport { settings_ids: [1, 3], method: UpdateDocuments, allow_index_creation: true, import_ids: [0, 2] })");
 
         // We ensure this kind of batch doesn't batch with forbidden operations
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true), doc_imp(UpdateDocuments, true)]), @"Some(settingsAnddoc_im(Repl)eDocuments)allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), settings(true), doc_imp(ReplaceDocuments, true)]), @"Some(settingsAnddoc_im(Upda)Documents)allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true), doc_del()]), @"Some(settingsAnddoc_im(Repl)eDocuments)allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), settings(true), doc_del()]), @"Some(settingsAnddoc_im(Upda)Documents)allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true), idx_create()]), @"Some(settingsAnddoc_im(Repl)eDocuments)allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), settings(true), idx_create()]), @"Some(settingsAnddoc_im(Upda)Documents)allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true), idx_update()]), @"Some(settingsAnddoc_im(Repl)eDocuments)allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), settings(true), idx_update()]), @"Some(settingsAnddoc_im(Upda)Documents)allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true), idx_swap()]), @"Some(settingsAnddoc_im(Repl)eDocuments)allow_index_creation: true, import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), settings(true), idx_swap()]), @"Some(settingsAnddoc_im(Upda)Documents)allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true), doc_imp(UpdateDocuments, true)]), @"Some(SettingsAndDocumentImport { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), settings(true), doc_imp(ReplaceDocuments, true)]), @"Some(SettingsAndDocumentImport { settings_ids: [1], method: UpdateDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true), doc_del()]), @"Some(SettingsAndDocumentImport { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), settings(true), doc_del()]), @"Some(SettingsAndDocumentImport { settings_ids: [1], method: UpdateDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true), idx_create()]), @"Some(SettingsAndDocumentImport { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), settings(true), idx_create()]), @"Some(SettingsAndDocumentImport { settings_ids: [1], method: UpdateDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true), idx_update()]), @"Some(SettingsAndDocumentImport { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), settings(true), idx_update()]), @"Some(SettingsAndDocumentImport { settings_ids: [1], method: UpdateDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true), idx_swap()]), @"Some(SettingsAndDocumentImport { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), settings(true), idx_swap()]), @"Some(SettingsAndDocumentImport { settings_ids: [1], method: UpdateDocuments, allow_index_creation: true, import_ids: [0] })");
     }
 
     #[test]
     fn clear_and_additions() {
         // these two doesn't need to batch
-        assert_smol_debug_snapshot!(autobatch_from([doc_clr(), doc_imp(ReplaceDocuments, true)]), @"Some(doc_clr() { ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_clr(), doc_imp(UpdateDocuments, true)]), @"Some(doc_clr() { ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_clr(), doc_imp(ReplaceDocuments, true)]), @"Some(DocumentClear { ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_clr(), doc_imp(UpdateDocuments, true)]), @"Some(DocumentClear { ids: [0] })");
 
         // Basic use case
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), doc_imp(ReplaceDocuments, true), doc_clr()]), @"Some(doc_clr() { ids: [0, 1, 2] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), doc_imp(UpdateDocuments, true), doc_clr()]), @"Some(doc_clr() { ids: [0, 1, 2] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), doc_imp(ReplaceDocuments, true), doc_clr()]), @"Some(DocumentClear { ids: [0, 1, 2] })");
+        debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), doc_imp(UpdateDocuments, true), doc_clr()]), @"Some(DocumentClear { ids: [0, 1, 2] })");
 
         // This batch kind doesn't mix with other document addition
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), doc_imp(ReplaceDocuments, true), doc_clr(), doc_imp(ReplaceDocuments, true)]), @"Some(doc_clr() { ids: [0, 1, 2] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), doc_imp(UpdateDocuments, true), doc_clr(), doc_imp(UpdateDocuments, true)]), @"Some(doc_clr() { ids: [0, 1, 2] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), doc_imp(ReplaceDocuments, true), doc_clr(), doc_imp(ReplaceDocuments, true)]), @"Some(DocumentClear { ids: [0, 1, 2] })");
+        debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), doc_imp(UpdateDocuments, true), doc_clr(), doc_imp(UpdateDocuments, true)]), @"Some(DocumentClear { ids: [0, 1, 2] })");
 
         // But you can batch multiple clear together
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), doc_imp(ReplaceDocuments, true), doc_clr(), doc_clr(), doc_clr()]), @"Some(doc_clr() { ids: [0, 1, 2, 3, 4] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), doc_imp(UpdateDocuments, true), doc_clr(), doc_clr(), doc_clr()]), @"Some(doc_clr() { ids: [0, 1, 2, 3, 4] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), doc_imp(ReplaceDocuments, true), doc_clr(), doc_clr(), doc_clr()]), @"Some(DocumentClear { ids: [0, 1, 2, 3, 4] })");
+        debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), doc_imp(UpdateDocuments, true), doc_clr(), doc_clr(), doc_clr()]), @"Some(DocumentClear { ids: [0, 1, 2, 3, 4] })");
     }
 
     #[test]
     fn clear_and_additions_and_settings() {
         // A clear don't need to autobatch the settings that happens AFTER there is no documents
-        assert_smol_debug_snapshot!(autobatch_from([doc_clr(), settings(true)]), @"Some(doc_clr() { ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_clr(), settings(true)]), @"Some(DocumentClear { ids: [0] })");
 
-        assert_smol_debug_snapshot!(autobatch_from([settings(true), doc_clr(), settings(true)]), @"Some(clearAndSettings([1) allow_index_creation: true, settings_ids: [0, 2] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true), doc_clr()]), @"Some(clearAndSettings([0)2], allow_index_creation: true, settings_ids: [1] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), settings(true), doc_clr()]), @"Some(clearAndSettings([0)2], allow_index_creation: true, settings_ids: [1] })");
+        debug_snapshot!(autobatch_from([settings(true), doc_clr(), settings(true)]), @"Some(ClearAndSettings { other: [1], allow_index_creation: true, settings_ids: [0, 2] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true), doc_clr()]), @"Some(ClearAndSettings { other: [0, 2], allow_index_creation: true, settings_ids: [1] })");
+        debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), settings(true), doc_clr()]), @"Some(ClearAndSettings { other: [0, 2], allow_index_creation: true, settings_ids: [1] })");
     }
 
     #[test]
     fn anything_and_index_deletion() {
         // The indexdeletion doesn't batch with anything that happens AFTER
-        assert_smol_debug_snapshot!(autobatch_from([idx_del(), doc_imp(ReplaceDocuments, true)]), @"Some(idx_del() { ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([idx_del(), doc_imp(UpdateDocuments, true)]), @"Some(idx_del() { ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([idx_del(), doc_del()]), @"Some(idx_del() { ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([idx_del(), doc_clr()]), @"Some(idx_del() { ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([idx_del(), settings(true)]), @"Some(idx_del() { ids: [0] })");
+        debug_snapshot!(autobatch_from([idx_del(), doc_imp(ReplaceDocuments, true)]), @"Some(IndexDeletion { ids: [0] })");
+        debug_snapshot!(autobatch_from([idx_del(), doc_imp(UpdateDocuments, true)]), @"Some(IndexDeletion { ids: [0] })");
+        debug_snapshot!(autobatch_from([idx_del(), doc_del()]), @"Some(IndexDeletion { ids: [0] })");
+        debug_snapshot!(autobatch_from([idx_del(), doc_clr()]), @"Some(IndexDeletion { ids: [0] })");
+        debug_snapshot!(autobatch_from([idx_del(), settings(true)]), @"Some(IndexDeletion { ids: [0] })");
 
         // The index deletion can accept almost any type of BatchKind and transform it to an idx_del()
         // First, the basic cases
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), idx_del()]), @"Some(idx_del() { ids: [0, 1] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), idx_del()]), @"Some(idx_del() { ids: [0, 1] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_del(), idx_del()]), @"Some(idx_del() { ids: [0, 1] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_clr(), idx_del()]), @"Some(idx_del() { ids: [0, 1] })");
-        assert_smol_debug_snapshot!(autobatch_from([settings(true), idx_del()]), @"Some(idx_del() { ids: [0, 1] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), idx_del()]), @"Some(IndexDeletion { ids: [0, 1] })");
+        debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), idx_del()]), @"Some(IndexDeletion { ids: [0, 1] })");
+        debug_snapshot!(autobatch_from([doc_del(), idx_del()]), @"Some(IndexDeletion { ids: [0, 1] })");
+        debug_snapshot!(autobatch_from([doc_clr(), idx_del()]), @"Some(IndexDeletion { ids: [0, 1] })");
+        debug_snapshot!(autobatch_from([settings(true), idx_del()]), @"Some(IndexDeletion { ids: [0, 1] })");
 
         // Then the mixed cases
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true), idx_del()]), @"Some(idx_del() { ids: [0, 2, 1] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), settings(true), idx_del()]), @"Some(idx_del() { ids: [0, 2, 1] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true), doc_clr(), idx_del()]), @"Some(idx_del() { ids: [1, 3, 0, 2] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), settings(true), doc_clr(), idx_del()]), @"Some(idx_del() { ids: [1, 3, 0, 2] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true), idx_del()]), @"Some(IndexDeletion { ids: [0, 2, 1] })");
+        debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), settings(true), idx_del()]), @"Some(IndexDeletion { ids: [0, 2, 1] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true), doc_clr(), idx_del()]), @"Some(IndexDeletion { ids: [1, 3, 0, 2] })");
+        debug_snapshot!(autobatch_from([doc_imp(UpdateDocuments, true), settings(true), doc_clr(), idx_del()]), @"Some(IndexDeletion { ids: [1, 3, 0, 2] })");
     }
 
     #[test]
     fn allowed_and_disallowed_index_creation() {
         // doc_imp(indexes canbe)ixed with those disallowed to do so
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, false), doc_imp(ReplaceDocuments, true)]), @"Some(doc_imp(ReplaceDocuments, false)import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), doc_imp(ReplaceDocuments, true)]), @"Some(doc_imp(ReplaceDocuments, true)import_ids: [0, 1] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, false), doc_imp(ReplaceDocuments, false)]), @"Some(doc_imp(ReplaceDocuments, false)import_ids: [0, 1] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true)]), @"Some(settingsAnddoc_imp(: ReplaceDocuments: true)import_ids: [0] })");
-        assert_smol_debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, false), settings(true)]), @"Some(doc_imp(ReplaceDocuments, false)import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, false), doc_imp(ReplaceDocuments, true)]), @"Some(DocumentImport { method: ReplaceDocuments, allow_index_creation: false, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), doc_imp(ReplaceDocuments, true)]), @"Some(DocumentImport { method: ReplaceDocuments, allow_index_creation: true, import_ids: [0, 1] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, false), doc_imp(ReplaceDocuments, false)]), @"Some(DocumentImport { method: ReplaceDocuments, allow_index_creation: false, import_ids: [0, 1] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, true), settings(true)]), @"Some(SettingsAndDocumentImport { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] })");
+        debug_snapshot!(autobatch_from([doc_imp(ReplaceDocuments, false), settings(true)]), @"Some(DocumentImport { method: ReplaceDocuments, allow_index_creation: false, import_ids: [0] })");
     }
 }

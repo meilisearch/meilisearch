@@ -1,4 +1,5 @@
 use milli::update::IndexDocumentsMethod;
+use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize, Serializer};
 use std::{
     fmt::{Display, Write},
@@ -42,7 +43,7 @@ impl Task {
             DumpExport { .. }
             | Snapshot
             | CancelTask { .. }
-            | DeleteTasks { .. }
+            | TaskDeletion { .. }
             | IndexSwap { .. } => None,
             DocumentImport { index_uid, .. }
             | DocumentDeletion { index_uid, .. }
@@ -59,7 +60,7 @@ impl Task {
         use KindWithContent::*;
 
         match &self.kind {
-            DumpExport { .. } | Snapshot | CancelTask { .. } | DeleteTasks { .. } => None,
+            DumpExport { .. } | Snapshot | CancelTask { .. } | TaskDeletion { .. } => None,
             DocumentImport { index_uid, .. }
             | DocumentDeletion { index_uid, .. }
             | DocumentClear { index_uid }
@@ -114,9 +115,9 @@ pub enum KindWithContent {
     CancelTask {
         tasks: Vec<TaskId>,
     },
-    DeleteTasks {
+    TaskDeletion {
         query: String,
-        tasks: Vec<TaskId>,
+        tasks: RoaringBitmap,
     },
     DumpExport {
         output: PathBuf,
@@ -136,7 +137,7 @@ impl KindWithContent {
             KindWithContent::IndexUpdate { .. } => Kind::IndexUpdate,
             KindWithContent::IndexSwap { .. } => Kind::IndexSwap,
             KindWithContent::CancelTask { .. } => Kind::CancelTask,
-            KindWithContent::DeleteTasks { .. } => Kind::DeleteTasks,
+            KindWithContent::TaskDeletion { .. } => Kind::TaskDeletion,
             KindWithContent::DumpExport { .. } => Kind::DumpExport,
             KindWithContent::Snapshot => Kind::Snapshot,
         }
@@ -146,7 +147,7 @@ impl KindWithContent {
         use KindWithContent::*;
 
         match self {
-            DumpExport { .. } | Snapshot | CancelTask { .. } | DeleteTasks { .. } => None,
+            DumpExport { .. } | Snapshot | CancelTask { .. } | TaskDeletion { .. } => None,
             DocumentImport { index_uid, .. }
             | DocumentDeletion { index_uid, .. }
             | DocumentClear { index_uid }
@@ -192,8 +193,8 @@ impl KindWithContent {
             KindWithContent::CancelTask { .. } => {
                 None // TODO: check correctness of this return value
             }
-            KindWithContent::DeleteTasks { query, tasks } => Some(Details::DeleteTasks {
-                matched_tasks: tasks.len(),
+            KindWithContent::TaskDeletion { query, tasks } => Some(Details::TaskDeletion {
+                matched_tasks: tasks.len() as usize,
                 deleted_tasks: None,
                 original_query: query.clone(),
             }),
@@ -203,7 +204,7 @@ impl KindWithContent {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Status {
     Enqueued,
@@ -240,7 +241,7 @@ impl FromStr for Status {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Kind {
     DocumentImport,
@@ -252,7 +253,7 @@ pub enum Kind {
     IndexUpdate,
     IndexSwap,
     CancelTask,
-    DeleteTasks,
+    TaskDeletion,
     DumpExport,
     Snapshot,
 }
@@ -272,7 +273,7 @@ impl FromStr for Kind {
             "index_update" => Ok(Kind::IndexUpdate),
             "index_swap" => Ok(Kind::IndexSwap),
             "cancel_task" => Ok(Kind::CancelTask),
-            "delete_tasks" => Ok(Kind::DeleteTasks),
+            "task_deletion" => Ok(Kind::TaskDeletion),
             "dump_export" => Ok(Kind::DumpExport),
             "snapshot" => Ok(Kind::Snapshot),
             s => Err(ResponseError::from_msg(
@@ -304,7 +305,7 @@ pub enum Details {
     ClearAll {
         deleted_documents: Option<u64>,
     },
-    DeleteTasks {
+    TaskDeletion {
         matched_tasks: usize,
         deleted_tasks: Option<usize>,
         original_query: String,
@@ -373,7 +374,7 @@ mod tests {
 
     #[test]
     fn bad_deser() {
-        let details = Details::DeleteTasks {
+        let details = Details::TaskDeletion {
             matched_tasks: 1,
             deleted_tasks: None,
             original_query: "hello".to_owned(),
