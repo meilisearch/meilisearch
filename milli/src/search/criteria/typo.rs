@@ -2,7 +2,6 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::mem::take;
 
-use itertools::Itertools;
 use log::debug;
 use roaring::RoaringBitmap;
 
@@ -10,6 +9,7 @@ use super::{
     query_docids, resolve_query_tree, Candidates, Context, Criterion, CriterionParameters,
     CriterionResult,
 };
+use crate::search::criteria::resolve_phrase;
 use crate::search::query_tree::{maximum_typo, Operation, Query, QueryKind};
 use crate::search::{word_derivations, WordDerivationsCache};
 use crate::Result;
@@ -257,26 +257,7 @@ fn resolve_candidates<'t>(
 
         match query_tree {
             And(ops) => mdfs(ctx, ops, number_typos, cache, wdcache),
-            Phrase(words) => {
-                let mut candidates = RoaringBitmap::new();
-                let mut first_loop = true;
-                for (left, right) in words.iter().filter_map(|w| w.as_ref()).tuple_windows() {
-                    match ctx.word_pair_proximity_docids(left, right, 1)? {
-                        Some(pair_docids) => {
-                            if pair_docids.is_empty() {
-                                return Ok(RoaringBitmap::new());
-                            } else if first_loop {
-                                candidates = pair_docids;
-                                first_loop = false;
-                            } else {
-                                candidates &= pair_docids;
-                            }
-                        }
-                        None => return Ok(RoaringBitmap::new()),
-                    }
-                }
-                Ok(candidates)
-            }
+            Phrase(words) => resolve_phrase(ctx, words),
             Or(_, ops) => {
                 let mut candidates = RoaringBitmap::new();
                 for op in ops {
