@@ -1,6 +1,5 @@
 ---
 source: index-scheduler/src/lib.rs
-expression: snapshot_index_scheduler(&index_scheduler)
 ---
 ### Autobatching Enabled = true
 ### Processing Tasks:
@@ -10,13 +9,15 @@ expression: snapshot_index_scheduler(&index_scheduler)
 0 {uid: 0, status: enqueued, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
 1 {uid: 1, status: enqueued, details: { received_documents: 12, indexed_documents: 0 }, kind: DocumentImport { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 12, allow_index_creation: true }}
 2 {uid: 2, status: enqueued, details: { received_documents: 5000, indexed_documents: 0 }, kind: DocumentImport { index_uid: "doggo", primary_key: Some("bone"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 5000, allow_index_creation: true }}
+3 {uid: 3, status: enqueued, details: { matched_tasks: 2, deleted_tasks: None, original_query: "test_query" }, kind: TaskDeletion { query: "test_query", tasks: RoaringBitmap<[0, 1]> }}
 ----------------------------------------------------------------------
 ### Status:
-enqueued [0,1,2,]
+enqueued [0,1,2,3,]
 ----------------------------------------------------------------------
 ### Kind:
-{"documentImport":{"method":"ReplaceDocuments","allow_index_creation":true}} [1,2,]
+"documentImport" [1,2,]
 "indexCreation" [0,]
+"taskDeletion" [3,]
 ----------------------------------------------------------------------
 ### Index Tasks:
 catto [0,1,]

@@ -1,6 +1,5 @@
 ---
 source: index-scheduler/src/lib.rs
-expression: snapshot_index_scheduler(&index_scheduler)
 ---
 ### Autobatching Enabled = true
 ### Processing Tasks:
@@ -15,7 +14,7 @@ enqueued []
 succeeded [0,1,]
 ----------------------------------------------------------------------
 ### Kind:
-{"documentImport":{"method":"ReplaceDocuments","allow_index_creation":true}} [0,1,]
+"documentImport" [0,1,]
 ----------------------------------------------------------------------
 ### Index Tasks:
 catto [0,]

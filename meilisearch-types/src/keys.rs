@@ -224,6 +224,8 @@ pub enum Action {
     IndexesDelete,
     #[serde(rename = "tasks.*")]
     TasksAll,
+    #[serde(rename = "tasks.*")]
+    TasksDelete,
     #[serde(rename = "tasks.get")]
     TasksGet,
     #[serde(rename = "settings.*")]
@@ -311,6 +313,7 @@ pub mod actions {
     pub const INDEXES_UPDATE: u8 = IndexesUpdate.repr();
     pub const INDEXES_DELETE: u8 = IndexesDelete.repr();
     pub const TASKS_ALL: u8 = TasksAll.repr();
+    pub const TASKS_DELETE: u8 = TasksDelete.repr();
     pub const TASKS_GET: u8 = TasksGet.repr();
     pub const SETTINGS_ALL: u8 = SettingsAll.repr();
     pub const SETTINGS_GET: u8 = SettingsGet.repr();
