@@ -293,8 +293,8 @@ impl IndexScheduler {
 
     /// Returns the tasks corresponding to the query.
     pub fn get_tasks(&self, query: Query) -> Result<Vec<Task>> {
-        let rtxn = self.env.read_txn()?;
         let tasks = self.get_task_ids(&query)?;
+        let rtxn = self.env.read_txn()?;
 
         let tasks = self.get_existing_tasks(
             &rtxn,
