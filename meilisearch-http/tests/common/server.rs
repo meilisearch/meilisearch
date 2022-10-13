@@ -12,6 +12,7 @@ use once_cell::sync::Lazy;
 use serde_json::Value;
 use tempfile::TempDir;
 
+use crate::common::encoder::Encoder;
 use meilisearch_http::option::Opt;
 
 use super::index::Index;
@@ -100,9 +101,14 @@ impl Server {
 
     /// Returns a view to an index. There is no guarantee that the index exists.
     pub fn index(&self, uid: impl AsRef<str>) -> Index<'_> {
+        self.index_with_encoder(uid, Encoder::Plain)
+    }
+
+    pub fn index_with_encoder(&self, uid: impl AsRef<str>, encoder: Encoder) -> Index<'_> {
         Index {
             uid: uid.as_ref().to_string(),
             service: &self.service,
+            encoder,
         }
     }
 

@@ -1,6 +1,11 @@
 use crate::common::{GetAllDocumentsOptions, GetDocumentOptions, Server};
+use actix_web::test;
+use http::header::ACCEPT_ENCODING;
 
-use serde_json::json;
+use crate::common::encoder::Encoder;
+use meilisearch_http::{analytics, create_app};
+use serde_json::{json, Value};
+use urlencoding::encode as urlencode;
 
 // TODO: partial test since we are testing error, amd error is not yet fully implemented in
 // transplant
@@ -153,6 +158,40 @@ async fn get_all_documents_no_options() {
         "tags":["bug"
             ,"bug"]});
     assert_eq!(first, arr[0]);
+}
+
+#[actix_rt::test]
+async fn get_all_documents_no_options_with_response_compression() {
+    let server = Server::new().await;
+    let index_uid = "test";
+    let index = server.index(index_uid);
+    index.load_test_set().await;
+
+    let app = test::init_service(create_app!(
+        &server.service.meilisearch,
+        &server.service.auth,
+        true,
+        server.service.options,
+        analytics::MockAnalytics::new(&server.service.options).0
+    ))
+    .await;
+
+    let req = test::TestRequest::get()
+        .uri(&format!("/indexes/{}/documents?", urlencode(index_uid)))
+        .insert_header((ACCEPT_ENCODING, "gzip"))
+        .to_request();
+
+    let res = test::call_service(&app, req).await;
+
+    assert_eq!(res.status(), 200);
+
+    let bytes = test::read_body(res).await;
+    let decoded = Encoder::Gzip.decode(bytes);
+    let parsed_response =
+        serde_json::from_slice::<Value>(decoded.into().as_ref()).expect("Expecting valid json");
+
+    let arr = parsed_response["results"].as_array().unwrap();
+    assert_eq!(arr.len(), 20);
 }
 
 #[actix_rt::test]

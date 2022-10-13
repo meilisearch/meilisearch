@@ -1,3 +1,4 @@
+pub mod encoder;
 pub mod index;
 pub mod server;
 pub mod service;
