@@ -187,14 +187,15 @@ fn resolve_candidates<'t>(
             Phrase(words) => {
                 if proximity == 0 {
                     let most_left = words
-                        .first()
-                        .map(|o| o.as_ref())
-                        .flatten()
+                        .iter()
+                        .filter_map(|o| o.as_ref())
+                        .next()
                         .map(|w| Query { prefix: false, kind: QueryKind::exact(w.clone()) });
                     let most_right = words
-                        .last()
-                        .map(|o| o.as_ref())
-                        .flatten()
+                        .iter()
+                        .rev()
+                        .filter_map(|o| o.as_ref())
+                        .next()
                         .map(|w| Query { prefix: false, kind: QueryKind::exact(w.clone()) });
 
                     match (most_left, most_right) {
