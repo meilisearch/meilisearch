@@ -174,13 +174,10 @@ async fn get_all_documents_no_options_with_response_compression() {
         server.service.options,
         analytics::MockAnalytics::new(&server.service.options).0
     ))
-        .await;
+    .await;
 
     let req = test::TestRequest::get()
-        .uri(&format!(
-            "/indexes/{}/documents?",
-            urlencode(index_uid.as_ref())
-        ))
+        .uri(&format!("/indexes/{}/documents?", urlencode(index_uid)))
         .insert_header((ACCEPT_ENCODING, "gzip"))
         .to_request();
 
@@ -191,7 +188,7 @@ async fn get_all_documents_no_options_with_response_compression() {
     let bytes = test::read_body(res).await;
     let decoded = Encoder::Gzip.decode(bytes);
     let parsed_response =
-        serde_json::from_slice::<Value>(&decoded.into().as_ref()).expect("Expecting valid json");
+        serde_json::from_slice::<Value>(decoded.into().as_ref()).expect("Expecting valid json");
 
     let arr = parsed_response["results"].as_array().unwrap();
     assert_eq!(arr.len(), 20);

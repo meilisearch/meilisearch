@@ -72,7 +72,7 @@ async fn create_index_with_gzip_encoded_request_and_receiving_brotli_encoded_res
     let bytes = test::read_body(res).await;
     let decoded = Encoder::Brotli.decode(bytes);
     let parsed_response =
-        serde_json::from_slice::<Value>(&decoded.into().as_ref()).expect("Expecting valid json");
+        serde_json::from_slice::<Value>(decoded.into().as_ref()).expect("Expecting valid json");
 
     assert_eq!(parsed_response["taskUid"], 0);
     assert_eq!(parsed_response["indexUid"], "test");
