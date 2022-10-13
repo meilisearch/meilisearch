@@ -503,7 +503,7 @@ impl IndexScheduler {
                 let mut tasks = dump.create_tasks_queue()?;
                 for ret in self.all_tasks.iter(&rtxn)? {
                     let (_, task) = ret?;
-                    let mut dump_content_file = tasks.push_task(&task)?;
+                    let mut dump_content_file = tasks.push_task((&task).into())?;
 
                     // 2.1. Dump the `content_file` associated with the task if there is one.
                     if let Some(content_file) = task.content_uuid() {
