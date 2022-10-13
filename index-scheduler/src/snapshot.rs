@@ -1,9 +1,12 @@
-use meilisearch_types::heed::{
-    types::{OwnedType, SerdeBincode, SerdeJson, Str},
-    Database, RoTxn,
-};
 use meilisearch_types::milli::{RoaringBitmapCodec, BEU32};
-use meilisearch_types::tasks::{Details, Task};
+use meilisearch_types::tasks::Details;
+use meilisearch_types::{
+    heed::{
+        types::{OwnedType, SerdeBincode, SerdeJson, Str},
+        Database, RoTxn,
+    },
+    tasks::Task,
+};
 use roaring::RoaringBitmap;
 
 use crate::{index_mapper::IndexMapper, IndexScheduler, Kind, Status};
@@ -127,7 +130,7 @@ fn snaphsot_details(d: &Details) -> String {
         Details::ClearAll { deleted_documents } => {
             format!("{{ deleted_documents: {deleted_documents:?} }}")
         },
-        Details::DeleteTasks {
+        Details::TaskDeletion {
             matched_tasks,
             deleted_tasks,
             original_query,
