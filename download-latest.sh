@@ -1,29 +1,38 @@
 #!/bin/sh
 
-# COLORS
+# GLOBALS
+
+# Colors
 RED='\033[31m'
 GREEN='\033[32m'
 DEFAULT='\033[0m'
 
-# GLOBALS
-GREP_SEMVER_REGEXP='v\([0-9]*\)[.]\([0-9]*\)[.]\([0-9]*\)$' # i.e. v[number].[number].[number]
+# Project name
+PNAME='meilisearch'
+
+# Version regexp i.e. v[number].[number].[number]
+GREP_SEMVER_REGEXP='v\([0-9]*\)[.]\([0-9]*\)[.]\([0-9]*\)$'
+
+# Github API address
+GITHUB_API='https://api.github.com/repos/meilisearch/meilisearch/releases'
+# Github Release address
+GITHUB_REL='https://github.com/meilisearch/meilisearch/releases/download/'
 
 # FUNCTIONS
 
-# semverParseInto and semverLT from https://github.com/cloudflare/semver_bash/blob/master/semver.sh
-
+# semverParseInto and semverLT from: https://github.com/cloudflare/semver_bash/blob/master/semver.sh
 # usage: semverParseInto version major minor patch special
 # version: the string version
 # major, minor, patch, special: will be assigned by the function
 semverParseInto() {
     local RE='[^0-9]*\([0-9]*\)[.]\([0-9]*\)[.]\([0-9]*\)\([0-9A-Za-z-]*\)'
-    #MAJOR
+    # MAJOR
     eval $2=`echo $1 | sed -e "s#$RE#\1#"`
-    #MINOR
+    # MINOR
     eval $3=`echo $1 | sed -e "s#$RE#\2#"`
-    #PATCH
+    # PATCH
     eval $4=`echo $1 | sed -e "s#$RE#\3#"`
-    #SPECIAL
+    # SPECIAL
     eval $5=`echo $1 | sed -e "s#$RE#\4#"`
 }
 
@@ -67,16 +76,22 @@ semverLT() {
     return 1
 }
 
-# Get a token from https://github.com/settings/tokens to increase rate limit (from 60 to 5000), make sure the token scope is set to 'public_repo'
-# Create GITHUB_PAT environment variable once you acquired the token to start using it
-# Returns the tag of the latest stable release (in terms of semver and not of release date)
+# Get a token from: https://github.com/settings/tokens to increase rate limit (from 60 to 5000),
+# make sure the token scope is set to 'public_repo'.
+# Create GITHUB_PAT environment variable once you acquired the token to start using it.
+# Returns the tag of the latest stable release (in terms of semver and not of release date).
 get_latest() {
-    temp_file='temp_file' # temp_file needed because the grep would start before the download is over
+    # temp_file is needed because the grep would start before the download is over
+    temp_file=$(mktemp -q /tmp/$PNAME.XXXXXXXXX)
+    if [ $? -ne 0 ]; then
+        echo "$0: Can't create temp file, bye bye.."
+        exit 1
+    fi
 
     if [ -z "$GITHUB_PAT" ]; then
-        curl -s 'https://api.github.com/repos/meilisearch/meilisearch/releases' > "$temp_file" || return 1
+        curl -s $GITHUB_API > "$temp_file" || return 1
     else
-        curl -H "Authorization: token $GITHUB_PAT" -s 'https://api.github.com/repos/meilisearch/meilisearch/releases' > "$temp_file" || return 1
+        curl -H "Authorization: token $GITHUB_PAT" -s $GITHUB_API > "$temp_file" || return 1
     fi
 
     releases=$(cat "$temp_file" | \
@@ -89,28 +104,35 @@ get_latest() {
     latest=''
     current_tag=''
     for release_info in $releases; do
-        if [ $i -eq 0 ]; then # Checking tag_name
-            if echo "$release_info" | grep -q "$GREP_SEMVER_REGEXP"; then # If it's not an alpha or beta release
+        # Checking tag_name
+        if [ $i -eq 0 ]; then
+            # If it's not an alpha or beta release
+            if echo "$release_info" | grep -q "$GREP_SEMVER_REGEXP"; then
                 current_tag=$release_info
             else
                 current_tag=''
             fi
             i=1
-        elif [ $i -eq 1 ]; then # Checking draft boolean
+        # Checking draft boolean
+        elif [ $i -eq 1 ]; then
             if [ "$release_info" = 'true' ]; then
                 current_tag=''
             fi
             i=2
-        elif [ $i -eq 2 ]; then # Checking prerelease boolean
+        # Checking prerelease boolean
+        elif [ $i -eq 2 ]; then
             if [ "$release_info" = 'true' ]; then
                 current_tag=''
             fi
             i=0
-            if [ "$current_tag" != '' ]; then # If the current_tag is valid
-                if [ "$latest" = '' ]; then # If there is no latest yet
+            # If the current_tag is valid
+            if [ "$current_tag" != '' ]; then
+                # If there is no latest yes
+                if [ "$latest" = '' ]; then
                     latest="$current_tag"
                 else
-                    semverLT $current_tag $latest # Comparing latest and the current tag
+                    # Comparing latest and the current tag
+                    semverLT $current_tag $latest
                     if [ $? -eq 1 ]; then
                         latest="$current_tag"
                     fi
@@ -123,7 +145,7 @@ get_latest() {
     return 0
 }
 
-# Gets the OS by setting the $os variable
+# Gets the OS by setting the $os variable.
 # Returns 0 in case of success, 1 otherwise.
 get_os() {
     os_name=$(uname -s)
@@ -134,7 +156,7 @@ get_os() {
     'Linux')
         os='linux'
         ;;
-	'MINGW'*)
+     'MINGW'*)
         os='windows'
         ;;
     *)
@@ -143,7 +165,7 @@ get_os() {
     return 0
 }
 
-# Gets the architecture by setting the $archi variable
+# Gets the architecture by setting the $archi variable.
 # Returns 0 in case of success, 1 otherwise.
 get_archi() {
     architecture=$(uname -m)
@@ -152,7 +174,8 @@ get_archi() {
         archi='amd64'
         ;;
     'arm64')
-        if [ $os = 'macos' ]; then # MacOS M1
+        # MacOS M1
+        if [ $os = 'macos' ]; then
             archi='amd64'
         else
             archi='aarch64'
@@ -171,9 +194,9 @@ success_usage() {
     printf "$GREEN%s\n$DEFAULT" "Meilisearch $latest binary successfully downloaded as '$binary_name' file."
     echo ''
     echo 'Run it:'
-    echo '    $ ./meilisearch'
+    echo "    $ ./$PNAME"
     echo 'Usage:'
-    echo '    $ ./meilisearch --help'
+    echo "    $ ./$PNAME --help"
 }
 
 not_available_failure_usage() {
@@ -189,52 +212,55 @@ fetch_release_failure_usage() {
     echo 'Please let us know about this issue: https://github.com/meilisearch/meilisearch/issues/new/choose'
 }
 
+fill_release_variables() {
+    # Fill $latest variable.
+    if ! get_latest; then
+        # TO CHANGE.
+        fetch_release_failure_usage
+        exit 1
+    fi
+    if [ "$latest" = '' ]; then
+        fetch_release_failure_usage
+        exit 1
+     fi
+     # Fill $os variable.
+     if ! get_os; then
+        not_available_failure_usage
+        exit 1
+     fi
+     # Fill $archi variable.
+     if ! get_archi; then
+        not_available_failure_usage
+        exit 1
+     fi
+}
+
+download_binary() {
+    fill_release_variables
+    echo "Downloading Meilisearch binary $latest for $os, architecture $archi..."
+    case "$os" in
+        'windows')
+            release_file="$PNAME-$os-$archi.exe"
+            binary_name="$PNAME.exe"
+            ;;
+        *)
+            release_file="$PNAME-$os-$archi"
+            binary_name="$PNAME"
+    esac
+    # Fetch the Meilisearch binary.
+    curl --fail -OL "$GITHUB_REL/$latest/$release_file"
+    if [ $? -ne 0 ]; then
+        fetch_release_failure_usage
+        exit 1
+    fi
+    mv "$release_file" "$binary_name"
+    chmod 744 "$binary_name"
+    success_usage
+}
+
 # MAIN
 
-# Fill $latest variable
-if ! get_latest; then
-    fetch_release_failure_usage # TO CHANGE
-    exit 1
-fi
-
-if [ "$latest" = '' ]; then
-    fetch_release_failure_usage
-    exit 1
-fi
-
-# Fill $os variable
-if ! get_os; then
-    not_available_failure_usage
-    exit 1
-fi
-
-# Fill $archi variable
-if ! get_archi; then
-    not_available_failure_usage
-    exit 1
-fi
-
-echo "Downloading Meilisearch binary $latest for $os, architecture $archi..."
-case "$os" in
-    'windows')
-        release_file="meilisearch-$os-$archi.exe"
-        binary_name='meilisearch.exe'
-
-        ;;
-    *)
-        release_file="meilisearch-$os-$archi"
-        binary_name='meilisearch'
-
-esac
-
-# Fetch the Meilisearch binary
-link="https://github.com/meilisearch/meilisearch/releases/download/$latest/$release_file"
-curl --fail -OL "$link"
-if [ $? -ne 0 ]; then
-    fetch_release_failure_usage
-    exit 1
-fi
-
-mv "$release_file" "$binary_name"
-chmod 744 "$binary_name"
-success_usage
+main() {
+    download_binary
+}
+main
