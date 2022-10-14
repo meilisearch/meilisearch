@@ -287,14 +287,13 @@ impl Opt {
                 config_read_from = Some(config_file_path);
             }
             Err(e) => {
-                match user_specified_config_file_path {
+                if let Some(path) = user_specified_config_file_path {
                     // If we have an error while reading the file defined by the user.
-                    Some(path) => anyhow::bail!(
+                    anyhow::bail!(
                         "unable to open or read the {:?} configuration file: {}.",
                         path,
                         e,
-                    ),
-                    None => (),
+                    )
                 }
             }
         }
