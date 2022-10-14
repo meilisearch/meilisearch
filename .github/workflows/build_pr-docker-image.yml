@@ -1,0 +1,103 @@
+name: Build PR Image
+on:
+  pull_request:
+    types: [opened,synchronize,reopened,closed]
+
+jobs:
+  build-meilisearch:
+    name: Build and push `meilisearch`
+    runs-on: ubuntu-latest
+    outputs:
+      tags: ${{ steps.meta.outputs.tags }}
+    if: ${{ github.event.action != 'closed' }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Generate UUID image name
+        id: uuid
+        run: echo "::set-output name=uuid::$(uuidgen)"
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v3
+        with:
+          images: ttl.sh/${{ steps.uuid.outputs.uuid }}
+          tags: | 
+            type=raw,value=24h
+      - name: Build Image
+        uses: docker/build-push-action@v3
+        with:
+          context: ./
+          file: .github/uffizzi/Dockerfile
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          load: true # makes image available to docker client
+          push: false
+
+      - name: DEBUG - Image information
+        if: ${{ runner.debug }}
+        run: |
+          docker image ls ttl.sh/${{ steps.uuid.outputs.uuid }}:24h
+          docker history ttl.sh/${{ steps.uuid.outputs.uuid }}:24h
+      - name: Push Image to TTL.SH
+        run: docker push ttl.sh/${{ steps.uuid.outputs.uuid }}:24h
+
+  render-compose-file:
+    name: Render Docker Compose File
+    # Pass output of this workflow to another triggered by `workflow_run` event.
+    runs-on: ubuntu-latest
+    needs: 
+      - build-meilisearch
+    outputs:
+      compose-file-cache-key: ${{ steps.hash.outputs.hash }}
+    steps:
+      - name: Checkout git repo
+        uses: actions/checkout@v3
+      - name: Render Compose File
+        run: |
+          MEILISEARCH_IMAGE=$(echo ${{ needs.build-meilisearch.outputs.tags }})
+          export MEILISEARCH_IMAGE
+          # Render simple template from environment variables.
+          envsubst < .github/uffizzi/docker-compose.uffizzi.yml > docker-compose.rendered.yml
+          cat docker-compose.rendered.yml
+      - name: Upload Rendered Compose File as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: preview-spec
+          path: docker-compose.rendered.yml
+          retention-days: 2
+      - name: Serialize PR Event to File
+        run:  |
+          cat << EOF > event.json
+          ${{ toJSON(github.event) }} 
+          
+          EOF
+      - name: Upload PR Event as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: preview-spec
+          path: event.json
+          retention-days: 2
+
+  delete-preview:
+    name: Call for Preview Deletion
+    runs-on: ubuntu-latest
+    if: ${{ github.event.action == 'closed' }}
+    steps:
+      # If this PR is closing, we will not render a compose file nor pass it to the next workflow.
+      - name: Serialize PR Event to File
+        run:  |
+          cat << EOF > event.json
+          ${{ toJSON(github.event) }} 
+          
+          EOF
+      - name: Upload PR Event as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: preview-spec
+          path: event.json
+          retention-days: 2

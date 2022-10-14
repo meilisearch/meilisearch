@@ -1,0 +1,16 @@
+version: "3"
+
+x-uffizzi:
+  ingress:
+    service: meilisearch
+    port: 7681
+
+services:
+  meilisearch:
+    image: waveywaves/meili-uffizzi-test
+    restart: unless-stopped
+    ports:
+      - "7700:7700"
+      - "7681:7681"
+    environment:
+      - MEILI_MASTER_KEY="dev"
