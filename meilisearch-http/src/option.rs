@@ -63,7 +63,7 @@ const DEFAULT_DUMPS_DIR: &str = "dumps/";
 const DEFAULT_LOG_LEVEL: &str = "INFO";
 
 #[derive(Debug, Clone, Parser, Serialize, Deserialize)]
-#[clap(version)]
+#[clap(version, next_display_order = None)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct Opt {
     /// Designates the location where database files will be created and retrieved.
