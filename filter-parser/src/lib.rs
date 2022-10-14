@@ -168,7 +168,7 @@ fn ws<'a, O>(inner: impl FnMut(Span<'a>) -> IResult<O>) -> impl FnMut(Span<'a>) 
 }
 
 /// value_list = (value ("," value)* ","?)?
-fn parse_value_list<'a>(input: Span<'a>) -> IResult<Vec<Token<'a>>> {
+fn parse_value_list(input: Span) -> IResult<Vec<Token>> {
     let (input, first_value) = opt(parse_value)(input)?;
     if let Some(first_value) = first_value {
         let value_list_el_parser = preceded(ws(tag(",")), parse_value);
@@ -335,17 +335,17 @@ fn parse_error_reserved_keyword(input: Span) -> IResult<FilterCondition> {
         Ok(result) => Ok(result),
         Err(nom::Err::Error(inner) | nom::Err::Failure(inner)) => match inner.kind() {
             ErrorKind::ExpectedValue(ExpectedValueKind::ReservedKeyword) => {
-                return Err(nom::Err::Failure(inner));
+                Err(nom::Err::Failure(inner))
             }
-            _ => return Err(nom::Err::Error(inner)),
+            _ => Err(nom::Err::Error(inner)),
         },
-        Err(e) => {
-            return Err(e);
-        }
+        Err(e) => Err(e),
     }
 }
 
-/// primary        = (WS* "(" WS* expression WS* ")" WS*) | geoRadius | condition | exists | not_exists | to
+/**
+primary        = (WS* "(" WS* expression WS* ")" WS*) | geoRadius | condition | exists | not_exists | to
+*/
 fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
     if depth > MAX_FILTER_DEPTH {
         return Err(nom::Err::Error(Error::new_from_kind(input, ErrorKind::DepthLimitReached)));

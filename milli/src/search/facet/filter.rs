@@ -100,10 +100,10 @@ impl<'a> Filter<'a> {
                         }
                     }
 
-                    if ors.len() > 1 {
-                        ands.push(FilterCondition::Or(ors));
-                    } else if ors.len() == 1 {
-                        ands.push(ors.pop().unwrap());
+                    match ors.len() {
+                        1 => ands.push(ors.pop().unwrap()),
+                        n if n > 1 => ands.push(FilterCondition::Or(ors)),
+                        _ => (),
                     }
                 }
                 Either::Right(rule) => {
@@ -128,6 +128,7 @@ impl<'a> Filter<'a> {
         Ok(Some(Self { condition: and }))
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(expression: &'a str) -> Result<Option<Self>> {
         let condition = match FilterCondition::parse(expression) {
             Ok(Some(fc)) => Ok(fc),

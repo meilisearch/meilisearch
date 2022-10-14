@@ -179,6 +179,7 @@ impl<'t> Criterion for Attribute<'t> {
 /// QueryPositionIterator is an Iterator over positions of a Query,
 /// It contains iterators over words positions.
 struct QueryPositionIterator<'t> {
+    #[allow(clippy::type_complexity)]
     inner:
         Vec<Peekable<Box<dyn Iterator<Item = heed::Result<((&'t str, u32), RoaringBitmap)>> + 't>>>,
 }

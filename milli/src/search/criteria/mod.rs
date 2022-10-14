@@ -96,6 +96,7 @@ pub trait Context<'c> {
         &self,
         docid: DocumentId,
     ) -> heed::Result<HashMap<String, RoaringBitmap>>;
+    #[allow(clippy::type_complexity)]
     fn word_position_iterator(
         &self,
         word: &str,
@@ -610,11 +611,7 @@ fn query_pair_proximity_docids(
         }
         (QueryKind::Exact { word: left, .. }, QueryKind::Tolerant { typo, word: right }) => {
             let r_words = word_derivations(right, prefix, *typo, ctx.words_fst(), wdcache)?;
-<<<<<<< HEAD
             all_word_pair_overall_proximity_docids(ctx, &[(left, 0)], r_words, proximity)
-=======
-            all_word_pair_proximity_docids(ctx, &[(left, 0)], r_words, proximity)
->>>>>>> 08fe530b (Execute cargo clippy --fix)
         }
         (
             QueryKind::Tolerant { typo: l_typo, word: left },

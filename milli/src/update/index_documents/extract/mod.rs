@@ -33,6 +33,7 @@ use crate::{FieldId, Result};
 
 /// Extract data for each databases from obkv documents in parallel.
 /// Send data in grenad file over provided Sender.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn data_from_obkv_documents(
     original_obkv_chunks: impl Iterator<Item = Result<grenad::Reader<File>>> + Send,
     flattened_obkv_chunks: impl Iterator<Item = Result<grenad::Reader<File>>> + Send,
@@ -53,6 +54,7 @@ pub(crate) fn data_from_obkv_documents(
         })
         .collect::<Result<()>>()?;
 
+    #[allow(clippy::type_complexity)]
     let result: Result<(Vec<_>, (Vec<_>, (Vec<_>, Vec<_>)))> = flattened_obkv_chunks
         .par_bridge()
         .map(|flattened_obkv_chunks| {
@@ -217,6 +219,8 @@ fn send_original_documents_data(
 /// - docid_fid_facet_numbers
 /// - docid_fid_facet_strings
 /// - docid_fid_facet_exists
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::type_complexity)]
 fn send_and_extract_flattened_documents_data(
     flattened_documents_chunk: Result<grenad::Reader<File>>,
     indexer: GrenadParameters,

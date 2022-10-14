@@ -598,6 +598,7 @@ where
 }
 
 /// Run the word prefix docids update operation.
+#[allow(clippy::too_many_arguments)]
 fn execute_word_prefix_docids(
     txn: &mut heed::RwTxn,
     reader: grenad::Reader<Cursor<ClonableMmap>>,

@@ -12,6 +12,7 @@ use crate::update::prefix_word_pairs::{
 };
 use crate::{CboRoaringBitmapCodec, Result, U8StrStrCodec, UncheckedU8StrStrCodec};
 
+#[allow(clippy::too_many_arguments)]
 #[logging_timer::time]
 pub fn index_prefix_word_database(
     wtxn: &mut heed::RwTxn,
@@ -38,8 +39,7 @@ pub fn index_prefix_word_database(
 
     for proximity in 1..max_proximity {
         for prefix in common_prefixes.iter() {
-            let mut prefix_key = vec![];
-            prefix_key.push(proximity);
+            let mut prefix_key = vec![proximity];
             prefix_key.extend_from_slice(prefix.as_bytes());
             let mut cursor = new_word_pair_proximity_docids.clone().into_prefix_iter(prefix_key)?;
             // This is the core of the algorithm
@@ -84,8 +84,7 @@ pub fn index_prefix_word_database(
 
     for proximity in 1..max_proximity {
         for prefix in new_prefixes.iter() {
-            let mut prefix_key = vec![];
-            prefix_key.push(proximity);
+            let mut prefix_key = vec![proximity];
             prefix_key.extend_from_slice(prefix.as_bytes());
             let mut db_iter = word_pair_proximity_docids
                 .as_polymorph()
