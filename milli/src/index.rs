@@ -1199,7 +1199,9 @@ impl Index {
     /* script  language docids */
     /// Retrieve all the documents ids that correspond with (Script, Language) key, `None` if it is any.
     pub fn script_language_documents_ids(&self, rtxn: &RoTxn, key: &(Script, Language)) -> heed::Result<Option<RoaringBitmap>> {
-        self.script_language_docids.get(rtxn, key)
+        let soft_deleted_documents = self.soft_deleted_documents_ids(rtxn)?;
+        let doc_ids = self.script_language_docids.get(rtxn, key)?;
+        Ok(doc_ids.map(|ids| ids - soft_deleted_documents))
     }
 }
 
