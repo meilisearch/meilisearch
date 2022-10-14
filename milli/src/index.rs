@@ -4,6 +4,7 @@ use std::fs::File;
 use std::mem::size_of;
 use std::path::Path;
 
+use charabia::{Language, Script};
 use heed::flags::Flags;
 use heed::types::*;
 use heed::{CompactionOption, Database, PolyDatabase, RoTxn, RwTxn};
@@ -1193,6 +1194,12 @@ impl Index {
 
     pub(crate) fn delete_pagination_max_total_hits(&self, txn: &mut RwTxn) -> heed::Result<bool> {
         self.main.delete::<_, Str>(txn, main_key::PAGINATION_MAX_TOTAL_HITS)
+    }
+
+    /* script  language docids */
+    /// Retrieve all the documents ids that correspond with (Script, Language) key, `None` if it is any.
+    pub fn script_language_documents_ids(&self, rtxn: &RoTxn, key: &(Script, Language)) -> heed::Result<Option<RoaringBitmap>> {
+        self.script_language_docids.get(rtxn, key)
     }
 }
 
