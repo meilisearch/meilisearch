@@ -529,6 +529,7 @@ fn default_log_level() -> String {
 
 #[cfg(test)]
 mod test {
+
     use super::*;
 
     #[test]
@@ -551,9 +552,16 @@ mod test {
         temp_env::with_vars(
             vec![("MEILI_CONFIG_FILE_PATH", Some("../configgg.toml"))],
             || {
-                assert_eq!(
-                    Opt::try_build().unwrap_err().to_string(),
-                    "unable to open or read the \"../configgg.toml\" configuration file: No such file or directory (os error 2)."
+                let possible_error_messages = [
+                    "unable to open or read the \"../configgg.toml\" configuration file: No such file or directory (os error 2).",
+                    "unable to open or read the \"../configgg.toml\" configuration file: The system cannot find the file specified. (os error 2).", // Windows
+                ];
+                let error_message = Opt::try_build().unwrap_err().to_string();
+                assert!(
+                    possible_error_messages.contains(&error_message.as_str()),
+                    "Expected onf of {:?}, got {:?}.",
+                    possible_error_messages,
+                    error_message
                 );
             },
         );
