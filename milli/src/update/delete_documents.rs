@@ -500,6 +500,22 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             .execute(self.wtxn)?;
         }
 
+        // Remove the documents ids from the script language database.
+        let mut iter = script_language_docids.iter_mut(self.wtxn)?;
+        while let Some((key, mut docids)) = iter.next().transpose()? {
+            let previous_len = docids.len();
+            docids -= &self.to_delete_docids;
+            if docids.is_empty() {
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.del_current()? };
+            } else if docids.len() != previous_len {
+                let key = key.to_owned();
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.put_current(&key, &docids)? };
+            }
+        }
+
+        drop(iter);
         // We delete the documents ids that are under the facet field id values.
         remove_docids_from_facet_id_exists_docids(
             self.wtxn,
@@ -1166,5 +1182,34 @@ mod tests {
     fn stats_should_not_return_deleted_documents() {
         stats_should_not_return_deleted_documents_(DeletionStrategy::AlwaysHard);
         stats_should_not_return_deleted_documents_(DeletionStrategy::AlwaysSoft);
+    }
+
+    #[test]
+    fn stored_detected_script_and_language_should_not_return_deleted_documents() {
+        use charabia::{Language, Script};
+        let index = TempIndex::new();
+        let mut wtxn = index.write_txn().unwrap();
+        index
+            .add_documents_using_wtxn(
+                &mut wtxn,
+                documents!([
+                { "id": "0", "title": "The quick (\"brown\") fox can't jump 32.3 feet, right? Brr, it's 29.3°F!" },
+                { "id": "1", "title": "人人生而自由﹐在尊嚴和權利上一律平等。他們賦有理性和良心﹐並應以兄弟關係的精神互相對待。" },
+                { "id": "2", "title": "הַשּׁוּעָל הַמָּהִיר (״הַחוּם״) לֹא יָכוֹל לִקְפֹּץ 9.94 מֶטְרִים, נָכוֹן? ברר, 1.5°C- בַּחוּץ!" },
+                { "id": "3", "title": "関西国際空港限定トートバッグ すもももももももものうち" },
+                { "id": "4", "title": "ภาษาไทยง่ายนิดเดียว" },
+                { "id": "5", "title": "The quick 在尊嚴和權利上一律平等。" },
+            ]))
+            .unwrap();
+
+        delete_documents(&mut wtxn, &index, &["1"]);
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        let key_cmn = (Script::Cj, Language::Cmn);
+        let cj_cmn_docs = index.script_language_documents_ids(&rtxn, &key_cmn).unwrap().unwrap();
+        let mut expected_cj_cmn_docids = RoaringBitmap::new();
+        expected_cj_cmn_docids.push(5);
+        assert_eq!(cj_cmn_docs, expected_cj_cmn_docids);
     }
 }
