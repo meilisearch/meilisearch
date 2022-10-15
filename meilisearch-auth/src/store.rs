@@ -30,12 +30,13 @@ const KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME: &str = "keyid-action-index-expirat
 
 pub type KeyId = Uuid;
 
+pub type IndexExpiry = (Vec<StarOr<IndexType>>, Option<OffsetDateTime>);
+
 #[derive(Clone)]
 pub struct HeedAuthStore {
     env: Arc<Env>,
     keys: Database<ByteSlice, SerdeJson<Key>>,
-    action_keyid_index_expiration:
-        Database<KeyIdActionCodec, SerdeJson<(Vec<StarOr<IndexType>>, Option<OffsetDateTime>)>>,
+    action_keyid_index_expiration: Database<KeyIdActionCodec, SerdeJson<IndexExpiry>>,
     should_close_on_drop: bool,
 }
 
