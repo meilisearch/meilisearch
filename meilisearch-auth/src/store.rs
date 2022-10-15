@@ -241,11 +241,7 @@ impl HeedAuthStore {
             .transpose()?
             .map(|(_, expiration)| expiration);
 
-        if let Some(x) = exp {
-            Ok(Some(x.1))
-        } else {
-            Ok(None)
-        }
+        Ok(exp.map(|x| x.1))
     }
 
     fn delete_key_from_inverted_db(&self, wtxn: &mut RwTxn, key: &KeyId) -> Result<()> {
