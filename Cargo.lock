@@ -2210,6 +2210,7 @@ dependencies = [
  "cargo_toml",
  "clap",
  "crossbeam-channel",
+ "dump",
  "either",
  "env_logger",
  "file-store",
