@@ -4,6 +4,8 @@ use std::fmt;
 use std::ops::Deref;
 use std::str::FromStr;
 
+const PATTERN_IDENTIFIER: char = '*';
+
 #[derive(Debug, Clone)]
 pub enum IndexType {
     Name(IndexUid),
@@ -34,7 +36,7 @@ impl From<IndexType> for String {
     fn from(x: IndexType) -> Self {
         match x {
             IndexType::Name(y) => y.into_inner(),
-            IndexType::Pattern(y) => y.1,
+            IndexType::Pattern(y) => y.original_pattern,
         }
     }
 }
@@ -43,18 +45,32 @@ impl PartialEq<str> for IndexType {
     fn eq(&self, other: &str) -> bool {
         match (self, other) {
             (Self::Name(x), y) => x.0 == y,
-            (Self::Pattern(x), y) => y.starts_with(&x.0),
+            (Self::Pattern(x), y) => y.starts_with(&x.prefix),
         }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct IndexPattern(String, String);
+pub struct IndexPattern {
+    prefix: String,
+    original_pattern: String,
+}
+
+impl IndexPattern {
+    fn from_pattern(pattern: String) -> Self {
+        let prefix = pattern[..pattern.len() - 1].to_owned();
+        let original_pattern = pattern;
+        return Self {
+            prefix,
+            original_pattern,
+        };
+    }
+}
 
 impl Deref for IndexPattern {
     type Target = str;
     fn deref(&self) -> &Self::Target {
-        &self.1
+        &self.original_pattern
     }
 }
 
@@ -63,7 +79,11 @@ pub struct IndexPatternError(String);
 
 impl fmt::Display for IndexPatternError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Pattern should end with *. Received => {}", self.0)
+        write!(
+            f,
+            "Pattern should end with {}. Received => {}",
+            PATTERN_IDENTIFIER, self.0
+        )
     }
 }
 
@@ -100,9 +120,8 @@ impl TryFrom<String> for IndexType {
     type Error = IndexTypeError;
     fn try_from(value: String) -> Result<Self, Self::Error> {
         if let Some(x) = value.chars().last() {
-            if x == '*' {
-                let pattern = &value[..value.len() - 1];
-                Ok(Self::Pattern(IndexPattern(pattern.to_owned(), value)))
+            if x == PATTERN_IDENTIFIER {
+                Ok(Self::Pattern(IndexPattern::from_pattern(value)))
             } else {
                 Ok(Self::Name(IndexUid::try_from(value)?))
             }
