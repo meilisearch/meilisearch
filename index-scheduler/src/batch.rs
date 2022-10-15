@@ -840,7 +840,7 @@ impl IndexScheduler {
         let mut affected_kinds = HashSet::new();
 
         for task_id in to_delete_tasks.iter() {
-            if let Some(task) = self.all_tasks.get(wtxn, &BEU32::new(task_id))? {
+            if let Some(task) = self.get_task(wtxn, task_id)? {
                 if let Some(task_indexes) = task.indexes() {
                     affected_indexes.extend(task_indexes.into_iter().map(|x| x.to_owned()));
                 }
