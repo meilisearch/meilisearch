@@ -13,8 +13,8 @@ pub enum IndexType {
 impl PartialEq for IndexType {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Name(left), Self::Name(right)) if left.eq(right) => true,
-            (Self::Pattern(left), Self::Pattern(right)) if left.deref() == right.deref() => true,
+            (Self::Name(left), Self::Name(right)) => left == right,
+            (Self::Pattern(left), Self::Pattern(right)) => left.deref() == right.deref(),
             (_, _) => false,
         }
     }
