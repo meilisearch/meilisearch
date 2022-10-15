@@ -197,6 +197,13 @@ impl HeedAuthStore {
         Ok(existing)
     }
 
+    pub fn delete_all_keys(&self) -> Result<()> {
+        let mut wtxn = self.env.write_txn()?;
+        self.keys.clear(&mut wtxn)?;
+        wtxn.commit()?;
+        Ok(())
+    }
+
     pub fn list_api_keys(&self) -> Result<Vec<Key>> {
         let mut list = Vec::new();
         let rtxn = self.env.read_txn()?;

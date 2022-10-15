@@ -242,7 +242,9 @@ async fn document_addition(
 
     let (uuid, mut update_file) = index_scheduler.create_update_file()?;
 
+    // TODO: this can be slow, maybe we should spawn a thread? But the payload isn't Send+Sync :weary:
     // push the entire stream into a `Vec`.
+    // If someone sends us a never ending stream we're going to block the thread.
     // TODO: Maybe we should write it to a file to reduce the RAM consumption
     // and then reread it to convert it to obkv?
     let mut buffer = Vec::new();
