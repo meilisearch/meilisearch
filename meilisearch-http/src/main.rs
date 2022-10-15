@@ -48,9 +48,13 @@ async fn main() -> anyhow::Result<()> {
         _ => unreachable!(),
     }
 
-    let index_scheduler = setup_meilisearch(&opt)?;
-
-    let auth_controller = AuthController::new(&opt.db_path, &opt.master_key)?;
+    let (index_scheduler, auth_controller) = match setup_meilisearch(&opt) {
+        Ok(ret) => ret,
+        Err(e) => {
+            std::fs::remove_dir_all(opt.db_path)?;
+            return Err(e);
+        }
+    };
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     let analytics = if !opt.no_analytics {

@@ -1,8 +1,10 @@
 use meilisearch_types::{
     error::ResponseError,
+    keys::Key,
     milli::update::IndexDocumentsMethod,
     settings::Unchecked,
     tasks::{Details, KindWithContent, Status, Task, TaskId},
+    InstanceUid,
 };
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -12,7 +14,7 @@ mod reader;
 mod writer;
 
 pub use error::Error;
-pub use reader::DumpReader;
+pub use reader::{DumpReader, UpdateFile};
 pub use writer::DumpWriter;
 
 const CURRENT_DUMP_VERSION: Version = Version::V6;
@@ -49,14 +51,13 @@ pub enum Version {
     V6,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskDump {
     pub uid: TaskId,
     #[serde(default)]
     pub index_uid: Option<String>,
     pub status: Status,
-    // TODO use our own Kind for the user
     #[serde(rename = "type")]
     pub kind: KindDump,
 
@@ -82,7 +83,7 @@ pub struct TaskDump {
 }
 
 // A `Kind` specific version made for the dump. If modified you may break the dump.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum KindDump {
     DocumentImport {
@@ -118,7 +119,9 @@ pub enum KindDump {
         query: String,
         tasks: Vec<TaskId>,
     },
-    DumpExport,
+    DumpExport {
+        dump_uid: String,
+    },
     Snapshot,
 }
 
@@ -177,7 +180,7 @@ impl From<KindWithContent> for KindDump {
             KindWithContent::IndexSwap { lhs, rhs } => KindDump::IndexSwap { lhs, rhs },
             KindWithContent::CancelTask { tasks } => KindDump::CancelTask { tasks },
             KindWithContent::DeleteTasks { query, tasks } => KindDump::DeleteTasks { query, tasks },
-            KindWithContent::DumpExport { .. } => KindDump::DumpExport,
+            KindWithContent::DumpExport { dump_uid, .. } => KindDump::DumpExport { dump_uid },
             KindWithContent::Snapshot => KindDump::Snapshot,
         }
     }
@@ -206,8 +209,7 @@ pub(crate) mod test {
     use uuid::Uuid;
 
     use crate::{
-        reader::{self, Document},
-        DumpReader, DumpWriter, IndexMetadata, KindDump, TaskDump, Version,
+        reader::Document, DumpReader, DumpWriter, IndexMetadata, KindDump, TaskDump, Version,
     };
 
     pub fn create_test_instance_uid() -> Uuid {

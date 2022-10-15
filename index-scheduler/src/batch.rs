@@ -736,7 +736,7 @@ impl IndexScheduler {
                     let user_result = match user_result {
                         Ok(count) => Ok(DocumentAdditionResult {
                             indexed_documents: count,
-                            number_of_documents: count,
+                            number_of_documents: count, // TODO: this is wrong, we should use the value stored in the Details.
                         }),
                         Err(e) => Err(milli::Error::from(e)),
                     };
