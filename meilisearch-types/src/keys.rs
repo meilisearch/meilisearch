@@ -224,7 +224,7 @@ pub enum Action {
     IndexesDelete,
     #[serde(rename = "tasks.*")]
     TasksAll,
-    #[serde(rename = "tasks.*")]
+    #[serde(rename = "tasks.delete")]
     TasksDelete,
     #[serde(rename = "tasks.get")]
     TasksGet,

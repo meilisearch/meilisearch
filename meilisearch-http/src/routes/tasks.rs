@@ -1,6 +1,5 @@
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use env_logger::filter;
 use index_scheduler::{IndexScheduler, Query, TaskId};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
@@ -188,8 +187,6 @@ pub struct TaskDeletionQuery {
 async fn delete_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_DELETE }>, Data<IndexScheduler>>,
     params: web::Query<TaskDeletionQuery>,
-    _req: HttpRequest,
-    _analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let TaskDeletionQuery {
         type_,
@@ -221,7 +218,7 @@ async fn delete_tasks(
         query: filtered_query_string,
         tasks,
     };
-    // TODO: Lo: analytics
+
     let task = index_scheduler.register(task_deletion)?;
 
     let task_view = TaskView::from_task(&task);
