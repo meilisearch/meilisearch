@@ -56,6 +56,21 @@ impl Default for Query {
 }
 
 impl Query {
+    /// Return `true` iff every field of the query is set to `None`, such that the query
+    /// would match all tasks.
+    pub fn is_empty(&self) -> bool {
+        matches!(
+            self,
+            Query {
+                limit: None,
+                from: None,
+                status: None,
+                kind: None,
+                index_uid: None,
+                uid: None
+            }
+        )
+    }
     pub fn with_status(self, status: Status) -> Self {
         let mut status_vec = self.status.unwrap_or_default();
         status_vec.push(status);
