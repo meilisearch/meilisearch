@@ -209,6 +209,9 @@ async fn delete_tasks(
         index_uid,
         uid,
     };
+    if query.is_empty() {
+        return Err(index_scheduler::Error::TaskDeletionWithEmptyQuery.into());
+    }
 
     let filtered_query = filter_out_inaccessible_indexes_from_query(&index_scheduler, &query);
 
@@ -258,6 +261,7 @@ async fn get_tasks(
         Some(&req),
     );
 
+    // TODO: Lo: use `filter_out_inaccessible_indexes_from_query` here
     let mut filters = index_scheduler::Query::default();
 
     // Then we filter on potential indexes and make sure that the search filter
