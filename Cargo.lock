@@ -2284,6 +2284,7 @@ dependencies = [
  "cargo_toml",
  "clap 4.0.9",
  "crossbeam-channel",
+ "dump",
  "either",
  "env_logger",
  "file-store",

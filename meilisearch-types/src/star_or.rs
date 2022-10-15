@@ -7,7 +7,7 @@ use std::str::FromStr;
 
 /// A type that tries to match either a star (*) or
 /// any other thing that implements `FromStr`.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum StarOr<T> {
     Star,
     Other(T),

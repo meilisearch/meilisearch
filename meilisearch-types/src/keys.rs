@@ -14,7 +14,7 @@ type Result<T> = std::result::Result<T, Error>;
 
 pub type KeyId = Uuid;
 
-#[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Key {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,

@@ -165,6 +165,17 @@ impl AuthController {
             None => Ok(false),
         }
     }
+
+    /// Delete all the keys in the DB.
+    pub fn raw_delete_all_keys(&mut self) -> Result<()> {
+        self.store.delete_all_keys()
+    }
+
+    /// Delete all the keys in the DB.
+    pub fn raw_insert_key(&mut self, key: Key) -> Result<()> {
+        self.store.put_api_key(key)?;
+        Ok(())
+    }
 }
 
 pub struct AuthFilter {

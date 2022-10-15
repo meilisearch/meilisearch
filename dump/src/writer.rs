@@ -71,24 +71,26 @@ impl DumpWriter {
 }
 
 pub struct KeyWriter {
-    file: File,
+    keys: BufWriter<File>,
 }
 
 impl KeyWriter {
     pub(crate) fn new(path: PathBuf) -> Result<Self> {
-        let file = File::create(path.join("keys.jsonl"))?;
-        Ok(KeyWriter { file })
+        let keys = File::create(path.join("keys.jsonl"))?;
+        Ok(KeyWriter {
+            keys: BufWriter::new(keys),
+        })
     }
 
     pub fn push_key(&mut self, key: &Key) -> Result<()> {
-        self.file.write_all(&serde_json::to_vec(key)?)?;
-        self.file.write_all(b"\n")?;
+        self.keys.write_all(&serde_json::to_vec(key)?)?;
+        self.keys.write_all(b"\n")?;
         Ok(())
     }
 }
 
 pub struct TaskWriter {
-    queue: File,
+    queue: BufWriter<File>,
     update_files: PathBuf,
 }
 
@@ -101,7 +103,7 @@ impl TaskWriter {
         std::fs::create_dir(&update_files)?;
 
         Ok(TaskWriter {
-            queue,
+            queue: BufWriter::new(queue),
             update_files,
         })
     }
@@ -111,6 +113,7 @@ impl TaskWriter {
     pub fn push_task(&mut self, task: &TaskDump) -> Result<UpdateFile> {
         self.queue.write_all(&serde_json::to_vec(task)?)?;
         self.queue.write_all(b"\n")?;
+        self.queue.flush()?;
 
         Ok(UpdateFile::new(
             self.update_files.join(format!("{}.jsonl", task.uid)),
