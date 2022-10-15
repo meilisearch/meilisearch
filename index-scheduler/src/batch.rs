@@ -830,6 +830,10 @@ impl IndexScheduler {
 
         let processing_tasks = &self.processing_tasks.read().unwrap().1;
 
+        // TODO: Lo: Take the intersection of `matched_tasks` and `all_tasks` first,
+        // so that we end up with the correct count for `deleted_tasks` (the value returned
+        // by this function). Related snapshot test:
+        // `task_deletion_delete_same_task_twice/task_deletion_processed.snap`
         let mut to_delete_tasks = matched_tasks - processing_tasks;
         to_delete_tasks -= enqueued_tasks;
 
