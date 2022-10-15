@@ -13,6 +13,8 @@ pub enum Error {
     IndexAlreadyExists(String),
     #[error("Corrupted task queue.")]
     CorruptedTaskQueue,
+    #[error("Corrupted dump.")]
+    CorruptedDump,
     #[error("Task `{0}` not found")]
     TaskNotFound(TaskId),
     // TODO: Lo: proper error message for this
@@ -49,14 +51,15 @@ impl ErrorCode for Error {
             Error::InvalidStatus(_) => Code::BadRequest,
             Error::InvalidKind(_) => Code::BadRequest,
 
-            // TODO: TAMO: are all these errors really internal?
             Error::Dump(e) => e.error_code(),
             Error::Milli(e) => e.error_code(),
+            // TODO: TAMO: are all these errors really internal?
             Error::Heed(_) => Code::Internal,
             Error::FileStore(_) => Code::Internal,
             Error::IoError(_) => Code::Internal,
             Error::Anyhow(_) => Code::Internal,
             Error::CorruptedTaskQueue => Code::Internal,
+            Error::CorruptedDump => Code::Internal,
         }
     }
 }

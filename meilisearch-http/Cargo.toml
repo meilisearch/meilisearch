@@ -34,6 +34,7 @@ byte-unit = { version = "4.0.14", default-features = false, features = ["std", "
 bytes = "1.2.1"
 clap = { version = "4.0.9", features = ["derive", "env"] }
 crossbeam-channel = "0.5.6"
+dump = { path = "../dump" }
 either = "1.8.0"
 env_logger = "0.9.1"
 flate2 = "1.0.24"

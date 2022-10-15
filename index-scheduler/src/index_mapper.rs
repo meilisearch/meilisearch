@@ -28,7 +28,7 @@ pub struct IndexMapper {
 
     base_path: PathBuf,
     index_size: usize,
-    indexer_config: Arc<IndexerConfig>,
+    pub indexer_config: Arc<IndexerConfig>,
 }
 
 /// Weither the index must not be inserted back
