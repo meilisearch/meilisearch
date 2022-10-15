@@ -146,7 +146,7 @@ impl UpdateFile {
 }
 
 pub struct IndexWriter {
-    documents: File,
+    documents: BufWriter<File>,
     settings: File,
 }
 
@@ -161,7 +161,7 @@ impl IndexWriter {
         let settings = File::create(path.join("settings.json"))?;
 
         Ok(IndexWriter {
-            documents,
+            documents: BufWriter::new(documents),
             settings,
         })
     }
@@ -169,6 +169,7 @@ impl IndexWriter {
     pub fn push_document(&mut self, document: &Map<String, Value>) -> Result<()> {
         self.documents.write_all(&serde_json::to_vec(document)?)?;
         self.documents.write_all(b"\n")?;
+        self.documents.flush()?;
         Ok(())
     }
 
