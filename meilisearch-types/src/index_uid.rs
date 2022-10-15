@@ -119,16 +119,10 @@ impl From<IndexPatternError> for IndexTypeError {
 impl TryFrom<String> for IndexType {
     type Error = IndexTypeError;
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        if let Some(x) = value.chars().last() {
-            if x == PATTERN_IDENTIFIER {
-                Ok(Self::Pattern(IndexPattern::from_pattern(value)))
-            } else {
-                Ok(Self::Name(IndexUid::try_from(value)?))
-            }
+        if let Some(x) = value.strip_suffix(PATTERN_IDENTIFIER) {
+            Ok(Self::Pattern(IndexPattern::from_pattern(x.to_owned())))
         } else {
-            Err(Self::Error::Name(IndexUidFormatError {
-                invalid_uid: value,
-            }))
+            Ok(Self::Name(IndexUid::try_from(value)?))
         }
     }
 }
