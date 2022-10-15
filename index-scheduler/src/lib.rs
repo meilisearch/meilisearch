@@ -792,6 +792,47 @@ mod tests {
     }
 
     #[test]
+    fn task_deletion_delete_same_task_twice() {
+        let (index_scheduler, handle) = IndexScheduler::test(true);
+
+        let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
+        let (file1, documents_count1) = sample_documents(&index_scheduler, 1, 1);
+
+        let to_enqueue = [
+            replace_document_import_task("catto", None, 0, documents_count0),
+            replace_document_import_task("doggo", Some("bone"), 1, documents_count1),
+        ];
+
+        for task in to_enqueue {
+            let _ = index_scheduler.register(task).unwrap();
+        }
+        file0.persist().unwrap();
+        file1.persist().unwrap();
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_tasks_enqueued");
+
+        handle.wait_till(Breakpoint::AfterProcessing);
+        // first addition of documents should be successful
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_tasks_processed");
+
+        // Now we delete the first task multiple times in a row
+        for _ in 0..2 {
+            index_scheduler
+                .register(KindWithContent::TaskDeletion {
+                    query: "test_query".to_owned(),
+                    tasks: RoaringBitmap::from_iter(&[0]),
+                })
+                .unwrap();
+        }
+        for _ in 0..2 {
+            handle.wait_till(Breakpoint::AfterProcessing);
+        }
+        // The three deletion tasks are marked as succeeded, and all their details say that one
+        // task has been deleted. Is this the correct behaviour? Probably not!
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "task_deletion_processed");
+    }
+
+    #[test]
     fn document_addition() {
         let (index_scheduler, handle) = IndexScheduler::test(true);
 
