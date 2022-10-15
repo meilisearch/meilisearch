@@ -24,6 +24,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         index_mapper,
         wake_up: _,
         test_breakpoint_sdr: _,
+        in_run_loop: _,
     } = scheduler;
 
     let rtxn = env.read_txn().unwrap();

@@ -1,9 +1,6 @@
 use std::collections::HashSet;
 
 use crate::{autobatcher::BatchKind, Error, IndexScheduler, Result, TaskId};
-
-use meilisearch_types::tasks::{Details, Kind, KindWithContent, Status, Task};
-
 use log::{debug, info};
 use meilisearch_types::milli::update::IndexDocumentsConfig;
 use meilisearch_types::milli::update::{
@@ -13,11 +10,13 @@ use meilisearch_types::milli::{
     self, documents::DocumentsBatchReader, update::Settings as MilliSettings, BEU32,
 };
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
+use meilisearch_types::tasks::{Details, Kind, KindWithContent, Status, Task};
 use meilisearch_types::{
     heed::{RoTxn, RwTxn},
     Index,
 };
 use roaring::RoaringBitmap;
+use std::collections::HashSet;
 use uuid::Uuid;
 
 #[derive(Debug)]

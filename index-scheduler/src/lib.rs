@@ -1,3 +1,22 @@
+/*!
+This crate defines the index scheduler, which is responsible for:
+1. Keeping references to meilisearch's indexes and mapping them to their
+user-defined names.
+2. Scheduling tasks given by the user and executing them, in batch if possible.
+
+When an `IndexScheduler` is created, a new thread containing a reference to the
+scheduler is created. This thread runs the scheduler's run loop, where the
+scheduler waits to be woken up to process new tasks. It wakes up when:
+
+1. it is launched for the first time
+2. a new task is registered
+3. a batch of tasks has been processed
+
+It is only within this thread that the scheduler is allowed to process tasks.
+On the other hand, the publicly accessible methods of the scheduler can be
+called asynchronously from any thread. These methods can either query the
+content of the scheduler or enqueue new tasks.
+*/
 mod autobatcher;
 mod batch;
 pub mod error;
@@ -30,19 +49,38 @@ use meilisearch_types::milli::{Index, RoaringBitmapCodec, BEU32};
 
 use crate::index_mapper::IndexMapper;
 
+/// Defines a subset of tasks to be retrieved from the [`IndexScheduler`].
+///
+/// An empty/default query (where each field is set to `None`) matches all tasks.
+/// Each non-null field restricts the set of tasks further.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Query {
+    /// The maximum number of tasks to be matched
     pub limit: Option<u32>,
+    /// The minimum [task id](`meilisearch_types::tasks::Task::uid`) to be matched
     pub from: Option<u32>,
+    /// The allowed [statuses](`meilisearch_types::tasks::Task::status`) of the matched tasls
     pub status: Option<Vec<Status>>,
     #[serde(rename = "type")]
+    /// The allowed [kinds](meilisearch_types::tasks::Kind) of the matched tasks.
+    ///
+    /// The kind of a task is given by:
+    /// ```
+    /// # use meilisearch_types::tasks::{Task, Kind};
+    /// # fn doc_func(task: Task) -> Kind {
+    /// task.kind.as_kind()
+    /// # }
+    /// ```
     pub kind: Option<Vec<Kind>>,
+    /// The allowed [index ids](meilisearch_types::tasks::Task::index_uid) of the matched tasks
     pub index_uid: Option<Vec<String>>,
+    /// The [task ids](`meilisearch_types::tasks::Task::uid`) to be matched
     pub uid: Option<Vec<TaskId>>,
 }
 
 impl Default for Query {
+    /// Create an empty query, that matches all tasks.
     fn default() -> Self {
         Self {
             limit: None,
@@ -71,6 +109,7 @@ impl Query {
             }
         )
     }
+    /// Add a [status](`meilisearch_types::tasks::Task::status`) to the list of permitted statuses.
     pub fn with_status(self, status: Status) -> Self {
         let mut status_vec = self.status.unwrap_or_default();
         status_vec.push(status);
@@ -80,6 +119,7 @@ impl Query {
         }
     }
 
+    /// Add a [task kind](meilisearch_types::tasks::Kind) to the list of permitted kinds.
     pub fn with_kind(self, kind: Kind) -> Self {
         let mut kind_vec = self.kind.unwrap_or_default();
         kind_vec.push(kind);
@@ -89,6 +129,7 @@ impl Query {
         }
     }
 
+    /// Add an [index id](meilisearch_types::tasks::Task::index_uid) to the list of permitted indexes.
     pub fn with_index(self, index_uid: String) -> Self {
         let mut index_vec = self.index_uid.unwrap_or_default();
         index_vec.push(index_uid);
@@ -98,6 +139,7 @@ impl Query {
         }
     }
 
+    /// Add a [task id](`meilisearch_types::tasks::Task::uid`) to the list of permitted indexes.
     pub fn with_uid(self, uid: TaskId) -> Self {
         let mut task_vec = self.uid.unwrap_or_default();
         task_vec.push(uid);
@@ -107,6 +149,7 @@ impl Query {
         }
     }
 
+    /// Add a limit to the number of tasks matched by the query
     pub fn with_limit(self, limit: u32) -> Self {
         Self {
             limit: Some(limit),
@@ -123,13 +166,13 @@ mod db_name {
     pub const INDEX_TASKS: &str = "index-tasks";
 }
 
-/// This module is responsible for two things;
-/// 1. Resolve the name of the indexes.
-/// 2. Schedule the tasks.
+/// Structure which holds meilisearch's indexes and schedules the tasks
+/// to be performed on them.
 pub struct IndexScheduler {
     /// The list of tasks currently processing and their starting date.
     pub(crate) processing_tasks: Arc<RwLock<(OffsetDateTime, RoaringBitmap)>>,
 
+    /// The list of files referenced by the tasks
     pub(crate) file_store: FileStore,
 
     /// The LMDB environment which the DBs are associated with.
@@ -151,12 +194,19 @@ pub struct IndexScheduler {
     /// Get a signal when a batch needs to be processed.
     pub(crate) wake_up: Arc<SignalEvent>,
 
-    /// Weither autobatching is enabled or not.
+    /// Whether autobatching is enabled or not.
     pub(crate) autobatching_enabled: bool,
 
+    /// A boolean indicating whether the index scheduler has already started its run loop.
+    ///
+    /// It is not necessary for the correctness of the index scheduler, but is used to provide
+    /// a dynamic check that the [`IndexScheduler::run`] function is only called once per index
+    /// scheduler.
+    in_run_loop: Arc<RwLock<bool>>,
+
     // ================= test
-    /// The next entry is dedicated to the tests.
-    /// It provide a way to break in multiple part of the scheduler.
+    //The next entry is dedicated to the tests.
+    /// Provides a way to set breakpoints in multiple parts of the scheduler.
     #[cfg(test)]
     test_breakpoint_sdr: crossbeam::channel::Sender<Breakpoint>,
 }
@@ -171,6 +221,18 @@ pub enum Breakpoint {
 }
 
 impl IndexScheduler {
+    /// Create an index scheduler and start its run loop.
+    ///
+    /// ## Arguments
+    /// - `tasks_path`: the path for the LMDB environment containing the task databases
+    /// - `update_file_path`: the path to the file store containing the files associated to the tasks
+    /// - `index_size`: the maximum size, in bytes, of each meilisearch index
+    /// - `indexer_config`: configuration used during indexing for each meilisearch index
+    /// - `autobatching_enabled`: `true` iff the index scheduler is allowed to automatically batch tasks
+    /// together, to process multiple tasks at once.
+    ///
+    /// ## Return
+    /// A reference to the created [`IndexScheduler`], if successful.
     pub fn new(
         tasks_path: PathBuf,
         update_file_path: PathBuf,
@@ -204,6 +266,7 @@ impl IndexScheduler {
             env,
             // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
             wake_up: Arc::new(SignalEvent::auto(true)),
+            in_run_loop: Arc::new(RwLock::new(false)),
             autobatching_enabled,
 
             #[cfg(test)]
@@ -214,7 +277,10 @@ impl IndexScheduler {
         Ok(this)
     }
 
-    /// This function will execute in a different thread and must be called only once.
+    /// Start the run loop for the given index scheduler.
+    ///
+    /// This function will execute in a different thread and must be called only once per index
+    /// scheduler, and will crash otherwise.
     fn run(&self) {
         let run = Self {
             processing_tasks: self.processing_tasks.clone(),
@@ -227,25 +293,36 @@ impl IndexScheduler {
             index_mapper: self.index_mapper.clone(),
             wake_up: self.wake_up.clone(),
             autobatching_enabled: self.autobatching_enabled,
-
+            in_run_loop: self.in_run_loop.clone(),
             #[cfg(test)]
             test_breakpoint_sdr: self.test_breakpoint_sdr.clone(),
         };
 
-        std::thread::spawn(move || loop {
-            run.wake_up.wait();
+        std::thread::spawn(move || {
+            let mut in_run_loop = run.in_run_loop.write().expect(
+                "IndexScheduler::run was called twice for the same scheduler (cannot acquire lock).",
+            );
+            assert_eq!(
+                *in_run_loop, false,
+                "IndexScheduler::run was called twice for the same scheduler."
+            );
+            *in_run_loop = true;
+            loop {
+                run.wake_up.wait();
 
-            match run.tick() {
-                Ok(0) => (),
-                Ok(_) => run.wake_up.signal(),
-                Err(e) => log::error!("{}", e),
+                match run.tick() {
+                    Ok(0) => (),
+                    Ok(_) => run.wake_up.signal(),
+                    Err(e) => log::error!("{}", e),
+                }
             }
         });
     }
 
-    /// Return the index corresponding to the name. If it wasn't opened before
-    /// it'll be opened. But if it doesn't exist on disk it'll throw an
-    /// `IndexNotFound` error.
+    /// Return the index corresponding to the name.
+    ///
+    /// * If the index wasn't opened before, the index will be opened.
+    /// * If the index doesn't exist on disk, the `IndexNotFoundError` is thrown.
     pub fn index(&self, name: &str) -> Result<Index> {
         let rtxn = self.env.read_txn()?;
         self.index_mapper.index(&rtxn, name)
@@ -257,7 +334,7 @@ impl IndexScheduler {
         self.index_mapper.indexes(&rtxn)
     }
 
-    /// Return the task ids corresponding to the query
+    /// Return the task ids matched by the given query.
     pub fn get_task_ids(&self, query: &Query) -> Result<RoaringBitmap> {
         let rtxn = self.env.read_txn()?;
 
@@ -306,7 +383,7 @@ impl IndexScheduler {
         Ok(tasks)
     }
 
-    /// Returns the tasks corresponding to the query.
+    /// Returns the tasks matched by the given query.
     pub fn get_tasks(&self, query: Query) -> Result<Vec<Task>> {
         let tasks = self.get_task_ids(&query)?;
         let rtxn = self.env.read_txn()?;
@@ -342,8 +419,9 @@ impl IndexScheduler {
         }
     }
 
-    /// Register a new task in the scheduler. If it fails and data was associated with the task
-    /// it tries to delete the file.
+    /// Register a new task in the scheduler.
+    ///
+    /// If it fails and data was associated with the task, it tries to delete the associated data.
     pub fn register(&self, task: KindWithContent) -> Result<Task> {
         let mut wtxn = self.env.write_txn()?;
 
@@ -390,6 +468,11 @@ impl IndexScheduler {
         Ok(task)
     }
 
+    /// Create a file and register it in the index scheduler.
+    ///
+    /// The returned file and uuid can be used to associate
+    /// some data to a task. The file will be kept until
+    /// the task has been fully processed.
     pub fn create_update_file(&self) -> Result<(Uuid, File)> {
         Ok(self.file_store.new_update()?)
     }
@@ -398,11 +481,23 @@ impl IndexScheduler {
         Ok(self.file_store.new_update_with_uuid(uuid)?)
     }
 
+    /// Delete a file from the index scheduler.
+    ///
+    /// Counterpart to the [`create_update_file`](IndexScheduler::create_update_file) method.
     pub fn delete_update_file(&self, uuid: Uuid) -> Result<()> {
         Ok(self.file_store.delete(uuid)?)
     }
 
-    /// Create and execute and store the result of one batch of registered tasks.
+    /// Perform one iteration of the run loop.
+    ///
+    /// 1. Find the next batch of tasks to be processed.
+    /// 2. Update the information of these tasks following the start of their processing.
+    /// 3. Update the in-memory list of processed tasks accordingly.
+    /// 4. Process the batch:
+    ///    - perform the actions of each batched task
+    ///    - update the information of each batched task following the end
+    ///      of their processing.
+    /// 5. Reset the in-memory list of processed tasks.
     ///
     /// Returns the number of processed tasks.
     fn tick(&self) -> Result<usize> {
