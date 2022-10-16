@@ -17,6 +17,7 @@ use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use meilisearch_types::InstanceUid;
 
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 
 use file_store::FileStore;
@@ -406,19 +407,24 @@ impl IndexScheduler {
         // Currently we don't need to access the tasks queue while loading a dump thus I can block everything.
         let mut wtxn = self.env.write_txn()?;
 
-        let content_uuid = if let Some(content_file) = content_file {
-            let (uuid, mut file) = self.create_update_file()?;
-            let mut builder = DocumentsBatchBuilder::new(file.as_file_mut());
-            for doc in content_file {
-                builder.append_json_object(&doc?)?;
+        let content_uuid = match content_file {
+            Some(content_file) if task.status == Status::Enqueued => {
+                let (uuid, mut file) = self.create_update_file()?;
+                let mut builder = DocumentsBatchBuilder::new(file.as_file_mut());
+                for doc in content_file {
+                    builder.append_json_object(&doc?)?;
+                }
+                builder.into_inner()?;
+                file.persist()?;
+
+                Some(uuid)
             }
-            builder.into_inner()?;
-
-            file.persist()?;
-
-            Some(uuid)
-        } else {
-            None
+            // If the task isn't `Enqueued` then just generate a recognisable `Uuid`
+            // in case we try to open it later.
+            _ if task.status != Status::Enqueued => {
+                Some(Uuid::from_str("00112233-4455-6677-8899-aabbccddeeff").unwrap())
+            }
+            _ => None,
         };
 
         let task = Task {
