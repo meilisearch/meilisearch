@@ -518,6 +518,7 @@ impl IndexScheduler {
             }
         }
 
+        self.wake_up.signal();
         Ok(task)
     }
 
