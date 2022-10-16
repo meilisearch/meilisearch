@@ -109,7 +109,7 @@ impl V6Reader {
         &mut self,
     ) -> Box<dyn Iterator<Item = Result<(Task, Option<Box<super::UpdateFile>>)>> + '_> {
         Box::new((&mut self.tasks).lines().map(|line| -> Result<_> {
-            let task: Task = serde_json::from_str(&dbg!(line?)).unwrap();
+            let task: Task = serde_json::from_str(&line?).unwrap();
 
             let update_file_path = self
                 .dump
