@@ -66,7 +66,6 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
     // we don't want to create anything in the data.ms yet, thus we
     // wrap our two builders in a closure that'll be executed later.
     let auth_controller_builder = || AuthController::new(&opt.db_path, &opt.master_key);
-
     let index_scheduler_builder = || {
         IndexScheduler::new(
             opt.db_path.join("tasks"),
@@ -80,6 +79,19 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
             todo!("We'll see later"),
         )
     };
+    let meilisearch = || -> anyhow::Result<_> {
+        // if anything wrong happens we delete the `data.ms` entirely.
+        match (
+            index_scheduler_builder().map_err(anyhow::Error::from),
+            auth_controller_builder().map_err(anyhow::Error::from),
+        ) {
+            (Ok(i), Ok(a)) => Ok((i, a)),
+            (Err(e), _) | (_, Err(e)) => {
+                std::fs::remove_dir_all(&opt.db_path)?;
+                Err(e)
+            }
+        }
+    };
 
     let (index_scheduler, auth_controller) = if let Some(ref _path) = opt.import_snapshot {
         // handle the snapshot with something akin to the dumps
@@ -90,8 +102,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
         let src_path_exists = path.exists();
 
         if empty_db && src_path_exists {
-            let mut index_scheduler = index_scheduler_builder()?;
-            let mut auth_controller = auth_controller_builder()?;
+            let (mut index_scheduler, mut auth_controller) = meilisearch()?;
             import_dump(
                 &opt.db_path,
                 path,
@@ -109,8 +120,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
         } else if !src_path_exists && !opt.ignore_missing_dump {
             bail!("dump doesn't exist at {:?}", path)
         } else {
-            let mut index_scheduler = index_scheduler_builder()?;
-            let mut auth_controller = auth_controller_builder()?;
+            let (mut index_scheduler, mut auth_controller) = meilisearch()?;
             import_dump(
                 &opt.db_path,
                 path,
@@ -120,7 +130,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
             (index_scheduler, auth_controller)
         }
     } else {
-        (index_scheduler_builder()?, auth_controller_builder()?)
+        meilisearch()?
     };
 
     /*
