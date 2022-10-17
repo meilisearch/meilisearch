@@ -79,7 +79,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
             todo!("We'll see later"),
         )
     };
-    let meilisearch = || -> anyhow::Result<_> {
+    let meilisearch_builder = || -> anyhow::Result<_> {
         // if anything wrong happens we delete the `data.ms` entirely.
         match (
             index_scheduler_builder().map_err(anyhow::Error::from),
@@ -102,7 +102,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
         let src_path_exists = path.exists();
 
         if empty_db && src_path_exists {
-            let (mut index_scheduler, mut auth_controller) = meilisearch()?;
+            let (mut index_scheduler, mut auth_controller) = meilisearch_builder()?;
             import_dump(
                 &opt.db_path,
                 path,
@@ -120,7 +120,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
         } else if !src_path_exists && !opt.ignore_missing_dump {
             bail!("dump doesn't exist at {:?}", path)
         } else {
-            let (mut index_scheduler, mut auth_controller) = meilisearch()?;
+            let (mut index_scheduler, mut auth_controller) = meilisearch_builder()?;
             import_dump(
                 &opt.db_path,
                 path,
@@ -130,7 +130,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
             (index_scheduler, auth_controller)
         }
     } else {
-        meilisearch()?
+        meilisearch_builder()?
     };
 
     /*
@@ -260,7 +260,7 @@ fn import_dump(
     // 4. Import the tasks.
     for ret in dump_reader.tasks() {
         let (task, file) = ret?;
-        index_scheduler.register_dumpped_task(task, file, &keys, instance_uid)?;
+        index_scheduler.register_dumped_task(task, file, &keys, instance_uid)?;
     }
     Ok(())
 }
