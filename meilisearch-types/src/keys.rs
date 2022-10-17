@@ -1,7 +1,7 @@
 use crate::error::{Code, ErrorCode};
 use crate::index_uid::IndexUid;
 use crate::star_or::StarOr;
-use enum_iterator::IntoEnumIterator;
+use enum_iterator::Sequence;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_value, Value};
 use std::hash::Hash;
@@ -197,7 +197,7 @@ fn parse_expiration_date(value: &Value) -> Result<Option<OffsetDateTime>> {
     }
 }
 
-#[derive(IntoEnumIterator, Copy, Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Hash)]
+#[derive(Copy, Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Hash, Sequence)]
 #[repr(u8)]
 pub enum Action {
     #[serde(rename = "*")]
