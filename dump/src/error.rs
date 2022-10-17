@@ -22,6 +22,7 @@ impl ErrorCode for Error {
     fn error_code(&self) -> Code {
         match self {
             // Are these three really Internal errors?
+            // TODO look at that later.
             Error::Io(_) => Code::Internal,
             Error::Serde(_) => Code::Internal,
             Error::Uuid(_) => Code::Internal,
