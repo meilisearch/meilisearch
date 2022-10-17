@@ -11,10 +11,8 @@ pub type TaskId = u32;
 
 use dump::{KindDump, TaskDump, UpdateFile};
 pub use error::Error;
-use meilisearch_types::keys::Key;
 use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
-use meilisearch_types::InstanceUid;
 
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -400,8 +398,6 @@ impl IndexScheduler {
         &mut self,
         task: TaskDump,
         content_file: Option<Box<UpdateFile>>,
-        keys: &[Key],
-        instance_uid: Option<InstanceUid>,
     ) -> Result<Task> {
         // Currently we don't need to access the tasks queue while loading a dump thus I can block everything.
         let mut wtxn = self.env.write_txn()?;
@@ -479,9 +475,13 @@ impl IndexScheduler {
                 KindDump::DeleteTasks { query, tasks } => {
                     KindWithContent::TaskDeletion { query, tasks }
                 }
-                KindDump::DumpExport { dump_uid } => KindWithContent::DumpExport {
+                KindDump::DumpExport {
                     dump_uid,
-                    keys: keys.to_vec(),
+                    keys,
+                    instance_uid,
+                } => KindWithContent::DumpExport {
+                    dump_uid,
+                    keys,
                     instance_uid,
                 },
                 KindDump::Snapshot => KindWithContent::Snapshot,
