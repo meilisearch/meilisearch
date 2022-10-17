@@ -819,7 +819,7 @@ impl IndexScheduler {
 
     /// Delete each given task from all the databases (if it is deleteable).
     ///
-    /// Return the number of tasks that were actually deleted
+    /// Return the number of tasks that were actually deleted.
     fn delete_matched_tasks(
         &self,
         wtxn: &mut RwTxn,
@@ -830,11 +830,9 @@ impl IndexScheduler {
 
         let processing_tasks = &self.processing_tasks.read().unwrap().1;
 
-        // TODO: Lo: Take the intersection of `matched_tasks` and `all_tasks` first,
-        // so that we end up with the correct count for `deleted_tasks` (the value returned
-        // by this function). Related snapshot test:
-        // `task_deletion_delete_same_task_twice/task_deletion_processed.snap`
-        let mut to_delete_tasks = matched_tasks - processing_tasks;
+        let all_task_ids = self.all_task_ids(&wtxn)?;
+        let mut to_delete_tasks = all_task_ids & matched_tasks;
+        to_delete_tasks -= processing_tasks;
         to_delete_tasks -= enqueued_tasks;
 
         // 2. We now have a list of tasks to delete, delete them
@@ -844,6 +842,8 @@ impl IndexScheduler {
         let mut affected_kinds = HashSet::new();
 
         for task_id in to_delete_tasks.iter() {
+            // This should never fail, but there is no harm done if it does. The function
+            // will still be 99% correct (the number of deleted tasks will be slightly incorrect).
             if let Some(task) = self.get_task(wtxn, task_id)? {
                 if let Some(task_indexes) = task.indexes() {
                     affected_indexes.extend(task_indexes.into_iter().map(|x| x.to_owned()));
