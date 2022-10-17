@@ -13,7 +13,7 @@ use self::typo::Typo;
 use self::words::Words;
 use super::query_tree::{Operation, PrimitiveQueryPart, Query, QueryKind};
 use crate::search::criteria::geo::Geo;
-use crate::search::{word_derivations, WordDerivationsCache};
+use crate::search::{word_derivations, Distinct, WordDerivationsCache};
 use crate::{AscDesc as AscDescName, DocumentId, FieldId, Index, Member, Result};
 
 mod asc_desc;
@@ -226,19 +226,26 @@ impl<'t> CriteriaBuilder<'t> {
         Ok(Self { rtxn, index, words_fst, words_prefixes_fst })
     }
 
-    pub fn build(
+    pub fn build<D: 't + Distinct>(
         &'t self,
         query_tree: Option<Operation>,
         primitive_query: Option<Vec<PrimitiveQueryPart>>,
         filtered_candidates: Option<RoaringBitmap>,
         sort_criteria: Option<Vec<AscDescName>>,
+        exhaustive_number_hits: bool,
+        distinct: Option<D>,
     ) -> Result<Final<'t>> {
         use crate::criterion::Criterion as Name;
 
         let primitive_query = primitive_query.unwrap_or_default();
 
-        let mut criterion =
-            Box::new(Initial::new(query_tree, filtered_candidates)) as Box<dyn Criterion>;
+        let mut criterion = Box::new(Initial::new(
+            self,
+            query_tree,
+            filtered_candidates,
+            exhaustive_number_hits,
+            distinct,
+        )) as Box<dyn Criterion>;
         for name in self.index.criteria(&self.rtxn)? {
             criterion = match name {
                 Name::Words => Box::new(Words::new(self, criterion)),

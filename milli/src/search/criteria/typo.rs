@@ -348,6 +348,7 @@ mod test {
     use super::super::initial::Initial;
     use super::super::test::TestContext;
     use super::*;
+    use crate::search::NoopDistinct;
 
     fn display_criteria(mut criteria: Typo, mut parameters: CriterionParameters) -> String {
         let mut result = String::new();
@@ -368,7 +369,8 @@ mod test {
             excluded_candidates: &RoaringBitmap::new(),
         };
 
-        let parent = Initial::new(query_tree, facet_candidates);
+        let parent =
+            Initial::<NoopDistinct>::new(&context, query_tree, facet_candidates, false, None);
         let criteria = Typo::new(&context, Box::new(parent));
 
         let result = display_criteria(criteria, criterion_parameters);
@@ -405,7 +407,8 @@ mod test {
             wdcache: &mut WordDerivationsCache::new(),
             excluded_candidates: &RoaringBitmap::new(),
         };
-        let parent = Initial::new(Some(query_tree), facet_candidates);
+        let parent =
+            Initial::<NoopDistinct>::new(&context, Some(query_tree), facet_candidates, false, None);
         let criteria = Typo::new(&context, Box::new(parent));
 
         let result = display_criteria(criteria, criterion_parameters);
@@ -439,7 +442,13 @@ mod test {
             wdcache: &mut WordDerivationsCache::new(),
             excluded_candidates: &RoaringBitmap::new(),
         };
-        let parent = Initial::new(query_tree, Some(facet_candidates.clone()));
+        let parent = Initial::<NoopDistinct>::new(
+            &context,
+            query_tree,
+            Some(facet_candidates.clone()),
+            false,
+            None,
+        );
         let criteria = Typo::new(&context, Box::new(parent));
 
         let result = display_criteria(criteria, criterion_parameters);
@@ -476,7 +485,13 @@ mod test {
             wdcache: &mut WordDerivationsCache::new(),
             excluded_candidates: &RoaringBitmap::new(),
         };
-        let parent = Initial::new(Some(query_tree), Some(facet_candidates.clone()));
+        let parent = Initial::<NoopDistinct>::new(
+            &context,
+            Some(query_tree),
+            Some(facet_candidates.clone()),
+            false,
+            None,
+        );
         let criteria = Typo::new(&context, Box::new(parent));
 
         let result = display_criteria(criteria, criterion_parameters);
