@@ -87,6 +87,11 @@ impl KeyWriter {
         self.keys.write_all(b"\n")?;
         Ok(())
     }
+
+    pub fn flush(mut self) -> Result<()> {
+        self.keys.flush()?;
+        Ok(())
+    }
 }
 
 pub struct TaskWriter {
@@ -113,11 +118,15 @@ impl TaskWriter {
     pub fn push_task(&mut self, task: &TaskDump) -> Result<UpdateFile> {
         self.queue.write_all(&serde_json::to_vec(task)?)?;
         self.queue.write_all(b"\n")?;
-        self.queue.flush()?;
 
         Ok(UpdateFile::new(
             self.update_files.join(format!("{}.jsonl", task.uid)),
         ))
+    }
+
+    pub fn flush(mut self) -> Result<()> {
+        self.queue.flush()?;
+        Ok(())
     }
 }
 
@@ -135,11 +144,17 @@ impl UpdateFile {
         if let Some(writer) = self.writer.as_mut() {
             writer.write_all(&serde_json::to_vec(document)?)?;
             writer.write_all(b"\n")?;
-            writer.flush()?;
         } else {
             let file = File::create(&self.path).unwrap();
             self.writer = Some(BufWriter::new(file));
             self.push_document(document)?;
+        }
+        Ok(())
+    }
+
+    pub fn flush(self) -> Result<()> {
+        if let Some(mut writer) = self.writer {
+            writer.flush()?;
         }
         Ok(())
     }
@@ -167,8 +182,12 @@ impl IndexWriter {
     }
 
     pub fn push_document(&mut self, document: &Map<String, Value>) -> Result<()> {
-        self.documents.write_all(&serde_json::to_vec(document)?)?;
+        serde_json::to_writer(&mut self.documents, document)?;
         self.documents.write_all(b"\n")?;
+        Ok(())
+    }
+
+    pub fn flush(&mut self) -> Result<()> {
         self.documents.flush()?;
         Ok(())
     }
