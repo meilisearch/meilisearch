@@ -109,6 +109,8 @@ impl<'a> Search<'a> {
         self
     }
 
+    /// Force the search to exhastivelly compute the number of candidates,
+    /// this will increase the search time but allows finite pagination.
     pub fn exhaustive_number_hits(&mut self, exhaustive_number_hits: bool) -> &mut Search<'a> {
         self.exhaustive_number_hits = exhaustive_number_hits;
         self

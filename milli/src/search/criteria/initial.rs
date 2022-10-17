@@ -5,7 +5,9 @@ use crate::search::criteria::{resolve_query_tree, Context};
 use crate::search::query_tree::Operation;
 use crate::search::Distinct;
 use crate::Result;
-
+/// Initial is a mandatory criterion, it is always the first
+/// and is meant to initalize the CriterionResult used by the other criteria.
+/// It behave like an [Once Iterator](https://doc.rust-lang.org/std/iter/struct.Once.html) and will return Some(CriterionResult) only one time.
 pub struct Initial<'t, D> {
     ctx: &'t dyn Context<'t>,
     answer: Option<CriterionResult>,
@@ -38,18 +40,21 @@ impl<D: Distinct> Criterion for Initial<'_, D> {
             .take()
             .map(|mut answer| {
                 if self.exhaustive_number_hits && answer.query_tree.is_some() {
+                    // resolve the whole query tree to retrieve an exhastive list of documents matching the query.
                     let mut candidates = resolve_query_tree(
                         self.ctx,
                         answer.query_tree.as_ref().unwrap(),
                         &mut params.wdcache,
                     )?;
 
+                    // Apply the filters on the documents retrieved with the query tree.
                     if let Some(ref filtered_candidates) = answer.filtered_candidates {
                         candidates &= filtered_candidates;
                     }
 
+                    // because the bucket_candidates should be an exhastive count of the matching documents,
+                    // we precompute the distinct attributes.
                     let bucket_candidates = match &mut self.distinct {
-                        // may be really time consuming
                         Some(distinct) => {
                             let mut bucket_candidates = RoaringBitmap::new();
                             for c in distinct.distinct(candidates.clone(), RoaringBitmap::new()) {
