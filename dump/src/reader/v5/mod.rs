@@ -34,7 +34,7 @@
 
 use std::{
     fs::{self, File},
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Seek, SeekFrom},
     path::Path,
 };
 
@@ -176,12 +176,11 @@ impl V5Reader {
         }))
     }
 
-    pub fn keys(&mut self) -> Box<dyn Iterator<Item = Result<Key>> + '_> {
-        Box::new(
-            (&mut self.keys)
-                .lines()
-                .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) }),
-        )
+    pub fn keys(&mut self) -> Result<Box<dyn Iterator<Item = Result<Key>> + '_>> {
+        self.keys.seek(SeekFrom::Start(0))?;
+        Ok(Box::new((&mut self.keys).lines().map(
+            |line| -> Result<_> { Ok(serde_json::from_str(&line?)?) },
+        )))
     }
 }
 
