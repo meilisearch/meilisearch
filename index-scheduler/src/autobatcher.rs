@@ -496,8 +496,7 @@ mod tests {
 
     fn idx_swap() -> KindWithContent {
         KindWithContent::IndexSwap {
-            lhs: String::from("doggo"),
-            rhs: String::from("catto"),
+            swaps: vec![(String::from("doggo"), String::from("catto"))],
         }
     }
 
