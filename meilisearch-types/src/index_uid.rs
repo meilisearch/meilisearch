@@ -60,10 +60,10 @@ impl IndexPattern {
     fn from_pattern(pattern: String) -> Self {
         let prefix = pattern[..pattern.len() - 1].to_owned();
         let original_pattern = pattern;
-        return Self {
+        Self {
             prefix,
             original_pattern,
-        };
+        }
     }
 }
 
