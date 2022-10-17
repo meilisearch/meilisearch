@@ -31,7 +31,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
 
     let mut snap = String::new();
 
-    let (_time, processing_tasks) = processing_tasks.read().unwrap().clone();
+    let processing_tasks = processing_tasks.read().unwrap().processing;
     snap.push_str(&format!(
         "### Autobatching Enabled = {autobatching_enabled}\n"
     ));
