@@ -330,9 +330,8 @@ pub(crate) mod test {
 
         // ==== checking the task queue
         let tasks_queue = fs::read_to_string(dump_path.join("tasks/queue.jsonl")).unwrap();
-        for (task, mut expected) in tasks_queue.lines().zip(create_test_tasks()) {
-            // TODO: uncomment this one once the we write the dump integration in the index-scheduler
-            // assert_eq!(serde_json::from_str::<TaskView>(task).unwrap(), expected.0);
+        for (task, expected) in tasks_queue.lines().zip(create_test_tasks()) {
+            assert_eq!(serde_json::from_str::<TaskDump>(task).unwrap(), expected.0);
 
             if let Some(expected_update) = expected.1 {
                 let path = dump_path.join(format!("tasks/update_files/{}.jsonl", expected.0.uid));
