@@ -22,7 +22,7 @@ enum AutobatchKind {
     IndexDeletion,
     IndexUpdate,
     IndexSwap,
-    CancelTask,
+    TaskCancelation,
     TaskDeletion,
     DumpExport,
     Snapshot,
@@ -62,7 +62,7 @@ impl From<KindWithContent> for AutobatchKind {
             KindWithContent::IndexCreation { .. } => AutobatchKind::IndexCreation,
             KindWithContent::IndexUpdate { .. } => AutobatchKind::IndexUpdate,
             KindWithContent::IndexSwap { .. } => AutobatchKind::IndexSwap,
-            KindWithContent::CancelTask { .. } => AutobatchKind::CancelTask,
+            KindWithContent::TaskCancelation { .. } => AutobatchKind::TaskCancelation,
             KindWithContent::TaskDeletion { .. } => AutobatchKind::TaskDeletion,
             KindWithContent::DumpExport { .. } => AutobatchKind::DumpExport,
             KindWithContent::Snapshot => AutobatchKind::Snapshot,
@@ -153,7 +153,7 @@ impl BatchKind {
                 allow_index_creation,
                 settings_ids: vec![task_id],
             }),
-            K::DumpExport | K::Snapshot | K::CancelTask | K::TaskDeletion => {
+            K::DumpExport | K::Snapshot | K::TaskCancelation | K::TaskDeletion => {
                 unreachable!()
             }
         }
@@ -378,7 +378,7 @@ impl BatchKind {
                     import_ids,
                 })
             }
-            (_, K::CancelTask | K::TaskDeletion | K::DumpExport | K::Snapshot) => {
+            (_, K::TaskCancelation | K::TaskDeletion | K::DumpExport | K::Snapshot) => {
                 unreachable!()
             }
             (
