@@ -98,16 +98,16 @@ impl DumpReader {
 
     pub fn tasks(
         &mut self,
-    ) -> Box<dyn Iterator<Item = Result<(v6::Task, Option<Box<UpdateFile>>)>> + '_> {
+    ) -> Result<Box<dyn Iterator<Item = Result<(v6::Task, Option<Box<UpdateFile>>)>> + '_>> {
         match self {
-            DumpReader::Current(current) => current.tasks(),
+            DumpReader::Current(current) => Ok(current.tasks()),
             DumpReader::Compat(compat) => compat.tasks(),
         }
     }
 
-    pub fn keys(&mut self) -> Box<dyn Iterator<Item = Result<v6::Key>> + '_> {
+    pub fn keys(&mut self) -> Result<Box<dyn Iterator<Item = Result<v6::Key>> + '_>> {
         match self {
-            DumpReader::Current(current) => current.keys(),
+            DumpReader::Current(current) => Ok(current.keys()),
             DumpReader::Compat(compat) => compat.keys(),
         }
     }

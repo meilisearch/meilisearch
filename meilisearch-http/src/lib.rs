@@ -190,7 +190,7 @@ fn import_dump(
     // 2. Import the `Key`s.
     let mut keys = Vec::new();
     auth.raw_delete_all_keys()?;
-    for key in dump_reader.keys() {
+    for key in dump_reader.keys()? {
         let key = key?;
         auth.raw_insert_key(key.clone())?;
         keys.push(key);
@@ -259,9 +259,9 @@ fn import_dump(
     }
 
     // 4. Import the tasks.
-    for ret in dump_reader.tasks() {
+    for ret in dump_reader.tasks()? {
         let (task, file) = ret?;
-        index_scheduler.register_dumped_task(task, file, &keys, instance_uid)?;
+        index_scheduler.register_dumped_task(task, file)?;
     }
     Ok(())
 }

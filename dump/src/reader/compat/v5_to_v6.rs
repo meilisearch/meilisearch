@@ -54,13 +54,16 @@ impl CompatV5ToV6 {
 
     pub fn tasks(
         &mut self,
-    ) -> Box<dyn Iterator<Item = Result<(v6::Task, Option<Box<UpdateFile>>)>> + '_> {
+    ) -> Result<Box<dyn Iterator<Item = Result<(v6::Task, Option<Box<UpdateFile>>)>> + '_>> {
+        let instance_uid = self.instance_uid().ok().flatten().map(|uid| uid.clone());
+        let keys = self.keys()?.collect::<Result<Vec<_>>>()?;
+
         let tasks = match self {
             CompatV5ToV6::V5(v5) => v5.tasks(),
             CompatV5ToV6::Compat(compat) => compat.tasks(),
         };
-        Box::new(tasks.map(|task| {
-            task.map(|(task, content_file)| {
+        Ok(Box::new(tasks.map(move |task| {
+            task.and_then(|(task, content_file)| {
                 let task_view: v5::tasks::TaskView = task.clone().into();
 
                 let task = v6::Task {
@@ -116,9 +119,11 @@ impl CompatV5ToV6 {
                             allow_index_creation,
                             settings: settings.into(),
                         },
-                        v5::tasks::TaskContent::Dump { uid } => {
-                            v6::Kind::DumpExport { dump_uid: uid }
-                        }
+                        v5::tasks::TaskContent::Dump { uid } => v6::Kind::DumpExport {
+                            dump_uid: uid,
+                            keys: keys.clone(),
+                            instance_uid: instance_uid.clone(),
+                        },
                     },
                     details: task_view.details.map(|details| match details {
                         v5::Details::DocumentAddition {
@@ -152,17 +157,18 @@ impl CompatV5ToV6 {
                     finished_at: task_view.finished_at,
                 };
 
-                (task, content_file)
+                Ok((task, content_file))
             })
-        }))
+        })))
     }
 
-    pub fn keys(&mut self) -> Box<dyn Iterator<Item = Result<v6::Key>> + '_> {
+    pub fn keys(&mut self) -> Result<Box<dyn Iterator<Item = Result<v6::Key>> + '_>> {
         let keys = match self {
-            CompatV5ToV6::V5(v5) => v5.keys(),
+            CompatV5ToV6::V5(v5) => v5.keys()?,
             CompatV5ToV6::Compat(compat) => compat.keys(),
         };
-        Box::new(keys.map(|key| {
+
+        Ok(Box::new(keys.map(|key| {
             key.map(|key| v6::Key {
                 description: key.description,
                 name: key.name,
@@ -186,7 +192,7 @@ impl CompatV5ToV6 {
                 created_at: key.created_at,
                 updated_at: key.updated_at,
             })
-        }))
+        })))
     }
 }
 
@@ -412,7 +418,7 @@ pub(crate) mod test {
         insta::assert_display_snapshot!(dump.instance_uid().unwrap().unwrap(), @"9e15e977-f2ae-4761-943f-1eaf75fd736d");
 
         // tasks
-        let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();
+        let tasks = dump.tasks().unwrap().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
         meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"8c6cd41457c0b7e4c6727c9c85b7abac");
         assert_eq!(update_files.len(), 22);
@@ -421,7 +427,7 @@ pub(crate) mod test {
         assert!(update_files[2..].iter().all(|u| u.is_none())); // everything already processed
 
         // keys
-        let keys = dump.keys().collect::<Result<Vec<_>>>().unwrap();
+        let keys = dump.keys().unwrap().collect::<Result<Vec<_>>>().unwrap();
         meili_snap::snapshot_hash!(meili_snap::json_string!(keys), @"c9d2b467fe2fca0b35580d8a999808fb");
 
         // indexes
