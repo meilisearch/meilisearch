@@ -12,6 +12,7 @@ use std::sync::Arc;
 use enum_iterator::IntoEnumIterator;
 use hmac::{Hmac, Mac};
 use meilisearch_types::keys::KeyId;
+use meilisearch_types::milli;
 use meilisearch_types::star_or::StarOr;
 use milli::heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
 use milli::heed::{Database, Env, EnvOpenOptions, RwTxn};

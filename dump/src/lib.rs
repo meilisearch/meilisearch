@@ -4,6 +4,7 @@ use meilisearch_types::{
     settings::Unchecked,
     tasks::{Details, KindWithContent, Status, Task, TaskId},
 };
+use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
@@ -115,7 +116,7 @@ pub enum KindDump {
     },
     DeleteTasks {
         query: String,
-        tasks: Vec<TaskId>,
+        tasks: RoaringBitmap,
     },
     DumpExport {
         dump_uid: String,
@@ -177,7 +178,9 @@ impl From<KindWithContent> for KindDump {
             }
             KindWithContent::IndexSwap { lhs, rhs } => KindDump::IndexSwap { lhs, rhs },
             KindWithContent::CancelTask { tasks } => KindDump::CancelTask { tasks },
-            KindWithContent::DeleteTasks { query, tasks } => KindDump::DeleteTasks { query, tasks },
+            KindWithContent::TaskDeletion { query, tasks } => {
+                KindDump::DeleteTasks { query, tasks }
+            }
             KindWithContent::DumpExport { dump_uid, .. } => KindDump::DumpExport { dump_uid },
             KindWithContent::Snapshot => KindDump::Snapshot,
         }

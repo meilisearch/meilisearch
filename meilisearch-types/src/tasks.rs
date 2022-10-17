@@ -87,7 +87,7 @@ impl Task {
             | KindWithContent::IndexUpdate { .. }
             | KindWithContent::IndexSwap { .. }
             | KindWithContent::CancelTask { .. }
-            | KindWithContent::DeleteTasks { .. }
+            | KindWithContent::TaskDeletion { .. }
             | KindWithContent::DumpExport { .. }
             | KindWithContent::Snapshot => None,
         }
@@ -250,7 +250,7 @@ impl From<&KindWithContent> for Option<Details> {
             }),
             KindWithContent::IndexSwap { .. } => None,
             KindWithContent::CancelTask { .. } => None,
-            KindWithContent::DeleteTasks { .. } => todo!(),
+            KindWithContent::TaskDeletion { .. } => todo!(),
             KindWithContent::DumpExport { dump_uid, .. } => Some(Details::Dump {
                 dump_uid: dump_uid.clone(),
             }),
