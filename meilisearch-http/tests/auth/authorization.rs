@@ -452,9 +452,15 @@ async fn access_authorized_index_patterns() {
     let mut server = Server::new_auth().await;
     server.use_admin_key("MASTER_KEY").await;
 
-    // create product_1 index
+    // create products_1 index
     let index_1 = server.index("products_1");
     let (response, code) = index_1.create(Some("id")).await;
+    println!("{response}");
+    assert_eq!(202, code, "{:?}", &response);
+
+    // create products index
+    let index_ = server.index("products");
+    let (response, code) = index_.create(Some("id")).await;
     println!("{response}");
     assert_eq!(202, code, "{:?}", &response);
 
@@ -474,8 +480,10 @@ async fn access_authorized_index_patterns() {
     let key = response["key"].as_str().unwrap();
     server.use_api_key(&key);
 
-    // refer to products_1 with modified api key.
+    // refer to products_1 and products with modified api key.
     let index_1 = server.index("products_1");
+
+    let index_ = server.index("products");
 
     // try to create a index via add documents route
     let documents = json!([
@@ -485,9 +493,14 @@ async fn access_authorized_index_patterns() {
         }
     ]);
 
-    let (response, code) = index_1.add_documents(documents, None).await;
+    // Adding document to products_1 index. Should succeed with 202
+    let (response, code) = index_1.add_documents(documents.clone(), None).await;
     assert_eq!(202, code, "{:?}", &response);
     let task_id = response["taskUid"].as_u64().unwrap();
+
+    // Adding document to products index. Should Fail with 403 -- invalid_api_key
+    let (response, code) = index_.add_documents(documents, None).await;
+    assert_eq!(403, code, "{:?}", &response);
 
     server.use_api_key("MASTER_KEY");
 
