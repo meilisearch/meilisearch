@@ -15,7 +15,7 @@ pub mod route_metrics;
 
 use std::{
     fs::File,
-    io::{BufReader, BufWriter, Seek, SeekFrom},
+    io::{BufReader, BufWriter},
     path::Path,
     sync::{atomic::AtomicBool, Arc},
 };
@@ -227,15 +227,16 @@ fn import_dump(
         // 3.3 Import the documents.
         // 3.3.1 We need to recreate the grenad+obkv format accepted by the index.
         log::info!("Importing the documents.");
-        let mut file = tempfile::tempfile()?;
-        let mut builder = DocumentsBatchBuilder::new(BufWriter::new(&mut file));
+        let file = tempfile::tempfile()?;
+        let mut builder = DocumentsBatchBuilder::new(BufWriter::new(file));
         for document in index_reader.documents()? {
             builder.append_json_object(&document?)?;
         }
-        builder.into_inner()?; // this actually flush the content of the batch builder.
+
+        // This flush the content of the batch builder.
+        let file = builder.into_inner()?.into_inner()?;
 
         // 3.3.2 We feed it to the milli index.
-        file.seek(SeekFrom::Start(0))?;
         let reader = BufReader::new(file);
         let reader = DocumentsBatchReader::from_reader(reader)?;
 
