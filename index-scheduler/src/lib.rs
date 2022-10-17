@@ -507,15 +507,9 @@ impl IndexScheduler {
             (bitmap.insert(task.uid));
         })?;
 
-        match wtxn.commit() {
-            Ok(()) => (),
-            _e @ Err(_) => {
-                todo!("remove the data associated with the task");
-                // _e?;
-            }
-        }
-
+        wtxn.commit()?;
         self.wake_up.signal();
+
         Ok(task)
     }
 
