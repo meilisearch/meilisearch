@@ -117,7 +117,7 @@ pub enum KindDump {
         query: String,
         tasks: Vec<TaskId>,
     },
-    DeleteTasks {
+    TasksDeletion {
         query: String,
         tasks: RoaringBitmap,
     },
@@ -186,7 +186,7 @@ impl From<KindWithContent> for KindDump {
                 KindDump::TaskCancelation { query, tasks }
             }
             KindWithContent::TaskDeletion { query, tasks } => {
-                KindDump::DeleteTasks { query, tasks }
+                KindDump::TasksDeletion { query, tasks }
             }
             KindWithContent::DumpExport {
                 dump_uid,
