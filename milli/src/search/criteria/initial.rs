@@ -40,7 +40,7 @@ impl<D: Distinct> Criterion for Initial<'_, D> {
             .take()
             .map(|mut answer| {
                 if self.exhaustive_number_hits && answer.query_tree.is_some() {
-                    // resolve the whole query tree to retrieve an exhastive list of documents matching the query.
+                    // resolve the whole query tree to retrieve an exhaustive list of documents matching the query.
                     let mut candidates = resolve_query_tree(
                         self.ctx,
                         answer.query_tree.as_ref().unwrap(),
