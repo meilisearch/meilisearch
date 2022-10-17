@@ -8,7 +8,7 @@ edition = "2021"
 actix-web = { version = "4.0.1", default-features = false }
 csv = "1.1.6"
 either = { version = "1.6.1", features = ["serde"] }
-enum-iterator = "0.7.0"
+enum-iterator = "1.2.0"
 milli = { git = "https://github.com/meilisearch/milli.git", branch = "main" }
 fst = "0.4.7"
 proptest = { version = "1.0.0", optional = true }
