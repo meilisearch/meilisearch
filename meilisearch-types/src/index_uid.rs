@@ -57,11 +57,9 @@ pub struct IndexPattern {
 }
 
 impl IndexPattern {
-    fn from_pattern(pattern: String) -> Self {
-        let prefix = pattern[..pattern.len() - 1].to_owned();
-        let original_pattern = pattern;
+    fn from_pattern(pattern: String, original_pattern: String) -> Self {
         Self {
-            prefix,
+            prefix: pattern,
             original_pattern,
         }
     }
@@ -120,7 +118,10 @@ impl TryFrom<String> for IndexType {
     type Error = IndexTypeError;
     fn try_from(value: String) -> Result<Self, Self::Error> {
         if let Some(x) = value.strip_suffix(PATTERN_IDENTIFIER) {
-            Ok(Self::Pattern(IndexPattern::from_pattern(x.to_owned())))
+            Ok(Self::Pattern(IndexPattern::from_pattern(
+                x.to_owned(),
+                value,
+            )))
         } else {
             Ok(Self::Name(IndexUid::try_from(value)?))
         }
