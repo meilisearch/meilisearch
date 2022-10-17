@@ -101,7 +101,7 @@ pub struct DetailsView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deleted_documents: Option<Option<u64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub matched_tasks: Option<usize>,
+    pub matched_tasks: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deleted_tasks: Option<Option<usize>>,
     #[serde(skip_serializing_if = "Option::is_none")]
