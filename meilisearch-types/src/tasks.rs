@@ -271,6 +271,7 @@ pub enum Status {
     Processing,
     Succeeded,
     Failed,
+    Canceled,
 }
 
 impl Display for Status {
@@ -280,6 +281,7 @@ impl Display for Status {
             Status::Processing => write!(f, "processing"),
             Status::Succeeded => write!(f, "succeeded"),
             Status::Failed => write!(f, "failed"),
+            Status::Canceled => write!(f, "canceled"),
         }
     }
 }
@@ -296,6 +298,8 @@ impl FromStr for Status {
             Ok(Status::Succeeded)
         } else if status.eq_ignore_ascii_case("failed") {
             Ok(Status::Failed)
+        } else if status.eq_ignore_ascii_case("canceled") {
+            Ok(Status::Canceled)
         } else {
             Err(ResponseError::from_msg(
                 format!(
