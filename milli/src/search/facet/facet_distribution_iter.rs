@@ -74,13 +74,12 @@ where
             if key.field_id != self.field_id {
                 return Ok(ControlFlow::Break(()));
             }
-            // TODO: use real intersection and then take min()?
-            let docids_in_common = value.bitmap.intersection_len(candidates);
-            if docids_in_common > 0 {
-                // TODO: use min()
-                let any_docid = value.bitmap.iter().next().unwrap();
-                match (self.callback)(key.left_bound, docids_in_common, any_docid)? {
-                    ControlFlow::Continue(_) => (), // TODO use unit instead of empty scope
+            let docids_in_common = value.bitmap & candidates;
+            if !docids_in_common.is_empty() {
+                let any_docid_in_common = docids_in_common.min().unwrap();
+                match (self.callback)(key.left_bound, docids_in_common.len(), any_docid_in_common)?
+                {
+                    ControlFlow::Continue(_) => (),
                     ControlFlow::Break(_) => return Ok(ControlFlow::Break(())),
                 }
             }
