@@ -26,6 +26,7 @@ use tokio::sync::mpsc::{self, Receiver, Sender};
 use uuid::Uuid;
 
 use crate::analytics::Analytics;
+use crate::option::default_http_addr;
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
 use crate::Opt;
 
@@ -220,7 +221,7 @@ impl Segment {
             json!({
                     "distribution": sys.name(),
                     "kernel_version": kernel_version,
-                    "cores": sys.processors().len(),
+                    "cores": sys.cpus().len(),
                     "ram_size": sys.total_memory(),
                     "disk_size": sys.disks().iter().map(|disk| disk.total_space()).max(),
                     "server_provider": std::env::var("MEILI_SERVER_PROVIDER").ok(),
@@ -235,7 +236,7 @@ impl Segment {
             let dumps_dir = opt.dumps_dir != PathBuf::from("dumps/");
             let import_snapshot = opt.import_snapshot.is_some();
             let snapshots_dir = opt.snapshot_dir != PathBuf::from("snapshots/");
-            let http_addr = opt.http_addr != "127.0.0.1:7700";
+            let http_addr = opt.http_addr != default_http_addr();
 
             let mut infos = serde_json::to_value(opt).unwrap();
 
@@ -349,16 +350,16 @@ pub struct SearchAggregator {
 
     // sort
     sort_with_geo_point: bool,
-    // everytime a request has a filter, this field must be incremented by the number of terms it contains
+    // every time a request has a filter, this field must be incremented by the number of terms it contains
     sort_sum_of_criteria_terms: usize,
-    // everytime a request has a filter, this field must be incremented by one
+    // every time a request has a filter, this field must be incremented by one
     sort_total_number_of_criteria: usize,
 
     // filter
     filter_with_geo_radius: bool,
-    // everytime a request has a filter, this field must be incremented by the number of terms it contains
+    // every time a request has a filter, this field must be incremented by the number of terms it contains
     filter_sum_of_criteria_terms: usize,
-    // everytime a request has a filter, this field must be incremented by one
+    // every time a request has a filter, this field must be incremented by one
     filter_total_number_of_criteria: usize,
     used_syntax: HashMap<String, usize>,
 
@@ -366,7 +367,7 @@ pub struct SearchAggregator {
     // The maximum number of terms in a q request
     max_terms_number: usize,
 
-    // everytime a search is done, we increment the counter linked to the used settings
+    // every time a search is done, we increment the counter linked to the used settings
     matching_strategy: HashMap<String, usize>,
 
     // pagination

@@ -181,6 +181,7 @@ impl SnapshotJob {
 
             let mut options = milli::heed::EnvOpenOptions::new();
             options.map_size(self.index_size);
+            options.max_readers(1024);
             let index = milli::Index::new(options, entry.path())?;
             index.copy_to_path(dst, CompactionOption::Enabled)?;
         }

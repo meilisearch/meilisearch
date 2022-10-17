@@ -1,10 +1,104 @@
+use crate::common::encoder::Encoder;
 use crate::common::Server;
+use actix_web::http::header::ContentType;
+use actix_web::test;
+use http::header::ACCEPT_ENCODING;
+use meilisearch_http::{analytics, create_app};
 use serde_json::{json, Value};
 
 #[actix_rt::test]
 async fn create_index_no_primary_key() {
     let server = Server::new().await;
     let index = server.index("test");
+    let (response, code) = index.create(None).await;
+
+    assert_eq!(code, 202);
+
+    assert_eq!(response["status"], "enqueued");
+
+    let response = index.wait_task(0).await;
+
+    assert_eq!(response["status"], "succeeded");
+    assert_eq!(response["type"], "indexCreation");
+    assert_eq!(response["details"]["primaryKey"], Value::Null);
+}
+
+#[actix_rt::test]
+async fn create_index_with_gzip_encoded_request() {
+    let server = Server::new().await;
+    let index = server.index_with_encoder("test", Encoder::Gzip);
+    let (response, code) = index.create(None).await;
+
+    assert_eq!(code, 202);
+
+    assert_eq!(response["status"], "enqueued");
+
+    let response = index.wait_task(0).await;
+
+    assert_eq!(response["status"], "succeeded");
+    assert_eq!(response["type"], "indexCreation");
+    assert_eq!(response["details"]["primaryKey"], Value::Null);
+}
+
+#[actix_rt::test]
+async fn create_index_with_gzip_encoded_request_and_receiving_brotli_encoded_response() {
+    let server = Server::new().await;
+    let app = test::init_service(create_app!(
+        &server.service.meilisearch,
+        &server.service.auth,
+        true,
+        server.service.options,
+        analytics::MockAnalytics::new(&server.service.options).0
+    ))
+    .await;
+
+    let body = serde_json::to_string(&json!({
+        "uid": "test",
+        "primaryKey": None::<&str>,
+    }))
+    .unwrap();
+    let req = test::TestRequest::post()
+        .uri("/indexes")
+        .insert_header(Encoder::Gzip.header().unwrap())
+        .insert_header((ACCEPT_ENCODING, "br"))
+        .insert_header(ContentType::json())
+        .set_payload(Encoder::Gzip.encode(body))
+        .to_request();
+
+    let res = test::call_service(&app, req).await;
+
+    assert_eq!(res.status(), 202);
+
+    let bytes = test::read_body(res).await;
+    let decoded = Encoder::Brotli.decode(bytes);
+    let parsed_response =
+        serde_json::from_slice::<Value>(decoded.into().as_ref()).expect("Expecting valid json");
+
+    assert_eq!(parsed_response["taskUid"], 0);
+    assert_eq!(parsed_response["indexUid"], "test");
+}
+
+#[actix_rt::test]
+async fn create_index_with_zlib_encoded_request() {
+    let server = Server::new().await;
+    let index = server.index_with_encoder("test", Encoder::Deflate);
+    let (response, code) = index.create(None).await;
+
+    assert_eq!(code, 202);
+
+    assert_eq!(response["status"], "enqueued");
+
+    let response = index.wait_task(0).await;
+
+    assert_eq!(response["status"], "succeeded");
+    assert_eq!(response["type"], "indexCreation");
+    assert_eq!(response["details"]["primaryKey"], Value::Null);
+}
+
+#[actix_rt::test]
+async fn create_index_with_brotli_encoded_request() {
+    let server = Server::new().await;
+    let index = server.index_with_encoder("test", Encoder::Brotli);
     let (response, code) = index.create(None).await;
 
     assert_eq!(code, 202);

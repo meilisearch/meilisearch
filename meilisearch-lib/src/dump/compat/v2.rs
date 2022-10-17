@@ -145,7 +145,7 @@ pub fn error_code_from_str(s: &str) -> anyhow::Result<Code> {
         "unsupported_media_type" => Code::UnsupportedMediaType,
         "dump_already_in_progress" => Code::DumpAlreadyInProgress,
         "dump_process_failed" => Code::DumpProcessFailed,
-        _ => bail!("unknow error code."),
+        _ => bail!("unknown error code."),
     };
 
     Ok(code)

@@ -1,15 +1,15 @@
 [package]
 name = "meilisearch-types"
-version = "0.29.0"
+version = "0.29.1"
 authors = ["marin <postma.marin@protonmail.com>"]
 edition = "2021"
 
 [dependencies]
-actix-web = { version = "4.0.1", default-features = false }
+actix-web = { version = "4.2.1", default-features = false }
 proptest = { version = "1.0.0", optional = true }
 proptest-derive = { version = "0.3.0", optional = true }
-serde = { version = "1.0.136", features = ["derive"] }
-serde_json = "1.0.79"
+serde = { version = "1.0.145", features = ["derive"] }
+serde_json = "1.0.85"
 
 [features]
 test-traits = ["proptest", "proptest-derive"]

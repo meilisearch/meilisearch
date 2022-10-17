@@ -22,9 +22,11 @@ If Meilisearch does not offer optimized support for your language, please consid
 It's [Hacktoberfest month](https://hacktoberfest.com)! 🥳
 
 Thanks so much for participating with Meilisearch this year!
-1. We will follow the quality standards set by the organizers of Hacktoberfest (see detail on their [website](https://hacktoberfest.digitalocean.com/resources/qualitystandards)). Our reviewers will not consider any PR that doesn’t match that standard.
+1. We will follow the quality standards set by the organizers of Hacktoberfest (see detail on their [website](https://hacktoberfest.com/participation/#spam)). Our reviewers will not consider any PR that doesn’t match that standard.
 2. PRs reviews will take place from Monday to Thursday, during usual working hours, CEST time. If you submit outside of these hours, there’s no need to panic; we will get around to your contribution.
 3. There will be no issue assignment as we don’t want people to ask to be assigned specific issues and never return, discouraging the volunteer contributors from opening a PR to fix this issue. We take the liberty to choose the PR that best fixes the issue, so we encourage you to get to it as soon as possible and do your best!
+
+You can check out the longer, more complete guideline documentation [here](https://github.com/meilisearch/.github/blob/main/Hacktoberfest_2022_contributors_guidelines.md).
 
 ## Assumptions
 
@@ -112,7 +114,7 @@ The full Meilisearch release process is described in [this guide](https://github
 ### Release assets
 
 For each release, the following assets are created:
-- Binaries for differents platforms (Linux, MacOS, Windows and ARM architectures) are attached to the GitHub release
+- Binaries for different platforms (Linux, MacOS, Windows and ARM architectures) are attached to the GitHub release
 - Binaries are pushed to HomeBrew and APT (not published for RC)
 - Docker tags are created/updated:
   - `vX.Y.Z`

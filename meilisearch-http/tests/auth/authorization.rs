@@ -651,11 +651,91 @@ async fn error_creating_index_without_action() {
 #[actix_rt::test]
 async fn lazy_create_index() {
     let mut server = Server::new_auth().await;
+
+    // create key with access on all indexes.
+    let contents = vec![
+        json!({
+            "indexes": ["*"],
+            "actions": ["*"],
+            "expiresAt": "2050-11-13T00:00:00Z"
+        }),
+        json!({
+            "indexes": ["*"],
+            "actions": ["indexes.*", "documents.*", "settings.*", "tasks.*"],
+            "expiresAt": "2050-11-13T00:00:00Z"
+        }),
+        json!({
+            "indexes": ["*"],
+            "actions": ["indexes.create", "documents.add", "settings.update", "tasks.get"],
+            "expiresAt": "2050-11-13T00:00:00Z"
+        }),
+    ];
+
+    for content in contents {
+        server.use_api_key("MASTER_KEY");
+        let (response, code) = server.add_api_key(content).await;
+        assert_eq!(201, code, "{:?}", &response);
+        assert!(response["key"].is_string());
+
+        // use created key.
+        let key = response["key"].as_str().unwrap();
+        server.use_api_key(&key);
+
+        // try to create a index via add documents route
+        let index = server.index("test");
+        let documents = json!([
+            {
+                "id": 1,
+                "content": "foo",
+            }
+        ]);
+
+        let (response, code) = index.add_documents(documents, None).await;
+        assert_eq!(202, code, "{:?}", &response);
+        let task_id = response["taskUid"].as_u64().unwrap();
+
+        index.wait_task(task_id).await;
+
+        let (response, code) = index.get_task(task_id).await;
+        assert_eq!(200, code, "{:?}", &response);
+        assert_eq!(response["status"], "succeeded");
+
+        // try to create a index via add settings route
+        let index = server.index("test1");
+        let settings = json!({ "distinctAttribute": "test"});
+
+        let (response, code) = index.update_settings(settings).await;
+        assert_eq!(202, code, "{:?}", &response);
+        let task_id = response["taskUid"].as_u64().unwrap();
+
+        index.wait_task(task_id).await;
+
+        let (response, code) = index.get_task(task_id).await;
+        assert_eq!(200, code, "{:?}", &response);
+        assert_eq!(response["status"], "succeeded");
+
+        // try to create a index via add specialized settings route
+        let index = server.index("test2");
+        let (response, code) = index.update_distinct_attribute(json!("test")).await;
+        assert_eq!(202, code, "{:?}", &response);
+        let task_id = response["taskUid"].as_u64().unwrap();
+
+        index.wait_task(task_id).await;
+
+        let (response, code) = index.get_task(task_id).await;
+        assert_eq!(200, code, "{:?}", &response);
+        assert_eq!(response["status"], "succeeded");
+    }
+}
+
+#[actix_rt::test]
+async fn error_creating_index_without_index() {
+    let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");
 
     // create key with access on all indexes.
     let content = json!({
-        "indexes": ["*"],
+        "indexes": ["unexpected"],
         "actions": ["*"],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -678,38 +758,21 @@ async fn lazy_create_index() {
     ]);
 
     let (response, code) = index.add_documents(documents, None).await;
-    assert_eq!(202, code, "{:?}", &response);
-    let task_id = response["taskUid"].as_u64().unwrap();
-
-    index.wait_task(task_id).await;
-
-    let (response, code) = index.get_task(task_id).await;
-    assert_eq!(200, code, "{:?}", &response);
-    assert_eq!(response["status"], "succeeded");
+    assert_eq!(403, code, "{:?}", &response);
 
     // try to create a index via add settings route
     let index = server.index("test1");
     let settings = json!({ "distinctAttribute": "test"});
-
     let (response, code) = index.update_settings(settings).await;
-    assert_eq!(202, code, "{:?}", &response);
-    let task_id = response["taskUid"].as_u64().unwrap();
-
-    index.wait_task(task_id).await;
-
-    let (response, code) = index.get_task(task_id).await;
-    assert_eq!(200, code, "{:?}", &response);
-    assert_eq!(response["status"], "succeeded");
+    assert_eq!(403, code, "{:?}", &response);
 
     // try to create a index via add specialized settings route
     let index = server.index("test2");
     let (response, code) = index.update_distinct_attribute(json!("test")).await;
-    assert_eq!(202, code, "{:?}", &response);
-    let task_id = response["taskUid"].as_u64().unwrap();
+    assert_eq!(403, code, "{:?}", &response);
 
-    index.wait_task(task_id).await;
-
-    let (response, code) = index.get_task(task_id).await;
-    assert_eq!(200, code, "{:?}", &response);
-    assert_eq!(response["status"], "succeeded");
+    // try to create a index via create index route
+    let index = server.index("test3");
+    let (response, code) = index.create(None).await;
+    assert_eq!(403, code, "{:?}", &response);
 }

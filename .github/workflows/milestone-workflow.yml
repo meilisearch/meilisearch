@@ -62,12 +62,12 @@ jobs:
       - uses: actions/checkout@v3
       - name: Download the issue template
         run: curl -s https://raw.githubusercontent.com/meilisearch/core-team/main/issue-templates/roadmap-issue.md > $ISSUE_TEMPLATE
-      - name: Replace all empty occurences in the templates
+      - name: Replace all empty occurrences in the templates
         run: |
-          # Replace all <<version>> occurences
+          # Replace all <<version>> occurrences
           sed -i "s/<<version>>/$MILESTONE_VERSION/g" $ISSUE_TEMPLATE
 
-          # Replace all <<milestone_id>> occurences
+          # Replace all <<milestone_id>> occurrences
           milestone_id=$(echo $MILESTONE_URL | cut -d '/' -f 7)
           sed -i "s/<<milestone_id>>/$milestone_id/g" $ISSUE_TEMPLATE
 
@@ -95,12 +95,12 @@ jobs:
       - uses: actions/checkout@v3
       - name: Download the issue template
         run: curl -s https://raw.githubusercontent.com/meilisearch/core-team/main/issue-templates/changelog-issue.md > $ISSUE_TEMPLATE
-      - name: Replace all empty occurences in the templates
+      - name: Replace all empty occurrences in the templates
         run: |
-          # Replace all <<version>> occurences
+          # Replace all <<version>> occurrences
           sed -i "s/<<version>>/$MILESTONE_VERSION/g" $ISSUE_TEMPLATE
 
-          # Replace all <<milestone_id>> occurences
+          # Replace all <<milestone_id>> occurrences
           milestone_id=$(echo $MILESTONE_URL | cut -d '/' -f 7)
           sed -i "s/<<milestone_id>>/$milestone_id/g" $ISSUE_TEMPLATE
       - name: Create the issue
@@ -129,7 +129,7 @@ jobs:
             label_description="$label_description released on $date"
           fi
 
-          gh api repos/curquiza/meilisearch/labels \
+          gh api repos/meilisearch/meilisearch/labels \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -f name="$MILESTONE_VERSION" \
@@ -146,7 +146,7 @@ jobs:
         run: |
           prs=$(gh pr list --search milestone:"$MILESTONE_VERSION" --limit 1000 --state all --json number --template '{{range .}}{{tablerow (printf "%v" .number)}}{{end}}')
           for pr in $prs; do
-              gh pr $pr edit --add-label $MILESTONE_VERSION
+              gh pr edit $pr --add-label $MILESTONE_VERSION
           done
       - name: Add label ${{ env.MILESTONE_VERSION }} to all issues in the Milestone
         run: |
