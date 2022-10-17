@@ -18,6 +18,7 @@ use std::sync::{Arc, RwLock};
 
 use file_store::FileStore;
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::milli;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use synchronoise::SignalEvent;
@@ -129,23 +130,26 @@ struct ProcessingTasks {
 }
 
 impl ProcessingTasks {
+    /// Stores the currently processing tasks, the date time at which it started
+    /// and resets the _must stop_ flag.
     fn start_processing_at(&mut self, started_at: OffsetDateTime, processing: RoaringBitmap) {
         self.started_at = started_at;
         self.processing = processing;
+        self.must_stop.store(false, Relaxed);
     }
 
+    /// Resets the processing tasks to an empty list.
     fn stop_processing_at(&mut self, stopped_at: OffsetDateTime) {
         self.started_at = stopped_at;
         self.processing = RoaringBitmap::new();
     }
 
-    fn cancel_processing_tasks(&self, canceled_tasks: &RoaringBitmap) -> bool {
+    /// Forces the currently processing tasks to stop running if necessary.
+    fn cancel_processing_tasks(&self, canceled_tasks: &RoaringBitmap) {
         // If there, at least, is one task that is currently processing we must stop.
-        let must_stop = !self.processing.is_disjoint(canceled_tasks);
-        if must_stop {
+        if !self.processing.is_disjoint(canceled_tasks) {
             self.must_stop.store(true, Relaxed);
         }
-        must_stop
     }
 }
 
@@ -171,6 +175,7 @@ pub struct IndexScheduler {
     pub(crate) all_tasks: Database<OwnedType<BEU32>, SerdeJson<Task>>,
 
     /// All the tasks ids grouped by their status.
+    // TODO we should not be able to serialize a `Status::Processing` in this database.
     pub(crate) status: Database<SerdeBincode<Status>, RoaringBitmapCodec>,
     /// All the tasks ids grouped by their kind.
     pub(crate) kind: Database<SerdeBincode<Kind>, RoaringBitmapCodec>,
@@ -354,7 +359,11 @@ impl IndexScheduler {
                 .take(query.limit.unwrap_or(u32::MAX) as usize),
         )?;
 
-        let ProcessingTasks { started_at, processing, .. } = self
+        let ProcessingTasks {
+            started_at,
+            processing,
+            ..
+        } = self
             .processing_tasks
             .read()
             .map_err(|_| Error::CorruptedTaskQueue)?
@@ -379,7 +388,7 @@ impl IndexScheduler {
 
     /// Register a new task in the scheduler. If it fails and data was associated with the task
     /// it tries to delete the file.
-    pub fn register(&self, task: KindWithContent) -> Result<Task> {
+    pub fn register(&self, kind: KindWithContent) -> Result<Task> {
         let mut wtxn = self.env.write_txn()?;
 
         let task = Task {
@@ -388,9 +397,9 @@ impl IndexScheduler {
             started_at: None,
             finished_at: None,
             error: None,
-            details: (&task).into(),
+            details: kind.default_details(),
             status: Status::Enqueued,
-            kind: task,
+            kind: kind.clone(),
         };
         self.all_tasks
             .append(&mut wtxn, &BEU32::new(task.uid), &task)?;
@@ -417,6 +426,16 @@ impl IndexScheduler {
                 self.delete_persisted_task_data(&task)?;
                 // _e?;
             }
+        }
+
+        // If the registered task is a task cancelation
+        // we inform the processing tasks to stop (if necessary).
+        if let KindWithContent::TaskCancelation { tasks, .. } = kind {
+            let tasks_to_cancel = RoaringBitmap::from_iter(tasks);
+            self.processing_tasks
+                .read()
+                .unwrap()
+                .cancel_processing_tasks(&tasks_to_cancel);
         }
 
         // notify the scheduler loop to execute a new tick
@@ -504,7 +523,9 @@ impl IndexScheduler {
                     primary_key,
                 },
                 KindDump::IndexSwap { lhs, rhs } => KindWithContent::IndexSwap { lhs, rhs },
-                KindDump::CancelTask { tasks } => KindWithContent::CancelTask { tasks },
+                KindDump::TaskCancelation { query, tasks } => {
+                    KindWithContent::TaskCancelation { query, tasks }
+                }
                 KindDump::DeleteTasks { query, tasks } => {
                     KindWithContent::TaskDeletion { query, tasks }
                 }
@@ -617,6 +638,14 @@ impl IndexScheduler {
                     self.delete_persisted_task_data(&task)?;
                 }
                 log::info!("A batch of tasks was successfully completed.");
+            }
+            // If we have an abortion error we must stop the tick here and re-schedule tasks.
+            Err(Error::Milli(milli::Error::InternalError(
+                milli::InternalError::AbortedIndexation,
+            ))) => {
+                // TODO should we add a breakpoint here?
+                wtxn.abort()?;
+                return Ok(0);
             }
             // In case of a failure we must get back and patch all the tasks with the error.
             Err(err) => {
@@ -796,7 +825,10 @@ mod tests {
         let kinds = [
             index_creation_task("catto", "mouse"),
             replace_document_import_task("catto", None, 0, 12),
-            KindWithContent::CancelTask { tasks: vec![0, 1] },
+            KindWithContent::TaskCancelation {
+                query: format!("uid=0,1"),
+                tasks: vec![0, 1],
+            },
             replace_document_import_task("catto", None, 1, 50),
             replace_document_import_task("doggo", Some("bone"), 2, 5000),
         ];
