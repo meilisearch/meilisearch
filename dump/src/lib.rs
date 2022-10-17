@@ -1,10 +1,8 @@
 use meilisearch_types::{
     error::ResponseError,
-    keys::Key,
     milli::update::IndexDocumentsMethod,
     settings::Unchecked,
     tasks::{Details, KindWithContent, Status, Task, TaskId},
-    InstanceUid,
 };
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
