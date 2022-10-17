@@ -191,6 +191,10 @@ fn snaphsot_details(d: &Details) -> String {
         Details::Dump { dump_uid } => {
             format!("{{ dump_uid: {dump_uid:?} }}")
         },
+        Details::IndexSwap { swaps } => {
+            format!("{{ indexes: {swaps:?} }}")
+        },
+        
     }
 }
 

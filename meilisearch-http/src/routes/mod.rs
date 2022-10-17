@@ -20,6 +20,7 @@ use self::indexes::IndexStats;
 mod api_key;
 mod dump;
 pub mod indexes;
+mod indexes_swap;
 mod tasks;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -29,7 +30,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/dumps").configure(dump::configure))
         .service(web::resource("/stats").route(web::get().to(get_stats)))
         .service(web::resource("/version").route(web::get().to(get_version)))
-        .service(web::scope("/indexes").configure(indexes::configure));
+        .service(web::scope("/indexes").configure(indexes::configure))
+        .service(web::scope("indexes-swap").configure(indexes_swap::configure));
 }
 
 /// Extracts the raw values from the `StarOr` types and
