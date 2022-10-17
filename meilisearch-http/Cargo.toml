@@ -32,7 +32,7 @@ async-trait = "0.1.57"
 bstr = "1.0.1"
 byte-unit = { version = "4.0.14", default-features = false, features = ["std", "serde"] }
 bytes = "1.2.1"
-clap = { version = "3.1.6", features = ["derive", "env"] }
+clap = { version = "4.0.9", features = ["derive", "env"] }
 crossbeam-channel = "0.5.6"
 either = "1.8.0"
 env_logger = "0.9.1"

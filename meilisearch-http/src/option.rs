@@ -63,7 +63,7 @@ const DEFAULT_DUMPS_DIR: &str = "dumps/";
 const DEFAULT_LOG_LEVEL: &str = "INFO";
 
 #[derive(Debug, Clone, Parser, Serialize, Deserialize)]
-#[clap(version)]
+#[clap(version, next_display_order = None)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct Opt {
     /// Designates the location where database files will be created and retrieved.
@@ -82,7 +82,7 @@ pub struct Opt {
     pub master_key: Option<String>,
 
     /// Configures the instance's environment. Value must be either `production` or `development`.
-    #[clap(long, env = MEILI_ENV, default_value_t = default_env(), possible_values = &POSSIBLE_ENV)]
+    #[clap(long, env = MEILI_ENV, default_value_t = default_env(), value_parser = POSSIBLE_ENV)]
     #[serde(default = "default_env")]
     pub env: String,
 
@@ -115,24 +115,24 @@ pub struct Opt {
 
     /// Sets the server's SSL certificates.
     #[serde(skip_serializing)]
-    #[clap(long, env = MEILI_SSL_CERT_PATH, parse(from_os_str))]
+    #[clap(long, env = MEILI_SSL_CERT_PATH, value_parser)]
     pub ssl_cert_path: Option<PathBuf>,
 
     /// Sets the server's SSL key files.
     #[serde(skip_serializing)]
-    #[clap(long, env = MEILI_SSL_KEY_PATH, parse(from_os_str))]
+    #[clap(long, env = MEILI_SSL_KEY_PATH, value_parser)]
     pub ssl_key_path: Option<PathBuf>,
 
     /// Enables client authentication in the specified path.
     #[serde(skip_serializing)]
-    #[clap(long, env = MEILI_SSL_AUTH_PATH, parse(from_os_str))]
+    #[clap(long, env = MEILI_SSL_AUTH_PATH, value_parser)]
     pub ssl_auth_path: Option<PathBuf>,
 
     /// Sets the server's OCSP file. *Optional*
     ///
     /// Reads DER-encoded OCSP response from OCSPFILE and staple to certificate.
     #[serde(skip_serializing)]
-    #[clap(long, env = MEILI_SSL_OCSP_PATH, parse(from_os_str))]
+    #[clap(long, env = MEILI_SSL_OCSP_PATH, value_parser)]
     pub ssl_ocsp_path: Option<PathBuf>,
 
     /// Makes SSL authentication mandatory.
@@ -161,7 +161,7 @@ pub struct Opt {
     #[clap(
         long,
         env = MEILI_IGNORE_MISSING_SNAPSHOT,
-        requires = "import-snapshot"
+        requires = "import_snapshot"
     )]
     #[serde(default)]
     pub ignore_missing_snapshot: bool,
@@ -174,7 +174,7 @@ pub struct Opt {
     #[clap(
         long,
         env = MEILI_IGNORE_SNAPSHOT_IF_DB_EXISTS,
-        requires = "import-snapshot"
+        requires = "import_snapshot"
     )]
     #[serde(default)]
     pub ignore_snapshot_if_db_exists: bool,
@@ -196,14 +196,14 @@ pub struct Opt {
 
     /// Imports the dump file located at the specified path. Path must point to a `.dump` file.
     /// If a database already exists, Meilisearch will throw an error and abort launch.
-    #[clap(long, env = MEILI_IMPORT_DUMP, conflicts_with = "import-snapshot")]
+    #[clap(long, env = MEILI_IMPORT_DUMP, conflicts_with = "import_snapshot")]
     pub import_dump: Option<PathBuf>,
 
     /// Prevents Meilisearch from throwing an error when `--import-dump` does not point to
     /// a valid dump file. Instead, Meilisearch will start normally without importing any dump.
     ///
     /// This option will trigger an error if `--import-dump` is not defined.
-    #[clap(long, env = MEILI_IGNORE_MISSING_DUMP, requires = "import-dump")]
+    #[clap(long, env = MEILI_IGNORE_MISSING_DUMP, requires = "import_dump")]
     #[serde(default)]
     pub ignore_missing_dump: bool,
 
@@ -212,7 +212,7 @@ pub struct Opt {
     /// launch using the existing database.
     ///
     /// This option will trigger an error if `--import-dump` is not defined.
-    #[clap(long, env = MEILI_IGNORE_DUMP_IF_DB_EXISTS, requires = "import-dump")]
+    #[clap(long, env = MEILI_IGNORE_DUMP_IF_DB_EXISTS, requires = "import_dump")]
     #[serde(default)]
     pub ignore_dump_if_db_exists: bool,
 

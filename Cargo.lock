@@ -711,13 +711,28 @@ checksum = "86447ad904c7fb335a790c9d7fe3d0d971dc523b8ccd1561a520de9a85302750"
 dependencies = [
  "atty",
  "bitflags",
- "clap_derive",
- "clap_lex",
+ "clap_derive 3.2.18",
+ "clap_lex 0.2.4",
  "indexmap",
  "once_cell",
  "strsim",
  "termcolor",
  "textwrap",
+]
+
+[[package]]
+name = "clap"
+version = "4.0.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30607dd93c420c6f1f80b544be522a0238a7db35e6a12968d28910983fee0df0"
+dependencies = [
+ "atty",
+ "bitflags",
+ "clap_derive 4.0.9",
+ "clap_lex 0.3.0",
+ "once_cell",
+ "strsim",
+ "termcolor",
 ]
 
 [[package]]
@@ -734,10 +749,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap_derive"
+version = "4.0.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4a307492e1a34939f79d3b6b9650bd2b971513cd775436bf2b78defeb5af00b"
+dependencies = [
+ "heck",
+ "proc-macro-error",
+ "proc-macro2 1.0.46",
+ "quote 1.0.21",
+ "syn 1.0.101",
+]
+
+[[package]]
 name = "clap_lex"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2850f2f5a82cbf437dd5af4d49848fbdfc27c157c3d010345776f952765261c5"
+dependencies = [
+ "os_str_bytes",
+]
+
+[[package]]
+name = "clap_lex"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d4198f73e42b4936b35b5bb248d81d2b595ecb170da0bac7655c54eedfa8da8"
 dependencies = [
  "os_str_bytes",
 ]
@@ -1793,7 +1830,7 @@ dependencies = [
  "anyhow",
  "bincode",
  "byteorder",
- "clap",
+ "clap 3.2.22",
  "csv",
  "encoding",
  "env_logger",
@@ -1868,7 +1905,7 @@ dependencies = [
  "anyhow",
  "bincode",
  "byteorder",
- "clap",
+ "clap 3.2.22",
  "encoding",
  "env_logger",
  "glob",
@@ -1888,7 +1925,7 @@ dependencies = [
  "anyhow",
  "bincode",
  "byteorder",
- "clap",
+ "clap 3.2.22",
  "csv",
  "encoding",
  "env_logger",
@@ -1908,7 +1945,7 @@ dependencies = [
  "anyhow",
  "bincode",
  "byteorder",
- "clap",
+ "clap 3.2.22",
  "csv",
  "encoding",
  "env_logger",
@@ -2051,7 +2088,7 @@ dependencies = [
  "byte-unit",
  "bytes",
  "cargo_toml",
- "clap",
+ "clap 4.0.9",
  "crossbeam-channel",
  "either",
  "env_logger",
@@ -2123,7 +2160,7 @@ dependencies = [
  "atomic_refcell",
  "byte-unit",
  "bytes",
- "clap",
+ "clap 4.0.9",
  "crossbeam-channel",
  "csv",
  "derivative",
