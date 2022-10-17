@@ -23,6 +23,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         index_tasks,
         index_mapper,
         wake_up: _,
+        dumps_path: _,
         test_breakpoint_sdr: _,
     } = scheduler;
 
@@ -115,7 +116,7 @@ fn snaphsot_details(d: &Details) -> String {
             received_documents,
             indexed_documents,
         } => {
-            format!("{{ received_documents: {received_documents}, indexed_documents: {indexed_documents} }}")
+            format!("{{ received_documents: {received_documents}, indexed_documents: {indexed_documents:?} }}")
         }
         Details::Settings { settings } => {
             format!("{{ settings: {settings:?} }}")
