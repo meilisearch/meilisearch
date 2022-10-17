@@ -555,11 +555,8 @@ impl IndexScheduler {
                 }
                 dump_tasks.flush()?;
 
-                // TODO: maybe `self.indexes` could use this rtxn instead of creating its own
-                drop(rtxn);
-
                 // 3. Dump the indexes
-                for (uid, index) in self.indexes()? {
+                for (uid, index) in self.index_mapper.indexes(&rtxn)? {
                     let rtxn = index.read_txn()?;
                     let metadata = IndexMetadata {
                         uid: uid.clone(),
