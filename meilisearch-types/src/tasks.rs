@@ -217,7 +217,7 @@ impl KindWithContent {
                 None // TODO: check correctness of this return value
             }
             KindWithContent::TaskDeletion { query, tasks } => Some(Details::TaskDeletion {
-                matched_tasks: tasks.len() as usize,
+                matched_tasks: tasks.len(),
                 deleted_tasks: None,
                 original_query: query.clone(),
             }),
@@ -250,7 +250,11 @@ impl From<&KindWithContent> for Option<Details> {
             }),
             KindWithContent::IndexSwap { .. } => None,
             KindWithContent::CancelTask { .. } => None,
-            KindWithContent::TaskDeletion { .. } => todo!(),
+            KindWithContent::TaskDeletion { query, tasks } => Some(Details::TaskDeletion {
+                matched_tasks: tasks.len(),
+                deleted_tasks: None,
+                original_query: query.clone(),
+            }),
             KindWithContent::DumpExport { dump_uid, .. } => Some(Details::Dump {
                 dump_uid: dump_uid.clone(),
             }),
@@ -361,7 +365,7 @@ pub enum Details {
         deleted_documents: Option<u64>,
     },
     TaskDeletion {
-        matched_tasks: usize,
+        matched_tasks: u64,
         deleted_tasks: Option<usize>,
         original_query: String,
     },
