@@ -262,18 +262,7 @@ impl IndexScheduler {
         let rtxn = self.env.read_txn()?;
 
         // This is the list of all the tasks.
-        let mut tasks = {
-            let mut all_tasks = RoaringBitmap::new();
-            for status in [
-                Status::Enqueued,
-                Status::Processing,
-                Status::Succeeded,
-                Status::Failed,
-            ] {
-                all_tasks |= self.get_status(&rtxn, status)?;
-            }
-            all_tasks
-        };
+        let mut tasks = self.all_task_ids(&rtxn)?;
 
         if let Some(uids) = &query.uid {
             tasks &= RoaringBitmap::from_iter(uids);
@@ -827,8 +816,6 @@ mod tests {
         for _ in 0..2 {
             handle.wait_till(Breakpoint::AfterProcessing);
         }
-        // The three deletion tasks are marked as succeeded, and all their details say that one
-        // task has been deleted. Is this the correct behaviour? Probably not!
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "task_deletion_processed");
     }
 

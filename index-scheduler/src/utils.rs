@@ -8,6 +8,18 @@ use crate::{Error, IndexScheduler, Result, Task, TaskId};
 use meilisearch_types::tasks::{Kind, Status};
 
 impl IndexScheduler {
+    pub(crate) fn all_task_ids(&self, rtxn: &RoTxn) -> Result<RoaringBitmap> {
+        let mut all_tasks = RoaringBitmap::new();
+        for status in [
+            Status::Enqueued,
+            Status::Processing,
+            Status::Succeeded,
+            Status::Failed,
+        ] {
+            all_tasks |= self.get_status(&rtxn, status)?;
+        }
+        Ok(all_tasks)
+    }
     pub(crate) fn last_task_id(&self, rtxn: &RoTxn) -> Result<Option<TaskId>> {
         Ok(self
             .all_tasks
