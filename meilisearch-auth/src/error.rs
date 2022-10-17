@@ -18,7 +18,7 @@ pub enum AuthControllerError {
 }
 
 internal_error!(
-    AuthControllerError: milli::heed::Error,
+    AuthControllerError: meilisearch_types::milli::heed::Error,
     std::io::Error,
     serde_json::Error,
     std::str::Utf8Error
