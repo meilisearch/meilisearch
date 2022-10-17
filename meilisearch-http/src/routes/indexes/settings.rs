@@ -15,7 +15,7 @@ use meilisearch_types::settings::{
     Checked, FacetingSettings, MinWordSizeTyposSetting, PaginationSettings, Settings, TypoSettings,
     Unchecked,
 };
-use meilisearch_types::tasks::KindWithContent;
+use meilisearch_types::tasks::TaskOperation;
 use meilisearch_types::Index;
 use serde_json::json;
 
@@ -34,7 +34,7 @@ macro_rules! make_setting_route {
             use index_scheduler::IndexScheduler;
             use meilisearch_types::milli::update::Setting;
             use meilisearch_types::settings::Settings;
-            use meilisearch_types::tasks::KindWithContent;
+            use meilisearch_types::tasks::TaskOperation;
 
             use meilisearch_types::error::ResponseError;
             use $crate::analytics::Analytics;
@@ -55,7 +55,7 @@ macro_rules! make_setting_route {
                 };
 
                 let allow_index_creation = index_scheduler.filters().allow_index_creation;
-                let task = KindWithContent::Settings {
+                let task = TaskOperation::Settings {
                     index_uid: index_uid.into_inner(),
                     new_settings,
                     is_deletion: true,
@@ -91,7 +91,7 @@ macro_rules! make_setting_route {
                 };
 
                 let allow_index_creation = index_scheduler.filters().allow_index_creation;
-                let task = KindWithContent::Settings {
+                let task = TaskOperation::Settings {
                     index_uid: index_uid.into_inner(),
                     new_settings,
                     is_deletion: false,
@@ -453,7 +453,7 @@ pub async fn update_all(
     );
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation;
-    let task = KindWithContent::Settings {
+    let task = TaskOperation::Settings {
         index_uid: index_uid.into_inner(),
         new_settings,
         is_deletion: false,
@@ -483,7 +483,7 @@ pub async fn delete_all(
     let new_settings = Settings::cleared().into_unchecked();
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation;
-    let task = KindWithContent::Settings {
+    let task = TaskOperation::Settings {
         index_uid: index_uid.into_inner(),
         new_settings,
         is_deletion: true,

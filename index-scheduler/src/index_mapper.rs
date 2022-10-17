@@ -25,15 +25,16 @@ const INDEX_MAPPING: &str = "index-mapping";
 /// 4. Mapping a user-defined name to each index uuid.
 #[derive(Clone)]
 pub struct IndexMapper {
-    // Keep track of the opened indexes and is used
-    // mainly by the index resolver.
+    /// Keep track of the opened indexes. Used mainly by the index resolver.
     index_map: Arc<RwLock<HashMap<Uuid, IndexStatus>>>,
 
     // TODO create a UUID Codec that uses the 16 bytes representation
-    // Map an index name with an index uuid currently available on disk.
+    /// Map an index name with an index uuid currently available on disk.
     index_mapping: Database<Str, SerdeBincode<Uuid>>,
 
+    /// Path to the folder where the LMDB environments of each index are.
     base_path: PathBuf,
+
     index_size: usize,
     indexer_config: Arc<IndexerConfig>,
 }

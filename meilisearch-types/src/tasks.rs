@@ -32,14 +32,14 @@ pub struct Task {
     pub details: Option<Details>,
 
     pub status: Status,
-    pub kind: KindWithContent,
+    pub operation: TaskOperation,
 }
 
 impl Task {
     pub fn index_uid(&self) -> Option<&str> {
-        use KindWithContent::*;
+        use TaskOperation::*;
 
-        match &self.kind {
+        match &self.operation {
             DumpExport { .. }
             | Snapshot
             | CancelTask { .. }
@@ -57,9 +57,9 @@ impl Task {
 
     /// Return the list of indexes updated by this tasks.
     pub fn indexes(&self) -> Option<Vec<&str>> {
-        use KindWithContent::*;
+        use TaskOperation::*;
 
-        match &self.kind {
+        match &self.operation {
             DumpExport { .. } | Snapshot | CancelTask { .. } | TaskDeletion { .. } => None,
             DocumentImport { index_uid, .. }
             | DocumentDeletion { index_uid, .. }
@@ -75,7 +75,7 @@ impl Task {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum KindWithContent {
+pub enum TaskOperation {
     DocumentImport {
         index_uid: String,
         primary_key: Option<String>,
@@ -125,26 +125,26 @@ pub enum KindWithContent {
     Snapshot,
 }
 
-impl KindWithContent {
+impl TaskOperation {
     pub fn as_kind(&self) -> Kind {
         match self {
-            KindWithContent::DocumentImport { .. } => Kind::DocumentImport,
-            KindWithContent::DocumentDeletion { .. } => Kind::DocumentDeletion,
-            KindWithContent::DocumentClear { .. } => Kind::DocumentClear,
-            KindWithContent::Settings { .. } => Kind::Settings,
-            KindWithContent::IndexCreation { .. } => Kind::IndexCreation,
-            KindWithContent::IndexDeletion { .. } => Kind::IndexDeletion,
-            KindWithContent::IndexUpdate { .. } => Kind::IndexUpdate,
-            KindWithContent::IndexSwap { .. } => Kind::IndexSwap,
-            KindWithContent::CancelTask { .. } => Kind::CancelTask,
-            KindWithContent::TaskDeletion { .. } => Kind::TaskDeletion,
-            KindWithContent::DumpExport { .. } => Kind::DumpExport,
-            KindWithContent::Snapshot => Kind::Snapshot,
+            TaskOperation::DocumentImport { .. } => Kind::DocumentImport,
+            TaskOperation::DocumentDeletion { .. } => Kind::DocumentDeletion,
+            TaskOperation::DocumentClear { .. } => Kind::DocumentClear,
+            TaskOperation::Settings { .. } => Kind::Settings,
+            TaskOperation::IndexCreation { .. } => Kind::IndexCreation,
+            TaskOperation::IndexDeletion { .. } => Kind::IndexDeletion,
+            TaskOperation::IndexUpdate { .. } => Kind::IndexUpdate,
+            TaskOperation::IndexSwap { .. } => Kind::IndexSwap,
+            TaskOperation::CancelTask { .. } => Kind::CancelTask,
+            TaskOperation::TaskDeletion { .. } => Kind::TaskDeletion,
+            TaskOperation::DumpExport { .. } => Kind::DumpExport,
+            TaskOperation::Snapshot => Kind::Snapshot,
         }
     }
 
     pub fn indexes(&self) -> Option<Vec<&str>> {
-        use KindWithContent::*;
+        use TaskOperation::*;
 
         match self {
             DumpExport { .. } | Snapshot | CancelTask { .. } | TaskDeletion { .. } => None,
@@ -159,47 +159,47 @@ impl KindWithContent {
         }
     }
 
-    /// Returns the default `Details` that correspond to this `KindWithContent`,
+    /// Returns the default `Details` that correspond to this `TaskOperation`,
     /// `None` if it cannot be generated.
     pub fn default_details(&self) -> Option<Details> {
         match self {
-            KindWithContent::DocumentImport {
+            TaskOperation::DocumentImport {
                 documents_count, ..
             } => Some(Details::DocumentAddition {
                 received_documents: *documents_count,
                 indexed_documents: 0,
             }),
-            KindWithContent::DocumentDeletion {
+            TaskOperation::DocumentDeletion {
                 index_uid: _,
                 documents_ids,
             } => Some(Details::DocumentDeletion {
                 received_document_ids: documents_ids.len(),
                 deleted_documents: None,
             }),
-            KindWithContent::DocumentClear { .. } => Some(Details::ClearAll {
+            TaskOperation::DocumentClear { .. } => Some(Details::ClearAll {
                 deleted_documents: None,
             }),
-            KindWithContent::Settings { new_settings, .. } => Some(Details::Settings {
+            TaskOperation::Settings { new_settings, .. } => Some(Details::Settings {
                 settings: new_settings.clone(),
             }),
-            KindWithContent::IndexDeletion { .. } => None,
-            KindWithContent::IndexCreation { primary_key, .. }
-            | KindWithContent::IndexUpdate { primary_key, .. } => Some(Details::IndexInfo {
+            TaskOperation::IndexDeletion { .. } => None,
+            TaskOperation::IndexCreation { primary_key, .. }
+            | TaskOperation::IndexUpdate { primary_key, .. } => Some(Details::IndexInfo {
                 primary_key: primary_key.clone(),
             }),
-            KindWithContent::IndexSwap { .. } => {
+            TaskOperation::IndexSwap { .. } => {
                 todo!()
             }
-            KindWithContent::CancelTask { .. } => {
+            TaskOperation::CancelTask { .. } => {
                 None // TODO: check correctness of this return value
             }
-            KindWithContent::TaskDeletion { query, tasks } => Some(Details::TaskDeletion {
+            TaskOperation::TaskDeletion { query, tasks } => Some(Details::TaskDeletion {
                 matched_tasks: tasks.len() as usize,
                 deleted_tasks: None,
                 original_query: query.clone(),
             }),
-            KindWithContent::DumpExport { .. } => None,
-            KindWithContent::Snapshot => None,
+            TaskOperation::DumpExport { .. } => None,
+            TaskOperation::Snapshot => None,
         }
     }
 }

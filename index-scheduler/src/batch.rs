@@ -1,6 +1,23 @@
-use std::collections::HashSet;
+/*!
+This module handles the creation and processing of batch operations.
 
-use crate::{autobatcher::BatchKind, Error, IndexScheduler, Result, TaskId};
+A batch is a combination of multiple tasks that can be processed at once.
+Executing a batch operation should always be functionally equivalent to
+executing each of its tasks' operations individually and in order.
+
+For example, if the user sends two tasks:
+1. import documents X
+2. import documents Y
+
+We can combine the two tasks in a single batch:
+1. import documents X and Y
+
+Processing this batch is functionally equivalent to processing the two
+tasks individally, but should be much faster since we are only performing
+one indexing operation.
+*/
+
+use crate::{autobatcher::AutoBatch, Error, IndexScheduler, Result, TaskId};
 use log::{debug, info};
 use meilisearch_types::milli::update::IndexDocumentsConfig;
 use meilisearch_types::milli::update::{
@@ -10,7 +27,7 @@ use meilisearch_types::milli::{
     self, documents::DocumentsBatchReader, update::Settings as MilliSettings, BEU32,
 };
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
-use meilisearch_types::tasks::{Details, Kind, KindWithContent, Status, Task};
+use meilisearch_types::tasks::{Details, Kind, Status, Task, TaskOperation};
 use meilisearch_types::{
     heed::{RoTxn, RwTxn},
     Index,
@@ -19,6 +36,11 @@ use roaring::RoaringBitmap;
 use std::collections::HashSet;
 use uuid::Uuid;
 
+/// Represents a combination of tasks that can all be processed at the same time.
+///
+/// A batch contains the set of tasks that it represents (accessible through
+/// [`self.ids()`](Batch::ids)), as well as additional information on how to
+/// be processed.
 #[derive(Debug)]
 pub(crate) enum Batch {
     Cancel(Task),
@@ -42,6 +64,7 @@ pub(crate) enum Batch {
     },
 }
 
+/// A [batch](Batch) that combines multiple tasks operating on an index.
 #[derive(Debug)]
 pub(crate) enum IndexOperation {
     DocumentImport {
@@ -95,6 +118,7 @@ pub(crate) enum IndexOperation {
 }
 
 impl Batch {
+    /// Return the task ids associated with this batch.
     pub fn ids(&self) -> Vec<TaskId> {
         match self {
             Batch::Cancel(task)
@@ -127,35 +151,41 @@ impl Batch {
 }
 
 impl IndexScheduler {
-    pub(crate) fn create_next_batch_index(
+    /// Convert an [`AutoBatch`](crate::autobatcher::AutoBatch) into a [`Batch`].
+    ///
+    /// ## Arguments
+    /// - `rtxn`: read transaction
+    /// - `index_uid`: name of the index affected by the operations of the autobatch
+    /// - `batch`: the result of the autobatcher
+    pub(crate) fn batch_from_autobatch(
         &self,
         rtxn: &RoTxn,
         index_uid: String,
-        batch: BatchKind,
+        batch: AutoBatch,
     ) -> Result<Option<Batch>> {
         match batch {
-            BatchKind::DocumentClear { ids } => {
+            AutoBatch::DocumentClear { ids } => {
                 Ok(Some(Batch::IndexOperation(IndexOperation::DocumentClear {
                     tasks: self.get_existing_tasks(rtxn, ids)?,
                     index_uid,
                 })))
             }
-            BatchKind::DocumentImport {
+            AutoBatch::DocumentImport {
                 method,
                 import_ids,
                 allow_index_creation,
             } => {
                 let tasks = self.get_existing_tasks(rtxn, import_ids)?;
-                let primary_key = match &tasks[0].kind {
-                    KindWithContent::DocumentImport { primary_key, .. } => primary_key.clone(),
+                let primary_key = match &tasks[0].operation {
+                    TaskOperation::DocumentImport { primary_key, .. } => primary_key.clone(),
                     _ => unreachable!(),
                 };
 
                 let mut documents_counts = Vec::new();
                 let mut content_files = Vec::new();
                 for task in &tasks {
-                    match task.kind {
-                        KindWithContent::DocumentImport {
+                    match task.operation {
+                        TaskOperation::DocumentImport {
                             content_file,
                             documents_count,
                             ..
@@ -179,13 +209,13 @@ impl IndexScheduler {
                     },
                 )))
             }
-            BatchKind::DocumentDeletion { deletion_ids } => {
+            AutoBatch::DocumentDeletion { deletion_ids } => {
                 let tasks = self.get_existing_tasks(rtxn, deletion_ids)?;
 
                 let mut documents = Vec::new();
                 for task in &tasks {
-                    match task.kind {
-                        KindWithContent::DocumentDeletion {
+                    match task.operation {
+                        TaskOperation::DocumentDeletion {
                             ref documents_ids, ..
                         } => documents.extend_from_slice(documents_ids),
                         _ => unreachable!(),
@@ -200,7 +230,7 @@ impl IndexScheduler {
                     },
                 )))
             }
-            BatchKind::Settings {
+            AutoBatch::Settings {
                 settings_ids,
                 allow_index_creation,
             } => {
@@ -208,8 +238,8 @@ impl IndexScheduler {
 
                 let mut settings = Vec::new();
                 for task in &tasks {
-                    match task.kind {
-                        KindWithContent::Settings {
+                    match task.operation {
+                        TaskOperation::Settings {
                             ref new_settings,
                             is_deletion,
                             ..
@@ -225,16 +255,16 @@ impl IndexScheduler {
                     tasks,
                 })))
             }
-            BatchKind::ClearAndSettings {
+            AutoBatch::ClearAndSettings {
                 other,
                 settings_ids,
                 allow_index_creation,
             } => {
                 let (index_uid, settings, settings_tasks) = match self
-                    .create_next_batch_index(
+                    .batch_from_autobatch(
                         rtxn,
                         index_uid,
-                        BatchKind::Settings {
+                        AutoBatch::Settings {
                             settings_ids,
                             allow_index_creation,
                         },
@@ -250,11 +280,7 @@ impl IndexScheduler {
                     _ => unreachable!(),
                 };
                 let (index_uid, cleared_tasks) = match self
-                    .create_next_batch_index(
-                        rtxn,
-                        index_uid,
-                        BatchKind::DocumentClear { ids: other },
-                    )?
+                    .batch_from_autobatch(rtxn, index_uid, AutoBatch::DocumentClear { ids: other })?
                     .unwrap()
                 {
                     Batch::IndexOperation(IndexOperation::DocumentClear { index_uid, tasks }) => {
@@ -273,25 +299,25 @@ impl IndexScheduler {
                     },
                 )))
             }
-            BatchKind::SettingsAndDocumentImport {
+            AutoBatch::SettingsAndDocumentImport {
                 settings_ids,
                 method,
                 allow_index_creation,
                 import_ids,
             } => {
-                let settings = self.create_next_batch_index(
+                let settings = self.batch_from_autobatch(
                     rtxn,
                     index_uid.clone(),
-                    BatchKind::Settings {
+                    AutoBatch::Settings {
                         settings_ids,
                         allow_index_creation,
                     },
                 )?;
 
-                let document_import = self.create_next_batch_index(
+                let document_import = self.batch_from_autobatch(
                     rtxn,
                     index_uid.clone(),
-                    BatchKind::DocumentImport {
+                    AutoBatch::DocumentImport {
                         method,
                         allow_index_creation,
                         import_ids,
@@ -328,10 +354,10 @@ impl IndexScheduler {
                     _ => unreachable!(),
                 }
             }
-            BatchKind::IndexCreation { id } => {
+            AutoBatch::IndexCreation { id } => {
                 let task = self.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
-                let (index_uid, primary_key) = match &task.kind {
-                    KindWithContent::IndexCreation {
+                let (index_uid, primary_key) = match &task.operation {
+                    TaskOperation::IndexCreation {
                         index_uid,
                         primary_key,
                     } => (index_uid.clone(), primary_key.clone()),
@@ -343,10 +369,10 @@ impl IndexScheduler {
                     task,
                 }))
             }
-            BatchKind::IndexUpdate { id } => {
+            AutoBatch::IndexUpdate { id } => {
                 let task = self.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
-                let primary_key = match &task.kind {
-                    KindWithContent::IndexUpdate { primary_key, .. } => primary_key.clone(),
+                let primary_key = match &task.operation {
+                    TaskOperation::IndexUpdate { primary_key, .. } => primary_key.clone(),
                     _ => unreachable!(),
                 };
                 Ok(Some(Batch::IndexUpdate {
@@ -355,11 +381,11 @@ impl IndexScheduler {
                     task,
                 }))
             }
-            BatchKind::IndexDeletion { ids } => Ok(Some(Batch::IndexDeletion {
+            AutoBatch::IndexDeletion { ids } => Ok(Some(Batch::IndexDeletion {
                 index_uid,
                 tasks: self.get_existing_tasks(rtxn, ids)?,
             })),
-            BatchKind::IndexSwap { id: _ } => todo!(),
+            AutoBatch::IndexSwap { id: _ } => todo!(),
         }
     }
 
@@ -431,12 +457,12 @@ impl IndexScheduler {
                 .map(|task_id| {
                     self.get_task(rtxn, task_id)
                         .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))
-                        .map(|task| (task.uid, task.kind))
+                        .map(|task| (task.uid, task.operation))
                 })
                 .collect::<Result<Vec<_>>>()?;
 
-            if let Some(batchkind) = crate::autobatcher::autobatch(enqueued) {
-                return self.create_next_batch_index(rtxn, index_name.to_string(), batchkind);
+            if let Some(batchkind) = crate::autobatcher::next_autobatch(enqueued) {
+                return self.batch_from_autobatch(rtxn, index_name.to_string(), batchkind);
             }
         }
 
@@ -445,13 +471,19 @@ impl IndexScheduler {
         Ok(None)
     }
 
+    /// Apply the operation associated with the given batch.
+    ///
+    /// ## Return
+    /// The list of tasks that were processed. The metadata of each task in the returned
+    /// list is updated accordingly, with the exception of the its date fields
+    /// [`finished_at`](Task::finished_at) and [`started_at`](Task::started_at).
     pub(crate) fn process_batch(&self, batch: Batch) -> Result<Vec<Task>> {
         match batch {
             Batch::Cancel(_) => todo!(),
             Batch::TaskDeletion(mut task) => {
                 // 1. Retrieve the tasks that matched the query at enqueue-time.
                 let matched_tasks =
-                    if let KindWithContent::TaskDeletion { tasks, query: _ } = &task.kind {
+                    if let TaskOperation::TaskDeletion { tasks, query: _ } = &task.operation {
                         tasks
                     } else {
                         unreachable!()
@@ -567,8 +599,8 @@ impl IndexScheduler {
                 // We set all the tasks details to the default value.
                 for task in &mut tasks {
                     task.status = Status::Succeeded;
-                    task.details = match &task.kind {
-                        KindWithContent::IndexDeletion { .. } => Some(Details::ClearAll {
+                    task.details = match &task.operation {
+                        TaskOperation::IndexDeletion { .. } => Some(Details::ClearAll {
                             deleted_documents: Some(number_of_documents),
                         }),
                         otherwise => otherwise.default_details(),
@@ -580,6 +612,10 @@ impl IndexScheduler {
         }
     }
 
+    /// Process the index operation on the given index.
+    ///
+    /// ## Return
+    /// The list of processed tasks.
     fn apply_index_operation<'txn, 'i>(
         &self,
         index_wtxn: &'txn mut RwTxn<'i, '_>,
@@ -595,8 +631,8 @@ impl IndexScheduler {
                     task.status = Status::Succeeded;
                     // The first document clear will effectively delete every documents
                     // in the database but the next ones will clear 0 documents.
-                    task.details = match &task.kind {
-                        KindWithContent::DocumentClear { .. } => {
+                    task.details = match &task.operation {
+                        TaskOperation::DocumentClear { .. } => {
                             let count = if first_clear_found { 0 } else { count };
                             first_clear_found = true;
                             Some(Details::ClearAll {
@@ -848,7 +884,7 @@ impl IndexScheduler {
                     affected_indexes.extend(task_indexes.into_iter().map(|x| x.to_owned()));
                 }
                 affected_statuses.insert(task.status);
-                affected_kinds.insert(task.kind.as_kind());
+                affected_kinds.insert(task.operation.as_kind());
             }
         }
         for index in affected_indexes {

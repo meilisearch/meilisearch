@@ -3,7 +3,7 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::IndexScheduler;
 use log::debug;
 use meilisearch_types::error::ResponseError;
-use meilisearch_types::tasks::KindWithContent;
+use meilisearch_types::tasks::TaskOperation;
 use serde_json::json;
 
 use crate::analytics::Analytics;
@@ -21,7 +21,7 @@ pub async fn create_dump(
 ) -> Result<HttpResponse, ResponseError> {
     analytics.publish("Dump Created".to_string(), json!({}), Some(&req));
 
-    let task = KindWithContent::DumpExport {
+    let task = TaskOperation::DumpExport {
         output: "todo".to_string().into(),
     };
     let res = tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;

@@ -4,7 +4,7 @@ use index_scheduler::{IndexScheduler, Query};
 use log::debug;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::milli::{self, FieldDistribution, Index};
-use meilisearch_types::tasks::{KindWithContent, Status};
+use meilisearch_types::tasks::{Status, TaskOperation};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
@@ -102,7 +102,7 @@ pub async fn create_index(
         Some(&req),
     );
 
-    let task = KindWithContent::IndexCreation {
+    let task = TaskOperation::IndexCreation {
         index_uid: uid,
         primary_key,
     };
@@ -146,7 +146,7 @@ pub async fn update_index(
         Some(&req),
     );
 
-    let task = KindWithContent::IndexUpdate {
+    let task = TaskOperation::IndexUpdate {
         index_uid: path.into_inner(),
         primary_key: body.primary_key,
     };
@@ -161,7 +161,7 @@ pub async fn delete_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_DELETE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let task = KindWithContent::IndexDeletion {
+    let task = TaskOperation::IndexDeletion {
         index_uid: index_uid.into_inner(),
     };
     let task = tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;

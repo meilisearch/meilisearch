@@ -13,7 +13,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::star_or::StarOr;
-use meilisearch_types::tasks::KindWithContent;
+use meilisearch_types::tasks::TaskOperation;
 use meilisearch_types::{milli, Document, Index};
 use mime::Mime;
 use once_cell::sync::Lazy;
@@ -105,7 +105,7 @@ pub async fn delete_document(
         document_id,
         index_uid,
     } = path.into_inner();
-    let task = KindWithContent::DocumentDeletion {
+    let task = TaskOperation::DocumentDeletion {
         index_uid,
         documents_ids: vec![document_id],
     };
@@ -273,7 +273,7 @@ async fn document_addition(
         }
     };
 
-    let task = KindWithContent::DocumentImport {
+    let task = TaskOperation::DocumentImport {
         method,
         content_file: uuid,
         documents_count,
@@ -310,7 +310,7 @@ pub async fn delete_documents(
         })
         .collect();
 
-    let task = KindWithContent::DocumentDeletion {
+    let task = TaskOperation::DocumentDeletion {
         index_uid: path.into_inner(),
         documents_ids: ids,
     };
@@ -324,7 +324,7 @@ pub async fn clear_all_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let task = KindWithContent::DocumentClear {
+    let task = TaskOperation::DocumentClear {
         index_uid: path.into_inner(),
     };
     let task = tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??;

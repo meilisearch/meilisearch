@@ -5,7 +5,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::star_or::StarOr;
-use meilisearch_types::tasks::{serialize_duration, Details, Kind, KindWithContent, Status, Task};
+use meilisearch_types::tasks::{serialize_duration, Details, Kind, Status, Task, TaskOperation};
 use serde::{Deserialize, Serialize};
 use serde_cs::vec::CS;
 use serde_json::json;
@@ -73,7 +73,7 @@ impl TaskView {
                 .indexes()
                 .and_then(|vec| vec.first().map(|i| i.to_string())),
             status: task.status,
-            kind: task.kind.as_kind(),
+            kind: task.operation.as_kind(),
             details: task.details.clone().map(DetailsView::from),
             error: task.error.clone(),
             duration: task
@@ -217,7 +217,7 @@ async fn delete_tasks(
 
     let tasks = index_scheduler.get_task_ids(&filtered_query)?;
     let filtered_query_string = yaup::to_string(&filtered_query).unwrap();
-    let task_deletion = KindWithContent::TaskDeletion {
+    let task_deletion = TaskOperation::TaskDeletion {
         query: filtered_query_string,
         tasks,
     };

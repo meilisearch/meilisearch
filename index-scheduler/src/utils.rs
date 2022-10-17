@@ -60,11 +60,11 @@ impl IndexScheduler {
             })?;
         }
 
-        if old_task.kind.as_kind() != task.kind.as_kind() {
-            self.update_kind(wtxn, old_task.kind.as_kind(), |bitmap| {
+        if old_task.operation.as_kind() != task.operation.as_kind() {
+            self.update_kind(wtxn, old_task.operation.as_kind(), |bitmap| {
                 bitmap.remove(task.uid);
             })?;
-            self.update_kind(wtxn, task.kind.as_kind(), |bitmap| {
+            self.update_kind(wtxn, task.operation.as_kind(), |bitmap| {
                 bitmap.insert(task.uid);
             })?;
         }

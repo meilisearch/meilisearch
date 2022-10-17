@@ -29,7 +29,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub type TaskId = u32;
 
 pub use error::Error;
-use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
+use meilisearch_types::tasks::{Kind, Status, Task, TaskOperation};
 
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -422,7 +422,7 @@ impl IndexScheduler {
     /// Register a new task in the scheduler.
     ///
     /// If it fails and data was associated with the task, it tries to delete the associated data.
-    pub fn register(&self, task: KindWithContent) -> Result<Task> {
+    pub fn register(&self, task: TaskOperation) -> Result<Task> {
         let mut wtxn = self.env.write_txn()?;
 
         let task = Task {
@@ -433,7 +433,7 @@ impl IndexScheduler {
             error: None,
             details: task.default_details(),
             status: Status::Enqueued,
-            kind: task,
+            operation: task,
         };
         self.all_tasks
             .append(&mut wtxn, &BEU32::new(task.uid), &task)?;
@@ -450,7 +450,7 @@ impl IndexScheduler {
             bitmap.insert(task.uid);
         })?;
 
-        self.update_kind(&mut wtxn, task.kind.as_kind(), |bitmap| {
+        self.update_kind(&mut wtxn, task.operation.as_kind(), |bitmap| {
             (bitmap.insert(task.uid));
         })?;
 
@@ -582,14 +582,14 @@ mod tests {
 
     use super::*;
 
-    /// Return a `KindWithContent::IndexCreation` task
-    fn index_creation_task(index: &'static str, primary_key: &'static str) -> KindWithContent {
-        KindWithContent::IndexCreation {
+    /// Return a `TaskOperation::IndexCreation` task
+    fn index_creation_task(index: &'static str, primary_key: &'static str) -> TaskOperation {
+        TaskOperation::IndexCreation {
             index_uid: S(index),
             primary_key: Some(S(primary_key)),
         }
     }
-    /// Create a `KindWithContent::DocumentImport` task that imports documents.
+    /// Create a `TaskOperation::DocumentImport` task that imports documents.
     ///
     /// - `index_uid` is given as parameter
     /// - `primary_key` is given as parameter
@@ -602,8 +602,8 @@ mod tests {
         primary_key: Option<&'static str>,
         content_file_uuid: u128,
         documents_count: u64,
-    ) -> KindWithContent {
-        KindWithContent::DocumentImport {
+    ) -> TaskOperation {
+        TaskOperation::DocumentImport {
             index_uid: S(index),
             primary_key: primary_key.map(ToOwned::to_owned),
             method: ReplaceDocuments,
@@ -698,7 +698,7 @@ mod tests {
         let kinds = [
             index_creation_task("catto", "mouse"),
             replace_document_import_task("catto", None, 0, 12),
-            KindWithContent::CancelTask { tasks: vec![0, 1] },
+            TaskOperation::CancelTask { tasks: vec![0, 1] },
             replace_document_import_task("catto", None, 1, 50),
             replace_document_import_task("doggo", Some("bone"), 2, 5000),
         ];
@@ -708,7 +708,7 @@ mod tests {
 
             assert_eq!(task.uid, idx as u32);
             assert_eq!(task.status, Status::Enqueued);
-            assert_eq!(task.kind.as_kind(), k);
+            assert_eq!(task.operation.as_kind(), k);
         }
 
         snapshot!(snapshot_index_scheduler(&index_scheduler));
@@ -718,12 +718,12 @@ mod tests {
     fn insert_task_while_another_task_is_processing() {
         let (index_scheduler, handle) = IndexScheduler::test(true);
 
-        index_scheduler.register(KindWithContent::Snapshot).unwrap();
+        index_scheduler.register(TaskOperation::Snapshot).unwrap();
         handle.wait_till(Breakpoint::BatchCreated);
         // while the task is processing can we register another task?
-        index_scheduler.register(KindWithContent::Snapshot).unwrap();
+        index_scheduler.register(TaskOperation::Snapshot).unwrap();
         index_scheduler
-            .register(KindWithContent::IndexDeletion {
+            .register(TaskOperation::IndexDeletion {
                 index_uid: S("doggos"),
             })
             .unwrap();
@@ -738,19 +738,19 @@ mod tests {
         let (index_scheduler, handle) = IndexScheduler::test(true);
 
         index_scheduler
-            .register(KindWithContent::IndexCreation {
+            .register(TaskOperation::IndexCreation {
                 index_uid: S("doggos"),
                 primary_key: None,
             })
             .unwrap();
         index_scheduler
-            .register(KindWithContent::IndexCreation {
+            .register(TaskOperation::IndexCreation {
                 index_uid: S("cattos"),
                 primary_key: None,
             })
             .unwrap();
         index_scheduler
-            .register(KindWithContent::IndexDeletion {
+            .register(TaskOperation::IndexDeletion {
                 index_uid: S("doggos"),
             })
             .unwrap();
@@ -773,23 +773,23 @@ mod tests {
         let (index_scheduler, handle) = IndexScheduler::test(false);
 
         index_scheduler
-            .register(KindWithContent::IndexCreation {
+            .register(TaskOperation::IndexCreation {
                 index_uid: S("doggos"),
                 primary_key: None,
             })
             .unwrap();
         index_scheduler
-            .register(KindWithContent::DocumentClear {
+            .register(TaskOperation::DocumentClear {
                 index_uid: S("doggos"),
             })
             .unwrap();
         index_scheduler
-            .register(KindWithContent::DocumentClear {
+            .register(TaskOperation::DocumentClear {
                 index_uid: S("doggos"),
             })
             .unwrap();
         index_scheduler
-            .register(KindWithContent::DocumentClear {
+            .register(TaskOperation::DocumentClear {
                 index_uid: S("doggos"),
             })
             .unwrap();
@@ -826,7 +826,7 @@ mod tests {
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_tasks_enqueued");
 
         index_scheduler
-            .register(KindWithContent::TaskDeletion {
+            .register(TaskOperation::TaskDeletion {
                 query: "test_query".to_owned(),
                 tasks: RoaringBitmap::from_iter(&[0, 1]),
             })
@@ -876,7 +876,7 @@ mod tests {
 
         // Now we delete the first task
         index_scheduler
-            .register(KindWithContent::TaskDeletion {
+            .register(TaskOperation::TaskDeletion {
                 query: "test_query".to_owned(),
                 tasks: RoaringBitmap::from_iter(&[0]),
             })
@@ -913,7 +913,7 @@ mod tests {
         // Now we delete the first task multiple times in a row
         for _ in 0..2 {
             index_scheduler
-                .register(KindWithContent::TaskDeletion {
+                .register(TaskOperation::TaskDeletion {
                     query: "test_query".to_owned(),
                     tasks: RoaringBitmap::from_iter(&[0]),
                 })
@@ -942,7 +942,7 @@ mod tests {
             meilisearch_types::document_formats::read_json(content.as_bytes(), file.as_file_mut())
                 .unwrap() as u64;
         index_scheduler
-            .register(KindWithContent::DocumentImport {
+            .register(TaskOperation::DocumentImport {
                 index_uid: S("doggos"),
                 primary_key: Some(S("id")),
                 method: ReplaceDocuments,
@@ -971,7 +971,7 @@ mod tests {
 
         for name in index_names {
             index_scheduler
-                .register(KindWithContent::IndexCreation {
+                .register(TaskOperation::IndexCreation {
                     index_uid: name.to_string(),
                     primary_key: None,
                 })
@@ -980,7 +980,7 @@ mod tests {
 
         for name in index_names {
             index_scheduler
-                .register(KindWithContent::DocumentClear {
+                .register(TaskOperation::DocumentClear {
                     index_uid: name.to_string(),
                 })
                 .unwrap();

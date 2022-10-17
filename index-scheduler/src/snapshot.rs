@@ -94,7 +94,7 @@ fn snapshot_task(task: &Task) -> String {
         error,
         details,
         status,
-        kind,
+        operation: kind,
     } = task;
     snap.push('{');
     snap.push_str(&format!("uid: {uid}, "));

@@ -67,7 +67,7 @@ impl From<Task> for SummarizedTaskView {
             task_uid: task.uid,
             index_uid: task.index_uid().map(|s| s.to_string()),
             status: task.status,
-            kind: task.kind.as_kind(),
+            kind: task.operation.as_kind(),
             enqueued_at: task.enqueued_at,
         }
     }
