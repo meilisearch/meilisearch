@@ -526,7 +526,7 @@ impl IndexScheduler {
                 KindDump::TaskCancelation { query, tasks } => {
                     KindWithContent::TaskCancelation { query, tasks }
                 }
-                KindDump::DeleteTasks { query, tasks } => {
+                KindDump::TasksDeletion { query, tasks } => {
                     KindWithContent::TaskDeletion { query, tasks }
                 }
                 KindDump::DumpExport {
