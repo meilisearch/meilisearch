@@ -6,8 +6,8 @@ description = "The parser for the Meilisearch filter syntax"
 publish = false
 
 [dependencies]
-nom = "7.1.0"
+nom = "7.1.1"
 nom_locate = "4.0.0"
 
 [dev-dependencies]
-insta = "1.18.2"
+insta = "1.21.0"

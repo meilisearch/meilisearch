@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Cursor, Read, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use byte_unit::Byte;
 use eyre::Result;
@@ -267,10 +267,6 @@ impl Performer for DocumentAddition {
             return Err(error.into());
         }
 
-        std::thread::spawn(move || {
-            progesses.join().unwrap();
-        });
-
         let result = addition.execute()?;
 
         txn.commit()?;
@@ -287,18 +283,19 @@ fn indexing_callback(step: milli::update::UpdateIndexingStep, bars: &[ProgressBa
         let prev = &bars[step_index - 1];
         if !prev.is_finished() {
             prev.disable_steady_tick();
-            prev.finish_at_current_pos();
+            prev.finish();
         }
     }
 
     let style = ProgressStyle::default_bar()
+        .progress_chars("##-")
         .template("[eta: {eta_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}")
-        .progress_chars("##-");
+        .unwrap();
 
     match step {
         RemapDocumentAddition { documents_seen } => {
             bar.set_style(ProgressStyle::default_spinner());
-            bar.set_message(format!("remaped {} documents so far.", documents_seen));
+            bar.set_message(format!("remapped {} documents so far.", documents_seen));
         }
         ComputeIdsAndMergeDocuments { documents_seen, total_documents } => {
             bar.set_style(style);
@@ -319,7 +316,7 @@ fn indexing_callback(step: milli::update::UpdateIndexingStep, bars: &[ProgressBa
             bar.set_position(databases_seen as u64);
         }
     }
-    bar.enable_steady_tick(200);
+    bar.enable_steady_tick(Duration::from_millis(200));
 }
 
 fn documents_from_jsonl(reader: impl Read) -> Result<Vec<u8>> {
@@ -519,10 +516,6 @@ impl Performer for SettingsUpdate {
             let bar = progesses.add(bar);
             bars.push(bar);
         }
-
-        std::thread::spawn(move || {
-            progesses.join().unwrap();
-        });
 
         update.execute(|step| indexing_callback(step, &bars))?;
 
