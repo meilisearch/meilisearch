@@ -13,9 +13,9 @@ PNAME='meilisearch'
 # Version regexp i.e. v[number].[number].[number]
 GREP_SEMVER_REGEXP='v\([0-9]*\)[.]\([0-9]*\)[.]\([0-9]*\)$'
 
-# Github API address
+# GitHub API address
 GITHUB_API='https://api.github.com/repos/meilisearch/meilisearch/releases'
-# Github Release address
+# GitHub Release address
 GITHUB_REL='https://github.com/meilisearch/meilisearch/releases/download/'
 
 # FUNCTIONS
