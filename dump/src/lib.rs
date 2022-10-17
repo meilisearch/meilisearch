@@ -1,8 +1,10 @@
 use meilisearch_types::{
     error::ResponseError,
+    keys::Key,
     milli::update::IndexDocumentsMethod,
     settings::Unchecked,
     tasks::{Details, KindWithContent, Status, Task, TaskId},
+    InstanceUid,
 };
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
@@ -120,6 +122,8 @@ pub enum KindDump {
     },
     DumpExport {
         dump_uid: String,
+        keys: Vec<Key>,
+        instance_uid: Option<InstanceUid>,
     },
     Snapshot,
 }
@@ -181,7 +185,15 @@ impl From<KindWithContent> for KindDump {
             KindWithContent::TaskDeletion { query, tasks } => {
                 KindDump::DeleteTasks { query, tasks }
             }
-            KindWithContent::DumpExport { dump_uid, .. } => KindDump::DumpExport { dump_uid },
+            KindWithContent::DumpExport {
+                dump_uid,
+                keys,
+                instance_uid,
+            } => KindDump::DumpExport {
+                dump_uid,
+                keys,
+                instance_uid,
+            },
             KindWithContent::Snapshot => KindDump::Snapshot,
         }
     }
@@ -444,7 +456,7 @@ pub(crate) mod test {
         drop(indexes);
 
         // ==== checking the task queue
-        for (task, expected) in dump.tasks().zip(create_test_tasks()) {
+        for (task, expected) in dump.tasks().unwrap().zip(create_test_tasks()) {
             let (task, content_file) = task.unwrap();
             assert_eq!(task, expected.0);
 
@@ -463,7 +475,7 @@ pub(crate) mod test {
         }
 
         // ==== checking the keys
-        for (key, expected) in dump.keys().zip(create_test_api_keys()) {
+        for (key, expected) in dump.keys().unwrap().zip(create_test_api_keys()) {
             assert_eq!(key.unwrap(), expected);
         }
     }
