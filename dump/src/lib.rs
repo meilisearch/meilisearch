@@ -113,7 +113,8 @@ pub enum KindDump {
         lhs: String,
         rhs: String,
     },
-    CancelTask {
+    TaskCancelation {
+        query: String,
         tasks: Vec<TaskId>,
     },
     DeleteTasks {
@@ -181,7 +182,9 @@ impl From<KindWithContent> for KindDump {
                 KindDump::IndexUpdate { primary_key }
             }
             KindWithContent::IndexSwap { lhs, rhs } => KindDump::IndexSwap { lhs, rhs },
-            KindWithContent::CancelTask { tasks } => KindDump::CancelTask { tasks },
+            KindWithContent::TaskCancelation { query, tasks } => {
+                KindDump::TaskCancelation { query, tasks }
+            }
             KindWithContent::TaskDeletion { query, tasks } => {
                 KindDump::DeleteTasks { query, tasks }
             }

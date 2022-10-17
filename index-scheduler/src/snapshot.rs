@@ -31,7 +31,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
 
     let mut snap = String::new();
 
-    let processing_tasks = processing_tasks.read().unwrap().processing;
+    let processing_tasks = processing_tasks.read().unwrap().processing.clone();
     snap.push_str(&format!(
         "### Autobatching Enabled = {autobatching_enabled}\n"
     ));
@@ -143,6 +143,13 @@ fn snaphsot_details(d: &Details) -> String {
         Details::ClearAll { deleted_documents } => {
             format!("{{ deleted_documents: {deleted_documents:?} }}")
         },
+        Details::TaskCancelation {
+            matched_tasks,
+            canceled_tasks,
+            original_query,
+        } => {
+            format!("{{ matched_tasks: {matched_tasks:?}, canceled_tasks: {canceled_tasks:?}, original_query: {original_query:?} }}")
+        }
         Details::TaskDeletion {
             matched_tasks,
             deleted_tasks,
