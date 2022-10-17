@@ -95,7 +95,8 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         }
     }
 
-    sorter_into_reader(docid_word_positions_sorter, indexer).map(|reader| (documents_ids, reader, script_language_pair))
+    sorter_into_reader(docid_word_positions_sorter, indexer)
+        .map(|reader| (documents_ids, reader, script_language_pair))
 }
 
 /// Transform a JSON value into a string that can be indexed.

@@ -18,7 +18,10 @@ use super::{ClonableMmap, MergeFn};
 use crate::facet::FacetType;
 use crate::update::facet::FacetsUpdate;
 use crate::update::index_documents::helpers::as_cloneable_grenad;
-use crate::{BoRoaringBitmapCodec, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index, Result, lat_lng_to_xyz};
+use crate::{
+    lat_lng_to_xyz, BoRoaringBitmapCodec, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index,
+    Result,
+};
 
 pub(crate) enum TypedChunk {
     DocidWordPositions(grenad::Reader<CursorClonableMmap>),
@@ -37,7 +40,7 @@ pub(crate) enum TypedChunk {
     FieldIdFacetNumberDocids(grenad::Reader<File>),
     FieldIdFacetExistsDocids(grenad::Reader<File>),
     GeoPoints(grenad::Reader<File>),
-    ScriptLanguageDocids(HashMap<(Script, Language), RoaringBitmap>)
+    ScriptLanguageDocids(HashMap<(Script, Language), RoaringBitmap>),
 }
 
 /// Write typed chunk in the corresponding LMDB database of the provided index.
@@ -224,11 +227,11 @@ pub(crate) fn write_typed_chunk_into_index(
                         let merged_db_values = RoaringBitmap::deserialize_from(&buffer[..])?;
                         merged_db_values
                     }
-                    None => value
+                    None => value,
                 };
                 index.script_language_docids.put(wtxn, &key, &final_value)?;
             }
-        } 
+        }
     }
 
     Ok((RoaringBitmap::new(), is_merged_database))

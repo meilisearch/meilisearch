@@ -15,12 +15,12 @@ use time::OffsetDateTime;
 use crate::error::{InternalError, UserError};
 use crate::facet::FacetType;
 use crate::fields_ids_map::FieldsIdsMap;
-use crate::heed_codec::ScriptLanguageCodec;
 use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
     FieldIdCodec, OrderedF64Codec,
 };
 use crate::heed_codec::StrRefCodec;
+use crate::heed_codec::ScriptLanguageCodec;
 use crate::{
     default_criteria, BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec, Criterion,
     DocumentId, ExternalDocumentsIds, FacetDistribution, FieldDistribution, FieldId,
@@ -125,7 +125,7 @@ pub struct Index {
     /// Maps the position of a word prefix with all the docids where this prefix appears.
     pub word_prefix_position_docids: Database<StrBEU32Codec, CboRoaringBitmapCodec>,
 
-    /// Maps the script and language with all the docids that corresponds to it. 
+    /// Maps the script and language with all the docids that corresponds to it.
     pub script_language_docids: Database<ScriptLanguageCodec, RoaringBitmapCodec>,
 
     /// Maps the facet field id and the docids for which this field exists
@@ -1198,7 +1198,11 @@ impl Index {
 
     /* script  language docids */
     /// Retrieve all the documents ids that correspond with (Script, Language) key, `None` if it is any.
-    pub fn script_language_documents_ids(&self, rtxn: &RoTxn, key: &(Script, Language)) -> heed::Result<Option<RoaringBitmap>> {
+    pub fn script_language_documents_ids(
+        &self,
+        rtxn: &RoTxn,
+        key: &(Script, Language),
+    ) -> heed::Result<Option<RoaringBitmap>> {
         let soft_deleted_documents = self.soft_deleted_documents_ids(rtxn)?;
         let doc_ids = self.script_language_docids.get(rtxn, key)?;
         Ok(doc_ids.map(|ids| ids - soft_deleted_documents))
