@@ -410,7 +410,7 @@ pub(crate) mod test {
         // tasks
         let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
-        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"e0b53f2cbd76c66dc55b12263a60d2c5");
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"ed9a30cded4c046ef46f7cff7450347e");
         assert_eq!(update_files.len(), 10);
         assert!(update_files[0].is_some()); // the enqueued document addition
         assert!(update_files[1..].iter().all(|u| u.is_none())); // everything already processed
