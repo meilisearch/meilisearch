@@ -5,7 +5,7 @@ use self::compat::v4_to_v5::CompatV4ToV5;
 use self::compat::v5_to_v6::{CompatIndexV5ToV6, CompatV5ToV6};
 use self::v5::V5Reader;
 use self::v6::{V6IndexReader, V6Reader};
-use crate::{Result, Version};
+use crate::{Error, Result, Version};
 
 use flate2::bufread::GzDecoder;
 use serde::Deserialize;
@@ -46,7 +46,7 @@ impl DumpReader {
 
         match dump_version {
             // Version::V1 => Ok(Box::new(v1::Reader::open(path)?)),
-            Version::V1 => todo!(),
+            Version::V1 => Err(Error::DumpV1Unsupported),
             Version::V2 => Ok(v2::V2Reader::open(path)?
                 .to_v3()
                 .to_v4()
