@@ -488,15 +488,22 @@ impl IndexScheduler {
             Batch::Snapshot(_) => todo!(),
             Batch::Dump(mut task) => {
                 let started_at = OffsetDateTime::now_utc();
-                let KindWithContent::DumpExport { keys, instance_uid, dump_uid } = &task.kind else {
+                let (keys, instance_uid, dump_uid) = if let KindWithContent::DumpExport {
+                    keys,
+                    instance_uid,
+                    dump_uid,
+                } = &task.kind
+                {
+                    (keys, instance_uid, dump_uid)
+                } else {
                     unreachable!();
                 };
                 let dump = dump::DumpWriter::new(instance_uid.clone())?;
-                let mut d_keys = dump.create_keys()?;
+                let mut dump_keys = dump.create_keys()?;
 
                 // 1. dump the keys
                 for key in keys {
-                    d_keys.push_key(key)?;
+                    dump_keys.push_key(key)?;
                 }
 
                 let rtxn = self.env.read_txn()?;
@@ -575,8 +582,8 @@ impl IndexScheduler {
                 }
 
                 let path = self.dumps_path.join(format!("{}.dump", dump_uid));
-                let file = File::create(path).unwrap();
-                dump.persist_to(BufWriter::new(file)).unwrap();
+                let file = File::create(path)?;
+                dump.persist_to(BufWriter::new(file))?;
 
                 task.status = Status::Succeeded;
 

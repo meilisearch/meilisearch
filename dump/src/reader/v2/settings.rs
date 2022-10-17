@@ -4,6 +4,7 @@ use std::{
     str::FromStr,
 };
 
+use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Deserializer};
 
@@ -132,9 +133,8 @@ impl Settings<Unchecked> {
     }
 }
 
-lazy_static::lazy_static! {
-    static ref ASC_DESC_REGEX: Regex = Regex::new(r#"(asc|desc)\(([\w_-]+)\)"#).unwrap();
-}
+static ASC_DESC_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r#"(asc|desc)\(([\w_-]+)\)"#).unwrap());
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub enum Criterion {

@@ -17,7 +17,6 @@ use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use meilisearch_types::InstanceUid;
 
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 
 use file_store::FileStore;
@@ -397,7 +396,7 @@ impl IndexScheduler {
 
     /// Register a new task comming from a dump in the scheduler.
     /// By takinig a mutable ref we're pretty sure no one will ever import a dump while actix is running.
-    pub fn register_dumpped_task(
+    pub fn register_dumped_task(
         &mut self,
         task: TaskDump,
         content_file: Option<Box<UpdateFile>>,
@@ -421,9 +420,7 @@ impl IndexScheduler {
             }
             // If the task isn't `Enqueued` then just generate a recognisable `Uuid`
             // in case we try to open it later.
-            _ if task.status != Status::Enqueued => {
-                Some(Uuid::from_str("00112233-4455-6677-8899-aabbccddeeff").unwrap())
-            }
+            _ if task.status != Status::Enqueued => Some(Uuid::nil()),
             _ => None,
         };
 
@@ -492,7 +489,7 @@ impl IndexScheduler {
         };
 
         self.all_tasks
-            .append(&mut wtxn, &BEU32::new(task.uid), &task)?;
+            .put(&mut wtxn, &BEU32::new(task.uid), &task)?;
 
         if let Some(indexes) = task.indexes() {
             for index in indexes {
