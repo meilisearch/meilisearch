@@ -611,6 +611,7 @@ impl IndexScheduler {
 #[cfg(test)]
 mod tests {
     use big_s::S;
+    use file_store::File;
     use meili_snap::snapshot;
     use meilisearch_types::milli::update::IndexDocumentsMethod::ReplaceDocuments;
     use tempfile::TempDir;
