@@ -52,7 +52,7 @@ impl<D: Distinct> Criterion for Initial<'_, D> {
                         candidates &= filtered_candidates;
                     }
 
-                    // because the bucket_candidates should be an exhastive count of the matching documents,
+                    // because the bucket_candidates should be an exhaustive count of the matching documents,
                     // we precompute the distinct attributes.
                     let bucket_candidates = match &mut self.distinct {
                         Some(distinct) => {
