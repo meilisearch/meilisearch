@@ -71,12 +71,10 @@ pub struct TaskView {
 }
 
 impl TaskView {
-    fn from_task(task: &Task) -> TaskView {
+    pub fn from_task(task: &Task) -> TaskView {
         TaskView {
             uid: task.uid,
-            index_uid: task
-                .indexes()
-                .and_then(|vec| vec.first().map(|i| i.to_string())),
+            index_uid: task.index_uid().map(ToOwned::to_owned),
             status: task.status,
             kind: task.kind.as_kind(),
             canceled_by: task.canceled_by,
@@ -119,6 +117,8 @@ pub struct DetailsView {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(flatten)]
     pub settings: Option<Settings<Unchecked>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub indexes: Option<Vec<(String, String)>>,
 }
 
 impl From<Details> for DetailsView {
@@ -175,6 +175,10 @@ impl From<Details> for DetailsView {
             Details::Dump { dump_uid } => DetailsView {
                 dump_uid: Some(dump_uid),
                 ..DetailsView::default()
+            },
+            Details::IndexSwap { swaps } => DetailsView {
+                indexes: Some(swaps),
+                ..Default::default()
             },
         }
     }

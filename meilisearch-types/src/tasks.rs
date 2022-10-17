@@ -1,4 +1,5 @@
 use std::fmt::{Display, Write};
+use std::collections::HashSet;
 use std::str::FromStr;
 
 use enum_iterator::Sequence;
@@ -59,19 +60,7 @@ impl Task {
 
     /// Return the list of indexes updated by this tasks.
     pub fn indexes(&self) -> Option<Vec<&str>> {
-        use KindWithContent::*;
-
-        match &self.kind {
-            DumpExport { .. } | Snapshot | TaskCancelation { .. } | TaskDeletion { .. } => None,
-            DocumentImport { index_uid, .. }
-            | DocumentDeletion { index_uid, .. }
-            | DocumentClear { index_uid }
-            | Settings { index_uid, .. }
-            | IndexCreation { index_uid, .. }
-            | IndexUpdate { index_uid, .. }
-            | IndexDeletion { index_uid } => Some(vec![index_uid]),
-            IndexSwap { lhs, rhs } => Some(vec![lhs, rhs]),
-        }
+        self.kind.indexes()
     }
 
     /// Return the content-uuid if there is one
@@ -131,8 +120,7 @@ pub enum KindWithContent {
         primary_key: Option<String>,
     },
     IndexSwap {
-        lhs: String,
-        rhs: String,
+        swaps: Vec<(String, String)>,
     },
     TaskCancelation {
         query: String,
@@ -180,7 +168,14 @@ impl KindWithContent {
             | IndexCreation { index_uid, .. }
             | IndexUpdate { index_uid, .. }
             | IndexDeletion { index_uid } => Some(vec![index_uid]),
-            IndexSwap { lhs, rhs } => Some(vec![lhs, rhs]),
+            IndexSwap { swaps } => {
+                let mut indexes = HashSet::<&str>::default();
+                for (lhs, rhs) in swaps {
+                    indexes.insert(lhs.as_str());
+                    indexes.insert(rhs.as_str());
+                }
+                Some(indexes.into_iter().collect())
+            }
         }
     }
 
@@ -212,9 +207,9 @@ impl KindWithContent {
             | KindWithContent::IndexUpdate { primary_key, .. } => Some(Details::IndexInfo {
                 primary_key: primary_key.clone(),
             }),
-            KindWithContent::IndexSwap { .. } => {
-                todo!()
-            }
+            KindWithContent::IndexSwap { swaps } => Some(Details::IndexSwap {
+                swaps: swaps.clone(),
+            }),
             KindWithContent::TaskCancelation { query, tasks } => Some(Details::TaskCancelation {
                 matched_tasks: tasks.len(),
                 canceled_tasks: None,
@@ -459,6 +454,10 @@ pub enum Details {
     },
     Dump {
         dump_uid: String,
+    },
+    // TODO: Lo: Revisit this variant once we have decided on what the POST payload of swapping indexes should be
+    IndexSwap {
+        swaps: Vec<(String, String)>,
     },
 }
 
