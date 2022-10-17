@@ -19,6 +19,8 @@ log = "0.4.17"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
 http = "0.2.8"
+regex = "1.6.0"
+lazy_static = "1.4.0"
 
 [dev-dependencies]
 big_s = "1.0.2"
