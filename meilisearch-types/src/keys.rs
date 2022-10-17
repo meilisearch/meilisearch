@@ -222,6 +222,8 @@ pub enum Action {
     IndexesUpdate,
     #[serde(rename = "indexes.delete")]
     IndexesDelete,
+    #[serde(rename = "indexes.swap")]
+    IndexesSwap,
     #[serde(rename = "tasks.*")]
     TasksAll,
     #[serde(rename = "tasks.cancel")]
@@ -316,6 +318,7 @@ pub mod actions {
     pub const INDEXES_GET: u8 = IndexesGet.repr();
     pub const INDEXES_UPDATE: u8 = IndexesUpdate.repr();
     pub const INDEXES_DELETE: u8 = IndexesDelete.repr();
+    pub const INDEXES_SWAP: u8 = IndexesSwap.repr();
     pub const TASKS_ALL: u8 = TasksAll.repr();
     pub const TASKS_CANCEL: u8 = TasksCancel.repr();
     pub const TASKS_DELETE: u8 = TasksDelete.repr();
