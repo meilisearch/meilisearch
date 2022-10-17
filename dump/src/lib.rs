@@ -382,6 +382,7 @@ pub(crate) mod test {
         for document in &documents {
             index.push_document(document).unwrap();
         }
+        index.flush().unwrap();
         index.settings(&settings).unwrap();
 
         // ========== pushing the task queue
@@ -396,6 +397,7 @@ pub(crate) mod test {
                 }
             }
         }
+        task_queue.flush().unwrap();
 
         // ========== pushing the api keys
         let api_keys = create_test_api_keys();
@@ -404,6 +406,7 @@ pub(crate) mod test {
         for key in &api_keys {
             keys.push_key(key).unwrap();
         }
+        keys.flush().unwrap();
 
         // create the dump
         let mut file = tempfile::tempfile().unwrap();
