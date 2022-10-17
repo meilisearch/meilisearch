@@ -1,3 +1,4 @@
+use enum_iterator::Sequence;
 use milli::update::IndexDocumentsMethod;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize, Serializer};
@@ -263,7 +264,7 @@ impl From<&KindWithContent> for Option<Details> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence)]
 #[serde(rename_all = "camelCase")]
 pub enum Status {
     Enqueued,
@@ -286,21 +287,32 @@ impl Display for Status {
 impl FromStr for Status {
     type Err = ResponseError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "enqueued" => Ok(Status::Enqueued),
-            "processing" => Ok(Status::Processing),
-            "succeeded" => Ok(Status::Succeeded),
-            "failed" => Ok(Status::Failed),
-            s => Err(ResponseError::from_msg(
-                format!("`{}` is not a status. Available types are", s),
+    fn from_str(status: &str) -> Result<Self, Self::Err> {
+        if status.eq_ignore_ascii_case("enqueued") {
+            Ok(Status::Enqueued)
+        } else if status.eq_ignore_ascii_case("processing") {
+            Ok(Status::Processing)
+        } else if status.eq_ignore_ascii_case("succeeded") {
+            Ok(Status::Succeeded)
+        } else if status.eq_ignore_ascii_case("failed") {
+            Ok(Status::Failed)
+        } else {
+            Err(ResponseError::from_msg(
+                format!(
+                    "`{}` is not a status. Available status are {}.",
+                    status,
+                    enum_iterator::all::<Status>()
+                        .map(|s| format!("`{s}`"))
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                ),
                 Code::BadRequest,
-            )),
+            ))
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence)]
 #[serde(rename_all = "camelCase")]
 pub enum Kind {
     DocumentImport,
@@ -320,25 +332,37 @@ pub enum Kind {
 impl FromStr for Kind {
     type Err = ResponseError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "document_addition" => Ok(Kind::DocumentImport),
-            "document_update" => Ok(Kind::DocumentImport),
-            "document_deletion" => Ok(Kind::DocumentDeletion),
-            "document_clear" => Ok(Kind::DocumentClear),
-            "settings" => Ok(Kind::Settings),
-            "index_creation" => Ok(Kind::IndexCreation),
-            "index_deletion" => Ok(Kind::IndexDeletion),
-            "index_update" => Ok(Kind::IndexUpdate),
-            "index_swap" => Ok(Kind::IndexSwap),
-            "cancel_task" => Ok(Kind::CancelTask),
-            "task_deletion" => Ok(Kind::TaskDeletion),
-            "dump_export" => Ok(Kind::DumpExport),
-            "snapshot" => Ok(Kind::Snapshot),
-            s => Err(ResponseError::from_msg(
-                format!("`{}` is not a type. Available status are ", s),
+    fn from_str(kind: &str) -> Result<Self, Self::Err> {
+        if kind.eq_ignore_ascii_case("indexCreation") {
+            Ok(Kind::IndexCreation)
+        } else if kind.eq_ignore_ascii_case("indexUpdate") {
+            Ok(Kind::IndexUpdate)
+        } else if kind.eq_ignore_ascii_case("indexDeletion") {
+            Ok(Kind::IndexDeletion)
+        } else if kind.eq_ignore_ascii_case("documentAdditionOrUpdate") {
+            Ok(Kind::DocumentImport)
+        } else if kind.eq_ignore_ascii_case("documentDeletion") {
+            Ok(Kind::DocumentDeletion)
+        } else if kind.eq_ignore_ascii_case("settingsUpdate") {
+            Ok(Kind::Settings)
+        } else if kind.eq_ignore_ascii_case("dumpCreation") {
+            Ok(Kind::DumpExport)
+        } else {
+            Err(ResponseError::from_msg(
+                format!(
+                    "`{}` is not a type. Available types are {}.",
+                    kind,
+                    enum_iterator::all::<Kind>()
+                        .map(|k| format!(
+                            "`{}`",
+                            // by default serde is going to insert `"` around the value.
+                            serde_json::to_string(&k).unwrap().trim_matches('"')
+                        ))
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                ),
                 Code::BadRequest,
-            )),
+            ))
         }
     }
 }
