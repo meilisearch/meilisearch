@@ -534,6 +534,7 @@ impl IndexScheduler {
     pub fn create_update_file(&self) -> Result<(Uuid, file_store::File)> {
         Ok(self.file_store.new_update()?)
     }
+
     #[cfg(test)]
     pub fn create_update_file_with_uuid(&self, uuid: u128) -> Result<(Uuid, file_store::File)> {
         Ok(self.file_store.new_update_with_uuid(uuid)?)
