@@ -480,7 +480,7 @@ impl IndexScheduler {
                 KindDump::IndexSwap { lhs, rhs } => KindWithContent::IndexSwap { lhs, rhs },
                 KindDump::CancelTask { tasks } => KindWithContent::CancelTask { tasks },
                 KindDump::DeleteTasks { query, tasks } => {
-                    KindWithContent::DeleteTasks { query, tasks }
+                    KindWithContent::TaskDeletion { query, tasks }
                 }
                 KindDump::DumpExport { dump_uid } => KindWithContent::DumpExport {
                     dump_uid,
