@@ -1,8 +1,10 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     marker::PhantomData,
+    str::FromStr,
 };
 
+use regex::Regex;
 use serde::{Deserialize, Deserializer};
 
 #[cfg(test)]
@@ -126,6 +128,54 @@ impl Settings<Unchecked> {
             synonyms: self.synonyms,
             distinct_attribute: self.distinct_attribute,
             _kind: PhantomData,
+        }
+    }
+}
+
+lazy_static::lazy_static! {
+    static ref ASC_DESC_REGEX: Regex = Regex::new(r#"(asc|desc)\(([\w_-]+)\)"#).unwrap();
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+pub enum Criterion {
+    /// Sorted by decreasing number of matched query terms.
+    /// Query words at the front of an attribute is considered better than if it was at the back.
+    Words,
+    /// Sorted by increasing number of typos.
+    Typo,
+    /// Sorted by increasing distance between matched query terms.
+    Proximity,
+    /// Documents with quey words contained in more important
+    /// attributes are considred better.
+    Attribute,
+    /// Sorted by the similarity of the matched words with the query words.
+    Exactness,
+    /// Sorted by the increasing value of the field specified.
+    Asc(String),
+    /// Sorted by the decreasing value of the field specified.
+    Desc(String),
+}
+
+impl FromStr for Criterion {
+    type Err = ();
+
+    fn from_str(txt: &str) -> Result<Criterion, Self::Err> {
+        match txt {
+            "words" => Ok(Criterion::Words),
+            "typo" => Ok(Criterion::Typo),
+            "proximity" => Ok(Criterion::Proximity),
+            "attribute" => Ok(Criterion::Attribute),
+            "exactness" => Ok(Criterion::Exactness),
+            text => {
+                let caps = ASC_DESC_REGEX.captures(text).ok_or(())?;
+                let order = caps.get(1).unwrap().as_str();
+                let field_name = caps.get(2).unwrap().as_str();
+                match order {
+                    "asc" => Ok(Criterion::Asc(field_name.to_string())),
+                    "desc" => Ok(Criterion::Desc(field_name.to_string())),
+                    _text => Err(()),
+                }
+            }
         }
     }
 }

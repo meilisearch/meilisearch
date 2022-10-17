@@ -353,12 +353,31 @@ impl<T> From<v2::Settings<T>> for v3::Settings<v3::Unchecked> {
             filterable_attributes: option_to_setting(settings.filterable_attributes)
                 .map(|f| f.into_iter().collect()),
             sortable_attributes: v3::Setting::NotSet,
-            ranking_rules: option_to_setting(settings.ranking_rules),
+            ranking_rules: option_to_setting(settings.ranking_rules).map(|criteria| {
+                criteria
+                    .into_iter()
+                    .map(|criterion| patch_ranking_rules(&criterion))
+                    .collect()
+            }),
             stop_words: option_to_setting(settings.stop_words),
             synonyms: option_to_setting(settings.synonyms),
             distinct_attribute: option_to_setting(settings.distinct_attribute),
             _kind: std::marker::PhantomData,
         }
+    }
+}
+
+fn patch_ranking_rules(ranking_rule: &str) -> String {
+    match v2::settings::Criterion::from_str(ranking_rule) {
+        Ok(v2::settings::Criterion::Words) => String::from("words"),
+        Ok(v2::settings::Criterion::Typo) => String::from("typo"),
+        Ok(v2::settings::Criterion::Proximity) => String::from("proximity"),
+        Ok(v2::settings::Criterion::Attribute) => String::from("attribute"),
+        Ok(v2::settings::Criterion::Exactness) => String::from("exactness"),
+        Ok(v2::settings::Criterion::Asc(name)) => format!("{name}:asc"),
+        Ok(v2::settings::Criterion::Desc(name)) => format!("{name}:desc"),
+        // we want to forward the error to the current version of meilisearch
+        Err(_) => ranking_rule.to_string(),
     }
 }
 
@@ -388,7 +407,7 @@ pub(crate) mod test {
         // tasks
         let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, mut update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
-        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"6adb1469ab4cc7625fd8ad32d07e51cd");
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"9507711db47c7171c79bc6d57d0bed79");
         assert_eq!(update_files.len(), 9);
         assert!(update_files[0].is_some()); // the enqueued document addition
         assert!(update_files[1..].iter().all(|u| u.is_none())); // everything already processed
@@ -440,7 +459,7 @@ pub(crate) mod test {
         }
         "###);
 
-        meili_snap::snapshot_hash!(format!("{:#?}", movies.settings()), @"8ee40d46442eb1a7cdc463d8a787515e");
+        meili_snap::snapshot_hash!(format!("{:#?}", movies.settings()), @"ae7c5ade2243a553152dab2f354e9095");
         let documents = movies
             .documents()
             .unwrap()
