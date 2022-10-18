@@ -2055,7 +2055,7 @@ checksum = "3e2e65a1a2e43cfcb47a895c4c8b10d1f4a61097f9f254f183aee60cad9c651d"
 
 [[package]]
 name = "meilisearch-auth"
-version = "0.29.1"
+version = "0.30.0"
 dependencies = [
  "enum-iterator",
  "hmac",
@@ -2072,7 +2072,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-http"
-version = "0.29.1"
+version = "0.30.0"
 dependencies = [
  "actix-cors",
  "actix-http",
@@ -2151,7 +2151,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-lib"
-version = "0.29.1"
+version = "0.30.0"
 dependencies = [
  "actix-rt",
  "actix-web",
@@ -2214,7 +2214,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-types"
-version = "0.29.1"
+version = "0.30.0"
 dependencies = [
  "actix-web",
  "proptest",
@@ -2613,7 +2613,7 @@ checksum = "478c572c3d73181ff3c2539045f6eb99e5491218eae919370993b890cdbdd98e"
 
 [[package]]
 name = "permissive-json-pointer"
-version = "0.29.1"
+version = "0.30.0"
 dependencies = [
  "big_s",
  "serde_json",
