@@ -280,6 +280,16 @@ async fn get_stats(
     );
     let search_rules = &index_scheduler.filters().search_rules;
 
+    let stats = create_all_stats((*index_scheduler).clone(), search_rules)?;
+
+    debug!("returns: {:?}", stats);
+    Ok(HttpResponse::Ok().json(stats))
+}
+
+pub fn create_all_stats(
+    index_scheduler: Data<IndexScheduler>,
+    search_rules: &meilisearch_auth::SearchRules,
+) -> Result<Stats, ResponseError> {
     let mut last_task: Option<OffsetDateTime> = None;
     let mut indexes = BTreeMap::new();
     let mut database_size = 0;
@@ -291,7 +301,6 @@ async fn get_stats(
     let processing_index = processing_task
         .first()
         .and_then(|task| task.index_uid().clone());
-
     for (name, index) in index_scheduler.indexes()? {
         if !search_rules.is_index_authorized(&name) {
             continue;
@@ -313,15 +322,12 @@ async fn get_stats(
 
         indexes.insert(name, stats);
     }
-
     let stats = Stats {
         database_size,
         last_update: last_task,
         indexes,
     };
-
-    debug!("returns: {:?}", stats);
-    Ok(HttpResponse::Ok().json(stats))
+    Ok(stats)
 }
 
 #[derive(Serialize)]

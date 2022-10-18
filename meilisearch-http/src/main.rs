@@ -47,10 +47,11 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let (index_scheduler, auth_controller) = setup_meilisearch(&opt)?;
+    let index_scheduler = Arc::new(index_scheduler);
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     let analytics = if !opt.no_analytics {
-        analytics::SegmentAnalytics::new(&opt, &meilisearch).await
+        analytics::SegmentAnalytics::new(&opt, index_scheduler.clone()).await
     } else {
         analytics::MockAnalytics::new(&opt)
     };
@@ -63,14 +64,14 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn run_http(
-    index_scheduler: IndexScheduler,
+    index_scheduler: Arc<IndexScheduler>,
     auth_controller: AuthController,
     opt: Opt,
     analytics: Arc<dyn Analytics>,
 ) -> anyhow::Result<()> {
     let enable_dashboard = &opt.env == "development";
     let opt_clone = opt.clone();
-    let index_scheduler = Data::new(index_scheduler);
+    let index_scheduler = Data::from(index_scheduler);
 
     let http_server = HttpServer::new(move || {
         create_app(
