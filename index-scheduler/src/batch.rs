@@ -1043,7 +1043,7 @@ impl IndexScheduler {
 
         // 2. We now have a list of tasks to cancel, cancel them
         for mut task in self.get_existing_tasks(wtxn, tasks_to_cancel.iter())? {
-            // TODO delete the content uuid of the task
+            self.delete_persisted_task_data(&task)?;
             task.status = Status::Canceled;
             task.canceled_by = Some(cancel_task_id);
             task.finished_at = Some(now);
