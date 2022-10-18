@@ -689,7 +689,7 @@ impl IndexScheduler {
             | KindWithContent::IndexCreation { .. }
             | KindWithContent::IndexUpdate { .. }
             | KindWithContent::IndexSwap { .. }
-            | KindWithContent::CancelTask { .. }
+            | KindWithContent::TaskCancelation { .. }
             | KindWithContent::TaskDeletion { .. }
             | KindWithContent::DumpExport { .. }
             | KindWithContent::Snapshot => Ok(()),
