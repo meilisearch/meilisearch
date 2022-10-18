@@ -135,7 +135,7 @@ pub enum KindWithContent {
     },
     TaskCancelation {
         query: String,
-        tasks: Vec<TaskId>,
+        tasks: RoaringBitmap,
     },
     TaskDeletion {
         query: String,
@@ -349,9 +349,9 @@ impl FromStr for Kind {
             Ok(Kind::DocumentDeletion)
         } else if kind.eq_ignore_ascii_case("settingsUpdate") {
             Ok(Kind::Settings)
-        } else if kind.eq_ignore_ascii_case("TaskCancelation") {
+        } else if kind.eq_ignore_ascii_case("taskCancelation") {
             Ok(Kind::TaskCancelation)
-        } else if kind.eq_ignore_ascii_case("TaskDeletion") {
+        } else if kind.eq_ignore_ascii_case("taskDeletion") {
             Ok(Kind::TaskDeletion)
         } else if kind.eq_ignore_ascii_case("dumpCreation") {
             Ok(Kind::DumpExport)
@@ -397,7 +397,7 @@ pub enum Details {
         deleted_documents: Option<u64>,
     },
     TaskCancelation {
-        matched_tasks: usize,
+        matched_tasks: u64,
         canceled_tasks: Option<usize>,
         original_query: String,
     },
