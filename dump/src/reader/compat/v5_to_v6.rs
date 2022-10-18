@@ -125,6 +125,7 @@ impl CompatV5ToV6 {
                             instance_uid: instance_uid.clone(),
                         },
                     },
+                    canceled_by: None,
                     details: task_view.details.map(|details| match details {
                         v5::Details::DocumentAddition {
                             received_documents,
