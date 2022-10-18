@@ -21,8 +21,10 @@ use std::{
 };
 
 use crate::error::MeilisearchHttpError;
-use actix_web::error::JsonPayloadError;
-use actix_web::web::Data;
+use actix_cors::Cors;
+use actix_http::body::MessageBody;
+use actix_web::{dev::ServiceFactory, error::JsonPayloadError, middleware};
+use actix_web::{dev::ServiceResponse, web::Data};
 use analytics::Analytics;
 use anyhow::bail;
 use error::PayloadError;
@@ -61,6 +63,57 @@ fn is_empty_db(db_path: impl AsRef<Path>) -> bool {
     }
 }
 
+pub fn create_app(
+    index_scheduler: Data<IndexScheduler>,
+    auth_controller: AuthController,
+    opt: Opt,
+    analytics: Arc<dyn Analytics>,
+    enable_dashboard: bool,
+) -> actix_web::App<
+    impl ServiceFactory<
+        actix_web::dev::ServiceRequest,
+        Config = (),
+        Response = ServiceResponse<impl MessageBody>,
+        Error = actix_web::Error,
+        InitError = (),
+    >,
+> {
+    let app = actix_web::App::new()
+        .configure(|s| {
+            configure_data(
+                s,
+                index_scheduler.clone(),
+                auth_controller.clone(),
+                &opt,
+                analytics.clone(),
+            )
+        })
+        .configure(routes::configure)
+        .configure(|s| dashboard(s, enable_dashboard));
+    #[cfg(feature = "metrics")]
+    let app = app.configure(|s| configure_metrics_route(s, opt.enable_metrics_route));
+    let app = app
+        .wrap(
+            Cors::default()
+                .send_wildcard()
+                .allow_any_header()
+                .allow_any_origin()
+                .allow_any_method()
+                .max_age(86_400), // 24h
+        )
+        .wrap(middleware::Logger::default())
+        .wrap(middleware::Compress::default())
+        .wrap(middleware::NormalizePath::new(
+            middleware::TrailingSlash::Trim,
+        ));
+    #[cfg(feature = "metrics")]
+    let app = app.wrap(Condition::new(
+        opt.enable_metrics_route,
+        route_metrics::RouteMetrics,
+    ));
+    app
+}
+
 // TODO: TAMO: Finish setting up things
 pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthController)> {
     // we don't want to create anything in the data.ms yet, thus we
@@ -75,8 +128,6 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
             opt.max_index_size.get_bytes() as usize,
             (&opt.indexer_options).try_into()?,
             true,
-            #[cfg(test)]
-            todo!("We'll see later"),
         )
     };
     let meilisearch_builder = || -> anyhow::Result<_> {

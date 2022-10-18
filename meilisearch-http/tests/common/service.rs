@@ -1,12 +1,12 @@
 use actix_web::{http::StatusCode, test};
+use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
-use meilisearch_lib::MeiliSearch;
 use serde_json::Value;
 
 use meilisearch_http::{analytics, create_app, Opt};
 
 pub struct Service {
-    pub meilisearch: MeiliSearch,
+    pub index_scheduler: IndexScheduler,
     pub auth: AuthController,
     pub options: Opt,
     pub api_key: Option<String>,
