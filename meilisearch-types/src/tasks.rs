@@ -215,9 +215,11 @@ impl KindWithContent {
             KindWithContent::IndexSwap { .. } => {
                 todo!()
             }
-            KindWithContent::TaskCancelation { .. } => {
-                None // TODO: check correctness of this return value
-            }
+            KindWithContent::TaskCancelation { query, tasks } => Some(Details::TaskCancelation {
+                matched_tasks: tasks.len(),
+                canceled_tasks: None,
+                original_query: query.clone(),
+            }),
             KindWithContent::TaskDeletion { query, tasks } => Some(Details::TaskDeletion {
                 matched_tasks: tasks.len(),
                 deleted_tasks: None,
@@ -251,7 +253,11 @@ impl From<&KindWithContent> for Option<Details> {
                 primary_key: primary_key.clone(),
             }),
             KindWithContent::IndexSwap { .. } => None,
-            KindWithContent::TaskCancelation { .. } => None,
+            KindWithContent::TaskCancelation { query, tasks } => Some(Details::TaskCancelation {
+                matched_tasks: tasks.len(),
+                canceled_tasks: None,
+                original_query: query.clone(),
+            }),
             KindWithContent::TaskDeletion { query, tasks } => Some(Details::TaskDeletion {
                 matched_tasks: tasks.len(),
                 deleted_tasks: None,
