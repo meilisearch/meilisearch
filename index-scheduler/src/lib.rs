@@ -381,7 +381,7 @@ impl IndexScheduler {
         match wtxn.commit() {
             Ok(()) => (),
             _e @ Err(_) => {
-                todo!("remove the data associated with the task");
+                self.delete_persisted_task_data(&task)?;
                 // _e?;
             }
         }
@@ -577,8 +577,8 @@ impl IndexScheduler {
                 for mut task in tasks {
                     task.started_at = Some(started_at);
                     task.finished_at = Some(finished_at);
-                    // TODO the info field should've been set by the process_batch function
                     self.update_task(&mut wtxn, &task)?;
+                    self.delete_persisted_task_data(&task)?;
                 }
                 log::info!("A batch of tasks was successfully completed.");
             }
@@ -605,6 +605,25 @@ impl IndexScheduler {
             .unwrap();
 
         Ok(processed_tasks)
+    }
+
+    pub(crate) fn delete_persisted_task_data(&self, task: &Task) -> Result<()> {
+        match &task.kind {
+            KindWithContent::DocumentImport { content_file, .. } => {
+                self.delete_update_file(*content_file)
+            }
+            KindWithContent::DocumentDeletion { .. }
+            | KindWithContent::DocumentClear { .. }
+            | KindWithContent::Settings { .. }
+            | KindWithContent::IndexDeletion { .. }
+            | KindWithContent::IndexCreation { .. }
+            | KindWithContent::IndexUpdate { .. }
+            | KindWithContent::IndexSwap { .. }
+            | KindWithContent::CancelTask { .. }
+            | KindWithContent::TaskDeletion { .. }
+            | KindWithContent::DumpExport { .. }
+            | KindWithContent::Snapshot => Ok(()),
+        }
     }
 }
 

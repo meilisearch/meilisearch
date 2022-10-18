@@ -953,15 +953,18 @@ impl IndexScheduler {
         let mut affected_kinds = HashSet::new();
 
         for task_id in to_delete_tasks.iter() {
-            // This should never fail, but there is no harm done if it does. The function
-            // will still be 99% correct (the number of deleted tasks will be slightly incorrect).
-            if let Some(task) = self.get_task(wtxn, task_id)? {
-                if let Some(task_indexes) = task.indexes() {
-                    affected_indexes.extend(task_indexes.into_iter().map(|x| x.to_owned()));
-                }
-                affected_statuses.insert(task.status);
-                affected_kinds.insert(task.kind.as_kind());
+            let task = self
+                .get_task(wtxn, task_id)?
+                .ok_or(Error::CorruptedTaskQueue)?;
+            if let Some(task_indexes) = task.indexes() {
+                affected_indexes.extend(task_indexes.into_iter().map(|x| x.to_owned()));
             }
+            affected_statuses.insert(task.status);
+            affected_kinds.insert(task.kind.as_kind());
+            // Note: don't delete the persisted task data since
+            // we can only delete succeeded, failed, and canceled tasks.
+            // In each of those cases, the persisted data is supposed to
+            // have been deleted already.
         }
         for index in affected_indexes {
             self.update_index(wtxn, &index, |bitmap| {
