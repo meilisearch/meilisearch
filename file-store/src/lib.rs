@@ -1,6 +1,8 @@
+use std::collections::BTreeSet;
 use std::fs::File as StdFile;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use tempfile::NamedTempFile;
 use uuid::Uuid;
@@ -95,6 +97,20 @@ impl FileStore {
         let path = self.path.join(uuid.to_string());
         std::fs::remove_file(path)?;
         Ok(())
+    }
+
+    /// List the Uuids of the files in the FileStore
+    ///
+    /// This function is meant to be used by tests only.
+    #[doc(hidden)]
+    pub fn __all_uuids(&self) -> BTreeSet<Uuid> {
+        let mut uuids = BTreeSet::new();
+        for entry in self.path.read_dir().unwrap() {
+            let entry = entry.unwrap();
+            let uuid = Uuid::from_str(entry.file_name().to_str().unwrap()).unwrap();
+            uuids.insert(uuid);
+        }
+        uuids
     }
 }
 
