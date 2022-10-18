@@ -1,15 +1,14 @@
 use std::env;
 use std::sync::Arc;
 
-use actix_cors::Cors;
 use actix_web::http::KeepAlive;
 use actix_web::web::Data;
-use actix_web::{middleware, HttpServer};
+use actix_web::HttpServer;
 use clap::Parser;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
 use meilisearch_http::analytics::Analytics;
-use meilisearch_http::{analytics, configure_data, dashboard, routes};
+use meilisearch_http::{analytics, create_app};
 use meilisearch_http::{setup_meilisearch, Opt};
 
 #[global_allocator]
@@ -48,10 +47,11 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let (index_scheduler, auth_controller) = setup_meilisearch(&opt)?;
+    let index_scheduler = Arc::new(index_scheduler);
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     let analytics = if !opt.no_analytics {
-        analytics::SegmentAnalytics::new(&opt, &meilisearch).await
+        analytics::SegmentAnalytics::new(&opt, index_scheduler.clone()).await
     } else {
         analytics::MockAnalytics::new(&opt)
     };
@@ -64,54 +64,23 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn run_http(
-    index_scheduler: IndexScheduler,
+    index_scheduler: Arc<IndexScheduler>,
     auth_controller: AuthController,
     opt: Opt,
     analytics: Arc<dyn Analytics>,
 ) -> anyhow::Result<()> {
     let enable_dashboard = &opt.env == "development";
     let opt_clone = opt.clone();
-    let index_scheduler = Data::new(index_scheduler);
+    let index_scheduler = Data::from(index_scheduler);
 
     let http_server = HttpServer::new(move || {
-        let app = actix_web::App::new()
-            .configure(|s| {
-                configure_data(
-                    s,
-                    index_scheduler.clone(),
-                    auth_controller.clone(),
-                    &opt,
-                    analytics.clone(),
-                )
-            })
-            .configure(routes::configure)
-            .configure(|s| dashboard(s, enable_dashboard));
-
-        #[cfg(feature = "metrics")]
-        let app = app.configure(|s| configure_metrics_route(s, opt.enable_metrics_route));
-
-        let app = app
-            .wrap(
-                Cors::default()
-                    .send_wildcard()
-                    .allow_any_header()
-                    .allow_any_origin()
-                    .allow_any_method()
-                    .max_age(86_400), // 24h
-            )
-            .wrap(middleware::Logger::default())
-            .wrap(middleware::Compress::default())
-            .wrap(middleware::NormalizePath::new(
-                middleware::TrailingSlash::Trim,
-            ));
-
-        #[cfg(feature = "metrics")]
-        let app = app.wrap(Condition::new(
-            opt.enable_metrics_route,
-            route_metrics::RouteMetrics,
-        ));
-
-        app
+        create_app(
+            index_scheduler.clone(),
+            auth_controller.clone(),
+            opt.clone(),
+            analytics.clone(),
+            enable_dashboard,
+        )
     })
     // Disable signals allows the server to terminate immediately when a user enter CTRL-C
     .disable_signals()
