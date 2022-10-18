@@ -37,9 +37,11 @@ pub fn load_dump(
         indexing_options,
     )?;
     UpdateFileStore::load_dump(src.as_ref(), &dst)?;
-    TaskStore::load_dump(&src, env)?;
+    TaskStore::load_dump(&src, env.clone())?;
     AuthController::load_dump(&src, &dst)?;
     analytics::copy_user_id(src.as_ref(), dst.as_ref());
+
+    env.as_ref().clone().prepare_for_closing();
 
     info!("Loading indexes.");
 

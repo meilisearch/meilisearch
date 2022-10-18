@@ -8,7 +8,6 @@ use self::data::GetDump;
 
 // all the following test are ignored on windows. See #2364
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v1() {
     let temp = tempfile::tempdir().unwrap();
 
@@ -31,7 +30,6 @@ async fn import_dump_v1() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v2_movie_raw() {
     let temp = tempfile::tempdir().unwrap();
 
@@ -95,7 +93,6 @@ async fn import_dump_v2_movie_raw() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v2_movie_with_settings() {
     let temp = tempfile::tempdir().unwrap();
 
@@ -159,7 +156,6 @@ async fn import_dump_v2_movie_with_settings() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v2_rubygems_with_settings() {
     let temp = tempfile::tempdir().unwrap();
 
@@ -223,7 +219,6 @@ async fn import_dump_v2_rubygems_with_settings() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v3_movie_raw() {
     let temp = tempfile::tempdir().unwrap();
 
@@ -287,7 +282,6 @@ async fn import_dump_v3_movie_raw() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v3_movie_with_settings() {
     let temp = tempfile::tempdir().unwrap();
 
@@ -351,7 +345,6 @@ async fn import_dump_v3_movie_with_settings() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v3_rubygems_with_settings() {
     let temp = tempfile::tempdir().unwrap();
 
@@ -415,7 +408,6 @@ async fn import_dump_v3_rubygems_with_settings() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v4_movie_raw() {
     let temp = tempfile::tempdir().unwrap();
 
@@ -479,7 +471,6 @@ async fn import_dump_v4_movie_raw() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v4_movie_with_settings() {
     let temp = tempfile::tempdir().unwrap();
 
@@ -543,7 +534,6 @@ async fn import_dump_v4_movie_with_settings() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v4_rubygems_with_settings() {
     let temp = tempfile::tempdir().unwrap();
 
@@ -607,7 +597,6 @@ async fn import_dump_v4_rubygems_with_settings() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v5() {
     let temp = tempfile::tempdir().unwrap();
 
