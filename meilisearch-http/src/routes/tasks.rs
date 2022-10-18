@@ -25,7 +25,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route(web::get().to(SeqHandler(get_tasks)))
             .route(web::delete().to(SeqHandler(delete_tasks))),
     )
-    .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))));
+    .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))))
+    .service(web::resource("/cancel").route(web::post().to(SeqHandler(cancel_tasks))));
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -200,6 +201,60 @@ pub struct TaskDeletionQuery {
     index_uid: Option<CS<IndexUid>>,
 }
 
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TaskCancelationQuery {
+    #[serde(rename = "type")]
+    type_: Option<CS<Kind>>,
+    uid: Option<CS<u32>>,
+    status: Option<CS<Status>>,
+    index_uid: Option<CS<IndexUid>>,
+}
+
+async fn cancel_tasks(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_CANCEL }>, Data<IndexScheduler>>,
+    params: web::Query<TaskCancelationQuery>,
+) -> Result<HttpResponse, ResponseError> {
+    let TaskCancelationQuery {
+        type_,
+        uid,
+        status,
+        index_uid,
+    } = params.into_inner();
+
+    let kind: Option<Vec<_>> = type_.map(|x| x.into_iter().collect());
+    let uid: Option<Vec<_>> = uid.map(|x| x.into_iter().collect());
+    let status: Option<Vec<_>> = status.map(|x| x.into_iter().collect());
+    let index_uid: Option<Vec<_>> =
+        index_uid.map(|x| x.into_iter().map(|x| x.to_string()).collect());
+
+    let query = Query {
+        limit: None,
+        from: None,
+        status,
+        kind,
+        index_uid,
+        uid,
+    };
+
+    if query.is_empty() {
+        return Err(index_scheduler::Error::TaskCancelationWithEmptyQuery.into());
+    }
+
+    let filtered_query = filter_out_inaccessible_indexes_from_query(&index_scheduler, &query);
+    let tasks = index_scheduler.get_task_ids(&filtered_query)?;
+    let filtered_query_string = yaup::to_string(&filtered_query).unwrap();
+    let task_cancelation = KindWithContent::TaskCancelation {
+        query: filtered_query_string,
+        tasks,
+    };
+
+    let task = index_scheduler.register(task_cancelation)?;
+    let task_view = TaskView::from_task(&task);
+
+    Ok(HttpResponse::Ok().json(task_view))
+}
+
 async fn delete_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_DELETE }>, Data<IndexScheduler>>,
     params: web::Query<TaskDeletionQuery>,
@@ -225,12 +280,12 @@ async fn delete_tasks(
         index_uid,
         uid,
     };
+
     if query.is_empty() {
         return Err(index_scheduler::Error::TaskDeletionWithEmptyQuery.into());
     }
 
     let filtered_query = filter_out_inaccessible_indexes_from_query(&index_scheduler, &query);
-
     let tasks = index_scheduler.get_task_ids(&filtered_query)?;
     let filtered_query_string = yaup::to_string(&filtered_query).unwrap();
     let task_deletion = KindWithContent::TaskDeletion {
@@ -239,7 +294,6 @@ async fn delete_tasks(
     };
 
     let task = index_scheduler.register(task_deletion)?;
-
     let task_view = TaskView::from_task(&task);
 
     Ok(HttpResponse::Ok().json(task_view))
