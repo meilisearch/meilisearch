@@ -1,13 +1,14 @@
-use std::sync::atomic::Ordering::Relaxed;
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::BufWriter;
+use std::sync::atomic::Ordering::Relaxed;
 
 use crate::{autobatcher::BatchKind, Error, IndexScheduler, Result, TaskId};
 
 use dump::IndexMetadata;
 use log::{debug, info};
 
+use meilisearch_types::milli::documents::obkv_to_object;
 use meilisearch_types::milli::update::IndexDocumentsConfig;
 use meilisearch_types::milli::update::{
     DocumentAdditionResult, DocumentDeletionResult, IndexDocumentsMethod,
@@ -15,7 +16,6 @@ use meilisearch_types::milli::update::{
 use meilisearch_types::milli::{
     self, documents::DocumentsBatchReader, update::Settings as MilliSettings, BEU32,
 };
-use meilisearch_types::milli::documents::obkv_to_object;
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
 use meilisearch_types::tasks::{Details, Kind, KindWithContent, Status, Task};
 use meilisearch_types::{
@@ -976,7 +976,6 @@ impl IndexScheduler {
     ) -> Result<usize> {
         // 1. Remove from this list the tasks that we are not allowed to delete
         let enqueued_tasks = self.get_status(wtxn, Status::Enqueued)?;
-
         let processing_tasks = &self.processing_tasks.read().unwrap().processing.clone();
 
         let all_task_ids = self.all_task_ids(&wtxn)?;
@@ -1004,24 +1003,47 @@ impl IndexScheduler {
             // In each of those cases, the persisted data is supposed to
             // have been deleted already.
         }
+
         for index in affected_indexes {
-            self.update_index(wtxn, &index, |bitmap| {
-                *bitmap -= &to_delete_tasks;
-            })?;
+            self.update_index(wtxn, &index, |bitmap| *bitmap -= &to_delete_tasks)?;
         }
+
         for status in affected_statuses {
-            self.update_status(wtxn, status, |bitmap| {
-                *bitmap -= &to_delete_tasks;
-            })?;
+            self.update_status(wtxn, status, |bitmap| *bitmap -= &to_delete_tasks)?;
         }
+
         for kind in affected_kinds {
-            self.update_kind(wtxn, kind, |bitmap| {
-                *bitmap -= &to_delete_tasks;
-            })?;
+            self.update_kind(wtxn, kind, |bitmap| *bitmap -= &to_delete_tasks)?;
         }
+
         for task in to_delete_tasks.iter() {
             self.all_tasks.delete(wtxn, &BEU32::new(task))?;
         }
+
         Ok(to_delete_tasks.len() as usize)
+    }
+
+    /// Cancel each given task from all the databases (if it is cancelable).
+    ///
+    /// Return the number of tasks that were actually canceled.
+    fn cancel_matched_tasks(
+        &self,
+        wtxn: &mut RwTxn,
+        matched_tasks: &RoaringBitmap,
+    ) -> Result<usize> {
+        // 1. Remove from this list the tasks that we are not allowed to cancel
+        //    Notice that only the _enqueued_ ones are cancelable and we should
+        //    have already aborted the indexation of the _processing_ ones
+        let cancelable_tasks = self.get_status(&wtxn, Status::Enqueued)?;
+        let tasks_to_cancel = cancelable_tasks & matched_tasks;
+
+        // 2. We now have a list of tasks to cancel, cancel them
+        self.update_status(wtxn, Status::Enqueued, |bitmap| *bitmap -= &tasks_to_cancel)?;
+        self.update_status(wtxn, Status::Canceled, |bitmap| *bitmap |= &tasks_to_cancel)?;
+
+        // TODO update the content of the tasks i.e. canceled_by and finished_at
+        // TODO delete the content uuid of the tasks
+
+        Ok(tasks_to_cancel.len() as usize)
     }
 }
