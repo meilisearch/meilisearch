@@ -115,7 +115,7 @@ pub enum KindDump {
     },
     TaskCancelation {
         query: String,
-        tasks: Vec<TaskId>,
+        tasks: RoaringBitmap,
     },
     TasksDeletion {
         query: String,
