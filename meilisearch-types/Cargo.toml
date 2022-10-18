@@ -16,8 +16,8 @@ proptest-derive = { version = "0.3.0", optional = true }
 roaring = { version = "0.10.0", features = ["serde"] }
 serde = { version = "1.0.145", features = ["derive"] }
 serde_json = "1.0.85"
-time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 thiserror = "1.0.30"
+time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 tokio = "1.0"
 uuid = { version = "1.1.2", features = ["serde", "v4"] }
 
