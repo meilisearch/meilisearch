@@ -397,6 +397,7 @@ impl IndexScheduler {
             started_at: None,
             finished_at: None,
             error: None,
+            canceled_by: None,
             details: kind.default_details(),
             status: Status::Enqueued,
             kind: kind.clone(),
@@ -478,6 +479,7 @@ impl IndexScheduler {
             started_at: task.started_at,
             finished_at: task.finished_at,
             error: task.error,
+            canceled_by: task.canceled_by,
             details: task.details,
             status: task.status,
             kind: match task.kind {
