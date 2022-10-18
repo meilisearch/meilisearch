@@ -17,9 +17,10 @@ pub enum Error {
     CorruptedDump,
     #[error("Task `{0}` not found")]
     TaskNotFound(TaskId),
-    // TODO: Lo: proper error message for this
-    #[error("Cannot delete all tasks")]
+    #[error("Query parameters to filter the tasks to delete are missing. Available query parameters are: `uid`, `indexUid`, `status`, `type`")]
     TaskDeletionWithEmptyQuery,
+    #[error("Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uid`, `indexUid`, `status`, `type`")]
+    TaskCancelationWithEmptyQuery,
     // maybe the two next errors are going to move to the frontend
     #[error("`{0}` is not a status. Available status are")]
     InvalidStatus(String),
@@ -48,6 +49,7 @@ impl ErrorCode for Error {
             Error::IndexAlreadyExists(_) => Code::IndexAlreadyExists,
             Error::TaskNotFound(_) => Code::TaskNotFound,
             Error::TaskDeletionWithEmptyQuery => Code::TaskDeletionWithEmptyQuery,
+            Error::TaskCancelationWithEmptyQuery => Code::TaskCancelationWithEmptyQuery,
             Error::InvalidStatus(_) => Code::BadRequest,
             Error::InvalidKind(_) => Code::BadRequest,
 

@@ -829,7 +829,7 @@ mod tests {
             replace_document_import_task("catto", None, 0, 12),
             KindWithContent::TaskCancelation {
                 query: format!("uid=0,1"),
-                tasks: vec![0, 1],
+                tasks: RoaringBitmap::from_iter([0, 1]),
             },
             replace_document_import_task("catto", None, 1, 50),
             replace_document_import_task("doggo", Some("bone"), 2, 5000),
