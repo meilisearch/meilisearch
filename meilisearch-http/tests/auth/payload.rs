@@ -1,6 +1,5 @@
 use crate::common::Server;
 use actix_web::test;
-use meilisearch_http::{analytics, create_app};
 use serde_json::{json, Value};
 
 #[actix_rt::test]
@@ -15,14 +14,7 @@ async fn error_api_key_bad_content_types() {
 
     let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
+    let app = server.init_web_app().await;
 
     // post
     let req = test::TestRequest::post()
@@ -87,14 +79,7 @@ async fn error_api_key_empty_content_types() {
 
     let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
+    let app = server.init_web_app().await;
 
     // post
     let req = test::TestRequest::post()
@@ -159,14 +144,7 @@ async fn error_api_key_missing_content_types() {
 
     let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
+    let app = server.init_web_app().await;
 
     // post
     let req = test::TestRequest::post()
@@ -223,14 +201,7 @@ async fn error_api_key_empty_payload() {
 
     let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
+    let app = server.init_web_app().await;
 
     // post
     let req = test::TestRequest::post()
@@ -279,14 +250,7 @@ async fn error_api_key_malformed_payload() {
 
     let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
+    let app = server.init_web_app().await;
 
     // post
     let req = test::TestRequest::post()

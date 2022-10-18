@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use actix_web::{http::StatusCode, test};
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
@@ -6,7 +8,7 @@ use serde_json::Value;
 use meilisearch_http::{analytics, create_app, Opt};
 
 pub struct Service {
-    pub index_scheduler: IndexScheduler,
+    pub index_scheduler: Arc<IndexScheduler>,
     pub auth: AuthController,
     pub options: Opt,
     pub api_key: Option<String>,
@@ -14,12 +16,12 @@ pub struct Service {
 
 impl Service {
     pub async fn post(&self, url: impl AsRef<str>, body: Value) -> (Value, StatusCode) {
-        let app = test::init_service(create_app!(
-            &self.meilisearch,
-            &self.auth,
+        let app = test::init_service(create_app(
+            self.index_scheduler.clone().into(),
+            self.auth.clone(),
+            self.options.clone(),
+            analytics::MockAnalytics::new(&self.options),
             true,
-            self.options,
-            analytics::MockAnalytics::new(&self.options).0
         ))
         .await;
 
@@ -42,12 +44,12 @@ impl Service {
         url: impl AsRef<str>,
         body: impl AsRef<str>,
     ) -> (Value, StatusCode) {
-        let app = test::init_service(create_app!(
-            &self.meilisearch,
-            &self.auth,
+        let app = test::init_service(create_app(
+            self.index_scheduler.clone().into(),
+            self.auth.clone(),
+            self.options.clone(),
+            analytics::MockAnalytics::new(&self.options),
             true,
-            self.options,
-            analytics::MockAnalytics::new(&self.options).0
         ))
         .await;
 
@@ -68,12 +70,12 @@ impl Service {
     }
 
     pub async fn get(&self, url: impl AsRef<str>) -> (Value, StatusCode) {
-        let app = test::init_service(create_app!(
-            &self.meilisearch,
-            &self.auth,
+        let app = test::init_service(create_app(
+            self.index_scheduler.clone().into(),
+            self.auth.clone(),
+            self.options.clone(),
+            analytics::MockAnalytics::new(&self.options),
             true,
-            self.options,
-            analytics::MockAnalytics::new(&self.options).0
         ))
         .await;
 
@@ -91,12 +93,12 @@ impl Service {
     }
 
     pub async fn put(&self, url: impl AsRef<str>, body: Value) -> (Value, StatusCode) {
-        let app = test::init_service(create_app!(
-            &self.meilisearch,
-            &self.auth,
+        let app = test::init_service(create_app(
+            self.index_scheduler.clone().into(),
+            self.auth.clone(),
+            self.options.clone(),
+            analytics::MockAnalytics::new(&self.options),
             true,
-            self.options,
-            analytics::MockAnalytics::new(&self.options).0
         ))
         .await;
 
@@ -114,12 +116,12 @@ impl Service {
     }
 
     pub async fn patch(&self, url: impl AsRef<str>, body: Value) -> (Value, StatusCode) {
-        let app = test::init_service(create_app!(
-            &self.meilisearch,
-            &self.auth,
+        let app = test::init_service(create_app(
+            self.index_scheduler.clone().into(),
+            self.auth.clone(),
+            self.options.clone(),
+            analytics::MockAnalytics::new(&self.options),
             true,
-            self.options,
-            analytics::MockAnalytics::new(&self.options).0
         ))
         .await;
 
@@ -137,12 +139,12 @@ impl Service {
     }
 
     pub async fn delete(&self, url: impl AsRef<str>) -> (Value, StatusCode) {
-        let app = test::init_service(create_app!(
-            &self.meilisearch,
-            &self.auth,
+        let app = test::init_service(create_app(
+            self.index_scheduler.clone().into(),
+            self.auth.clone(),
+            self.options.clone(),
+            analytics::MockAnalytics::new(&self.options),
             true,
-            self.options,
-            analytics::MockAnalytics::new(&self.options).0
         ))
         .await;
 
