@@ -213,6 +213,7 @@ pub struct TaskCancelationQuery {
 
 async fn cancel_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_CANCEL }>, Data<IndexScheduler>>,
+    req: HttpRequest,
     params: web::Query<TaskCancelationQuery>,
 ) -> Result<HttpResponse, ResponseError> {
     let TaskCancelationQuery {
@@ -243,12 +244,12 @@ async fn cancel_tasks(
 
     let filtered_query = filter_out_inaccessible_indexes_from_query(&index_scheduler, &query);
     let tasks = index_scheduler.get_task_ids(&filtered_query)?;
-    let filtered_query_string = yaup::to_string(&filtered_query).unwrap();
     let task_cancelation = KindWithContent::TaskCancelation {
-        query: filtered_query_string,
+        query: req.query_string().to_string(),
         tasks,
     };
 
+    // TODO add a tokio_spawn
     let task = index_scheduler.register(task_cancelation)?;
     let task_view = TaskView::from_task(&task);
 
@@ -257,6 +258,7 @@ async fn cancel_tasks(
 
 async fn delete_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_DELETE }>, Data<IndexScheduler>>,
+    req: HttpRequest,
     params: web::Query<TaskDeletionQuery>,
 ) -> Result<HttpResponse, ResponseError> {
     let TaskDeletionQuery {
@@ -287,12 +289,12 @@ async fn delete_tasks(
 
     let filtered_query = filter_out_inaccessible_indexes_from_query(&index_scheduler, &query);
     let tasks = index_scheduler.get_task_ids(&filtered_query)?;
-    let filtered_query_string = yaup::to_string(&filtered_query).unwrap();
     let task_deletion = KindWithContent::TaskDeletion {
-        query: filtered_query_string,
+        query: req.query_string().to_string(),
         tasks,
     };
 
+    // TODO add a tokio_spawn
     let task = index_scheduler.register(task_deletion)?;
     let task_view = TaskView::from_task(&task);
 
