@@ -1,15 +1,15 @@
 use actix_web::http::header::ContentType;
 use actix_web::test::TestRequest;
 use actix_web::{http::StatusCode, test};
+use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
-use meilisearch_lib::MeiliSearch;
 use serde_json::Value;
 
 use crate::common::encoder::Encoder;
 use meilisearch_http::{analytics, create_app, Opt};
 
 pub struct Service {
-    pub meilisearch: MeiliSearch,
+    pub index_scheduler: IndexScheduler,
     pub auth: AuthController,
     pub options: Opt,
     pub api_key: Option<String>,
