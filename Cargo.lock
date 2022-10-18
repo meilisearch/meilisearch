@@ -1162,7 +1162,16 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4eeac5c5edb79e4e39fe8439ef35207780a11f69c52cbe424ce3dfad4cb78de6"
 dependencies = [
- "enum-iterator-derive",
+ "enum-iterator-derive 0.7.0",
+]
+
+[[package]]
+name = "enum-iterator"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91a4ec26efacf4aeff80887a175a419493cb6f8b5480d26387eb0bd038976187"
+dependencies = [
+ "enum-iterator-derive 1.1.0",
 ]
 
 [[package]]
@@ -1170,6 +1179,17 @@ name = "enum-iterator-derive"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c134c37760b27a871ba422106eedbb8247da973a09e82558bf26d619c882b159"
+dependencies = [
+ "proc-macro2 1.0.39",
+ "quote 1.0.18",
+ "syn 1.0.96",
+]
+
+[[package]]
+name = "enum-iterator-derive"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "828de45d0ca18782232dfb8f3ea9cc428e8ced380eb26a520baaacfc70de39ce"
 dependencies = [
  "proc-macro2 1.0.39",
  "quote 1.0.18",
@@ -2182,7 +2202,7 @@ dependencies = [
 name = "meilisearch-auth"
 version = "0.29.0"
 dependencies = [
- "enum-iterator",
+ "enum-iterator 1.2.0",
  "hmac",
  "meilisearch-types",
  "rand",
@@ -2280,7 +2300,7 @@ dependencies = [
  "actix-web",
  "csv",
  "either",
- "enum-iterator",
+ "enum-iterator 1.2.0",
  "fst",
  "insta",
  "meili-snap",
@@ -3860,7 +3880,7 @@ checksum = "b1f44ef1afcf5979e34748c12595f9589f3dc4e34abf156fb6d95f9b835568dc"
 dependencies = [
  "anyhow",
  "cfg-if",
- "enum-iterator",
+ "enum-iterator 0.7.0",
  "getset",
  "git2",
  "rustversion",

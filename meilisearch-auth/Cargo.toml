@@ -4,7 +4,7 @@ version = "0.29.0"
 edition = "2021"
 
 [dependencies]
-enum-iterator = "0.7.0"
+enum-iterator = "1.2.0"
 hmac = "0.12.1"
 meilisearch-types = { path = "../meilisearch-types" }
 rand = "0.8.4"
