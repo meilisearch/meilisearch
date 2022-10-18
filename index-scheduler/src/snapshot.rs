@@ -15,7 +15,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     let IndexScheduler {
         autobatching_enabled,
         processing_tasks,
-        file_store: _,
+        file_store,
         env,
         all_tasks,
         status,
@@ -59,8 +59,20 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     snap.push_str(&snapshot_index_mapper(&rtxn, index_mapper));
     snap.push_str("\n----------------------------------------------------------------------\n");
 
+    snap.push_str("### File Store:\n");
+    snap.push_str(&snapshot_file_store(file_store));
+    snap.push_str("\n----------------------------------------------------------------------\n");
+
     rtxn.commit().unwrap();
 
+    snap
+}
+
+fn snapshot_file_store(file_store: &file_store::FileStore) -> String {
+    let mut snap = String::new();
+    for uuid in file_store.__all_uuids() {
+        snap.push_str(&format!("{uuid}\n"));
+    }
     snap
 }
 
