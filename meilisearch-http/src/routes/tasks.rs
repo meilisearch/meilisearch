@@ -39,6 +39,9 @@ pub struct TaskView {
     pub kind: Kind,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub canceled_by: Option<TaskId>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<DetailsView>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<ResponseError>,
@@ -74,6 +77,7 @@ impl TaskView {
                 .and_then(|vec| vec.first().map(|i| i.to_string())),
             status: task.status,
             kind: task.kind.as_kind(),
+            canceled_by: task.canceled_by,
             details: task.details.clone().map(DetailsView::from),
             error: task.error.clone(),
             duration: task

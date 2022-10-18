@@ -30,6 +30,7 @@ pub struct Task {
     pub finished_at: Option<OffsetDateTime>,
 
     pub error: Option<ResponseError>,
+    pub canceled_by: Option<TaskId>,
     pub details: Option<Details>,
 
     pub status: Status,

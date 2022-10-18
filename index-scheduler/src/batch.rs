@@ -468,7 +468,8 @@ impl IndexScheduler {
                     };
 
                 let mut wtxn = self.env.write_txn()?;
-                let nbr_canceled_tasks = self.cancel_matched_tasks(&mut wtxn, matched_tasks)?;
+                let canceled_tasks_count =
+                    self.cancel_matched_tasks(&mut wtxn, task.uid, matched_tasks)?;
 
                 task.status = Status::Succeeded;
                 match &mut task.details {
@@ -477,7 +478,7 @@ impl IndexScheduler {
                         canceled_tasks,
                         original_query: _,
                     }) => {
-                        *canceled_tasks = Some(nbr_canceled_tasks);
+                        *canceled_tasks = Some(canceled_tasks_count);
                     }
                     _ => unreachable!(),
                 }
@@ -1029,20 +1030,25 @@ impl IndexScheduler {
     fn cancel_matched_tasks(
         &self,
         wtxn: &mut RwTxn,
+        cancel_task_id: TaskId,
         matched_tasks: &RoaringBitmap,
     ) -> Result<usize> {
+        let now = OffsetDateTime::now_utc();
+
         // 1. Remove from this list the tasks that we are not allowed to cancel
         //    Notice that only the _enqueued_ ones are cancelable and we should
         //    have already aborted the indexation of the _processing_ ones
-        let cancelable_tasks = self.get_status(&wtxn, Status::Enqueued)?;
+        let cancelable_tasks = self.get_status(wtxn, Status::Enqueued)?;
         let tasks_to_cancel = cancelable_tasks & matched_tasks;
 
         // 2. We now have a list of tasks to cancel, cancel them
-        self.update_status(wtxn, Status::Enqueued, |bitmap| *bitmap -= &tasks_to_cancel)?;
-        self.update_status(wtxn, Status::Canceled, |bitmap| *bitmap |= &tasks_to_cancel)?;
-
-        // TODO update the content of the tasks i.e. canceled_by and finished_at
-        // TODO delete the content uuid of the tasks
+        for mut task in self.get_existing_tasks(wtxn, tasks_to_cancel.iter())? {
+            // TODO delete the content uuid of the task
+            task.status = Status::Canceled;
+            task.canceled_by = Some(cancel_task_id);
+            task.finished_at = Some(now);
+            self.update_task(wtxn, &task)?;
+        }
 
         Ok(tasks_to_cancel.len() as usize)
     }
