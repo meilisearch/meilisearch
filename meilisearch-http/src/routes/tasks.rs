@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_cs::vec::CS;
 use serde_json::json;
 use time::{Duration, OffsetDateTime};
+use tokio::task::block_in_place;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
@@ -249,8 +250,7 @@ async fn cancel_tasks(
         tasks,
     };
 
-    // TODO add a tokio_spawn
-    let task = index_scheduler.register(task_cancelation)?;
+    let task = block_in_place(|| index_scheduler.register(task_cancelation))?;
     let task_view = TaskView::from_task(&task);
 
     Ok(HttpResponse::Ok().json(task_view))
@@ -294,8 +294,7 @@ async fn delete_tasks(
         tasks,
     };
 
-    // TODO add a tokio_spawn
-    let task = index_scheduler.register(task_deletion)?;
+    let task = block_in_place(|| index_scheduler.register(task_deletion))?;
     let task_view = TaskView::from_task(&task);
 
     Ok(HttpResponse::Ok().json(task_view))
