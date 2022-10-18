@@ -18,14 +18,8 @@ async fn add_documents_test_json_content_types() {
 
     // this is a what is expected and should work
     let server = Server::new().await;
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
+    let app = server.init_web_app().await;
+
     // post
     let req = test::TestRequest::post()
         .uri("/indexes/dog/documents")
@@ -63,14 +57,8 @@ async fn add_single_document_test_json_content_types() {
 
     // this is a what is expected and should work
     let server = Server::new().await;
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
+    let app = server.init_web_app().await;
+
     // post
     let req = test::TestRequest::post()
         .uri("/indexes/dog/documents")
@@ -198,14 +186,8 @@ async fn error_add_documents_test_bad_content_types() {
     ]);
 
     let server = Server::new().await;
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
+    let app = server.init_web_app().await;
+
     // post
     let req = test::TestRequest::post()
         .uri("/indexes/dog/documents")
@@ -266,14 +248,8 @@ async fn error_add_documents_test_no_content_type() {
     ]);
 
     let server = Server::new().await;
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
+    let app = server.init_web_app().await;
+
     // post
     let req = test::TestRequest::post()
         .uri("/indexes/dog/documents")
@@ -326,14 +302,8 @@ async fn error_add_malformed_csv_documents() {
     let document = "id, content\n1234, hello, world\n12, hello world";
 
     let server = Server::new().await;
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
+    let app = server.init_web_app().await;
+
     // post
     let req = test::TestRequest::post()
         .uri("/indexes/dog/documents")
@@ -388,14 +358,8 @@ async fn error_add_malformed_json_documents() {
     let document = r#"[{"id": 1}, {id: 2}]"#;
 
     let server = Server::new().await;
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
+    let app = server.init_web_app().await;
+
     // post
     let req = test::TestRequest::post()
         .uri("/indexes/dog/documents")
@@ -500,14 +464,8 @@ async fn error_add_malformed_ndjson_documents() {
     let document = "{\"id\": 1}\n{id: 2}";
 
     let server = Server::new().await;
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
+    let app = server.init_web_app().await;
+
     // post
     let req = test::TestRequest::post()
         .uri("/indexes/dog/documents")
@@ -560,14 +518,8 @@ async fn error_add_missing_payload_csv_documents() {
     let document = "";
 
     let server = Server::new().await;
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
+    let app = server.init_web_app().await;
+
     // post
     let req = test::TestRequest::post()
         .uri("/indexes/dog/documents")
@@ -612,14 +564,8 @@ async fn error_add_missing_payload_json_documents() {
     let document = "";
 
     let server = Server::new().await;
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
+    let app = server.init_web_app().await;
+
     // post
     let req = test::TestRequest::post()
         .uri("/indexes/dog/documents")
@@ -664,14 +610,8 @@ async fn error_add_missing_payload_ndjson_documents() {
     let document = "";
 
     let server = Server::new().await;
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
+    let app = server.init_web_app().await;
+
     // post
     let req = test::TestRequest::post()
         .uri("/indexes/dog/documents")

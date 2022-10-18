@@ -1,17 +1,19 @@
 #![allow(dead_code)]
 
+use actix_http::body::MessageBody;
+use actix_web::dev::ServiceResponse;
 use clap::Parser;
 use std::path::Path;
+use std::sync::Arc;
 
 use actix_web::http::StatusCode;
 use byte_unit::{Byte, ByteUnit};
-use meilisearch_auth::AuthController;
 use once_cell::sync::Lazy;
 use serde_json::Value;
 use tempfile::TempDir;
 
 use meilisearch_http::option::{IndexerOpts, MaxMemory, Opt};
-use meilisearch_http::setup_meilisearch;
+use meilisearch_http::{analytics, create_app, setup_meilisearch};
 use crate::common::encoder::Encoder;
 
 use super::index::Index;
@@ -37,10 +39,9 @@ impl Server {
 
         let options = default_settings(dir.path());
 
-        let meilisearch = setup_meilisearch(&options).unwrap();
-        let auth = AuthController::new(&options.db_path, &options.master_key).unwrap();
+        let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
         let service = Service {
-            meilisearch,
+            index_scheduler: Arc::new(index_scheduler),
             auth,
             options,
             api_key: None,
@@ -61,10 +62,9 @@ impl Server {
 
         options.master_key = Some("MASTER_KEY".to_string());
 
-        let meilisearch = setup_meilisearch(&options).unwrap();
-        let auth = AuthController::new(&options.db_path, &options.master_key).unwrap();
+        let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
         let service = Service {
-            meilisearch,
+            index_scheduler: Arc::new(index_scheduler),
             auth,
             options,
             api_key: None,
@@ -83,10 +83,9 @@ impl Server {
     }
 
     pub async fn new_with_options(options: Opt) -> Result<Self, anyhow::Error> {
-        let meilisearch = setup_meilisearch(&options)?;
-        let auth = AuthController::new(&options.db_path, &options.master_key)?;
+        let (index_scheduler, auth) = setup_meilisearch(&options)?;
         let service = Service {
-            meilisearch,
+            index_scheduler: Arc::new(index_scheduler),
             auth,
             options,
             api_key: None,
@@ -96,6 +95,23 @@ impl Server {
             service,
             _dir: None,
         })
+    }
+
+    pub async fn init_web_app(
+        &self,
+    ) -> impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = ServiceResponse<impl MessageBody>,
+        Error = actix_web::Error,
+    > {
+        actix_web::test::init_service(create_app(
+            self.service.index_scheduler.clone().into(),
+            self.service.auth.clone(),
+            self.service.options.clone(),
+            analytics::MockAnalytics::new(&self.service.options),
+            true,
+        ))
+        .await
     }
 
     /// Returns a view to an index. There is no guarantee that the index exists.
