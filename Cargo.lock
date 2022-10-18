@@ -1687,6 +1687,7 @@ dependencies = [
  "csv",
  "derive_builder",
  "dump",
+ "enum-iterator",
  "file-store",
  "insta",
  "log",

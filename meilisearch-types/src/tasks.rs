@@ -1,11 +1,10 @@
+use std::fmt::{Display, Write};
+use std::str::FromStr;
+
 use enum_iterator::Sequence;
 use milli::update::IndexDocumentsMethod;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize, Serializer};
-use std::{
-    fmt::{Display, Write},
-    str::FromStr,
-};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
