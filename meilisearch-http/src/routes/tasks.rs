@@ -103,6 +103,8 @@ pub struct DetailsView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub matched_tasks: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub canceled_tasks: Option<Option<usize>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub deleted_tasks: Option<Option<usize>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_query: Option<String>,
@@ -142,6 +144,16 @@ impl From<Details> for DetailsView {
             },
             Details::ClearAll { deleted_documents } => DetailsView {
                 deleted_documents: Some(deleted_documents),
+                ..DetailsView::default()
+            },
+            Details::TaskCancelation {
+                matched_tasks,
+                canceled_tasks,
+                original_query,
+            } => DetailsView {
+                matched_tasks: Some(matched_tasks),
+                canceled_tasks: Some(canceled_tasks),
+                original_query: Some(original_query),
                 ..DetailsView::default()
             },
             Details::TaskDeletion {

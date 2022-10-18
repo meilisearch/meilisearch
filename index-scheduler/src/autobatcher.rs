@@ -127,6 +127,7 @@ impl BatchKind {
 
 impl BatchKind {
     /// Returns a `ControlFlow::Break` if you must stop right now.
+    // TODO use an AutoBatchKind as input
     pub fn new(task_id: TaskId, kind: KindWithContent) -> ControlFlow<BatchKind, BatchKind> {
         use AutobatchKind as K;
 

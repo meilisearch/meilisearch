@@ -271,9 +271,10 @@ fn import_dump(
         log::info!("Importing the settings.");
         let settings = index_reader.settings()?;
         apply_settings_to_builder(&settings, &mut builder);
-        builder.execute(|indexing_step| {
-            log::debug!("update: {:?}", indexing_step);
-        })?;
+        builder.execute(
+            |indexing_step| log::debug!("update: {:?}", indexing_step),
+            || false,
+        )?;
 
         // 3.3 Import the documents.
         // 3.3.1 We need to recreate the grenad+obkv format accepted by the index.
@@ -300,6 +301,7 @@ fn import_dump(
                 ..Default::default()
             },
             |indexing_step| log::debug!("update: {:?}", indexing_step),
+            || false,
         )?;
 
         let (builder, user_result) = builder.add_documents(reader)?;
