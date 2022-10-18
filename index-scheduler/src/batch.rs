@@ -496,7 +496,7 @@ impl IndexScheduler {
                     };
 
                 let mut wtxn = self.env.write_txn()?;
-                let nbr_deleted_tasks = self.delete_matched_tasks(&mut wtxn, matched_tasks)?;
+                let deleted_tasks_count = self.delete_matched_tasks(&mut wtxn, matched_tasks)?;
 
                 task.status = Status::Succeeded;
                 match &mut task.details {
@@ -505,7 +505,7 @@ impl IndexScheduler {
                         deleted_tasks,
                         original_query: _,
                     }) => {
-                        *deleted_tasks = Some(nbr_deleted_tasks);
+                        *deleted_tasks = Some(deleted_tasks_count);
                     }
                     _ => unreachable!(),
                 }
