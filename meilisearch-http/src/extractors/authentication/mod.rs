@@ -57,7 +57,7 @@ impl<P, D> GuardedData<P, D> {
                 }),
                 None => Err(AuthenticationError::IrretrievableState.into()),
             },
-            None => Err(AuthenticationError::MissingAuthorizationHeader.into()),
+            None => Err(AuthenticationError::MissingMasterKey.into()),
         }
     }
 

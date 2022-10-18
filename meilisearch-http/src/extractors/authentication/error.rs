@@ -9,6 +9,8 @@ pub enum AuthenticationError {
     // Triggered on configuration error.
     #[error("An internal error has occurred. `Irretrievable state`.")]
     IrretrievableState,
+    #[error("Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.")]
+    MissingMasterKey,
 }
 
 impl ErrorCode for AuthenticationError {
@@ -17,6 +19,7 @@ impl ErrorCode for AuthenticationError {
             AuthenticationError::MissingAuthorizationHeader => Code::MissingAuthorizationHeader,
             AuthenticationError::InvalidToken => Code::InvalidToken,
             AuthenticationError::IrretrievableState => Code::Internal,
+            AuthenticationError::MissingMasterKey => Code::MissingMasterKey,
         }
     }
 }
