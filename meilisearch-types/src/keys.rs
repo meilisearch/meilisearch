@@ -224,6 +224,8 @@ pub enum Action {
     IndexesDelete,
     #[serde(rename = "tasks.*")]
     TasksAll,
+    #[serde(rename = "tasks.cancel")]
+    TasksCancel,
     #[serde(rename = "tasks.delete")]
     TasksDelete,
     #[serde(rename = "tasks.get")]
@@ -274,6 +276,8 @@ impl Action {
             INDEXES_UPDATE => Some(Self::IndexesUpdate),
             INDEXES_DELETE => Some(Self::IndexesDelete),
             TASKS_ALL => Some(Self::TasksAll),
+            TASKS_CANCEL => Some(Self::TasksCancel),
+            TASKS_DELETE => Some(Self::TasksDelete),
             TASKS_GET => Some(Self::TasksGet),
             SETTINGS_ALL => Some(Self::SettingsAll),
             SETTINGS_GET => Some(Self::SettingsGet),
@@ -313,6 +317,7 @@ pub mod actions {
     pub const INDEXES_UPDATE: u8 = IndexesUpdate.repr();
     pub const INDEXES_DELETE: u8 = IndexesDelete.repr();
     pub const TASKS_ALL: u8 = TasksAll.repr();
+    pub const TASKS_CANCEL: u8 = TasksCancel.repr();
     pub const TASKS_DELETE: u8 = TasksDelete.repr();
     pub const TASKS_GET: u8 = TasksGet.repr();
     pub const SETTINGS_ALL: u8 = SettingsAll.repr();
