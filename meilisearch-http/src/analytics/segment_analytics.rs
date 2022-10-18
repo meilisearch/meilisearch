@@ -7,13 +7,9 @@ use std::time::{Duration, Instant};
 use actix_web::http::header::USER_AGENT;
 use actix_web::HttpRequest;
 use http::header::CONTENT_TYPE;
+use index_scheduler::IndexScheduler;
 use meilisearch_auth::SearchRules;
-use meilisearch_lib::index::{
-    SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
-    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
-};
-use meilisearch_lib::index_controller::Stats;
-use meilisearch_lib::MeiliSearch;
+use meilisearch_types::InstanceUid;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use segment::message::{Identify, Track, User};
@@ -28,6 +24,11 @@ use uuid::Uuid;
 use crate::analytics::Analytics;
 use crate::option::default_http_addr;
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
+use crate::routes::{create_all_stats, Stats};
+use crate::search::{
+    SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
+};
 use crate::Opt;
 
 use super::{config_user_id_path, MEILISEARCH_CONFIG_PATH};
@@ -35,14 +36,14 @@ use super::{config_user_id_path, MEILISEARCH_CONFIG_PATH};
 const ANALYTICS_HEADER: &str = "X-Meilisearch-Client";
 
 /// Write the instance-uid in the `data.ms` and in `~/.config/MeiliSearch/path-to-db-instance-uid`. Ignore the errors.
-fn write_user_id(db_path: &Path, user_id: &str) {
+fn write_user_id(db_path: &Path, user_id: &InstanceUid) {
     let _ = fs::write(db_path.join("instance-uid"), user_id.as_bytes());
     if let Some((meilisearch_config_path, user_id_path)) = MEILISEARCH_CONFIG_PATH
         .as_ref()
         .zip(config_user_id_path(db_path))
     {
         let _ = fs::create_dir_all(&meilisearch_config_path);
-        let _ = fs::write(user_id_path, user_id.as_bytes());
+        let _ = fs::write(user_id_path, user_id.to_string());
     }
 }
 
@@ -71,16 +72,17 @@ pub enum AnalyticsMsg {
 }
 
 pub struct SegmentAnalytics {
+    instance_uid: InstanceUid,
     sender: Sender<AnalyticsMsg>,
     user: User,
 }
 
 impl SegmentAnalytics {
-    pub async fn new(opt: &Opt, meilisearch: &MeiliSearch) -> (Arc<dyn Analytics>, String) {
-        let user_id = super::find_user_id(&opt.db_path);
-        let first_time_run = user_id.is_none();
-        let user_id = user_id.unwrap_or_else(|| Uuid::new_v4().to_string());
-        write_user_id(&opt.db_path, &user_id);
+    pub async fn new(opt: &Opt, index_scheduler: Arc<IndexScheduler>) -> Arc<dyn Analytics> {
+        let instance_uid = super::find_user_id(&opt.db_path);
+        let first_time_run = instance_uid.is_none();
+        let instance_uid = instance_uid.unwrap_or_else(|| Uuid::new_v4());
+        write_user_id(&opt.db_path, &instance_uid);
 
         let client = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(10))
@@ -95,7 +97,9 @@ impl SegmentAnalytics {
             client.unwrap(),
             "https://telemetry.meilisearch.com".to_string(),
         );
-        let user = User::UserId { user_id };
+        let user = User::UserId {
+            user_id: instance_uid.to_string(),
+        };
         let mut batcher = AutoBatcher::new(client, Batcher::new(None), SEGMENT_API_KEY.to_string());
 
         // If Meilisearch is Launched for the first time:
@@ -133,18 +137,23 @@ impl SegmentAnalytics {
             add_documents_aggregator: DocumentsAggregator::default(),
             update_documents_aggregator: DocumentsAggregator::default(),
         });
-        tokio::spawn(segment.run(meilisearch.clone()));
+        tokio::spawn(segment.run(index_scheduler.clone()));
 
         let this = Self {
+            instance_uid,
             sender,
             user: user.clone(),
         };
 
-        (Arc::new(this), user.to_string())
+        Arc::new(this)
     }
 }
 
 impl super::Analytics for SegmentAnalytics {
+    fn instance_uid(&self) -> Option<&InstanceUid> {
+        Some(&self.instance_uid)
+    }
+
     fn publish(&self, event_name: String, mut send: Value, request: Option<&HttpRequest>) {
         let user_agent = request.map(|req| extract_user_agents(req));
 
@@ -270,7 +279,7 @@ impl Segment {
         })
     }
 
-    async fn run(mut self, meilisearch: MeiliSearch) {
+    async fn run(mut self, index_scheduler: Arc<IndexScheduler>) {
         const INTERVAL: Duration = Duration::from_secs(60 * 60); // one hour
                                                                  // The first batch must be sent after one hour.
         let mut interval =
@@ -279,7 +288,7 @@ impl Segment {
         loop {
             select! {
                 _ = interval.tick() => {
-                    self.tick(meilisearch.clone()).await;
+                    self.tick(index_scheduler.clone()).await;
                 },
                 msg = self.inbox.recv() => {
                     match msg {
@@ -295,8 +304,8 @@ impl Segment {
         }
     }
 
-    async fn tick(&mut self, meilisearch: MeiliSearch) {
-        if let Ok(stats) = meilisearch.get_all_stats(&SearchRules::default()).await {
+    async fn tick(&mut self, index_scheduler: Arc<IndexScheduler>) {
+        if let Ok(stats) = create_all_stats(index_scheduler.into(), &SearchRules::default()) {
             let _ = self
                 .batcher
                 .push(Identify {
