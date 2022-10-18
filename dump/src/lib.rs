@@ -63,6 +63,9 @@ pub struct TaskDump {
     pub kind: KindDump,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub canceled_by: Option<TaskId>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<Details>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<ResponseError>,
@@ -136,6 +139,7 @@ impl From<Task> for TaskDump {
             index_uid: task.index_uid().map(|uid| uid.to_string()),
             status: task.status,
             kind: task.kind.into(),
+            canceled_by: task.canceled_by,
             details: task.details,
             error: task.error,
             enqueued_at: task.enqueued_at,
@@ -289,6 +293,7 @@ pub(crate) mod test {
                         primary_key: Some(S("bone")),
                         documents_count: 12,
                     },
+                    canceled_by: None,
                     details: Some(Details::DocumentAddition {
                         received_documents: 12,
                         indexed_documents: Some(10),
@@ -311,6 +316,7 @@ pub(crate) mod test {
                         primary_key: None,
                         documents_count: 2,
                     },
+                    canceled_by: None,
                     details: Some(Details::DocumentAddition {
                         received_documents: 2,
                         indexed_documents: None,
@@ -337,6 +343,7 @@ pub(crate) mod test {
                     index_uid: Some(S("catto")),
                     status: Status::Enqueued,
                     kind: KindDump::IndexDeletion,
+                    canceled_by: None,
                     details: None,
                     error: None,
                     enqueued_at: datetime!(2022-11-15 0:00 UTC),
