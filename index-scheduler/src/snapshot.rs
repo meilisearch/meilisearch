@@ -104,6 +104,7 @@ fn snapshot_task(task: &Task) -> String {
         started_at: _,
         finished_at: _,
         error,
+        canceled_by: _,
         details,
         status,
         kind,
