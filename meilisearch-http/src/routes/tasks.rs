@@ -187,42 +187,42 @@ pub struct TaskDateQuery {
         default,
         skip_serializing_if = "Option::is_none",
         serialize_with = "time::serde::rfc3339::option::serialize",
-        deserialize_with = "rfc3339_date_or_datetime::deserialize"
+        deserialize_with = "date_deserializer::after::deserialize"
     )]
     after_enqueued_at: Option<OffsetDateTime>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
         serialize_with = "time::serde::rfc3339::option::serialize",
-        deserialize_with = "rfc3339_date_or_datetime::deserialize"
+        deserialize_with = "date_deserializer::before::deserialize"
     )]
     before_enqueued_at: Option<OffsetDateTime>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
         serialize_with = "time::serde::rfc3339::option::serialize",
-        deserialize_with = "rfc3339_date_or_datetime::deserialize"
+        deserialize_with = "date_deserializer::after::deserialize"
     )]
     after_started_at: Option<OffsetDateTime>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
         serialize_with = "time::serde::rfc3339::option::serialize",
-        deserialize_with = "rfc3339_date_or_datetime::deserialize"
+        deserialize_with = "date_deserializer::before::deserialize"
     )]
     before_started_at: Option<OffsetDateTime>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
         serialize_with = "time::serde::rfc3339::option::serialize",
-        deserialize_with = "rfc3339_date_or_datetime::deserialize"
+        deserialize_with = "date_deserializer::after::deserialize"
     )]
     after_finished_at: Option<OffsetDateTime>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
         serialize_with = "time::serde::rfc3339::option::serialize",
-        deserialize_with = "rfc3339_date_or_datetime::deserialize"
+        deserialize_with = "date_deserializer::before::deserialize"
     )]
     before_finished_at: Option<OffsetDateTime>,
 }
@@ -536,65 +536,149 @@ fn filter_out_inaccessible_indexes_from_query<const ACTION: u8>(
     query
 }
 
-/// Deserialize a datetime optional string using rfc3339, assuming midnight and UTC+0 if not specified
-pub mod rfc3339_date_or_datetime {
-    #[allow(clippy::wildcard_imports)]
-    use super::*;
-    use serde::Deserializer;
-    use time::format_description::well_known::iso8601::{Config, EncodedConfig};
-    use time::format_description::well_known::{Iso8601, Rfc3339};
-    use time::{Date, PrimitiveDateTime, Time};
-    const SERDE_CONFIG: EncodedConfig = Config::DEFAULT.set_year_is_six_digits(true).encode();
+pub(crate) mod date_deserializer {
+    use time::{
+        format_description::well_known::Rfc3339, macros::format_description, Date, Duration,
+        OffsetDateTime, Time,
+    };
 
-    /// Deserialize an [`Option<OffsetDateTime>`] from its ISO 8601 representation.
-    pub fn deserialize<'a, D: Deserializer<'a>>(
-        deserializer: D,
-    ) -> Result<Option<OffsetDateTime>, D::Error> {
-        deserializer.deserialize_option(Visitor)
+    enum DeserializeDateOption {
+        Before,
+        After,
     }
-    struct Visitor;
 
-    #[derive(Debug)]
-    struct DeserializeError;
-
-    impl<'a> serde::de::Visitor<'a> for Visitor {
-        type Value = Option<OffsetDateTime>;
-
-        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            formatter.write_str("an rfc3339- or iso8601-formatted datetime")
+    fn deserialize_date<E: serde::de::Error>(
+        value: &str,
+        option: DeserializeDateOption,
+    ) -> std::result::Result<OffsetDateTime, E> {
+        // We can't parse using time's rfc3339 format, since then we won't know what part of the
+        // datetime was not explicitly specified, and thus we won't be able to increment it to the
+        // next step.
+        if let Ok(datetime) = OffsetDateTime::parse(value, &Rfc3339) {
+            // fully specified up to the second
+            // we assume that the subseconds are 0 if not specified, and we don't increment to the next second
+            Ok(datetime)
+        } else if let Ok(datetime) = Date::parse(
+            value,
+            format_description!("[year repr:full base:calendar]-[month repr:numerical]-[day]"),
+        ) {
+            let datetime = datetime.with_time(Time::MIDNIGHT).assume_utc();
+            // add one day since the time was not specified
+            match option {
+                DeserializeDateOption::Before => Ok(datetime),
+                DeserializeDateOption::After => {
+                    let datetime = datetime
+                        .checked_add(Duration::days(1))
+                        .ok_or(serde::de::Error::custom("date overflow"))?;
+                    Ok(datetime)
+                }
+            }
+        } else {
+            Err(serde::de::Error::custom(
+                "could not parse a date with the RFC3339 or YYYY-MM-DD format",
+            ))
         }
-        fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Option<OffsetDateTime>, E> {
-            let datetime = OffsetDateTime::parse(value, &Rfc3339)
-                .or_else(|_e| OffsetDateTime::parse(value, &Iso8601::<SERDE_CONFIG>))
-                .or_else(|_e| {
-                    PrimitiveDateTime::parse(value, &Iso8601::<SERDE_CONFIG>)
-                        .map(|x| x.assume_utc())
-                })
-                .or_else(|_e| {
-                    Date::parse(value, &Iso8601::<SERDE_CONFIG>)
-                        .map(|date| date.with_time(Time::MIDNIGHT).assume_utc())
-                })
-                .map_err(|_e| {
-                    serde::de::Error::custom(
-                        "could not parse an rfc3339- or iso8601-formatted date",
-                    )
-                })?;
+    }
 
-            Ok(Some(datetime))
-        }
-        fn visit_some<D: Deserializer<'a>>(
-            self,
+    /// Deserialize an upper bound datetime with RFC3339 or YYYY-MM-DD.
+    pub(crate) mod before {
+        use super::{deserialize_date, DeserializeDateOption};
+        use serde::Deserializer;
+        use time::OffsetDateTime;
+
+        /// Deserialize an [`Option<OffsetDateTime>`] from its ISO 8601 representation.
+        pub fn deserialize<'a, D: Deserializer<'a>>(
             deserializer: D,
         ) -> Result<Option<OffsetDateTime>, D::Error> {
-            deserializer.deserialize_str(Visitor)
+            deserializer.deserialize_option(Visitor)
         }
 
-        fn visit_none<E: serde::de::Error>(self) -> Result<Option<OffsetDateTime>, E> {
-            Ok(None)
+        struct Visitor;
+
+        #[derive(Debug)]
+        struct DeserializeError;
+
+        impl<'a> serde::de::Visitor<'a> for Visitor {
+            type Value = Option<OffsetDateTime>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str(
+                    "an optional date written as a string with the RFC3339 or YYYY-MM-DD format",
+                )
+            }
+
+            fn visit_str<E: serde::de::Error>(
+                self,
+                value: &str,
+            ) -> Result<Option<OffsetDateTime>, E> {
+                deserialize_date(value, DeserializeDateOption::Before).map(Some)
+            }
+
+            fn visit_some<D: Deserializer<'a>>(
+                self,
+                deserializer: D,
+            ) -> Result<Option<OffsetDateTime>, D::Error> {
+                deserializer.deserialize_str(Visitor)
+            }
+
+            fn visit_none<E: serde::de::Error>(self) -> Result<Option<OffsetDateTime>, E> {
+                Ok(None)
+            }
+
+            fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+                Ok(None)
+            }
+        }
+    }
+    /// Deserialize a lower bound datetime with RFC3339 or YYYY-MM-DD.
+    ///
+    /// If YYYY-MM-DD is used, the day is incremented by one.
+    pub(crate) mod after {
+        use super::{deserialize_date, DeserializeDateOption};
+        use serde::Deserializer;
+        use time::OffsetDateTime;
+
+        /// Deserialize an [`Option<OffsetDateTime>`] from its ISO 8601 representation.
+        pub fn deserialize<'a, D: Deserializer<'a>>(
+            deserializer: D,
+        ) -> Result<Option<OffsetDateTime>, D::Error> {
+            deserializer.deserialize_option(Visitor)
         }
 
-        fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
-            Ok(None)
+        struct Visitor;
+
+        #[derive(Debug)]
+        struct DeserializeError;
+
+        impl<'a> serde::de::Visitor<'a> for Visitor {
+            type Value = Option<OffsetDateTime>;
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str(
+                    "an optional date written as a string with the RFC3339 or YYYY-MM-DD format",
+                )
+            }
+
+            fn visit_str<E: serde::de::Error>(
+                self,
+                value: &str,
+            ) -> Result<Option<OffsetDateTime>, E> {
+                deserialize_date(value, DeserializeDateOption::After).map(Some)
+            }
+
+            fn visit_some<D: Deserializer<'a>>(
+                self,
+                deserializer: D,
+            ) -> Result<Option<OffsetDateTime>, D::Error> {
+                deserializer.deserialize_str(Visitor)
+            }
+
+            fn visit_none<E: serde::de::Error>(self) -> Result<Option<OffsetDateTime>, E> {
+                Ok(None)
+            }
+
+            fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+                Ok(None)
+            }
         }
     }
 }
@@ -607,54 +691,63 @@ mod tests {
     #[test]
     fn deserialize_task_deletion_query_datetime() {
         {
+            let json = r#" { 
+                "afterEnqueuedAt": "2021-12-03", 
+                "beforeEnqueuedAt": "2021-12-03",
+                "afterStartedAt": "2021-12-03", 
+                "beforeStartedAt": "2021-12-03",
+                "afterFinishedAt": "2021-12-03", 
+                "beforeFinishedAt": "2021-12-03"
+            } "#;
+            let query = serde_json::from_str::<TaskDeletionQuery>(json).unwrap();
+            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"2021-12-04 0:00:00.0 +00:00:00");
+            snapshot!(format!("{:?}", query.dates.before_enqueued_at.unwrap()), @"2021-12-03 0:00:00.0 +00:00:00");
+            snapshot!(format!("{:?}", query.dates.after_started_at.unwrap()), @"2021-12-04 0:00:00.0 +00:00:00");
+            snapshot!(format!("{:?}", query.dates.before_started_at.unwrap()), @"2021-12-03 0:00:00.0 +00:00:00");
+            snapshot!(format!("{:?}", query.dates.after_finished_at.unwrap()), @"2021-12-04 0:00:00.0 +00:00:00");
+            snapshot!(format!("{:?}", query.dates.before_finished_at.unwrap()), @"2021-12-03 0:00:00.0 +00:00:00");
+        }
+        {
+            let json = r#" { "afterEnqueuedAt": "2021-12-03T23:45:23Z", "beforeEnqueuedAt": "2021-12-03T23:45:23Z" } "#;
+            let query = serde_json::from_str::<TaskDeletionQuery>(json).unwrap();
+            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"2021-12-03 23:45:23.0 +00:00:00");
+            snapshot!(format!("{:?}", query.dates.before_enqueued_at.unwrap()), @"2021-12-03 23:45:23.0 +00:00:00");
+        }
+        {
+            let json = r#" { "afterEnqueuedAt": "1997-11-12T09:55:06-06:20" } "#;
+            let query = serde_json::from_str::<TaskDeletionQuery>(json).unwrap();
+            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"1997-11-12 9:55:06.0 -06:20:00");
+        }
+        {
+            let json = r#" { "afterEnqueuedAt": "1997-11-12T09:55:06+00:00" } "#;
+            let query = serde_json::from_str::<TaskDeletionQuery>(json).unwrap();
+            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"1997-11-12 9:55:06.0 +00:00:00");
+        }
+        {
+            let json = r#" { "afterEnqueuedAt": "1997-11-12T09:55:06.200000300Z" } "#;
+            let query = serde_json::from_str::<TaskDeletionQuery>(json).unwrap();
+            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"1997-11-12 9:55:06.2000003 +00:00:00");
+        }
+        {
             let json = r#" { "afterEnqueuedAt": "2021" } "#;
             let err = serde_json::from_str::<TaskDeletionQuery>(json).unwrap_err();
-            snapshot!(format!("{err}"), @"could not parse an rfc3339- or iso8601-formatted date at line 1 column 30");
+            snapshot!(format!("{err}"), @"could not parse a date with the RFC3339 or YYYY-MM-DD format at line 1 column 30");
         }
         {
             let json = r#" { "afterEnqueuedAt": "2021-12" } "#;
             let err = serde_json::from_str::<TaskDeletionQuery>(json).unwrap_err();
-            snapshot!(format!("{err}"), @"could not parse an rfc3339- or iso8601-formatted date at line 1 column 33");
+            snapshot!(format!("{err}"), @"could not parse a date with the RFC3339 or YYYY-MM-DD format at line 1 column 33");
         }
-        {
-            let json = r#" { "afterEnqueuedAt": "2021-12-03" } "#;
-            let query = serde_json::from_str::<TaskDeletionQuery>(json).unwrap();
-            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"2021-12-03 0:00:00.0 +00:00:00");
-        }
+
         {
             let json = r#" { "afterEnqueuedAt": "2021-12-03T23" } "#;
             let err = serde_json::from_str::<TaskDeletionQuery>(json).unwrap_err();
-            snapshot!(format!("{err}"), @"could not parse an rfc3339- or iso8601-formatted date at line 1 column 39");
+            snapshot!(format!("{err}"), @"could not parse a date with the RFC3339 or YYYY-MM-DD format at line 1 column 39");
         }
         {
             let json = r#" { "afterEnqueuedAt": "2021-12-03T23:45" } "#;
-            let query = serde_json::from_str::<TaskDeletionQuery>(json).unwrap();
-            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"2021-12-03 23:45:00.0 +00:00:00");
-        }
-        {
-            let json = r#" { "afterEnqueuedAt": "2021-12-03T23:45:23" } "#;
-            let query = serde_json::from_str::<TaskDeletionQuery>(json).unwrap();
-            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"2021-12-03 23:45:23.0 +00:00:00");
-        }
-        {
-            let json = r#" { "afterEnqueuedAt": "2021-12-03T23:45:23 +01:00" } "#;
             let err = serde_json::from_str::<TaskDeletionQuery>(json).unwrap_err();
-            snapshot!(format!("{err}"), @"could not parse an rfc3339- or iso8601-formatted date at line 1 column 52");
-        }
-        {
-            let json = r#" { "afterEnqueuedAt": "2021-12-03T23:45:23+01:00" } "#;
-            let query = serde_json::from_str::<TaskDeletionQuery>(json).unwrap();
-            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"2021-12-03 23:45:23.0 +01:00:00");
-        }
-        {
-            let json = r#" { "afterEnqueuedAt": "1997-11-12T09:55:06.000000000-06:00" } "#;
-            let query = serde_json::from_str::<TaskDeletionQuery>(json).unwrap();
-            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"1997-11-12 9:55:06.0 -06:00:00");
-        }
-        {
-            let json = r#" { "afterEnqueuedAt": "1997-11-12T09:55:06.000000000Z" } "#;
-            let query = serde_json::from_str::<TaskDeletionQuery>(json).unwrap();
-            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"1997-11-12 9:55:06.0 +00:00:00");
+            snapshot!(format!("{err}"), @"could not parse a date with the RFC3339 or YYYY-MM-DD format at line 1 column 42");
         }
     }
 }
