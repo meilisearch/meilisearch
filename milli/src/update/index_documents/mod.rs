@@ -1925,21 +1925,13 @@ mod tests {
             .unwrap();
 
         let rtxn = index.read_txn().unwrap();
-        let key_thai = (Script::Thai, Language::Other);
         let key_jpn = (Script::Cj, Language::Jpn);
         let key_cmn = (Script::Cj, Language::Cmn);
-        let thai_docs = index.script_language_documents_ids(&rtxn, &key_thai).unwrap().unwrap();
         let cj_jpn_docs = index.script_language_documents_ids(&rtxn, &key_jpn).unwrap().unwrap();
         let cj_cmn_docs = index.script_language_documents_ids(&rtxn, &key_cmn).unwrap().unwrap();
-        let mut expected_thai_docids = RoaringBitmap::new();
-        expected_thai_docids.push(4);
-        assert_eq!(thai_docs, expected_thai_docids);
-        let mut expected_cj_jpn_docids = RoaringBitmap::new();
-        expected_cj_jpn_docids.push(3);
+        let expected_cj_jpn_docids = [3].iter().collect();
         assert_eq!(cj_jpn_docs, expected_cj_jpn_docids);
-        let mut expected_cj_cmn_docids = RoaringBitmap::new();
-        expected_cj_cmn_docids.push(1);
-        expected_cj_cmn_docids.push(5);
+        let expected_cj_cmn_docids = [1,5].iter().collect();
         assert_eq!(cj_cmn_docs, expected_cj_cmn_docids);
     }
 }
