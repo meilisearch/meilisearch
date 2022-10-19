@@ -699,21 +699,9 @@ impl IndexScheduler {
     }
 
     pub(crate) fn delete_persisted_task_data(&self, task: &Task) -> Result<()> {
-        match &task.kind {
-            KindWithContent::DocumentImport { content_file, .. } => {
-                self.delete_update_file(*content_file)
-            }
-            KindWithContent::DocumentDeletion { .. }
-            | KindWithContent::DocumentClear { .. }
-            | KindWithContent::Settings { .. }
-            | KindWithContent::IndexDeletion { .. }
-            | KindWithContent::IndexCreation { .. }
-            | KindWithContent::IndexUpdate { .. }
-            | KindWithContent::IndexSwap { .. }
-            | KindWithContent::TaskCancelation { .. }
-            | KindWithContent::TaskDeletion { .. }
-            | KindWithContent::DumpExport { .. }
-            | KindWithContent::Snapshot => Ok(()),
+        match task.content_uuid() {
+            Some(content_file) => self.delete_update_file(*content_file),
+            None => Ok(()),
         }
     }
 }
