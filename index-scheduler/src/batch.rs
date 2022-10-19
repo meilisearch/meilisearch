@@ -731,7 +731,7 @@ impl IndexScheduler {
                         KindWithContent::IndexDeletion { .. } => Some(Details::ClearAll {
                             deleted_documents: Some(number_of_documents),
                         }),
-                        otherwise => otherwise.default_details(),
+                        otherwise => otherwise.default_finished_details(),
                     };
                 }
 
