@@ -201,16 +201,16 @@ pub(crate) mod test {
         insta::assert_display_snapshot!(dump.instance_uid().unwrap().unwrap(), @"9e15e977-f2ae-4761-943f-1eaf75fd736d");
 
         // tasks
-        let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();
+        let tasks = dump.tasks().unwrap().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
-        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"8c6cd41457c0b7e4c6727c9c85b7abac");
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"b37c01556be2e5ded407a9319915b406");
         assert_eq!(update_files.len(), 22);
         assert!(update_files[0].is_none()); // the dump creation
         assert!(update_files[1].is_some()); // the enqueued document addition
         assert!(update_files[2..].iter().all(|u| u.is_none())); // everything already processed
 
         // keys
-        let keys = dump.keys().collect::<Result<Vec<_>>>().unwrap();
+        let keys = dump.keys().unwrap().collect::<Result<Vec<_>>>().unwrap();
         meili_snap::snapshot_hash!(meili_snap::json_string!(keys), @"c9d2b467fe2fca0b35580d8a999808fb");
 
         // indexes
@@ -291,7 +291,7 @@ pub(crate) mod test {
         insta::assert_display_snapshot!(dump.instance_uid().unwrap().unwrap(), @"9e15e977-f2ae-4761-943f-1eaf75fd736d");
 
         // tasks
-        let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();
+        let tasks = dump.tasks().unwrap().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
         meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"acd74244b4e6578c353899e6db30b0b5");
         assert_eq!(update_files.len(), 10);
@@ -299,8 +299,8 @@ pub(crate) mod test {
         assert!(update_files[1..].iter().all(|u| u.is_none())); // everything already processed
 
         // keys
-        let keys = dump.keys().collect::<Result<Vec<_>>>().unwrap();
-        meili_snap::snapshot_hash!(meili_snap::json_string!(keys, { "[].uid" => "[uuid]" }), @"23afab5753c5a99d8c530075bf0ebd9c");
+        let keys = dump.keys().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        meili_snap::snapshot_hash!(meili_snap::json_string!(keys, { "[].uid" => "[uuid]" }), @"d751713988987e9331980363e24189ce");
 
         // indexes
         let mut indexes = dump.indexes().unwrap().collect::<Result<Vec<_>>>().unwrap();
@@ -380,7 +380,7 @@ pub(crate) mod test {
         assert_eq!(dump.instance_uid().unwrap(), None);
 
         // tasks
-        let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();
+        let tasks = dump.tasks().unwrap().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
         meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"fa74f7c6ab3014e09bb813fdc551db8f");
         assert_eq!(update_files.len(), 10);
@@ -388,7 +388,7 @@ pub(crate) mod test {
         assert!(update_files[1..].iter().all(|u| u.is_none())); // everything already processed
 
         // keys
-        let keys = dump.keys().collect::<Result<Vec<_>>>().unwrap();
+        let keys = dump.keys().unwrap().collect::<Result<Vec<_>>>().unwrap();
         meili_snap::snapshot_hash!(meili_snap::json_string!(keys), @"d751713988987e9331980363e24189ce");
 
         // indexes
@@ -489,7 +489,7 @@ pub(crate) mod test {
         assert_eq!(dump.instance_uid().unwrap(), None);
 
         // tasks
-        let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();
+        let tasks = dump.tasks().unwrap().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
         meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"19882e94dc085f1d60eb7df5005a3224");
         assert_eq!(update_files.len(), 9);
@@ -497,7 +497,7 @@ pub(crate) mod test {
         assert!(update_files[1..].iter().all(|u| u.is_none())); // everything already processed
 
         // keys
-        let keys = dump.keys().collect::<Result<Vec<_>>>().unwrap();
+        let keys = dump.keys().unwrap().collect::<Result<Vec<_>>>().unwrap();
         meili_snap::snapshot_hash!(meili_snap::json_string!(keys), @"d751713988987e9331980363e24189ce");
 
         // indexes
