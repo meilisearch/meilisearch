@@ -1931,7 +1931,7 @@ mod tests {
         let cj_cmn_docs = index.script_language_documents_ids(&rtxn, &key_cmn).unwrap().unwrap();
         let expected_cj_jpn_docids = [3].iter().collect();
         assert_eq!(cj_jpn_docs, expected_cj_jpn_docids);
-        let expected_cj_cmn_docids = [1,5].iter().collect();
+        let expected_cj_cmn_docids = [1, 5].iter().collect();
         assert_eq!(cj_cmn_docs, expected_cj_cmn_docids);
     }
 }
