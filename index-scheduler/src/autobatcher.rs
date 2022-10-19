@@ -191,233 +191,18 @@ impl BatchKind {
     /// To ease the writting of the code. `true` can be returned when you don't need to create an index
     /// but false can't be returned if you needs to create an index.
     #[rustfmt::skip]
-    fn accumulate(self, id: TaskId, kind: AutobatchKind, index_already_exists: bool) -> (ControlFlow<BatchKind, BatchKind>, bool) {
+    fn accumulate(self, id: TaskId, kind: AutobatchKind, index_already_exists: bool) -> ControlFlow<BatchKind, BatchKind> {
         use AutobatchKind as K;
 
-        match (index_already_exists, self, kind) {
-            // We don't batch any of these operations.
-            (true, this, K::IndexCreation | K::IndexUpdate | K::IndexSwap) => (Break(this), true),
-            // The index deletion can batch with everything but must stop after
-            (true,
-                BatchKind::DocumentClear { mut ids }
-                | BatchKind::DocumentDeletion { deletion_ids: mut ids }
-                | BatchKind::DocumentImport { method: _, allow_index_creation: _, import_ids: mut ids }
-                | BatchKind::Settings { allow_index_creation: _, settings_ids: mut ids },
-                K::IndexDeletion,
-            ) => {
-                ids.push(id);
-                (Break(BatchKind::IndexDeletion { ids }), true)
-            }
-            (true,
-                BatchKind::ClearAndSettings { settings_ids: mut ids, allow_index_creation: _, mut other }
-                | BatchKind::SettingsAndDocumentImport { import_ids: mut ids, method: _, allow_index_creation: _, settings_ids: mut other },
-                K::IndexDeletion,
-            ) => {
-                ids.push(id);
-                ids.append(&mut other);
-                (Break(BatchKind::IndexDeletion { ids }), true)
-            }
-
-            (true,
-                BatchKind::DocumentClear { mut ids },
-                K::DocumentClear | K::DocumentDeletion,
-            ) => {
-                ids.push(id);
-                (Continue(BatchKind::DocumentClear { ids }), true)
-            }
-            (true,
-                this @ BatchKind::DocumentClear { .. },
-                K::DocumentImport { .. } | K::Settings { .. },
-            ) => (Break(this), true),
-            (true,
-                BatchKind::DocumentImport { method: _, allow_index_creation: _, import_ids: mut ids },
-                K::DocumentClear,
-            ) => {
-                ids.push(id);
-                (Continue(BatchKind::DocumentClear { ids }), true)
-            }
-
-            // we can autobatch the same kind of document additions / updates
-            ( true,
-                BatchKind::DocumentImport { method: ReplaceDocuments, allow_index_creation, mut import_ids },
-                K::DocumentImport { method: ReplaceDocuments, .. },
-            ) => {
-                import_ids.push(id);
-                (Continue(BatchKind::DocumentImport {
-                    method: ReplaceDocuments,
-                    allow_index_creation,
-                    import_ids,
-                }), true)
-            }
-            (true,
-                BatchKind::DocumentImport { method: UpdateDocuments, allow_index_creation, mut import_ids },
-                K::DocumentImport { method: UpdateDocuments, .. },
-            ) => {
-                import_ids.push(id);
-                (Continue(BatchKind::DocumentImport {
-                    method: UpdateDocuments,
-                    allow_index_creation,
-                    import_ids,
-                }), true)
-            }
-
-            // but we can't autobatch documents if it's not the same kind
-            // this match branch MUST be AFTER the previous one
-            (true, 
-                this @ BatchKind::DocumentImport { .. },
-                K::DocumentDeletion | K::DocumentImport { .. },
-            ) => (Break(this), true),
-
-            (true,
-                BatchKind::DocumentImport { method, allow_index_creation, import_ids },
-                K::Settings { .. },
-            ) => (Continue(BatchKind::SettingsAndDocumentImport {
-                settings_ids: vec![id],
-                method,
-                allow_index_creation,
-                import_ids,
-            }), true),
-
-            (true, BatchKind::DocumentDeletion { mut deletion_ids }, K::DocumentClear) => {
-                deletion_ids.push(id);
-                (Continue(BatchKind::DocumentClear { ids: deletion_ids }), true)
-            }
-            (true, this @ BatchKind::DocumentDeletion { .. }, K::DocumentImport { .. }) => (Break(this), true),
-            (true, BatchKind::DocumentDeletion { mut deletion_ids }, K::DocumentDeletion) => {
-                deletion_ids.push(id);
-                (Continue(BatchKind::DocumentDeletion { deletion_ids }), true)
-            }
-            (true, this @ BatchKind::DocumentDeletion { .. }, K::Settings { .. }) => (Break(this), true),
-
-            (true,
-                BatchKind::Settings { settings_ids, allow_index_creation },
-                K::DocumentClear,
-            ) => (Continue(BatchKind::ClearAndSettings {
-                settings_ids,
-                allow_index_creation,
-                other: vec![id],
-            }), true),
-            (true,
-                this @ BatchKind::Settings { .. },
-                K::DocumentImport { .. } | K::DocumentDeletion,
-            ) => (Break(this), true),
-            (true,
-                BatchKind::Settings { mut settings_ids, allow_index_creation },
-                K::Settings { .. },
-            ) => {
-                settings_ids.push(id);
-                (Continue(BatchKind::Settings {
-                    allow_index_creation,
-                    settings_ids,
-                }), true)
-            }
-
-            (true,
-                BatchKind::ClearAndSettings { mut other, settings_ids, allow_index_creation },
-                K::DocumentClear,
-            ) => {
-                other.push(id);
-                (Continue(BatchKind::ClearAndSettings {
-                    other,
-                    settings_ids,
-                    allow_index_creation,
-                }), true)
-            }
-            (true, this @ BatchKind::ClearAndSettings { .. }, K::DocumentImport { .. }) => (Break(this), true),
-            (true, 
-                BatchKind::ClearAndSettings {
-                    mut other,
-                    settings_ids,
-                    allow_index_creation,
-                },
-                K::DocumentDeletion,
-            ) => {
-                other.push(id);
-                (Continue(BatchKind::ClearAndSettings {
-                    other,
-                    settings_ids,
-                    allow_index_creation,
-                }), true)
-            }
-            (true,
-                BatchKind::ClearAndSettings { mut settings_ids, other, allow_index_creation },
-                K::Settings { .. },
-            ) => {
-                settings_ids.push(id);
-                (Continue(BatchKind::ClearAndSettings {
-                    other,
-                    settings_ids,
-                    allow_index_creation,
-                }), true)
-            }
-            (true,
-                BatchKind::SettingsAndDocumentImport { settings_ids, method: _, import_ids: mut other, allow_index_creation },
-                K::DocumentClear,
-            ) => {
-                other.push(id);
-                (Continue(BatchKind::ClearAndSettings {
-                    settings_ids,
-                    other,
-                    allow_index_creation,
-                }), true)
-            }
-
-            (true,
-                BatchKind::SettingsAndDocumentImport { settings_ids, method: ReplaceDocuments, mut import_ids, allow_index_creation },
-                K::DocumentImport { method: ReplaceDocuments, .. },
-            ) => {
-                import_ids.push(id);
-                (Continue(BatchKind::SettingsAndDocumentImport {
-                    settings_ids,
-                    method: ReplaceDocuments,
-                    allow_index_creation,
-                    import_ids,
-                }), true)
-            }
-            (true,
-                BatchKind::SettingsAndDocumentImport { settings_ids, method: UpdateDocuments, allow_index_creation, mut import_ids },
-                K::DocumentImport { method: UpdateDocuments, .. },
-            ) => {
-                import_ids.push(id);
-                (Continue(BatchKind::SettingsAndDocumentImport {
-                    settings_ids,
-                    method: UpdateDocuments,
-                    allow_index_creation,
-                    import_ids,
-                }), true)
-            }
-            // But we can't batch a settings and a doc op with another doc op
-            // this MUST be AFTER the two previous branch
-            (true,
-                this @ BatchKind::SettingsAndDocumentImport { .. },
-                K::DocumentDeletion | K::DocumentImport { .. },
-            ) => (Break(this), true),
-            (true,
-                BatchKind::SettingsAndDocumentImport { mut settings_ids, method, allow_index_creation, import_ids },
-                K::Settings { .. },
-            ) => {
-                settings_ids.push(id);
-                (Continue(BatchKind::SettingsAndDocumentImport {
-                    settings_ids,
-                    method,
-                    allow_index_creation,
-                    import_ids,
-                }), true)
-            }
-            
-            // TODO
-            
-            
-            // We don't batch any of these operations.
-            (false, this, K::IndexCreation) => (Break(this), true),
-            (false, this, K::IndexUpdate | K::IndexSwap) => (Break(this), false),
-
-            // We must not batch tasks that don't have the same index creation rights.
-            (false, this, kind) if this.allow_index_creation() == Some(false) && kind.allow_index_creation() == Some(true) => {
-                (Break(this), false)
+        match (self, kind) {
+            // We don't batch any of these operations
+            (this, K::IndexCreation | K::IndexUpdate | K::IndexSwap) => Break(this),
+            // We must not batch tasks that don't have the same index creation rights
+            (this, kind) if this.allow_index_creation() == Some(false) && kind.allow_index_creation() == Some(true) => {
+                Break(this)
             },
             // The index deletion can batch with everything but must stop after
-            (false,
+            (
                 BatchKind::DocumentClear { mut ids }
                 | BatchKind::DocumentDeletion { deletion_ids: mut ids }
                 | BatchKind::DocumentImport { method: _, allow_index_creation: _, import_ids: mut ids }
@@ -425,125 +210,125 @@ impl BatchKind {
                 K::IndexDeletion,
             ) => {
                 ids.push(id);
-                (Break(BatchKind::IndexDeletion { ids }), false)
+                Break(BatchKind::IndexDeletion { ids })
             }
-            (false,
+            (
                 BatchKind::ClearAndSettings { settings_ids: mut ids, allow_index_creation: _, mut other }
                 | BatchKind::SettingsAndDocumentImport { import_ids: mut ids, method: _, allow_index_creation: _, settings_ids: mut other },
                 K::IndexDeletion,
             ) => {
                 ids.push(id);
                 ids.append(&mut other);
-                (Break(BatchKind::IndexDeletion { ids }), false)
+                Break(BatchKind::IndexDeletion { ids })
             }
 
-            (false,
+            (
                 BatchKind::DocumentClear { mut ids },
                 K::DocumentClear | K::DocumentDeletion,
             ) => {
                 ids.push(id);
-                (Continue(BatchKind::DocumentClear { ids }), false)
+                Continue(BatchKind::DocumentClear { ids })
             }
-            (false,
+            (
                 this @ BatchKind::DocumentClear { .. },
                 K::DocumentImport { .. } | K::Settings { .. },
-            ) => (Break(this), false),
-            (false,
+            ) => Break(this),
+            (
                 BatchKind::DocumentImport { method: _, allow_index_creation: _, import_ids: mut ids },
                 K::DocumentClear,
             ) => {
                 ids.push(id);
-                (Continue(BatchKind::DocumentClear { ids }), false)
+                Continue(BatchKind::DocumentClear { ids })
             }
 
             // we can autobatch the same kind of document additions / updates
-            (false,
+            (
                 BatchKind::DocumentImport { method: ReplaceDocuments, allow_index_creation, mut import_ids },
                 K::DocumentImport { method: ReplaceDocuments, .. },
             ) => {
                 import_ids.push(id);
-                (Continue(BatchKind::DocumentImport {
+                Continue(BatchKind::DocumentImport {
                     method: ReplaceDocuments,
                     allow_index_creation,
                     import_ids,
-                }), false)
+                })
             }
-            (false,
+            (
                 BatchKind::DocumentImport { method: UpdateDocuments, allow_index_creation, mut import_ids },
                 K::DocumentImport { method: UpdateDocuments, .. },
             ) => {
                 import_ids.push(id);
-                (Continue(BatchKind::DocumentImport {
+                Continue(BatchKind::DocumentImport {
                     method: UpdateDocuments,
                     allow_index_creation,
                     import_ids,
-                }), false)
+                })
             }
 
             // but we can't autobatch documents if it's not the same kind
             // this match branch MUST be AFTER the previous one
-            (false,
+            (
                 this @ BatchKind::DocumentImport { .. },
                 K::DocumentDeletion | K::DocumentImport { .. },
-            ) => (Break(this), false),
+            ) => Break(this),
 
-            (false,
+            (
                 BatchKind::DocumentImport { method, allow_index_creation, import_ids },
                 K::Settings { .. },
-            ) => (Continue(BatchKind::SettingsAndDocumentImport {
+            ) => Continue(BatchKind::SettingsAndDocumentImport {
                 settings_ids: vec![id],
                 method,
                 allow_index_creation,
                 import_ids,
-            }), false),
+            }),
 
-            (false, BatchKind::DocumentDeletion { mut deletion_ids }, K::DocumentClear) => {
+            (BatchKind::DocumentDeletion { mut deletion_ids }, K::DocumentClear) => {
                 deletion_ids.push(id);
-                (Continue(BatchKind::DocumentClear { ids: deletion_ids }), false)
+                Continue(BatchKind::DocumentClear { ids: deletion_ids })
             }
-            (false, this @ BatchKind::DocumentDeletion { .. }, K::DocumentImport { .. }) => (Break(this), false),
-            (false, BatchKind::DocumentDeletion { mut deletion_ids }, K::DocumentDeletion) => {
+            (this @ BatchKind::DocumentDeletion { .. }, K::DocumentImport { .. }) => Break(this),
+            (BatchKind::DocumentDeletion { mut deletion_ids }, K::DocumentDeletion) => {
                 deletion_ids.push(id);
-                (Continue(BatchKind::DocumentDeletion { deletion_ids }), false)
+                Continue(BatchKind::DocumentDeletion { deletion_ids })
             }
-            (false, this @ BatchKind::DocumentDeletion { .. }, K::Settings { .. }) => (Break(this), false),
+            (this @ BatchKind::DocumentDeletion { .. }, K::Settings { .. }) => Break(this),
 
-            (false,
+            (
                 BatchKind::Settings { settings_ids, allow_index_creation },
                 K::DocumentClear,
-            ) => (Continue(BatchKind::ClearAndSettings {
+            ) => Continue(BatchKind::ClearAndSettings {
                 settings_ids,
                 allow_index_creation,
                 other: vec![id],
-            }), false),
-            (false,
+            }),
+            (
                 this @ BatchKind::Settings { .. },
                 K::DocumentImport { .. } | K::DocumentDeletion,
-            ) => (Break(this), false),
-            (false,
+            ) => Break(this),
+            (
                 BatchKind::Settings { mut settings_ids, allow_index_creation },
                 K::Settings { .. },
             ) => {
                 settings_ids.push(id);
-                (Continue(BatchKind::Settings {
+                Continue(BatchKind::Settings {
                     allow_index_creation,
                     settings_ids,
-                }), false)
+                })
             }
 
-            (false,
+            (
                 BatchKind::ClearAndSettings { mut other, settings_ids, allow_index_creation },
                 K::DocumentClear,
             ) => {
                 other.push(id);
-                (Continue(BatchKind::ClearAndSettings {
+                Continue(BatchKind::ClearAndSettings {
                     other,
                     settings_ids,
                     allow_index_creation,
-                }), false)
+                })
             }
-            (false, this @ BatchKind::ClearAndSettings { .. }, K::DocumentImport { .. }) => (Break(this), false),
-            (false,
+            (this @ BatchKind::ClearAndSettings { .. }, K::DocumentImport { .. }) => Break(this),
+            (
                 BatchKind::ClearAndSettings {
                     mut other,
                     settings_ids,
@@ -552,78 +337,78 @@ impl BatchKind {
                 K::DocumentDeletion,
             ) => {
                 other.push(id);
-                (Continue(BatchKind::ClearAndSettings {
+                Continue(BatchKind::ClearAndSettings {
                     other,
                     settings_ids,
                     allow_index_creation,
-                }), false)
+                })
             }
-            (false,
+            (
                 BatchKind::ClearAndSettings { mut settings_ids, other, allow_index_creation },
                 K::Settings { .. },
             ) => {
                 settings_ids.push(id);
-                (Continue(BatchKind::ClearAndSettings {
+                Continue(BatchKind::ClearAndSettings {
                     other,
                     settings_ids,
                     allow_index_creation,
-                }), false)
+                })
             }
-            (false,
+            (
                 BatchKind::SettingsAndDocumentImport { settings_ids, method: _, import_ids: mut other, allow_index_creation },
                 K::DocumentClear,
             ) => {
                 other.push(id);
-                (Continue(BatchKind::ClearAndSettings {
+                Continue(BatchKind::ClearAndSettings {
                     settings_ids,
                     other,
                     allow_index_creation,
-                }), false)
+                })
             }
 
-            (false,
+            (
                 BatchKind::SettingsAndDocumentImport { settings_ids, method: ReplaceDocuments, mut import_ids, allow_index_creation },
                 K::DocumentImport { method: ReplaceDocuments, .. },
             ) => {
                 import_ids.push(id);
-                (Continue(BatchKind::SettingsAndDocumentImport {
+                Continue(BatchKind::SettingsAndDocumentImport {
                     settings_ids,
                     method: ReplaceDocuments,
                     allow_index_creation,
                     import_ids,
-                }), false)
+                })
             }
-            (false,
+            (
                 BatchKind::SettingsAndDocumentImport { settings_ids, method: UpdateDocuments, allow_index_creation, mut import_ids },
                 K::DocumentImport { method: UpdateDocuments, .. },
             ) => {
                 import_ids.push(id);
-                (Continue(BatchKind::SettingsAndDocumentImport {
+                Continue(BatchKind::SettingsAndDocumentImport {
                     settings_ids,
                     method: UpdateDocuments,
                     allow_index_creation,
                     import_ids,
-                }), false)
+                })
             }
             // But we can't batch a settings and a doc op with another doc op
             // this MUST be AFTER the two previous branch
-            (false,
+            (
                 this @ BatchKind::SettingsAndDocumentImport { .. },
                 K::DocumentDeletion | K::DocumentImport { .. },
-            ) => (Break(this), false),
-            (false,
+            ) => Break(this),
+            (
                 BatchKind::SettingsAndDocumentImport { mut settings_ids, method, allow_index_creation, import_ids },
                 K::Settings { .. },
             ) => {
                 settings_ids.push(id);
-                (Continue(BatchKind::SettingsAndDocumentImport {
+                Continue(BatchKind::SettingsAndDocumentImport {
                     settings_ids,
                     method,
                     allow_index_creation,
                     import_ids,
-                }), false)
+                })
             }
-            (_,
+            (
                 BatchKind::IndexCreation { .. }
                 | BatchKind::IndexDeletion { .. }
                 | BatchKind::IndexUpdate { .. }
@@ -632,7 +417,6 @@ impl BatchKind {
             ) => {
                 unreachable!()
             }
-                    
         }
     }
 }
@@ -657,21 +441,18 @@ pub fn autobatch(
     // index_exist will keep track of if the index should exist at this point after the tasks we batched.
     let mut index_exist = index_already_exists;
 
-    let (mut acc, mut must_create_index) = match BatchKind::new(id, kind) {
+    let (mut acc, must_create_index) = match BatchKind::new(id, kind) {
         (Continue(acc), create) => (acc, create),
         (Break(acc), create) => return Some((acc, create)),
     };
 
-    for (id, kind) in enqueued {
-        // if an index has been created in the previous step we can consider it exists.
-        index_exist |= must_create_index;
+    // if an index has been created in the previous step we can consider it as existing.
+    index_exist |= must_create_index;
 
-        match acc.accumulate(id, kind.into(), index_exist) {
-            (Continue(a), create) => {
-                acc = a;
-                must_create_index |= create;
-            }
-            (Break(acc), create) => return Some((acc, must_create_index | create)),
+    for (id, kind) in enqueued {
+        acc = match acc.accumulate(id, kind.into(), index_exist) {
+            Continue(acc) => acc,
+            Break(acc) => return Some((acc, must_create_index)),
         };
     }
 
@@ -685,7 +466,10 @@ mod tests {
     use super::*;
     use uuid::Uuid;
 
-    fn autobatch_from(index_already_exists: bool, input: impl IntoIterator<Item = KindWithContent>) -> Option<(BatchKind, bool)> {
+    fn autobatch_from(
+        index_already_exists: bool,
+        input: impl IntoIterator<Item = KindWithContent>,
+    ) -> Option<(BatchKind, bool)> {
         autobatch(
             input
                 .into_iter()
@@ -762,7 +546,7 @@ mod tests {
         debug_snapshot!(autobatch_from(true, [doc_imp(ReplaceDocuments, true)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] }, true))");
         debug_snapshot!(autobatch_from(true, [doc_imp(ReplaceDocuments, false)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: false, import_ids: [0] }, false))");
         debug_snapshot!(autobatch_from(true, [doc_imp(ReplaceDocuments, true), doc_imp( ReplaceDocuments, true ), doc_imp(ReplaceDocuments, true )]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, import_ids: [0, 1, 2] }, true))");
-        debug_snapshot!(autobatch_from(true, [doc_imp(ReplaceDocuments, false), doc_imp( ReplaceDocuments, false ), doc_imp(ReplaceDocuments, false )]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: false, import_ids: [0, 1, 2] }, true))");
+        debug_snapshot!(autobatch_from(true, [doc_imp(ReplaceDocuments, false), doc_imp( ReplaceDocuments, false ), doc_imp(ReplaceDocuments, false )]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: false, import_ids: [0, 1, 2] }, false))");
 
         // if it doesn't exists.
         debug_snapshot!(autobatch_from(false, [doc_imp(ReplaceDocuments, true)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] }, true))");
@@ -808,7 +592,7 @@ mod tests {
         debug_snapshot!(autobatch_from(true, [doc_imp(ReplaceDocuments, true), doc_del()]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] }, true))");
         debug_snapshot!(autobatch_from(true, [doc_imp(UpdateDocuments, true), doc_imp(ReplaceDocuments, true)]), @"Some((DocumentImport { method: UpdateDocuments, allow_index_creation: true, import_ids: [0] }, true))");
         debug_snapshot!(autobatch_from(true, [doc_imp(UpdateDocuments, true), doc_del()]), @"Some((DocumentImport { method: UpdateDocuments, allow_index_creation: true, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, [doc_del(), doc_imp(ReplaceDocuments, true)]), @"Some((DocumentDeletion { deletion_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, [doc_del(), doc_imp(ReplaceDocuments, true)]), @"Some((DocumentDeletion { deletion_ids: [0] }, false))");
         debug_snapshot!(autobatch_from(true, [doc_del(), doc_imp(UpdateDocuments, true)]), @"Some((DocumentDeletion { deletion_ids: [0] }, true))");
 
         debug_snapshot!(autobatch_from(true, [doc_imp(ReplaceDocuments, true), idx_create()]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] }, true))");
@@ -854,7 +638,7 @@ mod tests {
     #[test]
     fn clear_and_additions() {
         // these two doesn't need to batch
-        debug_snapshot!(autobatch_from(true, [doc_clr(), doc_imp(ReplaceDocuments, true)]), @"Some((DocumentClear { ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, [doc_clr(), doc_imp(ReplaceDocuments, true)]), @"Some((DocumentClear { ids: [0] }, false))");
         debug_snapshot!(autobatch_from(true, [doc_clr(), doc_imp(UpdateDocuments, true)]), @"Some((DocumentClear { ids: [0] }, true))");
 
         // Basic use case
@@ -873,7 +657,7 @@ mod tests {
     #[test]
     fn clear_and_additions_and_settings() {
         // A clear don't need to autobatch the settings that happens AFTER there is no documents
-        debug_snapshot!(autobatch_from(true, [doc_clr(), settings(true)]), @"Some((DocumentClear { ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, [doc_clr(), settings(true)]), @"Some((DocumentClear { ids: [0] }, false))");
 
         debug_snapshot!(autobatch_from(true, [settings(true), doc_clr(), settings(true)]), @"Some((ClearAndSettings { other: [1], allow_index_creation: true, settings_ids: [0, 2] }, true))");
         debug_snapshot!(autobatch_from(true, [doc_imp(ReplaceDocuments, true), settings(true), doc_clr()]), @"Some((ClearAndSettings { other: [0, 2], allow_index_creation: true, settings_ids: [1] }, true))");
@@ -905,7 +689,7 @@ mod tests {
         // First, the basic cases
         debug_snapshot!(autobatch_from(true, [doc_imp(ReplaceDocuments, true), idx_del()]), @"Some((IndexDeletion { ids: [0, 1] }, true))");
         debug_snapshot!(autobatch_from(true, [doc_imp(UpdateDocuments, true), idx_del()]), @"Some((IndexDeletion { ids: [0, 1] }, true))");
-        debug_snapshot!(autobatch_from(true, [doc_imp(ReplaceDocuments, false), idx_del()]), @"Some((IndexDeletion { ids: [0, 1] }, true))");
+        debug_snapshot!(autobatch_from(true, [doc_imp(ReplaceDocuments, false), idx_del()]), @"Some((IndexDeletion { ids: [0, 1] }, false))");
         debug_snapshot!(autobatch_from(true, [doc_imp(UpdateDocuments, false), idx_del()]), @"Some((IndexDeletion { ids: [0, 1] }, true))");
         debug_snapshot!(autobatch_from(true, [doc_del(), idx_del()]), @"Some((IndexDeletion { ids: [0, 1] }, true))");
         debug_snapshot!(autobatch_from(true, [doc_clr(), idx_del()]), @"Some((IndexDeletion { ids: [0, 1] }, true))");
@@ -939,7 +723,7 @@ mod tests {
         debug_snapshot!(autobatch_from(true, [doc_imp(UpdateDocuments, true), settings(false), idx_del()]), @"Some((IndexDeletion { ids: [0, 2, 1] }, true))");
         debug_snapshot!(autobatch_from(true, [doc_imp(ReplaceDocuments,true), settings(false), doc_clr(), idx_del()]), @"Some((IndexDeletion { ids: [1, 3, 0, 2] }, true))");
         debug_snapshot!(autobatch_from(true, [doc_imp(UpdateDocuments, true), settings(false), doc_clr(), idx_del()]), @"Some((IndexDeletion { ids: [1, 3, 0, 2] }, true))");
-        
+
         // When the index doesn't exists yet it's more complicated.
         // Either the first task we encounter create it, in which case we can create a big batch with everything.
         debug_snapshot!(autobatch_from(false, [doc_imp(ReplaceDocuments, true), settings(true), idx_del()]), @"Some((IndexDeletion { ids: [0, 2, 1] }, true))");
@@ -964,13 +748,12 @@ mod tests {
         debug_snapshot!(autobatch_from(false, [doc_imp(UpdateDocuments, false), settings(true), idx_del()]), @"Some((DocumentImport { method: UpdateDocuments, allow_index_creation: false, import_ids: [0] }, false))");
         debug_snapshot!(autobatch_from(false, [doc_imp(ReplaceDocuments,false), settings(true), doc_clr(), idx_del()]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: false, import_ids: [0] }, false))");
         debug_snapshot!(autobatch_from(false, [doc_imp(UpdateDocuments, false), settings(true), doc_clr(), idx_del()]), @"Some((DocumentImport { method: UpdateDocuments, allow_index_creation: false, import_ids: [0] }, false))");
-        
     }
 
     #[test]
     fn allowed_and_disallowed_index_creation() {
         // `DocumentImport` can't be mixed with those disallowed to do so except if the index already exists.
-        debug_snapshot!(autobatch_from(true, [doc_imp(ReplaceDocuments, false), doc_imp(ReplaceDocuments, true)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: false, import_ids: [0, 1] }, true))");
+        debug_snapshot!(autobatch_from(true, [doc_imp(ReplaceDocuments, false), doc_imp(ReplaceDocuments, true)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: false, import_ids: [0] }, false))");
         debug_snapshot!(autobatch_from(true, [doc_imp(ReplaceDocuments, true), doc_imp(ReplaceDocuments, true)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, import_ids: [0, 1] }, true))");
         debug_snapshot!(autobatch_from(true, [doc_imp(ReplaceDocuments, false), doc_imp(ReplaceDocuments, false)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: false, import_ids: [0, 1] }, true))");
         debug_snapshot!(autobatch_from(true, [doc_imp(ReplaceDocuments, true), settings(true)]), @"Some((SettingsAndDocumentImport { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] }, true))");
@@ -981,6 +764,5 @@ mod tests {
         debug_snapshot!(autobatch_from(false, [doc_imp(ReplaceDocuments, false), doc_imp(ReplaceDocuments, false)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: false, import_ids: [0, 1] }, false))");
         debug_snapshot!(autobatch_from(false, [doc_imp(ReplaceDocuments, true), settings(true)]), @"Some((SettingsAndDocumentImport { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, import_ids: [0] }, true))");
         debug_snapshot!(autobatch_from(false, [doc_imp(ReplaceDocuments, false), settings(true)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: false, import_ids: [0] }, false))");
-
     }
 }
