@@ -680,10 +680,10 @@ impl IndexScheduler {
                         self.index_mapper.indexer_config(),
                     );
                     builder.set_primary_key(primary_key);
-                    let must_stop = self.processing_tasks.read().unwrap().must_stop.clone();
+                    let must_stop_processing = self.must_stop_processing.clone();
                     builder.execute(
                         |indexing_step| debug!("update: {:?}", indexing_step),
-                        || must_stop.load(Relaxed),
+                        || must_stop_processing.get(),
                     )?;
                     index_wtxn.commit()?;
                 }
@@ -762,7 +762,7 @@ impl IndexScheduler {
                 content_files,
                 mut tasks,
             } => {
-                let must_stop = self.processing_tasks.read().unwrap().must_stop.clone();
+                let must_stop_processing = self.must_stop_processing.clone();
                 let indexer_config = self.index_mapper.indexer_config();
                 // TODO use the code from the IndexCreate operation
                 if let Some(primary_key) = primary_key {
@@ -772,7 +772,7 @@ impl IndexScheduler {
                         builder.set_primary_key(primary_key);
                         builder.execute(
                             |indexing_step| debug!("update: {:?}", indexing_step),
-                            || must_stop.clone().load(Relaxed),
+                            || must_stop_processing.clone().get(),
                         )?;
                     }
                 }
@@ -788,7 +788,7 @@ impl IndexScheduler {
                     indexer_config,
                     config,
                     |indexing_step| debug!("update: {:?}", indexing_step),
-                    || must_stop.load(Relaxed),
+                    || must_stop_processing.get(),
                 )?;
 
                 let mut results = Vec::new();
@@ -882,10 +882,10 @@ impl IndexScheduler {
                     let mut builder =
                         milli::update::Settings::new(index_wtxn, index, indexer_config);
                     apply_settings_to_builder(&checked_settings, &mut builder);
-                    let must_stop = self.processing_tasks.read().unwrap().must_stop.clone();
+                    let must_stop_processing = self.must_stop_processing.clone();
                     builder.execute(
                         |indexing_step| debug!("update: {:?}", indexing_step),
-                        || must_stop.load(Relaxed),
+                        || must_stop_processing.get(),
                     )?;
 
                     task.status = Status::Succeeded;
