@@ -14,6 +14,7 @@ use crate::{index_mapper::IndexMapper, IndexScheduler, Kind, Status};
 pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     let IndexScheduler {
         autobatching_enabled,
+        must_stop_processing,
         processing_tasks,
         file_store,
         env,
