@@ -71,12 +71,13 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
                         .take_while(|(p, _)| (*p as u32) < max_positions_per_attributes);
 
                     for (index, token) in tokens {
-                        let script = token.script;
-                        let language = token.language.unwrap_or_default();
-                        let entry = script_language_pair
-                            .entry((script, language))
-                            .or_insert_with(RoaringBitmap::new);
-                        entry.push(document_id);
+                        if let Some(language) = token.language {
+                            let script = token.script;
+                            let entry = script_language_pair
+                                .entry((script, language))
+                                .or_insert_with(RoaringBitmap::new);
+                            entry.push(document_id);
+                        }
                         let token = token.lemma().trim();
                         if !token.is_empty() && token.len() <= MAX_WORD_LENGTH {
                             key_buffer.truncate(mem::size_of::<u32>());
