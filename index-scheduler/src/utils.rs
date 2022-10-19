@@ -80,21 +80,15 @@ impl IndexScheduler {
             })?;
         }
 
-        if old_task.enqueued_at != task.enqueued_at {
-            unreachable!("Cannot update a task's enqueued_at time");
-        }
+        assert!(old_task.enqueued_at != task.enqueued_at, "Cannot update a task's enqueued_at time");
         if old_task.started_at != task.started_at {
-            if old_task.started_at.is_some() {
-                unreachable!("Cannot update a task's started_at time");
-            }
+            assert!(old_task.started_at.is_none(), "Cannot update a task's started_at time");
             if let Some(started_at) = task.started_at {
                 insert_task_datetime(wtxn, self.started_at, started_at, task.uid)?;
             }
         }
         if old_task.finished_at != task.finished_at {
-            if old_task.finished_at.is_some() {
-                unreachable!("Cannot update a task's finished_at time");
-            }
+            assert!(old_task.finished_at.is_none(), "Cannot update a task's finished_at time");
             if let Some(finished_at) = task.finished_at {
                 insert_task_datetime(wtxn, self.finished_at, finished_at, task.uid)?;
             }
@@ -187,24 +181,20 @@ impl IndexScheduler {
 pub(crate) fn insert_task_datetime(
     wtxn: &mut RwTxn,
     database: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
-
     time: OffsetDateTime,
     task_id: TaskId,
 ) -> Result<()> {
     let timestamp = BEI128::new(time.unix_timestamp_nanos());
-    let mut task_ids = if let Some(existing) = database.get(&wtxn, &timestamp)? {
-        existing
-    } else {
-        RoaringBitmap::new()
-    };
+    let mut task_ids = database.get(&wtxn, &timestamp)?.unwrap_or_default();
     task_ids.insert(task_id);
     database.put(wtxn, &timestamp, &RoaringBitmap::from_iter([task_id]))?;
     Ok(())
 }
+
+
 pub(crate) fn remove_task_datetime(
     wtxn: &mut RwTxn,
     database: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
-
     time: OffsetDateTime,
     task_id: TaskId,
 ) -> Result<()> {
@@ -220,6 +210,7 @@ pub(crate) fn remove_task_datetime(
 
     Ok(())
 }
+
 pub(crate) fn keep_tasks_within_datetimes(
     rtxn: &RoTxn,
     tasks: &mut RoaringBitmap,
