@@ -718,7 +718,7 @@ impl IndexScheduler {
             Some(batch) => batch,
             None => return Ok(0),
         };
-        drop(rtxn); //rtxn.commit()?;
+        drop(rtxn);
 
         // 1. store the starting date with the bitmap of processing tasks.
         let mut ids = batch.ids();
