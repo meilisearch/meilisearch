@@ -2217,6 +2217,7 @@ dependencies = [
  "log",
  "manifest-dir-macros",
  "maplit",
+ "meili-snap",
  "meilisearch-auth",
  "meilisearch-types",
  "mimalloc",

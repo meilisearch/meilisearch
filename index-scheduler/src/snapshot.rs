@@ -1,4 +1,4 @@
-use meilisearch_types::milli::{RoaringBitmapCodec, BEU32};
+use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::Details;
 use meilisearch_types::{
     heed::{
@@ -9,12 +9,13 @@ use meilisearch_types::{
 };
 use roaring::RoaringBitmap;
 
+use crate::BEI128;
 use crate::{index_mapper::IndexMapper, IndexScheduler, Kind, Status};
 
 pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     let IndexScheduler {
         autobatching_enabled,
-        must_stop_processing,
+        must_stop_processing: _,
         processing_tasks,
         file_store,
         env,
@@ -22,6 +23,9 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         status,
         kind,
         index_tasks,
+        enqueued_at,
+        started_at,
+        finished_at,
         index_mapper,
         wake_up: _,
         dumps_path: _,
@@ -60,6 +64,18 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     snap.push_str(&snapshot_index_mapper(&rtxn, index_mapper));
     snap.push_str("\n----------------------------------------------------------------------\n");
 
+    snap.push_str("### Enqueued At:\n");
+    snap.push_str(&snapshot_date_db(&rtxn, *enqueued_at));
+    snap.push_str("----------------------------------------------------------------------\n");
+
+    snap.push_str("### Started At:\n");
+    snap.push_str(&snapshot_date_db(&rtxn, *started_at));
+    snap.push_str("----------------------------------------------------------------------\n");
+
+    snap.push_str("### Finished At:\n");
+    snap.push_str(&snapshot_date_db(&rtxn, *finished_at));
+    snap.push_str("----------------------------------------------------------------------\n");
+
     snap.push_str("### File Store:\n");
     snap.push_str(&snapshot_file_store(file_store));
     snap.push_str("\n----------------------------------------------------------------------\n");
@@ -93,6 +109,19 @@ fn snapshot_all_tasks(rtxn: &RoTxn, db: Database<OwnedType<BEU32>, SerdeJson<Tas
     while let Some(next) = iter.next() {
         let (task_id, task) = next.unwrap();
         snap.push_str(&format!("{task_id} {}\n", snapshot_task(&task)));
+    }
+    snap
+}
+
+fn snapshot_date_db(
+    rtxn: &RoTxn,
+    db: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
+) -> String {
+    let mut snap = String::new();
+    let mut iter = db.iter(rtxn).unwrap();
+    while let Some(next) = iter.next() {
+        let (_timestamp, task_ids) = next.unwrap();
+        snap.push_str(&format!("[timestamp] {}\n", snapshot_bitmap(&task_ids)));
     }
     snap
 }

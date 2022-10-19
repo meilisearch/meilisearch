@@ -180,26 +180,79 @@ impl From<Details> for DetailsView {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TaskDateQuery {
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "time::serde::rfc3339::option::serialize",
+        deserialize_with = "rfc3339_date_or_datetime::deserialize"
+    )]
+    after_enqueued_at: Option<OffsetDateTime>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "time::serde::rfc3339::option::serialize",
+        deserialize_with = "rfc3339_date_or_datetime::deserialize"
+    )]
+    before_enqueued_at: Option<OffsetDateTime>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "time::serde::rfc3339::option::serialize",
+        deserialize_with = "rfc3339_date_or_datetime::deserialize"
+    )]
+    after_started_at: Option<OffsetDateTime>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "time::serde::rfc3339::option::serialize",
+        deserialize_with = "rfc3339_date_or_datetime::deserialize"
+    )]
+    before_started_at: Option<OffsetDateTime>,
+
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "time::serde::rfc3339::option::serialize",
+        deserialize_with = "rfc3339_date_or_datetime::deserialize"
+    )]
+    after_finished_at: Option<OffsetDateTime>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "time::serde::rfc3339::option::serialize",
+        deserialize_with = "rfc3339_date_or_datetime::deserialize"
+    )]
+    before_finished_at: Option<OffsetDateTime>,
+}
+
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TasksFilterQuery {
     #[serde(rename = "type")]
-    type_: Option<CS<StarOr<Kind>>>,
+    kind: Option<CS<StarOr<Kind>>>,
+    uid: Option<CS<u32>>,
     status: Option<CS<StarOr<Status>>>,
-    index_uid: Option<CS<StarOr<IndexUid>>>,
+    index_uid: Option<CS<StarOr<String>>>,
     #[serde(default = "DEFAULT_LIMIT")]
     limit: u32,
     from: Option<TaskId>,
+    #[serde(flatten)]
+    dates: TaskDateQuery,
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TaskDeletionQuery {
     #[serde(rename = "type")]
-    type_: Option<CS<Kind>>,
+    kind: Option<CS<Kind>>,
     uid: Option<CS<u32>>,
     status: Option<CS<Status>>,
     index_uid: Option<CS<IndexUid>>,
+    #[serde(flatten)]
+    dates: TaskDateQuery,
 }
 
 #[derive(Deserialize, Debug)]
@@ -210,6 +263,8 @@ pub struct TaskCancelationQuery {
     uid: Option<CS<u32>>,
     status: Option<CS<Status>>,
     index_uid: Option<CS<IndexUid>>,
+    #[serde(flatten)]
+    dates: TaskDateQuery,
 }
 
 async fn cancel_tasks(
@@ -222,6 +277,15 @@ async fn cancel_tasks(
         uid,
         status,
         index_uid,
+        dates:
+            TaskDateQuery {
+                after_enqueued_at,
+                before_enqueued_at,
+                after_started_at,
+                before_started_at,
+                after_finished_at,
+                before_finished_at,
+            },
     } = params.into_inner();
 
     let kind: Option<Vec<_>> = type_.map(|x| x.into_iter().collect());
@@ -237,6 +301,12 @@ async fn cancel_tasks(
         kind,
         index_uid,
         uid,
+        before_enqueued_at,
+        after_enqueued_at,
+        before_started_at,
+        after_started_at,
+        before_finished_at,
+        after_finished_at,
     };
 
     if query.is_empty() {
@@ -262,10 +332,19 @@ async fn delete_tasks(
     params: web::Query<TaskDeletionQuery>,
 ) -> Result<HttpResponse, ResponseError> {
     let TaskDeletionQuery {
-        type_,
+        kind: type_,
         uid,
         status,
         index_uid,
+        dates:
+            TaskDateQuery {
+                after_enqueued_at,
+                before_enqueued_at,
+                after_started_at,
+                before_started_at,
+                after_finished_at,
+                before_finished_at,
+            },
     } = params.into_inner();
 
     let kind: Option<Vec<_>> = type_.map(|x| x.into_iter().collect());
@@ -281,6 +360,12 @@ async fn delete_tasks(
         kind,
         index_uid,
         uid,
+        after_enqueued_at,
+        before_enqueued_at,
+        after_started_at,
+        before_started_at,
+        after_finished_at,
+        before_finished_at,
     };
 
     if query.is_empty() {
@@ -307,18 +392,27 @@ async fn get_tasks(
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let TasksFilterQuery {
-        type_,
+        kind,
+        uid,
         status,
         index_uid,
         limit,
         from,
+        dates:
+            TaskDateQuery {
+                after_enqueued_at,
+                before_enqueued_at,
+                after_started_at,
+                before_started_at,
+                after_finished_at,
+                before_finished_at,
+            },
     } = params.into_inner();
-
-    let search_rules = &index_scheduler.filters().search_rules;
 
     // We first transform a potential indexUid=* into a "not specified indexUid filter"
     // for every one of the filters: type, status, and indexUid.
-    let type_: Option<Vec<_>> = type_.and_then(fold_star_or);
+    let type_: Option<Vec<_>> = kind.and_then(fold_star_or);
+    let uid: Option<Vec<_>> = uid.map(|x| x.into_iter().collect());
     let status: Option<Vec<_>> = status.and_then(fold_star_or);
     let index_uid: Option<Vec<_>> = index_uid.and_then(fold_star_or);
 
@@ -332,47 +426,27 @@ async fn get_tasks(
         Some(&req),
     );
 
-    // TODO: Lo: use `filter_out_inaccessible_indexes_from_query` here
-    let mut filters = index_scheduler::Query::default();
-
-    // Then we filter on potential indexes and make sure that the search filter
-    // restrictions are also applied.
-    match index_uid {
-        Some(indexes) => {
-            for name in indexes {
-                if search_rules.is_index_authorized(&name) {
-                    filters = filters.with_index(name.to_string());
-                }
-            }
-        }
-        None => {
-            if !search_rules.is_index_authorized("*") {
-                for (index, _policy) in search_rules.clone() {
-                    filters = filters.with_index(index.to_string());
-                }
-            }
-        }
-    };
-
-    if let Some(kinds) = type_ {
-        for kind in kinds {
-            filters = filters.with_kind(kind);
-        }
-    }
-
-    if let Some(statuses) = status {
-        for status in statuses {
-            filters = filters.with_status(status);
-        }
-    }
-
-    filters.from = from;
     // We +1 just to know if there is more after this "page" or not.
     let limit = limit.saturating_add(1);
-    filters.limit = Some(limit);
+
+    let query = index_scheduler::Query {
+        limit: Some(limit),
+        from,
+        status,
+        kind: type_,
+        index_uid,
+        uid,
+        before_enqueued_at,
+        after_enqueued_at,
+        before_started_at,
+        after_started_at,
+        before_finished_at,
+        after_finished_at,
+    };
+    let query = filter_out_inaccessible_indexes_from_query(&index_scheduler, &query);
 
     let mut tasks_results: Vec<TaskView> = index_scheduler
-        .get_tasks(filters)?
+        .get_tasks(query)?
         .into_iter()
         .map(|t| TaskView::from_task(&t))
         .collect();
@@ -461,4 +535,127 @@ fn filter_out_inaccessible_indexes_from_query<const ACTION: u8>(
     };
 
     query
+}
+
+/// Deserialize a datetime optional string using rfc3339, assuming midnight and UTC+0 if not specified
+pub mod rfc3339_date_or_datetime {
+    #[allow(clippy::wildcard_imports)]
+    use super::*;
+    use serde::Deserializer;
+    use time::format_description::well_known::iso8601::{Config, EncodedConfig};
+    use time::format_description::well_known::{Iso8601, Rfc3339};
+    use time::{Date, PrimitiveDateTime, Time};
+    const SERDE_CONFIG: EncodedConfig = Config::DEFAULT.set_year_is_six_digits(true).encode();
+
+    /// Deserialize an [`Option<OffsetDateTime>`] from its ISO 8601 representation.
+    pub fn deserialize<'a, D: Deserializer<'a>>(
+        deserializer: D,
+    ) -> Result<Option<OffsetDateTime>, D::Error> {
+        deserializer.deserialize_option(Visitor)
+    }
+    struct Visitor;
+
+    #[derive(Debug)]
+    struct DeserializeError;
+
+    impl<'a> serde::de::Visitor<'a> for Visitor {
+        type Value = Option<OffsetDateTime>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("an rfc3339- or iso8601-formatted datetime")
+        }
+        fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Option<OffsetDateTime>, E> {
+            let datetime = OffsetDateTime::parse(value, &Rfc3339)
+                .or_else(|_e| OffsetDateTime::parse(value, &Iso8601::<SERDE_CONFIG>))
+                .or_else(|_e| {
+                    PrimitiveDateTime::parse(value, &Iso8601::<SERDE_CONFIG>)
+                        .map(|x| x.assume_utc())
+                })
+                .or_else(|_e| {
+                    Date::parse(value, &Iso8601::<SERDE_CONFIG>)
+                        .map(|date| date.with_time(Time::MIDNIGHT).assume_utc())
+                })
+                .map_err(|_e| {
+                    serde::de::Error::custom(
+                        "could not parse an rfc3339- or iso8601-formatted date",
+                    )
+                })?;
+
+            Ok(Some(datetime))
+        }
+        fn visit_some<D: Deserializer<'a>>(
+            self,
+            deserializer: D,
+        ) -> Result<Option<OffsetDateTime>, D::Error> {
+            deserializer.deserialize_str(Visitor)
+        }
+
+        fn visit_none<E: serde::de::Error>(self) -> Result<Option<OffsetDateTime>, E> {
+            Ok(None)
+        }
+
+        fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::routes::tasks::TaskDeletionQuery;
+    use meili_snap::snapshot;
+
+    #[test]
+    fn deserialize_task_deletion_query_datetime() {
+        {
+            let json = r#" { "afterEnqueuedAt": "2021" } "#;
+            let err = serde_json::from_str::<TaskDeletionQuery>(json).unwrap_err();
+            snapshot!(format!("{err}"), @"could not parse an rfc3339- or iso8601-formatted date at line 1 column 30");
+        }
+        {
+            let json = r#" { "afterEnqueuedAt": "2021-12" } "#;
+            let err = serde_json::from_str::<TaskDeletionQuery>(json).unwrap_err();
+            snapshot!(format!("{err}"), @"could not parse an rfc3339- or iso8601-formatted date at line 1 column 33");
+        }
+        {
+            let json = r#" { "afterEnqueuedAt": "2021-12-03" } "#;
+            let query = serde_json::from_str::<TaskDeletionQuery>(json).unwrap();
+            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"2021-12-03 0:00:00.0 +00:00:00");
+        }
+        {
+            let json = r#" { "afterEnqueuedAt": "2021-12-03T23" } "#;
+            let err = serde_json::from_str::<TaskDeletionQuery>(json).unwrap_err();
+            snapshot!(format!("{err}"), @"could not parse an rfc3339- or iso8601-formatted date at line 1 column 39");
+        }
+        {
+            let json = r#" { "afterEnqueuedAt": "2021-12-03T23:45" } "#;
+            let query = serde_json::from_str::<TaskDeletionQuery>(json).unwrap();
+            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"2021-12-03 23:45:00.0 +00:00:00");
+        }
+        {
+            let json = r#" { "afterEnqueuedAt": "2021-12-03T23:45:23" } "#;
+            let query = serde_json::from_str::<TaskDeletionQuery>(json).unwrap();
+            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"2021-12-03 23:45:23.0 +00:00:00");
+        }
+        {
+            let json = r#" { "afterEnqueuedAt": "2021-12-03T23:45:23 +01:00" } "#;
+            let err = serde_json::from_str::<TaskDeletionQuery>(json).unwrap_err();
+            snapshot!(format!("{err}"), @"could not parse an rfc3339- or iso8601-formatted date at line 1 column 52");
+        }
+        {
+            let json = r#" { "afterEnqueuedAt": "2021-12-03T23:45:23+01:00" } "#;
+            let query = serde_json::from_str::<TaskDeletionQuery>(json).unwrap();
+            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"2021-12-03 23:45:23.0 +01:00:00");
+        }
+        {
+            let json = r#" { "afterEnqueuedAt": "1997-11-12T09:55:06.000000000-06:00" } "#;
+            let query = serde_json::from_str::<TaskDeletionQuery>(json).unwrap();
+            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"1997-11-12 9:55:06.0 -06:00:00");
+        }
+        {
+            let json = r#" { "afterEnqueuedAt": "1997-11-12T09:55:06.000000000Z" } "#;
+            let query = serde_json::from_str::<TaskDeletionQuery>(json).unwrap();
+            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"1997-11-12 9:55:06.0 +00:00:00");
+        }
+    }
 }
