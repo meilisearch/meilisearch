@@ -970,11 +970,7 @@ impl IndexScheduler {
     /// Delete each given task from all the databases (if it is deleteable).
     ///
     /// Return the number of tasks that were actually deleted.
-    fn delete_matched_tasks(
-        &self,
-        wtxn: &mut RwTxn,
-        matched_tasks: &RoaringBitmap,
-    ) -> Result<usize> {
+    fn delete_matched_tasks(&self, wtxn: &mut RwTxn, matched_tasks: &RoaringBitmap) -> Result<u64> {
         // 1. Remove from this list the tasks that we are not allowed to delete
         let enqueued_tasks = self.get_status(wtxn, Status::Enqueued)?;
         let processing_tasks = &self.processing_tasks.read().unwrap().processing.clone();
@@ -1021,7 +1017,7 @@ impl IndexScheduler {
             self.all_tasks.delete(wtxn, &BEU32::new(task))?;
         }
 
-        Ok(to_delete_tasks.len() as usize)
+        Ok(to_delete_tasks.len())
     }
 
     /// Cancel each given task from all the databases (if it is cancelable).
@@ -1032,7 +1028,7 @@ impl IndexScheduler {
         wtxn: &mut RwTxn,
         cancel_task_id: TaskId,
         matched_tasks: &RoaringBitmap,
-    ) -> Result<usize> {
+    ) -> Result<u64> {
         let now = OffsetDateTime::now_utc();
 
         // 1. Remove from this list the tasks that we are not allowed to cancel
@@ -1050,6 +1046,6 @@ impl IndexScheduler {
             self.update_task(wtxn, &task)?;
         }
 
-        Ok(tasks_to_cancel.len() as usize)
+        Ok(tasks_to_cancel.len())
     }
 }
