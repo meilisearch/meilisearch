@@ -130,6 +130,10 @@ impl IndexMapper {
         Ok(())
     }
 
+    pub fn exists(&self, rtxn: &RoTxn, name: &str) -> Result<bool> {
+        Ok(self.index_mapping.get(rtxn, name)?.is_some())
+    }
+
     /// Return an index, may open it if it wasn't already opened.
     pub fn index(&self, rtxn: &RoTxn, name: &str) -> Result<Index> {
         let uuid = self
