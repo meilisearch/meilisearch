@@ -80,8 +80,8 @@ impl IndexScheduler {
             })?;
         }
 
-        assert!(
-            old_task.enqueued_at != task.enqueued_at,
+        assert_eq!(
+            old_task.enqueued_at, task.enqueued_at,
             "Cannot update a task's enqueued_at time"
         );
         if old_task.started_at != task.started_at {
