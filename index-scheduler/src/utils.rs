@@ -1,10 +1,15 @@
 //! Utility functions on the DBs. Mainly getter and setters.
 
-use meilisearch_types::heed::{types::DecodeIgnore, RoTxn, RwTxn};
-use meilisearch_types::milli::BEU32;
-use roaring::{MultiOps, RoaringBitmap};
+use std::ops::Bound;
 
-use crate::{Error, IndexScheduler, Result, Task, TaskId};
+use meilisearch_types::heed::types::OwnedType;
+use meilisearch_types::heed::Database;
+use meilisearch_types::heed::{types::DecodeIgnore, RoTxn, RwTxn};
+use meilisearch_types::milli::{CboRoaringBitmapCodec, BEU32};
+use roaring::{MultiOps, RoaringBitmap};
+use time::OffsetDateTime;
+
+use crate::{Error, IndexScheduler, Result, Task, TaskId, BEI128};
 use meilisearch_types::tasks::{Kind, Status};
 
 impl IndexScheduler {
@@ -73,6 +78,26 @@ impl IndexScheduler {
             self.update_kind(wtxn, task.kind.as_kind(), |bitmap| {
                 bitmap.insert(task.uid);
             })?;
+        }
+
+        if old_task.enqueued_at != task.enqueued_at {
+            unreachable!("Cannot update a task's enqueued_at time");
+        }
+        if old_task.started_at != task.started_at {
+            if old_task.started_at.is_some() {
+                unreachable!("Cannot update a task's started_at time");
+            }
+            if let Some(started_at) = task.started_at {
+                insert_task_datetime(wtxn, self.started_at, started_at, task.uid)?;
+            }
+        }
+        if old_task.finished_at != task.finished_at {
+            if old_task.finished_at.is_some() {
+                unreachable!("Cannot update a task's finished_at time");
+            }
+            if let Some(finished_at) = task.finished_at {
+                insert_task_datetime(wtxn, self.finished_at, finished_at, task.uid)?;
+            }
         }
 
         self.all_tasks.put(wtxn, &BEU32::new(task.uid), task)?;
@@ -156,5 +181,75 @@ impl IndexScheduler {
         self.put_kind(wtxn, kind, &tasks)?;
 
         Ok(())
+    }
+}
+
+pub(crate) fn insert_task_datetime(
+    wtxn: &mut RwTxn,
+    database: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
+
+    time: OffsetDateTime,
+    task_id: TaskId,
+) -> Result<()> {
+    let timestamp = BEI128::new(time.unix_timestamp_nanos());
+    let mut task_ids = if let Some(existing) = database.get(&wtxn, &timestamp)? {
+        existing
+    } else {
+        RoaringBitmap::new()
+    };
+    task_ids.insert(task_id);
+    database.put(wtxn, &timestamp, &RoaringBitmap::from_iter([task_id]))?;
+    Ok(())
+}
+pub(crate) fn remove_task_datetime(
+    wtxn: &mut RwTxn,
+    database: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
+
+    time: OffsetDateTime,
+    task_id: TaskId,
+) -> Result<()> {
+    let timestamp = BEI128::new(time.unix_timestamp_nanos());
+    if let Some(mut existing) = database.get(&wtxn, &timestamp)? {
+        existing.remove(task_id);
+        if existing.is_empty() {
+            database.delete(wtxn, &timestamp)?;
+        } else {
+            database.put(wtxn, &timestamp, &RoaringBitmap::from_iter([task_id]))?;
+        }
+    }
+
+    Ok(())
+}
+pub(crate) fn keep_tasks_within_datetimes(
+    rtxn: &RoTxn,
+    tasks: &mut RoaringBitmap,
+    database: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
+    after: Option<OffsetDateTime>,
+    before: Option<OffsetDateTime>,
+) -> Result<()> {
+    let (start, end) = match (&after, &before) {
+        (None, None) => return Ok(()),
+        (None, Some(before)) => (Bound::Unbounded, Bound::Excluded(*before)),
+        (Some(after), None) => (Bound::Excluded(*after), Bound::Unbounded),
+        (Some(after), Some(before)) => (Bound::Excluded(*after), Bound::Excluded(*before)),
+    };
+    let mut collected_task_ids = RoaringBitmap::new();
+    let start = map_bound(start, |b| BEI128::new(b.unix_timestamp_nanos()));
+    let end = map_bound(end, |b| BEI128::new(b.unix_timestamp_nanos()));
+    let iter = database.range(&rtxn, &(start, end))?;
+    for r in iter {
+        let (_timestamp, task_ids) = r?;
+        collected_task_ids |= task_ids;
+    }
+    *tasks &= collected_task_ids;
+    Ok(())
+}
+
+// TODO: remove when Bound::map ( https://github.com/rust-lang/rust/issues/86026 ) is available on stable
+fn map_bound<T, U>(bound: Bound<T>, map: impl FnOnce(T) -> U) -> Bound<U> {
+    match bound {
+        Bound::Included(x) => Bound::Included(map(x)),
+        Bound::Excluded(x) => Bound::Excluded(map(x)),
+        Bound::Unbounded => Bound::Unbounded,
     }
 }
