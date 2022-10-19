@@ -128,6 +128,14 @@ struct ProcessingTasks {
 }
 
 impl ProcessingTasks {
+    /// Creates an empty `ProcessingAt` struct.
+    fn new() -> ProcessingTasks {
+        ProcessingTasks {
+            started_at: OffsetDateTime::now_utc(),
+            processing: RoaringBitmap::new(),
+        }
+    }
+
     /// Stores the currently processing tasks, and the date time at which it started.
     fn start_processing_at(&mut self, started_at: OffsetDateTime, processing: RoaringBitmap) {
         self.started_at = started_at;
@@ -242,16 +250,12 @@ impl IndexScheduler {
         options.max_dbs(6);
 
         let env = options.open(tasks_path)?;
-        let processing_tasks = ProcessingTasks {
-            started_at: OffsetDateTime::now_utc(),
-            processing: RoaringBitmap::new(),
-        };
         let file_store = FileStore::new(&update_file_path)?;
 
         // allow unreachable_code to get rids of the warning in the case of a test build.
         let this = Self {
             must_stop_processing: MustStopProcessing::default(),
-            processing_tasks: Arc::new(RwLock::new(processing_tasks)),
+            processing_tasks: Arc::new(RwLock::new(ProcessingTasks::new())),
             file_store,
             all_tasks: env.create_database(Some(db_name::ALL_TASKS))?,
             status: env.create_database(Some(db_name::STATUS))?,
