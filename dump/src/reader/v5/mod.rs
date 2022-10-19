@@ -295,7 +295,7 @@ pub(crate) mod test {
         meili_snap::snapshot_hash!(meili_snap::json_string!(update_file), @"7b8889539b669c7b9ddba448bafa385d");
 
         // keys
-        let keys = dump.keys().collect::<Result<Vec<_>>>().unwrap();
+        let keys = dump.keys().unwrap().collect::<Result<Vec<_>>>().unwrap();
         meili_snap::snapshot_hash!(meili_snap::json_string!(keys), @"091ddad754f3cc7cf1d03a477855e819");
 
         // indexes
