@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::BufWriter;
-use std::sync::atomic::Ordering::Relaxed;
 
 use crate::{autobatcher::BatchKind, Error, IndexScheduler, Result, TaskId};
 
