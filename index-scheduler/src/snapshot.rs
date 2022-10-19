@@ -80,8 +80,6 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     snap.push_str(&snapshot_file_store(file_store));
     snap.push_str("\n----------------------------------------------------------------------\n");
 
-    rtxn.commit().unwrap();
-
     snap
 }
 

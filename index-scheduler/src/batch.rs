@@ -686,8 +686,7 @@ impl IndexScheduler {
                     | IndexOperation::DocumentClear { ref index_uid, .. } => {
                         // only get the index, don't create it
                         let rtxn = self.env.read_txn()?;
-                        let r = self.index_mapper.index(&rtxn, index_uid)?;
-                        r
+                        self.index_mapper.index(&rtxn, index_uid)?
                     }
                     IndexOperation::DocumentImport { ref index_uid, allow_index_creation, .. }
                     | IndexOperation::Settings { ref index_uid, allow_index_creation, .. }
@@ -701,8 +700,7 @@ impl IndexScheduler {
                             index
                         } else {
                             let rtxn = self.env.read_txn()?;
-                            let r = self.index_mapper.index(&rtxn, index_uid)?;
-                            r
+                            self.index_mapper.index(&rtxn, index_uid)?
                         }
                     }
                 };
