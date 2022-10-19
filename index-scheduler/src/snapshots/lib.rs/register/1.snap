@@ -7,10 +7,10 @@ source: index-scheduler/src/lib.rs
 ----------------------------------------------------------------------
 ### All Tasks:
 0 {uid: 0, status: enqueued, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
-1 {uid: 1, status: enqueued, details: { received_documents: 12, indexed_documents: None }, kind: DocumentImport { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 12, allow_index_creation: true }}
-2 {uid: 2, status: enqueued, kind: CancelTask { tasks: [0, 1] }}
-3 {uid: 3, status: enqueued, details: { received_documents: 50, indexed_documents: None }, kind: DocumentImport { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 50, allow_index_creation: true }}
-4 {uid: 4, status: enqueued, details: { received_documents: 5000, indexed_documents: None }, kind: DocumentImport { index_uid: "doggo", primary_key: Some("bone"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000002, documents_count: 5000, allow_index_creation: true }}
+1 {uid: 1, status: enqueued, details: { received_documents: 12, indexed_documents: Some(0) }, kind: DocumentImport { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 12, allow_index_creation: true }}
+2 {uid: 2, status: enqueued, details: { matched_tasks: 2, canceled_tasks: None, original_query: "uid=0,1" }, kind: TaskCancelation { query: "uid=0,1", tasks: RoaringBitmap<[0, 1]> }}
+3 {uid: 3, status: enqueued, details: { received_documents: 50, indexed_documents: Some(0) }, kind: DocumentImport { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 50, allow_index_creation: true }}
+4 {uid: 4, status: enqueued, details: { received_documents: 5000, indexed_documents: Some(0) }, kind: DocumentImport { index_uid: "doggo", primary_key: Some("bone"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000002, documents_count: 5000, allow_index_creation: true }}
 ----------------------------------------------------------------------
 ### Status:
 enqueued [0,1,2,3,4,]
@@ -18,7 +18,7 @@ enqueued [0,1,2,3,4,]
 ### Kind:
 "documentImport" [1,3,4,]
 "indexCreation" [0,]
-"cancelTask" [2,]
+"taskCancelation" [2,]
 ----------------------------------------------------------------------
 ### Index Tasks:
 catto [0,1,3,]
