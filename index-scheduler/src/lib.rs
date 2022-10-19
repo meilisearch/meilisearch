@@ -13,7 +13,6 @@ use dump::{KindDump, TaskDump, UpdateFile};
 pub use error::Error;
 use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
-use serde::Serialize;
 use utils::keep_tasks_within_datetimes;
 
 use std::path::PathBuf;
@@ -37,28 +36,20 @@ use crate::index_mapper::IndexMapper;
 
 type BEI128 = meilisearch_types::heed::zerocopy::I128<meilisearch_types::heed::byteorder::BE>;
 
-#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct Query {
     pub limit: Option<u32>,
     pub from: Option<u32>,
     pub status: Option<Vec<Status>>,
-    #[serde(rename = "type")]
     pub kind: Option<Vec<Kind>>,
     pub index_uid: Option<Vec<String>>,
     pub uid: Option<Vec<TaskId>>,
 
-    #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
     pub before_enqueued_at: Option<OffsetDateTime>,
-    #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
     pub after_enqueued_at: Option<OffsetDateTime>,
-    #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
     pub before_started_at: Option<OffsetDateTime>,
-    #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
     pub after_started_at: Option<OffsetDateTime>,
-    #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
     pub before_finished_at: Option<OffsetDateTime>,
-    #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
     pub after_finished_at: Option<OffsetDateTime>,
 }
 
