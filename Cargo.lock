@@ -2195,7 +2195,7 @@ dependencies = [
  "rayon",
  "regex",
  "reqwest",
- "roaring 0.9.0",
+ "roaring",
  "rustls",
  "serde",
  "serde_json",
@@ -2278,7 +2278,7 @@ dependencies = [
  "once_cell",
  "ordered-float",
  "rayon",
- "roaring 0.10.1",
+ "roaring",
  "rstar",
  "serde",
  "serde_json",
@@ -3053,17 +3053,6 @@ checksum = "88aa938cda42a0cf62a20cfe8d139ff1af20c2e681212b5b34adb5a58333f222"
 dependencies = [
  "lazy_static",
  "regex",
-]
-
-[[package]]
-name = "roaring"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd539cab4e32019956fe7e0cf160bb6d4802f4be2b52c4253d76d3bb0f85a5f7"
-dependencies = [
- "bytemuck",
- "byteorder",
- "retain_mut",
 ]
 
 [[package]]
