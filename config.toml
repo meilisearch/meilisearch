@@ -1,129 +1,135 @@
 # This file shows the default configuration of Meilisearch.
-# All variables are defined here https://docs.meilisearch.com/learn/configuration/instance_options.html#environment-variables
+# All variables are defined here: https://docs.meilisearch.com/learn/configuration/instance_options.html#environment-variables
 
 db_path = "./data.ms"
-# The destination where the database must be created.
+# Designates the location where database files will be created and retrieved.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#database-path
 
-env = "development" # Possible values: [development, production]
-# This environment variable must be set to `production` if you are running in production.
-# More logs wiil be displayed if the server is running in development mode. Setting the master
-# key is optional; hence no security on the updates routes. This
-# is useful to debug when integrating the engine with another service.
+env = "development"
+# Configures the instance's environment. Value must be either `production` or `development`.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#environment
 
-http_addr = "127.0.0.1:7700"
+http_addr = "localhost:7700"
 # The address on which the HTTP server will listen.
 
-# master_key = "MASTER_KEY"
+# master_key = "YOUR_MASTER_KEY_VALUE"
 # Sets the instance's master key, automatically protecting all routes except GET /health.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#master-key
 
-# no_analytics = false
-# Do not send analytics to Meilisearch.
-
-disable_auto_batching = false
-# The engine will disable task auto-batching, and will sequencialy compute each task one by one.
-
-
-### DUMP
-
-dumps_dir = "dumps/"
-# Folder where dumps are created when the dump route is called.
-
-# import_dump = "./path/to/my/file.dump"
-# Import a dump from the specified path, must be a `.dump` file.
-
-ignore_missing_dump = false
-# If the dump doesn't exist, load or create the database specified by `db_path` instead.
-
-ignore_dump_if_db_exists = false
-# Ignore the dump if a database already exists, and load that database instead.
-
-###
-
-
-log_level = "INFO" # Possible values: [ERROR, WARN, INFO, DEBUG, TRACE]
-# Set the log level.
-
-
-### INDEX
-
-max_index_size = "100 GiB"
-# The maximum size, in bytes, of the main LMDB database directory.
-
-# max_indexing_memory = "2 GiB"
-# The maximum amount of memory the indexer will use. 
-#
-# In case the engine is unable to retrieve the available memory the engine will try to use
-# the memory it needs but without real limit, this can lead to Out-Of-Memory issues and it
-# is recommended to specify the amount of memory to use.
-#
-# /!\ The default value is system dependant /!\
-
-# max_indexing_threads = 4
-# The maximum number of threads the indexer will use. If the number set is higher than the
-# real number of cores available in the machine, it will use the maximum number of
-# available cores.
-#
-# It defaults to half of the available threads.
-
-###
-
-
-max_task_db_size = "100 GiB"
-# The maximum size, in bytes, of the update LMDB database directory.
+# no_analytics = true
+# Deactivates Meilisearch's built-in telemetry when provided.
+# Meilisearch automatically collects data from all instances that do not opt out using this flag.
+# All gathered data is used solely for the purpose of improving Meilisearch, and can be deleted at any time.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#disable-analytics
 
 http_payload_size_limit = "100 MB"
-# The maximum size, in bytes, of accepted JSON payloads.
+# Sets the maximum size of accepted payloads.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#payload-limit-size
+
+log_level = "INFO"
+# Defines how much detail should be present in Meilisearch's logs.
+# Meilisearch currently supports five log levels, listed in order of increasing verbosity: `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE`
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#log-level
+
+max_index_size = "100 GiB"
+# Sets the maximum size of the index.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#max-index-size
+
+max_task_db_size = "100 GiB"
+# Sets the maximum size of the task database.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#max-task-db-size
+
+# max_indexing_memory = "2 GiB"
+# Sets the maximum amount of RAM Meilisearch can use when indexing.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#max-indexing-memory
+
+# max_indexing_threads = 4
+# Sets the maximum number of threads Meilisearch can use during indexing.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#max-indexing-threads
+
+disable_auto_batching = false
+# Deactivates auto-batching when provided.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#disable-auto-batching
 
 
-### SNAPSHOT
+#############
+### DUMPS ###
+#############
+
+dumps_dir = "dumps/"
+# Sets the directory where Meilisearch will create dump files.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#dumps-destination
+
+# import_dump = "./path/to/my/file.dump"
+# Imports the dump file located at the specified path. Path must point to a .dump file.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#import-dump
+
+ignore_missing_dump = false
+# Prevents Meilisearch from throwing an error when `import_dump` does not point to a valid dump file.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#ignore-missing-dump
+
+ignore_dump_if_db_exists = false
+# Prevents a Meilisearch instance with an existing database from throwing an error when using `import_dump`.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#ignore-dump-if-db-exists
+
+
+#################
+### SNAPSHOTS ###
+#################
 
 schedule_snapshot = false
-# Activate snapshot scheduling.
+# Activates scheduled snapshots when provided.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#schedule-snapshot-creation
 
 snapshot_dir = "snapshots/"
-# Defines the directory path where Meilisearch will create a snapshot each snapshot_interval_sec.
+# Sets the directory where Meilisearch will store snapshots.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#snapshot-destination
 
 snapshot_interval_sec = 86400
-# Defines time interval, in seconds, between each snapshot creation.
+# Defines the interval between each snapshot. Value must be given in seconds.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#snapshot-interval
 
 # import_snapshot = "./path/to/my/snapshot"
-# Defines the path of the snapshot file to import. This option will, by default, stop the
-# process if a database already exists, or if no snapshot exists at the given path. If this
-# option is not specified, no snapshot is imported.
+# Launches Meilisearch after importing a previously-generated snapshot at the given filepath.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#import-snapshot
 
 ignore_missing_snapshot = false
-# The engine will ignore a missing snapshot and not return an error in such a case.
+# Prevents a Meilisearch instance from throwing an error when `import_snapshot` does not point to a valid snapshot file.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#ignore-missing-snapshot
 
 ignore_snapshot_if_db_exists = false
-# The engine will skip snapshot importation and not return an error in such a case.
+# Prevents a Meilisearch instance with an existing database from throwing an error when using `import_snapshot`.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#ignore-snapshot-if-db-exists
 
-###
 
-
-### SSL
+###########
+### SSL ###
+###########
 
 # ssl_auth_path = "./path/to/root"
-# Enable client authentication, and accept certificates signed by those roots provided in CERTFILE.
+# Enables client authentication in the specified path.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#ssl-authentication-path
 
-# ssl_cert_path = "./path/to/CERTFILE"
-# Read server certificates from CERTFILE. This should contain PEM-format certificates in
-# the right order (the first certificate should certify KEYFILE, the last should be a root
-# CA).
+# ssl_cert_path = "./path/to/certfile"
+# Sets the server's SSL certificates.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#ssl-certificates-path
 
 # ssl_key_path = "./path/to/private-key"
-# Read the private key from KEYFILE.  This should be an RSA private key or PKCS8-encoded
-# private key, in PEM format.
+# Sets the server's SSL key files.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#ssl-key-path
 
-# ssl_ocsp_path = "./path/to/OCSPFILE"
-# Read DER-encoded OCSP response from OCSPFILE and staple to certificate. Optional.
+# ssl_ocsp_path = "./path/to/ocsp-file"
+# Sets the server's OCSP file.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#ssl-ocsp-path
 
 ssl_require_auth = false
-# Send a fatal alert if the client does not complete client authentication.
+# Makes SSL authentication mandatory.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#ssl-require-auth
 
 ssl_resumption = false
-# SSL support session resumption.
- 
-ssl_tickets = false
-# SSL support tickets.
+# Activates SSL session resumption.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#ssl-resumption
 
-###
+ssl_tickets = false
+# Activates SSL tickets.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#ssl-tickets
