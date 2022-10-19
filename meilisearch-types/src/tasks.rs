@@ -192,7 +192,7 @@ impl KindWithContent {
                 documents_count, ..
             } => Some(Details::DocumentAddition {
                 received_documents: *documents_count,
-                indexed_documents: Some(0),
+                indexed_documents: None,
             }),
             KindWithContent::DocumentDeletion {
                 index_uid: _,
@@ -223,6 +223,50 @@ impl KindWithContent {
             KindWithContent::TaskDeletion { query, tasks } => Some(Details::TaskDeletion {
                 matched_tasks: tasks.len(),
                 deleted_tasks: None,
+                original_query: query.clone(),
+            }),
+            KindWithContent::DumpExport { .. } => None,
+            KindWithContent::Snapshot => None,
+        }
+    }
+
+    pub fn default_finished_details(&self) -> Option<Details> {
+        match self {
+            KindWithContent::DocumentImport {
+                documents_count, ..
+            } => Some(Details::DocumentAddition {
+                received_documents: *documents_count,
+                indexed_documents: Some(0),
+            }),
+            KindWithContent::DocumentDeletion {
+                index_uid: _,
+                documents_ids,
+            } => Some(Details::DocumentDeletion {
+                received_document_ids: documents_ids.len(),
+                deleted_documents: Some(0),
+            }),
+            KindWithContent::DocumentClear { .. } => Some(Details::ClearAll {
+                deleted_documents: None,
+            }),
+            KindWithContent::Settings { new_settings, .. } => Some(Details::Settings {
+                settings: new_settings.clone(),
+            }),
+            KindWithContent::IndexDeletion { .. } => None,
+            KindWithContent::IndexCreation { primary_key, .. }
+            | KindWithContent::IndexUpdate { primary_key, .. } => Some(Details::IndexInfo {
+                primary_key: primary_key.clone(),
+            }),
+            KindWithContent::IndexSwap { .. } => {
+                todo!()
+            }
+            KindWithContent::TaskCancelation { query, tasks } => Some(Details::TaskCancelation {
+                matched_tasks: tasks.len(),
+                canceled_tasks: Some(0),
+                original_query: query.clone(),
+            }),
+            KindWithContent::TaskDeletion { query, tasks } => Some(Details::TaskDeletion {
+                matched_tasks: tasks.len(),
+                deleted_tasks: Some(0),
                 original_query: query.clone(),
             }),
             KindWithContent::DumpExport { .. } => None,
