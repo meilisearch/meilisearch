@@ -405,12 +405,12 @@ pub enum Details {
     },
     TaskCancelation {
         matched_tasks: u64,
-        canceled_tasks: Option<usize>,
+        canceled_tasks: Option<u64>,
         original_query: String,
     },
     TaskDeletion {
         matched_tasks: u64,
-        deleted_tasks: Option<usize>,
+        deleted_tasks: Option<u64>,
         original_query: String,
     },
     Dump {
