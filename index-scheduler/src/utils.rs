@@ -80,15 +80,24 @@ impl IndexScheduler {
             })?;
         }
 
-        assert!(old_task.enqueued_at != task.enqueued_at, "Cannot update a task's enqueued_at time");
+        assert!(
+            old_task.enqueued_at != task.enqueued_at,
+            "Cannot update a task's enqueued_at time"
+        );
         if old_task.started_at != task.started_at {
-            assert!(old_task.started_at.is_none(), "Cannot update a task's started_at time");
+            assert!(
+                old_task.started_at.is_none(),
+                "Cannot update a task's started_at time"
+            );
             if let Some(started_at) = task.started_at {
                 insert_task_datetime(wtxn, self.started_at, started_at, task.uid)?;
             }
         }
         if old_task.finished_at != task.finished_at {
-            assert!(old_task.finished_at.is_none(), "Cannot update a task's finished_at time");
+            assert!(
+                old_task.finished_at.is_none(),
+                "Cannot update a task's finished_at time"
+            );
             if let Some(finished_at) = task.finished_at {
                 insert_task_datetime(wtxn, self.finished_at, finished_at, task.uid)?;
             }
@@ -190,7 +199,6 @@ pub(crate) fn insert_task_datetime(
     database.put(wtxn, &timestamp, &RoaringBitmap::from_iter([task_id]))?;
     Ok(())
 }
-
 
 pub(crate) fn remove_task_datetime(
     wtxn: &mut RwTxn,
