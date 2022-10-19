@@ -211,7 +211,6 @@ pub struct TaskDateQuery {
         deserialize_with = "rfc3339_date_or_datetime::deserialize"
     )]
     before_started_at: Option<OffsetDateTime>,
-
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
