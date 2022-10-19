@@ -438,12 +438,9 @@ impl IndexScheduler {
             (bitmap.insert(task.uid));
         })?;
 
-        match wtxn.commit() {
-            Ok(()) => (),
-            _e @ Err(_) => {
-                self.delete_persisted_task_data(&task)?;
-                // _e?;
-            }
+        if let Err(e) = wtxn.commit() {
+            self.delete_persisted_task_data(&task)?;
+            return Err(e.into());
         }
 
         // If the registered task is a task cancelation
