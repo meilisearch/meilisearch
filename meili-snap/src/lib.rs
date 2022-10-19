@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::{collections::HashMap, path::Path};
 
+pub use insta;
+
 static SNAPSHOT_NAMES: Lazy<Mutex<HashMap<PathBuf, usize>>> = Lazy::new(|| Mutex::default());
 
 /// Return the md5 hash of the given string
@@ -81,8 +83,8 @@ macro_rules! snapshot_hash {
         settings.bind(|| {
             let snap = format!("{}", $value);
             let hash_snap = $crate::hash_snapshot(&snap);
-            insta::assert_snapshot!(hash_snap, @$inline);
-            insta::assert_snapshot!(format!("{}.full", snap_name), snap);
+            meili_snap::insta::assert_snapshot!(hash_snap, @$inline);
+            meili_snap::insta::assert_snapshot!(format!("{}.full", snap_name), snap);
         });
     };
     ($value:expr, name: $name:expr, @$inline:literal) => {
@@ -91,8 +93,8 @@ macro_rules! snapshot_hash {
         settings.bind(|| {
             let snap = format!("{}", $value);
             let hash_snap = $crate::hash_snapshot(&snap);
-            insta::assert_snapshot!(hash_snap, @$inline);
-            insta::assert_snapshot!(format!("{}.full", snap_name), snap);
+            meili_snap::insta::assert_snapshot!(hash_snap, @$inline);
+            meili_snap::insta::assert_snapshot!(format!("{}.full", snap_name), snap);
         });
     };
 }
@@ -132,7 +134,7 @@ macro_rules! snapshot {
         let (settings, snap_name) = $crate::default_snapshot_settings_for_test(Some(&snap_name));
         settings.bind(|| {
             let snap = format!("{}", $value);
-            insta::assert_snapshot!(format!("{}", snap_name), snap);
+            meili_snap::insta::assert_snapshot!(format!("{}", snap_name), snap);
         });
     };
     ($value:expr, @$inline:literal) => {
@@ -141,21 +143,21 @@ macro_rules! snapshot {
         let (settings, _) = $crate::default_snapshot_settings_for_test(Some("_dummy_argument"));
         settings.bind(|| {
             let snap = format!("{}", $value);
-            insta::assert_snapshot!(snap, @$inline);
+            meili_snap::insta::assert_snapshot!(snap, @$inline);
         });
     };
     ($value:expr) => {
         let (settings, snap_name) = $crate::default_snapshot_settings_for_test(None);
         settings.bind(|| {
             let snap = format!("{}", $value);
-            insta::assert_snapshot!(format!("{}", snap_name), snap);
+            meili_snap::insta::assert_snapshot!(format!("{}", snap_name), snap);
         });
     };
 }
 
 #[cfg(test)]
 mod tests {
-
+    use crate as meili_snap;
     #[test]
     fn snap() {
         snapshot_hash!(10, @"d3d9446802a44259755d38e6d163e820");
@@ -180,6 +182,7 @@ mod tests {
     // Currently the name of this module is not part of the snapshot path
     // It does not bother me, but maybe it is worth changing later on.
     mod snap {
+        use crate as meili_snap;
         #[test]
         fn some_test() {
             snapshot_hash!(10, @"d3d9446802a44259755d38e6d163e820");
@@ -214,15 +217,15 @@ mod tests {
 macro_rules! json_string {
     ($value:expr, {$($k:expr => $v:expr),*$(,)?}) => {
         {
-            let (_, snap) = insta::_prepare_snapshot_for_redaction!($value, {$($k => $v),*}, Json, File);
+            let (_, snap) = meili_snap::insta::_prepare_snapshot_for_redaction!($value, {$($k => $v),*}, Json, File);
             snap
         }
     };
     ($value:expr) => {{
-        let value = insta::_macro_support::serialize_value(
+        let value = meili_snap::insta::_macro_support::serialize_value(
             &$value,
-            insta::_macro_support::SerializationFormat::Json,
-            insta::_macro_support::SnapshotLocation::File
+            meili_snap::insta::_macro_support::SerializationFormat::Json,
+            meili_snap::insta::_macro_support::SnapshotLocation::File
         );
         value
     }};

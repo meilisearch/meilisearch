@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fs::File;
 use std::io::BufWriter;
 
+use crate::utils;
 use crate::{autobatcher::BatchKind, Error, IndexScheduler, Result, TaskId};
 
 use dump::IndexMetadata;
@@ -1015,6 +1016,13 @@ impl IndexScheduler {
             // we can only delete succeeded, failed, and canceled tasks.
             // In each of those cases, the persisted data is supposed to
             // have been deleted already.
+            utils::remove_task_datetime(wtxn, self.enqueued_at, task.enqueued_at, task.uid)?;
+            if let Some(started_at) = task.started_at {
+                utils::remove_task_datetime(wtxn, self.started_at, started_at, task.uid)?;
+            }
+            if let Some(finished_at) = task.finished_at {
+                utils::remove_task_datetime(wtxn, self.finished_at, finished_at, task.uid)?;
+            }
         }
 
         for index in affected_indexes {

@@ -94,6 +94,7 @@ brotli = "3.3.4"
 manifest-dir-macros = "0.1.16"
 maplit = "1.0.2"
 urlencoding = "2.1.2"
+meili-snap = {path = "../meili-snap"}
 yaup = "0.2.1"
 temp-env = "0.3.1"
 
