@@ -11,7 +11,7 @@ impl IndexScheduler {
     pub(crate) fn all_task_ids(&self, rtxn: &RoTxn) -> Result<RoaringBitmap> {
         enum_iterator::all()
             .map(|s| self.get_status(&rtxn, s))
-            .r#union()
+            .union()
     }
 
     pub(crate) fn last_task_id(&self, rtxn: &RoTxn) -> Result<Option<TaskId>> {
