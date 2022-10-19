@@ -109,9 +109,9 @@ pub struct DetailsView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub matched_tasks: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub canceled_tasks: Option<Option<usize>>,
+    pub canceled_tasks: Option<Option<u64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub deleted_tasks: Option<Option<usize>>,
+    pub deleted_tasks: Option<Option<u64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_query: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
