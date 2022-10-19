@@ -22,10 +22,6 @@ enum AutobatchKind {
     IndexDeletion,
     IndexUpdate,
     IndexSwap,
-    TaskCancelation,
-    TaskDeletion,
-    DumpExport,
-    Snapshot,
 }
 
 impl AutobatchKind {
@@ -62,10 +58,12 @@ impl From<KindWithContent> for AutobatchKind {
             KindWithContent::IndexCreation { .. } => AutobatchKind::IndexCreation,
             KindWithContent::IndexUpdate { .. } => AutobatchKind::IndexUpdate,
             KindWithContent::IndexSwap { .. } => AutobatchKind::IndexSwap,
-            KindWithContent::TaskCancelation { .. } => AutobatchKind::TaskCancelation,
-            KindWithContent::TaskDeletion { .. } => AutobatchKind::TaskDeletion,
-            KindWithContent::DumpExport { .. } => AutobatchKind::DumpExport,
-            KindWithContent::Snapshot => AutobatchKind::Snapshot,
+            KindWithContent::TaskCancelation { .. }
+            | KindWithContent::TaskDeletion { .. }
+            | KindWithContent::DumpExport { .. }
+            | KindWithContent::Snapshot => {
+                panic!("The autobatcher should never be called with tasks that don't apply to an index.")
+            }
         }
     }
 }
@@ -154,9 +152,6 @@ impl BatchKind {
                 allow_index_creation,
                 settings_ids: vec![task_id],
             }),
-            K::DumpExport | K::Snapshot | K::TaskCancelation | K::TaskDeletion => {
-                unreachable!()
-            }
         }
     }
 
@@ -268,7 +263,7 @@ impl BatchKind {
                 BatchKind::Settings { settings_ids, allow_index_creation },
                 K::DocumentClear,
             ) => Continue(BatchKind::ClearAndSettings {
-                settings_ids: settings_ids,
+                settings_ids,
                 allow_index_creation,
                 other: vec![id],
             }),
@@ -378,9 +373,6 @@ impl BatchKind {
                     allow_index_creation,
                     import_ids,
                 })
-            }
-            (_, K::TaskCancelation | K::TaskDeletion | K::DumpExport | K::Snapshot) => {
-                unreachable!()
             }
             (
                 BatchKind::IndexCreation { .. }
