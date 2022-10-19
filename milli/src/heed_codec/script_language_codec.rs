@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-
 use std::str;
 
 use charabia::{Language, Script};
