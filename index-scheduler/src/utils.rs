@@ -10,7 +10,7 @@ use roaring::{MultiOps, RoaringBitmap};
 use time::OffsetDateTime;
 
 use crate::{Error, IndexScheduler, Result, Task, TaskId, BEI128};
-use meilisearch_types::tasks::{Kind, Status};
+use meilisearch_types::tasks::{Kind, KindWithContent, Status};
 
 impl IndexScheduler {
     pub(crate) fn all_task_ids(&self, rtxn: &RoTxn) -> Result<RoaringBitmap> {
@@ -245,5 +245,37 @@ fn map_bound<T, U>(bound: Bound<T>, map: impl FnOnce(T) -> U) -> Bound<U> {
         Bound::Included(x) => Bound::Included(map(x)),
         Bound::Excluded(x) => Bound::Excluded(map(x)),
         Bound::Unbounded => Bound::Unbounded,
+    }
+}
+
+pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
+    use KindWithContent as K;
+    let mut index_uids = vec![];
+    match &mut task.kind {
+        K::DocumentImport { index_uid, .. } => index_uids.push(index_uid),
+        K::DocumentDeletion { index_uid, .. } => index_uids.push(index_uid),
+        K::DocumentClear { index_uid } => index_uids.push(index_uid),
+        K::Settings { index_uid, .. } => index_uids.push(index_uid),
+        K::IndexDeletion { index_uid } => index_uids.push(index_uid),
+        K::IndexCreation { index_uid, .. } => index_uids.push(index_uid),
+        K::IndexUpdate { index_uid, .. } => index_uids.push(index_uid),
+        K::IndexSwap { swaps } => {
+            for (lhs, rhs) in swaps.iter_mut() {
+                if lhs == &swap.0 || lhs == &swap.1 {
+                    index_uids.push(lhs);
+                }
+                if rhs == &swap.0 || rhs == &swap.1 {
+                    index_uids.push(rhs);
+                }
+            }
+        }
+        K::TaskCancelation { .. } | K::TaskDeletion { .. } | K::DumpExport { .. } | K::Snapshot => (),
+    };
+    for index_uid in index_uids {
+        if index_uid == &swap.0 {
+            *index_uid = swap.1.to_owned();
+        } else if index_uid == &swap.1 {
+            *index_uid = swap.0.to_owned();
+        }
     }
 }
