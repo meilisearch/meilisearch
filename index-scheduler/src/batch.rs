@@ -74,6 +74,7 @@ pub(crate) enum Batch {
     IndexDeletion {
         index_uid: String,
         tasks: Vec<Task>,
+        index_has_been_created: bool,
     },
     IndexSwap {
         task: Task,
@@ -444,6 +445,7 @@ impl IndexScheduler {
             }
             BatchKind::IndexDeletion { ids } => Ok(Some(Batch::IndexDeletion {
                 index_uid,
+                index_has_been_created: must_create_index,
                 tasks: self.get_existing_tasks(rtxn, ids)?,
             })),
             BatchKind::IndexSwap { id } => {
@@ -796,18 +798,25 @@ impl IndexScheduler {
             }
             Batch::IndexDeletion {
                 index_uid,
+                index_has_been_created,
                 mut tasks,
             } => {
                 let wtxn = self.env.write_txn()?;
 
-                let number_of_documents = {
+                // it's possible that the index doesn't exist
+                let number_of_documents = || -> Result<u64> {
                     let index = self.index_mapper.index(&wtxn, &index_uid)?;
                     let index_rtxn = index.read_txn()?;
-                    index.number_of_documents(&index_rtxn)?
-                };
+                    Ok(index.number_of_documents(&index_rtxn)?)
+                }()
+                .unwrap_or_default();
 
                 // The write transaction is directly owned and commited inside.
-                self.index_mapper.delete_index(wtxn, &index_uid)?;
+                match self.index_mapper.delete_index(wtxn, &index_uid) {
+                    Ok(()) => (),
+                    Err(Error::IndexNotFound(_)) if index_has_been_created => (),
+                    Err(e) => return Err(e),
+                }
 
                 // We set all the tasks details to the default value.
                 for task in &mut tasks {
