@@ -88,7 +88,6 @@ pub(crate) enum IndexOperation {
         index_uid: String,
         primary_key: Option<String>,
         method: IndexDocumentsMethod,
-        allow_index_creation: bool,
         documents_counts: Vec<u64>,
         content_files: Vec<Uuid>,
         tasks: Vec<Task>,
@@ -106,7 +105,6 @@ pub(crate) enum IndexOperation {
         index_uid: String,
         // TODO what's that boolean, does it mean that it removes things or what?
         settings: Vec<(bool, Settings<Unchecked>)>,
-        allow_index_creation: bool,
         tasks: Vec<Task>,
     },
     DocumentClearAndSetting {
@@ -115,7 +113,6 @@ pub(crate) enum IndexOperation {
 
         // TODO what's that boolean, does it mean that it removes things or what?
         settings: Vec<(bool, Settings<Unchecked>)>,
-        allow_index_creation: bool,
         settings_tasks: Vec<Task>,
     },
     SettingsAndDocumentImport {
@@ -123,7 +120,6 @@ pub(crate) enum IndexOperation {
 
         primary_key: Option<String>,
         method: IndexDocumentsMethod,
-        allow_index_creation: bool,
         documents_counts: Vec<u64>,
         content_files: Vec<Uuid>,
         document_import_tasks: Vec<Task>,
@@ -204,11 +200,7 @@ impl IndexScheduler {
                 },
                 must_create_index,
             })),
-            BatchKind::DocumentImport {
-                method,
-                import_ids,
-                allow_index_creation,
-            } => {
+            BatchKind::DocumentImport { method, import_ids, .. } => {
                 let tasks = self.get_existing_tasks(rtxn, import_ids)?;
                 let primary_key = match &tasks[0].kind {
                     KindWithContent::DocumentImport { primary_key, .. } => primary_key.clone(),
@@ -236,7 +228,6 @@ impl IndexScheduler {
                         index_uid,
                         primary_key,
                         method,
-                        allow_index_creation,
                         documents_counts,
                         content_files,
                         tasks,
@@ -266,10 +257,7 @@ impl IndexScheduler {
                     must_create_index,
                 }))
             }
-            BatchKind::Settings {
-                settings_ids,
-                allow_index_creation,
-            } => {
+            BatchKind::Settings { settings_ids, .. } => {
                 let tasks = self.get_existing_tasks(rtxn, settings_ids)?;
 
                 let mut settings = Vec::new();
@@ -288,7 +276,6 @@ impl IndexScheduler {
                     op: IndexOperation::Settings {
                         index_uid,
                         settings,
-                        allow_index_creation,
                         tasks,
                     },
                     must_create_index,
@@ -343,7 +330,6 @@ impl IndexScheduler {
                     op: IndexOperation::DocumentClearAndSetting {
                         index_uid,
                         cleared_tasks,
-                        allow_index_creation,
                         settings,
                         settings_tasks,
                     },
@@ -404,7 +390,6 @@ impl IndexScheduler {
                             index_uid,
                             primary_key,
                             method,
-                            allow_index_creation,
                             documents_counts,
                             content_files,
                             document_import_tasks,
@@ -931,7 +916,6 @@ impl IndexScheduler {
                 index_uid: _,
                 primary_key,
                 method,
-                allow_index_creation: _,
                 documents_counts,
                 content_files,
                 mut tasks,
@@ -1044,7 +1028,6 @@ impl IndexScheduler {
             IndexOperation::Settings {
                 index_uid: _,
                 settings,
-                allow_index_creation: _,
                 mut tasks,
             } => {
                 let indexer_config = self.index_mapper.indexer_config();
@@ -1071,7 +1054,6 @@ impl IndexScheduler {
                 index_uid,
                 primary_key,
                 method,
-                allow_index_creation,
                 documents_counts,
                 content_files,
                 document_import_tasks,
@@ -1084,7 +1066,6 @@ impl IndexScheduler {
                     IndexOperation::Settings {
                         index_uid: index_uid.clone(),
                         settings,
-                        allow_index_creation,
                         tasks: settings_tasks,
                     },
                 )?;
@@ -1096,7 +1077,6 @@ impl IndexScheduler {
                         index_uid,
                         primary_key,
                         method,
-                        allow_index_creation,
                         documents_counts,
                         content_files,
                         tasks: document_import_tasks,
@@ -1111,7 +1091,6 @@ impl IndexScheduler {
                 index_uid,
                 cleared_tasks,
                 settings,
-                allow_index_creation,
                 settings_tasks,
             } => {
                 let mut import_tasks = self.apply_index_operation(
@@ -1129,7 +1108,6 @@ impl IndexScheduler {
                     IndexOperation::Settings {
                         index_uid,
                         settings,
-                        allow_index_creation,
                         tasks: settings_tasks,
                     },
                 )?;
