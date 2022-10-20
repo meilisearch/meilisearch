@@ -528,7 +528,13 @@ where
 
         if let Some(word_pair_proximity_docids) = word_pair_proximity_docids {
             // Run the word prefix pair proximity docids update operation.
-            PrefixWordPairsProximityDocids::new(self.wtxn, self.index).execute(
+            PrefixWordPairsProximityDocids::new(
+                self.wtxn,
+                self.index,
+                self.indexer_config.chunk_compression_type,
+                self.indexer_config.chunk_compression_level,
+            )
+            .execute(
                 word_pair_proximity_docids,
                 &new_prefix_fst_words,
                 &common_prefix_fst_words,

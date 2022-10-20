@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use std::io::BufReader;
 
+use grenad::CompressionType;
 use heed::types::ByteSlice;
 
 use super::index_documents::{merge_cbo_roaring_bitmaps, CursorClonableMmap};
@@ -18,10 +19,24 @@ pub struct PrefixWordPairsProximityDocids<'t, 'u, 'i> {
     index: &'i Index,
     max_proximity: u8,
     max_prefix_length: usize,
+    chunk_compression_type: CompressionType,
+    chunk_compression_level: Option<u32>,
 }
 impl<'t, 'u, 'i> PrefixWordPairsProximityDocids<'t, 'u, 'i> {
-    pub fn new(wtxn: &'t mut heed::RwTxn<'i, 'u>, index: &'i Index) -> Self {
-        Self { wtxn, index, max_proximity: 4, max_prefix_length: 2 }
+    pub fn new(
+        wtxn: &'t mut heed::RwTxn<'i, 'u>,
+        index: &'i Index,
+        chunk_compression_type: CompressionType,
+        chunk_compression_level: Option<u32>,
+    ) -> Self {
+        Self {
+            wtxn,
+            index,
+            max_proximity: 4,
+            max_prefix_length: 2,
+            chunk_compression_type,
+            chunk_compression_level,
+        }
     }
     /// Set the maximum proximity required to make a prefix be part of the words prefixes
     /// database. If two words are too far from the threshold the associated documents will
@@ -42,6 +57,7 @@ impl<'t, 'u, 'i> PrefixWordPairsProximityDocids<'t, 'u, 'i> {
         self.max_prefix_length = value;
         self
     }
+
     #[logging_timer::time("WordPrefixPairProximityDocids::{}")]
     pub fn execute<'a>(
         self,
@@ -60,6 +76,8 @@ impl<'t, 'u, 'i> PrefixWordPairsProximityDocids<'t, 'u, 'i> {
             new_prefix_fst_words,
             common_prefix_fst_words,
             del_prefix_fst_words,
+            self.chunk_compression_type,
+            self.chunk_compression_level,
         )?;
 
         index_prefix_word_database(
@@ -72,6 +90,8 @@ impl<'t, 'u, 'i> PrefixWordPairsProximityDocids<'t, 'u, 'i> {
             new_prefix_fst_words,
             common_prefix_fst_words,
             del_prefix_fst_words,
+            self.chunk_compression_type,
+            self.chunk_compression_level,
         )?;
 
         Ok(())

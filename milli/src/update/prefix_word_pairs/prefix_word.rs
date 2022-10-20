@@ -23,6 +23,8 @@ pub fn index_prefix_word_database(
     new_prefix_fst_words: &[String],
     common_prefix_fst_words: &[&[String]],
     del_prefix_fst_words: &HashSet<Vec<u8>>,
+    chunk_compression_type: CompressionType,
+    chunk_compression_level: Option<u32>,
 ) -> Result<()> {
     let max_proximity = max_proximity - 1;
     debug!("Computing and writing the word prefix pair proximity docids into LMDB on disk...");
@@ -35,7 +37,7 @@ pub fn index_prefix_word_database(
         .filter(|s| s.len() <= max_prefix_length)
         .collect();
 
-    for proximity in 1..=max_proximity - 1 {
+    for proximity in 1..max_proximity {
         for prefix in common_prefixes.iter() {
             let mut prefix_key = vec![];
             prefix_key.push(proximity);
@@ -78,7 +80,8 @@ pub fn index_prefix_word_database(
 
     // Since we read the DB, we can't write to it directly, so we add each new (word1, prefix, proximity)
     // element in an intermediary grenad
-    let mut writer = create_writer(CompressionType::None, None, tempfile::tempfile()?);
+    let mut writer =
+        create_writer(chunk_compression_type, chunk_compression_level, tempfile::tempfile()?);
 
     for proximity in 1..=max_proximity - 1 {
         for prefix in new_prefixes.iter() {
@@ -144,7 +147,7 @@ fn execute_on_word_pairs_and_prefixes<I>(
     mut next_word2_and_docids: impl for<'a> FnMut(&'a mut I) -> Result<Option<(&'a [u8], &'a [u8])>>,
     mut insert: impl for<'a> FnMut(&'a [u8], &'a [u8]) -> Result<()>,
 ) -> Result<()> {
-    let mut batch: BTreeMap<Vec<u8>, Vec<Cow<'static, [u8]>>> = <_>::default();
+    let mut batch: BTreeMap<Vec<u8>, Vec<Cow<'static, [u8]>>> = BTreeMap::default();
 
     // Memory usage check:
     // The content of the loop will be called for each `word2` that follows a word beginning

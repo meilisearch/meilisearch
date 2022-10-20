@@ -187,6 +187,8 @@ pub fn index_word_prefix_database(
     new_prefix_fst_words: &[String],
     common_prefix_fst_words: &[&[String]],
     del_prefix_fst_words: &HashSet<Vec<u8>>,
+    chunk_compression_type: CompressionType,
+    chunk_compression_level: Option<u32>,
 ) -> Result<()> {
     debug!("Computing and writing the word prefix pair proximity docids into LMDB on disk...");
 
@@ -249,7 +251,8 @@ pub fn index_word_prefix_database(
 
         // Since we read the DB, we can't write to it directly, so we add each new (proximity, word1, prefix)
         // element in an intermediary grenad
-        let mut writer = create_writer(CompressionType::None, None, tempfile::tempfile()?);
+        let mut writer =
+            create_writer(chunk_compression_type, chunk_compression_level, tempfile::tempfile()?);
 
         execute_on_word_pairs_and_prefixes(
             &mut db_iter,
@@ -325,7 +328,7 @@ fn execute_on_word_pairs_and_prefixes<I>(
         };
         let word2_start_different_than_prev = word2[0] != prev_word2_start;
         // if there were no potential prefixes for the previous word2 based on its first letter,
-        // and if the current word2 starts with the s`ame letter, then there is also no potential
+        // and if the current word2 starts with the same letter, then there is also no potential
         // prefixes for the current word2, and we can skip to the next iteration
         if empty_prefixes && !word2_start_different_than_prev {
             continue;

@@ -448,9 +448,8 @@ pub fn resolve_phrase(ctx: &dyn Context, phrase: &[String]) -> Result<RoaringBit
                 } else {
                     let mut bitmap = RoaringBitmap::new();
                     for dist in 0..=dist {
-                        match ctx.word_pair_proximity_docids(s1, s2, dist as u8 + 1)? {
-                            Some(m) => bitmap |= m,
-                            None => {}
+                        if let Some(m) = ctx.word_pair_proximity_docids(s1, s2, dist as u8 + 1)? {
+                            bitmap |= m
                         }
                     }
                     if bitmap.is_empty() {
