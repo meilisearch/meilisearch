@@ -112,15 +112,6 @@ impl IndexScheduler {
         Ok(self.index_tasks.get(rtxn, index)?.unwrap_or_default())
     }
 
-    pub(crate) fn put_index(
-        &self,
-        wtxn: &mut RwTxn,
-        index: &str,
-        bitmap: &RoaringBitmap,
-    ) -> Result<()> {
-        Ok(self.index_tasks.put(wtxn, index, bitmap)?)
-    }
-
     pub(crate) fn update_index(
         &self,
         wtxn: &mut RwTxn,
@@ -129,7 +120,11 @@ impl IndexScheduler {
     ) -> Result<()> {
         let mut tasks = self.index_tasks(wtxn, index)?;
         f(&mut tasks);
-        self.put_index(wtxn, index, &tasks)?;
+        if tasks.is_empty() {
+            self.index_tasks.delete(wtxn, index)?;
+        } else {
+            self.index_tasks.put(wtxn, index, &tasks)?;
+        }
 
         Ok(())
     }
