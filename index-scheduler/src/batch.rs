@@ -1,3 +1,22 @@
+/*!
+This module handles the creation and processing of batch operations.
+
+A batch is a combination of multiple tasks that can be processed at once.
+Executing a batch operation should always be functionally equivalent to
+executing each of its tasks' operations individually and in order.
+
+For example, if the user sends two tasks:
+1. import documents X
+2. import documents Y
+
+We can combine the two tasks in a single batch:
+1. import documents X and Y
+
+Processing this batch is functionally equivalent to processing the two
+tasks individally, but should be much faster since we are only performing
+one indexing operation.
+*/
+
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::BufWriter;
@@ -26,6 +45,11 @@ use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+/// Represents a combination of tasks that can all be processed at the same time.
+///
+/// A batch contains the set of tasks that it represents (accessible through
+/// [`self.ids()`](Batch::ids)), as well as additional information on how to
+/// be processed.
 #[derive(Debug)]
 pub(crate) enum Batch {
     TaskCancelation(Task),
@@ -49,6 +73,7 @@ pub(crate) enum Batch {
     },
 }
 
+/// A [batch](Batch) that combines multiple tasks operating on an index.
 #[derive(Debug)]
 pub(crate) enum IndexOperation {
     DocumentImport {
@@ -102,6 +127,7 @@ pub(crate) enum IndexOperation {
 }
 
 impl Batch {
+    /// Return the task ids associated with this batch.
     pub fn ids(&self) -> Vec<TaskId> {
         match self {
             Batch::TaskCancelation(task)
@@ -135,6 +161,12 @@ impl Batch {
 }
 
 impl IndexScheduler {
+    /// Convert an [`BatchKind`](crate::autobatcher::BatchKind) into a [`Batch`].
+    ///
+    /// ## Arguments
+    /// - `rtxn`: read transaction
+    /// - `index_uid`: name of the index affected by the operations of the autobatch
+    /// - `batch`: the result of the autobatcher
     pub(crate) fn create_next_batch_index(
         &self,
         rtxn: &RoTxn,
@@ -456,6 +488,12 @@ impl IndexScheduler {
         Ok(None)
     }
 
+    /// Apply the operation associated with the given batch.
+    ///
+    /// ## Return
+    /// The list of tasks that were processed. The metadata of each task in the returned
+    /// list is updated accordingly, with the exception of the its date fields
+    /// [`finished_at`](meilisearch_types::tasks::Task::finished_at) and [`started_at`](meilisearch_types::tasks::Task::started_at).
     pub(crate) fn process_batch(&self, batch: Batch) -> Result<Vec<Task>> {
         match batch {
             Batch::TaskCancelation(mut task) => {
@@ -741,6 +779,10 @@ impl IndexScheduler {
         }
     }
 
+    /// Process the index operation on the given index.
+    ///
+    /// ## Return
+    /// The list of processed tasks.
     fn apply_index_operation<'txn, 'i>(
         &self,
         index_wtxn: &'txn mut RwTxn<'i, '_>,
