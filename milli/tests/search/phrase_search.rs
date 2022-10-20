@@ -1,6 +1,7 @@
-use crate::search::Criterion::{Attribute, Exactness, Proximity};
 use milli::update::{IndexerConfig, Settings};
 use milli::{Criterion, Index, Search, TermsMatchingStrategy};
+
+use crate::search::Criterion::{Attribute, Exactness, Proximity};
 
 fn set_stop_words(index: &Index, stop_words: &[&str]) {
     let mut wtxn = index.write_txn().unwrap();
