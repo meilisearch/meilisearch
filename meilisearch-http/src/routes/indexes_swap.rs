@@ -61,12 +61,6 @@ pub async fn indexes_swap(
             ));
         }
     }
-    if swaps.is_empty() {
-        return Err(ResponseError::from_msg(
-            "TODO: error message when swaps is empty".to_owned(),
-            Code::BadRequest,
-        ));
-    }
 
     let task = KindWithContent::IndexSwap { swaps };
 
