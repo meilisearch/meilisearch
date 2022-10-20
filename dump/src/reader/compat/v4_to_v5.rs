@@ -439,7 +439,7 @@ pub(crate) mod test {
         }
         "###);
 
-        meili_snap::snapshot_hash!(format!("{:#?}", products.settings()), @"26947283836ee4cdf0974f82efcc5332");
+        meili_snap::snapshot_hash!(format!("{:#?}", products.settings()), @"ed1a6977a832b1ab49cd5068b77ce498");
         let documents = products
             .documents()
             .unwrap()
@@ -458,7 +458,7 @@ pub(crate) mod test {
         }
         "###);
 
-        meili_snap::snapshot_hash!(format!("{:#?}", movies.settings()), @"156871410d17e23803d0c90ddc6a66cb");
+        meili_snap::snapshot_hash!(format!("{:#?}", movies.settings()), @"70681af1d52411218036fbd5a9b94ab5");
         let documents = movies
             .documents()
             .unwrap()
@@ -477,7 +477,7 @@ pub(crate) mod test {
         }
         "###);
 
-        meili_snap::snapshot_hash!(format!("{:#?}", spells.settings()), @"69c9916142612cf4a2da9b9ed9455e9e");
+        meili_snap::snapshot_hash!(format!("{:#?}", spells.settings()), @"7019bb8f146004dcdd91fc3c3254b742");
         let documents = spells
             .documents()
             .unwrap()

@@ -294,8 +294,8 @@ pub(crate) mod test {
         ├---- indexes/
         │    └---- doggos/
         │    │    ├---- settings.json
-        │    │    ├---- documents.jsonl
-        │    │    └---- metadata.json
+        │    │    ├---- metadata.json
+        │    │    └---- documents.jsonl
         ├---- tasks/
         │    ├---- update_files/
         │    │    └---- 1.jsonl
