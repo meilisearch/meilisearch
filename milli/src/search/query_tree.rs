@@ -4,7 +4,6 @@ use std::{fmt, mem};
 
 use charabia::classifier::ClassifiedTokenIter;
 use charabia::{SeparatorKind, TokenKind};
-use fst::Set;
 use roaring::RoaringBitmap;
 use slice_group_by::GroupBy;
 
@@ -269,8 +268,7 @@ impl<'a> QueryTreeBuilder<'a> {
         &self,
         query: ClassifiedTokenIter<A>,
     ) -> Result<Option<(Operation, PrimitiveQuery, MatchingWords)>> {
-        let stop_words = self.index.stop_words(self.rtxn)?;
-        let primitive_query = create_primitive_query(query, stop_words, self.words_limit);
+        let primitive_query = create_primitive_query(query, self.words_limit);
         if !primitive_query.is_empty() {
             let qt = create_query_tree(
                 self,
@@ -722,7 +720,6 @@ impl PrimitiveQueryPart {
 /// the primitive query is an intermediate state to build the query tree.
 fn create_primitive_query<A>(
     query: ClassifiedTokenIter<A>,
-    stop_words: Option<Set<&[u8]>>,
     words_limit: Option<usize>,
 ) -> PrimitiveQuery
 where
@@ -747,13 +744,14 @@ where
                 // 2. if the word is not the last token of the query and is not a stop_word we push it as a non-prefix word,
                 // 3. if the word is the last token of the query we push it as a prefix word.
                 if quoted {
-                    if stop_words.as_ref().map_or(false, |swords| swords.contains(token.lemma())) {
+                    if let TokenKind::StopWord = token.kind {
                         phrase.push(None)
                     } else {
                         phrase.push(Some(token.lemma().to_string()));
                     }
                 } else if peekable.peek().is_some() {
-                    if !stop_words.as_ref().map_or(false, |swords| swords.contains(token.lemma())) {
+                    if let TokenKind::StopWord = token.kind {
+                    } else {
                         primitive_query
                             .push(PrimitiveQueryPart::Word(token.lemma().to_string(), false));
                     }
@@ -836,7 +834,7 @@ mod test {
             words_limit: Option<usize>,
             query: ClassifiedTokenIter<A>,
         ) -> Result<Option<(Operation, PrimitiveQuery)>> {
-            let primitive_query = create_primitive_query(query, None, words_limit);
+            let primitive_query = create_primitive_query(query, words_limit);
             if !primitive_query.is_empty() {
                 let qt = create_query_tree(
                     self,
