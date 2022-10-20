@@ -293,11 +293,11 @@ pub fn create_all_stats(
     let mut last_task: Option<OffsetDateTime> = None;
     let mut indexes = BTreeMap::new();
     let mut database_size = 0;
-    let processing_task = index_scheduler.get_tasks(
-        Query::default()
-            .with_status(Status::Processing)
-            .with_limit(1),
-    )?;
+    let processing_task = index_scheduler.get_tasks(Query {
+        status: Some(vec![Status::Processing]),
+        limit: Some(1),
+        ..Query::default()
+    })?;
     let processing_index = processing_task
         .first()
         .and_then(|task| task.index_uid().clone());
