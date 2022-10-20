@@ -5,7 +5,6 @@ use std::sync::Arc;
 use actix_web::http::KeepAlive;
 use actix_web::web::Data;
 use actix_web::HttpServer;
-use clap::Parser;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
 use meilisearch_http::analytics::Analytics;

@@ -96,7 +96,7 @@ pub async fn create_index(
 ) -> Result<HttpResponse, ResponseError> {
     let IndexCreateRequest { primary_key, uid } = body.into_inner();
 
-    let allow_index_creation = meilisearch.filters().search_rules.is_index_authorized(&uid);
+    let allow_index_creation = index_scheduler.filters().search_rules.is_index_authorized(&uid);
     if allow_index_creation {
         analytics.publish(
             "Index Created".to_string(),
