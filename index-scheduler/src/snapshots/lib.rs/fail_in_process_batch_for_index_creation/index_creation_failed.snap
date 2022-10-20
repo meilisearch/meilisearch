@@ -1,0 +1,36 @@
+---
+source: index-scheduler/src/lib.rs
+---
+### Autobatching Enabled = true
+### Processing Tasks:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, status: failed, error: ResponseError { code: 200, message: "Corrupted task queue.", error_code: "internal", error_type: "internal", error_link: "https://docs.meilisearch.com/errors#internal" }, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+failed [0,]
+----------------------------------------------------------------------
+### Kind:
+"indexCreation" [0,]
+----------------------------------------------------------------------
+### Index Tasks:
+catto [0,]
+----------------------------------------------------------------------
+### Index Mapper:
+[]
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------
+
