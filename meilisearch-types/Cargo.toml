@@ -28,10 +28,15 @@ meili-snap = { path = "../meili-snap" }
 insta = "1.19.1"
 
 [features]
+# all specialized tokenizations
 default = ["milli/default"]
 
-test-traits = ["proptest", "proptest-derive"]
+# chinese specialized tokenization
 chinese = ["milli/chinese"]
+# hebrew specialized tokenization
 hebrew = ["milli/hebrew"]
+# japanese specialized tokenization
 japanese = ["milli/japanese"]
+# thai specialized tokenization
 thai = ["milli/thai"]
+test-traits = ["proptest", "proptest-derive"]
