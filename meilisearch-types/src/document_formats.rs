@@ -44,15 +44,23 @@ impl Display for DocumentFormatError {
                     // The user input maybe insanely long. We need to truncate it.
                     let mut serde_msg = se.to_string();
                     let ellipsis = "...";
-                    if serde_msg.len() > 100 + ellipsis.len() {
-                        serde_msg.replace_range(50..serde_msg.len() - 85, ellipsis);
+                    let trim_input_prefix_len = 50;
+                    let trim_input_suffix_len = 85;
+
+                    if serde_msg.len()
+                        > trim_input_prefix_len + trim_input_suffix_len + ellipsis.len()
+                    {
+                        serde_msg.replace_range(
+                            trim_input_prefix_len..serde_msg.len() - trim_input_suffix_len,
+                            ellipsis,
+                        );
                     }
 
                     write!(
                         f,
                         "The `{}` payload provided is malformed. `Couldn't serialize document value: {}`.",
                         b, serde_msg
-                )
+                    )
                 }
                 _ => write!(f, "The `{}` payload provided is malformed: `{}`.", b, me),
             },
