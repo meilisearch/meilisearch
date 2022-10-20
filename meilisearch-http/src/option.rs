@@ -1,3 +1,4 @@
+use std::env;
 use std::fs;
 use std::io::{BufReader, Read};
 use std::path::PathBuf;
@@ -51,6 +52,7 @@ const MEILI_LOG_LEVEL: &str = "MEILI_LOG_LEVEL";
 #[cfg(feature = "metrics")]
 const MEILI_ENABLE_METRICS_ROUTE: &str = "MEILI_ENABLE_METRICS_ROUTE";
 
+const DEFAULT_CONFIG_FILE_PATH: &str = "./config.toml";
 const DEFAULT_DB_PATH: &str = "./data.ms";
 const DEFAULT_HTTP_ADDR: &str = "localhost:7700";
 const DEFAULT_ENV: &str = "development";
@@ -63,7 +65,7 @@ const DEFAULT_DUMPS_DIR: &str = "dumps/";
 const DEFAULT_LOG_LEVEL: &str = "INFO";
 
 #[derive(Debug, Clone, Parser, Serialize, Deserialize)]
-#[clap(version)]
+#[clap(version, next_display_order = None)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct Opt {
     /// Designates the location where database files will be created and retrieved.
@@ -82,7 +84,7 @@ pub struct Opt {
     pub master_key: Option<String>,
 
     /// Configures the instance's environment. Value must be either `production` or `development`.
-    #[clap(long, env = MEILI_ENV, default_value_t = default_env(), possible_values = &POSSIBLE_ENV)]
+    #[clap(long, env = MEILI_ENV, default_value_t = default_env(), value_parser = POSSIBLE_ENV)]
     #[serde(default = "default_env")]
     pub env: String,
 
@@ -115,24 +117,24 @@ pub struct Opt {
 
     /// Sets the server's SSL certificates.
     #[serde(skip_serializing)]
-    #[clap(long, env = MEILI_SSL_CERT_PATH, parse(from_os_str))]
+    #[clap(long, env = MEILI_SSL_CERT_PATH, value_parser)]
     pub ssl_cert_path: Option<PathBuf>,
 
     /// Sets the server's SSL key files.
     #[serde(skip_serializing)]
-    #[clap(long, env = MEILI_SSL_KEY_PATH, parse(from_os_str))]
+    #[clap(long, env = MEILI_SSL_KEY_PATH, value_parser)]
     pub ssl_key_path: Option<PathBuf>,
 
     /// Enables client authentication in the specified path.
     #[serde(skip_serializing)]
-    #[clap(long, env = MEILI_SSL_AUTH_PATH, parse(from_os_str))]
+    #[clap(long, env = MEILI_SSL_AUTH_PATH, value_parser)]
     pub ssl_auth_path: Option<PathBuf>,
 
     /// Sets the server's OCSP file. *Optional*
     ///
     /// Reads DER-encoded OCSP response from OCSPFILE and staple to certificate.
     #[serde(skip_serializing)]
-    #[clap(long, env = MEILI_SSL_OCSP_PATH, parse(from_os_str))]
+    #[clap(long, env = MEILI_SSL_OCSP_PATH, value_parser)]
     pub ssl_ocsp_path: Option<PathBuf>,
 
     /// Makes SSL authentication mandatory.
@@ -161,7 +163,7 @@ pub struct Opt {
     #[clap(
         long,
         env = MEILI_IGNORE_MISSING_SNAPSHOT,
-        requires = "import-snapshot"
+        requires = "import_snapshot"
     )]
     #[serde(default)]
     pub ignore_missing_snapshot: bool,
@@ -174,7 +176,7 @@ pub struct Opt {
     #[clap(
         long,
         env = MEILI_IGNORE_SNAPSHOT_IF_DB_EXISTS,
-        requires = "import-snapshot"
+        requires = "import_snapshot"
     )]
     #[serde(default)]
     pub ignore_snapshot_if_db_exists: bool,
@@ -196,14 +198,14 @@ pub struct Opt {
 
     /// Imports the dump file located at the specified path. Path must point to a `.dump` file.
     /// If a database already exists, Meilisearch will throw an error and abort launch.
-    #[clap(long, env = MEILI_IMPORT_DUMP, conflicts_with = "import-snapshot")]
+    #[clap(long, env = MEILI_IMPORT_DUMP, conflicts_with = "import_snapshot")]
     pub import_dump: Option<PathBuf>,
 
     /// Prevents Meilisearch from throwing an error when `--import-dump` does not point to
     /// a valid dump file. Instead, Meilisearch will start normally without importing any dump.
     ///
     /// This option will trigger an error if `--import-dump` is not defined.
-    #[clap(long, env = MEILI_IGNORE_MISSING_DUMP, requires = "import-dump")]
+    #[clap(long, env = MEILI_IGNORE_MISSING_DUMP, requires = "import_dump")]
     #[serde(default)]
     pub ignore_missing_dump: bool,
 
@@ -212,7 +214,7 @@ pub struct Opt {
     /// launch using the existing database.
     ///
     /// This option will trigger an error if `--import-dump` is not defined.
-    #[clap(long, env = MEILI_IGNORE_DUMP_IF_DB_EXISTS, requires = "import-dump")]
+    #[clap(long, env = MEILI_IGNORE_DUMP_IF_DB_EXISTS, requires = "import_dump")]
     #[serde(default)]
     pub ignore_dump_if_db_exists: bool,
 
@@ -261,32 +263,38 @@ impl Opt {
         // Parse the args to get the config_file_path.
         let mut opts = Opt::parse();
         let mut config_read_from = None;
-        if let Some(config_file_path) = opts
+        let user_specified_config_file_path = opts
             .config_file_path
             .clone()
-            .or_else(|| Some(PathBuf::from("./config.toml")))
-        {
-            match std::fs::read(&config_file_path) {
-                Ok(config) => {
-                    // If the file is successfully read, we deserialize it with `toml`.
-                    let opt_from_config = toml::from_slice::<Opt>(&config)?;
-                    // Return an error if config file contains 'config_file_path'
-                    // Using that key in the config file doesn't make sense bc it creates a logical loop (config file referencing itself)
-                    if opt_from_config.config_file_path.is_some() {
-                        anyhow::bail!("`config_file_path` is not supported in config file")
-                    }
-                    // We inject the values from the toml in the corresponding env vars if needs be. Doing so, we respect the priority toml < env vars < cli args.
-                    opt_from_config.export_to_env();
-                    // Once injected we parse the cli args once again to take the new env vars into scope.
-                    opts = Opt::parse();
-                    config_read_from = Some(config_file_path);
+            .or_else(|| env::var("MEILI_CONFIG_FILE_PATH").map(PathBuf::from).ok());
+        let config_file_path = user_specified_config_file_path
+            .clone()
+            .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIG_FILE_PATH));
+
+        match std::fs::read(&config_file_path) {
+            Ok(config) => {
+                // If the file is successfully read, we deserialize it with `toml`.
+                let opt_from_config = toml::from_slice::<Opt>(&config)?;
+                // Return an error if config file contains 'config_file_path'
+                // Using that key in the config file doesn't make sense bc it creates a logical loop (config file referencing itself)
+                if opt_from_config.config_file_path.is_some() {
+                    anyhow::bail!("`config_file_path` is not supported in config file")
                 }
-                // If we have an error while reading the file defined by the user.
-                Err(_) if opts.config_file_path.is_some() => anyhow::bail!(
-                    "unable to open or read the {:?} configuration file.",
-                    opts.config_file_path.unwrap().display().to_string()
-                ),
-                _ => (),
+                // We inject the values from the toml in the corresponding env vars if needs be. Doing so, we respect the priority toml < env vars < cli args.
+                opt_from_config.export_to_env();
+                // Once injected we parse the cli args once again to take the new env vars into scope.
+                opts = Opt::parse();
+                config_read_from = Some(config_file_path);
+            }
+            Err(e) => {
+                if let Some(path) = user_specified_config_file_path {
+                    // If we have an error while reading the file defined by the user.
+                    anyhow::bail!(
+                        "unable to open or read the {:?} configuration file: {}.",
+                        path,
+                        e,
+                    )
+                }
             }
         }
 
@@ -521,10 +529,41 @@ fn default_log_level() -> String {
 
 #[cfg(test)]
 mod test {
+
     use super::*;
 
     #[test]
     fn test_valid_opt() {
         assert!(Opt::try_parse_from(Some("")).is_ok());
+    }
+
+    #[test]
+    fn test_meilli_config_file_path_valid() {
+        temp_env::with_vars(
+            vec![("MEILI_CONFIG_FILE_PATH", Some("../config.toml"))], // Relative path in meilisearch_http package
+            || {
+                assert!(Opt::try_build().is_ok());
+            },
+        );
+    }
+
+    #[test]
+    fn test_meilli_config_file_path_invalid() {
+        temp_env::with_vars(
+            vec![("MEILI_CONFIG_FILE_PATH", Some("../configgg.toml"))],
+            || {
+                let possible_error_messages = [
+                    "unable to open or read the \"../configgg.toml\" configuration file: No such file or directory (os error 2).",
+                    "unable to open or read the \"../configgg.toml\" configuration file: The system cannot find the file specified. (os error 2).", // Windows
+                ];
+                let error_message = Opt::try_build().unwrap_err().to_string();
+                assert!(
+                    possible_error_messages.contains(&error_message.as_str()),
+                    "Expected onf of {:?}, got {:?}.",
+                    possible_error_messages,
+                    error_message
+                );
+            },
+        );
     }
 }
