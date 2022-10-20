@@ -414,7 +414,7 @@ async fn get_tasks(
 
     // We first transform a potential indexUid=* into a "not specified indexUid filter"
     // for every one of the filters: type, status, and indexUid.
-    let type_: Option<Vec<_>> = kind.and_then(fold_star_or);
+    let kind: Option<Vec<_>> = kind.and_then(fold_star_or);
     let uid: Option<Vec<_>> = uid.map(|x| x.into_iter().collect());
     let status: Option<Vec<_>> = status.and_then(fold_star_or);
     let index_uid: Option<Vec<_>> = index_uid.and_then(fold_star_or);
@@ -423,7 +423,7 @@ async fn get_tasks(
         "Tasks Seen".to_string(),
         json!({
             "filtered_by_index_uid": index_uid.as_ref().map_or(false, |v| !v.is_empty()),
-            "filtered_by_type": type_.as_ref().map_or(false, |v| !v.is_empty()),
+            "filtered_by_type": kind.as_ref().map_or(false, |v| !v.is_empty()),
             "filtered_by_status": status.as_ref().map_or(false, |v| !v.is_empty()),
         }),
         Some(&req),
@@ -436,7 +436,7 @@ async fn get_tasks(
         limit: Some(limit),
         from,
         status,
-        kind: type_,
+        kind,
         index_uid,
         uid,
         before_enqueued_at,
