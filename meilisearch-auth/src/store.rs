@@ -1,8 +1,7 @@
 use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::collections::HashSet;
-use std::convert::TryFrom;
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::fs::create_dir_all;
 use std::ops::Deref;
 use std::path::Path;
@@ -59,12 +58,7 @@ impl HeedAuthStore {
         let keys = env.create_database(Some(KEY_DB_NAME))?;
         let action_keyid_index_expiration =
             env.create_database(Some(KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME))?;
-        Ok(Self {
-            env,
-            keys,
-            action_keyid_index_expiration,
-            should_close_on_drop: true,
-        })
+        Ok(Self { env, keys, action_keyid_index_expiration, should_close_on_drop: true })
     }
 
     pub fn set_drop_on_close(&mut self, v: bool) {
@@ -94,12 +88,8 @@ impl HeedAuthStore {
                 Action::All => actions.extend(enum_iterator::all::<Action>()),
                 Action::DocumentsAll => {
                     actions.extend(
-                        [
-                            Action::DocumentsGet,
-                            Action::DocumentsDelete,
-                            Action::DocumentsAdd,
-                        ]
-                        .iter(),
+                        [Action::DocumentsGet, Action::DocumentsDelete, Action::DocumentsAdd]
+                            .iter(),
                     );
                 }
                 Action::IndexesAll => {

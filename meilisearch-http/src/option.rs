@@ -1,24 +1,21 @@
 use std::convert::TryFrom;
+use std::env::VarError;
+use std::ffi::OsStr;
 use std::io::{BufReader, Read};
 use std::num::ParseIntError;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::ffi::OsStr;
-use std::env::VarError;
 use std::sync::Arc;
 use std::{env, fmt, fs};
 
 use byte_unit::{Byte, ByteError};
 use clap::Parser;
 use meilisearch_types::milli::update::IndexerConfig;
-use rustls::{
-    server::{
-        AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient,
-        ServerSessionMemoryCache,
-    },
-    RootCertStore,
+use rustls::server::{
+    AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, ServerSessionMemoryCache,
 };
+use rustls::RootCertStore;
 use rustls_pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
 use serde::{Deserialize, Serialize};
 use sysinfo::{RefreshKind, System, SystemExt};
@@ -502,9 +499,7 @@ pub struct SchedulerConfig {
 
 impl SchedulerConfig {
     pub fn export_to_env(self) {
-        let SchedulerConfig {
-            disable_auto_batching,
-        } = self;
+        let SchedulerConfig { disable_auto_batching } = self;
         export_to_env_if_not_present(DISABLE_AUTO_BATCHING, disable_auto_batching.to_string());
     }
 }
@@ -513,9 +508,8 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
     type Error = anyhow::Error;
 
     fn try_from(other: &IndexerOpts) -> Result<Self, Self::Error> {
-        let thread_pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(*other.max_indexing_threads)
-            .build()?;
+        let thread_pool =
+            rayon::ThreadPoolBuilder::new().num_threads(*other.max_indexing_threads).build()?;
 
         Ok(Self {
             log_every_n: Some(other.log_every_n),
@@ -553,11 +547,7 @@ impl FromStr for MaxMemory {
 
 impl Default for MaxMemory {
     fn default() -> MaxMemory {
-        MaxMemory(
-            total_memory_bytes()
-                .map(|bytes| bytes * 2 / 3)
-                .map(Byte::from_bytes),
-        )
+        MaxMemory(total_memory_bytes().map(|bytes| bytes * 2 / 3).map(Byte::from_bytes))
     }
 }
 
@@ -757,21 +747,18 @@ mod test {
 
     #[test]
     fn test_meilli_config_file_path_invalid() {
-        temp_env::with_vars(
-            vec![("MEILI_CONFIG_FILE_PATH", Some("../configgg.toml"))],
-            || {
-                let possible_error_messages = [
+        temp_env::with_vars(vec![("MEILI_CONFIG_FILE_PATH", Some("../configgg.toml"))], || {
+            let possible_error_messages = [
                     "unable to open or read the \"../configgg.toml\" configuration file: No such file or directory (os error 2).",
                     "unable to open or read the \"../configgg.toml\" configuration file: The system cannot find the file specified. (os error 2).", // Windows
                 ];
-                let error_message = Opt::try_build().unwrap_err().to_string();
-                assert!(
-                    possible_error_messages.contains(&error_message.as_str()),
-                    "Expected onf of {:?}, got {:?}.",
-                    possible_error_messages,
-                    error_message
-                );
-            },
-        );
+            let error_message = Opt::try_build().unwrap_err().to_string();
+            assert!(
+                possible_error_messages.contains(&error_message.as_str()),
+                "Expected onf of {:?}, got {:?}.",
+                possible_error_messages,
+                error_message
+            );
+        });
     }
 }

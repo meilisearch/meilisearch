@@ -1,6 +1,5 @@
 use meilisearch_types::error::{Code, ErrorCode};
-use meilisearch_types::heed;
-use meilisearch_types::milli;
+use meilisearch_types::{heed, milli};
 use thiserror::Error;
 
 use crate::TaskId;

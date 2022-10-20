@@ -33,11 +33,7 @@ impl<P, D> GuardedData<P, D> {
     {
         match Self::authenticate(auth, token, index).await? {
             Some(filters) => match data {
-                Some(data) => Ok(Self {
-                    data,
-                    filters,
-                    _marker: PhantomData,
-                }),
+                Some(data) => Ok(Self { data, filters, _marker: PhantomData }),
                 None => Err(AuthenticationError::IrretrievableState.into()),
             },
             None => Err(AuthenticationError::InvalidToken.into()),
@@ -50,11 +46,7 @@ impl<P, D> GuardedData<P, D> {
     {
         match Self::authenticate(auth, String::new(), None).await? {
             Some(filters) => match data {
-                Some(data) => Ok(Self {
-                    data,
-                    filters,
-                    _marker: PhantomData,
-                }),
+                Some(data) => Ok(Self { data, filters, _marker: PhantomData }),
                 None => Err(AuthenticationError::IrretrievableState.into()),
             },
             None => Err(AuthenticationError::MissingAuthorizationHeader.into()),
@@ -129,14 +121,14 @@ pub trait Policy {
 
 pub mod policies {
     use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+    use meilisearch_auth::{AuthController, AuthFilter, SearchRules};
+    // reexport actions in policies in order to be used in routes configuration.
+    pub use meilisearch_types::keys::{actions, Action};
     use serde::{Deserialize, Serialize};
     use time::OffsetDateTime;
     use uuid::Uuid;
 
     use crate::extractors::authentication::Policy;
-    use meilisearch_auth::{AuthController, AuthFilter, SearchRules};
-    // reexport actions in policies in order to be used in routes configuration.
-    pub use meilisearch_types::keys::{actions, Action};
 
     fn tenant_token_validation() -> Validation {
         let mut validation = Validation::default();
@@ -174,10 +166,7 @@ pub mod policies {
             // authenticate if token is the master key.
             // master key can only have access to keys routes.
             // if master key is None only keys routes are inaccessible.
-            if auth
-                .get_master_key()
-                .map_or_else(|| !is_keys_action(A), |mk| mk == token)
-            {
+            if auth.get_master_key().map_or_else(|| !is_keys_action(A), |mk| mk == token) {
                 return Some(AuthFilter::default());
             }
 
@@ -235,9 +224,7 @@ pub mod policies {
                     }
                 }
 
-                return auth
-                    .get_key_filters(uid, Some(data.claims.search_rules))
-                    .ok();
+                return auth.get_key_filters(uid, Some(data.claims.search_rules)).ok();
             }
 
             None

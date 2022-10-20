@@ -2,29 +2,22 @@
 
 use std::ops::Bound;
 
-use meilisearch_types::heed::types::OwnedType;
-use meilisearch_types::heed::Database;
-use meilisearch_types::heed::{types::DecodeIgnore, RoTxn, RwTxn};
+use meilisearch_types::heed::types::{DecodeIgnore, OwnedType};
+use meilisearch_types::heed::{Database, RoTxn, RwTxn};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, BEU32};
+use meilisearch_types::tasks::{Kind, KindWithContent, Status};
 use roaring::{MultiOps, RoaringBitmap};
 use time::OffsetDateTime;
 
 use crate::{Error, IndexScheduler, Result, Task, TaskId, BEI128};
-use meilisearch_types::tasks::{Kind, KindWithContent, Status};
 
 impl IndexScheduler {
     pub(crate) fn all_task_ids(&self, rtxn: &RoTxn) -> Result<RoaringBitmap> {
-        enum_iterator::all()
-            .map(|s| self.get_status(&rtxn, s))
-            .union()
+        enum_iterator::all().map(|s| self.get_status(&rtxn, s)).union()
     }
 
     pub(crate) fn last_task_id(&self, rtxn: &RoTxn) -> Result<Option<TaskId>> {
-        Ok(self
-            .all_tasks
-            .remap_data_type::<DecodeIgnore>()
-            .last(rtxn)?
-            .map(|(k, _)| k.get() + 1))
+        Ok(self.all_tasks.remap_data_type::<DecodeIgnore>().last(rtxn)?.map(|(k, _)| k.get() + 1))
     }
 
     pub(crate) fn next_task_id(&self, rtxn: &RoTxn) -> Result<TaskId> {
@@ -45,16 +38,13 @@ impl IndexScheduler {
         tasks
             .into_iter()
             .map(|task_id| {
-                self.get_task(rtxn, task_id)
-                    .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))
+                self.get_task(rtxn, task_id).and_then(|task| task.ok_or(Error::CorruptedTaskQueue))
             })
             .collect::<Result<_>>()
     }
 
     pub(crate) fn update_task(&self, wtxn: &mut RwTxn, task: &Task) -> Result<()> {
-        let old_task = self
-            .get_task(wtxn, task.uid)?
-            .ok_or(Error::CorruptedTaskQueue)?;
+        let old_task = self.get_task(wtxn, task.uid)?.ok_or(Error::CorruptedTaskQueue)?;
 
         debug_assert_eq!(old_task.uid, task.uid);
 
@@ -85,19 +75,13 @@ impl IndexScheduler {
             "Cannot update a task's enqueued_at time"
         );
         if old_task.started_at != task.started_at {
-            assert!(
-                old_task.started_at.is_none(),
-                "Cannot update a task's started_at time"
-            );
+            assert!(old_task.started_at.is_none(), "Cannot update a task's started_at time");
             if let Some(started_at) = task.started_at {
                 insert_task_datetime(wtxn, self.started_at, started_at, task.uid)?;
             }
         }
         if old_task.finished_at != task.finished_at {
-            assert!(
-                old_task.finished_at.is_none(),
-                "Cannot update a task's finished_at time"
-            );
+            assert!(old_task.finished_at.is_none(), "Cannot update a task's finished_at time");
             if let Some(finished_at) = task.finished_at {
                 insert_task_datetime(wtxn, self.finished_at, finished_at, task.uid)?;
             }
@@ -269,7 +253,9 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
                 }
             }
         }
-        K::TaskCancelation { .. } | K::TaskDeletion { .. } | K::DumpExport { .. } | K::Snapshot => (),
+        K::TaskCancelation { .. } | K::TaskDeletion { .. } | K::DumpExport { .. } | K::Snapshot => {
+            ()
+        }
     };
     for index_uid in index_uids {
         if index_uid == &swap.0 {

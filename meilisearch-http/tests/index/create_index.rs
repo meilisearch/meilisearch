@@ -1,9 +1,10 @@
-use crate::common::encoder::Encoder;
-use crate::common::Server;
 use actix_web::http::header::ContentType;
 use actix_web::test;
 use http::header::ACCEPT_ENCODING;
 use serde_json::{json, Value};
+
+use crate::common::encoder::Encoder;
+use crate::common::Server;
 
 #[actix_rt::test]
 async fn create_index_no_primary_key() {

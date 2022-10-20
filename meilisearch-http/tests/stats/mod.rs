@@ -1,5 +1,6 @@
 use serde_json::json;
-use time::{format_description::well_known::Rfc3339, OffsetDateTime};
+use time::format_description::well_known::Rfc3339;
+use time::OffsetDateTime;
 
 use crate::common::Server;
 

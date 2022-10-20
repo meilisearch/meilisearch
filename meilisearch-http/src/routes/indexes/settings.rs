@@ -1,15 +1,15 @@
 use actix_web::web::Data;
-use log::debug;
-
 use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::IndexScheduler;
+use log::debug;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::settings::{settings, Settings, Unchecked};
 use meilisearch_types::tasks::KindWithContent;
 use serde_json::json;
 
 use crate::analytics::Analytics;
-use crate::extractors::authentication::{policies::*, GuardedData};
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::GuardedData;
 use crate::routes::SummarizedTaskView;
 
 #[macro_export]
@@ -18,16 +18,15 @@ macro_rules! make_setting_route {
         pub mod $attr {
             use actix_web::web::Data;
             use actix_web::{web, HttpRequest, HttpResponse, Resource};
-            use log::debug;
-
             use index_scheduler::IndexScheduler;
+            use log::debug;
+            use meilisearch_types::error::ResponseError;
             use meilisearch_types::milli::update::Setting;
             use meilisearch_types::settings::{settings, Settings};
             use meilisearch_types::tasks::KindWithContent;
-
-            use meilisearch_types::error::ResponseError;
             use $crate::analytics::Analytics;
-            use $crate::extractors::authentication::{policies::*, GuardedData};
+            use $crate::extractors::authentication::policies::*;
+            use $crate::extractors::authentication::GuardedData;
             use $crate::extractors::sequential_extractor::SeqHandler;
             use $crate::routes::SummarizedTaskView;
 
@@ -38,10 +37,7 @@ macro_rules! make_setting_route {
                 >,
                 index_uid: web::Path<String>,
             ) -> Result<HttpResponse, ResponseError> {
-                let new_settings = Settings {
-                    $attr: Setting::Reset,
-                    ..Default::default()
-                };
+                let new_settings = Settings { $attr: Setting::Reset, ..Default::default() };
 
                 let allow_index_creation = index_scheduler.filters().allow_index_creation;
                 let task = KindWithContent::Settings {
@@ -270,13 +266,7 @@ make_setting_route!(
     "synonyms"
 );
 
-make_setting_route!(
-    "/distinct-attribute",
-    put,
-    String,
-    distinct_attribute,
-    "distinctAttribute"
-);
+make_setting_route!("/distinct-attribute", put, String, distinct_attribute, "distinctAttribute");
 
 make_setting_route!(
     "/ranking-rules",
@@ -453,9 +443,7 @@ pub async fn update_all(
         allow_index_creation,
     };
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task))
-            .await??
-            .into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
@@ -486,9 +474,7 @@ pub async fn delete_all(
         allow_index_creation,
     };
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task))
-            .await??
-            .into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))

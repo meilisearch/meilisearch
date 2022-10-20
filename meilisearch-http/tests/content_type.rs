@@ -2,9 +2,10 @@
 
 mod common;
 
-use crate::common::Server;
 use actix_web::test;
 use serde_json::{json, Value};
+
+use crate::common::Server;
 
 enum HttpVerb {
     Put,
@@ -75,11 +76,7 @@ async fn error_json_bad_content_type() {
         "calling the route `{}` with a content-type of json isn't supposed to throw a bad media type error", route);
 
         // No content-type.
-        let req = verb
-            .test_request()
-            .uri(route)
-            .set_payload(document)
-            .to_request();
+        let req = verb.test_request().uri(route).set_payload(document).to_request();
         let res = test::call_service(&app, req).await;
         let status_code = res.status();
         let body = test::read_body(res).await;

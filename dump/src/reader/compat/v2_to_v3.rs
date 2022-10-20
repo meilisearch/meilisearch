@@ -4,10 +4,9 @@ use std::str::FromStr;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+use super::v3_to_v4::CompatV3ToV4;
 use crate::reader::{v2, v3, Document};
 use crate::Result;
-
-use super::v3_to_v4::CompatV3ToV4;
 
 pub struct CompatV2ToV3 {
     pub from: v2::V2Reader,
@@ -22,10 +21,7 @@ impl CompatV2ToV3 {
         self.from
             .index_uuid()
             .into_iter()
-            .map(|index| v3::meta::IndexUuid {
-                uid: index.uid,
-                uuid: index.uuid,
-            })
+            .map(|index| v3::meta::IndexUuid { uid: index.uid, uuid: index.uuid })
             .collect()
     }
 
@@ -65,10 +61,7 @@ impl CompatV2ToV3 {
                 .tasks()
                 .map(move |task| {
                     task.map(|(task, content_file)| {
-                        let task = v3::Task {
-                            uuid: task.uuid,
-                            update: task.update.into(),
-                        };
+                        let task = v3::Task { uuid: task.uuid, update: task.update.into() };
 
                         Some((
                             task,
@@ -216,22 +209,22 @@ impl TryFrom<(v2::updates::UpdateMeta, Option<Uuid>)> for v3::updates::Update {
 
     fn try_from((update, uuid): (v2::updates::UpdateMeta, Option<Uuid>)) -> Result<Self> {
         Ok(match update {
-            v2::updates::UpdateMeta::DocumentsAddition {
-                method,
-                format: _,
-                primary_key,
-            } if uuid.is_some() => v3::updates::Update::DocumentAddition {
-                primary_key,
-                method: match method {
-                    v2::updates::IndexDocumentsMethod::ReplaceDocuments => {
-                        v3::updates::IndexDocumentsMethod::ReplaceDocuments
-                    }
-                    v2::updates::IndexDocumentsMethod::UpdateDocuments => {
-                        v3::updates::IndexDocumentsMethod::UpdateDocuments
-                    }
-                },
-                content_uuid: uuid.unwrap(),
-            },
+            v2::updates::UpdateMeta::DocumentsAddition { method, format: _, primary_key }
+                if uuid.is_some() =>
+            {
+                v3::updates::Update::DocumentAddition {
+                    primary_key,
+                    method: match method {
+                        v2::updates::IndexDocumentsMethod::ReplaceDocuments => {
+                            v3::updates::IndexDocumentsMethod::ReplaceDocuments
+                        }
+                        v2::updates::IndexDocumentsMethod::UpdateDocuments => {
+                            v3::updates::IndexDocumentsMethod::UpdateDocuments
+                        }
+                    },
+                    content_uuid: uuid.unwrap(),
+                }
+            }
             v2::updates::UpdateMeta::DocumentsAddition { .. } => {
                 return Err(crate::Error::MalformedTask)
             }
@@ -248,23 +241,21 @@ impl TryFrom<(v2::updates::UpdateMeta, Option<Uuid>)> for v3::updates::Update {
 
 pub fn update_from_unchecked_update_meta(update: v2::updates::UpdateMeta) -> v3::updates::Update {
     match update {
-        v2::updates::UpdateMeta::DocumentsAddition {
-            method,
-            format: _,
-            primary_key,
-        } => v3::updates::Update::DocumentAddition {
-            primary_key,
-            method: match method {
-                v2::updates::IndexDocumentsMethod::ReplaceDocuments => {
-                    v3::updates::IndexDocumentsMethod::ReplaceDocuments
-                }
-                v2::updates::IndexDocumentsMethod::UpdateDocuments => {
-                    v3::updates::IndexDocumentsMethod::UpdateDocuments
-                }
-            },
-            // we use this special uuid so we can recognize it if one day there is a bug related to this field.
-            content_uuid: Uuid::from_str("00112233-4455-6677-8899-aabbccddeeff").unwrap(),
-        },
+        v2::updates::UpdateMeta::DocumentsAddition { method, format: _, primary_key } => {
+            v3::updates::Update::DocumentAddition {
+                primary_key,
+                method: match method {
+                    v2::updates::IndexDocumentsMethod::ReplaceDocuments => {
+                        v3::updates::IndexDocumentsMethod::ReplaceDocuments
+                    }
+                    v2::updates::IndexDocumentsMethod::UpdateDocuments => {
+                        v3::updates::IndexDocumentsMethod::UpdateDocuments
+                    }
+                },
+                // we use this special uuid so we can recognize it if one day there is a bug related to this field.
+                content_uuid: Uuid::from_str("00112233-4455-6677-8899-aabbccddeeff").unwrap(),
+            }
+        }
         v2::updates::UpdateMeta::ClearDocuments => v3::updates::Update::ClearDocuments,
         v2::updates::UpdateMeta::DeleteDocuments { ids } => {
             v3::updates::Update::DeleteDocuments(ids)
@@ -354,10 +345,7 @@ impl<T> From<v2::Settings<T>> for v3::Settings<v3::Unchecked> {
                 .map(|f| f.into_iter().collect()),
             sortable_attributes: v3::Setting::NotSet,
             ranking_rules: option_to_setting(settings.ranking_rules).map(|criteria| {
-                criteria
-                    .into_iter()
-                    .map(|criterion| patch_ranking_rules(&criterion))
-                    .collect()
+                criteria.into_iter().map(|criterion| patch_ranking_rules(&criterion)).collect()
             }),
             stop_words: option_to_setting(settings.stop_words),
             synonyms: option_to_setting(settings.synonyms),
@@ -383,7 +371,8 @@ fn patch_ranking_rules(ranking_rule: &str) -> String {
 
 #[cfg(test)]
 pub(crate) mod test {
-    use std::{fs::File, io::BufReader};
+    use std::fs::File;
+    use std::io::BufReader;
 
     use flate2::bufread::GzDecoder;
     use tempfile::TempDir;
@@ -412,11 +401,7 @@ pub(crate) mod test {
         assert!(update_files[0].is_some()); // the enqueued document addition
         assert!(update_files[1..].iter().all(|u| u.is_none())); // everything already processed
 
-        let update_file = update_files
-            .remove(0)
-            .unwrap()
-            .collect::<Result<Vec<_>>>()
-            .unwrap();
+        let update_file = update_files.remove(0).unwrap().collect::<Result<Vec<_>>>().unwrap();
         meili_snap::snapshot_hash!(meili_snap::json_string!(update_file), @"7b8889539b669c7b9ddba448bafa385d");
 
         // indexes
@@ -441,11 +426,7 @@ pub(crate) mod test {
         "###);
 
         meili_snap::snapshot_hash!(format!("{:#?}", products.settings()), @"f43338ecceeddd1ce13ffd55438b2347");
-        let documents = products
-            .documents()
-            .unwrap()
-            .collect::<Result<Vec<_>>>()
-            .unwrap();
+        let documents = products.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 10);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"548284a84de510f71e88e6cdea495cf5");
 
@@ -460,11 +441,7 @@ pub(crate) mod test {
         "###);
 
         meili_snap::snapshot_hash!(format!("{:#?}", movies.settings()), @"0d76c745cb334e8c20d6d6a14df733e1");
-        let documents = movies
-            .documents()
-            .unwrap()
-            .collect::<Result<Vec<_>>>()
-            .unwrap();
+        let documents = movies.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 110);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"d153b5a81d8b3cdcbe1dec270b574022");
 
@@ -479,11 +456,7 @@ pub(crate) mod test {
         "###);
 
         meili_snap::snapshot_hash!(format!("{:#?}", movies2.settings()), @"09a2f7c571729f70f4cd93e24e8e3f28");
-        let documents = movies2
-            .documents()
-            .unwrap()
-            .collect::<Result<Vec<_>>>()
-            .unwrap();
+        let documents = movies2.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 0);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"d751713988987e9331980363e24189ce");
 
@@ -498,11 +471,7 @@ pub(crate) mod test {
         "###);
 
         meili_snap::snapshot_hash!(format!("{:#?}", spells.settings()), @"09a2f7c571729f70f4cd93e24e8e3f28");
-        let documents = spells
-            .documents()
-            .unwrap()
-            .collect::<Result<Vec<_>>>()
-            .unwrap();
+        let documents = spells.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 10);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"235016433dd04262c7f2da01d1e808ce");
     }

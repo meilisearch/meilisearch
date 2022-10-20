@@ -1,17 +1,14 @@
-use std::{
-    fmt::Write,
-    panic::{catch_unwind, resume_unwind, UnwindSafe},
-    time::Duration,
-};
+use std::fmt::Write;
+use std::panic::{catch_unwind, resume_unwind, UnwindSafe};
+use std::time::Duration;
 
 use actix_web::http::StatusCode;
 use serde_json::{json, Value};
 use tokio::time::sleep;
 use urlencoding::encode as urlencode;
 
-use super::service::Service;
-
 use super::encoder::Encoder;
+use super::service::Service;
 
 pub struct Index<'a> {
     pub uid: String,
@@ -28,10 +25,8 @@ impl Index<'_> {
 
     pub async fn load_test_set(&self) -> u64 {
         let url = format!("/indexes/{}/documents", urlencode(self.uid.as_ref()));
-        let (response, code) = self
-            .service
-            .post_str(url, include_str!("../assets/test_set.json"))
-            .await;
+        let (response, code) =
+            self.service.post_str(url, include_str!("../assets/test_set.json")).await;
         assert_eq!(code, 202);
         let update_id = response["taskUid"].as_i64().unwrap();
         self.wait_task(update_id as u64).await;
@@ -43,9 +38,7 @@ impl Index<'_> {
             "uid": self.uid,
             "primaryKey": primary_key,
         });
-        self.service
-            .post_encoded("/indexes", body, self.encoder)
-            .await
+        self.service.post_encoded("/indexes", body, self.encoder).await
     }
 
     pub async fn update(&self, primary_key: Option<&str>) -> (Value, StatusCode) {
@@ -68,16 +61,12 @@ impl Index<'_> {
         primary_key: Option<&str>,
     ) -> (Value, StatusCode) {
         let url = match primary_key {
-            Some(key) => format!(
-                "/indexes/{}/documents?primaryKey={}",
-                urlencode(self.uid.as_ref()),
-                key
-            ),
+            Some(key) => {
+                format!("/indexes/{}/documents?primaryKey={}", urlencode(self.uid.as_ref()), key)
+            }
             None => format!("/indexes/{}/documents", urlencode(self.uid.as_ref())),
         };
-        self.service
-            .post_encoded(url, documents, self.encoder)
-            .await
+        self.service.post_encoded(url, documents, self.encoder).await
     }
 
     pub async fn update_documents(
@@ -86,11 +75,9 @@ impl Index<'_> {
         primary_key: Option<&str>,
     ) -> (Value, StatusCode) {
         let url = match primary_key {
-            Some(key) => format!(
-                "/indexes/{}/documents?primaryKey={}",
-                urlencode(self.uid.as_ref()),
-                key
-            ),
+            Some(key) => {
+                format!("/indexes/{}/documents?primaryKey={}", urlencode(self.uid.as_ref()), key)
+            }
             None => format!("/indexes/{}/documents", urlencode(self.uid.as_ref())),
         };
         self.service.put_encoded(url, documents, self.encoder).await
@@ -174,13 +161,8 @@ impl Index<'_> {
     }
 
     pub async fn delete_batch(&self, ids: Vec<u64>) -> (Value, StatusCode) {
-        let url = format!(
-            "/indexes/{}/documents/delete-batch",
-            urlencode(self.uid.as_ref())
-        );
-        self.service
-            .post_encoded(url, serde_json::to_value(&ids).unwrap(), self.encoder)
-            .await
+        let url = format!("/indexes/{}/documents/delete-batch", urlencode(self.uid.as_ref()));
+        self.service.post_encoded(url, serde_json::to_value(&ids).unwrap(), self.encoder).await
     }
 
     pub async fn settings(&self) -> (Value, StatusCode) {
@@ -190,9 +172,7 @@ impl Index<'_> {
 
     pub async fn update_settings(&self, settings: Value) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/settings", urlencode(self.uid.as_ref()));
-        self.service
-            .patch_encoded(url, settings, self.encoder)
-            .await
+        self.service.patch_encoded(url, settings, self.encoder).await
     }
 
     pub async fn delete_settings(&self) -> (Value, StatusCode) {
@@ -232,29 +212,19 @@ impl Index<'_> {
 
     pub async fn search_get(&self, query: Value) -> (Value, StatusCode) {
         let params = yaup::to_string(&query).unwrap();
-        let url = format!(
-            "/indexes/{}/search?{}",
-            urlencode(self.uid.as_ref()),
-            params
-        );
+        let url = format!("/indexes/{}/search?{}", urlencode(self.uid.as_ref()), params);
         self.service.get(url).await
     }
 
     pub async fn update_distinct_attribute(&self, value: Value) -> (Value, StatusCode) {
-        let url = format!(
-            "/indexes/{}/settings/{}",
-            urlencode(self.uid.as_ref()),
-            "distinct-attribute"
-        );
+        let url =
+            format!("/indexes/{}/settings/{}", urlencode(self.uid.as_ref()), "distinct-attribute");
         self.service.put_encoded(url, value, self.encoder).await
     }
 
     pub async fn get_distinct_attribute(&self) -> (Value, StatusCode) {
-        let url = format!(
-            "/indexes/{}/settings/{}",
-            urlencode(self.uid.as_ref()),
-            "distinct-attribute"
-        );
+        let url =
+            format!("/indexes/{}/settings/{}", urlencode(self.uid.as_ref()), "distinct-attribute");
         self.service.get(url).await
     }
 }

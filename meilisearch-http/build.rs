@@ -72,11 +72,8 @@ mod mini_dashboard {
         resource_dir(&dashboard_dir).build()?;
 
         // Write the sha1 for the dashboard back to file.
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(sha1_path)?;
+        let mut file =
+            OpenOptions::new().write(true).create(true).truncate(true).open(sha1_path)?;
 
         file.write_all(sha1.as_bytes())?;
         file.flush()?;

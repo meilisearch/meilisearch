@@ -1,9 +1,10 @@
-use crate::common::{GetAllDocumentsOptions, Server};
 use actix_web::test;
+use serde_json::{json, Value};
+use time::format_description::well_known::Rfc3339;
+use time::OffsetDateTime;
 
 use crate::common::encoder::Encoder;
-use serde_json::{json, Value};
-use time::{format_description::well_known::Rfc3339, OffsetDateTime};
+use crate::common::{GetAllDocumentsOptions, Server};
 
 /// This is the basic usage of our API and every other tests uses the content-type application/json
 #[actix_rt::test]
@@ -192,10 +193,7 @@ async fn error_add_documents_test_bad_content_types() {
     );
     assert_eq!(response["code"], "invalid_content_type");
     assert_eq!(response["type"], "invalid_request");
-    assert_eq!(
-        response["link"],
-        "https://docs.meilisearch.com/errors#invalid_content_type"
-    );
+    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#invalid_content_type");
 
     // put
     let req = test::TestRequest::put()
@@ -216,10 +214,7 @@ async fn error_add_documents_test_bad_content_types() {
     );
     assert_eq!(response["code"], "invalid_content_type");
     assert_eq!(response["type"], "invalid_request");
-    assert_eq!(
-        response["link"],
-        "https://docs.meilisearch.com/errors#invalid_content_type"
-    );
+    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#invalid_content_type");
 }
 
 /// missing content-type must be refused
@@ -253,10 +248,7 @@ async fn error_add_documents_test_no_content_type() {
     );
     assert_eq!(response["code"], "missing_content_type");
     assert_eq!(response["type"], "invalid_request");
-    assert_eq!(
-        response["link"],
-        "https://docs.meilisearch.com/errors#missing_content_type"
-    );
+    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#missing_content_type");
 
     // put
     let req = test::TestRequest::put()
@@ -276,10 +268,7 @@ async fn error_add_documents_test_no_content_type() {
     );
     assert_eq!(response["code"], "missing_content_type");
     assert_eq!(response["type"], "invalid_request");
-    assert_eq!(
-        response["link"],
-        "https://docs.meilisearch.com/errors#missing_content_type"
-    );
+    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#missing_content_type");
 }
 
 #[actix_rt::test]
@@ -308,10 +297,7 @@ async fn error_add_malformed_csv_documents() {
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(
-        response["link"],
-        json!("https://docs.meilisearch.com/errors#malformed_payload")
-    );
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
 
     // put
     let req = test::TestRequest::put()
@@ -332,10 +318,7 @@ async fn error_add_malformed_csv_documents() {
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(
-        response["link"],
-        json!("https://docs.meilisearch.com/errors#malformed_payload")
-    );
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
 }
 
 #[actix_rt::test]
@@ -364,10 +347,7 @@ async fn error_add_malformed_json_documents() {
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(
-        response["link"],
-        json!("https://docs.meilisearch.com/errors#malformed_payload")
-    );
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
 
     // put
     let req = test::TestRequest::put()
@@ -388,10 +368,7 @@ async fn error_add_malformed_json_documents() {
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(
-        response["link"],
-        json!("https://docs.meilisearch.com/errors#malformed_payload")
-    );
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
 
     // truncate
 
@@ -416,10 +393,7 @@ async fn error_add_malformed_json_documents() {
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(
-        response["link"],
-        json!("https://docs.meilisearch.com/errors#malformed_payload")
-    );
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
 
     // add one more char to the long string to test if the truncating works.
     let document = format!("\"{}m\"", long);
@@ -438,10 +412,7 @@ async fn error_add_malformed_json_documents() {
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(
-        response["link"],
-        json!("https://docs.meilisearch.com/errors#malformed_payload")
-    );
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
 }
 
 #[actix_rt::test]
@@ -470,10 +441,7 @@ async fn error_add_malformed_ndjson_documents() {
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(
-        response["link"],
-        json!("https://docs.meilisearch.com/errors#malformed_payload")
-    );
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
 
     // put
     let req = test::TestRequest::put()
@@ -492,10 +460,7 @@ async fn error_add_malformed_ndjson_documents() {
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(
-        response["link"],
-        json!("https://docs.meilisearch.com/errors#malformed_payload")
-    );
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
 }
 
 #[actix_rt::test]
@@ -519,10 +484,7 @@ async fn error_add_missing_payload_csv_documents() {
     assert_eq!(response["message"], json!(r#"A csv payload is missing."#));
     assert_eq!(response["code"], json!("missing_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(
-        response["link"],
-        json!("https://docs.meilisearch.com/errors#missing_payload")
-    );
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing_payload"));
 
     // put
     let req = test::TestRequest::put()
@@ -538,10 +500,7 @@ async fn error_add_missing_payload_csv_documents() {
     assert_eq!(response["message"], json!(r#"A csv payload is missing."#));
     assert_eq!(response["code"], json!("missing_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(
-        response["link"],
-        json!("https://docs.meilisearch.com/errors#missing_payload")
-    );
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing_payload"));
 }
 
 #[actix_rt::test]
@@ -565,10 +524,7 @@ async fn error_add_missing_payload_json_documents() {
     assert_eq!(response["message"], json!(r#"A json payload is missing."#));
     assert_eq!(response["code"], json!("missing_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(
-        response["link"],
-        json!("https://docs.meilisearch.com/errors#missing_payload")
-    );
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing_payload"));
 
     // put
     let req = test::TestRequest::put()
@@ -584,10 +540,7 @@ async fn error_add_missing_payload_json_documents() {
     assert_eq!(response["message"], json!(r#"A json payload is missing."#));
     assert_eq!(response["code"], json!("missing_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(
-        response["link"],
-        json!("https://docs.meilisearch.com/errors#missing_payload")
-    );
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing_payload"));
 }
 
 #[actix_rt::test]
@@ -608,16 +561,10 @@ async fn error_add_missing_payload_ndjson_documents() {
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     assert_eq!(status_code, 400);
-    assert_eq!(
-        response["message"],
-        json!(r#"A ndjson payload is missing."#)
-    );
+    assert_eq!(response["message"], json!(r#"A ndjson payload is missing."#));
     assert_eq!(response["code"], json!("missing_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(
-        response["link"],
-        json!("https://docs.meilisearch.com/errors#missing_payload")
-    );
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing_payload"));
 
     // put
     let req = test::TestRequest::put()
@@ -630,16 +577,10 @@ async fn error_add_missing_payload_ndjson_documents() {
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     assert_eq!(status_code, 400);
-    assert_eq!(
-        response["message"],
-        json!(r#"A ndjson payload is missing."#)
-    );
+    assert_eq!(response["message"], json!(r#"A ndjson payload is missing."#));
     assert_eq!(response["code"], json!("missing_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(
-        response["link"],
-        json!("https://docs.meilisearch.com/errors#missing_payload")
-    );
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing_payload"));
 }
 
 #[actix_rt::test]
@@ -792,10 +733,7 @@ async fn add_larger_dataset() {
     assert_eq!(response["details"]["indexedDocuments"], 77);
     assert_eq!(response["details"]["receivedDocuments"], 77);
     let (response, code) = index
-        .get_all_documents(GetAllDocumentsOptions {
-            limit: Some(1000),
-            ..Default::default()
-        })
+        .get_all_documents(GetAllDocumentsOptions { limit: Some(1000), ..Default::default() })
         .await;
     assert_eq!(code, 200, "failed with `{}`", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 77);
@@ -900,9 +838,7 @@ async fn add_documents_invalid_geo_field() {
     let server = Server::new().await;
     let index = server.index("test");
     index.create(Some("id")).await;
-    index
-        .update_settings(json!({"sortableAttributes": ["_geo"]}))
-        .await;
+    index.update_settings(json!({"sortableAttributes": ["_geo"]})).await;
 
     let documents = json!([
         {
@@ -1045,10 +981,7 @@ async fn batch_several_documents_addition() {
 
     // Check if there are exactly 120 documents (150 - 30) in the index;
     let (response, code) = index
-        .get_all_documents(GetAllDocumentsOptions {
-            limit: Some(200),
-            ..Default::default()
-        })
+        .get_all_documents(GetAllDocumentsOptions { limit: Some(200), ..Default::default() })
         .await;
     assert_eq!(code, 200, "failed with `{}`", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 120);

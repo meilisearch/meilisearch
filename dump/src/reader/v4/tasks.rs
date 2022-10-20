@@ -2,11 +2,9 @@ use serde::Deserialize;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use super::{
-    errors::ResponseError,
-    meta::IndexUid,
-    settings::{Settings, Unchecked},
-};
+use super::errors::ResponseError;
+use super::meta::IndexUid;
+use super::settings::{Settings, Unchecked};
 
 pub type TaskId = u32;
 pub type BatchId = u32;
@@ -109,10 +107,9 @@ impl Task {
     /// Return the content_uuid of the `Task` if there is one.
     pub fn get_content_uuid(&self) -> Option<Uuid> {
         match self {
-            Task {
-                content: TaskContent::DocumentAddition { content_uuid, .. },
-                ..
-            } => Some(*content_uuid),
+            Task { content: TaskContent::DocumentAddition { content_uuid, .. }, .. } => {
+                Some(*content_uuid)
+            }
             _ => None,
         }
     }

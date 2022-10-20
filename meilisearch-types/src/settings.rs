@@ -376,9 +376,8 @@ pub fn settings(
     index: &Index,
     rtxn: &crate::heed::RoTxn,
 ) -> Result<Settings<Checked>, milli::Error> {
-    let displayed_attributes = index
-        .displayed_fields(rtxn)?
-        .map(|fields| fields.into_iter().map(String::from).collect());
+    let displayed_attributes =
+        index.displayed_fields(rtxn)?.map(|fields| fields.into_iter().map(String::from).collect());
 
     let searchable_attributes = index
         .user_defined_searchable_fields(rtxn)?
@@ -388,11 +387,7 @@ pub fn settings(
 
     let sortable_attributes = index.sortable_fields(rtxn)?.into_iter().collect();
 
-    let criteria = index
-        .criteria(rtxn)?
-        .into_iter()
-        .map(|c| c.to_string())
-        .collect();
+    let criteria = index.criteria(rtxn)?.into_iter().map(|c| c.to_string()).collect();
 
     let stop_words = index
         .stop_words(rtxn)?
@@ -408,12 +403,7 @@ pub fn settings(
     let synonyms = index
         .synonyms(rtxn)?
         .iter()
-        .map(|(key, values)| {
-            (
-                key.join(" "),
-                values.iter().map(|value| value.join(" ")).collect(),
-            )
-        })
+        .map(|(key, values)| (key.join(" "), values.iter().map(|value| value.join(" ")).collect()))
         .collect();
 
     let min_typo_word_len = MinWordSizeTyposSetting {
@@ -426,11 +416,7 @@ pub fn settings(
         None => BTreeSet::new(),
     };
 
-    let disabled_attributes = index
-        .exact_attributes(rtxn)?
-        .into_iter()
-        .map(String::from)
-        .collect();
+    let disabled_attributes = index.exact_attributes(rtxn)?.into_iter().map(String::from).collect();
 
     let typo_tolerance = TypoSettings {
         enabled: Setting::Set(index.authorize_typos(rtxn)?),
@@ -441,17 +427,13 @@ pub fn settings(
 
     let faceting = FacetingSettings {
         max_values_per_facet: Setting::Set(
-            index
-                .max_values_per_facet(rtxn)?
-                .unwrap_or(DEFAULT_VALUES_PER_FACET),
+            index.max_values_per_facet(rtxn)?.unwrap_or(DEFAULT_VALUES_PER_FACET),
         ),
     };
 
     let pagination = PaginationSettings {
         max_total_hits: Setting::Set(
-            index
-                .pagination_max_total_hits(rtxn)?
-                .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS),
+            index.pagination_max_total_hits(rtxn)?.unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS),
         ),
     };
 
@@ -487,11 +469,7 @@ pub(crate) mod test {
     use super::*;
 
     pub(super) fn setting_strategy<T: Arbitrary + Clone>() -> impl Strategy<Value = Setting<T>> {
-        prop_oneof![
-            Just(Setting::NotSet),
-            Just(Setting::Reset),
-            any::<T>().prop_map(Setting::Set)
-        ]
+        prop_oneof![Just(Setting::NotSet), Just(Setting::Reset), any::<T>().prop_map(Setting::Set)]
     }
 
     #[test]
@@ -514,10 +492,7 @@ pub(crate) mod test {
 
         let checked = settings.clone().check();
         assert_eq!(settings.displayed_attributes, checked.displayed_attributes);
-        assert_eq!(
-            settings.searchable_attributes,
-            checked.searchable_attributes
-        );
+        assert_eq!(settings.searchable_attributes, checked.searchable_attributes);
 
         // test wildcard
         // test no changes

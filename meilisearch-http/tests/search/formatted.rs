@@ -1,15 +1,14 @@
+use serde_json::json;
+
 use super::*;
 use crate::common::Server;
-use serde_json::json;
 
 #[actix_rt::test]
 async fn formatted_contain_wildcard() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    index
-        .update_settings(json!({ "displayedAttributes": ["id", "cattos"] }))
-        .await;
+    index.update_settings(json!({ "displayedAttributes": ["id", "cattos"] })).await;
 
     let documents = NESTED_DOCUMENTS.clone();
     index.add_documents(documents, None).await;
@@ -34,19 +33,16 @@ async fn formatted_contain_wildcard() {
     .await;
 
     index
-        .search(
-            json!({ "q": "pesti", "attributesToRetrieve": ["*"] }),
-            |response, code| {
-                assert_eq!(code, 200, "{}", response);
-                assert_eq!(
-                    response["hits"][0],
-                    json!({
-                        "id": 852,
-                        "cattos": "pesti",
-                    })
-                );
-            },
-        )
+        .search(json!({ "q": "pesti", "attributesToRetrieve": ["*"] }), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            assert_eq!(
+                response["hits"][0],
+                json!({
+                    "id": 852,
+                    "cattos": "pesti",
+                })
+            );
+        })
         .await;
 
     index
@@ -91,23 +87,20 @@ async fn formatted_contain_wildcard() {
         .await;
 
     index
-        .search(
-            json!({ "q": "pesti", "attributesToCrop": ["*"] }),
-            |response, code| {
-                assert_eq!(code, 200, "{}", response);
-                assert_eq!(
-                    response["hits"][0],
-                    json!({
-                        "id": 852,
+        .search(json!({ "q": "pesti", "attributesToCrop": ["*"] }), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            assert_eq!(
+                response["hits"][0],
+                json!({
+                    "id": 852,
+                    "cattos": "pesti",
+                    "_formatted": {
+                        "id": "852",
                         "cattos": "pesti",
-                        "_formatted": {
-                            "id": "852",
-                            "cattos": "pesti",
-                        }
-                    })
-                );
-            },
-        )
+                    }
+                })
+            );
+        })
         .await;
 }
 
@@ -121,27 +114,24 @@ async fn format_nested() {
     index.wait_task(0).await;
 
     index
-        .search(
-            json!({ "q": "pesti", "attributesToRetrieve": ["doggos"] }),
-            |response, code| {
-                assert_eq!(code, 200, "{}", response);
-                assert_eq!(
-                    response["hits"][0],
-                    json!({
-                        "doggos": [
-                            {
-                                "name": "bobby",
-                                "age": 2,
-                            },
-                            {
-                                "name": "buddy",
-                                "age": 4,
-                            },
-                        ],
-                    })
-                );
-            },
-        )
+        .search(json!({ "q": "pesti", "attributesToRetrieve": ["doggos"] }), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            assert_eq!(
+                response["hits"][0],
+                json!({
+                    "doggos": [
+                        {
+                            "name": "bobby",
+                            "age": 2,
+                        },
+                        {
+                            "name": "buddy",
+                            "age": 4,
+                        },
+                    ],
+                })
+            );
+        })
         .await;
 
     index
@@ -297,9 +287,7 @@ async fn displayedattr_2_smol() {
     let index = server.index("test");
 
     // not enough displayed for the other settings
-    index
-        .update_settings(json!({ "displayedAttributes": ["id"] }))
-        .await;
+    index.update_settings(json!({ "displayedAttributes": ["id"] })).await;
 
     let documents = NESTED_DOCUMENTS.clone();
     index.add_documents(documents, None).await;
@@ -319,36 +307,30 @@ async fn displayedattr_2_smol() {
         .await;
 
     index
-        .search(
-            json!({ "attributesToRetrieve": ["id"] }),
-            |response, code| {
-                assert_eq!(code, 200, "{}", response);
-                assert_eq!(
-                    response["hits"][0],
-                    json!({
-                        "id": 852,
-                    })
-                );
-            },
-        )
+        .search(json!({ "attributesToRetrieve": ["id"] }), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            assert_eq!(
+                response["hits"][0],
+                json!({
+                    "id": 852,
+                })
+            );
+        })
         .await;
 
     index
-        .search(
-            json!({ "attributesToHighlight": ["id"] }),
-            |response, code| {
-                assert_eq!(code, 200, "{}", response);
-                assert_eq!(
-                    response["hits"][0],
-                    json!({
-                        "id": 852,
-                        "_formatted": {
-                            "id": "852",
-                        }
-                    })
-                );
-            },
-        )
+        .search(json!({ "attributesToHighlight": ["id"] }), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            assert_eq!(
+                response["hits"][0],
+                json!({
+                    "id": 852,
+                    "_formatted": {
+                        "id": "852",
+                    }
+                })
+            );
+        })
         .await;
 
     index
@@ -385,43 +367,34 @@ async fn displayedattr_2_smol() {
         .await;
 
     index
-        .search(
-            json!({ "attributesToHighlight": ["cattos"] }),
-            |response, code| {
-                assert_eq!(code, 200, "{}", response);
-                assert_eq!(
-                    response["hits"][0],
-                    json!({
-                        "id": 852,
-                    })
-                );
-            },
-        )
+        .search(json!({ "attributesToHighlight": ["cattos"] }), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            assert_eq!(
+                response["hits"][0],
+                json!({
+                    "id": 852,
+                })
+            );
+        })
         .await;
 
     index
-        .search(
-            json!({ "attributesToCrop": ["cattos"] }),
-            |response, code| {
-                assert_eq!(code, 200, "{}", response);
-                assert_eq!(
-                    response["hits"][0],
-                    json!({
-                        "id": 852,
-                    })
-                );
-            },
-        )
+        .search(json!({ "attributesToCrop": ["cattos"] }), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            assert_eq!(
+                response["hits"][0],
+                json!({
+                    "id": 852,
+                })
+            );
+        })
         .await;
 
     index
-        .search(
-            json!({ "attributesToRetrieve": ["cattos"] }),
-            |response, code| {
-                assert_eq!(code, 200, "{}", response);
-                assert_eq!(response["hits"][0], json!({}));
-            },
-        )
+        .search(json!({ "attributesToRetrieve": ["cattos"] }), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            assert_eq!(response["hits"][0], json!({}));
+        })
         .await;
 
     index

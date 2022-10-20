@@ -9,11 +9,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
 
-use crate::analytics::Analytics;
-use crate::extractors::authentication::{policies::*, AuthenticationError, GuardedData};
-use crate::extractors::sequential_extractor::SeqHandler;
-
 use super::{Pagination, SummarizedTaskView};
+use crate::analytics::Analytics;
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::{AuthenticationError, GuardedData};
+use crate::extractors::sequential_extractor::SeqHandler;
 
 pub mod documents;
 pub mod search;
@@ -104,14 +104,9 @@ pub async fn create_index(
             Some(&req),
         );
 
-        let task = KindWithContent::IndexCreation {
-            index_uid: uid,
-            primary_key,
-        };
+        let task = KindWithContent::IndexCreation { index_uid: uid, primary_key };
         let task: SummarizedTaskView =
-            tokio::task::spawn_blocking(move || index_scheduler.register(task))
-            .await??
-            .into();
+            tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
         Ok(HttpResponse::Accepted().json(task))
     } else {
@@ -160,9 +155,7 @@ pub async fn update_index(
     };
 
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task))
-            .await??
-            .into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
@@ -172,13 +165,9 @@ pub async fn delete_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_DELETE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let task = KindWithContent::IndexDeletion {
-        index_uid: index_uid.into_inner(),
-    };
+    let task = KindWithContent::IndexDeletion { index_uid: index_uid.into_inner() };
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task))
-            .await??
-            .into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
     Ok(HttpResponse::Accepted().json(task))
 }
@@ -189,11 +178,7 @@ pub async fn get_index_stats(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    analytics.publish(
-        "Stats Seen".to_string(),
-        json!({ "per_index_uid": true }),
-        Some(&req),
-    );
+    analytics.publish("Stats Seen".to_string(), json!({ "per_index_uid": true }), Some(&req));
 
     let stats = IndexStats::new((*index_scheduler).clone(), index_uid.into_inner());
 

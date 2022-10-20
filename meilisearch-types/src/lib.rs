@@ -7,8 +7,7 @@ pub mod star_or;
 pub mod tasks;
 
 pub use milli;
-pub use milli::heed;
-pub use milli::Index;
+pub use milli::{heed, Index};
 use uuid::Uuid;
 
 pub type Document = serde_json::Map<String, serde_json::Value>;

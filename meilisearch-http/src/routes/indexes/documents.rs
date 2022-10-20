@@ -2,8 +2,7 @@ use std::io::Cursor;
 
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;
-use actix_web::HttpMessage;
-use actix_web::{web, HttpRequest, HttpResponse};
+use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use bstr::ByteSlice;
 use futures::StreamExt;
 use index_scheduler::IndexScheduler;
@@ -23,17 +22,14 @@ use serde_json::Value;
 
 use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
-use crate::extractors::authentication::{policies::*, GuardedData};
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::GuardedData;
 use crate::extractors::payload::Payload;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::{fold_star_or, PaginationView, SummarizedTaskView};
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
-    vec![
-        "application/json".to_string(),
-        "application/x-ndjson".to_string(),
-        "text/csv".to_string(),
-    ]
+    vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]
 });
 
 /// Extracts the mime type from the content type and return
@@ -47,9 +43,7 @@ fn extract_mime_type(req: &HttpRequest) -> Result<Option<Mime>, MeilisearchHttpE
                 content_type.as_bytes().as_bstr().to_string(),
                 ACCEPTED_CONTENT_TYPE.clone(),
             )),
-            None => Err(MeilisearchHttpError::MissingContentType(
-                ACCEPTED_CONTENT_TYPE.clone(),
-            )),
+            None => Err(MeilisearchHttpError::MissingContentType(ACCEPTED_CONTENT_TYPE.clone())),
         },
     }
 }
@@ -101,18 +95,10 @@ pub async fn delete_document(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let DocumentParam {
-        document_id,
-        index_uid,
-    } = path.into_inner();
-    let task = KindWithContent::DocumentDeletion {
-        index_uid,
-        documents_ids: vec![document_id],
-    };
+    let DocumentParam { document_id, index_uid } = path.into_inner();
+    let task = KindWithContent::DocumentDeletion { index_uid, documents_ids: vec![document_id] };
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task))
-            .await??
-            .into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
 }
@@ -133,11 +119,7 @@ pub async fn get_all_documents(
     params: web::Query<BrowseQuery>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
-    let BrowseQuery {
-        limit,
-        offset,
-        fields,
-    } = params.into_inner();
+    let BrowseQuery { limit, offset, fields } = params.into_inner();
     let attributes_to_retrieve = fields.and_then(fold_star_or);
 
     let index = index_scheduler.index(&index_uid)?;
@@ -220,10 +202,7 @@ async fn document_addition(
     method: IndexDocumentsMethod,
     allow_index_creation: bool,
 ) -> Result<SummarizedTaskView, MeilisearchHttpError> {
-    let format = match mime_type
-        .as_ref()
-        .map(|m| (m.type_().as_str(), m.subtype().as_str()))
-    {
+    let format = match mime_type.as_ref().map(|m| (m.type_().as_str(), m.subtype().as_str())) {
         Some(("application", "json")) => PayloadType::Json,
         Some(("application", "x-ndjson")) => PayloadType::Ndjson,
         Some(("text", "csv")) => PayloadType::Csv,
@@ -234,9 +213,7 @@ async fn document_addition(
             ))
         }
         None => {
-            return Err(MeilisearchHttpError::MissingContentType(
-                ACCEPTED_CONTENT_TYPE.clone(),
-            ))
+            return Err(MeilisearchHttpError::MissingContentType(ACCEPTED_CONTENT_TYPE.clone()))
         }
     };
 
@@ -308,21 +285,13 @@ pub async fn delete_documents(
     debug!("called with params: {:?}", body);
     let ids = body
         .iter()
-        .map(|v| {
-            v.as_str()
-                .map(String::from)
-                .unwrap_or_else(|| v.to_string())
-        })
+        .map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string()))
         .collect();
 
-    let task = KindWithContent::DocumentDeletion {
-        index_uid: path.into_inner(),
-        documents_ids: ids,
-    };
+    let task =
+        KindWithContent::DocumentDeletion { index_uid: path.into_inner(), documents_ids: ids };
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task))
-            .await??
-            .into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
@@ -332,13 +301,9 @@ pub async fn clear_all_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let task = KindWithContent::DocumentClear {
-        index_uid: path.into_inner(),
-    };
+    let task = KindWithContent::DocumentClear { index_uid: path.into_inner() };
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task))
-            .await??
-            .into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
@@ -352,10 +317,9 @@ fn all_documents<'a>(
     let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
 
     Ok(index.all_documents(rtxn)?.map(move |ret| {
-        ret.map_err(ResponseError::from)
-            .and_then(|(_key, document)| -> Result<_, ResponseError> {
-                Ok(milli::obkv_to_json(&all_fields, &fields_ids_map, document)?)
-            })
+        ret.map_err(ResponseError::from).and_then(|(_key, document)| -> Result<_, ResponseError> {
+            Ok(milli::obkv_to_json(&all_fields, &fields_ids_map, document)?)
+        })
     }))
 }
 

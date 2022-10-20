@@ -1,10 +1,12 @@
-use crate::common::Server;
+use std::collections::{HashMap, HashSet};
+
 use ::time::format_description::well_known::Rfc3339;
 use maplit::{hashmap, hashset};
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
 use time::{Duration, OffsetDateTime};
+
+use crate::common::Server;
 
 pub static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'static str>>> =
     Lazy::new(|| {
@@ -57,21 +59,14 @@ pub static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'
         };
 
         if cfg!(feature = "metrics") {
-            authorizations.insert(
-                ("GET", "/metrics"),
-                hashset! {"metrics.get", "metrics.*", "*"},
-            );
+            authorizations.insert(("GET", "/metrics"), hashset! {"metrics.get", "metrics.*", "*"});
         }
 
         authorizations
     });
 
 pub static ALL_ACTIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    AUTHORIZATIONS
-        .values()
-        .cloned()
-        .reduce(|l, r| l.union(&r).cloned().collect())
-        .unwrap()
+    AUTHORIZATIONS.values().cloned().reduce(|l, r| l.union(&r).cloned().collect()).unwrap()
 });
 
 static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
@@ -109,13 +104,7 @@ async fn error_access_expired_key() {
     for (method, route) in AUTHORIZATIONS.keys() {
         let (response, code) = server.dummy_request(method, route).await;
 
-        assert_eq!(
-            response,
-            INVALID_RESPONSE.clone(),
-            "on route: {:?} - {:?}",
-            method,
-            route
-        );
+        assert_eq!(response, INVALID_RESPONSE.clone(), "on route: {:?} - {:?}", method, route);
         assert_eq!(403, code, "{:?}", &response);
     }
 }
@@ -146,13 +135,7 @@ async fn error_access_unauthorized_index() {
     {
         let (response, code) = server.dummy_request(method, route).await;
 
-        assert_eq!(
-            response,
-            INVALID_RESPONSE.clone(),
-            "on route: {:?} - {:?}",
-            method,
-            route
-        );
+        assert_eq!(response, INVALID_RESPONSE.clone(), "on route: {:?} - {:?}", method, route);
         assert_eq!(403, code, "{:?}", &response);
     }
 }
@@ -180,13 +163,7 @@ async fn error_access_unauthorized_action() {
         server.use_api_key(&key);
         let (response, code) = server.dummy_request(method, route).await;
 
-        assert_eq!(
-            response,
-            INVALID_RESPONSE.clone(),
-            "on route: {:?} - {:?}",
-            method,
-            route
-        );
+        assert_eq!(response, INVALID_RESPONSE.clone(), "on route: {:?} - {:?}", method, route);
         assert_eq!(403, code, "{:?}", &response);
     }
 }
@@ -201,13 +178,7 @@ async fn access_authorized_master_key() {
     for ((method, route), _) in AUTHORIZATIONS.iter() {
         let (response, code) = server.dummy_request(method, route).await;
 
-        assert_ne!(
-            response,
-            INVALID_RESPONSE.clone(),
-            "on route: {:?} - {:?}",
-            method,
-            route
-        );
+        assert_ne!(response, INVALID_RESPONSE.clone(), "on route: {:?} - {:?}", method, route);
         assert_ne!(code, 403);
     }
 }

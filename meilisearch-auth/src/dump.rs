@@ -1,9 +1,8 @@
-use serde_json::Deserializer;
-
 use std::fs::File;
-use std::io::BufReader;
-use std::io::Write;
+use std::io::{BufReader, Write};
 use std::path::Path;
+
+use serde_json::Deserializer;
 
 use crate::{AuthController, HeedAuthStore, Result};
 

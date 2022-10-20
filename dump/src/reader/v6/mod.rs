@@ -1,19 +1,15 @@
-use std::{
-    fs::{self, File},
-    io::{BufRead, BufReader},
-    path::Path,
-    str::FromStr,
-};
+use std::fs::{self, File};
+use std::io::{BufRead, BufReader};
+use std::path::Path;
+use std::str::FromStr;
 
+pub use meilisearch_types::milli;
 use tempfile::TempDir;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{Error, IndexMetadata, Result, Version};
-
-pub use meilisearch_types::milli;
-
 use super::Document;
+use crate::{Error, IndexMetadata, Result, Version};
 
 pub type Metadata = crate::Metadata;
 
@@ -89,11 +85,7 @@ impl V6Reader {
                     let entry = entry?;
                     if entry.file_type()?.is_dir() {
                         let index = V6IndexReader::new(
-                            entry
-                                .file_name()
-                                .to_str()
-                                .ok_or(Error::BadIndexName)?
-                                .to_string(),
+                            entry.file_name().to_str().ok_or(Error::BadIndexName)?.to_string(),
                             &entry.path(),
                         )?;
                         Ok(Some(index))
@@ -132,9 +124,7 @@ impl V6Reader {
 
     pub fn keys(&mut self) -> Box<dyn Iterator<Item = Result<Key>> + '_> {
         Box::new(
-            (&mut self.keys)
-                .lines()
-                .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) }),
+            (&mut self.keys).lines().map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) }),
         )
     }
 }
@@ -145,9 +135,7 @@ pub struct UpdateFile {
 
 impl UpdateFile {
     fn new(path: &Path) -> Result<Self> {
-        Ok(UpdateFile {
-            reader: BufReader::new(File::open(path)?),
-        })
+        Ok(UpdateFile { reader: BufReader::new(File::open(path)?) })
     }
 }
 

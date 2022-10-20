@@ -2,13 +2,14 @@ use std::borrow::Borrow;
 use std::fmt::{self, Debug, Display};
 use std::io::{self, BufReader, Read, Seek, Write};
 
-use crate::error::{Code, ErrorCode};
-use crate::internal_error;
 use either::Either;
 use milli::documents::{DocumentsBatchBuilder, Error};
 use milli::Object;
 use serde::Deserialize;
 use serde_json::error::Category;
+
+use crate::error::{Code, ErrorCode};
+use crate::internal_error;
 
 type Result<T> = std::result::Result<T, DocumentFormatError>;
 
@@ -105,10 +106,7 @@ pub fn read_csv(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
     builder.append_csv(csv).map_err(|e| (PayloadType::Csv, e))?;
 
     let count = builder.documents_count();
-    let _ = builder
-        .into_inner()
-        .map_err(Into::into)
-        .map_err(DocumentFormatError::Internal)?;
+    let _ = builder.into_inner().map_err(Into::into).map_err(DocumentFormatError::Internal)?;
 
     Ok(count as usize)
 }
@@ -119,9 +117,7 @@ pub fn read_ndjson(input: impl Read, writer: impl Write + Seek) -> Result<usize>
     let reader = BufReader::new(input);
 
     for result in serde_json::Deserializer::from_reader(reader).into_iter() {
-        let object = result
-            .map_err(Error::Json)
-            .map_err(|e| (PayloadType::Ndjson, e))?;
+        let object = result.map_err(Error::Json).map_err(|e| (PayloadType::Ndjson, e))?;
         builder
             .append_json_object(&object)
             .map_err(Into::into)
@@ -129,10 +125,7 @@ pub fn read_ndjson(input: impl Read, writer: impl Write + Seek) -> Result<usize>
     }
 
     let count = builder.documents_count();
-    let _ = builder
-        .into_inner()
-        .map_err(Into::into)
-        .map_err(DocumentFormatError::Internal)?;
+    let _ = builder.into_inner().map_err(Into::into).map_err(DocumentFormatError::Internal)?;
 
     Ok(count as usize)
 }
@@ -149,9 +142,8 @@ pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
         inner: Either<Vec<Object>, Object>,
     }
 
-    let content: ArrayOrSingleObject = serde_json::from_reader(reader)
-        .map_err(Error::Json)
-        .map_err(|e| (PayloadType::Json, e))?;
+    let content: ArrayOrSingleObject =
+        serde_json::from_reader(reader).map_err(Error::Json).map_err(|e| (PayloadType::Json, e))?;
 
     for object in content.inner.map_right(|o| vec![o]).into_inner() {
         builder
@@ -161,10 +153,7 @@ pub fn read_json(input: impl Read, writer: impl Write + Seek) -> Result<usize> {
     }
 
     let count = builder.documents_count();
-    let _ = builder
-        .into_inner()
-        .map_err(Into::into)
-        .map_err(DocumentFormatError::Internal)?;
+    let _ = builder.into_inner().map_err(Into::into).map_err(DocumentFormatError::Internal)?;
 
     Ok(count as usize)
 }
