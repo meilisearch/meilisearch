@@ -3,8 +3,6 @@ name = "meili-snap"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 insta = { version = "1.19.1", features = ["json", "redactions"] }
 md5 = "0.7.0"
