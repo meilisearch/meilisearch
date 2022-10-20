@@ -1327,6 +1327,45 @@ mod tests {
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_swap_processed");
     }
 
+    #[test]
+    fn document_addition_and_index_deletion_on_unexisting_index() {
+        let (index_scheduler, handle) = IndexScheduler::test(true);
+
+        let content = r#"
+        {
+            "id": 1,
+            "doggo": "bob"
+        }"#;
+
+        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
+        let documents_count =
+            meilisearch_types::document_formats::read_json(content.as_bytes(), file.as_file_mut())
+                .unwrap() as u64;
+        file.persist().unwrap();
+        index_scheduler
+            .register(KindWithContent::DocumentImport {
+                index_uid: S("doggos"),
+                primary_key: Some(S("id")),
+                method: ReplaceDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: true,
+            })
+            .unwrap();
+        index_scheduler
+            .register(KindWithContent::IndexDeletion {
+                index_uid: S("doggos"),
+            })
+            .unwrap();
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        handle.wait_till(Breakpoint::Start); // before anything happens.
+        handle.wait_till(Breakpoint::Start); // after the execution of the two tasks in a single batch.
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+    }
+
     #[macro_export]
     macro_rules! debug_snapshot {
         ($value:expr, @$snapshot:literal) => {{
