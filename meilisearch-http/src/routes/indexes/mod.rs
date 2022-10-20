@@ -210,12 +210,12 @@ impl IndexStats {
         index_uid: String,
     ) -> Result<Self, ResponseError> {
         // we check if there is currently a task processing associated with this index.
-        let processing_task = index_scheduler.get_tasks(
-            Query::default()
-                .with_status(Status::Processing)
-                .with_index(index_uid.clone())
-                .with_limit(1),
-        )?;
+        let processing_task = index_scheduler.get_tasks(Query {
+            status: Some(vec![Status::Processing]),
+            index_uid: Some(vec![index_uid.clone()]),
+            limit: Some(1),
+            ..Query::default()
+        })?;
         let is_processing = !processing_task.is_empty();
 
         let index = index_scheduler.index(&index_uid)?;

@@ -16,23 +16,29 @@ use crate::{Error, Result};
 
 const INDEX_MAPPING: &str = "index-mapping";
 
+/// Structure managing meilisearch's indexes.
+///
+/// It is responsible for:
+/// 1. Creating new indexes
+/// 2. Opening indexes and storing references to these opened indexes
+/// 3. Accessing indexes through their uuid
+/// 4. Mapping a user-defined name to each index uuid.
 #[derive(Clone)]
 pub struct IndexMapper {
-    // Keep track of the opened indexes and is used
-    // mainly by the index resolver.
+    /// Keep track of the opened indexes. Used mainly by the index resolver.
     index_map: Arc<RwLock<HashMap<Uuid, IndexStatus>>>,
 
     // TODO create a UUID Codec that uses the 16 bytes representation
-    // Map an index name with an index uuid currently available on disk.
+    /// Map an index name with an index uuid currently available on disk.
     index_mapping: Database<Str, SerdeBincode<Uuid>>,
 
+    /// Path to the folder where the LMDB environments of each index are.
     base_path: PathBuf,
     index_size: usize,
     pub indexer_config: Arc<IndexerConfig>,
 }
 
-/// Weither the index must not be inserted back
-/// or it is available for use.
+/// Whether the index is available for use or is forbidden to be inserted back in the index map
 #[derive(Clone)]
 pub enum IndexStatus {
     /// Do not insert it back in the index map as it is currently being deleted.
@@ -167,6 +173,7 @@ impl IndexMapper {
         Ok(index)
     }
 
+    /// Return all indexes, may open them if they weren't already opened.
     pub fn indexes(&self, rtxn: &RoTxn) -> Result<Vec<(String, Index)>> {
         self.index_mapping
             .iter(rtxn)?

@@ -1,3 +1,10 @@
+/*!
+The autobatcher is responsible for combining the next enqueued
+tasks affecting a single index into a [batch](crate::batch::Batch).
+
+The main function of the autobatcher is [`next_autobatch`].
+*/
+
 use meilisearch_types::milli::update::IndexDocumentsMethod::{
     self, ReplaceDocuments, UpdateDocuments,
 };
@@ -6,8 +13,10 @@ use std::ops::ControlFlow::{self, Break, Continue};
 
 use crate::KindWithContent;
 
-/// This enum contain the minimal necessary informations
-/// to make the autobatcher works.
+/// Succinctly describes a task's [`Kind`](meilisearch_types::tasks::Kind)
+/// for the purpose of simplifying the implementation of the autobatcher.
+///
+/// Only the non-prioritised tasks that can be grouped in a batch have a corresponding [`AutobatchKind`]
 enum AutobatchKind {
     DocumentImport {
         method: IndexDocumentsMethod,
@@ -387,6 +396,16 @@ impl BatchKind {
     }
 }
 
+/// Create a batch from an ordered list of tasks.
+///
+/// ## Preconditions
+/// 1. The tasks must be enqueued and given in the order in which they were enqueued
+/// 2. The tasks must not be prioritised tasks (e.g. task cancellation, dump, snapshot, task deletion)
+/// 3. The tasks must all be related to the same index
+///
+/// ## Return
+/// `None` if the list of tasks is empty. Otherwise, an [`AutoBatch`] that represents
+/// a subset of the given tasks.
 pub fn autobatch(enqueued: Vec<(TaskId, KindWithContent)>) -> Option<BatchKind> {
     let mut enqueued = enqueued.into_iter();
     let (id, kind) = enqueued.next()?;
