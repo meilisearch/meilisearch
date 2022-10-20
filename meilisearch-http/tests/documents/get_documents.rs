@@ -3,7 +3,6 @@ use actix_web::test;
 use http::header::ACCEPT_ENCODING;
 
 use crate::common::encoder::Encoder;
-use meilisearch_http::{analytics, create_app};
 use serde_json::{json, Value};
 use urlencoding::encode as urlencode;
 
@@ -167,15 +166,7 @@ async fn get_all_documents_no_options_with_response_compression() {
     let index = server.index(index_uid);
     index.load_test_set().await;
 
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
-
+    let app = server.init_web_app().await;
     let req = test::TestRequest::get()
         .uri(&format!("/indexes/{}/documents?", urlencode(index_uid)))
         .insert_header((ACCEPT_ENCODING, "gzip"))

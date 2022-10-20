@@ -1,5 +1,3 @@
-use meilisearch_http::analytics;
-
 mod auth;
 mod common;
 mod dashboard;
