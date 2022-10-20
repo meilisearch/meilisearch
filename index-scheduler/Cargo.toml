@@ -3,8 +3,6 @@ name = "index-scheduler"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 anyhow = "1.0.64"
 bincode = "1.3.3"
@@ -25,8 +23,8 @@ time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsi
 uuid = { version = "1.1.2", features = ["serde", "v4"] }
 
 [dev-dependencies]
-crossbeam = "0.8.2"
-nelson = { git = "https://github.com/meilisearch/nelson.git", rev = "675f13885548fb415ead8fbb447e9e6d9314000a"}
-insta = { version = "1.19.1", features = ["json", "redactions"] }
 big_s = "1.0.2"
+crossbeam = "0.8.2"
+insta = { version = "1.19.1", features = ["json", "redactions"] }
 meili-snap = { path = "../meili-snap" }
+nelson = { git = "https://github.com/meilisearch/nelson.git", rev = "675f13885548fb415ead8fbb447e9e6d9314000a"}
