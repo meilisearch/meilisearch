@@ -2,7 +2,6 @@ use crate::common::{GetAllDocumentsOptions, Server};
 use actix_web::test;
 
 use crate::common::encoder::Encoder;
-use meilisearch_http::{analytics, create_app};
 use serde_json::{json, Value};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
@@ -96,14 +95,7 @@ async fn add_single_document_gzip_encoded() {
 
     // this is a what is expected and should work
     let server = Server::new().await;
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
+    let app = server.init_web_app().await;
     // post
     let document = serde_json::to_string(&document).unwrap();
     let encoder = Encoder::Gzip;
@@ -145,14 +137,7 @@ async fn add_single_document_with_every_encoding() {
 
     // this is a what is expected and should work
     let server = Server::new().await;
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
+    let app = server.init_web_app().await;
     // post
     let document = serde_json::to_string(&document).unwrap();
 
