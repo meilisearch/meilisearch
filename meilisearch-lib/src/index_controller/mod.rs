@@ -691,10 +691,10 @@ mod test {
         let index_uuid = Uuid::new_v4();
         let query = SearchQuery {
             q: Some(String::from("hello world")),
-            offset: Some(10),
-            limit: Some(0),
-            page: 1,
-            hits_per_page: 10,
+            offset: 10,
+            limit: 0,
+            page: Some(1),
+            hits_per_page: Some(10),
             attributes_to_retrieve: Some(vec!["string".to_owned()].into_iter().collect()),
             attributes_to_crop: None,
             crop_length: 18,

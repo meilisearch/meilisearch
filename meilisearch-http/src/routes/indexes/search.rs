@@ -2,8 +2,9 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use log::debug;
 use meilisearch_auth::IndexSearchRules;
 use meilisearch_lib::index::{
-    SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
-    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_HIT_PER_PAGE, DEFAULT_PAGE, MatchingStrategy
+    MatchingStrategy, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
+    DEFAULT_SEARCH_OFFSET,
 };
 use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::ResponseError;
@@ -27,12 +28,12 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SearchQueryGet {
     q: Option<String>,
-    offset: Option<usize>,
-    limit: Option<usize>,
-    #[serde(default = "DEFAULT_PAGE")]
-    page: usize,
-    #[serde(default = "DEFAULT_HIT_PER_PAGE")]
-    hits_per_page: usize,
+    #[serde(default = "DEFAULT_SEARCH_OFFSET")]
+    offset: usize,
+    #[serde(default = "DEFAULT_SEARCH_LIMIT")]
+    limit: usize,
+    page: Option<usize>,
+    hits_per_page: Option<usize>,
     attributes_to_retrieve: Option<CS<String>>,
     attributes_to_crop: Option<CS<String>>,
     #[serde(default = "DEFAULT_CROP_LENGTH")]

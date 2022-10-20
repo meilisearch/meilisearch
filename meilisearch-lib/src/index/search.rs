@@ -21,13 +21,12 @@ use super::index::Index;
 pub type Document = serde_json::Map<String, Value>;
 type MatchesPosition = BTreeMap<String, Vec<MatchBounds>>;
 
+pub const DEFAULT_SEARCH_OFFSET: fn() -> usize = || 0;
 pub const DEFAULT_SEARCH_LIMIT: fn() -> usize = || 20;
 pub const DEFAULT_CROP_LENGTH: fn() -> usize = || 10;
 pub const DEFAULT_CROP_MARKER: fn() -> String = || "…".to_string();
 pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
-pub const DEFAULT_PAGE: fn() -> usize = || 1;
-pub const DEFAULT_HIT_PER_PAGE: fn() -> usize = || 20;
 
 /// The maximum number of results that the engine
 /// will be able to return in one search call.
@@ -37,12 +36,12 @@ pub const DEFAULT_PAGINATION_MAX_TOTAL_HITS: usize = 1000;
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SearchQuery {
     pub q: Option<String>,
-    pub offset: Option<usize>,
-    pub limit: Option<usize>,
-    #[serde(default = "DEFAULT_PAGE")]
-    pub page: usize,
-    #[serde(default = "DEFAULT_HIT_PER_PAGE")]
-    pub hits_per_page: usize,
+    #[serde(default = "DEFAULT_SEARCH_OFFSET")]
+    pub offset: usize,
+    #[serde(default = "DEFAULT_SEARCH_LIMIT")]
+    pub limit: usize,
+    pub page: Option<usize>,
+    pub hits_per_page: Option<usize>,
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
     pub attributes_to_crop: Option<Vec<String>>,
     #[serde(default = "DEFAULT_CROP_LENGTH")]
@@ -145,32 +144,25 @@ impl Index {
             .pagination_max_total_hits(&rtxn)?
             .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
 
-        // Make sure that a user can't get more documents than the hard limit,
-        // we align that on the offset too.
-        let is_finite_pagination = query.offset.is_none() && query.limit.is_none();
+        let is_finite_pagination = query.page.or(query.hits_per_page).is_some();
 
         search.exhaustive_number_hits(is_finite_pagination);
 
+        // compute the offset on the limit depending on the pagination mode.
         let (offset, limit) = if is_finite_pagination {
-            match query.page.checked_sub(1) {
-                Some(page) => {
-                    let offset = min(query.hits_per_page * page, max_total_hits);
-                    let limit = min(query.hits_per_page, max_total_hits.saturating_sub(offset));
+            let limit = query.hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
+            let page = query.page.unwrap_or(1);
 
-                    (offset, limit)
-                }
-                // page 0 returns 0 hits
-                None => (0, 0),
-            }
+            // page 0 gives a limit of 0 forcing Meilisearch to return no document.
+            page.checked_sub(1).map_or((0, 0), |p| (limit * p, limit))
         } else {
-            let offset = min(query.offset.unwrap_or(0), max_total_hits);
-            let limit = min(
-                query.limit.unwrap_or_else(DEFAULT_SEARCH_LIMIT),
-                max_total_hits.saturating_sub(offset),
-            );
-
-            (offset, limit)
+            (query.offset, query.limit)
         };
+
+        // Make sure that a user can't get more documents than the hard limit,
+        // we align that on the offset too.
+        let offset = min(offset, max_total_hits);
+        let limit = min(limit, max_total_hits.saturating_sub(offset));
 
         search.offset(offset);
         search.limit(limit);
@@ -297,20 +289,21 @@ impl Index {
 
         let number_of_hits = min(candidates.len() as usize, max_total_hits);
         let hits_info = if is_finite_pagination {
+            let hits_per_page = query.hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
             // If hit_per_page is 0, then pages can't be computed and so we respond 0.
-            let total_pages = (number_of_hits + query.hits_per_page.saturating_sub(1))
-                .checked_div(query.hits_per_page)
+            let total_pages = (number_of_hits + hits_per_page.saturating_sub(1))
+                .checked_div(hits_per_page)
                 .unwrap_or(0);
 
             HitsInfo::Pagination {
-                hits_per_page: query.hits_per_page,
-                page: query.page,
+                hits_per_page: hits_per_page,
+                page: query.page.unwrap_or(1),
                 total_pages,
                 total_hits: number_of_hits,
             }
         } else {
             HitsInfo::OffsetLimit {
-                limit: query.limit.unwrap_or_else(DEFAULT_SEARCH_LIMIT),
+                limit: query.limit,
                 offset,
                 estimated_total_hits: number_of_hits,
             }
