@@ -1,5 +1,6 @@
+use crate::search::Criterion::{Attribute, Exactness, Proximity};
 use milli::update::{IndexerConfig, Settings};
-use milli::{Index, Search, TermsMatchingStrategy};
+use milli::{Criterion, Index, Search, TermsMatchingStrategy};
 
 fn set_stop_words(index: &Index, stop_words: &[&str]) {
     let mut wtxn = index.write_txn().unwrap();
@@ -12,9 +13,7 @@ fn set_stop_words(index: &Index, stop_words: &[&str]) {
     wtxn.commit().unwrap();
 }
 
-#[test]
-fn test_phrase_search_with_stop_words() {
-    let criteria = [];
+fn test_phrase_search_with_stop_words_given_criteria(criteria: &[Criterion]) {
     let index = super::setup_search_index_with_criteria(&criteria);
 
     // Add stop_words
@@ -41,4 +40,16 @@ fn test_phrase_search_with_stop_words() {
     search.terms_matching_strategy(TermsMatchingStrategy::All);
     let result = search.execute().unwrap();
     assert_eq!(result.documents_ids.len(), 0);
+}
+
+#[test]
+fn test_phrase_search_with_stop_words_no_criteria() {
+    let criteria = [];
+    test_phrase_search_with_stop_words_given_criteria(&criteria);
+}
+
+#[test]
+fn test_phrase_search_with_stop_words_all_criteria() {
+    let criteria = [Proximity, Attribute, Exactness];
+    test_phrase_search_with_stop_words_given_criteria(&criteria);
 }
