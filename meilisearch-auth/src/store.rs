@@ -4,7 +4,6 @@ use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::fs::create_dir_all;
-// use std::ops::Deref;
 use std::path::Path;
 use std::str;
 use std::sync::Arc;
