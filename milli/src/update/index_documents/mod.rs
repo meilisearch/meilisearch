@@ -106,7 +106,7 @@ where
     ) -> Result<IndexDocuments<'t, 'u, 'i, 'a, F>> {
         let transform = Some(Transform::new(
             wtxn,
-            &index,
+            index,
             indexer_config,
             config.update_method,
             config.autogenerate_docids,
@@ -291,18 +291,12 @@ where
         // Run extraction pipeline in parallel.
         pool.install(|| {
             // split obkv file into several chunks
-            let original_chunk_iter = grenad_obkv_into_chunks(
-                original_documents,
-                pool_params.clone(),
-                documents_chunk_size,
-            );
+            let original_chunk_iter =
+                grenad_obkv_into_chunks(original_documents, pool_params, documents_chunk_size);
 
             // split obkv file into several chunks
-            let flattened_chunk_iter = grenad_obkv_into_chunks(
-                flattened_documents,
-                pool_params.clone(),
-                documents_chunk_size,
-            );
+            let flattened_chunk_iter =
+                grenad_obkv_into_chunks(flattened_documents, pool_params, documents_chunk_size);
 
             let result = original_chunk_iter.and_then(|original_chunk| {
                 let flattened_chunk = flattened_chunk_iter?;
@@ -341,7 +335,7 @@ where
         }
 
         let index_documents_ids = self.index.documents_ids(self.wtxn)?;
-        let index_is_empty = index_documents_ids.len() == 0;
+        let index_is_empty = index_documents_ids.is_empty();
         let mut final_documents_ids = RoaringBitmap::new();
         let mut word_pair_proximity_docids = None;
         let mut word_position_docids = None;
@@ -378,7 +372,7 @@ where
             };
 
             let (docids, is_merged_database) =
-                write_typed_chunk_into_index(typed_chunk, &self.index, self.wtxn, index_is_empty)?;
+                write_typed_chunk_into_index(typed_chunk, self.index, self.wtxn, index_is_empty)?;
             if !docids.is_empty() {
                 final_documents_ids |= docids;
                 let documents_seen_count = final_documents_ids.len();
@@ -475,7 +469,7 @@ where
         );
         let common_prefix_fst_words: Vec<_> = common_prefix_fst_words
             .as_slice()
-            .linear_group_by_key(|x| x.chars().nth(0).unwrap())
+            .linear_group_by_key(|x| x.chars().next().unwrap())
             .collect();
 
         // We retrieve the newly added words between the previous and new prefix word fst.
@@ -498,9 +492,9 @@ where
             execute_word_prefix_docids(
                 self.wtxn,
                 word_docids,
-                self.index.word_docids.clone(),
-                self.index.word_prefix_docids.clone(),
-                &self.indexer_config,
+                self.index.word_docids,
+                self.index.word_prefix_docids,
+                self.indexer_config,
                 &new_prefix_fst_words,
                 &common_prefix_fst_words,
                 &del_prefix_fst_words,
@@ -511,9 +505,9 @@ where
             execute_word_prefix_docids(
                 self.wtxn,
                 exact_word_docids,
-                self.index.exact_word_docids.clone(),
-                self.index.exact_word_prefix_docids.clone(),
-                &self.indexer_config,
+                self.index.exact_word_docids,
+                self.index.exact_word_prefix_docids,
+                self.indexer_config,
                 &new_prefix_fst_words,
                 &common_prefix_fst_words,
                 &del_prefix_fst_words,
@@ -595,12 +589,7 @@ fn execute_word_prefix_docids(
     builder.chunk_compression_level = indexer_config.chunk_compression_level;
     builder.max_nb_chunks = indexer_config.max_nb_chunks;
     builder.max_memory = indexer_config.max_memory;
-    builder.execute(
-        cursor,
-        &new_prefix_fst_words,
-        &common_prefix_fst_words,
-        &del_prefix_fst_words,
-    )?;
+    builder.execute(cursor, new_prefix_fst_words, common_prefix_fst_words, del_prefix_fst_words)?;
     Ok(())
 }
 
