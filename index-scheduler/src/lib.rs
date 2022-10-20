@@ -53,7 +53,8 @@ use uuid::Uuid;
 
 use crate::index_mapper::IndexMapper;
 
-type BEI128 = meilisearch_types::heed::zerocopy::I128<meilisearch_types::heed::byteorder::BE>;
+pub(crate) type BEI128 =
+    meilisearch_types::heed::zerocopy::I128<meilisearch_types::heed::byteorder::BE>;
 
 /// Defines a subset of tasks to be retrieved from the [`IndexScheduler`].
 ///
@@ -879,9 +880,17 @@ mod tests {
             replace_document_import_task("catto", None, 1, 50),
             replace_document_import_task("doggo", Some("bone"), 2, 5000),
         ];
+        let (_, file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
+        file.persist().unwrap();
+        let (_, file) = index_scheduler.create_update_file_with_uuid(1).unwrap();
+        file.persist().unwrap();
+        let (_, file) = index_scheduler.create_update_file_with_uuid(2).unwrap();
+        file.persist().unwrap();
+
         for (idx, kind) in kinds.into_iter().enumerate() {
             let k = kind.as_kind();
             let task = index_scheduler.register(kind).unwrap();
+            index_scheduler.assert_internally_consistent();
 
             assert_eq!(task.uid, idx as u32);
             assert_eq!(task.status, Status::Enqueued);
@@ -896,12 +905,19 @@ mod tests {
         let (index_scheduler, handle) = IndexScheduler::test(true);
 
         index_scheduler.register(index_creation_task("index_a", "id")).unwrap();
+        index_scheduler.assert_internally_consistent();
+
         handle.wait_till(Breakpoint::BatchCreated);
+        index_scheduler.assert_internally_consistent();
+
         // while the task is processing can we register another task?
         index_scheduler.register(index_creation_task("index_b", "id")).unwrap();
+        index_scheduler.assert_internally_consistent();
+
         index_scheduler
             .register(KindWithContent::IndexDeletion { index_uid: S("index_a") })
             .unwrap();
+        index_scheduler.assert_internally_consistent();
 
         snapshot!(snapshot_index_scheduler(&index_scheduler));
     }
@@ -915,17 +931,29 @@ mod tests {
         index_scheduler
             .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
             .unwrap();
+        index_scheduler.assert_internally_consistent();
+
         index_scheduler
             .register(KindWithContent::IndexCreation { index_uid: S("cattos"), primary_key: None })
             .unwrap();
+        index_scheduler.assert_internally_consistent();
+
         index_scheduler
             .register(KindWithContent::IndexDeletion { index_uid: S("doggos") })
             .unwrap();
+        index_scheduler.assert_internally_consistent();
 
         handle.wait_till(Breakpoint::Start);
+        index_scheduler.assert_internally_consistent();
+
         handle.wait_till(Breakpoint::AfterProcessing);
+        index_scheduler.assert_internally_consistent();
+
         handle.wait_till(Breakpoint::AfterProcessing);
+        index_scheduler.assert_internally_consistent();
+
         handle.wait_till(Breakpoint::AfterProcessing);
+        index_scheduler.assert_internally_consistent();
 
         let mut tasks = index_scheduler.get_tasks(Query::default()).unwrap();
         tasks.reverse();
@@ -942,20 +970,34 @@ mod tests {
         index_scheduler
             .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
             .unwrap();
+        index_scheduler.assert_internally_consistent();
+
         index_scheduler
             .register(KindWithContent::DocumentClear { index_uid: S("doggos") })
             .unwrap();
+        index_scheduler.assert_internally_consistent();
+
         index_scheduler
             .register(KindWithContent::DocumentClear { index_uid: S("doggos") })
             .unwrap();
+        index_scheduler.assert_internally_consistent();
+
         index_scheduler
             .register(KindWithContent::DocumentClear { index_uid: S("doggos") })
             .unwrap();
+        index_scheduler.assert_internally_consistent();
 
         handle.wait_till(Breakpoint::AfterProcessing);
+        index_scheduler.assert_internally_consistent();
+
         handle.wait_till(Breakpoint::AfterProcessing);
+        index_scheduler.assert_internally_consistent();
+
         handle.wait_till(Breakpoint::AfterProcessing);
+        index_scheduler.assert_internally_consistent();
+
         handle.wait_till(Breakpoint::AfterProcessing);
+        index_scheduler.assert_internally_consistent();
 
         let mut tasks = index_scheduler.get_tasks(Query::default()).unwrap();
         tasks.reverse();
@@ -970,13 +1012,20 @@ mod tests {
     fn task_deletion_undeleteable() {
         let (index_scheduler, handle) = IndexScheduler::test(true);
 
+        let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
+        let (file1, documents_count1) = sample_documents(&index_scheduler, 1, 1);
+        file0.persist().unwrap();
+        file1.persist().unwrap();
+
         let to_enqueue = [
             index_creation_task("catto", "mouse"),
-            replace_document_import_task("catto", None, 0, 12),
-            replace_document_import_task("doggo", Some("bone"), 1, 5000),
+            replace_document_import_task("catto", None, 0, documents_count0),
+            replace_document_import_task("doggo", Some("bone"), 1, documents_count1),
         ];
+
         for task in to_enqueue {
             let _ = index_scheduler.register(task).unwrap();
+            index_scheduler.assert_internally_consistent();
         }
 
         // here we have registered all the tasks, but the index scheduler
@@ -989,17 +1038,20 @@ mod tests {
                 tasks: RoaringBitmap::from_iter(&[0, 1]),
             })
             .unwrap();
+        index_scheduler.assert_internally_consistent();
 
         // again, no progress made at all, but one more task is registered
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "task_deletion_enqueued");
 
         // now we create the first batch
         handle.wait_till(Breakpoint::BatchCreated);
+        index_scheduler.assert_internally_consistent();
 
         // the task deletion should now be "processing"
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "task_deletion_processing");
 
         handle.wait_till(Breakpoint::AfterProcessing);
+        index_scheduler.assert_internally_consistent();
 
         // after the task deletion is processed, no task should actually have been deleted,
         // because the tasks with ids 0 and 1 were still "enqueued", and thus undeleteable
@@ -1014,6 +1066,8 @@ mod tests {
 
         let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
         let (file1, documents_count1) = sample_documents(&index_scheduler, 1, 1);
+        file0.persist().unwrap();
+        file1.persist().unwrap();
 
         let to_enqueue = [
             replace_document_import_task("catto", None, 0, documents_count0),
@@ -1022,13 +1076,14 @@ mod tests {
 
         for task in to_enqueue {
             let _ = index_scheduler.register(task).unwrap();
+            index_scheduler.assert_internally_consistent();
         }
-        file0.persist().unwrap();
-        file1.persist().unwrap();
 
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_tasks_enqueued");
 
         handle.wait_till(Breakpoint::AfterProcessing);
+        index_scheduler.assert_internally_consistent();
+
         // first addition of documents should be successful
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_tasks_processed");
 
@@ -1039,8 +1094,11 @@ mod tests {
                 tasks: RoaringBitmap::from_iter(&[0]),
             })
             .unwrap();
+        index_scheduler.assert_internally_consistent();
 
         handle.wait_till(Breakpoint::AfterProcessing);
+        index_scheduler.assert_internally_consistent();
+
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "task_deletion_processed");
     }
 
@@ -1050,6 +1108,8 @@ mod tests {
 
         let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
         let (file1, documents_count1) = sample_documents(&index_scheduler, 1, 1);
+        file0.persist().unwrap();
+        file1.persist().unwrap();
 
         let to_enqueue = [
             replace_document_import_task("catto", None, 0, documents_count0),
@@ -1058,13 +1118,14 @@ mod tests {
 
         for task in to_enqueue {
             let _ = index_scheduler.register(task).unwrap();
+            index_scheduler.assert_internally_consistent();
         }
-        file0.persist().unwrap();
-        file1.persist().unwrap();
 
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_tasks_enqueued");
 
         handle.wait_till(Breakpoint::AfterProcessing);
+        index_scheduler.assert_internally_consistent();
+
         // first addition of documents should be successful
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_tasks_processed");
 
@@ -1076,10 +1137,13 @@ mod tests {
                     tasks: RoaringBitmap::from_iter(&[0]),
                 })
                 .unwrap();
+            index_scheduler.assert_internally_consistent();
         }
         for _ in 0..2 {
             handle.wait_till(Breakpoint::AfterProcessing);
+            index_scheduler.assert_internally_consistent();
         }
+
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "task_deletion_processed");
     }
 
@@ -1097,6 +1161,7 @@ mod tests {
         let documents_count =
             meilisearch_types::document_formats::read_json(content.as_bytes(), file.as_file_mut())
                 .unwrap() as u64;
+        file.persist().unwrap();
         index_scheduler
             .register(KindWithContent::DocumentAdditionOrUpdate {
                 index_uid: S("doggos"),
@@ -1107,15 +1172,18 @@ mod tests {
                 allow_index_creation: true,
             })
             .unwrap();
-        file.persist().unwrap();
+
+        index_scheduler.assert_internally_consistent();
 
         snapshot!(snapshot_index_scheduler(&index_scheduler));
 
         handle.wait_till(Breakpoint::BatchCreated);
+        index_scheduler.assert_internally_consistent();
 
         snapshot!(snapshot_index_scheduler(&index_scheduler));
 
         handle.wait_till(Breakpoint::AfterProcessing);
+        index_scheduler.assert_internally_consistent();
 
         snapshot!(snapshot_index_scheduler(&index_scheduler));
     }
@@ -1133,6 +1201,7 @@ mod tests {
         index_scheduler
             .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
             .unwrap();
+        index_scheduler.assert_internally_consistent();
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
         let documents_count =
@@ -1149,9 +1218,12 @@ mod tests {
                 allow_index_creation: true,
             })
             .unwrap();
+        index_scheduler.assert_internally_consistent();
+
         index_scheduler
             .register(KindWithContent::IndexDeletion { index_uid: S("doggos") })
             .unwrap();
+        index_scheduler.assert_internally_consistent();
 
         snapshot!(snapshot_index_scheduler(&index_scheduler));
 
@@ -1174,16 +1246,19 @@ mod tests {
                     primary_key: None,
                 })
                 .unwrap();
+            index_scheduler.assert_internally_consistent();
         }
 
         for name in index_names {
             index_scheduler
                 .register(KindWithContent::DocumentClear { index_uid: name.to_string() })
                 .unwrap();
+            index_scheduler.assert_internally_consistent();
         }
 
         for _ in 0..(index_names.len() * 2) {
             handle.wait_till(Breakpoint::AfterProcessing);
+            index_scheduler.assert_internally_consistent();
         }
 
         let mut tasks = index_scheduler.get_tasks(Query::default()).unwrap();
