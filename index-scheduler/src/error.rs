@@ -28,6 +28,8 @@ pub enum Error {
     Heed(#[from] heed::Error),
     #[error(transparent)]
     Milli(#[from] milli::Error),
+    #[error("An unexpected crash occurred when processing the task")]
+    MilliPanic,
     #[error(transparent)]
     FileStore(#[from] file_store::Error),
     #[error(transparent)]
@@ -48,6 +50,7 @@ impl ErrorCode for Error {
 
             Error::Dump(e) => e.error_code(),
             Error::Milli(e) => e.error_code(),
+            Error::MilliPanic => Code::Internal,
             // TODO: TAMO: are all these errors really internal?
             Error::Heed(_) => Code::Internal,
             Error::FileStore(_) => Code::Internal,
