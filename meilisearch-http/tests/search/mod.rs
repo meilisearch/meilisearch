@@ -3,6 +3,7 @@
 
 mod errors;
 mod formatted;
+mod pagination;
 
 use crate::common::Server;
 use once_cell::sync::Lazy;
