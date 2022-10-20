@@ -1,8 +1,6 @@
-use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
-    marker::PhantomData,
-    str::FromStr,
-};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::marker::PhantomData;
+use std::str::FromStr;
 
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -39,10 +37,7 @@ pub struct Unchecked;
 #[cfg_attr(test, derive(serde::Serialize))]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
-#[serde(bound(
-    serialize = "T: serde::Serialize",
-    deserialize = "T: Deserialize<'static>"
-))]
+#[serde(bound(serialize = "T: serde::Serialize", deserialize = "T: Deserialize<'static>"))]
 pub struct Settings<T> {
     #[serde(
         default,

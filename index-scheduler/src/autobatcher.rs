@@ -5,11 +5,12 @@ tasks affecting a single index into a [batch](crate::batch::Batch).
 The main function of the autobatcher is [`next_autobatch`].
 */
 
+use std::ops::ControlFlow::{self, Break, Continue};
+
 use meilisearch_types::milli::update::IndexDocumentsMethod::{
     self, ReplaceDocuments, UpdateDocuments,
 };
 use meilisearch_types::tasks::TaskId;
-use std::ops::ControlFlow::{self, Break, Continue};
 
 use crate::KindWithContent;
 
@@ -18,15 +19,10 @@ use crate::KindWithContent;
 ///
 /// Only the non-prioritised tasks that can be grouped in a batch have a corresponding [`AutobatchKind`]
 enum AutobatchKind {
-    DocumentImport {
-        method: IndexDocumentsMethod,
-        allow_index_creation: bool,
-    },
+    DocumentImport { method: IndexDocumentsMethod, allow_index_creation: bool },
     DocumentDeletion,
     DocumentClear,
-    Settings {
-        allow_index_creation: bool,
-    },
+    Settings { allow_index_creation: bool },
     IndexCreation,
     IndexDeletion,
     IndexUpdate,
@@ -47,23 +43,16 @@ impl AutobatchKind {
 impl From<KindWithContent> for AutobatchKind {
     fn from(kind: KindWithContent) -> Self {
         match kind {
-            KindWithContent::DocumentImport {
-                method,
-                allow_index_creation,
-                ..
-            } => AutobatchKind::DocumentImport {
-                method,
-                allow_index_creation,
-            },
+            KindWithContent::DocumentImport { method, allow_index_creation, .. } => {
+                AutobatchKind::DocumentImport { method, allow_index_creation }
+            }
             KindWithContent::DocumentDeletion { .. } => AutobatchKind::DocumentDeletion,
             KindWithContent::DocumentClear { .. } => AutobatchKind::DocumentClear,
-            KindWithContent::Settings {
-                allow_index_creation,
-                is_deletion,
-                ..
-            } => AutobatchKind::Settings {
-                allow_index_creation: allow_index_creation && !is_deletion,
-            },
+            KindWithContent::Settings { allow_index_creation, is_deletion, .. } => {
+                AutobatchKind::Settings {
+                    allow_index_creation: allow_index_creation && !is_deletion,
+                }
+            }
             KindWithContent::IndexDeletion { .. } => AutobatchKind::IndexDeletion,
             KindWithContent::IndexCreation { .. } => AutobatchKind::IndexCreation,
             KindWithContent::IndexUpdate { .. } => AutobatchKind::IndexUpdate,
@@ -147,20 +136,11 @@ impl BatchKind {
 
         match AutobatchKind::from(kind) {
             K::IndexCreation => (Break(BatchKind::IndexCreation { id: task_id }), true),
-            K::IndexDeletion => (
-                Break(BatchKind::IndexDeletion { ids: vec![task_id] }),
-                false,
-            ),
+            K::IndexDeletion => (Break(BatchKind::IndexDeletion { ids: vec![task_id] }), false),
             K::IndexUpdate => (Break(BatchKind::IndexUpdate { id: task_id }), false),
             K::IndexSwap => (Break(BatchKind::IndexSwap { id: task_id }), false),
-            K::DocumentClear => (
-                Continue(BatchKind::DocumentClear { ids: vec![task_id] }),
-                false,
-            ),
-            K::DocumentImport {
-                method,
-                allow_index_creation,
-            } => (
+            K::DocumentClear => (Continue(BatchKind::DocumentClear { ids: vec![task_id] }), false),
+            K::DocumentImport { method, allow_index_creation } => (
                 Continue(BatchKind::DocumentImport {
                     method,
                     allow_index_creation,
@@ -168,19 +148,11 @@ impl BatchKind {
                 }),
                 allow_index_creation,
             ),
-            K::DocumentDeletion => (
-                Continue(BatchKind::DocumentDeletion {
-                    deletion_ids: vec![task_id],
-                }),
-                false,
-            ),
-            K::Settings {
-                allow_index_creation,
-            } => (
-                Continue(BatchKind::Settings {
-                    allow_index_creation,
-                    settings_ids: vec![task_id],
-                }),
+            K::DocumentDeletion => {
+                (Continue(BatchKind::DocumentDeletion { deletion_ids: vec![task_id] }), false)
+            }
+            K::Settings { allow_index_creation } => (
+                Continue(BatchKind::Settings { allow_index_creation, settings_ids: vec![task_id] }),
                 allow_index_creation,
             ),
         }
@@ -461,21 +433,17 @@ pub fn autobatch(
 
 #[cfg(test)]
 mod tests {
-    use crate::debug_snapshot;
+    use uuid::Uuid;
 
     use super::*;
-    use uuid::Uuid;
+    use crate::debug_snapshot;
 
     fn autobatch_from(
         index_already_exists: bool,
         input: impl IntoIterator<Item = KindWithContent>,
     ) -> Option<(BatchKind, bool)> {
         autobatch(
-            input
-                .into_iter()
-                .enumerate()
-                .map(|(id, kind)| (id as TaskId, kind.into()))
-                .collect(),
+            input.into_iter().enumerate().map(|(id, kind)| (id as TaskId, kind.into())).collect(),
             index_already_exists,
         )
     }
@@ -499,9 +467,7 @@ mod tests {
     }
 
     fn doc_clr() -> KindWithContent {
-        KindWithContent::DocumentClear {
-            index_uid: String::from("doggo"),
-        }
+        KindWithContent::DocumentClear { index_uid: String::from("doggo") }
     }
 
     fn settings(allow_index_creation: bool) -> KindWithContent {
@@ -514,29 +480,19 @@ mod tests {
     }
 
     fn idx_create() -> KindWithContent {
-        KindWithContent::IndexCreation {
-            index_uid: String::from("doggo"),
-            primary_key: None,
-        }
+        KindWithContent::IndexCreation { index_uid: String::from("doggo"), primary_key: None }
     }
 
     fn idx_update() -> KindWithContent {
-        KindWithContent::IndexUpdate {
-            index_uid: String::from("doggo"),
-            primary_key: None,
-        }
+        KindWithContent::IndexUpdate { index_uid: String::from("doggo"), primary_key: None }
     }
 
     fn idx_del() -> KindWithContent {
-        KindWithContent::IndexDeletion {
-            index_uid: String::from("doggo"),
-        }
+        KindWithContent::IndexDeletion { index_uid: String::from("doggo") }
     }
 
     fn idx_swap() -> KindWithContent {
-        KindWithContent::IndexSwap {
-            swaps: vec![(String::from("doggo"), String::from("catto"))],
-        }
+        KindWithContent::IndexSwap { swaps: vec![(String::from("doggo"), String::from("catto"))] }
     }
 
     #[test]

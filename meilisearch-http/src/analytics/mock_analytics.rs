@@ -1,12 +1,13 @@
-use std::{any::Any, sync::Arc};
+use std::any::Any;
+use std::sync::Arc;
 
 use actix_web::HttpRequest;
 use meilisearch_types::InstanceUid;
 use serde_json::Value;
 
-use crate::{routes::indexes::documents::UpdateDocumentsQuery, Opt};
-
 use super::{find_user_id, Analytics};
+use crate::routes::indexes::documents::UpdateDocumentsQuery;
+use crate::Opt;
 
 pub struct MockAnalytics {
     instance_uid: Option<InstanceUid>,

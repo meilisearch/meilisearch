@@ -10,7 +10,8 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 
 use crate::analytics::Analytics;
-use crate::extractors::authentication::{policies::*, GuardedData};
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::SummarizedTaskView;
 
@@ -38,9 +39,7 @@ pub async fn create_dump(
         dump_uid,
     };
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task))
-            .await??
-            .into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))

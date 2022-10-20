@@ -1,7 +1,5 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    marker::PhantomData,
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::marker::PhantomData;
 
 use serde::{Deserialize, Deserializer, Serialize};
 

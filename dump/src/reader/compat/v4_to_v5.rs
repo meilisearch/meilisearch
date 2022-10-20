@@ -1,8 +1,7 @@
-use crate::reader::{v4, v5, Document};
-use crate::Result;
-
 use super::v3_to_v4::{CompatIndexV3ToV4, CompatV3ToV4};
 use super::v5_to_v6::CompatV5ToV6;
+use crate::reader::{v4, v5, Document};
+use crate::Result;
 
 pub enum CompatV4ToV5 {
     V4(v4::V4Reader),
@@ -41,18 +40,15 @@ impl CompatV4ToV5 {
 
     pub fn indexes(&self) -> Result<Box<dyn Iterator<Item = Result<CompatIndexV4ToV5>> + '_>> {
         Ok(match self {
-            CompatV4ToV5::V4(v4) => Box::new(
-                v4.indexes()?
-                    .map(|index| index.map(CompatIndexV4ToV5::from)),
-            )
-                as Box<dyn Iterator<Item = Result<CompatIndexV4ToV5>> + '_>,
+            CompatV4ToV5::V4(v4) => {
+                Box::new(v4.indexes()?.map(|index| index.map(CompatIndexV4ToV5::from)))
+                    as Box<dyn Iterator<Item = Result<CompatIndexV4ToV5>> + '_>
+            }
 
-            CompatV4ToV5::Compat(compat) => Box::new(
-                compat
-                    .indexes()?
-                    .map(|index| index.map(CompatIndexV4ToV5::from)),
-            )
-                as Box<dyn Iterator<Item = Result<CompatIndexV4ToV5>> + '_>,
+            CompatV4ToV5::Compat(compat) => {
+                Box::new(compat.indexes()?.map(|index| index.map(CompatIndexV4ToV5::from)))
+                    as Box<dyn Iterator<Item = Result<CompatIndexV4ToV5>> + '_>
+            }
         })
     }
 
@@ -138,13 +134,9 @@ impl CompatV4ToV5 {
                             v4::tasks::TaskEvent::Created(date) => {
                                 v5::tasks::TaskEvent::Created(date)
                             }
-                            v4::tasks::TaskEvent::Batched {
-                                timestamp,
-                                batch_id,
-                            } => v5::tasks::TaskEvent::Batched {
-                                timestamp,
-                                batch_id,
-                            },
+                            v4::tasks::TaskEvent::Batched { timestamp, batch_id } => {
+                                v5::tasks::TaskEvent::Batched { timestamp, batch_id }
+                            }
                             v4::tasks::TaskEvent::Processing(date) => {
                                 v5::tasks::TaskEvent::Processing(date)
                             }
@@ -196,11 +188,7 @@ impl CompatV4ToV5 {
                 description: key.description,
                 name: None,
                 uid: v5::keys::KeyId::new_v4(),
-                actions: key
-                    .actions
-                    .into_iter()
-                    .filter_map(|action| action.into())
-                    .collect(),
+                actions: key.actions.into_iter().filter_map(|action| action.into()).collect(),
                 indexes: key
                     .indexes
                     .into_iter()
@@ -385,7 +373,8 @@ impl From<v4::Action> for Option<v5::Action> {
 
 #[cfg(test)]
 pub(crate) mod test {
-    use std::{fs::File, io::BufReader};
+    use std::fs::File;
+    use std::io::BufReader;
 
     use flate2::bufread::GzDecoder;
     use tempfile::TempDir;
@@ -440,11 +429,7 @@ pub(crate) mod test {
         "###);
 
         meili_snap::snapshot_hash!(format!("{:#?}", products.settings()), @"ed1a6977a832b1ab49cd5068b77ce498");
-        let documents = products
-            .documents()
-            .unwrap()
-            .collect::<Result<Vec<_>>>()
-            .unwrap();
+        let documents = products.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 10);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"b01c8371aea4c7171af0d4d846a2bdca");
 
@@ -459,11 +444,7 @@ pub(crate) mod test {
         "###);
 
         meili_snap::snapshot_hash!(format!("{:#?}", movies.settings()), @"70681af1d52411218036fbd5a9b94ab5");
-        let documents = movies
-            .documents()
-            .unwrap()
-            .collect::<Result<Vec<_>>>()
-            .unwrap();
+        let documents = movies.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 110);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"786022a66ecb992c8a2a60fee070a5ab");
 
@@ -478,11 +459,7 @@ pub(crate) mod test {
         "###);
 
         meili_snap::snapshot_hash!(format!("{:#?}", spells.settings()), @"7019bb8f146004dcdd91fc3c3254b742");
-        let documents = spells
-            .documents()
-            .unwrap()
-            .collect::<Result<Vec<_>>>()
-            .unwrap();
+        let documents = spells.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 10);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"235016433dd04262c7f2da01d1e808ce");
     }

@@ -1,7 +1,9 @@
+use serde_json::json;
+use time::format_description::well_known::Rfc3339;
+use time::OffsetDateTime;
+
 use crate::common::encoder::Encoder;
 use crate::common::Server;
-use serde_json::json;
-use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 #[actix_rt::test]
 async fn update_primary_key() {

@@ -1,6 +1,6 @@
+use serde_json::{json, Value};
+
 use crate::common::Server;
-use serde_json::json;
-use serde_json::Value;
 
 #[actix_rt::test]
 async fn create_and_get_index() {
@@ -63,12 +63,8 @@ async fn list_multiple_indexes() {
     assert!(response["results"].is_array());
     let arr = response["results"].as_array().unwrap();
     assert_eq!(arr.len(), 2);
-    assert!(arr
-        .iter()
-        .any(|entry| entry["uid"] == "test" && entry["primaryKey"] == Value::Null));
-    assert!(arr
-        .iter()
-        .any(|entry| entry["uid"] == "test1" && entry["primaryKey"] == "key"));
+    assert!(arr.iter().any(|entry| entry["uid"] == "test" && entry["primaryKey"] == Value::Null));
+    assert!(arr.iter().any(|entry| entry["uid"] == "test1" && entry["primaryKey"] == "key"));
 }
 
 #[actix_rt::test]
@@ -77,10 +73,7 @@ async fn get_and_paginate_indexes() {
     const NB_INDEXES: usize = 50;
     for i in 0..NB_INDEXES {
         server.index(&format!("test_{i:02}")).create(None).await;
-        server
-            .index(&format!("test_{i:02}"))
-            .wait_task(i as u64)
-            .await;
+        server.index(&format!("test_{i:02}")).wait_task(i as u64).await;
     }
 
     // basic

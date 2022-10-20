@@ -1,23 +1,22 @@
 #![allow(dead_code)]
 
-use actix_http::body::MessageBody;
-use actix_web::dev::ServiceResponse;
-use clap::Parser;
 use std::path::Path;
 use std::sync::Arc;
 
+use actix_http::body::MessageBody;
+use actix_web::dev::ServiceResponse;
 use actix_web::http::StatusCode;
 use byte_unit::{Byte, ByteUnit};
+use clap::Parser;
+use meilisearch_http::option::{IndexerOpts, MaxMemory, Opt};
+use meilisearch_http::{analytics, create_app, setup_meilisearch};
 use once_cell::sync::Lazy;
 use serde_json::Value;
 use tempfile::TempDir;
 
-use meilisearch_http::option::{IndexerOpts, MaxMemory, Opt};
-use meilisearch_http::{analytics, create_app, setup_meilisearch};
-use crate::common::encoder::Encoder;
-
 use super::index::Index;
 use super::service::Service;
+use crate::common::encoder::Encoder;
 
 pub struct Server {
     pub service: Service,
@@ -40,17 +39,10 @@ impl Server {
         let options = default_settings(dir.path());
 
         let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
-        let service = Service {
-            index_scheduler: Arc::new(index_scheduler),
-            auth,
-            options,
-            api_key: None,
-        };
+        let service =
+            Service { index_scheduler: Arc::new(index_scheduler), auth, options, api_key: None };
 
-        Server {
-            service,
-            _dir: Some(dir),
-        }
+        Server { service, _dir: Some(dir) }
     }
 
     pub async fn new_auth_with_options(mut options: Opt, dir: TempDir) -> Self {
@@ -63,17 +55,10 @@ impl Server {
         options.master_key = Some("MASTER_KEY".to_string());
 
         let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
-        let service = Service {
-            index_scheduler: Arc::new(index_scheduler),
-            auth,
-            options,
-            api_key: None,
-        };
+        let service =
+            Service { index_scheduler: Arc::new(index_scheduler), auth, options, api_key: None };
 
-        Server {
-            service,
-            _dir: Some(dir),
-        }
+        Server { service, _dir: Some(dir) }
     }
 
     pub async fn new_auth() -> Self {
@@ -84,17 +69,10 @@ impl Server {
 
     pub async fn new_with_options(options: Opt) -> Result<Self, anyhow::Error> {
         let (index_scheduler, auth) = setup_meilisearch(&options)?;
-        let service = Service {
-            index_scheduler: Arc::new(index_scheduler),
-            auth,
-            options,
-            api_key: None,
-        };
+        let service =
+            Service { index_scheduler: Arc::new(index_scheduler), auth, options, api_key: None };
 
-        Ok(Server {
-            service,
-            _dir: None,
-        })
+        Ok(Server { service, _dir: None })
     }
 
     pub async fn init_web_app(
@@ -120,11 +98,7 @@ impl Server {
     }
 
     pub fn index_with_encoder(&self, uid: impl AsRef<str>, encoder: Encoder) -> Index<'_> {
-        Index {
-            uid: uid.as_ref().to_string(),
-            service: &self.service,
-            encoder,
-        }
+        Index { uid: uid.as_ref().to_string(), service: &self.service, encoder }
     }
 
     pub async fn list_indexes(
@@ -142,9 +116,7 @@ impl Server {
             .map(|(offset, limit)| format!("{offset}&{limit}"))
             .or_else(|| offset.xor(limit));
         if let Some(query_parameter) = query_parameter {
-            self.service
-                .get(format!("/indexes?{query_parameter}"))
-                .await
+            self.service.get(format!("/indexes?{query_parameter}")).await
         } else {
             self.service.get("/indexes").await
         }

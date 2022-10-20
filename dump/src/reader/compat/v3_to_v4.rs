@@ -1,8 +1,7 @@
-use crate::reader::{v3, v4, UpdateFile};
-use crate::Result;
-
 use super::v2_to_v3::{CompatIndexV2ToV3, CompatV2ToV3};
 use super::v4_to_v5::CompatV4ToV5;
+use crate::reader::{v3, v4, UpdateFile};
+use crate::Result;
 
 pub enum CompatV3ToV4 {
     V3(v3::V3Reader),
@@ -38,18 +37,15 @@ impl CompatV3ToV4 {
 
     pub fn indexes(&self) -> Result<impl Iterator<Item = Result<CompatIndexV3ToV4>> + '_> {
         Ok(match self {
-            CompatV3ToV4::V3(v3) => Box::new(
-                v3.indexes()?
-                    .map(|index| index.map(CompatIndexV3ToV4::from)),
-            )
-                as Box<dyn Iterator<Item = Result<CompatIndexV3ToV4>> + '_>,
+            CompatV3ToV4::V3(v3) => {
+                Box::new(v3.indexes()?.map(|index| index.map(CompatIndexV3ToV4::from)))
+                    as Box<dyn Iterator<Item = Result<CompatIndexV3ToV4>> + '_>
+            }
 
-            CompatV3ToV4::Compat(compat) => Box::new(
-                compat
-                    .indexes()?
-                    .map(|index| index.map(CompatIndexV3ToV4::from)),
-            )
-                as Box<dyn Iterator<Item = Result<CompatIndexV3ToV4>> + '_>,
+            CompatV3ToV4::Compat(compat) => {
+                Box::new(compat.indexes()?.map(|index| index.map(CompatIndexV3ToV4::from)))
+                    as Box<dyn Iterator<Item = Result<CompatIndexV3ToV4>> + '_>
+            }
         })
     }
 
@@ -341,7 +337,8 @@ impl<T> From<v3::Settings<T>> for v4::Settings<v4::Unchecked> {
 
 #[cfg(test)]
 pub(crate) mod test {
-    use std::{fs::File, io::BufReader};
+    use std::fs::File;
+    use std::io::BufReader;
 
     use flate2::bufread::GzDecoder;
     use tempfile::TempDir;
@@ -370,11 +367,7 @@ pub(crate) mod test {
         assert!(update_files[0].is_some()); // the enqueued document addition
         assert!(update_files[1..].iter().all(|u| u.is_none())); // everything already processed
 
-        let update_file = update_files
-            .remove(0)
-            .unwrap()
-            .collect::<Result<Vec<_>>>()
-            .unwrap();
+        let update_file = update_files.remove(0).unwrap().collect::<Result<Vec<_>>>().unwrap();
         meili_snap::snapshot_hash!(meili_snap::json_string!(update_file), @"7b8889539b669c7b9ddba448bafa385d");
 
         // keys
@@ -403,11 +396,7 @@ pub(crate) mod test {
         "###);
 
         meili_snap::snapshot_hash!(format!("{:#?}", products.settings()), @"ea46dd6b58c5e1d65c1c8159a32695ea");
-        let documents = products
-            .documents()
-            .unwrap()
-            .collect::<Result<Vec<_>>>()
-            .unwrap();
+        let documents = products.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 10);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"548284a84de510f71e88e6cdea495cf5");
 
@@ -422,11 +411,7 @@ pub(crate) mod test {
         "###);
 
         meili_snap::snapshot_hash!(format!("{:#?}", movies.settings()), @"4df4074ef6bfb71e8dc66d08ff8c9dfd");
-        let documents = movies
-            .documents()
-            .unwrap()
-            .collect::<Result<Vec<_>>>()
-            .unwrap();
+        let documents = movies.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 110);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"d153b5a81d8b3cdcbe1dec270b574022");
 
@@ -441,11 +426,7 @@ pub(crate) mod test {
         "###);
 
         meili_snap::snapshot_hash!(format!("{:#?}", movies2.settings()), @"24eaf4046d9718dabff36f35103352d4");
-        let documents = movies2
-            .documents()
-            .unwrap()
-            .collect::<Result<Vec<_>>>()
-            .unwrap();
+        let documents = movies2.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 0);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"d751713988987e9331980363e24189ce");
 
@@ -460,11 +441,7 @@ pub(crate) mod test {
         "###);
 
         meili_snap::snapshot_hash!(format!("{:#?}", spells.settings()), @"24eaf4046d9718dabff36f35103352d4");
-        let documents = spells
-            .documents()
-            .unwrap()
-            .collect::<Result<Vec<_>>>()
-            .unwrap();
+        let documents = spells.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 10);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"235016433dd04262c7f2da01d1e808ce");
     }

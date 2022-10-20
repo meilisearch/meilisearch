@@ -13,37 +13,32 @@ pub mod metrics;
 #[cfg(feature = "metrics")]
 pub mod route_metrics;
 
-use std::{
-    fs::File,
-    io::{BufReader, BufWriter},
-    path::Path,
-    sync::{atomic::AtomicBool, Arc},
-};
+use std::fs::File;
+use std::io::{BufReader, BufWriter};
+use std::path::Path;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
-use crate::error::MeilisearchHttpError;
 use actix_cors::Cors;
 use actix_http::body::MessageBody;
-use actix_web::{dev::ServiceFactory, error::JsonPayloadError, middleware};
-use actix_web::{dev::ServiceResponse, web::Data};
+use actix_web::dev::{ServiceFactory, ServiceResponse};
+use actix_web::error::JsonPayloadError;
+use actix_web::web::Data;
+use actix_web::{middleware, web, HttpRequest};
 use analytics::Analytics;
 use anyhow::bail;
 use error::PayloadError;
-use http::header::CONTENT_TYPE;
-use meilisearch_types::{
-    milli::{
-        self,
-        documents::{DocumentsBatchBuilder, DocumentsBatchReader},
-        update::{IndexDocumentsConfig, IndexDocumentsMethod},
-    },
-    settings::apply_settings_to_builder,
-};
-pub use option::Opt;
-
-use actix_web::{web, HttpRequest};
-
 use extractors::payload::PayloadConfig;
+use http::header::CONTENT_TYPE;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
+use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
+use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod};
+use meilisearch_types::milli::{self};
+use meilisearch_types::settings::apply_settings_to_builder;
+pub use option::Opt;
+
+use crate::error::MeilisearchHttpError;
 
 pub static AUTOBATCHING_ENABLED: AtomicBool = AtomicBool::new(false);
 
@@ -103,14 +98,9 @@ pub fn create_app(
         )
         .wrap(middleware::Logger::default())
         .wrap(middleware::Compress::default())
-        .wrap(middleware::NormalizePath::new(
-            middleware::TrailingSlash::Trim,
-        ));
+        .wrap(middleware::NormalizePath::new(middleware::TrailingSlash::Trim));
     #[cfg(feature = "metrics")]
-    let app = app.wrap(Condition::new(
-        opt.enable_metrics_route,
-        route_metrics::RouteMetrics,
-    ));
+    let app = app.wrap(Condition::new(opt.enable_metrics_route, route_metrics::RouteMetrics));
     app
 }
 
@@ -154,30 +144,18 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
 
         if empty_db && src_path_exists {
             let (mut index_scheduler, mut auth_controller) = meilisearch_builder()?;
-            import_dump(
-                &opt.db_path,
-                path,
-                &mut index_scheduler,
-                &mut auth_controller,
-            )?;
+            import_dump(&opt.db_path, path, &mut index_scheduler, &mut auth_controller)?;
             (index_scheduler, auth_controller)
         } else if !empty_db && !opt.ignore_dump_if_db_exists {
             bail!(
                 "database already exists at {:?}, try to delete it or rename it",
-                opt.db_path
-                    .canonicalize()
-                    .unwrap_or_else(|_| opt.db_path.to_owned())
+                opt.db_path.canonicalize().unwrap_or_else(|_| opt.db_path.to_owned())
             )
         } else if !src_path_exists && !opt.ignore_missing_dump {
             bail!("dump doesn't exist at {:?}", path)
         } else {
             let (mut index_scheduler, mut auth_controller) = meilisearch_builder()?;
-            import_dump(
-                &opt.db_path,
-                path,
-                &mut index_scheduler,
-                &mut auth_controller,
-            )?;
+            import_dump(&opt.db_path, path, &mut index_scheduler, &mut auth_controller)?;
             (index_scheduler, auth_controller)
         }
     } else {
@@ -232,10 +210,7 @@ fn import_dump(
     // 1. Import the instance-uid.
     if let Some(ref instance_uid) = instance_uid {
         // we don't want to panic if there is an error with the instance-uid.
-        let _ = std::fs::write(
-            db_path.join("instance-uid"),
-            instance_uid.to_string().as_bytes(),
-        );
+        let _ = std::fs::write(db_path.join("instance-uid"), instance_uid.to_string().as_bytes());
     };
 
     // 2. Import the `Key`s.
@@ -271,10 +246,7 @@ fn import_dump(
         log::info!("Importing the settings.");
         let settings = index_reader.settings()?;
         apply_settings_to_builder(&settings, &mut builder);
-        builder.execute(
-            |indexing_step| log::debug!("update: {:?}", indexing_step),
-            || false,
-        )?;
+        builder.execute(|indexing_step| log::debug!("update: {:?}", indexing_step), || false)?;
 
         // 3.3 Import the documents.
         // 3.3.1 We need to recreate the grenad+obkv format accepted by the index.
@@ -368,9 +340,7 @@ pub fn dashboard(config: &mut web::ServiceConfig, enable_frontend: bool) {
         let generated = generated::generate();
         // Generate routes for mini-dashboard assets
         for (path, resource) in generated.into_iter() {
-            let Resource {
-                mime_type, data, ..
-            } = resource;
+            let Resource { mime_type, data, .. } = resource;
             // Redirect index.html to /
             if path == "index.html" {
                 config.service(web::resource("/").route(web::get().to(move || async move {

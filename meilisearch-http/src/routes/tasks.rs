@@ -12,11 +12,11 @@ use serde_json::json;
 use time::{Duration, OffsetDateTime};
 use tokio::task::block_in_place;
 
-use crate::analytics::Analytics;
-use crate::extractors::authentication::{policies::*, GuardedData};
-use crate::extractors::sequential_extractor::SeqHandler;
-
 use super::fold_star_or;
+use crate::analytics::Analytics;
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::GuardedData;
+use crate::extractors::sequential_extractor::SeqHandler;
 
 const DEFAULT_LIMIT: fn() -> u32 = || 20;
 
@@ -80,10 +80,7 @@ impl TaskView {
             canceled_by: task.canceled_by,
             details: task.details.clone().map(DetailsView::from),
             error: task.error.clone(),
-            duration: task
-                .started_at
-                .zip(task.finished_at)
-                .map(|(start, end)| end - start),
+            duration: task.started_at.zip(task.finished_at).map(|(start, end)| end - start),
             enqueued_at: task.enqueued_at,
             started_at: task.started_at,
             finished_at: task.finished_at,
@@ -124,62 +121,45 @@ pub struct DetailsView {
 impl From<Details> for DetailsView {
     fn from(details: Details) -> Self {
         match details.clone() {
-            Details::DocumentAddition {
-                received_documents,
-                indexed_documents,
-            } => DetailsView {
+            Details::DocumentAddition { received_documents, indexed_documents } => DetailsView {
                 received_documents: Some(received_documents),
                 indexed_documents,
                 ..DetailsView::default()
             },
-            Details::Settings { settings } => DetailsView {
-                settings: Some(settings),
-                ..DetailsView::default()
-            },
-            Details::IndexInfo { primary_key } => DetailsView {
-                primary_key: Some(primary_key),
-                ..DetailsView::default()
-            },
-            Details::DocumentDeletion {
-                received_document_ids,
-                deleted_documents,
-            } => DetailsView {
+            Details::Settings { settings } => {
+                DetailsView { settings: Some(settings), ..DetailsView::default() }
+            }
+            Details::IndexInfo { primary_key } => {
+                DetailsView { primary_key: Some(primary_key), ..DetailsView::default() }
+            }
+            Details::DocumentDeletion { received_document_ids, deleted_documents } => DetailsView {
                 received_document_ids: Some(received_document_ids),
                 deleted_documents: Some(deleted_documents),
                 ..DetailsView::default()
             },
-            Details::ClearAll { deleted_documents } => DetailsView {
-                deleted_documents: Some(deleted_documents),
-                ..DetailsView::default()
-            },
-            Details::TaskCancelation {
-                matched_tasks,
-                canceled_tasks,
-                original_query,
-            } => DetailsView {
-                matched_tasks: Some(matched_tasks),
-                canceled_tasks: Some(canceled_tasks),
-                original_query: Some(original_query),
-                ..DetailsView::default()
-            },
-            Details::TaskDeletion {
-                matched_tasks,
-                deleted_tasks,
-                original_query,
-            } => DetailsView {
+            Details::ClearAll { deleted_documents } => {
+                DetailsView { deleted_documents: Some(deleted_documents), ..DetailsView::default() }
+            }
+            Details::TaskCancelation { matched_tasks, canceled_tasks, original_query } => {
+                DetailsView {
+                    matched_tasks: Some(matched_tasks),
+                    canceled_tasks: Some(canceled_tasks),
+                    original_query: Some(original_query),
+                    ..DetailsView::default()
+                }
+            }
+            Details::TaskDeletion { matched_tasks, deleted_tasks, original_query } => DetailsView {
                 matched_tasks: Some(matched_tasks),
                 deleted_tasks: Some(deleted_tasks),
                 original_query: Some(original_query),
                 ..DetailsView::default()
             },
-            Details::Dump { dump_uid } => DetailsView {
-                dump_uid: Some(dump_uid),
-                ..DetailsView::default()
-            },
-            Details::IndexSwap { swaps } => DetailsView {
-                indexes: Some(swaps),
-                ..Default::default()
-            },
+            Details::Dump { dump_uid } => {
+                DetailsView { dump_uid: Some(dump_uid), ..DetailsView::default() }
+            }
+            Details::IndexSwap { swaps } => {
+                DetailsView { indexes: Some(swaps), ..Default::default() }
+            }
         }
     }
 }
@@ -318,10 +298,8 @@ async fn cancel_tasks(
 
     let filtered_query = filter_out_inaccessible_indexes_from_query(&index_scheduler, &query);
     let tasks = index_scheduler.get_task_ids(&filtered_query)?;
-    let task_cancelation = KindWithContent::TaskCancelation {
-        query: req.query_string().to_string(),
-        tasks,
-    };
+    let task_cancelation =
+        KindWithContent::TaskCancelation { query: req.query_string().to_string(), tasks };
 
     let task = block_in_place(|| index_scheduler.register(task_cancelation))?;
     let task_view = TaskView::from_task(&task);
@@ -377,10 +355,8 @@ async fn delete_tasks(
 
     let filtered_query = filter_out_inaccessible_indexes_from_query(&index_scheduler, &query);
     let tasks = index_scheduler.get_task_ids(&filtered_query)?;
-    let task_deletion = KindWithContent::TaskDeletion {
-        query: req.query_string().to_string(),
-        tasks,
-    };
+    let task_deletion =
+        KindWithContent::TaskDeletion { query: req.query_string().to_string(), tasks };
 
     let task = block_in_place(|| index_scheduler.register(task_deletion))?;
     let task_view = TaskView::from_task(&task);
@@ -448,11 +424,8 @@ async fn get_tasks(
     };
     let query = filter_out_inaccessible_indexes_from_query(&index_scheduler, &query);
 
-    let mut tasks_results: Vec<TaskView> = index_scheduler
-        .get_tasks(query)?
-        .into_iter()
-        .map(|t| TaskView::from_task(&t))
-        .collect();
+    let mut tasks_results: Vec<TaskView> =
+        index_scheduler.get_tasks(query)?.into_iter().map(|t| TaskView::from_task(&t)).collect();
 
     // If we were able to fetch the number +1 tasks we asked
     // it means that there is more to come.
@@ -483,11 +456,7 @@ async fn get_task(
 ) -> Result<HttpResponse, ResponseError> {
     let task_id = task_id.into_inner();
 
-    analytics.publish(
-        "Tasks Seen".to_string(),
-        json!({ "per_task_uid": true }),
-        Some(&req),
-    );
+    analytics.publish("Tasks Seen".to_string(), json!({ "per_task_uid": true }), Some(&req));
 
     let search_rules = &index_scheduler.filters().search_rules;
     let mut filters = index_scheduler::Query::default();
@@ -541,10 +510,9 @@ fn filter_out_inaccessible_indexes_from_query<const ACTION: u8>(
 }
 
 pub(crate) mod date_deserializer {
-    use time::{
-        format_description::well_known::Rfc3339, macros::format_description, Date, Duration,
-        OffsetDateTime, Time,
-    };
+    use time::format_description::well_known::Rfc3339;
+    use time::macros::format_description;
+    use time::{Date, Duration, OffsetDateTime, Time};
 
     enum DeserializeDateOption {
         Before,
@@ -586,9 +554,10 @@ pub(crate) mod date_deserializer {
 
     /// Deserialize an upper bound datetime with RFC3339 or YYYY-MM-DD.
     pub(crate) mod before {
-        use super::{deserialize_date, DeserializeDateOption};
         use serde::Deserializer;
         use time::OffsetDateTime;
+
+        use super::{deserialize_date, DeserializeDateOption};
 
         /// Deserialize an [`Option<OffsetDateTime>`] from its ISO 8601 representation.
         pub fn deserialize<'a, D: Deserializer<'a>>(
@@ -638,9 +607,10 @@ pub(crate) mod date_deserializer {
     ///
     /// If YYYY-MM-DD is used, the day is incremented by one.
     pub(crate) mod after {
-        use super::{deserialize_date, DeserializeDateOption};
         use serde::Deserializer;
         use time::OffsetDateTime;
+
+        use super::{deserialize_date, DeserializeDateOption};
 
         /// Deserialize an [`Option<OffsetDateTime>`] from its ISO 8601 representation.
         pub fn deserialize<'a, D: Deserializer<'a>>(
@@ -689,8 +659,9 @@ pub(crate) mod date_deserializer {
 
 #[cfg(test)]
 mod tests {
-    use crate::routes::tasks::TaskDeletionQuery;
     use meili_snap::snapshot;
+
+    use crate::routes::tasks::TaskDeletionQuery;
 
     #[test]
     fn deserialize_task_deletion_query_datetime() {

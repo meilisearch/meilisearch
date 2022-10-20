@@ -2,11 +2,9 @@ use serde::Deserialize;
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
-use super::{
-    errors::ResponseError,
-    meta::IndexUid,
-    settings::{Settings, Unchecked},
-};
+use super::errors::ResponseError;
+use super::meta::IndexUid;
+use super::settings::{Settings, Unchecked};
 
 pub type TaskId = u32;
 pub type BatchId = u32;
@@ -117,20 +115,16 @@ impl Task {
     /// A task is finished when its last state is either `Succeeded` or `Failed`.
     pub fn is_finished(&self) -> bool {
         self.events.last().map_or(false, |event| {
-            matches!(
-                event,
-                TaskEvent::Succeeded { .. } | TaskEvent::Failed { .. }
-            )
+            matches!(event, TaskEvent::Succeeded { .. } | TaskEvent::Failed { .. })
         })
     }
 
     /// Return the content_uuid of the `Task` if there is one.
     pub fn get_content_uuid(&self) -> Option<Uuid> {
         match self {
-            Task {
-                content: TaskContent::DocumentAddition { content_uuid, .. },
-                ..
-            } => Some(*content_uuid),
+            Task { content: TaskContent::DocumentAddition { content_uuid, .. }, .. } => {
+                Some(*content_uuid)
+            }
             _ => None,
         }
     }
@@ -184,31 +178,19 @@ pub struct TaskView {
     pub duration: Option<Duration>,
     #[cfg_attr(test, serde(serialize_with = "time::serde::rfc3339::serialize"))]
     pub enqueued_at: OffsetDateTime,
-    #[cfg_attr(
-        test,
-        serde(serialize_with = "time::serde::rfc3339::option::serialize")
-    )]
+    #[cfg_attr(test, serde(serialize_with = "time::serde::rfc3339::option::serialize"))]
     pub started_at: Option<OffsetDateTime>,
-    #[cfg_attr(
-        test,
-        serde(serialize_with = "time::serde::rfc3339::option::serialize")
-    )]
+    #[cfg_attr(test, serde(serialize_with = "time::serde::rfc3339::option::serialize"))]
     pub finished_at: Option<OffsetDateTime>,
 }
 
 impl From<Task> for TaskView {
     fn from(task: Task) -> Self {
         let index_uid = task.index_uid().map(String::from);
-        let Task {
-            id,
-            content,
-            events,
-        } = task;
+        let Task { id, content, events } = task;
 
         let (task_type, mut details) = match content {
-            TaskContent::DocumentAddition {
-                documents_count, ..
-            } => {
+            TaskContent::DocumentAddition { documents_count, .. } => {
                 let details = TaskDetails::DocumentAddition {
                     received_documents: documents_count,
                     indexed_documents: None,
@@ -216,47 +198,32 @@ impl From<Task> for TaskView {
 
                 (TaskType::DocumentAdditionOrUpdate, Some(details))
             }
-            TaskContent::DocumentDeletion {
-                deletion: DocumentDeletion::Ids(ids),
-                ..
-            } => (
+            TaskContent::DocumentDeletion { deletion: DocumentDeletion::Ids(ids), .. } => (
                 TaskType::DocumentDeletion,
                 Some(TaskDetails::DocumentDeletion {
                     received_document_ids: ids.len(),
                     deleted_documents: None,
                 }),
             ),
-            TaskContent::DocumentDeletion {
-                deletion: DocumentDeletion::Clear,
-                ..
-            } => (
+            TaskContent::DocumentDeletion { deletion: DocumentDeletion::Clear, .. } => (
                 TaskType::DocumentDeletion,
-                Some(TaskDetails::ClearAll {
-                    deleted_documents: None,
-                }),
+                Some(TaskDetails::ClearAll { deleted_documents: None }),
             ),
-            TaskContent::IndexDeletion { .. } => (
-                TaskType::IndexDeletion,
-                Some(TaskDetails::ClearAll {
-                    deleted_documents: None,
-                }),
-            ),
-            TaskContent::SettingsUpdate { settings, .. } => (
-                TaskType::SettingsUpdate,
-                Some(TaskDetails::Settings { settings }),
-            ),
-            TaskContent::IndexCreation { primary_key, .. } => (
-                TaskType::IndexCreation,
-                Some(TaskDetails::IndexInfo { primary_key }),
-            ),
-            TaskContent::IndexUpdate { primary_key, .. } => (
-                TaskType::IndexUpdate,
-                Some(TaskDetails::IndexInfo { primary_key }),
-            ),
-            TaskContent::Dump { uid } => (
-                TaskType::DumpCreation,
-                Some(TaskDetails::Dump { dump_uid: uid }),
-            ),
+            TaskContent::IndexDeletion { .. } => {
+                (TaskType::IndexDeletion, Some(TaskDetails::ClearAll { deleted_documents: None }))
+            }
+            TaskContent::SettingsUpdate { settings, .. } => {
+                (TaskType::SettingsUpdate, Some(TaskDetails::Settings { settings }))
+            }
+            TaskContent::IndexCreation { primary_key, .. } => {
+                (TaskType::IndexCreation, Some(TaskDetails::IndexInfo { primary_key }))
+            }
+            TaskContent::IndexUpdate { primary_key, .. } => {
+                (TaskType::IndexUpdate, Some(TaskDetails::IndexInfo { primary_key }))
+            }
+            TaskContent::Dump { uid } => {
+                (TaskType::DumpCreation, Some(TaskDetails::Dump { dump_uid: uid }))
+            }
         };
 
         // An event always has at least one event: "Created"
@@ -267,36 +234,20 @@ impl From<Task> for TaskView {
             TaskEvent::Succeeded { timestamp, result } => {
                 match (result, &mut details) {
                     (
-                        TaskResult::DocumentAddition {
-                            indexed_documents: num,
-                            ..
-                        },
-                        Some(TaskDetails::DocumentAddition {
-                            ref mut indexed_documents,
-                            ..
-                        }),
+                        TaskResult::DocumentAddition { indexed_documents: num, .. },
+                        Some(TaskDetails::DocumentAddition { ref mut indexed_documents, .. }),
                     ) => {
                         indexed_documents.replace(*num);
                     }
                     (
-                        TaskResult::DocumentDeletion {
-                            deleted_documents: docs,
-                            ..
-                        },
-                        Some(TaskDetails::DocumentDeletion {
-                            ref mut deleted_documents,
-                            ..
-                        }),
+                        TaskResult::DocumentDeletion { deleted_documents: docs, .. },
+                        Some(TaskDetails::DocumentDeletion { ref mut deleted_documents, .. }),
                     ) => {
                         deleted_documents.replace(*docs);
                     }
                     (
-                        TaskResult::ClearAll {
-                            deleted_documents: docs,
-                        },
-                        Some(TaskDetails::ClearAll {
-                            ref mut deleted_documents,
-                        }),
+                        TaskResult::ClearAll { deleted_documents: docs },
+                        Some(TaskDetails::ClearAll { ref mut deleted_documents }),
                     ) => {
                         deleted_documents.replace(*docs);
                     }
@@ -306,22 +257,13 @@ impl From<Task> for TaskView {
             }
             TaskEvent::Failed { timestamp, error } => {
                 match details {
-                    Some(TaskDetails::DocumentDeletion {
-                        ref mut deleted_documents,
-                        ..
-                    }) => {
+                    Some(TaskDetails::DocumentDeletion { ref mut deleted_documents, .. }) => {
                         deleted_documents.replace(0);
                     }
-                    Some(TaskDetails::ClearAll {
-                        ref mut deleted_documents,
-                        ..
-                    }) => {
+                    Some(TaskDetails::ClearAll { ref mut deleted_documents, .. }) => {
                         deleted_documents.replace(0);
                     }
-                    Some(TaskDetails::DocumentAddition {
-                        ref mut indexed_documents,
-                        ..
-                    }) => {
+                    Some(TaskDetails::DocumentAddition { ref mut indexed_documents, .. }) => {
                         indexed_documents.replace(0);
                     }
                     _ => (),
@@ -400,10 +342,7 @@ pub enum TaskStatus {
 #[allow(clippy::large_enum_variant)]
 pub enum TaskDetails {
     #[cfg_attr(test, serde(rename_all = "camelCase"))]
-    DocumentAddition {
-        received_documents: usize,
-        indexed_documents: Option<u64>,
-    },
+    DocumentAddition { received_documents: usize, indexed_documents: Option<u64> },
     #[cfg_attr(test, serde(rename_all = "camelCase"))]
     Settings {
         #[cfg_attr(test, serde(flatten))]
@@ -412,10 +351,7 @@ pub enum TaskDetails {
     #[cfg_attr(test, serde(rename_all = "camelCase"))]
     IndexInfo { primary_key: Option<String> },
     #[cfg_attr(test, serde(rename_all = "camelCase"))]
-    DocumentDeletion {
-        received_document_ids: usize,
-        deleted_documents: Option<u64>,
-    },
+    DocumentDeletion { received_document_ids: usize, deleted_documents: Option<u64> },
     #[cfg_attr(test, serde(rename_all = "camelCase"))]
     ClearAll { deleted_documents: Option<u64> },
     #[cfg_attr(test, serde(rename_all = "camelCase"))]

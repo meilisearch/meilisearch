@@ -1,11 +1,10 @@
 use std::time::Duration;
 
-use crate::common::server::default_settings;
-use crate::common::GetAllDocumentsOptions;
-use crate::common::Server;
+use meilisearch_http::Opt;
 use tokio::time::sleep;
 
-use meilisearch_http::Opt;
+use crate::common::server::default_settings;
+use crate::common::{GetAllDocumentsOptions, Server};
 
 macro_rules! verify_snapshot {
     (
@@ -62,10 +61,7 @@ async fn perform_snapshot() {
 
     let snapshot_path = snapshot_dir.path().to_owned().join("db.snapshot");
 
-    let options = Opt {
-        import_snapshot: Some(snapshot_path),
-        ..default_settings(temp.path())
-    };
+    let options = Opt { import_snapshot: Some(snapshot_path), ..default_settings(temp.path()) };
 
     let snapshot_server = Server::new_with_options(options).await.unwrap();
 

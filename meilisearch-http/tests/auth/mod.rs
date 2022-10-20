@@ -3,10 +3,10 @@ mod authorization;
 mod payload;
 mod tenant_token;
 
-use crate::common::Server;
 use actix_web::http::StatusCode;
-
 use serde_json::{json, Value};
+
+use crate::common::Server;
 
 impl Server {
     pub fn use_api_key(&mut self, api_key: impl AsRef<str>) {

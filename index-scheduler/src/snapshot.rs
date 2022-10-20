@@ -1,16 +1,11 @@
+use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
+use meilisearch_types::heed::{Database, RoTxn};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
-use meilisearch_types::tasks::Details;
-use meilisearch_types::{
-    heed::{
-        types::{OwnedType, SerdeBincode, SerdeJson, Str},
-        Database, RoTxn,
-    },
-    tasks::Task,
-};
+use meilisearch_types::tasks::{Details, Task};
 use roaring::RoaringBitmap;
 
-use crate::BEI128;
-use crate::{index_mapper::IndexMapper, IndexScheduler, Kind, Status};
+use crate::index_mapper::IndexMapper;
+use crate::{IndexScheduler, Kind, Status, BEI128};
 
 pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     let IndexScheduler {
@@ -37,9 +32,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     let mut snap = String::new();
 
     let processing_tasks = processing_tasks.read().unwrap().processing.clone();
-    snap.push_str(&format!(
-        "### Autobatching Enabled = {autobatching_enabled}\n"
-    ));
+    snap.push_str(&format!("### Autobatching Enabled = {autobatching_enabled}\n"));
     snap.push_str("### Processing Tasks:\n");
     snap.push_str(&snapshot_bitmap(&processing_tasks));
     snap.push_str("\n----------------------------------------------------------------------\n");
@@ -151,6 +144,7 @@ fn snapshot_task(task: &Task) -> String {
     snap.push('}');
     snap
 }
+
 fn snaphsot_details(d: &Details) -> String {
     match d {
         Details::DocumentAddition {
@@ -191,8 +185,7 @@ fn snaphsot_details(d: &Details) -> String {
         },
         Details::IndexSwap { swaps } => {
             format!("{{ indexes: {swaps:?} }}")
-        },
-        
+        }
     }
 }
 
@@ -205,6 +198,7 @@ fn snapshot_status(rtxn: &RoTxn, db: Database<SerdeBincode<Status>, RoaringBitma
     }
     snap
 }
+
 fn snapshot_kind(rtxn: &RoTxn, db: Database<SerdeBincode<Kind>, RoaringBitmapCodec>) -> String {
     let mut snap = String::new();
     let mut iter = db.iter(rtxn).unwrap();
@@ -227,11 +221,6 @@ fn snapshot_index_tasks(rtxn: &RoTxn, db: Database<Str, RoaringBitmapCodec>) -> 
 }
 
 fn snapshot_index_mapper(rtxn: &RoTxn, mapper: &IndexMapper) -> String {
-    let names = mapper
-        .indexes(rtxn)
-        .unwrap()
-        .into_iter()
-        .map(|(n, _)| n)
-        .collect::<Vec<_>>();
+    let names = mapper.indexes(rtxn).unwrap().into_iter().map(|(n, _)| n).collect::<Vec<_>>();
     format!("{names:?}")
 }

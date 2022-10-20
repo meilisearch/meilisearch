@@ -1,7 +1,8 @@
-use crate::common::Server;
 use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
+
+use crate::common::Server;
 
 #[actix_rt::test]
 async fn error_get_unexisting_task_status() {
@@ -49,10 +50,7 @@ async fn list_tasks() {
     index.create(None).await;
     index.wait_task(0).await;
     index
-        .add_documents(
-            serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(),
-            None,
-        )
+        .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
     let (response, code) = index.list_tasks().await;
     assert_eq!(code, 200);
@@ -66,10 +64,7 @@ async fn list_tasks_with_star_filters() {
     index.create(None).await;
     index.wait_task(0).await;
     index
-        .add_documents(
-            serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(),
-            None,
-        )
+        .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
     let (response, code) = index.service.get("/tasks?indexUid=test").await;
     assert_eq!(code, 200);
@@ -87,10 +82,8 @@ async fn list_tasks_with_star_filters() {
     assert_eq!(code, 200);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 
-    let (response, code) = index
-        .service
-        .get("/tasks?type=*,documentAdditionOrUpdate&status=*")
-        .await;
+    let (response, code) =
+        index.service.get("/tasks?type=*,documentAdditionOrUpdate&status=*").await;
     assert_eq!(code, 200, "{:?}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 
@@ -116,10 +109,7 @@ async fn list_tasks_status_filtered() {
     index.create(None).await;
     index.wait_task(0).await;
     index
-        .add_documents(
-            serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(),
-            None,
-        )
+        .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
 
     let (response, code) = index.filtered_tasks(&[], &["succeeded"]).await;
@@ -145,19 +135,15 @@ async fn list_tasks_type_filtered() {
     index.create(None).await;
     index.wait_task(0).await;
     index
-        .add_documents(
-            serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(),
-            None,
-        )
+        .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
 
     let (response, code) = index.filtered_tasks(&["indexCreation"], &[]).await;
     assert_eq!(code, 200, "{}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 1);
 
-    let (response, code) = index
-        .filtered_tasks(&["indexCreation", "documentAdditionOrUpdate"], &[])
-        .await;
+    let (response, code) =
+        index.filtered_tasks(&["indexCreation", "documentAdditionOrUpdate"], &[]).await;
     assert_eq!(code, 200, "{}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 }
@@ -169,10 +155,7 @@ async fn list_tasks_status_and_type_filtered() {
     index.create(None).await;
     index.wait_task(0).await;
     index
-        .add_documents(
-            serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(),
-            None,
-        )
+        .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
 
     let (response, code) = index.filtered_tasks(&["indexCreation"], &["failed"]).await;

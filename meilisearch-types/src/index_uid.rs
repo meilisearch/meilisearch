@@ -1,7 +1,8 @@
-use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
+
+use serde::{Deserialize, Serialize};
 
 /// An index uid is composed of only ascii alphanumeric characters, - and _, between 1 and 400
 /// bytes long
@@ -38,9 +39,7 @@ impl TryFrom<String> for IndexUid {
     type Error = IndexUidFormatError;
 
     fn try_from(uid: String) -> Result<Self, Self::Error> {
-        if !uid
-            .chars()
-            .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
+        if !uid.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
             || uid.is_empty()
             || uid.len() > 400
         {

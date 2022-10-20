@@ -9,7 +9,8 @@ use serde_cs::vec::CS;
 use serde_json::Value;
 
 use crate::analytics::{Analytics, SearchAggregator};
-use crate::extractors::authentication::{policies::*, GuardedData};
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::search::{
     perform_search, MatchingStrategy, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
@@ -64,14 +65,10 @@ impl From<SearchQueryGet> for SearchQuery {
             q: other.q,
             offset: other.offset,
             limit: other.limit.unwrap_or_else(DEFAULT_SEARCH_LIMIT),
-            attributes_to_retrieve: other
-                .attributes_to_retrieve
-                .map(|o| o.into_iter().collect()),
+            attributes_to_retrieve: other.attributes_to_retrieve.map(|o| o.into_iter().collect()),
             attributes_to_crop: other.attributes_to_crop.map(|o| o.into_iter().collect()),
             crop_length: other.crop_length,
-            attributes_to_highlight: other
-                .attributes_to_highlight
-                .map(|o| o.into_iter().collect()),
+            attributes_to_highlight: other.attributes_to_highlight.map(|o| o.into_iter().collect()),
             filter,
             sort: other.sort.map(|attr| fix_sort_query_parameters(&attr)),
             show_matches_position: other.show_matches_position,
@@ -140,10 +137,8 @@ pub async fn search_with_url_query(
     let mut query: SearchQuery = params.into_inner().into();
 
     // Tenant token search_rules.
-    if let Some(search_rules) = index_scheduler
-        .filters()
-        .search_rules
-        .get_index_search_rules(&index_uid)
+    if let Some(search_rules) =
+        index_scheduler.filters().search_rules.get_index_search_rules(&index_uid)
     {
         add_search_rules(&mut query, search_rules);
     }
@@ -174,10 +169,8 @@ pub async fn search_with_post(
     debug!("search called with params: {:?}", query);
 
     // Tenant token search_rules.
-    if let Some(search_rules) = index_scheduler
-        .filters()
-        .search_rules
-        .get_index_search_rules(&index_uid)
+    if let Some(search_rules) =
+        index_scheduler.filters().search_rules.get_index_search_rules(&index_uid)
     {
         add_search_rules(&mut query, search_rules);
     }
@@ -206,13 +199,7 @@ mod test {
         let sort = fix_sort_query_parameters("_geoPoint(12, 13):asc");
         assert_eq!(sort, vec!["_geoPoint(12,13):asc".to_string()]);
         let sort = fix_sort_query_parameters("doggo:asc,_geoPoint(12.45,13.56):desc");
-        assert_eq!(
-            sort,
-            vec![
-                "doggo:asc".to_string(),
-                "_geoPoint(12.45,13.56):desc".to_string(),
-            ]
-        );
+        assert_eq!(sort, vec!["doggo:asc".to_string(), "_geoPoint(12.45,13.56):desc".to_string(),]);
         let sort = fix_sort_query_parameters(
             "doggo:asc , _geoPoint(12.45, 13.56, 2590352):desc , catto:desc",
         );
@@ -226,12 +213,6 @@ mod test {
         );
         let sort = fix_sort_query_parameters("doggo:asc , _geoPoint(1, 2), catto:desc");
         // This is ugly but eh, I don't want to write a full parser just for this unused route
-        assert_eq!(
-            sort,
-            vec![
-                "doggo:asc".to_string(),
-                "_geoPoint(1,2),catto:desc".to_string(),
-            ]
-        );
+        assert_eq!(sort, vec!["doggo:asc".to_string(), "_geoPoint(1,2),catto:desc".to_string(),]);
     }
 }
