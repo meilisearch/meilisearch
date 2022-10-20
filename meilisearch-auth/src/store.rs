@@ -7,7 +7,6 @@ use std::fs::create_dir_all;
 use std::path::Path;
 use std::str;
 use std::sync::Arc;
-
 use hmac::{Hmac, Mac};
 use meilisearch_types::index_uid::IndexType;
 use meilisearch_types::star_or::StarOr;
