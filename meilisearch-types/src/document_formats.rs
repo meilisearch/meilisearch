@@ -8,6 +8,7 @@ use either::Either;
 use milli::documents::{DocumentsBatchBuilder, Error};
 use milli::Object;
 use serde::Deserialize;
+use serde_json::error::Category;
 
 type Result<T> = std::result::Result<T, DocumentFormatError>;
 
@@ -40,18 +41,24 @@ impl Display for DocumentFormatError {
             Self::Internal(e) => write!(f, "An internal error has occurred: `{}`.", e),
             Self::MalformedPayload(me, b) => match me.borrow() {
                 Error::Json(se) => {
+                    let mut message = match se.classify() {
+                        Category::Data => {
+                            "data are neither an object nor a list of objects".to_string()
+                        }
+                        _ => se.to_string(),
+                    };
+
                     // https://github.com/meilisearch/meilisearch/issues/2107
                     // The user input maybe insanely long. We need to truncate it.
-                    let mut serde_msg = se.to_string();
                     let ellipsis = "...";
                     let trim_input_prefix_len = 50;
                     let trim_input_suffix_len = 85;
 
-                    if serde_msg.len()
+                    if message.len()
                         > trim_input_prefix_len + trim_input_suffix_len + ellipsis.len()
                     {
-                        serde_msg.replace_range(
-                            trim_input_prefix_len..serde_msg.len() - trim_input_suffix_len,
+                        message.replace_range(
+                            trim_input_prefix_len..message.len() - trim_input_suffix_len,
                             ellipsis,
                         );
                     }
@@ -59,7 +66,7 @@ impl Display for DocumentFormatError {
                     write!(
                         f,
                         "The `{}` payload provided is malformed. `Couldn't serialize document value: {}`.",
-                        b, serde_msg
+                        b, message
                     )
                 }
                 _ => write!(f, "The `{}` payload provided is malformed: `{}`.", b, me),
