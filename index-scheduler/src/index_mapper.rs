@@ -122,10 +122,7 @@ impl IndexMapper {
             }
 
             // Finally we remove the entry from the index map.
-            assert!(matches!(
-                index_map.write().unwrap().remove(&uuid),
-                Some(BeingDeleted)
-            ));
+            assert!(matches!(index_map.write().unwrap().remove(&uuid), Some(BeingDeleted)));
         });
 
         Ok(())
@@ -183,8 +180,7 @@ impl IndexMapper {
             .iter(rtxn)?
             .map(|ret| {
                 ret.map_err(Error::from).and_then(|(name, _)| {
-                    self.index(rtxn, name)
-                        .map(|index| (name.to_string(), index))
+                    self.index(rtxn, name).map(|index| (name.to_string(), index))
                 })
             })
             .collect()

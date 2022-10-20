@@ -29,28 +29,27 @@ mod utils;
 pub type Result<T> = std::result::Result<T, Error>;
 pub type TaskId = u32;
 
-use dump::{KindDump, TaskDump, UpdateFile};
-pub use error::Error;
-use meilisearch_types::milli::documents::DocumentsBatchBuilder;
-use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
-use utils::keep_tasks_within_datetimes;
-
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, RwLock};
 
+use dump::{KindDump, TaskDump, UpdateFile};
+pub use error::Error;
 use file_store::FileStore;
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
+use meilisearch_types::heed::{self, Database, Env};
 use meilisearch_types::milli;
+use meilisearch_types::milli::documents::DocumentsBatchBuilder;
+use meilisearch_types::milli::update::IndexerConfig;
+use meilisearch_types::milli::{CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
+use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use synchronoise::SignalEvent;
 use time::OffsetDateTime;
+use utils::keep_tasks_within_datetimes;
 use uuid::Uuid;
-
-use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
-use meilisearch_types::heed::{self, Database, Env};
-use meilisearch_types::milli::update::IndexerConfig;
-use meilisearch_types::milli::{CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
 
 use crate::index_mapper::IndexMapper;
 
@@ -124,10 +123,7 @@ impl Query {
     pub fn with_index(self, index_uid: String) -> Self {
         let mut index_vec = self.index_uid.unwrap_or_default();
         index_vec.push(index_uid);
-        Self {
-            index_uid: Some(index_vec),
-            ..self
-        }
+        Self { index_uid: Some(index_vec), ..self }
     }
 }
 
@@ -142,10 +138,7 @@ struct ProcessingTasks {
 impl ProcessingTasks {
     /// Creates an empty `ProcessingAt` struct.
     fn new() -> ProcessingTasks {
-        ProcessingTasks {
-            started_at: OffsetDateTime::now_utc(),
-            processing: RoaringBitmap::new(),
-        }
+        ProcessingTasks { started_at: OffsetDateTime::now_utc(), processing: RoaringBitmap::new() }
     }
 
     /// Stores the currently processing tasks, and the date time at which it started.
@@ -447,21 +440,11 @@ impl IndexScheduler {
 
         let tasks = self.get_existing_tasks(
             &rtxn,
-            tasks
-                .into_iter()
-                .rev()
-                .take(query.limit.unwrap_or(u32::MAX) as usize),
+            tasks.into_iter().rev().take(query.limit.unwrap_or(u32::MAX) as usize),
         )?;
 
-        let ProcessingTasks {
-            started_at,
-            processing,
-            ..
-        } = self
-            .processing_tasks
-            .read()
-            .map_err(|_| Error::CorruptedTaskQueue)?
-            .clone();
+        let ProcessingTasks { started_at, processing, .. } =
+            self.processing_tasks.read().map_err(|_| Error::CorruptedTaskQueue)?.clone();
 
         let ret = tasks.into_iter();
         if processing.is_empty() {
@@ -469,11 +452,9 @@ impl IndexScheduler {
         } else {
             Ok(ret
                 .map(|task| match processing.contains(task.uid) {
-                    true => Task {
-                        status: Status::Processing,
-                        started_at: Some(started_at),
-                        ..task
-                    },
+                    true => {
+                        Task { status: Status::Processing, started_at: Some(started_at), ..task }
+                    }
                     false => task,
                 })
                 .collect())
@@ -497,8 +478,7 @@ impl IndexScheduler {
             status: Status::Enqueued,
             kind: kind.clone(),
         };
-        self.all_tasks
-            .append(&mut wtxn, &BEU32::new(task.uid), &task)?;
+        self.all_tasks.append(&mut wtxn, &BEU32::new(task.uid), &task)?;
 
         if let Some(indexes) = task.indexes() {
             for index in indexes {
@@ -527,11 +507,7 @@ impl IndexScheduler {
         // we inform the processing tasks to stop (if necessary).
         if let KindWithContent::TaskCancelation { tasks, .. } = kind {
             let tasks_to_cancel = RoaringBitmap::from_iter(tasks);
-            if self
-                .processing_tasks
-                .read()
-                .unwrap()
-                .must_cancel_processing_tasks(&tasks_to_cancel)
+            if self.processing_tasks.read().unwrap().must_cancel_processing_tasks(&tasks_to_cancel)
             {
                 self.must_stop_processing.must_stop();
             }
@@ -601,16 +577,14 @@ impl IndexScheduler {
                 KindDump::DocumentClear => KindWithContent::DocumentClear {
                     index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
                 },
-                KindDump::Settings {
-                    settings,
-                    is_deletion,
-                    allow_index_creation,
-                } => KindWithContent::Settings {
-                    index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
-                    new_settings: settings,
-                    is_deletion,
-                    allow_index_creation,
-                },
+                KindDump::Settings { settings, is_deletion, allow_index_creation } => {
+                    KindWithContent::Settings {
+                        index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
+                        new_settings: settings,
+                        is_deletion,
+                        allow_index_creation,
+                    }
+                }
                 KindDump::IndexDeletion => KindWithContent::IndexDeletion {
                     index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
                 },
@@ -629,21 +603,14 @@ impl IndexScheduler {
                 KindDump::TasksDeletion { query, tasks } => {
                     KindWithContent::TaskDeletion { query, tasks }
                 }
-                KindDump::DumpExport {
-                    dump_uid,
-                    keys,
-                    instance_uid,
-                } => KindWithContent::DumpExport {
-                    dump_uid,
-                    keys,
-                    instance_uid,
-                },
+                KindDump::DumpExport { dump_uid, keys, instance_uid } => {
+                    KindWithContent::DumpExport { dump_uid, keys, instance_uid }
+                }
                 KindDump::Snapshot => KindWithContent::Snapshot,
             },
         };
 
-        self.all_tasks
-            .put(&mut wtxn, &BEU32::new(task.uid), &task)?;
+        self.all_tasks.put(&mut wtxn, &BEU32::new(task.uid), &task)?;
 
         if let Some(indexes) = task.indexes() {
             for index in indexes {
@@ -729,19 +696,12 @@ impl IndexScheduler {
 
         // We reset the must_stop flag to be sure that we don't stop processing tasks
         self.must_stop_processing.reset();
-        self.processing_tasks
-            .write()
-            .unwrap()
-            .start_processing_at(started_at, processing_tasks);
+        self.processing_tasks.write().unwrap().start_processing_at(started_at, processing_tasks);
 
         #[cfg(test)]
         {
-            self.test_breakpoint_sdr
-                .send(Breakpoint::BatchCreated)
-                .unwrap();
-            self.test_breakpoint_sdr
-                .send(Breakpoint::BeforeProcessing)
-                .unwrap();
+            self.test_breakpoint_sdr.send(Breakpoint::BatchCreated).unwrap();
+            self.test_breakpoint_sdr.send(Breakpoint::BeforeProcessing).unwrap();
         }
 
         // 2. Process the tasks
@@ -781,16 +741,11 @@ impl IndexScheduler {
                 }
             }
         }
-        self.processing_tasks
-            .write()
-            .unwrap()
-            .stop_processing_at(finished_at);
+        self.processing_tasks.write().unwrap().stop_processing_at(finished_at);
         wtxn.commit()?;
 
         #[cfg(test)]
-        self.test_breakpoint_sdr
-            .send(Breakpoint::AfterProcessing)
-            .unwrap();
+        self.test_breakpoint_sdr.send(Breakpoint::AfterProcessing).unwrap();
 
         Ok(processed_tasks)
     }
@@ -812,16 +767,12 @@ mod tests {
     use tempfile::TempDir;
     use uuid::Uuid;
 
-    use crate::snapshot::snapshot_index_scheduler;
-
     use super::*;
+    use crate::snapshot::snapshot_index_scheduler;
 
     /// Return a `KindWithContent::IndexCreation` task
     fn index_creation_task(index: &'static str, primary_key: &'static str) -> KindWithContent {
-        KindWithContent::IndexCreation {
-            index_uid: S(index),
-            primary_key: Some(S(primary_key)),
-        }
+        KindWithContent::IndexCreation { index_uid: S(index), primary_key: Some(S(primary_key)) }
     }
     /// Create a `KindWithContent::DocumentImport` task that imports documents.
     ///
@@ -864,9 +815,7 @@ mod tests {
         }}"#
         );
 
-        let (_uuid, mut file) = index_scheduler
-            .create_update_file_with_uuid(file_uuid)
-            .unwrap();
+        let (_uuid, mut file) = index_scheduler.create_update_file_with_uuid(file_uuid).unwrap();
         let documents_count =
             meilisearch_types::document_formats::read_json(content.as_bytes(), file.as_file_mut())
                 .unwrap() as u64;
@@ -890,10 +839,8 @@ mod tests {
             )
             .unwrap();
 
-            let index_scheduler_handle = IndexSchedulerHandle {
-                _tempdir: tempdir,
-                test_breakpoint_rcv: receiver,
-            };
+            let index_scheduler_handle =
+                IndexSchedulerHandle { _tempdir: tempdir, test_breakpoint_rcv: receiver };
 
             (index_scheduler, index_scheduler_handle)
         }
@@ -952,18 +899,12 @@ mod tests {
     fn insert_task_while_another_task_is_processing() {
         let (index_scheduler, handle) = IndexScheduler::test(true);
 
-        index_scheduler
-            .register(index_creation_task("index_a", "id"))
-            .unwrap();
+        index_scheduler.register(index_creation_task("index_a", "id")).unwrap();
         handle.wait_till(Breakpoint::BatchCreated);
         // while the task is processing can we register another task?
+        index_scheduler.register(index_creation_task("index_b", "id")).unwrap();
         index_scheduler
-            .register(index_creation_task("index_b", "id"))
-            .unwrap();
-        index_scheduler
-            .register(KindWithContent::IndexDeletion {
-                index_uid: S("index_a"),
-            })
+            .register(KindWithContent::IndexDeletion { index_uid: S("index_a") })
             .unwrap();
 
         snapshot!(snapshot_index_scheduler(&index_scheduler));
@@ -976,21 +917,13 @@ mod tests {
         let (index_scheduler, handle) = IndexScheduler::test(true);
 
         index_scheduler
-            .register(KindWithContent::IndexCreation {
-                index_uid: S("doggos"),
-                primary_key: None,
-            })
+            .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
             .unwrap();
         index_scheduler
-            .register(KindWithContent::IndexCreation {
-                index_uid: S("cattos"),
-                primary_key: None,
-            })
+            .register(KindWithContent::IndexCreation { index_uid: S("cattos"), primary_key: None })
             .unwrap();
         index_scheduler
-            .register(KindWithContent::IndexDeletion {
-                index_uid: S("doggos"),
-            })
+            .register(KindWithContent::IndexDeletion { index_uid: S("doggos") })
             .unwrap();
 
         handle.wait_till(Breakpoint::Start);
@@ -1011,25 +944,16 @@ mod tests {
         let (index_scheduler, handle) = IndexScheduler::test(false);
 
         index_scheduler
-            .register(KindWithContent::IndexCreation {
-                index_uid: S("doggos"),
-                primary_key: None,
-            })
+            .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
             .unwrap();
         index_scheduler
-            .register(KindWithContent::DocumentClear {
-                index_uid: S("doggos"),
-            })
+            .register(KindWithContent::DocumentClear { index_uid: S("doggos") })
             .unwrap();
         index_scheduler
-            .register(KindWithContent::DocumentClear {
-                index_uid: S("doggos"),
-            })
+            .register(KindWithContent::DocumentClear { index_uid: S("doggos") })
             .unwrap();
         index_scheduler
-            .register(KindWithContent::DocumentClear {
-                index_uid: S("doggos"),
-            })
+            .register(KindWithContent::DocumentClear { index_uid: S("doggos") })
             .unwrap();
 
         handle.wait_till(Breakpoint::AfterProcessing);
@@ -1211,10 +1135,7 @@ mod tests {
         }"#;
 
         index_scheduler
-            .register(KindWithContent::IndexCreation {
-                index_uid: S("doggos"),
-                primary_key: None,
-            })
+            .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
             .unwrap();
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
@@ -1233,9 +1154,7 @@ mod tests {
             })
             .unwrap();
         index_scheduler
-            .register(KindWithContent::IndexDeletion {
-                index_uid: S("doggos"),
-            })
+            .register(KindWithContent::IndexDeletion { index_uid: S("doggos") })
             .unwrap();
 
         snapshot!(snapshot_index_scheduler(&index_scheduler));
@@ -1263,9 +1182,7 @@ mod tests {
 
         for name in index_names {
             index_scheduler
-                .register(KindWithContent::DocumentClear {
-                    index_uid: name.to_string(),
-                })
+                .register(KindWithContent::DocumentClear { index_uid: name.to_string() })
                 .unwrap();
         }
 
@@ -1308,10 +1225,7 @@ mod tests {
 
         index_scheduler
             .register(KindWithContent::IndexSwap {
-                swaps: vec![
-                    ("a".to_owned(), "b".to_owned()),
-                    ("c".to_owned(), "d".to_owned()),
-                ],
+                swaps: vec![("a".to_owned(), "b".to_owned()), ("c".to_owned(), "d".to_owned())],
             })
             .unwrap();
 
@@ -1319,9 +1233,7 @@ mod tests {
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "first_swap_processed");
 
         index_scheduler
-            .register(KindWithContent::IndexSwap {
-                swaps: vec![("a".to_owned(), "c".to_owned())],
-            })
+            .register(KindWithContent::IndexSwap { swaps: vec![("a".to_owned(), "c".to_owned())] })
             .unwrap();
         handle.wait_till(Breakpoint::AfterProcessing);
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_swap_processed");
@@ -1353,9 +1265,7 @@ mod tests {
             })
             .unwrap();
         index_scheduler
-            .register(KindWithContent::IndexDeletion {
-                index_uid: S("doggos"),
-            })
+            .register(KindWithContent::IndexDeletion { index_uid: S("doggos") })
             .unwrap();
 
         snapshot!(snapshot_index_scheduler(&index_scheduler));

@@ -9,13 +9,12 @@ use std::str::FromStr;
 
 use actix_web::HttpRequest;
 use meilisearch_types::InstanceUid;
+pub use mock_analytics::MockAnalytics;
 use once_cell::sync::Lazy;
 use platform_dirs::AppDirs;
 use serde_json::Value;
 
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
-
-pub use mock_analytics::MockAnalytics;
 
 // if we are in debug mode OR the analytics feature is disabled
 // the `SegmentAnalytics` point to the mock instead of the real analytics
@@ -42,12 +41,7 @@ fn config_user_id_path(db_path: &Path) -> Option<PathBuf> {
     db_path
         .canonicalize()
         .ok()
-        .map(|path| {
-            path.join("instance-uid")
-                .display()
-                .to_string()
-                .replace('/', "-")
-        })
+        .map(|path| path.join("instance-uid").display().to_string().replace('/', "-"))
         .zip(MEILISEARCH_CONFIG_PATH.as_ref())
         .map(|(filename, config_path)| config_path.join(filename.trim_start_matches('-')))
 }

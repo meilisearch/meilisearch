@@ -1,11 +1,9 @@
-use meilisearch_types::{
-    error::ResponseError,
-    keys::Key,
-    milli::update::IndexDocumentsMethod,
-    settings::Unchecked,
-    tasks::{Details, KindWithContent, Status, Task, TaskId},
-    InstanceUid,
-};
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::keys::Key;
+use meilisearch_types::milli::update::IndexDocumentsMethod;
+use meilisearch_types::settings::Unchecked;
+use meilisearch_types::tasks::{Details, KindWithContent, Status, Task, TaskId};
+use meilisearch_types::InstanceUid;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -168,15 +166,8 @@ impl From<KindWithContent> for KindDump {
             }
             KindWithContent::DocumentClear { .. } => KindDump::DocumentClear,
             KindWithContent::Settings {
-                new_settings,
-                is_deletion,
-                allow_index_creation,
-                ..
-            } => KindDump::Settings {
-                settings: new_settings,
-                is_deletion,
-                allow_index_creation,
-            },
+                new_settings, is_deletion, allow_index_creation, ..
+            } => KindDump::Settings { settings: new_settings, is_deletion, allow_index_creation },
             KindWithContent::IndexDeletion { .. } => KindDump::IndexDeletion,
             KindWithContent::IndexCreation { primary_key, .. } => {
                 KindDump::IndexCreation { primary_key }
@@ -191,15 +182,9 @@ impl From<KindWithContent> for KindDump {
             KindWithContent::TaskDeletion { query, tasks } => {
                 KindDump::TasksDeletion { query, tasks }
             }
-            KindWithContent::DumpExport {
-                dump_uid,
-                keys,
-                instance_uid,
-            } => KindDump::DumpExport {
-                dump_uid,
-                keys,
-                instance_uid,
-            },
+            KindWithContent::DumpExport { dump_uid, keys, instance_uid } => {
+                KindDump::DumpExport { dump_uid, keys, instance_uid }
+            }
             KindWithContent::Snapshot => KindDump::Snapshot,
         }
     }
@@ -207,29 +192,25 @@ impl From<KindWithContent> for KindDump {
 
 #[cfg(test)]
 pub(crate) mod test {
-    use std::{
-        fs::File,
-        io::{Seek, SeekFrom},
-        str::FromStr,
-    };
+    use std::fs::File;
+    use std::io::{Seek, SeekFrom};
+    use std::str::FromStr;
 
     use big_s::S;
     use maplit::btreeset;
+    use meilisearch_types::index_uid::IndexUid;
     use meilisearch_types::keys::{Action, Key};
-    use meilisearch_types::milli::{self, update::Setting};
-    use meilisearch_types::tasks::Status;
-    use meilisearch_types::{index_uid::IndexUid, star_or::StarOr};
-    use meilisearch_types::{
-        settings::{Checked, Settings},
-        tasks::Details,
-    };
+    use meilisearch_types::milli::update::Setting;
+    use meilisearch_types::milli::{self};
+    use meilisearch_types::settings::{Checked, Settings};
+    use meilisearch_types::star_or::StarOr;
+    use meilisearch_types::tasks::{Details, Status};
     use serde_json::{json, Map, Value};
     use time::macros::datetime;
     use uuid::Uuid;
 
-    use crate::{
-        reader::Document, DumpReader, DumpWriter, IndexMetadata, KindDump, TaskDump, Version,
-    };
+    use crate::reader::Document;
+    use crate::{DumpReader, DumpWriter, IndexMetadata, KindDump, TaskDump, Version};
 
     pub fn create_test_instance_uid() -> Uuid {
         Uuid::parse_str("9e15e977-f2ae-4761-943f-1eaf75fd736d").unwrap()
@@ -326,14 +307,8 @@ pub(crate) mod test {
                     finished_at: None,
                 },
                 Some(vec![
-                    json!({ "id": 4, "race": "leonberg" })
-                        .as_object()
-                        .unwrap()
-                        .clone(),
-                    json!({ "id": 5, "race": "patou" })
-                        .as_object()
-                        .unwrap()
-                        .clone(),
+                    json!({ "id": 4, "race": "leonberg" }).as_object().unwrap().clone(),
+                    json!({ "id": 5, "race": "patou" }).as_object().unwrap().clone(),
                 ]),
             ),
             (
@@ -397,9 +372,7 @@ pub(crate) mod test {
         let documents = create_test_documents();
         let settings = create_test_settings();
 
-        let mut index = dump
-            .create_index("doggos", &create_test_index_metadata())
-            .unwrap();
+        let mut index = dump.create_index("doggos", &create_test_index_metadata()).unwrap();
         for document in &documents {
             index.push_document(document).unwrap();
         }
@@ -445,10 +418,7 @@ pub(crate) mod test {
         // ==== checking the top level infos
         assert_eq!(dump.version(), Version::V6);
         assert!(dump.date().is_some());
-        assert_eq!(
-            dump.instance_uid().unwrap().unwrap(),
-            create_test_instance_uid()
-        );
+        assert_eq!(dump.instance_uid().unwrap().unwrap(), create_test_instance_uid());
 
         // ==== checking the index
         let mut indexes = dump.indexes().unwrap();
@@ -475,10 +445,7 @@ pub(crate) mod test {
                     "A content file was expected for the task {}.",
                     expected.0.uid
                 );
-                let updates = content_file
-                    .unwrap()
-                    .collect::<Result<Vec<_>, _>>()
-                    .unwrap();
+                let updates = content_file.unwrap().collect::<Result<Vec<_>, _>>().unwrap();
                 assert_eq!(updates, expected_update);
             }
         }

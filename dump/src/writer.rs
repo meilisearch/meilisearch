@@ -1,20 +1,18 @@
-use std::{
-    fs::{self, File},
-    io::{BufWriter, Write},
-    path::PathBuf,
-};
+use std::fs::{self, File};
+use std::io::{BufWriter, Write};
+use std::path::PathBuf;
 
-use flate2::{write::GzEncoder, Compression};
-use meilisearch_types::{
-    keys::Key,
-    settings::{Checked, Settings},
-};
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use meilisearch_types::keys::Key;
+use meilisearch_types::settings::{Checked, Settings};
 use serde_json::{Map, Value};
 use tempfile::TempDir;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{reader::Document, IndexMetadata, Metadata, Result, TaskDump, CURRENT_DUMP_VERSION};
+use crate::reader::Document;
+use crate::{IndexMetadata, Metadata, Result, TaskDump, CURRENT_DUMP_VERSION};
 
 pub struct DumpWriter {
     dir: TempDir,
@@ -36,10 +34,7 @@ impl DumpWriter {
             db_version: env!("CARGO_PKG_VERSION").to_string(),
             dump_date: OffsetDateTime::now_utc(),
         };
-        fs::write(
-            dir.path().join("metadata.json"),
-            serde_json::to_string(&metadata)?,
-        )?;
+        fs::write(dir.path().join("metadata.json"), serde_json::to_string(&metadata)?)?;
 
         std::fs::create_dir(&dir.path().join("indexes"))?;
 
@@ -77,9 +72,7 @@ pub struct KeyWriter {
 impl KeyWriter {
     pub(crate) fn new(path: PathBuf) -> Result<Self> {
         let keys = File::create(path.join("keys.jsonl"))?;
-        Ok(KeyWriter {
-            keys: BufWriter::new(keys),
-        })
+        Ok(KeyWriter { keys: BufWriter::new(keys) })
     }
 
     pub fn push_key(&mut self, key: &Key) -> Result<()> {
@@ -107,10 +100,7 @@ impl TaskWriter {
         let update_files = path.join("update_files");
         std::fs::create_dir(&update_files)?;
 
-        Ok(TaskWriter {
-            queue: BufWriter::new(queue),
-            update_files,
-        })
+        Ok(TaskWriter { queue: BufWriter::new(queue), update_files })
     }
 
     /// Pushes tasks in the dump.
@@ -119,9 +109,7 @@ impl TaskWriter {
         self.queue.write_all(&serde_json::to_vec(task)?)?;
         self.queue.write_all(b"\n")?;
 
-        Ok(UpdateFile::new(
-            self.update_files.join(format!("{}.jsonl", task.uid)),
-        ))
+        Ok(UpdateFile::new(self.update_files.join(format!("{}.jsonl", task.uid))))
     }
 
     pub fn flush(mut self) -> Result<()> {
@@ -175,10 +163,7 @@ impl IndexWriter {
         let documents = File::create(path.join("documents.jsonl"))?;
         let settings = File::create(path.join("settings.json"))?;
 
-        Ok(IndexWriter {
-            documents: BufWriter::new(documents),
-            settings,
-        })
+        Ok(IndexWriter { documents: BufWriter::new(documents), settings })
     }
 
     pub fn push_document(&mut self, document: &Map<String, Value>) -> Result<()> {
@@ -200,20 +185,20 @@ impl IndexWriter {
 
 #[cfg(test)]
 pub(crate) mod test {
-    use std::{fmt::Write, io::BufReader, path::Path, str::FromStr};
+    use std::fmt::Write;
+    use std::io::BufReader;
+    use std::path::Path;
+    use std::str::FromStr;
 
     use flate2::bufread::GzDecoder;
     use meilisearch_types::settings::Unchecked;
 
-    use crate::{
-        reader::Document,
-        test::{
-            create_test_api_keys, create_test_documents, create_test_dump,
-            create_test_instance_uid, create_test_settings, create_test_tasks,
-        },
-    };
-
     use super::*;
+    use crate::reader::Document;
+    use crate::test::{
+        create_test_api_keys, create_test_documents, create_test_dump, create_test_instance_uid,
+        create_test_settings, create_test_tasks,
+    };
 
     fn create_directory_hierarchy(dir: &Path) -> String {
         let mut ret = String::new();
@@ -226,10 +211,8 @@ pub(crate) mod test {
         let mut ret = String::new();
 
         // the entries are not guarenteed to be returned in the same order thus we need to sort them.
-        let mut entries = fs::read_dir(dir)
-            .unwrap()
-            .collect::<std::result::Result<Vec<_>, _>>()
-            .unwrap();
+        let mut entries =
+            fs::read_dir(dir).unwrap().collect::<std::result::Result<Vec<_>, _>>().unwrap();
 
         // I want the directories first and then sort by name.
         entries.sort_by(|a, b| {
@@ -317,18 +300,12 @@ pub(crate) mod test {
         "###);
 
         let instance_uid = fs::read_to_string(dump_path.join("instance_uid.uuid")).unwrap();
-        assert_eq!(
-            Uuid::from_str(&instance_uid).unwrap(),
-            create_test_instance_uid()
-        );
+        assert_eq!(Uuid::from_str(&instance_uid).unwrap(), create_test_instance_uid());
 
         // ==== checking the index
         let docs = fs::read_to_string(dump_path.join("indexes/doggos/documents.jsonl")).unwrap();
         for (document, expected) in docs.lines().zip(create_test_documents()) {
-            assert_eq!(
-                serde_json::from_str::<Map<String, Value>>(document).unwrap(),
-                expected
-            );
+            assert_eq!(serde_json::from_str::<Map<String, Value>>(document).unwrap(), expected);
         }
         let test_settings =
             fs::read_to_string(dump_path.join("indexes/doggos/settings.json")).unwrap();
@@ -356,10 +333,8 @@ pub(crate) mod test {
                 let path = dump_path.join(format!("tasks/update_files/{}.jsonl", expected.0.uid));
                 println!("trying to open {}", path.display());
                 let update = fs::read_to_string(path).unwrap();
-                let documents: Vec<Document> = update
-                    .lines()
-                    .map(|line| serde_json::from_str(line).unwrap())
-                    .collect();
+                let documents: Vec<Document> =
+                    update.lines().map(|line| serde_json::from_str(line).unwrap()).collect();
                 assert_eq!(documents, expected_update);
             }
         }

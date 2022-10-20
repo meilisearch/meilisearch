@@ -1,10 +1,9 @@
-use std::{
-    fmt::{self, Display, Formatter},
-    marker::PhantomData,
-    str::FromStr,
-};
+use std::fmt::{self, Display, Formatter};
+use std::marker::PhantomData;
+use std::str::FromStr;
 
-use serde::{de::Visitor, Deserialize, Deserializer};
+use serde::de::Visitor;
+use serde::{Deserialize, Deserializer};
 use uuid::Uuid;
 
 use super::settings::{Settings, Unchecked};
@@ -39,9 +38,7 @@ impl TryFrom<String> for IndexUid {
     type Error = IndexUidFormatError;
 
     fn try_from(uid: String) -> Result<Self, Self::Error> {
-        if !uid
-            .chars()
-            .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
+        if !uid.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
             || uid.is_empty()
             || uid.len() > 400
         {

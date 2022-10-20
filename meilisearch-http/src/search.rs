@@ -145,12 +145,7 @@ pub fn perform_search(
         search.sort_criteria(sort);
     }
 
-    let milli::SearchResult {
-        documents_ids,
-        matching_words,
-        candidates,
-        ..
-    } = search.execute()?;
+    let milli::SearchResult { documents_ids, matching_words, candidates, .. } = search.execute()?;
 
     let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
@@ -240,11 +235,7 @@ pub fn perform_search(
             insert_geo_distance(sort, &mut document);
         }
 
-        let hit = SearchHit {
-            document,
-            formatted,
-            matches_position,
-        };
+        let hit = SearchHit { document, formatted, matches_position };
         documents.push(hit);
     }
 
@@ -289,10 +280,7 @@ fn insert_geo_distance(sorts: &[String], document: &mut Document) {
     };
     if let Some(capture_group) = sorts.iter().find_map(|sort| GEO_REGEX.captures(sort)) {
         // TODO: TAMO: milli encountered an internal error, what do we want to do?
-        let base = [
-            capture_group[1].parse().unwrap(),
-            capture_group[2].parse().unwrap(),
-        ];
+        let base = [capture_group[1].parse().unwrap(), capture_group[2].parse().unwrap()];
         let geo_point = &document.get("_geo").unwrap_or(&json!(null));
         if let Some((lat, lng)) = geo_point["lat"].as_f64().zip(geo_point["lng"].as_f64()) {
             let distance = milli::distance_between_two_points(&base, &[lat, lng]);
@@ -341,10 +329,7 @@ fn add_highlight_to_formatted_options(
     displayed_ids: &BTreeSet<FieldId>,
 ) {
     for attr in attr_to_highlight {
-        let new_format = FormatOptions {
-            highlight: true,
-            crop: None,
-        };
+        let new_format = FormatOptions { highlight: true, crop: None };
 
         if attr == "*" {
             for id in displayed_ids {
@@ -383,10 +368,7 @@ fn add_crop_to_formatted_options(
                 formatted_options
                     .entry(*id)
                     .and_modify(|f| f.crop = Some(attr_len))
-                    .or_insert(FormatOptions {
-                        highlight: false,
-                        crop: Some(attr_len),
-                    });
+                    .or_insert(FormatOptions { highlight: false, crop: Some(attr_len) });
             }
         }
 
@@ -395,10 +377,7 @@ fn add_crop_to_formatted_options(
                 formatted_options
                     .entry(id)
                     .and_modify(|f| f.crop = Some(attr_len))
-                    .or_insert(FormatOptions {
-                        highlight: false,
-                        crop: Some(attr_len),
-                    });
+                    .or_insert(FormatOptions { highlight: false, crop: Some(attr_len) });
             }
         }
     }
@@ -409,10 +388,7 @@ fn add_non_formatted_ids_to_formatted_options(
     to_retrieve_ids: &BTreeSet<FieldId>,
 ) {
     for id in to_retrieve_ids {
-        formatted_options.entry(*id).or_insert(FormatOptions {
-            highlight: false,
-            crop: None,
-        });
+        formatted_options.entry(*id).or_insert(FormatOptions { highlight: false, crop: None });
     }
 }
 
@@ -426,10 +402,7 @@ fn make_document(
     // recreate the original json
     for (key, value) in obkv.iter() {
         let value = serde_json::from_slice(value)?;
-        let key = field_ids_map
-            .name(key)
-            .expect("Missing field name")
-            .to_string();
+        let key = field_ids_map.name(key).expect("Missing field name").to_string();
 
         document.insert(key, value);
     }
@@ -455,9 +428,8 @@ fn format_fields<'a, A: AsRef<[u8]>>(
     let mut document = document.clone();
 
     // select the attributes to retrieve
-    let displayable_names = displayable_ids
-        .iter()
-        .map(|&fid| field_ids_map.name(fid).expect("Missing field name"));
+    let displayable_names =
+        displayable_ids.iter().map(|&fid| field_ids_map.name(fid).expect("Missing field name"));
     permissive_json_pointer::map_leaf_values(&mut document, displayable_names, |key, value| {
         // To get the formatting option of each key we need to see all the rules that applies
         // to the value and merge them together. eg. If a user said he wanted to highlight `doggo`
@@ -473,13 +445,7 @@ fn format_fields<'a, A: AsRef<[u8]>>(
             .reduce(|acc, option| acc.merge(option));
         let mut infos = Vec::new();
 
-        *value = format_value(
-            std::mem::take(value),
-            builder,
-            format,
-            &mut infos,
-            compute_matches,
-        );
+        *value = format_value(std::mem::take(value), builder, format, &mut infos, compute_matches);
 
         if let Some(matches) = matches_position.as_mut() {
             if !infos.is_empty() {

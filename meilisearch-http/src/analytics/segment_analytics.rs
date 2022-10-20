@@ -21,6 +21,7 @@ use tokio::select;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use uuid::Uuid;
 
+use super::{config_user_id_path, MEILISEARCH_CONFIG_PATH};
 use crate::analytics::Analytics;
 use crate::option::default_http_addr;
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
@@ -31,16 +32,13 @@ use crate::search::{
 };
 use crate::Opt;
 
-use super::{config_user_id_path, MEILISEARCH_CONFIG_PATH};
-
 const ANALYTICS_HEADER: &str = "X-Meilisearch-Client";
 
 /// Write the instance-uid in the `data.ms` and in `~/.config/MeiliSearch/path-to-db-instance-uid`. Ignore the errors.
 fn write_user_id(db_path: &Path, user_id: &InstanceUid) {
     let _ = fs::write(db_path.join("instance-uid"), user_id.as_bytes());
-    if let Some((meilisearch_config_path, user_id_path)) = MEILISEARCH_CONFIG_PATH
-        .as_ref()
-        .zip(config_user_id_path(db_path))
+    if let Some((meilisearch_config_path, user_id_path)) =
+        MEILISEARCH_CONFIG_PATH.as_ref().zip(config_user_id_path(db_path))
     {
         let _ = fs::create_dir_all(&meilisearch_config_path);
         let _ = fs::write(user_id_path, user_id.to_string());
@@ -84,22 +82,16 @@ impl SegmentAnalytics {
         let instance_uid = instance_uid.unwrap_or_else(|| Uuid::new_v4());
         write_user_id(&opt.db_path, &instance_uid);
 
-        let client = reqwest::Client::builder()
-            .connect_timeout(Duration::from_secs(10))
-            .build();
+        let client = reqwest::Client::builder().connect_timeout(Duration::from_secs(10)).build();
 
         // if reqwest throws an error we won't be able to send analytics
         if client.is_err() {
             return super::MockAnalytics::new(opt);
         }
 
-        let client = HttpClient::new(
-            client.unwrap(),
-            "https://telemetry.meilisearch.com".to_string(),
-        );
-        let user = User::UserId {
-            user_id: instance_uid.to_string(),
-        };
+        let client =
+            HttpClient::new(client.unwrap(), "https://telemetry.meilisearch.com".to_string());
+        let user = User::UserId { user_id: instance_uid.to_string() };
         let mut batcher = AutoBatcher::new(client, Batcher::new(None), SEGMENT_API_KEY.to_string());
 
         // If Meilisearch is Launched for the first time:
@@ -108,9 +100,7 @@ impl SegmentAnalytics {
         if first_time_run {
             let _ = batcher
                 .push(Track {
-                    user: User::UserId {
-                        user_id: "total_launch".to_string(),
-                    },
+                    user: User::UserId { user_id: "total_launch".to_string() },
                     event: "Launched".to_string(),
                     ..Default::default()
                 })
@@ -139,11 +129,7 @@ impl SegmentAnalytics {
         });
         tokio::spawn(segment.run(index_scheduler.clone()));
 
-        let this = Self {
-            instance_uid,
-            sender,
-            user: user.clone(),
-        };
+        let this = Self { instance_uid, sender, user: user.clone() };
 
         Arc::new(this)
     }
@@ -164,21 +150,15 @@ impl super::Analytics for SegmentAnalytics {
             properties: send,
             ..Default::default()
         };
-        let _ = self
-            .sender
-            .try_send(AnalyticsMsg::BatchMessage(event.into()));
+        let _ = self.sender.try_send(AnalyticsMsg::BatchMessage(event.into()));
     }
 
     fn get_search(&self, aggregate: SearchAggregator) {
-        let _ = self
-            .sender
-            .try_send(AnalyticsMsg::AggregateGetSearch(aggregate));
+        let _ = self.sender.try_send(AnalyticsMsg::AggregateGetSearch(aggregate));
     }
 
     fn post_search(&self, aggregate: SearchAggregator) {
-        let _ = self
-            .sender
-            .try_send(AnalyticsMsg::AggregatePostSearch(aggregate));
+        let _ = self.sender.try_send(AnalyticsMsg::AggregatePostSearch(aggregate));
     }
 
     fn add_documents(
@@ -188,9 +168,7 @@ impl super::Analytics for SegmentAnalytics {
         request: &HttpRequest,
     ) {
         let aggregate = DocumentsAggregator::from_query(documents_query, index_creation, request);
-        let _ = self
-            .sender
-            .try_send(AnalyticsMsg::AggregateAddDocuments(aggregate));
+        let _ = self.sender.try_send(AnalyticsMsg::AggregateAddDocuments(aggregate));
     }
 
     fn update_documents(
@@ -200,9 +178,7 @@ impl super::Analytics for SegmentAnalytics {
         request: &HttpRequest,
     ) {
         let aggregate = DocumentsAggregator::from_query(documents_query, index_creation, request);
-        let _ = self
-            .sender
-            .try_send(AnalyticsMsg::AggregateUpdateDocuments(aggregate));
+        let _ = self.sender.try_send(AnalyticsMsg::AggregateUpdateDocuments(aggregate));
     }
 }
 
@@ -261,11 +237,8 @@ impl Segment {
             infos
         };
 
-        let number_of_documents = stats
-            .indexes
-            .values()
-            .map(|index| index.number_of_documents)
-            .collect::<Vec<u64>>();
+        let number_of_documents =
+            stats.indexes.values().map(|index| index.number_of_documents).collect::<Vec<u64>>();
 
         json!({
             "start_since_days": FIRST_START_TIMESTAMP.elapsed().as_secs() / (60 * 60 * 24), // one day
@@ -413,11 +386,7 @@ impl SearchAggregator {
             let syntax = match filter {
                 Value::String(_) => "string".to_string(),
                 Value::Array(values) => {
-                    if values
-                        .iter()
-                        .map(|v| v.to_string())
-                        .any(|s| RE.is_match(&s))
-                    {
+                    if values.iter().map(|v| v.to_string()).any(|s| RE.is_match(&s)) {
                         "mixed".to_string()
                     } else {
                         "array".to_string()
@@ -448,8 +417,7 @@ impl SearchAggregator {
             ret.finite_pagination = 0;
         }
 
-        ret.matching_strategy
-            .insert(format!("{:?}", query.matching_strategy), 1);
+        ret.matching_strategy.insert(format!("{:?}", query.matching_strategy), 1);
 
         ret.highlight_pre_tag = query.highlight_pre_tag != DEFAULT_HIGHLIGHT_PRE_TAG();
         ret.highlight_post_tag = query.highlight_post_tag != DEFAULT_HIGHLIGHT_POST_TAG();
@@ -481,17 +449,14 @@ impl SearchAggregator {
         self.time_spent.append(&mut other.time_spent);
         // sort
         self.sort_with_geo_point |= other.sort_with_geo_point;
-        self.sort_sum_of_criteria_terms = self
-            .sort_sum_of_criteria_terms
-            .saturating_add(other.sort_sum_of_criteria_terms);
-        self.sort_total_number_of_criteria = self
-            .sort_total_number_of_criteria
-            .saturating_add(other.sort_total_number_of_criteria);
+        self.sort_sum_of_criteria_terms =
+            self.sort_sum_of_criteria_terms.saturating_add(other.sort_sum_of_criteria_terms);
+        self.sort_total_number_of_criteria =
+            self.sort_total_number_of_criteria.saturating_add(other.sort_total_number_of_criteria);
         // filter
         self.filter_with_geo_radius |= other.filter_with_geo_radius;
-        self.filter_sum_of_criteria_terms = self
-            .filter_sum_of_criteria_terms
-            .saturating_add(other.filter_sum_of_criteria_terms);
+        self.filter_sum_of_criteria_terms =
+            self.filter_sum_of_criteria_terms.saturating_add(other.filter_sum_of_criteria_terms);
         self.filter_total_number_of_criteria = self
             .filter_total_number_of_criteria
             .saturating_add(other.filter_total_number_of_criteria);

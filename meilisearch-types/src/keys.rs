@@ -1,14 +1,16 @@
-use crate::error::{Code, ErrorCode};
-use crate::index_uid::IndexUid;
-use crate::star_or::StarOr;
+use std::hash::Hash;
+
 use enum_iterator::Sequence;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_value, Value};
-use std::hash::Hash;
 use time::format_description::well_known::Rfc3339;
 use time::macros::{format_description, time};
 use time::{Date, OffsetDateTime, PrimitiveDateTime};
 use uuid::Uuid;
+
+use crate::error::{Code, ErrorCode};
+use crate::index_uid::IndexUid;
+use crate::star_or::StarOr;
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -74,16 +76,7 @@ impl Key {
         let created_at = OffsetDateTime::now_utc();
         let updated_at = created_at;
 
-        Ok(Self {
-            name,
-            description,
-            uid,
-            actions,
-            indexes,
-            expires_at,
-            created_at,
-            updated_at,
-        })
+        Ok(Self { name, description, uid, actions, indexes, expires_at, created_at, updated_at })
     }
 
     pub fn update_from_value(&mut self, value: Value) -> Result<()> {

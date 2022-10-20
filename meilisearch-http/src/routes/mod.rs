@@ -12,10 +12,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
 
-use crate::analytics::Analytics;
-use crate::extractors::authentication::{policies::*, GuardedData};
-
 use self::indexes::IndexStats;
+use crate::analytics::Analytics;
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::GuardedData;
 
 mod api_key;
 mod dump;
@@ -102,11 +102,7 @@ impl Pagination {
         T: Serialize,
     {
         let total = content.len();
-        let content: Vec<_> = content
-            .into_iter()
-            .skip(self.offset)
-            .take(self.limit)
-            .collect();
+        let content: Vec<_> = content.into_iter().skip(self.offset).take(self.limit).collect();
         self.format_with(total, content)
     }
 
@@ -119,11 +115,7 @@ impl Pagination {
     where
         T: Serialize,
     {
-        let content: Vec<_> = content
-            .into_iter()
-            .skip(self.offset)
-            .take(self.limit)
-            .collect();
+        let content: Vec<_> = content.into_iter().skip(self.offset).take(self.limit).collect();
         self.format_with(total, content)
     }
 
@@ -133,23 +125,13 @@ impl Pagination {
     where
         T: Serialize,
     {
-        PaginationView {
-            results,
-            offset: self.offset,
-            limit: self.limit,
-            total,
-        }
+        PaginationView { results, offset: self.offset, limit: self.limit, total }
     }
 }
 
 impl<T> PaginationView<T> {
     pub fn new(offset: usize, limit: usize, total: usize, results: Vec<T>) -> Self {
-        Self {
-            offset,
-            limit,
-            results,
-            total,
-        }
+        Self { offset, limit, results, total }
     }
 }
 
@@ -211,10 +193,7 @@ pub struct EnqueuedUpdateResult {
     pub update_type: UpdateType,
     #[serde(with = "time::serde::rfc3339")]
     pub enqueued_at: OffsetDateTime,
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        with = "time::serde::rfc3339::option"
-    )]
+    #[serde(skip_serializing_if = "Option::is_none", with = "time::serde::rfc3339::option")]
     pub started_processing_at: Option<OffsetDateTime>,
 }
 
@@ -275,11 +254,7 @@ async fn get_stats(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    analytics.publish(
-        "Stats Seen".to_string(),
-        json!({ "per_index_uid": false }),
-        Some(&req),
-    );
+    analytics.publish("Stats Seen".to_string(), json!({ "per_index_uid": false }), Some(&req));
     let search_rules = &index_scheduler.filters().search_rules;
 
     let stats = create_all_stats((*index_scheduler).clone(), search_rules)?;
@@ -300,9 +275,7 @@ pub fn create_all_stats(
         limit: Some(1),
         ..Query::default()
     })?;
-    let processing_index = processing_task
-        .first()
-        .and_then(|task| task.index_uid().clone());
+    let processing_index = processing_task.first().and_then(|task| task.index_uid().clone());
     for (name, index) in index_scheduler.indexes()? {
         if !search_rules.is_index_authorized(&name) {
             continue;
@@ -313,9 +286,7 @@ pub fn create_all_stats(
         let rtxn = index.read_txn()?;
         let stats = IndexStats {
             number_of_documents: index.number_of_documents(&rtxn)?,
-            is_indexing: processing_index
-                .as_deref()
-                .map_or(false, |index_name| name == index_name),
+            is_indexing: processing_index.as_deref().map_or(false, |index_name| name == index_name),
             field_distribution: index.field_distribution(&rtxn)?,
         };
 
@@ -324,11 +295,7 @@ pub fn create_all_stats(
 
         indexes.insert(name, stats);
     }
-    let stats = Stats {
-        database_size,
-        last_update: last_task,
-        indexes,
-    };
+    let stats = Stats { database_size, last_update: last_task, indexes };
     Ok(stats)
 }
 

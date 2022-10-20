@@ -8,8 +8,7 @@ use actix_web::HttpServer;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
 use meilisearch_http::analytics::Analytics;
-use meilisearch_http::{analytics, create_app};
-use meilisearch_http::{setup_meilisearch, Opt};
+use meilisearch_http::{analytics, create_app, setup_meilisearch, Opt};
 
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -89,24 +88,22 @@ async fn run_http(
     .keep_alive(KeepAlive::Os);
 
     if let Some(config) = opt_clone.get_ssl_config()? {
-        http_server
-            .bind_rustls(opt_clone.http_addr, config)?
-            .run()
-            .await?;
+        http_server.bind_rustls(opt_clone.http_addr, config)?.run().await?;
     } else {
         http_server.bind(&opt_clone.http_addr)?.run().await?;
     }
     Ok(())
 }
 
-pub fn print_launch_resume(opt: &Opt, analytics: Arc<dyn Analytics>, config_read_from: Option<PathBuf>) {
+pub fn print_launch_resume(
+    opt: &Opt,
+    analytics: Arc<dyn Analytics>,
+    config_read_from: Option<PathBuf>,
+) {
     let commit_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
     let commit_date = option_env!("VERGEN_GIT_COMMIT_TIMESTAMP").unwrap_or("unknown");
-    let protocol = if opt.ssl_cert_path.is_some() && opt.ssl_key_path.is_some() {
-        "https"
-    } else {
-        "http"
-    };
+    let protocol =
+        if opt.ssl_cert_path.is_some() && opt.ssl_key_path.is_some() { "https" } else { "http" };
     let ascii_name = r#"
 888b     d888          d8b 888 d8b                                            888
 8888b   d8888          Y8P 888 Y8P                                            888
@@ -131,10 +128,7 @@ pub fn print_launch_resume(opt: &Opt, analytics: Arc<dyn Analytics>, config_read
     eprintln!("Environment:\t\t{:?}", opt.env);
     eprintln!("Commit SHA:\t\t{:?}", commit_sha.to_string());
     eprintln!("Commit date:\t\t{:?}", commit_date.to_string());
-    eprintln!(
-        "Package version:\t{:?}",
-        env!("CARGO_PKG_VERSION").to_string()
-    );
+    eprintln!("Package version:\t{:?}", env!("CARGO_PKG_VERSION").to_string());
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     {

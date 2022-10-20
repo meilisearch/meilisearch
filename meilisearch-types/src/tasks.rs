@@ -1,5 +1,5 @@
-use std::fmt::{Display, Write};
 use std::collections::HashSet;
+use std::fmt::{Display, Write};
 use std::str::FromStr;
 
 use enum_iterator::Sequence;
@@ -9,12 +9,10 @@ use serde::{Deserialize, Serialize, Serializer};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
-use crate::{
-    error::{Code, ResponseError},
-    keys::Key,
-    settings::{Settings, Unchecked},
-    InstanceUid,
-};
+use crate::error::{Code, ResponseError};
+use crate::keys::Key;
+use crate::settings::{Settings, Unchecked};
+use crate::InstanceUid;
 
 pub type TaskId = u32;
 
@@ -66,9 +64,7 @@ impl Task {
     /// Return the content-uuid if there is one
     pub fn content_uuid(&self) -> Option<&Uuid> {
         match self.kind {
-            KindWithContent::DocumentImport {
-                ref content_file, ..
-            } => Some(content_file),
+            KindWithContent::DocumentImport { ref content_file, .. } => Some(content_file),
             KindWithContent::DocumentDeletion { .. }
             | KindWithContent::DocumentClear { .. }
             | KindWithContent::Settings { .. }
@@ -183,33 +179,32 @@ impl KindWithContent {
     /// `None` if it cannot be generated.
     pub fn default_details(&self) -> Option<Details> {
         match self {
-            KindWithContent::DocumentImport {
-                documents_count, ..
-            } => Some(Details::DocumentAddition {
-                received_documents: *documents_count,
-                indexed_documents: None,
-            }),
-            KindWithContent::DocumentDeletion {
-                index_uid: _,
-                documents_ids,
-            } => Some(Details::DocumentDeletion {
-                received_document_ids: documents_ids.len(),
-                deleted_documents: None,
-            }),
-            KindWithContent::DocumentClear { .. } => Some(Details::ClearAll {
-                deleted_documents: None,
-            }),
-            KindWithContent::Settings { new_settings, .. } => Some(Details::Settings {
-                settings: new_settings.clone(),
-            }),
+            KindWithContent::DocumentImport { documents_count, .. } => {
+                Some(Details::DocumentAddition {
+                    received_documents: *documents_count,
+                    indexed_documents: None,
+                })
+            }
+            KindWithContent::DocumentDeletion { index_uid: _, documents_ids } => {
+                Some(Details::DocumentDeletion {
+                    received_document_ids: documents_ids.len(),
+                    deleted_documents: None,
+                })
+            }
+            KindWithContent::DocumentClear { .. } => {
+                Some(Details::ClearAll { deleted_documents: None })
+            }
+            KindWithContent::Settings { new_settings, .. } => {
+                Some(Details::Settings { settings: new_settings.clone() })
+            }
             KindWithContent::IndexDeletion { .. } => None,
             KindWithContent::IndexCreation { primary_key, .. }
-            | KindWithContent::IndexUpdate { primary_key, .. } => Some(Details::IndexInfo {
-                primary_key: primary_key.clone(),
-            }),
-            KindWithContent::IndexSwap { swaps } => Some(Details::IndexSwap {
-                swaps: swaps.clone(),
-            }),
+            | KindWithContent::IndexUpdate { primary_key, .. } => {
+                Some(Details::IndexInfo { primary_key: primary_key.clone() })
+            }
+            KindWithContent::IndexSwap { swaps } => {
+                Some(Details::IndexSwap { swaps: swaps.clone() })
+            }
             KindWithContent::TaskCancelation { query, tasks } => Some(Details::TaskCancelation {
                 matched_tasks: tasks.len(),
                 canceled_tasks: None,
@@ -227,30 +222,29 @@ impl KindWithContent {
 
     pub fn default_finished_details(&self) -> Option<Details> {
         match self {
-            KindWithContent::DocumentImport {
-                documents_count, ..
-            } => Some(Details::DocumentAddition {
-                received_documents: *documents_count,
-                indexed_documents: Some(0),
-            }),
-            KindWithContent::DocumentDeletion {
-                index_uid: _,
-                documents_ids,
-            } => Some(Details::DocumentDeletion {
-                received_document_ids: documents_ids.len(),
-                deleted_documents: Some(0),
-            }),
-            KindWithContent::DocumentClear { .. } => Some(Details::ClearAll {
-                deleted_documents: None,
-            }),
-            KindWithContent::Settings { new_settings, .. } => Some(Details::Settings {
-                settings: new_settings.clone(),
-            }),
+            KindWithContent::DocumentImport { documents_count, .. } => {
+                Some(Details::DocumentAddition {
+                    received_documents: *documents_count,
+                    indexed_documents: Some(0),
+                })
+            }
+            KindWithContent::DocumentDeletion { index_uid: _, documents_ids } => {
+                Some(Details::DocumentDeletion {
+                    received_document_ids: documents_ids.len(),
+                    deleted_documents: Some(0),
+                })
+            }
+            KindWithContent::DocumentClear { .. } => {
+                Some(Details::ClearAll { deleted_documents: None })
+            }
+            KindWithContent::Settings { new_settings, .. } => {
+                Some(Details::Settings { settings: new_settings.clone() })
+            }
             KindWithContent::IndexDeletion { .. } => None,
             KindWithContent::IndexCreation { primary_key, .. }
-            | KindWithContent::IndexUpdate { primary_key, .. } => Some(Details::IndexInfo {
-                primary_key: primary_key.clone(),
-            }),
+            | KindWithContent::IndexUpdate { primary_key, .. } => {
+                Some(Details::IndexInfo { primary_key: primary_key.clone() })
+            }
             KindWithContent::IndexSwap { .. } => {
                 todo!()
             }
@@ -273,24 +267,24 @@ impl KindWithContent {
 impl From<&KindWithContent> for Option<Details> {
     fn from(kind: &KindWithContent) -> Self {
         match kind {
-            KindWithContent::DocumentImport {
-                documents_count, ..
-            } => Some(Details::DocumentAddition {
-                received_documents: *documents_count,
-                indexed_documents: None,
-            }),
+            KindWithContent::DocumentImport { documents_count, .. } => {
+                Some(Details::DocumentAddition {
+                    received_documents: *documents_count,
+                    indexed_documents: None,
+                })
+            }
             KindWithContent::DocumentDeletion { .. } => None,
             KindWithContent::DocumentClear { .. } => None,
-            KindWithContent::Settings { new_settings, .. } => Some(Details::Settings {
-                settings: new_settings.clone(),
-            }),
+            KindWithContent::Settings { new_settings, .. } => {
+                Some(Details::Settings { settings: new_settings.clone() })
+            }
             KindWithContent::IndexDeletion { .. } => None,
-            KindWithContent::IndexCreation { primary_key, .. } => Some(Details::IndexInfo {
-                primary_key: primary_key.clone(),
-            }),
-            KindWithContent::IndexUpdate { primary_key, .. } => Some(Details::IndexInfo {
-                primary_key: primary_key.clone(),
-            }),
+            KindWithContent::IndexCreation { primary_key, .. } => {
+                Some(Details::IndexInfo { primary_key: primary_key.clone() })
+            }
+            KindWithContent::IndexUpdate { primary_key, .. } => {
+                Some(Details::IndexInfo { primary_key: primary_key.clone() })
+            }
             KindWithContent::IndexSwap { .. } => None,
             KindWithContent::TaskCancelation { query, tasks } => Some(Details::TaskCancelation {
                 matched_tasks: tasks.len(),
@@ -302,9 +296,9 @@ impl From<&KindWithContent> for Option<Details> {
                 deleted_tasks: None,
                 original_query: query.clone(),
             }),
-            KindWithContent::DumpExport { dump_uid, .. } => Some(Details::Dump {
-                dump_uid: dump_uid.clone(),
-            }),
+            KindWithContent::DumpExport { dump_uid, .. } => {
+                Some(Details::Dump { dump_uid: dump_uid.clone() })
+            }
             KindWithContent::Snapshot => None,
         }
     }
@@ -514,9 +508,9 @@ pub fn serialize_duration<S: Serializer>(
 
 #[cfg(test)]
 mod tests {
-    use crate::heed::{types::SerdeJson, BytesDecode, BytesEncode};
-
     use super::Details;
+    use crate::heed::types::SerdeJson;
+    use crate::heed::{BytesDecode, BytesEncode};
 
     #[test]
     fn bad_deser() {

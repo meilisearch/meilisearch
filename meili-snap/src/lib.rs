@@ -1,10 +1,10 @@
-use once_cell::sync::Lazy;
 use std::borrow::Cow;
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::{collections::HashMap, path::Path};
 
 pub use insta;
+use once_cell::sync::Lazy;
 
 static SNAPSHOT_NAMES: Lazy<Mutex<HashMap<PathBuf, usize>>> = Lazy::new(|| Mutex::default());
 
@@ -23,18 +23,9 @@ pub fn default_snapshot_settings_for_test(name: Option<&str>) -> (insta::Setting
     let filename = path.file_name().unwrap().to_str().unwrap();
     settings.set_omit_expression(true);
 
-    let test_name = std::thread::current()
-        .name()
-        .unwrap()
-        .rsplit("::")
-        .next()
-        .unwrap()
-        .to_owned();
+    let test_name = std::thread::current().name().unwrap().rsplit("::").next().unwrap().to_owned();
 
-    let path = Path::new("snapshots")
-        .join(filename)
-        .join(&test_name)
-        .to_owned();
+    let path = Path::new("snapshots").join(filename).join(&test_name).to_owned();
     settings.set_snapshot_path(path.clone());
     let snap_name = if let Some(name) = name {
         Cow::Borrowed(name)

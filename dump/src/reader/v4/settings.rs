@@ -1,8 +1,6 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    marker::PhantomData,
-    num::NonZeroUsize,
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::marker::PhantomData;
+use std::num::NonZeroUsize;
 
 use serde::{Deserialize, Deserializer};
 
@@ -65,10 +63,7 @@ pub struct TypoSettings {
 #[cfg_attr(test, derive(serde::Serialize))]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
-#[serde(bound(
-    serialize = "T: serde::Serialize",
-    deserialize = "T: Deserialize<'static>"
-))]
+#[serde(bound(serialize = "T: serde::Serialize", deserialize = "T: Deserialize<'static>"))]
 pub struct Settings<T> {
     #[serde(
         default,

@@ -1,14 +1,16 @@
 use std::collections::HashSet;
 
-use crate::extractors::authentication::{policies::*, GuardedData};
-use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::tasks::TaskView;
 use actix_web::web::Data;
 use actix_web::{web, HttpResponse};
 use index_scheduler::IndexScheduler;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::tasks::KindWithContent;
 use serde::Deserialize;
+
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::GuardedData;
+use crate::extractors::sequential_extractor::SeqHandler;
+use crate::routes::tasks::TaskView;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(SeqHandler(indexes_swap))));
@@ -33,10 +35,7 @@ pub async fn indexes_swap(
 
     let mut swaps = vec![];
     let mut indexes_set = HashSet::<String>::default();
-    for IndexesSwapPayload {
-        indexes: (lhs, rhs),
-    } in params.into_inner().into_iter()
-    {
+    for IndexesSwapPayload { indexes: (lhs, rhs) } in params.into_inner().into_iter() {
         if !search_rules.is_index_authorized(&lhs) || !search_rules.is_index_authorized(&lhs) {
             return Err(ResponseError::from_msg(
                 "TODO: error message when we swap with an index were not allowed to access"

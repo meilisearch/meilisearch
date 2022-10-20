@@ -8,10 +8,7 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "test-traits", derive(proptest_derive::Arbitrary))]
 pub struct ResponseError {
     #[serde(skip)]
-    #[cfg_attr(
-        feature = "test-traits",
-        proptest(strategy = "strategy::status_code_strategy()")
-    )]
+    #[cfg_attr(feature = "test-traits", proptest(strategy = "strategy::status_code_strategy()"))]
     pub code: StatusCode,
     pub message: String,
     #[serde(rename = "code")]
@@ -206,10 +203,9 @@ impl Code {
 
             BadParameter => ErrCode::invalid("bad_parameter", StatusCode::BAD_REQUEST),
             BadRequest => ErrCode::invalid("bad_request", StatusCode::BAD_REQUEST),
-            DatabaseSizeLimitReached => ErrCode::internal(
-                "database_size_limit_reached",
-                StatusCode::INTERNAL_SERVER_ERROR,
-            ),
+            DatabaseSizeLimitReached => {
+                ErrCode::internal("database_size_limit_reached", StatusCode::INTERNAL_SERVER_ERROR)
+            }
             DocumentNotFound => ErrCode::invalid("document_not_found", StatusCode::NOT_FOUND),
             Internal => ErrCode::internal("internal", StatusCode::INTERNAL_SERVER_ERROR),
             InvalidGeoField => ErrCode::invalid("invalid_geo_field", StatusCode::BAD_REQUEST),
@@ -302,26 +298,14 @@ struct ErrCode {
 
 impl ErrCode {
     fn authentication(error_name: &'static str, status_code: StatusCode) -> ErrCode {
-        ErrCode {
-            status_code,
-            error_name,
-            error_type: ErrorType::AuthenticationError,
-        }
+        ErrCode { status_code, error_name, error_type: ErrorType::AuthenticationError }
     }
 
     fn internal(error_name: &'static str, status_code: StatusCode) -> ErrCode {
-        ErrCode {
-            status_code,
-            error_name,
-            error_type: ErrorType::InternalError,
-        }
+        ErrCode { status_code, error_name, error_type: ErrorType::InternalError }
     }
 
     fn invalid(error_name: &'static str, status_code: StatusCode) -> ErrCode {
-        ErrCode {
-            status_code,
-            error_name,
-            error_type: ErrorType::InvalidRequestError,
-        }
+        ErrCode { status_code, error_name, error_type: ErrorType::InvalidRequestError }
     }
 }
