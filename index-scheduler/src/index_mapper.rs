@@ -75,6 +75,7 @@ impl IndexMapper {
                 fs::create_dir_all(&index_path)?;
                 let mut options = EnvOpenOptions::new();
                 options.map_size(self.index_size);
+                options.max_readers(1024);
                 Ok(Index::new(options, &index_path)?)
             }
             error => error,
