@@ -1,6 +1,6 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::{fs, thread};
 
@@ -63,6 +63,15 @@ impl IndexMapper {
         })
     }
 
+    /// Create or open an index in the specified path.
+    /// The path *must* exists or an error will be thrown.
+    fn create_or_open_index(&self, path: &Path) -> Result<Index> {
+        let mut options = EnvOpenOptions::new();
+        options.map_size(self.index_size);
+        options.max_readers(1024);
+        Ok(Index::new(options, path)?)
+    }
+
     /// Get or create the index.
     pub fn create_index(&self, wtxn: &mut RwTxn, name: &str) -> Result<Index> {
         match self.index(wtxn, name) {
@@ -73,10 +82,7 @@ impl IndexMapper {
 
                 let index_path = self.base_path.join(uuid.to_string());
                 fs::create_dir_all(&index_path)?;
-                let mut options = EnvOpenOptions::new();
-                options.map_size(self.index_size);
-                options.max_readers(1024);
-                Ok(Index::new(options, &index_path)?)
+                self.create_or_open_index(&index_path)
             }
             error => error,
         }
@@ -156,10 +162,7 @@ impl IndexMapper {
                 match index_map.entry(uuid) {
                     Entry::Vacant(entry) => {
                         let index_path = self.base_path.join(uuid.to_string());
-                        fs::create_dir_all(&index_path)?;
-                        let mut options = EnvOpenOptions::new();
-                        options.map_size(self.index_size);
-                        let index = Index::new(options, &index_path)?;
+                        let index = self.create_or_open_index(&index_path)?;
                         entry.insert(Available(index.clone()));
                         index
                     }
