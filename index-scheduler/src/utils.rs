@@ -236,10 +236,10 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
     use KindWithContent as K;
     let mut index_uids = vec![];
     match &mut task.kind {
-        K::DocumentImport { index_uid, .. } => index_uids.push(index_uid),
+        K::DocumentAdditionOrUpdate { index_uid, .. } => index_uids.push(index_uid),
         K::DocumentDeletion { index_uid, .. } => index_uids.push(index_uid),
         K::DocumentClear { index_uid } => index_uids.push(index_uid),
-        K::Settings { index_uid, .. } => index_uids.push(index_uid),
+        K::SettingsUpdate { index_uid, .. } => index_uids.push(index_uid),
         K::IndexDeletion { index_uid } => index_uids.push(index_uid),
         K::IndexCreation { index_uid, .. } => index_uids.push(index_uid),
         K::IndexUpdate { index_uid, .. } => index_uids.push(index_uid),

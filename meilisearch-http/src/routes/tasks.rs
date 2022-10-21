@@ -121,12 +121,14 @@ pub struct DetailsView {
 impl From<Details> for DetailsView {
     fn from(details: Details) -> Self {
         match details.clone() {
-            Details::DocumentAddition { received_documents, indexed_documents } => DetailsView {
-                received_documents: Some(received_documents),
-                indexed_documents,
-                ..DetailsView::default()
-            },
-            Details::Settings { settings } => {
+            Details::DocumentAdditionOrUpdate { received_documents, indexed_documents } => {
+                DetailsView {
+                    received_documents: Some(received_documents),
+                    indexed_documents,
+                    ..DetailsView::default()
+                }
+            }
+            Details::SettingsUpdate { settings } => {
                 DetailsView { settings: Some(settings), ..DetailsView::default() }
             }
             Details::IndexInfo { primary_key } => {

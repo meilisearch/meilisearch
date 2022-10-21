@@ -149,7 +149,7 @@ impl From<Task> for TaskDump {
 impl From<KindWithContent> for KindDump {
     fn from(kind: KindWithContent) -> Self {
         match kind {
-            KindWithContent::DocumentImport {
+            KindWithContent::DocumentAdditionOrUpdate {
                 primary_key,
                 method,
                 documents_count,
@@ -165,8 +165,11 @@ impl From<KindWithContent> for KindDump {
                 KindDump::DocumentDeletion { documents_ids }
             }
             KindWithContent::DocumentClear { .. } => KindDump::DocumentClear,
-            KindWithContent::Settings {
-                new_settings, is_deletion, allow_index_creation, ..
+            KindWithContent::SettingsUpdate {
+                new_settings,
+                is_deletion,
+                allow_index_creation,
+                ..
             } => KindDump::Settings { settings: new_settings, is_deletion, allow_index_creation },
             KindWithContent::IndexDeletion { .. } => KindDump::IndexDeletion,
             KindWithContent::IndexCreation { primary_key, .. } => {
@@ -274,7 +277,7 @@ pub(crate) mod test {
                         documents_count: 12,
                     },
                     canceled_by: None,
-                    details: Some(Details::DocumentAddition {
+                    details: Some(Details::DocumentAdditionOrUpdate {
                         received_documents: 12,
                         indexed_documents: Some(10),
                     }),
@@ -297,7 +300,7 @@ pub(crate) mod test {
                         documents_count: 2,
                     },
                     canceled_by: None,
-                    details: Some(Details::DocumentAddition {
+                    details: Some(Details::DocumentAdditionOrUpdate {
                         received_documents: 2,
                         indexed_documents: None,
                     }),
