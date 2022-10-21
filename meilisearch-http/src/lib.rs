@@ -144,8 +144,13 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
 
         if empty_db && src_path_exists {
             let (mut index_scheduler, mut auth_controller) = meilisearch_builder()?;
-            import_dump(&opt.db_path, path, &mut index_scheduler, &mut auth_controller)?;
-            (index_scheduler, auth_controller)
+            match import_dump(&opt.db_path, path, &mut index_scheduler, &mut auth_controller) {
+                Ok(()) => (index_scheduler, auth_controller),
+                Err(e) => {
+                    std::fs::remove_dir_all(&opt.db_path)?;
+                    return Err(e.into());
+                }
+            }
         } else if !empty_db && !opt.ignore_dump_if_db_exists {
             bail!(
                 "database already exists at {:?}, try to delete it or rename it",
@@ -155,8 +160,13 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
             bail!("dump doesn't exist at {:?}", path)
         } else {
             let (mut index_scheduler, mut auth_controller) = meilisearch_builder()?;
-            import_dump(&opt.db_path, path, &mut index_scheduler, &mut auth_controller)?;
-            (index_scheduler, auth_controller)
+            match import_dump(&opt.db_path, path, &mut index_scheduler, &mut auth_controller) {
+                Ok(()) => (index_scheduler, auth_controller),
+                Err(e) => {
+                    std::fs::remove_dir_all(&opt.db_path)?;
+                    return Err(e.into());
+                }
+            }
         }
     } else {
         meilisearch_builder()?
