@@ -562,7 +562,7 @@ impl IndexScheduler {
                     method,
                     documents_count,
                     allow_index_creation,
-                } => KindWithContent::DocumentImport {
+                } => KindWithContent::DocumentAdditionOrUpdate {
                     index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
                     primary_key,
                     method,
@@ -578,7 +578,7 @@ impl IndexScheduler {
                     index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
                 },
                 KindDump::Settings { settings, is_deletion, allow_index_creation } => {
-                    KindWithContent::Settings {
+                    KindWithContent::SettingsUpdate {
                         index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
                         new_settings: settings,
                         is_deletion,
@@ -788,7 +788,7 @@ mod tests {
         content_file_uuid: u128,
         documents_count: u64,
     ) -> KindWithContent {
-        KindWithContent::DocumentImport {
+        KindWithContent::DocumentAdditionOrUpdate {
             index_uid: S(index),
             primary_key: primary_key.map(ToOwned::to_owned),
             method: ReplaceDocuments,
@@ -1102,7 +1102,7 @@ mod tests {
             meilisearch_types::document_formats::read_json(content.as_bytes(), file.as_file_mut())
                 .unwrap() as u64;
         index_scheduler
-            .register(KindWithContent::DocumentImport {
+            .register(KindWithContent::DocumentAdditionOrUpdate {
                 index_uid: S("doggos"),
                 primary_key: Some(S("id")),
                 method: ReplaceDocuments,
@@ -1144,7 +1144,7 @@ mod tests {
                 .unwrap() as u64;
         file.persist().unwrap();
         index_scheduler
-            .register(KindWithContent::DocumentImport {
+            .register(KindWithContent::DocumentAdditionOrUpdate {
                 index_uid: S("doggos"),
                 primary_key: Some(S("id")),
                 method: ReplaceDocuments,
@@ -1255,7 +1255,7 @@ mod tests {
                 .unwrap() as u64;
         file.persist().unwrap();
         index_scheduler
-            .register(KindWithContent::DocumentImport {
+            .register(KindWithContent::DocumentAdditionOrUpdate {
                 index_uid: S("doggos"),
                 primary_key: Some(S("id")),
                 method: ReplaceDocuments,

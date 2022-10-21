@@ -181,7 +181,9 @@ impl IndexScheduler {
             BatchKind::DocumentImport { method, import_ids, .. } => {
                 let tasks = self.get_existing_tasks(rtxn, import_ids)?;
                 let primary_key = match &tasks[0].kind {
-                    KindWithContent::DocumentImport { primary_key, .. } => primary_key.clone(),
+                    KindWithContent::DocumentAdditionOrUpdate { primary_key, .. } => {
+                        primary_key.clone()
+                    }
                     _ => unreachable!(),
                 };
 
@@ -189,8 +191,10 @@ impl IndexScheduler {
                 let mut content_files = Vec::new();
                 for task in &tasks {
                     match task.kind {
-                        KindWithContent::DocumentImport {
-                            content_file, documents_count, ..
+                        KindWithContent::DocumentAdditionOrUpdate {
+                            content_file,
+                            documents_count,
+                            ..
                         } => {
                             documents_counts.push(documents_count);
                             content_files.push(content_file);
@@ -235,9 +239,9 @@ impl IndexScheduler {
                 let mut settings = Vec::new();
                 for task in &tasks {
                     match task.kind {
-                        KindWithContent::Settings { ref new_settings, is_deletion, .. } => {
-                            settings.push((is_deletion, new_settings.clone()))
-                        }
+                        KindWithContent::SettingsUpdate {
+                            ref new_settings, is_deletion, ..
+                        } => settings.push((is_deletion, new_settings.clone())),
                         _ => unreachable!(),
                     }
                 }
@@ -873,14 +877,14 @@ impl IndexScheduler {
                     match ret {
                         Ok(DocumentAdditionResult { indexed_documents, number_of_documents }) => {
                             task.status = Status::Succeeded;
-                            task.details = Some(Details::DocumentAddition {
+                            task.details = Some(Details::DocumentAdditionOrUpdate {
                                 received_documents: number_of_documents,
                                 indexed_documents: Some(indexed_documents),
                             });
                         }
                         Err(error) => {
                             task.status = Status::Failed;
-                            task.details = Some(Details::DocumentAddition {
+                            task.details = Some(Details::DocumentAdditionOrUpdate {
                                 received_documents: count,
                                 indexed_documents: Some(count),
                             });
@@ -914,7 +918,7 @@ impl IndexScheduler {
                 // TODO merge the settings to only do *one* reindexation.
                 for (task, (_, settings)) in tasks.iter_mut().zip(settings) {
                     let checked_settings = settings.clone().check();
-                    task.details = Some(Details::Settings { settings });
+                    task.details = Some(Details::SettingsUpdate { settings });
 
                     let mut builder =
                         milli::update::Settings::new(index_wtxn, index, indexer_config);

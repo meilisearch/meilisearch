@@ -46,10 +46,10 @@ impl Task {
             | TaskCancelation { .. }
             | TaskDeletion { .. }
             | IndexSwap { .. } => None,
-            DocumentImport { index_uid, .. }
+            DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentDeletion { index_uid, .. }
             | DocumentClear { index_uid }
-            | Settings { index_uid, .. }
+            | SettingsUpdate { index_uid, .. }
             | IndexCreation { index_uid, .. }
             | IndexUpdate { index_uid, .. }
             | IndexDeletion { index_uid } => Some(index_uid),
@@ -64,10 +64,12 @@ impl Task {
     /// Return the content-uuid if there is one
     pub fn content_uuid(&self) -> Option<&Uuid> {
         match self.kind {
-            KindWithContent::DocumentImport { ref content_file, .. } => Some(content_file),
+            KindWithContent::DocumentAdditionOrUpdate { ref content_file, .. } => {
+                Some(content_file)
+            }
             KindWithContent::DocumentDeletion { .. }
             | KindWithContent::DocumentClear { .. }
-            | KindWithContent::Settings { .. }
+            | KindWithContent::SettingsUpdate { .. }
             | KindWithContent::IndexDeletion { .. }
             | KindWithContent::IndexCreation { .. }
             | KindWithContent::IndexUpdate { .. }
@@ -83,7 +85,7 @@ impl Task {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum KindWithContent {
-    DocumentImport {
+    DocumentAdditionOrUpdate {
         index_uid: String,
         primary_key: Option<String>,
         method: IndexDocumentsMethod,
@@ -98,7 +100,7 @@ pub enum KindWithContent {
     DocumentClear {
         index_uid: String,
     },
-    Settings {
+    SettingsUpdate {
         index_uid: String,
         new_settings: Settings<Unchecked>,
         is_deletion: bool,
@@ -137,10 +139,10 @@ pub enum KindWithContent {
 impl KindWithContent {
     pub fn as_kind(&self) -> Kind {
         match self {
-            KindWithContent::DocumentImport { .. } => Kind::DocumentImport,
+            KindWithContent::DocumentAdditionOrUpdate { .. } => Kind::DocumentAdditionOrUpdate,
             KindWithContent::DocumentDeletion { .. } => Kind::DocumentDeletion,
             KindWithContent::DocumentClear { .. } => Kind::DocumentClear,
-            KindWithContent::Settings { .. } => Kind::Settings,
+            KindWithContent::SettingsUpdate { .. } => Kind::SettingsUpdate,
             KindWithContent::IndexCreation { .. } => Kind::IndexCreation,
             KindWithContent::IndexDeletion { .. } => Kind::IndexDeletion,
             KindWithContent::IndexUpdate { .. } => Kind::IndexUpdate,
@@ -157,10 +159,10 @@ impl KindWithContent {
 
         match self {
             DumpExport { .. } | Snapshot | TaskCancelation { .. } | TaskDeletion { .. } => None,
-            DocumentImport { index_uid, .. }
+            DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentDeletion { index_uid, .. }
             | DocumentClear { index_uid }
-            | Settings { index_uid, .. }
+            | SettingsUpdate { index_uid, .. }
             | IndexCreation { index_uid, .. }
             | IndexUpdate { index_uid, .. }
             | IndexDeletion { index_uid } => Some(vec![index_uid]),
@@ -179,8 +181,8 @@ impl KindWithContent {
     /// `None` if it cannot be generated.
     pub fn default_details(&self) -> Option<Details> {
         match self {
-            KindWithContent::DocumentImport { documents_count, .. } => {
-                Some(Details::DocumentAddition {
+            KindWithContent::DocumentAdditionOrUpdate { documents_count, .. } => {
+                Some(Details::DocumentAdditionOrUpdate {
                     received_documents: *documents_count,
                     indexed_documents: None,
                 })
@@ -194,8 +196,8 @@ impl KindWithContent {
             KindWithContent::DocumentClear { .. } => {
                 Some(Details::ClearAll { deleted_documents: None })
             }
-            KindWithContent::Settings { new_settings, .. } => {
-                Some(Details::Settings { settings: new_settings.clone() })
+            KindWithContent::SettingsUpdate { new_settings, .. } => {
+                Some(Details::SettingsUpdate { settings: new_settings.clone() })
             }
             KindWithContent::IndexDeletion { .. } => None,
             KindWithContent::IndexCreation { primary_key, .. }
@@ -222,8 +224,8 @@ impl KindWithContent {
 
     pub fn default_finished_details(&self) -> Option<Details> {
         match self {
-            KindWithContent::DocumentImport { documents_count, .. } => {
-                Some(Details::DocumentAddition {
+            KindWithContent::DocumentAdditionOrUpdate { documents_count, .. } => {
+                Some(Details::DocumentAdditionOrUpdate {
                     received_documents: *documents_count,
                     indexed_documents: Some(0),
                 })
@@ -237,8 +239,8 @@ impl KindWithContent {
             KindWithContent::DocumentClear { .. } => {
                 Some(Details::ClearAll { deleted_documents: None })
             }
-            KindWithContent::Settings { new_settings, .. } => {
-                Some(Details::Settings { settings: new_settings.clone() })
+            KindWithContent::SettingsUpdate { new_settings, .. } => {
+                Some(Details::SettingsUpdate { settings: new_settings.clone() })
             }
             KindWithContent::IndexDeletion { .. } => None,
             KindWithContent::IndexCreation { primary_key, .. }
@@ -267,16 +269,16 @@ impl KindWithContent {
 impl From<&KindWithContent> for Option<Details> {
     fn from(kind: &KindWithContent) -> Self {
         match kind {
-            KindWithContent::DocumentImport { documents_count, .. } => {
-                Some(Details::DocumentAddition {
+            KindWithContent::DocumentAdditionOrUpdate { documents_count, .. } => {
+                Some(Details::DocumentAdditionOrUpdate {
                     received_documents: *documents_count,
                     indexed_documents: None,
                 })
             }
             KindWithContent::DocumentDeletion { .. } => None,
             KindWithContent::DocumentClear { .. } => None,
-            KindWithContent::Settings { new_settings, .. } => {
-                Some(Details::Settings { settings: new_settings.clone() })
+            KindWithContent::SettingsUpdate { new_settings, .. } => {
+                Some(Details::SettingsUpdate { settings: new_settings.clone() })
             }
             KindWithContent::IndexDeletion { .. } => None,
             KindWithContent::IndexCreation { primary_key, .. } => {
@@ -359,10 +361,10 @@ impl FromStr for Status {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence)]
 #[serde(rename_all = "camelCase")]
 pub enum Kind {
-    DocumentImport,
+    DocumentAdditionOrUpdate,
     DocumentDeletion,
     DocumentClear,
-    Settings,
+    SettingsUpdate,
     IndexCreation,
     IndexDeletion,
     IndexUpdate,
@@ -384,11 +386,11 @@ impl FromStr for Kind {
         } else if kind.eq_ignore_ascii_case("indexDeletion") {
             Ok(Kind::IndexDeletion)
         } else if kind.eq_ignore_ascii_case("documentAdditionOrUpdate") {
-            Ok(Kind::DocumentImport)
+            Ok(Kind::DocumentAdditionOrUpdate)
         } else if kind.eq_ignore_ascii_case("documentDeletion") {
             Ok(Kind::DocumentDeletion)
         } else if kind.eq_ignore_ascii_case("settingsUpdate") {
-            Ok(Kind::Settings)
+            Ok(Kind::SettingsUpdate)
         } else if kind.eq_ignore_ascii_case("taskCancelation") {
             Ok(Kind::TaskCancelation)
         } else if kind.eq_ignore_ascii_case("taskDeletion") {
@@ -418,11 +420,11 @@ impl FromStr for Kind {
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[allow(clippy::large_enum_variant)]
 pub enum Details {
-    DocumentAddition {
+    DocumentAdditionOrUpdate {
         received_documents: u64,
         indexed_documents: Option<u64>,
     },
-    Settings {
+    SettingsUpdate {
         settings: Settings<Unchecked>,
     },
     IndexInfo {

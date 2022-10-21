@@ -1,5 +1,5 @@
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, ErrorKind};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -88,8 +88,11 @@ impl V4Reader {
     }
 
     pub fn instance_uid(&self) -> Result<Option<Uuid>> {
-        let uuid = fs::read_to_string(self.dump.path().join("instance-uid"))?;
-        Ok(Some(Uuid::parse_str(&uuid)?))
+        match fs::read_to_string(self.dump.path().join("instance-uid")) {
+            Ok(uuid) => Ok(Some(Uuid::parse_str(&uuid)?)),
+            Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e.into()),
+        }
     }
 
     pub fn indexes(&self) -> Result<impl Iterator<Item = Result<V4IndexReader>> + '_> {
