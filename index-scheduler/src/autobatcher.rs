@@ -43,12 +43,12 @@ impl AutobatchKind {
 impl From<KindWithContent> for AutobatchKind {
     fn from(kind: KindWithContent) -> Self {
         match kind {
-            KindWithContent::DocumentImport { method, allow_index_creation, .. } => {
+            KindWithContent::DocumentAdditionOrUpdate { method, allow_index_creation, .. } => {
                 AutobatchKind::DocumentImport { method, allow_index_creation }
             }
             KindWithContent::DocumentDeletion { .. } => AutobatchKind::DocumentDeletion,
             KindWithContent::DocumentClear { .. } => AutobatchKind::DocumentClear,
-            KindWithContent::Settings { allow_index_creation, is_deletion, .. } => {
+            KindWithContent::SettingsUpdate { allow_index_creation, is_deletion, .. } => {
                 AutobatchKind::Settings {
                     allow_index_creation: allow_index_creation && !is_deletion,
                 }
@@ -449,7 +449,7 @@ mod tests {
     }
 
     fn doc_imp(method: IndexDocumentsMethod, allow_index_creation: bool) -> KindWithContent {
-        KindWithContent::DocumentImport {
+        KindWithContent::DocumentAdditionOrUpdate {
             index_uid: String::from("doggo"),
             primary_key: None,
             method,
@@ -471,7 +471,7 @@ mod tests {
     }
 
     fn settings(allow_index_creation: bool) -> KindWithContent {
-        KindWithContent::Settings {
+        KindWithContent::SettingsUpdate {
             index_uid: String::from("doggo"),
             new_settings: Default::default(),
             is_deletion: false,

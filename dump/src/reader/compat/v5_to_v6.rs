@@ -60,7 +60,11 @@ impl CompatV5ToV6 {
         };
         Ok(Box::new(tasks.map(move |task| {
             task.and_then(|(task, content_file)| {
-                let task_view: v5::tasks::TaskView = task.clone().into();
+                let mut task_view: v5::tasks::TaskView = task.clone().into();
+
+                if task_view.status == v5::Status::Processing {
+                    task_view.started_at = None;
+                }
 
                 let task = v6::Task {
                     uid: task_view.uid,
@@ -124,13 +128,13 @@ impl CompatV5ToV6 {
                     canceled_by: None,
                     details: task_view.details.map(|details| match details {
                         v5::Details::DocumentAddition { received_documents, indexed_documents } => {
-                            v6::Details::DocumentAddition {
+                            v6::Details::DocumentAdditionOrUpdate {
                                 received_documents: received_documents as u64,
                                 indexed_documents: indexed_documents.map(|i| i as u64),
                             }
                         }
                         v5::Details::Settings { settings } => {
-                            v6::Details::Settings { settings: settings.into() }
+                            v6::Details::SettingsUpdate { settings: settings.into() }
                         }
                         v5::Details::IndexInfo { primary_key } => {
                             v6::Details::IndexInfo { primary_key }

@@ -147,13 +147,13 @@ fn snapshot_task(task: &Task) -> String {
 
 fn snaphsot_details(d: &Details) -> String {
     match d {
-        Details::DocumentAddition {
+        Details::DocumentAdditionOrUpdate {
             received_documents,
             indexed_documents,
         } => {
             format!("{{ received_documents: {received_documents}, indexed_documents: {indexed_documents:?} }}")
         }
-        Details::Settings { settings } => {
+        Details::SettingsUpdate { settings } => {
             format!("{{ settings: {settings:?} }}")
         }
         Details::IndexInfo { primary_key } => {

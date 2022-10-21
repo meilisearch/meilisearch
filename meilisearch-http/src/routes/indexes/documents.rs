@@ -255,7 +255,7 @@ async fn document_addition(
         }
     };
 
-    let task = KindWithContent::DocumentImport {
+    let task = KindWithContent::DocumentAdditionOrUpdate {
         method,
         content_file: uuid,
         documents_count,
