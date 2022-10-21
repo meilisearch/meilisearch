@@ -326,7 +326,7 @@ impl From<TaskContent> for TaskType {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Deserialize)]
 #[cfg_attr(test, derive(serde::Serialize))]
 #[serde(rename_all = "camelCase")]
 pub enum TaskStatus {
