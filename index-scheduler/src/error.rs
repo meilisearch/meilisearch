@@ -6,25 +6,20 @@ use crate::TaskId;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Index `{0}` not found")]
+    #[error("Index `{0}` not found.")]
     IndexNotFound(String),
-    #[error("Index `{0}` already exists")]
+    #[error("Index `{0}` already exists.")]
     IndexAlreadyExists(String),
     #[error("Corrupted task queue.")]
     CorruptedTaskQueue,
     #[error("Corrupted dump.")]
     CorruptedDump,
-    #[error("Task `{0}` not found")]
+    #[error("Task `{0}` not found.")]
     TaskNotFound(TaskId),
-    #[error("Query parameters to filter the tasks to delete are missing. Available query parameters are: `uid`, `indexUid`, `status`, `type`")]
+    #[error("Query parameters to filter the tasks to delete are missing. Available query parameters are: `uid`, `indexUid`, `status`, `type`.")]
     TaskDeletionWithEmptyQuery,
-    #[error("Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uid`, `indexUid`, `status`, `type`")]
+    #[error("Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uid`, `indexUid`, `status`, `type`.")]
     TaskCancelationWithEmptyQuery,
-    // maybe the two next errors are going to move to the frontend
-    #[error("`{0}` is not a status. Available status are")]
-    InvalidStatus(String),
-    #[error("`{0}` is not a type. Available types are")]
-    InvalidKind(String),
 
     #[error(transparent)]
     Dump(#[from] dump::Error),
@@ -49,8 +44,6 @@ impl ErrorCode for Error {
             Error::TaskNotFound(_) => Code::TaskNotFound,
             Error::TaskDeletionWithEmptyQuery => Code::TaskDeletionWithEmptyQuery,
             Error::TaskCancelationWithEmptyQuery => Code::TaskCancelationWithEmptyQuery,
-            Error::InvalidStatus(_) => Code::BadRequest,
-            Error::InvalidKind(_) => Code::BadRequest,
 
             Error::Dump(e) => e.error_code(),
             Error::Milli(e) => e.error_code(),

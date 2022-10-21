@@ -180,7 +180,7 @@ pub async fn get_index_stats(
 ) -> Result<HttpResponse, ResponseError> {
     analytics.publish("Stats Seen".to_string(), json!({ "per_index_uid": true }), Some(&req));
 
-    let stats = IndexStats::new((*index_scheduler).clone(), index_uid.into_inner());
+    let stats = IndexStats::new((*index_scheduler).clone(), index_uid.into_inner())?;
 
     debug!("returns: {:?}", stats);
     Ok(HttpResponse::Ok().json(stats))
