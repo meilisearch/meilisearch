@@ -3,6 +3,7 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::IndexScheduler;
 use log::debug;
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::settings::{settings, Settings, Unchecked};
 use meilisearch_types::tasks::KindWithContent;
 use serde_json::json;
@@ -21,6 +22,7 @@ macro_rules! make_setting_route {
             use index_scheduler::IndexScheduler;
             use log::debug;
             use meilisearch_types::error::ResponseError;
+            use meilisearch_types::index_uid::IndexUid;
             use meilisearch_types::milli::update::Setting;
             use meilisearch_types::settings::{settings, Settings};
             use meilisearch_types::tasks::KindWithContent;
@@ -40,8 +42,9 @@ macro_rules! make_setting_route {
                 let new_settings = Settings { $attr: Setting::Reset, ..Default::default() };
 
                 let allow_index_creation = index_scheduler.filters().allow_index_creation;
+                let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
                 let task = KindWithContent::SettingsUpdate {
-                    index_uid: index_uid.into_inner(),
+                    index_uid,
                     new_settings,
                     is_deletion: true,
                     allow_index_creation,
@@ -78,8 +81,9 @@ macro_rules! make_setting_route {
                 };
 
                 let allow_index_creation = index_scheduler.filters().allow_index_creation;
+                let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
                 let task = KindWithContent::SettingsUpdate {
-                    index_uid: index_uid.into_inner(),
+                    index_uid,
                     new_settings,
                     is_deletion: false,
                     allow_index_creation,
@@ -436,8 +440,9 @@ pub async fn update_all(
     );
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation;
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
     let task = KindWithContent::SettingsUpdate {
-        index_uid: index_uid.into_inner(),
+        index_uid,
         new_settings,
         is_deletion: false,
         allow_index_creation,
@@ -467,8 +472,9 @@ pub async fn delete_all(
     let new_settings = Settings::cleared().into_unchecked();
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation;
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
     let task = KindWithContent::SettingsUpdate {
-        index_uid: index_uid.into_inner(),
+        index_uid: index_uid,
         new_settings,
         is_deletion: true,
         allow_index_creation,
