@@ -821,6 +821,7 @@ impl IndexScheduler {
                 content_files,
                 mut tasks,
             } => {
+                let mut primary_key_has_been_set = false;
                 let must_stop_processing = self.must_stop_processing.clone();
                 let indexer_config = self.index_mapper.indexer_config();
                 // TODO use the code from the IndexCreate operation
@@ -833,6 +834,7 @@ impl IndexScheduler {
                             |indexing_step| debug!("update: {:?}", indexing_step),
                             || must_stop_processing.clone().get(),
                         )?;
+                        primary_key_has_been_set = true;
                     }
                 }
 
@@ -869,6 +871,16 @@ impl IndexScheduler {
                 if results.iter().any(|res| res.is_ok()) {
                     let addition = builder.execute()?;
                     info!("document addition done: {:?}", addition);
+                } else if primary_key_has_been_set {
+                    // Everything failed but we've set a primary key.
+                    // We need to remove it.
+                    let mut builder =
+                        milli::update::Settings::new(index_wtxn, index, indexer_config);
+                    builder.reset_primary_key();
+                    builder.execute(
+                        |indexing_step| debug!("update: {:?}", indexing_step),
+                        || must_stop_processing.clone().get(),
+                    )?;
                 }
 
                 for (task, (ret, count)) in
