@@ -36,7 +36,7 @@ pub async fn indexes_swap(
     let mut swaps = vec![];
     let mut indexes_set = HashSet::<String>::default();
     for IndexesSwapPayload { indexes: (lhs, rhs) } in params.into_inner().into_iter() {
-        if !search_rules.is_index_authorized(&lhs) || !search_rules.is_index_authorized(&lhs) {
+        if !search_rules.is_index_authorized(&lhs) || !search_rules.is_index_authorized(&rhs) {
             return Err(ResponseError::from_msg(
                 "TODO: error message when we swap with an index were not allowed to access"
                     .to_owned(),
