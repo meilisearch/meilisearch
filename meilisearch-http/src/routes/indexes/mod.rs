@@ -3,6 +3,7 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::{IndexScheduler, Query};
 use log::debug;
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::{self, FieldDistribution, Index};
 use meilisearch_types::tasks::{KindWithContent, Status};
 use serde::{Deserialize, Serialize};
@@ -95,6 +96,7 @@ pub async fn create_index(
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let IndexCreateRequest { primary_key, uid } = body.into_inner();
+    let uid = IndexUid::try_from(uid)?.into_inner();
 
     let allow_index_creation = index_scheduler.filters().search_rules.is_index_authorized(&uid);
     if allow_index_creation {
