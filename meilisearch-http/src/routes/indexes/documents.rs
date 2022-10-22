@@ -10,6 +10,7 @@ use log::debug;
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
+use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::star_or::StarOr;
 use meilisearch_types::tasks::KindWithContent;
@@ -216,6 +217,9 @@ async fn document_addition(
             return Err(MeilisearchHttpError::MissingContentType(ACCEPTED_CONTENT_TYPE.clone()))
         }
     };
+
+    // is your indexUid valid?
+    let index_uid = IndexUid::try_from(index_uid)?.into_inner();
 
     let (uuid, mut update_file) = index_scheduler.create_update_file()?;
 
