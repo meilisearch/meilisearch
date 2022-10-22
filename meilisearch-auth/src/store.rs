@@ -99,6 +99,7 @@ impl HeedAuthStore {
                             Action::IndexesDelete,
                             Action::IndexesGet,
                             Action::IndexesUpdate,
+                            Action::IndexesSwap,
                         ]
                         .iter(),
                     );
@@ -110,7 +111,7 @@ impl HeedAuthStore {
                     actions.insert(Action::DumpsCreate);
                 }
                 Action::TasksAll => {
-                    actions.insert(Action::TasksGet);
+                    actions.extend([Action::TasksGet, Action::TasksDelete, Action::TasksCancel]);
                 }
                 Action::StatsAll => {
                     actions.insert(Action::StatsGet);
