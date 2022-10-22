@@ -1,6 +1,6 @@
 use actix_web as aweb;
 use aweb::error::{JsonPayloadError, QueryPayloadError};
-use meilisearch_types::document_formats::DocumentFormatError;
+use meilisearch_types::document_formats::{DocumentFormatError, PayloadType};
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use serde_json::Value;
 use tokio::task::JoinError;
@@ -19,6 +19,8 @@ pub enum MeilisearchHttpError {
     DocumentNotFound(String),
     #[error("Invalid syntax for the filter parameter: `expected {}, found: {1}`.", .0.join(", "))]
     InvalidExpression(&'static [&'static str], Value),
+    #[error("A {0} payload is missing.")]
+    MissingPayload(PayloadType),
     #[error("The provided payload reached the size limit.")]
     PayloadTooLarge,
     #[error(transparent)]
@@ -43,6 +45,7 @@ impl ErrorCode for MeilisearchHttpError {
     fn error_code(&self) -> Code {
         match self {
             MeilisearchHttpError::MissingContentType(_) => Code::MissingContentType,
+            MeilisearchHttpError::MissingPayload(_) => Code::MissingPayload,
             MeilisearchHttpError::InvalidContentType(_, _) => Code::InvalidContentType,
             MeilisearchHttpError::DocumentNotFound(_) => Code::DocumentNotFound,
             MeilisearchHttpError::InvalidExpression(_, _) => Code::Filter,
