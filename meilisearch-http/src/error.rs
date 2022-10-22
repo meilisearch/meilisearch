@@ -19,6 +19,8 @@ pub enum MeilisearchHttpError {
     DocumentNotFound(String),
     #[error("Invalid syntax for the filter parameter: `expected {}, found: {1}`.", .0.join(", "))]
     InvalidExpression(&'static [&'static str], Value),
+    #[error("The provided payload reached the size limit.")]
+    PayloadTooLarge,
     #[error(transparent)]
     SerdeJson(#[from] serde_json::Error),
     #[error(transparent)]
@@ -44,6 +46,7 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::InvalidContentType(_, _) => Code::InvalidContentType,
             MeilisearchHttpError::DocumentNotFound(_) => Code::DocumentNotFound,
             MeilisearchHttpError::InvalidExpression(_, _) => Code::Filter,
+            MeilisearchHttpError::PayloadTooLarge => Code::PayloadTooLarge,
             MeilisearchHttpError::SerdeJson(_) => Code::Internal,
             MeilisearchHttpError::HeedError(_) => Code::Internal,
             MeilisearchHttpError::IndexScheduler(e) => e.error_code(),
@@ -86,12 +89,12 @@ impl ErrorCode for PayloadError {
     fn error_code(&self) -> Code {
         match self {
             PayloadError::Payload(e) => match e {
-                aweb::error::PayloadError::Incomplete(_) => todo!(),
-                aweb::error::PayloadError::EncodingCorrupted => todo!(),
-                aweb::error::PayloadError::Overflow => todo!(),
-                aweb::error::PayloadError::UnknownLength => todo!(),
-                aweb::error::PayloadError::Http2Payload(_) => todo!(),
-                aweb::error::PayloadError::Io(_) => todo!(),
+                aweb::error::PayloadError::Incomplete(_) => Code::Internal,
+                aweb::error::PayloadError::EncodingCorrupted => Code::Internal,
+                aweb::error::PayloadError::Overflow => Code::PayloadTooLarge,
+                aweb::error::PayloadError::UnknownLength => Code::Internal,
+                aweb::error::PayloadError::Http2Payload(_) => Code::Internal,
+                aweb::error::PayloadError::Io(_) => Code::Internal,
                 _ => todo!(),
             },
             PayloadError::Json(err) => match err {
