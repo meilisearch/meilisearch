@@ -245,7 +245,7 @@ pub(crate) mod test {
 
             let name = entry.file_name().into_string().unwrap();
             let file_type = entry.file_type().unwrap();
-            let is_dir = file_type.is_dir().then_some("/").unwrap_or("");
+            let is_dir = if file_type.is_dir() { "/" } else { "" };
 
             assert!(!file_type.is_symlink());
             writeln!(ret, "{ident} {name}{is_dir}").unwrap();
