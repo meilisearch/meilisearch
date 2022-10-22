@@ -275,7 +275,7 @@ pub fn create_all_stats(
         limit: Some(1),
         ..Query::default()
     })?;
-    let processing_index = processing_task.first().and_then(|task| task.index_uid().clone());
+    let processing_index = processing_task.first().and_then(|task| task.index_uid());
     for (name, index) in index_scheduler.indexes()? {
         if !search_rules.is_index_authorized(&name) {
             continue;
@@ -286,7 +286,7 @@ pub fn create_all_stats(
         let rtxn = index.read_txn()?;
         let stats = IndexStats {
             number_of_documents: index.number_of_documents(&rtxn)?,
-            is_indexing: processing_index.as_deref().map_or(false, |index_name| name == index_name),
+            is_indexing: processing_index.map_or(false, |index_name| name == index_name),
             field_distribution: index.field_distribution(&rtxn)?,
         };
 

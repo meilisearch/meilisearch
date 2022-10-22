@@ -74,7 +74,7 @@ impl CompatV3ToV4 {
                             .map(|index| index.uid.clone());
 
                         let index_uid = match index_uid {
-                            Some(uid) => uid.to_string(),
+                            Some(uid) => uid,
                             None => {
                                 log::warn!(
                                     "Error while importing the update {}.",
@@ -120,7 +120,7 @@ impl CompatV3ToV4 {
                                     primary_key: primary_key.clone(),
                                     documents_count: 0, // we don't have this info
                                     allow_index_creation: true, // there was no API-key in the v3
-                                    content_uuid: content_uuid.clone(),
+                                    content_uuid: *content_uuid,
                                 },
                                 v3::Kind::Settings(settings) => {
                                     v4::tasks::TaskContent::SettingsUpdate {

@@ -12,7 +12,7 @@ pub struct Unchecked;
 /// Holds all the settings for an index. `T` can either be `Checked` if they represents settings
 /// whose validity is guaranteed, or `Unchecked` if they need to be validated. In the later case, a
 /// call to `check` will return a `Settings<Checked>` from a `Settings<Unchecked>`.
-#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(serde::Serialize))]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
@@ -47,7 +47,7 @@ pub struct Settings<T> {
     pub _kind: PhantomData<T>,
 }
 
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 #[cfg_attr(test, derive(serde::Serialize))]
 pub enum Setting<T> {
     Set(T),
@@ -102,7 +102,7 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Setting<T> {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(serde::Serialize))]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
@@ -113,7 +113,7 @@ pub struct MinWordSizeTyposSetting {
     pub two_typos: Setting<u8>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(serde::Serialize))]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
@@ -128,7 +128,7 @@ pub struct TypoSettings {
     pub disable_on_attributes: Setting<BTreeSet<String>>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(serde::Serialize))]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
@@ -137,7 +137,7 @@ pub struct FacetingSettings {
     pub max_values_per_facet: Setting<usize>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(serde::Serialize))]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]

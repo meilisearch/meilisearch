@@ -39,6 +39,7 @@ pub struct IndexMapper {
 }
 
 /// Whether the index is available for use or is forbidden to be inserted back in the index map
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone)]
 pub enum IndexStatus {
     /// Do not insert it back in the index map as it is currently being deleted.

@@ -102,7 +102,7 @@ pub enum KindWithContent {
     },
     SettingsUpdate {
         index_uid: String,
-        new_settings: Settings<Unchecked>,
+        new_settings: Box<Settings<Unchecked>>,
         is_deletion: bool,
         allow_index_creation: bool,
     },
@@ -417,14 +417,13 @@ impl FromStr for Kind {
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-#[allow(clippy::large_enum_variant)]
 pub enum Details {
     DocumentAdditionOrUpdate {
         received_documents: u64,
         indexed_documents: Option<u64>,
     },
     SettingsUpdate {
-        settings: Settings<Unchecked>,
+        settings: Box<Settings<Unchecked>>,
     },
     IndexInfo {
         primary_key: Option<String>,

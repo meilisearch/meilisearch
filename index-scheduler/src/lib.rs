@@ -267,6 +267,7 @@ impl IndexScheduler {
     /// - `indexer_config`: configuration used during indexing for each meilisearch index
     /// - `autobatching_enabled`: `true` iff the index scheduler is allowed to automatically batch tasks
     /// together, to process multiple tasks at once.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         tasks_path: PathBuf,
         update_file_path: PathBuf,
@@ -401,7 +402,7 @@ impl IndexScheduler {
         if let Some(index) = &query.index_uid {
             let mut index_tasks = RoaringBitmap::new();
             for index in index {
-                index_tasks |= self.index_tasks(&rtxn, &index)?;
+                index_tasks |= self.index_tasks(&rtxn, index)?;
             }
             tasks &= index_tasks;
         }
@@ -793,7 +794,7 @@ mod tests {
             primary_key: primary_key.map(ToOwned::to_owned),
             method: ReplaceDocuments,
             content_file: Uuid::from_u128(content_file_uuid),
-            documents_count: documents_count,
+            documents_count,
             allow_index_creation: true,
         }
     }

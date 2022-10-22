@@ -108,7 +108,7 @@ impl V6Reader {
                 .path()
                 .join("tasks")
                 .join("update_files")
-                .join(format!("{}.jsonl", task.uid.to_string()));
+                .join(format!("{}.jsonl", task.uid));
 
             if update_file_path.exists() {
                 Ok((

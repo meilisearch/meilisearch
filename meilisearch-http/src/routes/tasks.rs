@@ -113,14 +113,14 @@ pub struct DetailsView {
     pub dump_uid: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(flatten)]
-    pub settings: Option<Settings<Unchecked>>,
+    pub settings: Option<Box<Settings<Unchecked>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub indexes: Option<Vec<(String, String)>>,
 }
 
 impl From<Details> for DetailsView {
     fn from(details: Details) -> Self {
-        match details.clone() {
+        match details {
             Details::DocumentAdditionOrUpdate { received_documents, indexed_documents } => {
                 DetailsView {
                     received_documents: Some(received_documents),
@@ -471,7 +471,7 @@ async fn get_task(
     filters.uid = Some(vec![task_id]);
 
     if let Some(task) = index_scheduler.get_tasks(filters)?.first() {
-        let task_view = TaskView::from_task(&task);
+        let task_view = TaskView::from_task(task);
         Ok(HttpResponse::Ok().json(task_view))
     } else {
         Err(index_scheduler::Error::TaskNotFound(task_id).into())
@@ -494,7 +494,7 @@ fn filter_out_inaccessible_indexes_from_query<const ACTION: u8>(
     match indexes {
         Some(indexes) => {
             for name in indexes.iter() {
-                if search_rules.is_index_authorized(&name) {
+                if search_rules.is_index_authorized(name) {
                     query = query.with_index(name.to_string());
                 }
             }
@@ -543,7 +543,7 @@ pub(crate) mod date_deserializer {
                 DeserializeDateOption::After => {
                     let datetime = datetime
                         .checked_add(Duration::days(1))
-                        .ok_or(serde::de::Error::custom("date overflow"))?;
+                        .ok_or_else(|| serde::de::Error::custom("date overflow"))?;
                     Ok(datetime)
                 }
             }

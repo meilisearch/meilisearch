@@ -9,7 +9,7 @@ use super::settings::{Settings, Unchecked};
 pub type TaskId = u32;
 pub type BatchId = u32;
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(serde::Serialize))]
 pub struct Task {
     pub id: TaskId,
@@ -18,7 +18,7 @@ pub struct Task {
     pub events: Vec<TaskEvent>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(serde::Serialize))]
 #[allow(clippy::large_enum_variant)]
 pub enum TaskContent {
