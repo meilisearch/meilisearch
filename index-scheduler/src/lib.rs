@@ -863,14 +863,6 @@ mod tests {
         fn next_breakpoint(&self) -> Breakpoint {
             self.test_breakpoint_rcv.recv().unwrap()
         }
-
-        /// The scheduler will not stop on breakpoints anymore.
-        fn dont_block(self) {
-            std::thread::spawn(move || loop {
-                // unroll and ignore all the state the scheduler is going to send us.
-                self.test_breakpoint_rcv.iter().last();
-            });
-        }
     }
 
     #[test]
