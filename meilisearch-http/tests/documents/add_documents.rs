@@ -560,7 +560,6 @@ async fn error_add_missing_payload_ndjson_documents() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    dbg!(&response);
     assert_eq!(status_code, 400);
     assert_eq!(response["message"], json!(r#"A ndjson payload is missing."#));
     assert_eq!(response["code"], json!("missing_payload"));

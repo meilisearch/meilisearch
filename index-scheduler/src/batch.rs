@@ -72,7 +72,8 @@ pub(crate) enum IndexOperation {
     },
     DocumentDeletion {
         index_uid: String,
-        documents: Vec<String>,
+        // The vec associated with each document deletion tasks.
+        documents: Vec<Vec<String>>,
         tasks: Vec<Task>,
     },
     DocumentClear {
@@ -222,7 +223,7 @@ impl IndexScheduler {
                 for task in &tasks {
                     match task.kind {
                         KindWithContent::DocumentDeletion { ref documents_ids, .. } => {
-                            documents.extend_from_slice(documents_ids)
+                            documents.push(documents_ids.clone())
                         }
                         _ => unreachable!(),
                     }
@@ -912,7 +913,7 @@ impl IndexScheduler {
             }
             IndexOperation::DocumentDeletion { index_uid: _, documents, mut tasks } => {
                 let mut builder = milli::update::DeleteDocuments::new(index_wtxn, index)?;
-                documents.iter().for_each(|id| {
+                documents.iter().flatten().for_each(|id| {
                     builder.delete_external_id(id);
                 });
 
@@ -922,7 +923,7 @@ impl IndexScheduler {
                     task.status = Status::Succeeded;
                     task.details = Some(Details::DocumentDeletion {
                         received_document_ids: documents.len(),
-                        deleted_documents: Some(deleted_documents),
+                        deleted_documents: Some(deleted_documents.min(documents.len() as u64)),
                     });
                 }
 
