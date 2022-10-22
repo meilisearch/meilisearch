@@ -6,14 +6,14 @@ source: index-scheduler/src/lib.rs
 []
 ----------------------------------------------------------------------
 ### All Tasks:
-0 {uid: 0, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentImport { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
+0 {uid: 0, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
 ----------------------------------------------------------------------
 ### Status:
 enqueued []
 succeeded [0,]
 ----------------------------------------------------------------------
 ### Kind:
-"documentImport" [0,]
+"documentAdditionOrUpdate" [0,]
 ----------------------------------------------------------------------
 ### Index Tasks:
 doggos [0,]
