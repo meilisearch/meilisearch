@@ -246,7 +246,6 @@ async fn document_addition(
             };
             // we NEED to persist the file here because we moved the `udpate_file` in another task.
             update_file.persist()?;
-            println!("file has been persisted");
             Ok(documents_count)
         })
         .await;
