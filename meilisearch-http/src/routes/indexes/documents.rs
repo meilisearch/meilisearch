@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::io::{Cursor, ErrorKind};
 
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;
@@ -228,6 +228,9 @@ async fn document_addition(
     while let Some(bytes) = body.next().await {
         buffer.extend_from_slice(&bytes?);
     }
+    if buffer.is_empty() {
+        return Err(MeilisearchHttpError::MissingPayload(format));
+    }
     let reader = Cursor::new(buffer);
 
     let documents_count =
@@ -239,18 +242,30 @@ async fn document_addition(
             };
             // we NEED to persist the file here because we moved the `udpate_file` in another task.
             update_file.persist()?;
+            println!("file has been persisted");
             Ok(documents_count)
         })
         .await;
 
     let documents_count = match documents_count {
         Ok(Ok(documents_count)) => documents_count as u64,
-        Ok(Err(e)) => {
-            index_scheduler.delete_update_file(uuid)?;
-            return Err(e);
-        }
+        // in this case the file has not possibly be persisted.
+        Ok(Err(e)) => return Err(e),
         Err(e) => {
-            index_scheduler.delete_update_file(uuid)?;
+            // Here the file MAY have been persisted or not.
+            // We don't know thus we ignore the file not found error.
+            match index_scheduler.delete_update_file(uuid) {
+                Ok(()) => (),
+                Err(index_scheduler::Error::FileStore(file_store::Error::IoError(e)))
+                    if e.kind() == ErrorKind::NotFound =>
+                {
+                    ()
+                }
+                Err(e) => {
+                    log::warn!("Unknown error happened while deleting a malformed update file with uuid {uuid}: {e}");
+                }
+            }
+            // We still want to return the original error to the end user.
             return Err(e.into());
         }
     };
