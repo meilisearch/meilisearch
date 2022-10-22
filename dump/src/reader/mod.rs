@@ -134,7 +134,7 @@ impl From<CompatV4ToV5> for DumpReader {
 
 pub enum DumpIndexReader {
     Current(v6::V6IndexReader),
-    Compat(CompatIndexV5ToV6),
+    Compat(Box<CompatIndexV5ToV6>),
 }
 
 impl DumpIndexReader {
@@ -176,7 +176,7 @@ impl From<V6IndexReader> for DumpIndexReader {
 
 impl From<CompatIndexV5ToV6> for DumpIndexReader {
     fn from(value: CompatIndexV5ToV6) -> Self {
-        DumpIndexReader::Compat(value)
+        DumpIndexReader::Compat(Box::new(value))
     }
 }
 

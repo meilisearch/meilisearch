@@ -170,7 +170,7 @@ impl BatchKind {
             // We don't batch any of these operations
             (this, K::IndexCreation | K::IndexUpdate | K::IndexSwap) => Break(this),
             // We must not batch tasks that don't have the same index creation rights if the index doesn't already exists.
-            (this, kind) if index_already_exists == false && this.allow_index_creation() == Some(false) && kind.allow_index_creation() == Some(true) => {
+            (this, kind) if !index_already_exists && this.allow_index_creation() == Some(false) && kind.allow_index_creation() == Some(true) => {
                 Break(this)
             },
             // The index deletion can batch with everything but must stop after
@@ -443,7 +443,7 @@ mod tests {
         input: impl IntoIterator<Item = KindWithContent>,
     ) -> Option<(BatchKind, bool)> {
         autobatch(
-            input.into_iter().enumerate().map(|(id, kind)| (id as TaskId, kind.into())).collect(),
+            input.into_iter().enumerate().map(|(id, kind)| (id as TaskId, kind)).collect(),
             index_already_exists,
         )
     }

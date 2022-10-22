@@ -4,6 +4,7 @@ use thiserror::Error;
 
 use crate::TaskId;
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Index `{0}` not found.")]

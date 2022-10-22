@@ -105,10 +105,10 @@ impl V2Reader {
 
     pub fn indexes(&self) -> Result<impl Iterator<Item = Result<V2IndexReader>> + '_> {
         Ok(self.index_uuid.iter().map(|index| -> Result<_> {
-            Ok(V2IndexReader::new(
+            V2IndexReader::new(
                 index.uid.clone(),
-                &self.dump.path().join("indexes").join(format!("index-{}", index.uuid.to_string())),
-            )?)
+                &self.dump.path().join("indexes").join(format!("index-{}", index.uuid)),
+            )
         }))
     }
 
@@ -122,7 +122,7 @@ impl V2Reader {
                         .path()
                         .join("updates")
                         .join("update_files")
-                        .join(format!("update_{}", uuid.to_string()));
+                        .join(format!("update_{}", uuid));
                     Ok((task, Some(UpdateFile::new(&update_file_path)?)))
                 } else {
                     Ok((task, None))

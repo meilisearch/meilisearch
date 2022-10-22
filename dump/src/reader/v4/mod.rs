@@ -97,10 +97,10 @@ impl V4Reader {
 
     pub fn indexes(&self) -> Result<impl Iterator<Item = Result<V4IndexReader>> + '_> {
         Ok(self.index_uuid.iter().map(|index| -> Result<_> {
-            Ok(V4IndexReader::new(
+            V4IndexReader::new(
                 index.uid.clone(),
                 &self.dump.path().join("indexes").join(index.index_meta.uuid.to_string()),
-            )?)
+            )
         }))
     }
 

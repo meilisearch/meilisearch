@@ -111,10 +111,10 @@ impl V3Reader {
 
     pub fn indexes(&self) -> Result<impl Iterator<Item = Result<V3IndexReader>> + '_> {
         Ok(self.index_uuid.iter().map(|index| -> Result<_> {
-            Ok(V3IndexReader::new(
+            V3IndexReader::new(
                 index.uid.clone(),
                 &self.dump.path().join("indexes").join(index.uuid.to_string()),
-            )?)
+            )
         }))
     }
 

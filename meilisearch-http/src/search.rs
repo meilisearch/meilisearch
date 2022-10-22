@@ -552,7 +552,7 @@ fn parse_filter(facets: &Value) -> Result<Option<Filter>, MeilisearchHttpError> 
             Ok(condition)
         }
         Value::Array(arr) => parse_filter_array(arr),
-        v => Err(MeilisearchHttpError::InvalidExpression(&["Array"], v.clone()).into()),
+        v => Err(MeilisearchHttpError::InvalidExpression(&["Array"], v.clone())),
     }
 }
 
@@ -570,8 +570,7 @@ fn parse_filter_array(arr: &[Value]) -> Result<Option<Filter>, MeilisearchHttpEr
                             return Err(MeilisearchHttpError::InvalidExpression(
                                 &["String"],
                                 v.clone(),
-                            )
-                            .into())
+                            ))
                         }
                     }
                 }
@@ -581,8 +580,7 @@ fn parse_filter_array(arr: &[Value]) -> Result<Option<Filter>, MeilisearchHttpEr
                 return Err(MeilisearchHttpError::InvalidExpression(
                     &["String", "[String]"],
                     v.clone(),
-                )
-                .into())
+                ))
             }
         }
     }

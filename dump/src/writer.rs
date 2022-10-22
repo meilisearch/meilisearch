@@ -233,13 +233,13 @@ pub(crate) mod test {
             let mut ident = String::new();
 
             for _ in 0..depth {
-                ident.push_str(&"│");
+                ident.push('│');
                 ident.push_str(&" ".repeat(4));
             }
             if idx == entries.len() - 1 {
-                ident.push_str(&"└");
+                ident.push('└');
             } else {
-                ident.push_str(&"├");
+                ident.push('├');
             }
             ident.push_str(&"-".repeat(4));
 
