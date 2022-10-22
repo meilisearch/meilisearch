@@ -260,10 +260,7 @@ async fn document_addition(
             match index_scheduler.delete_update_file(uuid) {
                 Ok(()) => (),
                 Err(index_scheduler::Error::FileStore(file_store::Error::IoError(e)))
-                    if e.kind() == ErrorKind::NotFound =>
-                {
-                    
-                }
+                    if e.kind() == ErrorKind::NotFound => {}
                 Err(e) => {
                     log::warn!("Unknown error happened while deleting a malformed update file with uuid {uuid}: {e}");
                 }
