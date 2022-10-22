@@ -51,7 +51,7 @@ impl CompatV5ToV6 {
     pub fn tasks(
         &mut self,
     ) -> Result<Box<dyn Iterator<Item = Result<(v6::Task, Option<Box<UpdateFile>>)>> + '_>> {
-        let instance_uid = self.instance_uid().ok().flatten().map(|uid| uid.clone());
+        let instance_uid = self.instance_uid().ok().flatten();
         let keys = self.keys()?.collect::<Result<Vec<_>>>()?;
 
         let tasks = match self {
@@ -59,7 +59,7 @@ impl CompatV5ToV6 {
             CompatV5ToV6::Compat(compat) => compat.tasks(),
         };
         Ok(Box::new(tasks.map(move |task| {
-            task.and_then(|(task, content_file)| {
+            task.map(|(task, content_file)| {
                 let mut task_view: v5::tasks::TaskView = task.clone().into();
 
                 if task_view.status == v5::Status::Processing {
@@ -75,7 +75,7 @@ impl CompatV5ToV6 {
                         v5::Status::Succeeded => v6::Status::Succeeded,
                         v5::Status::Failed => v6::Status::Failed,
                     },
-                    kind: match task.content.clone() {
+                    kind: match task.content {
                         v5::tasks::TaskContent::IndexCreation { primary_key, .. } => {
                             v6::Kind::IndexCreation { primary_key }
                         }
@@ -100,7 +100,7 @@ impl CompatV5ToV6 {
                                     v6::milli::update::IndexDocumentsMethod::UpdateDocuments
                                 }
                             },
-                            allow_index_creation: allow_index_creation.clone(),
+                            allow_index_creation,
                         },
                         v5::tasks::TaskContent::DocumentDeletion { deletion, .. } => match deletion
                         {
@@ -117,13 +117,11 @@ impl CompatV5ToV6 {
                         } => v6::Kind::Settings {
                             is_deletion,
                             allow_index_creation,
-                            settings: settings.into(),
+                            settings: Box::new(settings.into()),
                         },
-                        v5::tasks::TaskContent::Dump { uid } => v6::Kind::DumpExport {
-                            dump_uid: uid,
-                            keys: keys.clone(),
-                            instance_uid: instance_uid.clone(),
-                        },
+                        v5::tasks::TaskContent::Dump { uid } => {
+                            v6::Kind::DumpExport { dump_uid: uid, keys: keys.clone(), instance_uid }
+                        }
                     },
                     canceled_by: None,
                     details: task_view.details.map(|details| match details {
@@ -134,7 +132,7 @@ impl CompatV5ToV6 {
                             }
                         }
                         v5::Details::Settings { settings } => {
-                            v6::Details::SettingsUpdate { settings: settings.into() }
+                            v6::Details::SettingsUpdate { settings: Box::new(settings.into()) }
                         }
                         v5::Details::IndexInfo { primary_key } => {
                             v6::Details::IndexInfo { primary_key }
@@ -157,7 +155,7 @@ impl CompatV5ToV6 {
                     finished_at: task_view.finished_at,
                 };
 
-                Ok((task, content_file))
+                (task, content_file)
             })
         })))
     }

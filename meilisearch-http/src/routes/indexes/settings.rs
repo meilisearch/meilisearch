@@ -45,7 +45,7 @@ macro_rules! make_setting_route {
                 let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
                 let task = KindWithContent::SettingsUpdate {
                     index_uid,
-                    new_settings,
+                    new_settings: Box::new(new_settings),
                     is_deletion: true,
                     allow_index_creation,
                 };
@@ -84,7 +84,7 @@ macro_rules! make_setting_route {
                 let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
                 let task = KindWithContent::SettingsUpdate {
                     index_uid,
-                    new_settings,
+                    new_settings: Box::new(new_settings),
                     is_deletion: false,
                     allow_index_creation,
                 };
@@ -443,7 +443,7 @@ pub async fn update_all(
     let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
     let task = KindWithContent::SettingsUpdate {
         index_uid,
-        new_settings,
+        new_settings: Box::new(new_settings),
         is_deletion: false,
         allow_index_creation,
     };
@@ -474,8 +474,8 @@ pub async fn delete_all(
     let allow_index_creation = index_scheduler.filters().allow_index_creation;
     let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
     let task = KindWithContent::SettingsUpdate {
-        index_uid: index_uid,
-        new_settings,
+        index_uid,
+        new_settings: Box::new(new_settings),
         is_deletion: true,
         allow_index_creation,
     };

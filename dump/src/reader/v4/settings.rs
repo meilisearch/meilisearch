@@ -23,15 +23,15 @@ where
     .serialize(s)
 }
 
-#[derive(Clone, Default, Debug, PartialEq)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 #[cfg_attr(test, derive(serde::Serialize))]
 pub struct Checked;
 
-#[derive(Clone, Default, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Default, Debug, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(serde::Serialize))]
 pub struct Unchecked;
 
-#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(serde::Serialize))]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
@@ -42,7 +42,7 @@ pub struct MinWordSizeTyposSetting {
     pub two_typos: Setting<u8>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(serde::Serialize))]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
@@ -59,7 +59,7 @@ pub struct TypoSettings {
 /// Holds all the settings for an index. `T` can either be `Checked` if they represents settings
 /// whose validity is guaranteed, or `Unchecked` if they need to be validated. In the later case, a
 /// call to `check` will return a `Settings<Checked>` from a `Settings<Unchecked>`.
-#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(serde::Serialize))]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
@@ -191,7 +191,7 @@ pub struct Facets {
     pub min_level_size: Option<NonZeroUsize>,
 }
 
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum Setting<T> {
     Set(T),
     Reset,

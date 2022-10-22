@@ -160,7 +160,7 @@ pub struct Facets {
     pub min_level_size: Option<NonZeroUsize>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Setting<T> {
     Set(T),
     Reset,

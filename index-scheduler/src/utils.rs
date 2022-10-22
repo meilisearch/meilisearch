@@ -13,7 +13,7 @@ use crate::{Error, IndexScheduler, Result, Task, TaskId, BEI128};
 
 impl IndexScheduler {
     pub(crate) fn all_task_ids(&self, rtxn: &RoTxn) -> Result<RoaringBitmap> {
-        enum_iterator::all().map(|s| self.get_status(&rtxn, s)).union()
+        enum_iterator::all().map(|s| self.get_status(rtxn, s)).union()
     }
 
     pub(crate) fn last_task_id(&self, rtxn: &RoTxn) -> Result<Option<TaskId>> {
@@ -173,7 +173,7 @@ pub(crate) fn insert_task_datetime(
     task_id: TaskId,
 ) -> Result<()> {
     let timestamp = BEI128::new(time.unix_timestamp_nanos());
-    let mut task_ids = database.get(&wtxn, &timestamp)?.unwrap_or_default();
+    let mut task_ids = database.get(wtxn, &timestamp)?.unwrap_or_default();
     task_ids.insert(task_id);
     database.put(wtxn, &timestamp, &RoaringBitmap::from_iter([task_id]))?;
     Ok(())
@@ -186,7 +186,7 @@ pub(crate) fn remove_task_datetime(
     task_id: TaskId,
 ) -> Result<()> {
     let timestamp = BEI128::new(time.unix_timestamp_nanos());
-    if let Some(mut existing) = database.get(&wtxn, &timestamp)? {
+    if let Some(mut existing) = database.get(wtxn, &timestamp)? {
         existing.remove(task_id);
         if existing.is_empty() {
             database.delete(wtxn, &timestamp)?;
@@ -214,7 +214,7 @@ pub(crate) fn keep_tasks_within_datetimes(
     let mut collected_task_ids = RoaringBitmap::new();
     let start = map_bound(start, |b| BEI128::new(b.unix_timestamp_nanos()));
     let end = map_bound(end, |b| BEI128::new(b.unix_timestamp_nanos()));
-    let iter = database.range(&rtxn, &(start, end))?;
+    let iter = database.range(rtxn, &(start, end))?;
     for r in iter {
         let (_timestamp, task_ids) = r?;
         collected_task_ids |= task_ids;
@@ -245,22 +245,21 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
         K::IndexUpdate { index_uid, .. } => index_uids.push(index_uid),
         K::IndexSwap { swaps } => {
             for (lhs, rhs) in swaps.iter_mut() {
-                if lhs == &swap.0 || lhs == &swap.1 {
+                if lhs == swap.0 || lhs == swap.1 {
                     index_uids.push(lhs);
                 }
-                if rhs == &swap.0 || rhs == &swap.1 {
+                if rhs == swap.0 || rhs == swap.1 {
                     index_uids.push(rhs);
                 }
             }
         }
         K::TaskCancelation { .. } | K::TaskDeletion { .. } | K::DumpExport { .. } | K::Snapshot => {
-            ()
         }
     };
     for index_uid in index_uids {
-        if index_uid == &swap.0 {
+        if index_uid == swap.0 {
             *index_uid = swap.1.to_owned();
-        } else if index_uid == &swap.1 {
+        } else if index_uid == swap.1 {
             *index_uid = swap.0.to_owned();
         }
     }

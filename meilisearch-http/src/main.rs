@@ -147,7 +147,7 @@ Anonymous telemetry:\t\"Enabled\""
     }
 
     if let Some(instance_uid) = analytics.instance_uid() {
-        eprintln!("Instance UID:\t\t\"{}\"", instance_uid.to_string());
+        eprintln!("Instance UID:\t\t\"{}\"", instance_uid);
     }
 
     eprintln!();

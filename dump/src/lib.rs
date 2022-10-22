@@ -1,3 +1,6 @@
+#![allow(clippy::type_complexity)]
+#![allow(clippy::wrong_self_convention)]
+
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::Key;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
@@ -99,7 +102,7 @@ pub enum KindDump {
     },
     DocumentClear,
     Settings {
-        settings: meilisearch_types::settings::Settings<Unchecked>,
+        settings: Box<meilisearch_types::settings::Settings<Unchecked>>,
         is_deletion: bool,
         allow_index_creation: bool,
     },
@@ -369,7 +372,7 @@ pub(crate) mod test {
 
     pub fn create_test_dump() -> File {
         let instance_uid = create_test_instance_uid();
-        let dump = DumpWriter::new(Some(instance_uid.clone())).unwrap();
+        let dump = DumpWriter::new(Some(instance_uid)).unwrap();
 
         // ========== Adding an index
         let documents = create_test_documents();

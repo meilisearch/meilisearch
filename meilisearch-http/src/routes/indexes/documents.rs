@@ -262,7 +262,7 @@ async fn document_addition(
                 Err(index_scheduler::Error::FileStore(file_store::Error::IoError(e)))
                     if e.kind() == ErrorKind::NotFound =>
                 {
-                    ()
+                    
                 }
                 Err(e) => {
                     log::warn!("Unknown error happened while deleting a malformed update file with uuid {uuid}: {e}");

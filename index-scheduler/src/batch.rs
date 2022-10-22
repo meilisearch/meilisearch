@@ -242,7 +242,7 @@ impl IndexScheduler {
                     match task.kind {
                         KindWithContent::SettingsUpdate {
                             ref new_settings, is_deletion, ..
-                        } => settings.push((is_deletion, new_settings.clone())),
+                        } => settings.push((is_deletion, *new_settings.clone())),
                         _ => unreachable!(),
                     }
                 }
@@ -424,7 +424,7 @@ impl IndexScheduler {
             // AT LEAST one index. We can use the right or left one it doesn't
             // matter.
             let index_name = task.indexes().unwrap()[0];
-            let index_already_exists = self.index_mapper.exists(rtxn, &index_name)?;
+            let index_already_exists = self.index_mapper.exists(rtxn, index_name)?;
 
             let index_tasks = self.index_tasks(rtxn, index_name)? & enqueued;
 
@@ -550,7 +550,7 @@ impl IndexScheduler {
                 } else {
                     unreachable!();
                 };
-                let dump = dump::DumpWriter::new(instance_uid.clone())?;
+                let dump = dump::DumpWriter::new(*instance_uid)?;
 
                 // 1. dump the keys
                 let mut dump_keys = dump.create_keys()?;
@@ -566,7 +566,7 @@ impl IndexScheduler {
                 for ret in self.all_tasks.iter(&rtxn)? {
                     let (_, mut t) = ret?;
                     let status = t.status;
-                    let content_file = t.content_uuid().map(|uuid| uuid.clone());
+                    let content_file = t.content_uuid().copied();
 
                     // In the case we're dumping ourselves we want to be marked as finished
                     // to not loop over ourselves indefinitely.
@@ -745,11 +745,11 @@ impl IndexScheduler {
     /// Swap the index `lhs` with the index `rhs`.
     fn apply_index_swap(&self, wtxn: &mut RwTxn, task_id: u32, lhs: &str, rhs: &str) -> Result<()> {
         // 1. Verify that both lhs and rhs are existing indexes
-        let index_lhs_exists = self.index_mapper.index_exists(&wtxn, lhs)?;
+        let index_lhs_exists = self.index_mapper.index_exists(wtxn, lhs)?;
         if !index_lhs_exists {
             return Err(Error::IndexNotFound(lhs.to_owned()));
         }
-        let index_rhs_exists = self.index_mapper.index_exists(&wtxn, rhs)?;
+        let index_rhs_exists = self.index_mapper.index_exists(wtxn, rhs)?;
         if !index_rhs_exists {
             return Err(Error::IndexNotFound(rhs.to_owned()));
         }
@@ -764,7 +764,7 @@ impl IndexScheduler {
 
         // 3. before_name -> new_name in the task's KindWithContent
         for task_id in &index_lhs_task_ids | &index_rhs_task_ids {
-            let mut task = self.get_task(&wtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
+            let mut task = self.get_task(wtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
             swap_index_uid_in_task(&mut task, (lhs, rhs));
             self.all_tasks.put(wtxn, &BEU32::new(task_id), &task)?;
         }
@@ -934,7 +934,7 @@ impl IndexScheduler {
                 // TODO merge the settings to only do *one* reindexation.
                 for (task, (_, settings)) in tasks.iter_mut().zip(settings) {
                     let checked_settings = settings.clone().check();
-                    task.details = Some(Details::SettingsUpdate { settings });
+                    task.details = Some(Details::SettingsUpdate { settings: Box::new(settings) });
 
                     let mut builder =
                         milli::update::Settings::new(index_wtxn, index, indexer_config);
@@ -1023,7 +1023,7 @@ impl IndexScheduler {
         let enqueued_tasks = self.get_status(wtxn, Status::Enqueued)?;
         let processing_tasks = &self.processing_tasks.read().unwrap().processing.clone();
 
-        let all_task_ids = self.all_task_ids(&wtxn)?;
+        let all_task_ids = self.all_task_ids(wtxn)?;
         let mut to_delete_tasks = all_task_ids & matched_tasks;
         to_delete_tasks -= processing_tasks;
         to_delete_tasks -= enqueued_tasks;

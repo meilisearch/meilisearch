@@ -87,21 +87,20 @@ pub fn create_app(
         .configure(|s| dashboard(s, enable_dashboard));
     #[cfg(feature = "metrics")]
     let app = app.configure(|s| configure_metrics_route(s, opt.enable_metrics_route));
-    let app = app
-        .wrap(
-            Cors::default()
-                .send_wildcard()
-                .allow_any_header()
-                .allow_any_origin()
-                .allow_any_method()
-                .max_age(86_400), // 24h
-        )
-        .wrap(middleware::Logger::default())
-        .wrap(middleware::Compress::default())
-        .wrap(middleware::NormalizePath::new(middleware::TrailingSlash::Trim));
+
     #[cfg(feature = "metrics")]
     let app = app.wrap(Condition::new(opt.enable_metrics_route, route_metrics::RouteMetrics));
-    app
+    app.wrap(
+        Cors::default()
+            .send_wildcard()
+            .allow_any_header()
+            .allow_any_origin()
+            .allow_any_method()
+            .max_age(86_400), // 24h
+    )
+    .wrap(middleware::Logger::default())
+    .wrap(middleware::Compress::default())
+    .wrap(middleware::NormalizePath::new(middleware::TrailingSlash::Trim))
 }
 
 // TODO: TAMO: Finish setting up things
@@ -148,7 +147,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
                 Ok(()) => (index_scheduler, auth_controller),
                 Err(e) => {
                     std::fs::remove_dir_all(&opt.db_path)?;
-                    return Err(e.into());
+                    return Err(e);
                 }
             }
         } else if !empty_db && !opt.ignore_dump_if_db_exists {
@@ -164,7 +163,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
                 Ok(()) => (index_scheduler, auth_controller),
                 Err(e) => {
                     std::fs::remove_dir_all(&opt.db_path)?;
-                    return Err(e.into());
+                    return Err(e);
                 }
             }
         }
@@ -232,7 +231,7 @@ fn import_dump(
         keys.push(key);
     }
 
-    let indexer_config = index_scheduler.indexer_config().clone();
+    let indexer_config = index_scheduler.indexer_config();
 
     // /!\ The tasks must be imported AFTER importing the indexes or else the scheduler might
     // try to process tasks while we're trying to import the indexes.

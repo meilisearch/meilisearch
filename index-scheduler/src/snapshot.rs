@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, RoTxn};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
@@ -96,8 +98,8 @@ fn snapshot_bitmap(r: &RoaringBitmap) -> String {
 
 fn snapshot_all_tasks(rtxn: &RoTxn, db: Database<OwnedType<BEU32>, SerdeJson<Task>>) -> String {
     let mut snap = String::new();
-    let mut iter = db.iter(rtxn).unwrap();
-    while let Some(next) = iter.next() {
+    let iter = db.iter(rtxn).unwrap();
+    for next in iter {
         let (task_id, task) = next.unwrap();
         snap.push_str(&format!("{task_id} {}\n", snapshot_task(&task)));
     }
@@ -109,8 +111,8 @@ fn snapshot_date_db(
     db: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
 ) -> String {
     let mut snap = String::new();
-    let mut iter = db.iter(rtxn).unwrap();
-    while let Some(next) = iter.next() {
+    let iter = db.iter(rtxn).unwrap();
+    for next in iter {
         let (_timestamp, task_ids) = next.unwrap();
         snap.push_str(&format!("[timestamp] {}\n", snapshot_bitmap(&task_ids)));
     }
@@ -191,31 +193,31 @@ fn snaphsot_details(d: &Details) -> String {
 
 fn snapshot_status(rtxn: &RoTxn, db: Database<SerdeBincode<Status>, RoaringBitmapCodec>) -> String {
     let mut snap = String::new();
-    let mut iter = db.iter(rtxn).unwrap();
-    while let Some(next) = iter.next() {
+    let iter = db.iter(rtxn).unwrap();
+    for next in iter {
         let (status, task_ids) = next.unwrap();
-        snap.push_str(&format!("{status} {}\n", snapshot_bitmap(&task_ids)));
+        write!(snap, "{status} {}\n", snapshot_bitmap(&task_ids)).unwrap();
     }
     snap
 }
 
 fn snapshot_kind(rtxn: &RoTxn, db: Database<SerdeBincode<Kind>, RoaringBitmapCodec>) -> String {
     let mut snap = String::new();
-    let mut iter = db.iter(rtxn).unwrap();
-    while let Some(next) = iter.next() {
+    let iter = db.iter(rtxn).unwrap();
+    for next in iter {
         let (kind, task_ids) = next.unwrap();
         let kind = serde_json::to_string(&kind).unwrap();
-        snap.push_str(&format!("{kind} {}\n", snapshot_bitmap(&task_ids)));
+        write!(snap, "{kind} {}\n", snapshot_bitmap(&task_ids)).unwrap();
     }
     snap
 }
 
 fn snapshot_index_tasks(rtxn: &RoTxn, db: Database<Str, RoaringBitmapCodec>) -> String {
     let mut snap = String::new();
-    let mut iter = db.iter(rtxn).unwrap();
-    while let Some(next) = iter.next() {
+    let iter = db.iter(rtxn).unwrap();
+    for next in iter {
         let (index, task_ids) = next.unwrap();
-        snap.push_str(&format!("{index} {}\n", snapshot_bitmap(&task_ids)));
+        write!(snap, "{index} {}\n", snapshot_bitmap(&task_ids)).unwrap();
     }
     snap
 }

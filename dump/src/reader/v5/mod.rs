@@ -138,10 +138,10 @@ impl V5Reader {
 
     pub fn indexes(&self) -> Result<impl Iterator<Item = Result<V5IndexReader>> + '_> {
         Ok(self.index_uuid.iter().map(|index| -> Result<_> {
-            Ok(V5IndexReader::new(
+            V5IndexReader::new(
                 index.uid.clone(),
                 &self.dump.path().join("indexes").join(index.index_meta.uuid.to_string()),
-            )?)
+            )
         }))
     }
 

@@ -6,7 +6,7 @@ use std::sync::Mutex;
 pub use insta;
 use once_cell::sync::Lazy;
 
-static SNAPSHOT_NAMES: Lazy<Mutex<HashMap<PathBuf, usize>>> = Lazy::new(|| Mutex::default());
+static SNAPSHOT_NAMES: Lazy<Mutex<HashMap<PathBuf, usize>>> = Lazy::new(Mutex::default);
 
 /// Return the md5 hash of the given string
 pub fn hash_snapshot(snap: &str) -> String {
@@ -25,7 +25,7 @@ pub fn default_snapshot_settings_for_test(name: Option<&str>) -> (insta::Setting
 
     let test_name = std::thread::current().name().unwrap().rsplit("::").next().unwrap().to_owned();
 
-    let path = Path::new("snapshots").join(filename).join(&test_name).to_owned();
+    let path = Path::new("snapshots").join(filename).join(&test_name);
     settings.set_snapshot_path(path.clone());
     let snap_name = if let Some(name) = name {
         Cow::Borrowed(name)
