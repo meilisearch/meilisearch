@@ -2,6 +2,7 @@ use actix_web as aweb;
 use aweb::error::{JsonPayloadError, QueryPayloadError};
 use meilisearch_types::document_formats::{DocumentFormatError, PayloadType};
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
+use meilisearch_types::index_uid::IndexUidFormatError;
 use serde_json::Value;
 use tokio::task::JoinError;
 
@@ -23,6 +24,8 @@ pub enum MeilisearchHttpError {
     MissingPayload(PayloadType),
     #[error("The provided payload reached the size limit.")]
     PayloadTooLarge,
+    #[error(transparent)]
+    IndexUid(#[from] IndexUidFormatError),
     #[error(transparent)]
     SerdeJson(#[from] serde_json::Error),
     #[error(transparent)]
@@ -50,6 +53,7 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::DocumentNotFound(_) => Code::DocumentNotFound,
             MeilisearchHttpError::InvalidExpression(_, _) => Code::Filter,
             MeilisearchHttpError::PayloadTooLarge => Code::PayloadTooLarge,
+            MeilisearchHttpError::IndexUid(e) => e.error_code(),
             MeilisearchHttpError::SerdeJson(_) => Code::Internal,
             MeilisearchHttpError::HeedError(_) => Code::Internal,
             MeilisearchHttpError::IndexScheduler(e) => e.error_code(),
