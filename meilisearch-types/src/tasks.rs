@@ -141,7 +141,7 @@ impl KindWithContent {
         match self {
             KindWithContent::DocumentAdditionOrUpdate { .. } => Kind::DocumentAdditionOrUpdate,
             KindWithContent::DocumentDeletion { .. } => Kind::DocumentDeletion,
-            KindWithContent::DocumentClear { .. } => Kind::DocumentClear,
+            KindWithContent::DocumentClear { .. } => Kind::DocumentDeletion,
             KindWithContent::SettingsUpdate { .. } => Kind::SettingsUpdate,
             KindWithContent::IndexCreation { .. } => Kind::IndexCreation,
             KindWithContent::IndexDeletion { .. } => Kind::IndexDeletion,
@@ -363,7 +363,6 @@ impl FromStr for Status {
 pub enum Kind {
     DocumentAdditionOrUpdate,
     DocumentDeletion,
-    DocumentClear,
     SettingsUpdate,
     IndexCreation,
     IndexDeletion,
