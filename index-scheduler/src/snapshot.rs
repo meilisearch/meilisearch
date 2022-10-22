@@ -196,7 +196,7 @@ fn snapshot_status(rtxn: &RoTxn, db: Database<SerdeBincode<Status>, RoaringBitma
     let iter = db.iter(rtxn).unwrap();
     for next in iter {
         let (status, task_ids) = next.unwrap();
-        write!(snap, "{status} {}\n", snapshot_bitmap(&task_ids)).unwrap();
+        writeln!(snap, "{status} {}", snapshot_bitmap(&task_ids)).unwrap();
     }
     snap
 }
@@ -207,7 +207,7 @@ fn snapshot_kind(rtxn: &RoTxn, db: Database<SerdeBincode<Kind>, RoaringBitmapCod
     for next in iter {
         let (kind, task_ids) = next.unwrap();
         let kind = serde_json::to_string(&kind).unwrap();
-        write!(snap, "{kind} {}\n", snapshot_bitmap(&task_ids)).unwrap();
+        writeln!(snap, "{kind} {}", snapshot_bitmap(&task_ids)).unwrap();
     }
     snap
 }
@@ -217,7 +217,7 @@ fn snapshot_index_tasks(rtxn: &RoTxn, db: Database<Str, RoaringBitmapCodec>) -> 
     let iter = db.iter(rtxn).unwrap();
     for next in iter {
         let (index, task_ids) = next.unwrap();
-        write!(snap, "{index} {}\n", snapshot_bitmap(&task_ids)).unwrap();
+        writeln!(snap, "{index} {}", snapshot_bitmap(&task_ids)).unwrap();
     }
     snap
 }
