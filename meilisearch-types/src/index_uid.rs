@@ -4,6 +4,8 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
+use crate::error::{Code, ErrorCode};
+
 /// An index uid is composed of only ascii alphanumeric characters, - and _, between 1 and 400
 /// bytes long
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -82,3 +84,9 @@ impl fmt::Display for IndexUidFormatError {
 }
 
 impl Error for IndexUidFormatError {}
+
+impl ErrorCode for IndexUidFormatError {
+    fn error_code(&self) -> Code {
+        Code::InvalidIndexUid
+    }
+}
