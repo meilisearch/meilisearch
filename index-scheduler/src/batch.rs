@@ -661,6 +661,9 @@ impl IndexScheduler {
             }
             Batch::IndexCreation { index_uid, primary_key, task } => {
                 let mut wtxn = self.env.write_txn()?;
+                if self.index_mapper.exists(&wtxn, &index_uid)? {
+                    return Err(Error::IndexAlreadyExists(index_uid));
+                }
                 self.index_mapper.create_index(&mut wtxn, &index_uid)?;
                 wtxn.commit()?;
 
