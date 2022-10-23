@@ -273,6 +273,7 @@ impl IndexScheduler {
         update_file_path: PathBuf,
         indexes_path: PathBuf,
         dumps_path: PathBuf,
+        task_db_size: usize,
         index_size: usize,
         indexer_config: IndexerConfig,
         autobatching_enabled: bool,
@@ -285,6 +286,7 @@ impl IndexScheduler {
 
         let mut options = heed::EnvOpenOptions::new();
         options.max_dbs(9);
+        options.map_size(task_db_size);
 
         let env = options.open(tasks_path)?;
         let file_store = FileStore::new(&update_file_path)?;
@@ -833,6 +835,7 @@ mod tests {
                 tempdir.path().join("file_store"),
                 tempdir.path().join("indexes"),
                 tempdir.path().join("dumps"),
+                1024 * 1024,
                 1024 * 1024,
                 IndexerConfig::default(),
                 autobatching, // enable autobatching
