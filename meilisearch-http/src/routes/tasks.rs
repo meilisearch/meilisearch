@@ -48,25 +48,13 @@ pub struct TaskView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<ResponseError>,
 
-    #[serde(
-        serialize_with = "serialize_duration",
-        skip_serializing_if = "Option::is_none",
-        default
-    )]
+    #[serde(serialize_with = "serialize_duration", default)]
     pub duration: Option<Duration>,
     #[serde(with = "time::serde::rfc3339")]
     pub enqueued_at: OffsetDateTime,
-    #[serde(
-        with = "time::serde::rfc3339::option",
-        skip_serializing_if = "Option::is_none",
-        default
-    )]
+    #[serde(with = "time::serde::rfc3339::option", default)]
     pub started_at: Option<OffsetDateTime>,
-    #[serde(
-        with = "time::serde::rfc3339::option",
-        skip_serializing_if = "Option::is_none",
-        default
-    )]
+    #[serde(with = "time::serde::rfc3339::option", default)]
     pub finished_at: Option<OffsetDateTime>,
 }
 
@@ -366,6 +354,14 @@ async fn delete_tasks(
     Ok(HttpResponse::Ok().json(task_view))
 }
 
+#[derive(Debug, Serialize)]
+pub struct AllTasks {
+    results: Vec<TaskView>,
+    limit: u32,
+    from: Option<u32>,
+    next: Option<u32>,
+}
+
 async fn get_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, Data<IndexScheduler>>,
     params: web::Query<TasksFilterQuery>,
@@ -439,14 +435,7 @@ async fn get_tasks(
 
     let from = tasks_results.first().map(|t| t.uid);
 
-    // TODO: TAMO: define a structure to represent this type
-    let tasks = json!({
-        "results": tasks_results,
-        "limit": limit.saturating_sub(1),
-        "from": from,
-        "next": next,
-    });
-
+    let tasks = AllTasks { results: tasks_results, limit: limit.saturating_sub(1), from, next };
     Ok(HttpResponse::Ok().json(tasks))
 }
 
