@@ -7,7 +7,7 @@ use meilisearch_lib::index::{Settings, Unchecked};
 use meilisearch_lib::tasks::task::{
     DocumentDeletion, Task, TaskContent, TaskEvent, TaskId, TaskResult,
 };
-use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use serde::{Deserialize, Serialize, Serializer};
 use time::{Duration, OffsetDateTime};
 
@@ -91,23 +91,22 @@ pub enum TaskStatus {
     Failed,
 }
 
-#[derive(Debug)]
-pub struct TaskStatusError {
-    invalid_status: String,
+#[derive(Debug, thiserror::Error)]
+pub enum TaskStatusError {
+    #[error(
+        "Task status `{0}` is invalid. Available task status are: \
+    enqueued, processing, succeeded, and failed."
+    )]
+    InvalidTaskStatus(String),
 }
 
-impl fmt::Display for TaskStatusError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "invalid task status `{}`, expecting one of: \
-            enqueued, processing, succeeded, or failed",
-            self.invalid_status,
-        )
+impl ErrorCode for TaskStatusError {
+    fn error_code(&self) -> Code {
+        match self {
+            TaskStatusError::InvalidTaskStatus(_) => Code::InvalidTaskStatus,
+        }
     }
 }
-
-impl Error for TaskStatusError {}
 
 impl FromStr for TaskStatus {
     type Err = TaskStatusError;
@@ -122,9 +121,7 @@ impl FromStr for TaskStatus {
         } else if status.eq_ignore_ascii_case("failed") {
             Ok(TaskStatus::Failed)
         } else {
-            Err(TaskStatusError {
-                invalid_status: status.to_string(),
-            })
+            Err(TaskStatusError::InvalidTaskStatus(status.to_string()))
         }
     }
 }
