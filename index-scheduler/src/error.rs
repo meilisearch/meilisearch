@@ -11,8 +11,6 @@ pub enum Error {
     IndexNotFound(String),
     #[error("Index `{0}` already exists.")]
     IndexAlreadyExists(String),
-    #[error("Corrupted task queue.")]
-    CorruptedTaskQueue,
     #[error("Corrupted dump.")]
     CorruptedDump,
     #[error("Task `{0}` not found.")]
@@ -29,7 +27,7 @@ pub enum Error {
     #[error(transparent)]
     Milli(#[from] milli::Error),
     #[error("An unexpected crash occurred when processing the task")]
-    MilliPanic,
+    ProcessBatchPanicked,
     #[error(transparent)]
     FileStore(#[from] file_store::Error),
     #[error(transparent)]
@@ -37,6 +35,16 @@ pub enum Error {
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
+
+    // Irrecoverable errors:
+    #[error(transparent)]
+    CreateBatch(Box<Self>),
+    #[error("Corrupted task queue.")]
+    CorruptedTaskQueue,
+    #[error(transparent)]
+    TaskDatabaseUpdate(Box<Self>),
+    #[error(transparent)]
+    HeedTransaction(heed::Error),
 }
 
 impl ErrorCode for Error {
@@ -50,7 +58,7 @@ impl ErrorCode for Error {
 
             Error::Dump(e) => e.error_code(),
             Error::Milli(e) => e.error_code(),
-            Error::MilliPanic => Code::Internal,
+            Error::ProcessBatchPanicked => Code::Internal,
             // TODO: TAMO: are all these errors really internal?
             Error::Heed(_) => Code::Internal,
             Error::FileStore(_) => Code::Internal,
@@ -58,6 +66,9 @@ impl ErrorCode for Error {
             Error::Anyhow(_) => Code::Internal,
             Error::CorruptedTaskQueue => Code::Internal,
             Error::CorruptedDump => Code::Internal,
+            Error::TaskDatabaseUpdate(_) => Code::Internal,
+            Error::CreateBatch(_) => Code::Internal,
+            Error::HeedTransaction(_) => Code::Internal,
         }
     }
 }
