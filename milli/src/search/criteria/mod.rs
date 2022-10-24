@@ -433,11 +433,6 @@ pub fn resolve_phrase(ctx: &dyn Context, phrase: &[String]) -> Result<RoaringBit
         let mut bitmaps = Vec::with_capacity(winsize.pow(2));
         for (offset, s1) in win.iter().enumerate() {
             for (dist, s2) in win.iter().skip(offset + 1).enumerate() {
-                // TODO: add proximity between identical words to the word
-                // pair proximity database
-                if s1 == s2 {
-                    continue;
-                }
                 if dist == 0 {
                     match ctx.word_pair_proximity_docids(s1, s2, 1)? {
                         Some(m) => bitmaps.push(m),
