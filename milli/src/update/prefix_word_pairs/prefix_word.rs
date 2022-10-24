@@ -83,7 +83,7 @@ pub fn index_prefix_word_database(
     let mut writer =
         create_writer(chunk_compression_type, chunk_compression_level, tempfile::tempfile()?);
 
-    for proximity in 1..=max_proximity - 1 {
+    for proximity in 1..max_proximity {
         for prefix in new_prefixes.iter() {
             let mut prefix_key = vec![];
             prefix_key.push(proximity);
