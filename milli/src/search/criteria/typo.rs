@@ -69,7 +69,7 @@ impl<'t> Criterion for Typo<'t> {
                     let fst = self.ctx.words_fst();
                     let new_query_tree = match self.typos {
                         typos if typos < MAX_TYPOS_PER_WORD => alterate_query_tree(
-                            &fst,
+                            fst,
                             query_tree.clone(),
                             self.typos,
                             params.wdcache,
@@ -78,7 +78,7 @@ impl<'t> Criterion for Typo<'t> {
                             // When typos >= MAX_TYPOS_PER_WORD, no more alteration of the query tree is possible,
                             // we keep the altered query tree
                             *query_tree = alterate_query_tree(
-                                &fst,
+                                fst,
                                 query_tree.clone(),
                                 self.typos,
                                 params.wdcache,
@@ -199,7 +199,7 @@ fn alterate_query_tree(
                 ops.iter_mut().try_for_each(|op| recurse(words_fst, op, number_typos, wdcache))
             }
             // Because Phrases don't allow typos, no alteration can be done.
-            Phrase(_words) => return Ok(()),
+            Phrase(_words) => Ok(()),
             Operation::Query(q) => {
                 if let QueryKind::Tolerant { typo, word } = &q.kind {
                     // if no typo is allowed we don't call word_derivations function,

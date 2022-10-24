@@ -44,7 +44,7 @@ impl<'a> Iterator for MatchesIter<'a, '_> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.inner.next() {
-            Some((matching_words, ids)) => match matching_words[0].match_token(&self.token) {
+            Some((matching_words, ids)) => match matching_words[0].match_token(self.token) {
                 Some(char_len) => {
                     if matching_words.len() > 1 {
                         Some(MatchType::Partial(PartialMatch {

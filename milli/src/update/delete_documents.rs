@@ -127,7 +127,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         // the `soft_deleted_documents_ids` bitmap and early exit.
         let size_used = self.index.used_size()?;
         let map_size = self.index.env.map_size()? as u64;
-        let nb_documents = self.index.number_of_documents(&self.wtxn)?;
+        let nb_documents = self.index.number_of_documents(self.wtxn)?;
         let nb_soft_deleted = soft_deleted_docids.len();
 
         let percentage_available = 100 - (size_used * 100 / map_size);
@@ -158,12 +158,11 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         // and we can reset the soft deleted bitmap
         self.index.put_soft_deleted_documents_ids(self.wtxn, &RoaringBitmap::new())?;
 
-        let primary_key = self.index.primary_key(self.wtxn)?.ok_or_else(|| {
-            InternalError::DatabaseMissingEntry {
+        let primary_key =
+            self.index.primary_key(self.wtxn)?.ok_or(InternalError::DatabaseMissingEntry {
                 db_name: db_name::MAIN,
                 key: Some(main_key::PRIMARY_KEY_KEY),
-            }
-        })?;
+            })?;
 
         // Since we already checked if the DB was empty, if we can't find the primary key, then
         // something is wrong, and we must return an error.
@@ -433,7 +432,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                 .map(|point| (point, point.data.0))
                 .unzip();
             points_to_remove.iter().for_each(|point| {
-                rtree.remove(&point);
+                rtree.remove(point);
             });
             geo_faceted_doc_ids -= docids_to_remove;
 
@@ -534,7 +533,7 @@ fn remove_from_word_docids(
     // We create an iterator to be able to get the content and delete the word docids.
     // It's faster to acquire a cursor to get and delete or put, as we avoid traversing
     // the LMDB B-Tree two times but only once.
-    let mut iter = db.prefix_iter_mut(txn, &word)?;
+    let mut iter = db.prefix_iter_mut(txn, word)?;
     if let Some((key, mut docids)) = iter.next().transpose()? {
         if key == word {
             let previous_len = docids.len();
@@ -597,7 +596,7 @@ fn remove_docids_from_facet_field_id_string_docids<'a, C, D>(
                 // level key. We must then parse the value using the appropriate codec.
                 let (group, mut docids) =
                     FacetStringZeroBoundsValueCodec::<CboRoaringBitmapCodec>::bytes_decode(val)
-                        .ok_or_else(|| SerializationError::Decoding { db_name })?;
+                        .ok_or(SerializationError::Decoding { db_name })?;
 
                 let previous_len = docids.len();
                 docids -= to_remove;
@@ -609,7 +608,7 @@ fn remove_docids_from_facet_field_id_string_docids<'a, C, D>(
                     let val = &(group, docids);
                     let value_bytes =
                         FacetStringZeroBoundsValueCodec::<CboRoaringBitmapCodec>::bytes_encode(val)
-                            .ok_or_else(|| SerializationError::Encoding { db_name })?;
+                            .ok_or(SerializationError::Encoding { db_name })?;
 
                     // safety: we don't keep references from inside the LMDB database.
                     unsafe { iter.put_current(&key, &value_bytes)? };
@@ -619,7 +618,7 @@ fn remove_docids_from_facet_field_id_string_docids<'a, C, D>(
                 // The key corresponds to a level zero facet string.
                 let (original_value, mut docids) =
                     FacetStringLevelZeroValueCodec::bytes_decode(val)
-                        .ok_or_else(|| SerializationError::Decoding { db_name })?;
+                        .ok_or(SerializationError::Decoding { db_name })?;
 
                 let previous_len = docids.len();
                 docids -= to_remove;
@@ -630,7 +629,7 @@ fn remove_docids_from_facet_field_id_string_docids<'a, C, D>(
                     let key = key.to_owned();
                     let val = &(original_value, docids);
                     let value_bytes = FacetStringLevelZeroValueCodec::bytes_encode(val)
-                        .ok_or_else(|| SerializationError::Encoding { db_name })?;
+                        .ok_or(SerializationError::Encoding { db_name })?;
 
                     // safety: we don't keep references from inside the LMDB database.
                     unsafe { iter.put_current(&key, &value_bytes)? };

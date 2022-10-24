@@ -99,7 +99,7 @@ impl<'t> Criterion for Proximity<'t> {
                         // use set theory based algorithm
                         resolve_candidates(
                             self.ctx,
-                            &query_tree,
+                            query_tree,
                             self.proximity,
                             &mut self.candidates_cache,
                             params.wdcache,
@@ -194,7 +194,7 @@ fn resolve_candidates<'t>(
                         .map(|w| Query { prefix: false, kind: QueryKind::exact(w.clone()) });
 
                     match (most_left, most_right) {
-                        (Some(l), Some(r)) => vec![(l, r, resolve_phrase(ctx, &words)?)],
+                        (Some(l), Some(r)) => vec![(l, r, resolve_phrase(ctx, words)?)],
                         _otherwise => Default::default(),
                     }
                 } else {
@@ -496,7 +496,7 @@ fn resolve_plane_sweep_candidates(
                 match kind {
                     QueryKind::Exact { word, .. } => {
                         if *prefix {
-                            let iter = word_derivations(word, true, 0, &words_positions)
+                            let iter = word_derivations(word, true, 0, words_positions)
                                 .flat_map(|positions| positions.iter().map(|p| (p, 0, p)));
                             result.extend(iter);
                         } else if let Some(positions) = words_positions.get(word) {
@@ -504,7 +504,7 @@ fn resolve_plane_sweep_candidates(
                         }
                     }
                     QueryKind::Tolerant { typo, word } => {
-                        let iter = word_derivations(word, *prefix, *typo, &words_positions)
+                        let iter = word_derivations(word, *prefix, *typo, words_positions)
                             .flat_map(|positions| positions.iter().map(|p| (p, 0, p)));
                         result.extend(iter);
                     }

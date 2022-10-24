@@ -65,7 +65,7 @@ impl FieldsIdsMap {
     }
 
     /// Iterate over the ids in the order of the ids.
-    pub fn ids<'a>(&'a self) -> impl Iterator<Item = FieldId> + 'a {
+    pub fn ids(&'_ self) -> impl Iterator<Item = FieldId> + '_ {
         self.ids_names.keys().copied()
     }
 

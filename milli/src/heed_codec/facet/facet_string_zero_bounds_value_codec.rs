@@ -66,14 +66,14 @@ where
                 bytes.extend_from_slice(left.as_bytes());
                 bytes.extend_from_slice(right.as_bytes());
 
-                let value_bytes = C::bytes_encode(&value)?;
+                let value_bytes = C::bytes_encode(value)?;
                 bytes.extend_from_slice(&value_bytes[..]);
 
                 Some(Cow::Owned(bytes))
             }
             None => {
                 bytes.push(0);
-                let value_bytes = C::bytes_encode(&value)?;
+                let value_bytes = C::bytes_encode(value)?;
                 bytes.extend_from_slice(&value_bytes[..]);
                 Some(Cow::Owned(bytes))
             }

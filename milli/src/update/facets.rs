@@ -262,8 +262,8 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
 /// 1. a vector of grenad::Reader. The reader at index `i` corresponds to the elements of level `i + 1`
 /// that must be inserted into the database.
 /// 2. a roaring bitmap of all the document ids present in the database
-fn compute_facet_number_levels<'t>(
-    rtxn: &'t heed::RoTxn,
+fn compute_facet_number_levels(
+    rtxn: &'_ heed::RoTxn,
     db: heed::Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
     compression_type: CompressionType,
     compression_level: Option<u32>,
@@ -496,7 +496,7 @@ where
             bitmaps.clear();
         }
         // level 0 is already stored in the DB
-        return Ok(vec![]);
+        Ok(vec![])
     } else {
         // level >= 1
         // we compute each element of this level based on the elements of the level below it
@@ -562,7 +562,7 @@ where
         }
 
         sub_writers.push(writer_into_reader(cur_writer)?);
-        return Ok(sub_writers);
+        Ok(sub_writers)
     }
 }
 
@@ -598,7 +598,7 @@ fn write_number_entry(
 ) -> Result<()> {
     let key = (field_id, level, left, right);
     let key = FacetLevelValueF64Codec::bytes_encode(&key).ok_or(Error::Encoding)?;
-    let data = CboRoaringBitmapCodec::bytes_encode(&ids).ok_or(Error::Encoding)?;
+    let data = CboRoaringBitmapCodec::bytes_encode(ids).ok_or(Error::Encoding)?;
     writer.insert(&key, &data)?;
     Ok(())
 }
