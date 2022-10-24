@@ -114,19 +114,7 @@ impl IndexScheduler {
     }
 
     pub(crate) fn get_status(&self, rtxn: &RoTxn, status: Status) -> Result<RoaringBitmap> {
-        match status {
-            Status::Processing => {
-                let tasks = self
-                    .processing_tasks
-                    .read()
-                    .map_err(|_| Error::CorruptedTaskQueue)?
-                    .processing
-                    .clone();
-
-                Ok(tasks)
-            }
-            status => Ok(self.status.get(rtxn, &status)?.unwrap_or_default()),
-        }
+        Ok(self.status.get(rtxn, &status)?.unwrap_or_default())
     }
 
     pub(crate) fn put_status(
