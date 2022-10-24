@@ -1373,12 +1373,20 @@ mod tests {
 
         for task in to_enqueue {
             let _ = index_scheduler.register(task).unwrap();
+            index_scheduler.assert_internally_consistent();
         }
 
         handle.wait_till(Breakpoint::AfterProcessing);
+        index_scheduler.assert_internally_consistent();
+
         handle.wait_till(Breakpoint::AfterProcessing);
+        index_scheduler.assert_internally_consistent();
+
         handle.wait_till(Breakpoint::AfterProcessing);
+        index_scheduler.assert_internally_consistent();
+
         handle.wait_till(Breakpoint::AfterProcessing);
+        index_scheduler.assert_internally_consistent();
 
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_tasks_processed");
 
@@ -1387,14 +1395,19 @@ mod tests {
                 swaps: vec![("a".to_owned(), "b".to_owned()), ("c".to_owned(), "d".to_owned())],
             })
             .unwrap();
+        index_scheduler.assert_internally_consistent();
 
         handle.wait_till(Breakpoint::AfterProcessing);
+        index_scheduler.assert_internally_consistent();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "first_swap_processed");
 
         index_scheduler
             .register(KindWithContent::IndexSwap { swaps: vec![("a".to_owned(), "c".to_owned())] })
             .unwrap();
+        index_scheduler.assert_internally_consistent();
+
         handle.wait_till(Breakpoint::AfterProcessing);
+        index_scheduler.assert_internally_consistent();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_swap_processed");
     }
 
