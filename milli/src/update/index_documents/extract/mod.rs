@@ -96,7 +96,7 @@ pub(crate) fn data_from_obkv_documents(
 
     spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
         docid_word_positions_chunks.clone(),
-        indexer.clone(),
+        indexer,
         lmdb_writer_sx.clone(),
         extract_word_pair_proximity_docids,
         merge_cbo_roaring_bitmaps,
@@ -106,7 +106,7 @@ pub(crate) fn data_from_obkv_documents(
 
     spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
         docid_word_positions_chunks.clone(),
-        indexer.clone(),
+        indexer,
         lmdb_writer_sx.clone(),
         extract_fid_word_count_docids,
         merge_cbo_roaring_bitmaps,
@@ -116,7 +116,7 @@ pub(crate) fn data_from_obkv_documents(
 
     spawn_extraction_task::<_, _, Vec<(grenad::Reader<File>, grenad::Reader<File>)>>(
         docid_word_positions_chunks.clone(),
-        indexer.clone(),
+        indexer,
         lmdb_writer_sx.clone(),
         move |doc_word_pos, indexer| extract_word_docids(doc_word_pos, indexer, &exact_attributes),
         merge_roaring_bitmaps,
@@ -128,8 +128,8 @@ pub(crate) fn data_from_obkv_documents(
     );
 
     spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
-        docid_word_positions_chunks.clone(),
-        indexer.clone(),
+        docid_word_positions_chunks,
+        indexer,
         lmdb_writer_sx.clone(),
         extract_word_position_docids,
         merge_cbo_roaring_bitmaps,
@@ -138,8 +138,8 @@ pub(crate) fn data_from_obkv_documents(
     );
 
     spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
-        docid_fid_facet_strings_chunks.clone(),
-        indexer.clone(),
+        docid_fid_facet_strings_chunks,
+        indexer,
         lmdb_writer_sx.clone(),
         extract_facet_string_docids,
         keep_first_prefix_value_merge_roaring_bitmaps,
@@ -148,8 +148,8 @@ pub(crate) fn data_from_obkv_documents(
     );
 
     spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
-        docid_fid_facet_numbers_chunks.clone(),
-        indexer.clone(),
+        docid_fid_facet_numbers_chunks,
+        indexer,
         lmdb_writer_sx.clone(),
         extract_facet_number_docids,
         merge_cbo_roaring_bitmaps,
@@ -183,12 +183,12 @@ fn spawn_extraction_task<FE, FS, M>(
 {
     rayon::spawn(move || {
         let chunks: Result<M> =
-            chunks.into_par_iter().map(|chunk| extract_fn(chunk, indexer.clone())).collect();
+            chunks.into_par_iter().map(|chunk| extract_fn(chunk, indexer)).collect();
         rayon::spawn(move || match chunks {
             Ok(chunks) => {
                 debug!("merge {} database", name);
                 let reader = chunks.merge(merge_fn, &indexer);
-                let _ = lmdb_writer_sx.send(reader.map(|r| serialize_fn(r)));
+                let _ = lmdb_writer_sx.send(reader.map(serialize_fn));
             }
             Err(e) => {
                 let _ = lmdb_writer_sx.send(Err(e));
@@ -255,7 +255,7 @@ fn send_and_extract_flattened_documents_data(
             || {
                 let (documents_ids, docid_word_positions_chunk) = extract_docid_word_positions(
                     flattened_documents_chunk.clone(),
-                    indexer.clone(),
+                    indexer,
                     searchable_fields,
                     stop_words.as_ref(),
                     max_positions_per_attributes,
@@ -279,7 +279,7 @@ fn send_and_extract_flattened_documents_data(
                     fid_facet_exists_docids_chunk,
                 ) = extract_fid_docid_facet_values(
                     flattened_documents_chunk.clone(),
-                    indexer.clone(),
+                    indexer,
                     faceted_fields,
                 )?;
 

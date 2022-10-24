@@ -42,7 +42,7 @@ impl<'t, 'u, 'i> WordsPrefixesFst<'t, 'u, 'i> {
 
     #[logging_timer::time("WordsPrefixesFst::{}")]
     pub fn execute(self) -> Result<()> {
-        let words_fst = self.index.words_fst(&self.wtxn)?;
+        let words_fst = self.index.words_fst(self.wtxn)?;
 
         let mut current_prefix = vec![SmallString32::new(); self.max_prefix_length];
         let mut current_prefix_count = vec![0; self.max_prefix_length];

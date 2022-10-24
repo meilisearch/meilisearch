@@ -7,9 +7,9 @@ use serde::Serialize;
 
 pub mod matching_words;
 
-const DEFAULT_CROP_MARKER: &'static str = "…";
-const DEFAULT_HIGHLIGHT_PREFIX: &'static str = "<em>";
-const DEFAULT_HIGHLIGHT_SUFFIX: &'static str = "</em>";
+const DEFAULT_CROP_MARKER: &str = "…";
+const DEFAULT_HIGHLIGHT_PREFIX: &str = "<em>";
+const DEFAULT_HIGHLIGHT_SUFFIX: &str = "</em>";
 
 /// Structure used to build a Matcher allowing to customize formating tags.
 pub struct MatcherBuilder<'a, A> {

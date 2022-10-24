@@ -61,12 +61,12 @@ impl<'t, 'u, 'i> WordPrefixDocids<'t, 'u, 'i> {
             let mut prefixes_cache = HashMap::new();
             while let Some((word, data)) = new_word_docids_iter.move_on_next()? {
                 current_prefixes = match current_prefixes.take() {
-                    Some(prefixes) if word.starts_with(&prefixes[0].as_bytes()) => Some(prefixes),
+                    Some(prefixes) if word.starts_with(prefixes[0].as_bytes()) => Some(prefixes),
                     _otherwise => {
                         write_prefixes_in_sorter(&mut prefixes_cache, &mut prefix_docids_sorter)?;
                         common_prefix_fst_words
                             .iter()
-                            .find(|prefixes| word.starts_with(&prefixes[0].as_bytes()))
+                            .find(|prefixes| word.starts_with(prefixes[0].as_bytes()))
                     }
                 };
 

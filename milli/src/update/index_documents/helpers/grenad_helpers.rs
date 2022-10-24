@@ -61,7 +61,7 @@ pub fn sorter_into_reader(
     );
     sorter.write_into_stream_writer(&mut writer)?;
 
-    Ok(writer_into_reader(writer)?)
+    writer_into_reader(writer)
 }
 
 pub fn writer_into_reader(writer: grenad::Writer<File>) -> Result<grenad::Reader<File>> {
@@ -134,7 +134,7 @@ impl<R: io::Read + io::Seek> MergerBuilder<R> {
         );
         merger.write_into_stream_writer(&mut writer)?;
 
-        Ok(writer_into_reader(writer)?)
+        writer_into_reader(writer)
     }
 }
 
@@ -180,7 +180,6 @@ pub fn grenad_obkv_into_chunks<R: io::Read + io::Seek>(
     let mut continue_reading = true;
     let mut cursor = reader.into_cursor()?;
 
-    let indexer_clone = indexer.clone();
     let mut transposer = move || {
         if !continue_reading {
             return Ok(None);
@@ -188,8 +187,8 @@ pub fn grenad_obkv_into_chunks<R: io::Read + io::Seek>(
 
         let mut current_chunk_size = 0u64;
         let mut obkv_documents = create_writer(
-            indexer_clone.chunk_compression_type,
-            indexer_clone.chunk_compression_level,
+            indexer.chunk_compression_type,
+            indexer.chunk_compression_level,
             tempfile::tempfile()?,
         );
 
@@ -224,7 +223,7 @@ pub fn write_into_lmdb_database(
         match iter.next().transpose()? {
             Some((key, old_val)) if key == k => {
                 let vals = &[Cow::Borrowed(old_val), Cow::Borrowed(v)][..];
-                let val = merge(k, &vals)?;
+                let val = merge(k, vals)?;
                 // safety: we don't keep references from inside the LMDB database.
                 unsafe { iter.put_current(k, &val)? };
             }

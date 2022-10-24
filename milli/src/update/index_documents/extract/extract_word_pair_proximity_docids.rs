@@ -39,7 +39,7 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
     let mut cursor = docid_word_positions.into_cursor()?;
     while let Some((key, value)) = cursor.move_on_next()? {
         let (document_id_bytes, word_bytes) = try_split_array_at(key)
-            .ok_or_else(|| SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
+            .ok_or(SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
         let document_id = u32::from_be_bytes(document_id_bytes);
         let word = str::from_utf8(word_bytes)?;
 
@@ -81,7 +81,7 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
 ///
 /// This list is used by the engine to calculate the documents containing words that are
 /// close to each other.
-fn document_word_positions_into_sorter<'b>(
+fn document_word_positions_into_sorter(
     document_id: DocumentId,
     mut word_positions_heap: BinaryHeap<PeekedWordPosition<vec::IntoIter<u32>>>,
     word_pair_proximity_docids_sorter: &mut grenad::Sorter<MergeFn>,

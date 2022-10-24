@@ -15,7 +15,7 @@ use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{ClearDocuments, IndexDocuments, UpdateIndexingStep};
 use crate::{FieldsIdsMap, Index, Result};
 
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum Setting<T> {
     Set(T),
     Reset,
@@ -273,24 +273,21 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
         // if the settings are set before any document update, we don't need to do anything, and
         // will set the primary key during the first document addition.
-        if self.index.number_of_documents(&self.wtxn)? == 0 {
+        if self.index.number_of_documents(self.wtxn)? == 0 {
             return Ok(());
         }
 
         let transform = Transform::new(
             self.wtxn,
-            &self.index,
-            &self.indexer_config,
+            self.index,
+            self.indexer_config,
             IndexDocumentsMethod::ReplaceDocuments,
             false,
         )?;
 
         // We remap the documents fields based on the new `FieldsIdsMap`.
-        let output = transform.remap_index_documents(
-            self.wtxn,
-            old_fields_ids_map,
-            fields_ids_map.clone(),
-        )?;
+        let output =
+            transform.remap_index_documents(self.wtxn, old_fields_ids_map, fields_ids_map)?;
 
         let new_facets = output.compute_real_facets(self.wtxn, self.index)?;
         self.index.put_faceted_fields(self.wtxn, &new_facets)?;
@@ -303,7 +300,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         let indexing_builder = IndexDocuments::new(
             self.wtxn,
             self.index,
-            &self.indexer_config,
+            self.indexer_config,
             IndexDocumentsConfig::default(),
             &cb,
         )?;
@@ -330,7 +327,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_distinct_field(&mut self) -> Result<bool> {
         match self.distinct_field {
             Setting::Set(ref attr) => {
-                self.index.put_distinct_field(self.wtxn, &attr)?;
+                self.index.put_distinct_field(self.wtxn, attr)?;
             }
             Setting::Reset => {
                 self.index.delete_distinct_field(self.wtxn)?;
@@ -356,11 +353,11 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 // Add all the searchable attributes to the field map, and then add the
                 // remaining fields from the old field map to the new one
                 for name in names.iter() {
-                    new_fields_ids_map.insert(&name).ok_or(UserError::AttributeLimitReached)?;
+                    new_fields_ids_map.insert(name).ok_or(UserError::AttributeLimitReached)?;
                 }
 
                 for (_, name) in old_fields_ids_map.iter() {
-                    new_fields_ids_map.insert(&name).ok_or(UserError::AttributeLimitReached)?;
+                    new_fields_ids_map.insert(name).ok_or(UserError::AttributeLimitReached)?;
                 }
 
                 self.index.put_all_searchable_fields_from_fields_ids_map(
@@ -462,11 +459,11 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         match self.exact_attributes {
             Setting::Set(ref attrs) => {
                 let attrs = attrs.iter().map(String::as_str).collect::<Vec<_>>();
-                self.index.put_exact_attributes(&mut self.wtxn, &attrs)?;
+                self.index.put_exact_attributes(self.wtxn, &attrs)?;
                 Ok(true)
             }
             Setting::Reset => {
-                self.index.delete_exact_attributes(&mut self.wtxn)?;
+                self.index.delete_exact_attributes(self.wtxn)?;
                 Ok(true)
             }
             Setting::NotSet => Ok(false),
@@ -528,7 +525,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_primary_key(&mut self) -> Result<()> {
         match self.primary_key {
             Setting::Set(ref primary_key) => {
-                if self.index.number_of_documents(&self.wtxn)? == 0 {
+                if self.index.number_of_documents(self.wtxn)? == 0 {
                     let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
                     fields_ids_map.insert(primary_key).ok_or(UserError::AttributeLimitReached)?;
                     self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
@@ -540,7 +537,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 }
             }
             Setting::Reset => {
-                if self.index.number_of_documents(&self.wtxn)? == 0 {
+                if self.index.number_of_documents(self.wtxn)? == 0 {
                     self.index.delete_primary_key(self.wtxn)?;
                     Ok(())
                 } else {
@@ -574,24 +571,24 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 if one > two {
                     return Err(UserError::InvalidMinTypoWordLenSetting(one, two).into());
                 } else {
-                    self.index.put_min_word_len_one_typo(&mut self.wtxn, one)?;
-                    self.index.put_min_word_len_two_typos(&mut self.wtxn, two)?;
+                    self.index.put_min_word_len_one_typo(self.wtxn, one)?;
+                    self.index.put_min_word_len_two_typos(self.wtxn, two)?;
                 }
             }
             (Setting::Set(one), _) => {
-                let two = self.index.min_word_len_two_typos(&self.wtxn)?;
+                let two = self.index.min_word_len_two_typos(self.wtxn)?;
                 if one > two {
                     return Err(UserError::InvalidMinTypoWordLenSetting(one, two).into());
                 } else {
-                    self.index.put_min_word_len_one_typo(&mut self.wtxn, one)?;
+                    self.index.put_min_word_len_one_typo(self.wtxn, one)?;
                 }
             }
             (_, Setting::Set(two)) => {
-                let one = self.index.min_word_len_one_typo(&self.wtxn)?;
+                let one = self.index.min_word_len_one_typo(self.wtxn)?;
                 if one > two {
                     return Err(UserError::InvalidMinTypoWordLenSetting(one, two).into());
                 } else {
-                    self.index.put_min_word_len_two_typos(&mut self.wtxn, two)?;
+                    self.index.put_min_word_len_two_typos(self.wtxn, two)?;
                 }
             }
             _ => (),
@@ -621,10 +618,10 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 words.sort_unstable();
 
                 let words = fst::Set::from_iter(words.iter())?;
-                self.index.put_exact_words(&mut self.wtxn, &words)?;
+                self.index.put_exact_words(self.wtxn, &words)?;
             }
             Setting::Reset => {
-                self.index.put_exact_words(&mut self.wtxn, &fst::Set::default())?;
+                self.index.put_exact_words(self.wtxn, &fst::Set::default())?;
             }
             Setting::NotSet => (),
         }
@@ -635,10 +632,10 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_max_values_per_facet(&mut self) -> Result<()> {
         match self.max_values_per_facet {
             Setting::Set(max) => {
-                self.index.put_max_values_per_facet(&mut self.wtxn, max)?;
+                self.index.put_max_values_per_facet(self.wtxn, max)?;
             }
             Setting::Reset => {
-                self.index.delete_max_values_per_facet(&mut self.wtxn)?;
+                self.index.delete_max_values_per_facet(self.wtxn)?;
             }
             Setting::NotSet => (),
         }
@@ -649,10 +646,10 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_pagination_max_total_hits(&mut self) -> Result<()> {
         match self.pagination_max_total_hits {
             Setting::Set(max) => {
-                self.index.put_pagination_max_total_hits(&mut self.wtxn, max)?;
+                self.index.put_pagination_max_total_hits(self.wtxn, max)?;
             }
             Setting::Reset => {
-                self.index.delete_pagination_max_total_hits(&mut self.wtxn)?;
+                self.index.delete_pagination_max_total_hits(self.wtxn)?;
             }
             Setting::NotSet => (),
         }
@@ -666,8 +663,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     {
         self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
-        let old_faceted_fields = self.index.user_defined_faceted_fields(&self.wtxn)?;
-        let old_fields_ids_map = self.index.fields_ids_map(&self.wtxn)?;
+        let old_faceted_fields = self.index.user_defined_faceted_fields(self.wtxn)?;
+        let old_fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
 
         self.update_displayed()?;
         self.update_filterable()?;
@@ -684,7 +681,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         // If there is new faceted fields we indicate that we must reindex as we must
         // index new fields as facets. It means that the distinct attribute,
         // an Asc/Desc criterion or a filtered attribute as be added or removed.
-        let new_faceted_fields = self.index.user_defined_faceted_fields(&self.wtxn)?;
+        let new_faceted_fields = self.index.user_defined_faceted_fields(self.wtxn)?;
         let faceted_updated = old_faceted_fields != new_faceted_fields;
 
         let stop_words_updated = self.update_stop_words()?;

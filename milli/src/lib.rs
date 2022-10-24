@@ -195,7 +195,7 @@ pub fn lat_lng_to_xyz(coord: &[f64; 2]) -> [f64; 3] {
 /// Returns `true` if the field match one of the faceted fields.
 /// See the function [`is_faceted_by`] below to see what “matching” means.
 pub fn is_faceted(field: &str, faceted_fields: impl IntoIterator<Item = impl AsRef<str>>) -> bool {
-    faceted_fields.into_iter().find(|facet| is_faceted_by(field, facet.as_ref())).is_some()
+    faceted_fields.into_iter().any(|facet| is_faceted_by(field, facet.as_ref()))
 }
 
 /// Returns `true` if the field match the facet.
