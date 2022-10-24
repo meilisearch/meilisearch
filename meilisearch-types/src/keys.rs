@@ -270,6 +270,7 @@ impl Action {
             INDEXES_GET => Some(Self::IndexesGet),
             INDEXES_UPDATE => Some(Self::IndexesUpdate),
             INDEXES_DELETE => Some(Self::IndexesDelete),
+            INDEXES_SWAP => Some(Self::IndexesSwap),
             TASKS_ALL => Some(Self::TasksAll),
             TASKS_CANCEL => Some(Self::TasksCancel),
             TASKS_DELETE => Some(Self::TasksDelete),
