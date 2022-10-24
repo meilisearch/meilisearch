@@ -236,7 +236,7 @@ pub(crate) fn keep_tasks_within_datetimes(
 }
 
 // TODO: remove when Bound::map ( https://github.com/rust-lang/rust/issues/86026 ) is available on stable
-fn map_bound<T, U>(bound: Bound<T>, map: impl FnOnce(T) -> U) -> Bound<U> {
+pub(crate) fn map_bound<T, U>(bound: Bound<T>, map: impl FnOnce(T) -> U) -> Bound<U> {
     match bound {
         Bound::Included(x) => Bound::Included(map(x)),
         Bound::Excluded(x) => Bound::Excluded(map(x)),
