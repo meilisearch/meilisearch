@@ -109,7 +109,7 @@ pub struct SearchResult {
     pub facet_distribution: Option<BTreeMap<String, BTreeMap<String, u64>>>,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum HitsInfo {
     #[serde(rename_all = "camelCase")]
@@ -296,7 +296,7 @@ impl Index {
                 .unwrap_or(0);
 
             HitsInfo::Pagination {
-                hits_per_page: hits_per_page,
+                hits_per_page,
                 page: query.page.unwrap_or(1),
                 total_pages,
                 total_hits: number_of_hits,

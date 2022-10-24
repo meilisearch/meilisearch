@@ -80,7 +80,7 @@ impl TaskEvent {
 /// It's stored on disk and executed from the lowest to highest Task id.
 /// Every time a new task is created it has a higher Task id than the previous one.
 /// See also `Job`.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Task {
     pub id: TaskId,
@@ -135,7 +135,7 @@ pub enum DocumentDeletion {
     Ids(Vec<String>),
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[allow(clippy::large_enum_variant)]
 pub enum TaskContent {
