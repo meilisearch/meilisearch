@@ -5,7 +5,7 @@ use std::ops::Bound;
 use meilisearch_types::heed::types::{DecodeIgnore, OwnedType};
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, BEU32};
-use meilisearch_types::tasks::{Kind, KindWithContent, Status};
+use meilisearch_types::tasks::{Details, Kind, KindWithContent, Status};
 use roaring::{MultiOps, RoaringBitmap};
 use time::OffsetDateTime;
 
@@ -268,6 +268,22 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
         K::TaskCancelation { .. } | K::TaskDeletion { .. } | K::DumpExport { .. } | K::Snapshot => {
         }
     };
+    match &mut task.details {
+        Some(details) => match details {
+            Details::IndexSwap { swaps } => {
+                for (lhs, rhs) in swaps.iter_mut() {
+                    if lhs == swap.0 || lhs == swap.1 {
+                        index_uids.push(lhs);
+                    }
+                    if rhs == swap.0 || rhs == swap.1 {
+                        index_uids.push(rhs);
+                    }
+                }
+            }
+            _ => {}
+        },
+        None => {}
+    }
     for index_uid in index_uids {
         if index_uid == swap.0 {
             *index_uid = swap.1.to_owned();
@@ -276,8 +292,6 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
         }
     }
 }
-#[cfg(test)]
-use meilisearch_types::tasks::Details;
 #[cfg(test)]
 impl IndexScheduler {
     /// Asserts that the index scheduler's content is internally consistent.
@@ -345,9 +359,12 @@ impl IndexScheduler {
             }
             match details {
                 Some(details) => match details {
-                    Details::IndexSwap { swaps } => {
-                        todo!()
-                    }
+                    Details::IndexSwap { swaps: sw1 } => match &kind {
+                        KindWithContent::IndexSwap { swaps: sw2 } => {
+                            assert_eq!(&sw1, sw2);
+                        }
+                        _ => panic!(),
+                    },
                     Details::DocumentAdditionOrUpdate { received_documents, indexed_documents } => {
                         assert_eq!(kind.as_kind(), Kind::DocumentAdditionOrUpdate);
                         if let Some(indexed_documents) = indexed_documents {
