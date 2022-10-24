@@ -16,7 +16,9 @@ pub fn hash_snapshot(snap: &str) -> String {
 }
 
 #[track_caller]
-pub fn default_snapshot_settings_for_test(name: Option<&str>) -> (insta::Settings, Cow<'_, str>) {
+pub fn default_snapshot_settings_for_test(
+    name: Option<&str>,
+) -> (insta::Settings, Cow<'_, str>, bool) {
     let mut settings = insta::Settings::clone_current();
     settings.set_prepend_module_to_snapshot(false);
     let path = Path::new(std::panic::Location::caller().file());
@@ -36,7 +38,10 @@ pub fn default_snapshot_settings_for_test(name: Option<&str>) -> (insta::Setting
         Cow::Owned(format!("{counter}"))
     };
 
-    (settings, snap_name)
+    let store_whole_snapshot = std::env::var("MEILI_TEST_FULL_SNAPS").unwrap_or("false".to_owned());
+    let store_whole_snapshot: bool = store_whole_snapshot.parse().unwrap();
+
+    (settings, snap_name, store_whole_snapshot)
 }
 
 /**
@@ -70,22 +75,26 @@ snapshot_hash!("hello world", name: "snap_name", @"5f93f983524def3dca464469d2cf9
 #[macro_export]
 macro_rules! snapshot_hash {
     ($value:expr, @$inline:literal) => {
-        let (settings, snap_name) = $crate::default_snapshot_settings_for_test(None);
+        let (settings, snap_name, store_whole_snapshot) = $crate::default_snapshot_settings_for_test(None);
         settings.bind(|| {
             let snap = format!("{}", $value);
             let hash_snap = $crate::hash_snapshot(&snap);
             meili_snap::insta::assert_snapshot!(hash_snap, @$inline);
-            meili_snap::insta::assert_snapshot!(format!("{}.full", snap_name), snap);
+            if store_whole_snapshot {
+                meili_snap::insta::assert_snapshot!(format!("{}.full", snap_name), snap);
+            }
         });
     };
     ($value:expr, name: $name:expr, @$inline:literal) => {
         let snap_name = format!("{}", $name);
-        let (settings, snap_name) = $crate::default_snapshot_settings_for_test(Some(&snap_name));
+        let (settings, snap_name, store_whole_snapshot) = $crate::default_snapshot_settings_for_test(Some(&snap_name));
         settings.bind(|| {
             let snap = format!("{}", $value);
             let hash_snap = $crate::hash_snapshot(&snap);
             meili_snap::insta::assert_snapshot!(hash_snap, @$inline);
-            meili_snap::insta::assert_snapshot!(format!("{}.full", snap_name), snap);
+            if store_whole_snapshot {
+                meili_snap::insta::assert_snapshot!(format!("{}.full", snap_name), snap);
+            }
         });
     };
 }
@@ -122,7 +131,7 @@ snapshot!(format!("{:?}", vec![1, 2]), @"[1, 2]");
 macro_rules! snapshot {
     ($value:expr, name: $name:expr) => {
         let snap_name = format!("{}", $name);
-        let (settings, snap_name) = $crate::default_snapshot_settings_for_test(Some(&snap_name));
+        let (settings, snap_name, _) = $crate::default_snapshot_settings_for_test(Some(&snap_name));
         settings.bind(|| {
             let snap = format!("{}", $value);
             meili_snap::insta::assert_snapshot!(format!("{}", snap_name), snap);
@@ -131,14 +140,14 @@ macro_rules! snapshot {
     ($value:expr, @$inline:literal) => {
         // Note that the name given as argument does not matter since it is only an inline snapshot
         // We don't pass None because otherwise `meili-snap` will try to assign it a unique identifier
-        let (settings, _) = $crate::default_snapshot_settings_for_test(Some("_dummy_argument"));
+        let (settings, _, _) = $crate::default_snapshot_settings_for_test(Some("_dummy_argument"));
         settings.bind(|| {
             let snap = format!("{}", $value);
             meili_snap::insta::assert_snapshot!(snap, @$inline);
         });
     };
     ($value:expr) => {
-        let (settings, snap_name) = $crate::default_snapshot_settings_for_test(None);
+        let (settings, snap_name, _) = $crate::default_snapshot_settings_for_test(None);
         settings.bind(|| {
             let snap = format!("{}", $value);
             meili_snap::insta::assert_snapshot!(format!("{}", snap_name), snap);
