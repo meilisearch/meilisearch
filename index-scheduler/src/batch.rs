@@ -409,7 +409,7 @@ impl IndexScheduler {
         }
 
         // 4. we batch the dumps.
-        let to_dump = self.get_kind(rtxn, Kind::DumpExport)? & enqueued;
+        let to_dump = self.get_kind(rtxn, Kind::DumpCreation)? & enqueued;
         if let Some(to_dump) = to_dump.min() {
             return Ok(Some(Batch::Dump(
                 self.get_task(rtxn, to_dump)?.ok_or(Error::CorruptedTaskQueue)?,
@@ -540,16 +540,14 @@ impl IndexScheduler {
             Batch::Snapshot(_) => todo!(),
             Batch::Dump(mut task) => {
                 let started_at = OffsetDateTime::now_utc();
-                let (keys, instance_uid, dump_uid) = if let KindWithContent::DumpExport {
-                    keys,
-                    instance_uid,
-                    dump_uid,
-                } = &task.kind
-                {
-                    (keys, instance_uid, dump_uid)
-                } else {
-                    unreachable!();
-                };
+                let (keys, instance_uid, dump_uid) =
+                    if let KindWithContent::DumpCreation { keys, instance_uid, dump_uid } =
+                        &task.kind
+                    {
+                        (keys, instance_uid, dump_uid)
+                    } else {
+                        unreachable!();
+                    };
                 let dump = dump::DumpWriter::new(*instance_uid)?;
 
                 // 1. dump the keys

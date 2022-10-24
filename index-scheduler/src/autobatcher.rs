@@ -59,7 +59,7 @@ impl From<KindWithContent> for AutobatchKind {
             KindWithContent::IndexSwap { .. } => AutobatchKind::IndexSwap,
             KindWithContent::TaskCancelation { .. }
             | KindWithContent::TaskDeletion { .. }
-            | KindWithContent::DumpExport { .. }
+            | KindWithContent::DumpCreation { .. }
             | KindWithContent::Snapshot => {
                 panic!("The autobatcher should never be called with tasks that don't apply to an index.")
             }
