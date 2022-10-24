@@ -923,7 +923,10 @@ mod tests {
     use big_s::S;
     use file_store::File;
     use meili_snap::snapshot;
-    use meilisearch_types::milli::update::IndexDocumentsMethod::ReplaceDocuments;
+    use meilisearch_types::milli::obkv_to_json;
+    use meilisearch_types::milli::update::IndexDocumentsMethod::{
+        ReplaceDocuments, UpdateDocuments,
+    };
     use tempfile::TempDir;
     use time::Duration;
     use uuid::Uuid;
@@ -1048,6 +1051,13 @@ mod tests {
         /// Wait until the provided breakpoint is reached.
         fn wait_till(&self, breakpoint: Breakpoint) {
             self.test_breakpoint_rcv.iter().find(|b| *b == (breakpoint, false));
+        }
+
+        /// Wait for `n` tasks.
+        fn advance_n_batch(&self, n: usize) {
+            for _ in 0..n {
+                self.wait_till(Breakpoint::AfterProcessing);
+            }
         }
     }
 
@@ -1674,6 +1684,282 @@ mod tests {
 
         handle.wait_till(Breakpoint::AfterProcessing);
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "cancel_processed");
+    }
+
+    #[test]
+    fn test_document_replace() {
+        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+
+        for i in 0..10 {
+            let content = format!(
+                r#"{{
+                    "id": {},
+                    "doggo": "bob {}"
+                }}"#,
+                i, i
+            );
+
+            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let documents_count = meilisearch_types::document_formats::read_json(
+                content.as_bytes(),
+                file.as_file_mut(),
+            )
+            .unwrap() as u64;
+            file.persist().unwrap();
+            index_scheduler
+                .register(KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S("id")),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                })
+                .unwrap();
+        }
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // everything should be batched together.
+        handle.advance_n_batch(1);
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // has everything being pushed successfully in milli?
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap());
+    }
+
+    #[test]
+    fn test_document_update() {
+        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+
+        for i in 0..10 {
+            let content = format!(
+                r#"{{
+                    "id": {},
+                    "doggo": "bob {}"
+                }}"#,
+                i, i
+            );
+
+            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let documents_count = meilisearch_types::document_formats::read_json(
+                content.as_bytes(),
+                file.as_file_mut(),
+            )
+            .unwrap() as u64;
+            file.persist().unwrap();
+            index_scheduler
+                .register(KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S("id")),
+                    method: UpdateDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                })
+                .unwrap();
+        }
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // everything should be batched together.
+        handle.advance_n_batch(1);
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // has everything being pushed successfully in milli?
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap());
+    }
+
+    #[test]
+    fn test_mixed_document_addition() {
+        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+
+        for i in 0..10 {
+            let method = if i % 2 == 0 { UpdateDocuments } else { ReplaceDocuments };
+
+            let content = format!(
+                r#"{{
+                    "id": {},
+                    "doggo": "bob {}"
+                }}"#,
+                i, i
+            );
+
+            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let documents_count = meilisearch_types::document_formats::read_json(
+                content.as_bytes(),
+                file.as_file_mut(),
+            )
+            .unwrap() as u64;
+            file.persist().unwrap();
+            index_scheduler
+                .register(KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S("id")),
+                    method,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                })
+                .unwrap();
+        }
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // Only half of the task should've been processed since we can't autobatch replace and update together.
+        handle.advance_n_batch(5);
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        handle.advance_n_batch(5);
+
+        // has everything being pushed successfully in milli?
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap());
+    }
+
+    // TESTS WITH DISABLED AUTOBATCHING
+
+    #[test]
+    fn test_document_replace_without_autobatching() {
+        let (index_scheduler, handle) = IndexScheduler::test(false, vec![]);
+
+        for i in 0..10 {
+            let content = format!(
+                r#"{{
+                    "id": {},
+                    "doggo": "bob {}"
+                }}"#,
+                i, i
+            );
+
+            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let documents_count = meilisearch_types::document_formats::read_json(
+                content.as_bytes(),
+                file.as_file_mut(),
+            )
+            .unwrap() as u64;
+            file.persist().unwrap();
+            index_scheduler
+                .register(KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S("id")),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                })
+                .unwrap();
+        }
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // Nothing should be batched thus half of the tasks are processed.
+        handle.advance_n_batch(5);
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // Everything is processed.
+        handle.advance_n_batch(5);
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // has everything being pushed successfully in milli?
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap());
+    }
+
+    #[test]
+    fn test_document_update_without_autobatching() {
+        let (index_scheduler, handle) = IndexScheduler::test(false, vec![]);
+
+        for i in 0..10 {
+            let content = format!(
+                r#"{{
+                    "id": {},
+                    "doggo": "bob {}"
+                }}"#,
+                i, i
+            );
+
+            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let documents_count = meilisearch_types::document_formats::read_json(
+                content.as_bytes(),
+                file.as_file_mut(),
+            )
+            .unwrap() as u64;
+            file.persist().unwrap();
+            index_scheduler
+                .register(KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S("id")),
+                    method: UpdateDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                })
+                .unwrap();
+        }
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // Nothing should be batched thus half of the tasks are processed.
+        handle.advance_n_batch(5);
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // Everything is processed.
+        handle.advance_n_batch(5);
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // has everything being pushed successfully in milli?
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap());
     }
 
     #[macro_export]
