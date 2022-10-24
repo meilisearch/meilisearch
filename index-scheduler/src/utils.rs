@@ -253,8 +253,10 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
                 }
             }
         }
-        K::TaskCancelation { .. } | K::TaskDeletion { .. } | K::DumpExport { .. } | K::Snapshot => {
-        }
+        K::TaskCancelation { .. }
+        | K::TaskDeletion { .. }
+        | K::DumpCreation { .. }
+        | K::Snapshot => {}
     };
     for index_uid in index_uids {
         if index_uid == swap.0 {

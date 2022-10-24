@@ -395,7 +395,7 @@ pub(crate) mod test {
         }
         "###);
 
-        meili_snap::snapshot_hash!(format!("{:#?}", products.settings()), @"ea46dd6b58c5e1d65c1c8159a32695ea");
+        meili_snap::snapshot_hash!(format!("{:#?}", products.settings()), @"d3402aff19b90acea9e9a07c466690aa");
         let documents = products.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 10);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"548284a84de510f71e88e6cdea495cf5");
@@ -410,7 +410,7 @@ pub(crate) mod test {
         }
         "###);
 
-        meili_snap::snapshot_hash!(format!("{:#?}", movies.settings()), @"4df4074ef6bfb71e8dc66d08ff8c9dfd");
+        meili_snap::snapshot_hash!(format!("{:#?}", movies.settings()), @"687aaab250f01b55d57bc69aa313b581");
         let documents = movies.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 110);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"d153b5a81d8b3cdcbe1dec270b574022");
@@ -425,7 +425,7 @@ pub(crate) mod test {
         }
         "###);
 
-        meili_snap::snapshot_hash!(format!("{:#?}", movies2.settings()), @"24eaf4046d9718dabff36f35103352d4");
+        meili_snap::snapshot_hash!(format!("{:#?}", movies2.settings()), @"cd9fedbd7e3492831a94da62c90013ea");
         let documents = movies2.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 0);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"d751713988987e9331980363e24189ce");
@@ -440,7 +440,7 @@ pub(crate) mod test {
         }
         "###);
 
-        meili_snap::snapshot_hash!(format!("{:#?}", spells.settings()), @"24eaf4046d9718dabff36f35103352d4");
+        meili_snap::snapshot_hash!(format!("{:#?}", spells.settings()), @"cd9fedbd7e3492831a94da62c90013ea");
         let documents = spells.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 10);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"235016433dd04262c7f2da01d1e808ce");

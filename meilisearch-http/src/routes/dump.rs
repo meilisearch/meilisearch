@@ -33,7 +33,7 @@ pub async fn create_dump(
         ))
         .unwrap();
 
-    let task = KindWithContent::DumpExport {
+    let task = KindWithContent::DumpCreation {
         keys: auth_controller.list_keys()?,
         instance_uid: analytics.instance_uid().cloned(),
         dump_uid,
