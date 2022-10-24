@@ -350,7 +350,7 @@ async fn error_add_api_key_invalid_parameters_indexes() {
     assert_eq!(400, code, "{:?}", &response);
 
     let expected_response = json!({
-        "message": r#"`indexes` field value `{"name":"products"}` is invalid. It should be an array of string representing index names."#,
+        "message": r#"`{"name":"products"}` is not a valid index uid. It should be an array of string representing index names."#,
         "code": "invalid_api_key_indexes",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_api_key_indexes"
@@ -375,7 +375,7 @@ async fn error_add_api_key_invalid_index_uids() {
     let (response, code) = server.add_api_key(content).await;
 
     let expected_response = json!({
-        "message": r#"`indexes` field value `["invalid index # / \\name with spaces"]` is invalid. It should be an array of string representing index names."#,
+        "message": r#"`["invalid index # / \\name with spaces"]` is not a valid index uid. It should be an array of string representing index names."#,
         "code": "invalid_api_key_indexes",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_api_key_indexes"
