@@ -119,9 +119,11 @@ impl CompatV5ToV6 {
                             allow_index_creation,
                             settings: Box::new(settings.into()),
                         },
-                        v5::tasks::TaskContent::Dump { uid } => {
-                            v6::Kind::DumpExport { dump_uid: uid, keys: keys.clone(), instance_uid }
-                        }
+                        v5::tasks::TaskContent::Dump { uid } => v6::Kind::DumpCreation {
+                            dump_uid: uid,
+                            keys: keys.clone(),
+                            instance_uid,
+                        },
                     },
                     canceled_by: None,
                     details: task_view.details.map(|details| match details {
@@ -415,7 +417,7 @@ pub(crate) mod test {
         // tasks
         let tasks = dump.tasks().unwrap().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
-        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"5d5d839c70adf763d0dc2e0b46c59828");
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"42d4200cf6d92a6449989ca48cd8e28a");
         assert_eq!(update_files.len(), 22);
         assert!(update_files[0].is_none()); // the dump creation
         assert!(update_files[1].is_some()); // the enqueued document addition
@@ -445,7 +447,7 @@ pub(crate) mod test {
         }
         "###);
 
-        meili_snap::snapshot_hash!(format!("{:#?}", products.settings()), @"9896a66a399c24a0f4f6a3c8563cd14a");
+        meili_snap::snapshot_hash!(format!("{:#?}", products.settings()), @"8e5cadabf74aebe1160bf51c3d489efe");
         let documents = products.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 10);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"b01c8371aea4c7171af0d4d846a2bdca");
@@ -460,7 +462,7 @@ pub(crate) mod test {
         }
         "###);
 
-        meili_snap::snapshot_hash!(format!("{:#?}", movies.settings()), @"d0dc7efd1360f95fce57d7931a70b7c9");
+        meili_snap::snapshot_hash!(format!("{:#?}", movies.settings()), @"4894ac1e74b9e1069ed5ee262b7a1aca");
         let documents = movies.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 200);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"e962baafd2fbae4cdd14e876053b0c5a");
@@ -475,7 +477,7 @@ pub(crate) mod test {
         }
         "###);
 
-        meili_snap::snapshot_hash!(format!("{:#?}", spells.settings()), @"59c8e30c2022897987ea7b4394167b06");
+        meili_snap::snapshot_hash!(format!("{:#?}", spells.settings()), @"054dbf08a79e08bb9becba6f5d090f13");
         let documents = spells.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 10);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"235016433dd04262c7f2da01d1e808ce");

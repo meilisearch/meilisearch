@@ -124,7 +124,7 @@ pub enum KindDump {
         query: String,
         tasks: RoaringBitmap,
     },
-    DumpExport {
+    DumpCreation {
         dump_uid: String,
         keys: Vec<Key>,
         instance_uid: Option<InstanceUid>,
@@ -188,8 +188,8 @@ impl From<KindWithContent> for KindDump {
             KindWithContent::TaskDeletion { query, tasks } => {
                 KindDump::TasksDeletion { query, tasks }
             }
-            KindWithContent::DumpExport { dump_uid, keys, instance_uid } => {
-                KindDump::DumpExport { dump_uid, keys, instance_uid }
+            KindWithContent::DumpCreation { dump_uid, keys, instance_uid } => {
+                KindDump::DumpCreation { dump_uid, keys, instance_uid }
             }
             KindWithContent::Snapshot => KindDump::Snapshot,
         }
