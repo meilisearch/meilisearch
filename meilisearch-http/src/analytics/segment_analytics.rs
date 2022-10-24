@@ -271,8 +271,8 @@ impl Segment {
     }
 
     async fn run(mut self, meilisearch: MeiliSearch) {
-        const INTERVAL: Duration = Duration::from_secs(60); // one minute
-                                                            // The first batch must be sent after one minute.
+        const INTERVAL: Duration = Duration::from_secs(60 * 60); // one hour
+                                                                 // The first batch must be sent after one hour.
         let mut interval =
             tokio::time::interval_at(tokio::time::Instant::now() + INTERVAL, INTERVAL);
 
@@ -302,7 +302,7 @@ impl Segment {
                 .push(Identify {
                     context: Some(json!({
                         "app": {
-                            "version": "prototype-pagination-4".to_string(),
+                            "version": env!("CARGO_PKG_VERSION").to_string(),
                         },
                     })),
                     user: self.user.clone(),
@@ -428,13 +428,14 @@ impl SearchAggregator {
             ret.max_terms_number = q.split_whitespace().count();
         }
 
-        if query.limit.is_none() && query.offset.is_none() {
-            ret.max_limit = query.hits_per_page;
-            ret.max_offset = query.page.saturating_sub(1) * query.hits_per_page;
+        if query.hits_per_page.or(query.page).is_some() {
+            let limit = query.hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
+            ret.max_limit = limit;
+            ret.max_offset = query.page.unwrap_or(1).saturating_sub(1) * limit;
             ret.finite_pagination = 1;
         } else {
-            ret.max_limit = query.limit.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
-            ret.max_offset = query.offset.unwrap_or_default();
+            ret.max_limit = query.limit;
+            ret.max_offset = query.offset;
             ret.finite_pagination = 0;
         }
 
