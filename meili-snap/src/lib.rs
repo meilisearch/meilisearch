@@ -16,16 +16,18 @@ pub fn hash_snapshot(snap: &str) -> String {
 }
 
 #[track_caller]
-pub fn default_snapshot_settings_for_test(
-    name: Option<&str>,
-) -> (insta::Settings, Cow<'_, str>, bool) {
+pub fn default_snapshot_settings_for_test<'a>(
+    test_name: &str,
+    name: Option<&'a str>,
+) -> (insta::Settings, Cow<'a, str>, bool) {
     let mut settings = insta::Settings::clone_current();
     settings.set_prepend_module_to_snapshot(false);
     let path = Path::new(std::panic::Location::caller().file());
     let filename = path.file_name().unwrap().to_str().unwrap();
     settings.set_omit_expression(true);
 
-    let test_name = std::thread::current().name().unwrap().rsplit("::").next().unwrap().to_owned();
+    let test_name = test_name.strip_suffix("::{{closure}}").unwrap_or(test_name);
+    let test_name = test_name.rsplit("::").next().unwrap().to_owned();
 
     let path = Path::new("snapshots").join(filename).join(&test_name);
     settings.set_snapshot_path(path.clone());
@@ -75,7 +77,18 @@ snapshot_hash!("hello world", name: "snap_name", @"5f93f983524def3dca464469d2cf9
 #[macro_export]
 macro_rules! snapshot_hash {
     ($value:expr, @$inline:literal) => {
-        let (settings, snap_name, store_whole_snapshot) = $crate::default_snapshot_settings_for_test(None);
+        let test_name = {
+            fn f() {}
+            fn type_name_of_val<T>(_: T) -> &'static str {
+                std::any::type_name::<T>()
+            }
+            type_name_of_val(f).strip_suffix("::f").unwrap_or("")
+        };
+        let test_name = test_name
+            .strip_suffix("::{{closure}}")
+            .unwrap_or(test_name);
+
+        let (settings, snap_name, store_whole_snapshot) = $crate::default_snapshot_settings_for_test(test_name, None);
         settings.bind(|| {
             let snap = format!("{}", $value);
             let hash_snap = $crate::hash_snapshot(&snap);
@@ -86,8 +99,16 @@ macro_rules! snapshot_hash {
         });
     };
     ($value:expr, name: $name:expr, @$inline:literal) => {
+        let test_name = {
+            fn f() {}
+            fn type_name_of_val<T>(_: T) -> &'static str {
+                std::any::type_name::<T>()
+            }
+            type_name_of_val(f).strip_suffix("::f").unwrap_or("")
+        };
+
         let snap_name = format!("{}", $name);
-        let (settings, snap_name, store_whole_snapshot) = $crate::default_snapshot_settings_for_test(Some(&snap_name));
+        let (settings, snap_name, store_whole_snapshot) = $crate::default_snapshot_settings_for_test(test_name, Some(&snap_name));
         settings.bind(|| {
             let snap = format!("{}", $value);
             let hash_snap = $crate::hash_snapshot(&snap);
@@ -130,8 +151,19 @@ snapshot!(format!("{:?}", vec![1, 2]), @"[1, 2]");
 #[macro_export]
 macro_rules! snapshot {
     ($value:expr, name: $name:expr) => {
+        let test_name = {
+            fn f() {}
+            fn type_name_of_val<T>(_: T) -> &'static str {
+                std::any::type_name::<T>()
+            }
+            type_name_of_val(f).strip_suffix("::f").unwrap_or("")
+        };
+        let test_name = test_name
+            .strip_suffix("::{{closure}}")
+            .unwrap_or(test_name);
+
         let snap_name = format!("{}", $name);
-        let (settings, snap_name, _) = $crate::default_snapshot_settings_for_test(Some(&snap_name));
+        let (settings, snap_name, _) = $crate::default_snapshot_settings_for_test(test_name, Some(&snap_name));
         settings.bind(|| {
             let snap = format!("{}", $value);
             meili_snap::insta::assert_snapshot!(format!("{}", snap_name), snap);
@@ -140,14 +172,25 @@ macro_rules! snapshot {
     ($value:expr, @$inline:literal) => {
         // Note that the name given as argument does not matter since it is only an inline snapshot
         // We don't pass None because otherwise `meili-snap` will try to assign it a unique identifier
-        let (settings, _, _) = $crate::default_snapshot_settings_for_test(Some("_dummy_argument"));
+        let (settings, _, _) = $crate::default_snapshot_settings_for_test("", Some("_dummy_argument"));
         settings.bind(|| {
             let snap = format!("{}", $value);
             meili_snap::insta::assert_snapshot!(snap, @$inline);
         });
     };
     ($value:expr) => {
-        let (settings, snap_name, _) = $crate::default_snapshot_settings_for_test(None);
+        let test_name = {
+            fn f() {}
+            fn type_name_of_val<T>(_: T) -> &'static str {
+                std::any::type_name::<T>()
+            }
+            type_name_of_val(f).strip_suffix("::f").unwrap_or("")
+        };
+        let test_name = test_name
+            .strip_suffix("::{{closure}}")
+            .unwrap_or(test_name);
+
+        let (settings, snap_name, _) = $crate::default_snapshot_settings_for_test(test_name, None);
         settings.bind(|| {
             let snap = format!("{}", $value);
             meili_snap::insta::assert_snapshot!(format!("{}", snap_name), snap);
@@ -202,7 +245,7 @@ mod tests {
 
             snapshot!(120);
 
-            snapshot_hash!("", name: "", @"d41d8cd98f00b204e9800998ecf8427e");
+            // snapshot_hash!("", name: "", @"d41d8cd98f00b204e9800998ecf8427e");
         }
     }
 }
