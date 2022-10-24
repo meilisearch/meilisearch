@@ -7,7 +7,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::tasks::KindWithContent;
 use serde::Deserialize;
 
-use self::errors::{DuplicateSwappedIndexError, IndexesNotFoundError};
+use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
@@ -53,13 +53,20 @@ pub async fn swap_indexes(
         }
     }
     if !duplicate_indexes.is_empty() {
-        return Err(DuplicateSwappedIndexError {
-            indexes: duplicate_indexes.into_iter().collect(),
+        let duplicate_indexes: Vec<_> = duplicate_indexes.into_iter().collect();
+        if let [index] = duplicate_indexes.as_slice() {
+            return Err(MeilisearchHttpError::SwapDuplicateIndexFound(index.clone()).into());
+        } else {
+            return Err(MeilisearchHttpError::SwapDuplicateIndexesFound(duplicate_indexes).into());
         }
-        .into());
     }
     if !unknown_indexes.is_empty() {
-        return Err(IndexesNotFoundError { indexes: unknown_indexes.into_iter().collect() }.into());
+        let unknown_indexes: Vec<_> = unknown_indexes.into_iter().collect();
+        if let [index] = unknown_indexes.as_slice() {
+            return Err(index_scheduler::Error::IndexNotFound(index.clone()).into());
+        } else {
+            return Err(MeilisearchHttpError::IndexesNotFound(unknown_indexes).into());
+        }
     }
 
     let task = KindWithContent::IndexSwap { swaps };
@@ -68,64 +75,4 @@ pub async fn swap_indexes(
     let task_view = TaskView::from_task(&task);
 
     Ok(HttpResponse::Accepted().json(task_view))
-}
-
-pub mod errors {
-    use std::fmt::Display;
-
-    use meilisearch_types::error::{Code, ErrorCode};
-
-    #[derive(Debug)]
-    pub struct IndexesNotFoundError {
-        pub indexes: Vec<String>,
-    }
-    impl Display for IndexesNotFoundError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            if self.indexes.len() == 1 {
-                write!(f, "Index `{}` not found,", self.indexes[0])?;
-            } else {
-                write!(f, "Indexes `{}`", self.indexes[0])?;
-                for index in self.indexes.iter().skip(1) {
-                    write!(f, ", `{}`", index)?;
-                }
-                write!(f, "not found.")?;
-            }
-            Ok(())
-        }
-    }
-    impl std::error::Error for IndexesNotFoundError {}
-    impl ErrorCode for IndexesNotFoundError {
-        fn error_code(&self) -> Code {
-            Code::IndexNotFound
-        }
-    }
-    #[derive(Debug)]
-    pub struct DuplicateSwappedIndexError {
-        pub indexes: Vec<String>,
-    }
-    impl Display for DuplicateSwappedIndexError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            if self.indexes.len() == 1 {
-                write!(f, "Indexes must be declared only once during a swap. `{}` was specified several times.", self.indexes[0])?;
-            } else {
-                write!(
-                    f,
-                    "Indexes must be declared only once during a swap. `{}`",
-                    self.indexes[0]
-                )?;
-                for index in self.indexes.iter().skip(1) {
-                    write!(f, ", `{}`", index)?;
-                }
-                write!(f, "were specified several times.")?;
-            }
-
-            Ok(())
-        }
-    }
-    impl std::error::Error for DuplicateSwappedIndexError {}
-    impl ErrorCode for DuplicateSwappedIndexError {
-        fn error_code(&self) -> Code {
-            Code::DuplicateIndexFound
-        }
-    }
 }
