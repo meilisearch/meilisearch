@@ -120,6 +120,8 @@ pub enum Code {
     InvalidIndexUid,
     InvalidMinWordLengthForTypo,
 
+    DuplicateIndexFound,
+
     // invalid state error
     InvalidState,
     MissingPrimaryKey,
@@ -293,6 +295,9 @@ impl Code {
             ImmutableField => ErrCode::invalid("immutable_field", StatusCode::BAD_REQUEST),
             InvalidMinWordLengthForTypo => {
                 ErrCode::invalid("invalid_min_word_length_for_typo", StatusCode::BAD_REQUEST)
+            }
+            DuplicateIndexFound => {
+                ErrCode::invalid("duplicate_index_found", StatusCode::BAD_REQUEST)
             }
         }
     }
