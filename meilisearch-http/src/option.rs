@@ -278,7 +278,7 @@ impl Opt {
                 // Return an error if config file contains 'config_file_path'
                 // Using that key in the config file doesn't make sense bc it creates a logical loop (config file referencing itself)
                 if opt_from_config.config_file_path.is_some() {
-                    anyhow::bail!("`config_file_path` is not supported in config file")
+                    anyhow::bail!("`config_file_path` is not supported in the configuration file")
                 }
                 // We inject the values from the toml in the corresponding env vars if needs be. Doing so, we respect the priority toml < env vars < cli args.
                 opt_from_config.export_to_env();
