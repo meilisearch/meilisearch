@@ -144,7 +144,7 @@ pub fn snapshot_task(task: &Task) -> String {
         snap.push_str(&format!("error: {error:?}, "));
     }
     if let Some(details) = details {
-        snap.push_str(&format!("details: {}, ", &snaphsot_details(details)));
+        snap.push_str(&format!("details: {}, ", &snapshot_details(details)));
     }
     snap.push_str(&format!("kind: {kind:?}"));
 
@@ -152,7 +152,7 @@ pub fn snapshot_task(task: &Task) -> String {
     snap
 }
 
-fn snaphsot_details(d: &Details) -> String {
+fn snapshot_details(d: &Details) -> String {
     match d {
         Details::DocumentAdditionOrUpdate {
             received_documents,
