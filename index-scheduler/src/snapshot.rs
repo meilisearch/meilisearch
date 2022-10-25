@@ -164,7 +164,7 @@ fn snaphsot_details(d: &Details) -> String {
             format!("{{ primary_key: {primary_key:?} }}")
         }
         Details::DocumentDeletion {
-            received_document_ids,
+            matched_documents: received_document_ids,
             deleted_documents,
         } => format!("{{ received_document_ids: {received_document_ids}, deleted_documents: {deleted_documents:?} }}"),
         Details::ClearAll { deleted_documents } => {

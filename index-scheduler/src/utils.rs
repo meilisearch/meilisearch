@@ -373,7 +373,10 @@ impl IndexScheduler {
                         }
                         _ => panic!(),
                     },
-                    Details::DocumentDeletion { received_document_ids, deleted_documents } => {
+                    Details::DocumentDeletion {
+                        matched_documents: received_document_ids,
+                        deleted_documents,
+                    } => {
                         if let Some(deleted_documents) = deleted_documents {
                             assert_eq!(status, Status::Succeeded);
                             assert!(deleted_documents <= received_document_ids as u64);
