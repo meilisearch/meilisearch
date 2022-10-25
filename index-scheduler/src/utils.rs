@@ -257,20 +257,17 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
         }
     };
     match &mut task.details {
-        Some(details) => match details {
-            Details::IndexSwap { swaps } => {
-                for (lhs, rhs) in swaps.iter_mut() {
-                    if lhs == swap.0 || lhs == swap.1 {
-                        index_uids.push(lhs);
-                    }
-                    if rhs == swap.0 || rhs == swap.1 {
-                        index_uids.push(rhs);
-                    }
+        Some(Details::IndexSwap { swaps }) => {
+            for (lhs, rhs) in swaps.iter_mut() {
+                if lhs == swap.0 || lhs == swap.1 {
+                    index_uids.push(lhs);
+                }
+                if rhs == swap.0 || rhs == swap.1 {
+                    index_uids.push(rhs);
                 }
             }
-            _ => {}
-        },
-        None => {}
+        }
+        _ => (),
     }
     for index_uid in index_uids {
         if index_uid == swap.0 {
