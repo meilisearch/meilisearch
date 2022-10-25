@@ -18,6 +18,7 @@ one indexing operation.
 */
 
 use std::collections::HashSet;
+use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::BufWriter;
 
@@ -33,7 +34,7 @@ use meilisearch_types::milli::update::{
 use meilisearch_types::milli::{self, BEU32};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
 use meilisearch_types::tasks::{Details, Kind, KindWithContent, Status, Task};
-use meilisearch_types::{Index, VERSION_FILE_NAME};
+use meilisearch_types::{compression, Index, VERSION_FILE_NAME};
 use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -621,7 +622,23 @@ impl IndexScheduler {
                 let auth = milli::heed::EnvOpenOptions::new().open(src)?;
                 auth.copy_to_path(dst, CompactionOption::Enabled)?;
 
-                todo!("tar-gz and append .snapshot at the end of the file");
+                // 5. Copy and tarball the flat snapshot
+                // 5.1 Find the original name of the database
+                // TODO find a better way to get this path
+                let mut base_path = self.env.path().to_owned();
+                base_path.pop();
+                let db_name = base_path.file_name().and_then(OsStr::to_str).unwrap_or("data.ms");
+
+                // 5.2 Tarball the content of the snapshot in a tempfile with a .snapshot extension
+                let snapshot_path = self.snapshots_path.join(db_name).with_extension("snapshot");
+                let temp_snapshot_file = tempfile::NamedTempFile::new_in(&self.snapshots_path)?;
+                compression::to_tar_gz(temp_snapshot_dir.path(), temp_snapshot_file.path())?;
+                let file = temp_snapshot_file.persist(&snapshot_path)?;
+
+                // 5.3 Change the permission to make the snapshot readonly
+                let mut permissions = file.metadata()?.permissions();
+                permissions.set_readonly(true);
+                file.set_permissions(permissions)?;
 
                 for task in &mut tasks {
                     task.status = Status::Succeeded;
