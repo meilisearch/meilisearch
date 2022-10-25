@@ -42,7 +42,7 @@ impl Task {
 
         match &self.kind {
             DumpCreation { .. }
-            | Snapshot
+            | SnapshotCreation
             | TaskCancelation { .. }
             | TaskDeletion { .. }
             | IndexSwap { .. } => None,
@@ -77,7 +77,7 @@ impl Task {
             | KindWithContent::TaskCancelation { .. }
             | KindWithContent::TaskDeletion { .. }
             | KindWithContent::DumpCreation { .. }
-            | KindWithContent::Snapshot => None,
+            | KindWithContent::SnapshotCreation => None,
         }
     }
 }
@@ -133,7 +133,7 @@ pub enum KindWithContent {
         keys: Vec<Key>,
         instance_uid: Option<InstanceUid>,
     },
-    Snapshot,
+    SnapshotCreation,
 }
 
 impl KindWithContent {
@@ -150,7 +150,7 @@ impl KindWithContent {
             KindWithContent::TaskCancelation { .. } => Kind::TaskCancelation,
             KindWithContent::TaskDeletion { .. } => Kind::TaskDeletion,
             KindWithContent::DumpCreation { .. } => Kind::DumpCreation,
-            KindWithContent::Snapshot => Kind::Snapshot,
+            KindWithContent::SnapshotCreation => Kind::SnapshotCreation,
         }
     }
 
@@ -158,7 +158,10 @@ impl KindWithContent {
         use KindWithContent::*;
 
         match self {
-            DumpCreation { .. } | Snapshot | TaskCancelation { .. } | TaskDeletion { .. } => vec![],
+            DumpCreation { .. }
+            | SnapshotCreation
+            | TaskCancelation { .. }
+            | TaskDeletion { .. } => vec![],
             DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentDeletion { index_uid, .. }
             | DocumentClear { index_uid }
@@ -218,7 +221,7 @@ impl KindWithContent {
                 original_query: query.clone(),
             }),
             KindWithContent::DumpCreation { .. } => None,
-            KindWithContent::Snapshot => None,
+            KindWithContent::SnapshotCreation => None,
         }
     }
 
@@ -261,7 +264,7 @@ impl KindWithContent {
                 original_query: query.clone(),
             }),
             KindWithContent::DumpCreation { .. } => None,
-            KindWithContent::Snapshot => None,
+            KindWithContent::SnapshotCreation => None,
         }
     }
 }
@@ -301,7 +304,7 @@ impl From<&KindWithContent> for Option<Details> {
             KindWithContent::DumpCreation { dump_uid, .. } => {
                 Some(Details::Dump { dump_uid: dump_uid.clone() })
             }
-            KindWithContent::Snapshot => None,
+            KindWithContent::SnapshotCreation => None,
         }
     }
 }
@@ -371,7 +374,7 @@ pub enum Kind {
     TaskCancelation,
     TaskDeletion,
     DumpCreation,
-    Snapshot,
+    SnapshotCreation,
 }
 
 impl FromStr for Kind {
@@ -396,6 +399,8 @@ impl FromStr for Kind {
             Ok(Kind::TaskDeletion)
         } else if kind.eq_ignore_ascii_case("dumpCreation") {
             Ok(Kind::DumpCreation)
+        } else if kind.eq_ignore_ascii_case("snapshotCreation") {
+            Ok(Kind::SnapshotCreation)
         } else {
             Err(ResponseError::from_msg(
                 format!(

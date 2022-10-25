@@ -50,7 +50,7 @@ use crate::{Error, IndexScheduler, Query, Result, TaskId};
 pub(crate) enum Batch {
     TaskCancelation(Task),
     TaskDeletion(Task),
-    Snapshot(Vec<Task>),
+    SnapshotCreation(Vec<Task>),
     Dump(Task),
     IndexOperation { op: IndexOperation, must_create_index: bool },
     IndexCreation { index_uid: String, primary_key: Option<String>, task: Task },
@@ -118,7 +118,7 @@ impl Batch {
             | Batch::Dump(task)
             | Batch::IndexCreation { task, .. }
             | Batch::IndexUpdate { task, .. } => vec![task.uid],
-            Batch::Snapshot(tasks) | Batch::IndexDeletion { tasks, .. } => {
+            Batch::SnapshotCreation(tasks) | Batch::IndexDeletion { tasks, .. } => {
                 tasks.iter().map(|task| task.uid).collect()
             }
             Batch::IndexOperation { op, .. } => match op {
@@ -406,9 +406,9 @@ impl IndexScheduler {
         }
 
         // 3. we batch the snapshot.
-        let to_snapshot = self.get_kind(rtxn, Kind::Snapshot)? & enqueued;
+        let to_snapshot = self.get_kind(rtxn, Kind::SnapshotCreation)? & enqueued;
         if !to_snapshot.is_empty() {
-            return Ok(Some(Batch::Snapshot(self.get_existing_tasks(rtxn, to_snapshot)?)));
+            return Ok(Some(Batch::SnapshotCreation(self.get_existing_tasks(rtxn, to_snapshot)?)));
         }
 
         // 4. we batch the dumps.
@@ -552,7 +552,7 @@ impl IndexScheduler {
                 wtxn.commit()?;
                 Ok(vec![task])
             }
-            Batch::Snapshot(_) => todo!(),
+            Batch::SnapshotCreation(_) => todo!(),
             Batch::Dump(mut task) => {
                 let started_at = OffsetDateTime::now_utc();
                 let (keys, instance_uid, dump_uid) =
