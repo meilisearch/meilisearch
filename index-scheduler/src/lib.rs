@@ -23,7 +23,7 @@ mod batch;
 pub mod error;
 mod index_mapper;
 #[cfg(test)]
-mod snapshot;
+mod insta_snapshot;
 mod utils;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -938,7 +938,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
-    use crate::snapshot::{snapshot_bitmap, snapshot_index_scheduler};
+    use crate::insta_snapshot::{snapshot_bitmap, snapshot_index_scheduler};
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum FailureLocation {
