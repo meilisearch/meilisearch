@@ -928,7 +928,7 @@ impl IndexScheduler {
                 for (task, documents) in tasks.iter_mut().zip(documents) {
                     task.status = Status::Succeeded;
                     task.details = Some(Details::DocumentDeletion {
-                        received_document_ids: documents.len(),
+                        matched_documents: documents.len(),
                         deleted_documents: Some(deleted_documents.min(documents.len() as u64)),
                     });
                 }

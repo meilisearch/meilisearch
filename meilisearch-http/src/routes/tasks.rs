@@ -122,7 +122,10 @@ impl From<Details> for DetailsView {
             Details::IndexInfo { primary_key } => {
                 DetailsView { primary_key: Some(primary_key), ..DetailsView::default() }
             }
-            Details::DocumentDeletion { received_document_ids, deleted_documents } => DetailsView {
+            Details::DocumentDeletion {
+                matched_documents: received_document_ids,
+                deleted_documents,
+            } => DetailsView {
                 received_document_ids: Some(received_document_ids),
                 deleted_documents: Some(deleted_documents),
                 ..DetailsView::default()
