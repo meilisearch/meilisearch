@@ -436,7 +436,7 @@ impl IndexScheduler {
                     }
                     Details::Dump { dump_uid: d1 } => {
                         assert!(
-                            matches!(&kind, KindWithContent::DumpExport { dump_uid: d2, keys: _, instance_uid: _ } if &d1 == d2 )
+                            matches!(&kind, KindWithContent::DumpCreation { dump_uid: d2, keys: _, instance_uid: _ } if &d1 == d2 )
                         );
                     }
                 },
