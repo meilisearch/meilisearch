@@ -138,7 +138,12 @@ pub struct Index {
 }
 
 impl Index {
-    pub fn new<P: AsRef<Path>>(mut options: heed::EnvOpenOptions, path: P) -> Result<Index> {
+    pub fn new_with_creation_dates<P: AsRef<Path>>(
+        mut options: heed::EnvOpenOptions,
+        path: P,
+        created_at: OffsetDateTime,
+        updated_at: OffsetDateTime,
+    ) -> Result<Index> {
         use db_name::*;
 
         options.max_dbs(18);
@@ -168,7 +173,7 @@ impl Index {
             env.create_database(Some(FIELD_ID_DOCID_FACET_STRINGS))?;
         let documents = env.create_database(Some(DOCUMENTS))?;
 
-        Index::initialize_creation_dates(&env, main)?;
+        Index::set_creation_dates(&env, main, created_at, updated_at)?;
 
         Ok(Index {
             env,
@@ -193,21 +198,30 @@ impl Index {
         })
     }
 
-    fn initialize_creation_dates(env: &heed::Env, main: PolyDatabase) -> heed::Result<()> {
+    pub fn new<P: AsRef<Path>>(options: heed::EnvOpenOptions, path: P) -> Result<Index> {
+        let now = OffsetDateTime::now_utc();
+        Self::new_with_creation_dates(options, path, now.clone(), now)
+    }
+
+    fn set_creation_dates(
+        env: &heed::Env,
+        main: PolyDatabase,
+        created_at: OffsetDateTime,
+        updated_at: OffsetDateTime,
+    ) -> heed::Result<()> {
         let mut txn = env.write_txn()?;
         // The db was just created, we update its metadata with the relevant information.
         if main.get::<_, Str, SerdeJson<OffsetDateTime>>(&txn, main_key::CREATED_AT_KEY)?.is_none()
         {
-            let now = OffsetDateTime::now_utc();
             main.put::<_, Str, SerdeJson<OffsetDateTime>>(
                 &mut txn,
                 main_key::UPDATED_AT_KEY,
-                &now,
+                &updated_at,
             )?;
             main.put::<_, Str, SerdeJson<OffsetDateTime>>(
                 &mut txn,
                 main_key::CREATED_AT_KEY,
-                &now,
+                &created_at,
             )?;
             txn.commit()?;
         }
