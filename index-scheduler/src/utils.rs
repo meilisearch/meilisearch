@@ -175,7 +175,7 @@ pub(crate) fn insert_task_datetime(
     let timestamp = BEI128::new(time.unix_timestamp_nanos());
     let mut task_ids = database.get(wtxn, &timestamp)?.unwrap_or_default();
     task_ids.insert(task_id);
-    database.put(wtxn, &timestamp, &RoaringBitmap::from_iter([task_id]))?;
+    database.put(wtxn, &timestamp, &RoaringBitmap::from_iter(task_ids))?;
     Ok(())
 }
 
@@ -191,7 +191,7 @@ pub(crate) fn remove_task_datetime(
         if existing.is_empty() {
             database.delete(wtxn, &timestamp)?;
         } else {
-            database.put(wtxn, &timestamp, &RoaringBitmap::from_iter([task_id]))?;
+            database.put(wtxn, &timestamp, &RoaringBitmap::from_iter(existing))?;
         }
     }
 
@@ -297,7 +297,7 @@ impl IndexScheduler {
                 details,
                 status,
                 kind,
-            } = task;
+            } = task.clone();
             assert_eq!(uid, task.uid);
             if let Some(task_index_uid) = &task_index_uid {
                 assert!(self
@@ -319,6 +319,9 @@ impl IndexScheduler {
                     .get(&rtxn, &BEI128::new(started_at.unix_timestamp_nanos()))
                     .unwrap()
                     .unwrap();
+                if !db_started_at.contains(task_id) {
+                    dbg!(&task);
+                }
                 assert!(db_started_at.contains(task_id));
             }
             if let Some(finished_at) = finished_at {
