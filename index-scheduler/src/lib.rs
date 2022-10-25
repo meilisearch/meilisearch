@@ -269,16 +269,16 @@ impl IndexScheduler {
             must_stop_processing: self.must_stop_processing.clone(),
             processing_tasks: self.processing_tasks.clone(),
             file_store: self.file_store.clone(),
-            all_tasks: self.all_tasks.clone(),
-            status: self.status.clone(),
-            kind: self.kind.clone(),
-            index_tasks: self.index_tasks.clone(),
-            enqueued_at: self.enqueued_at.clone(),
-            started_at: self.started_at.clone(),
-            finished_at: self.finished_at.clone(),
+            all_tasks: self.all_tasks,
+            status: self.status,
+            kind: self.kind,
+            index_tasks: self.index_tasks,
+            enqueued_at: self.enqueued_at,
+            started_at: self.started_at,
+            finished_at: self.finished_at,
             index_mapper: self.index_mapper.clone(),
             wake_up: self.wake_up.clone(),
-            autobatching_enabled: self.autobatching_enabled.clone(),
+            autobatching_enabled: self.autobatching_enabled,
             dumps_path: self.dumps_path.clone(),
             #[cfg(test)]
             test_breakpoint_sdr: self.test_breakpoint_sdr.clone(),
@@ -808,7 +808,7 @@ impl IndexScheduler {
         let res = {
             let cloned_index_scheduler = self.private_clone();
             let handle = std::thread::spawn(move || cloned_index_scheduler.process_batch(batch));
-            handle.join().unwrap_or_else(|_| Err(Error::ProcessBatchPanicked))
+            handle.join().unwrap_or(Err(Error::ProcessBatchPanicked))
         };
 
         #[cfg(test)]
@@ -1223,7 +1223,7 @@ mod tests {
         index_scheduler
             .register(KindWithContent::TaskDeletion {
                 query: "test_query".to_owned(),
-                tasks: RoaringBitmap::from_iter(&[0, 1]),
+                tasks: RoaringBitmap::from_iter([0, 1]),
             })
             .unwrap();
         index_scheduler.assert_internally_consistent();
@@ -1279,7 +1279,7 @@ mod tests {
         index_scheduler
             .register(KindWithContent::TaskDeletion {
                 query: "test_query".to_owned(),
-                tasks: RoaringBitmap::from_iter(&[0]),
+                tasks: RoaringBitmap::from_iter([0]),
             })
             .unwrap();
         index_scheduler.assert_internally_consistent();
@@ -1322,7 +1322,7 @@ mod tests {
             index_scheduler
                 .register(KindWithContent::TaskDeletion {
                     query: "test_query".to_owned(),
-                    tasks: RoaringBitmap::from_iter(&[0]),
+                    tasks: RoaringBitmap::from_iter([0]),
                 })
                 .unwrap();
             index_scheduler.assert_internally_consistent();

@@ -130,7 +130,7 @@ impl CompatV5ToV6 {
                         v5::Details::DocumentAddition { received_documents, indexed_documents } => {
                             v6::Details::DocumentAdditionOrUpdate {
                                 received_documents: received_documents as u64,
-                                indexed_documents: indexed_documents.map(|i| i as u64),
+                                indexed_documents,
                             }
                         }
                         v5::Details::Settings { settings } => {
