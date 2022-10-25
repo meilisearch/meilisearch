@@ -62,11 +62,9 @@ impl Task {
     }
 
     /// Return the content-uuid if there is one
-    pub fn content_uuid(&self) -> Option<&Uuid> {
+    pub fn content_uuid(&self) -> Option<Uuid> {
         match self.kind {
-            KindWithContent::DocumentAdditionOrUpdate { ref content_file, .. } => {
-                Some(content_file)
-            }
+            KindWithContent::DocumentAdditionOrUpdate { content_file, .. } => Some(content_file),
             KindWithContent::DocumentDeletion { .. }
             | KindWithContent::DocumentClear { .. }
             | KindWithContent::SettingsUpdate { .. }

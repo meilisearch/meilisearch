@@ -74,9 +74,14 @@ impl FileStore {
 
     /// Returns the file corresponding to the requested uuid.
     pub fn get_update(&self, uuid: Uuid) -> Result<StdFile> {
-        let path = self.path.join(uuid.to_string());
+        let path = self.get_update_path(uuid);
         let file = StdFile::open(path)?;
         Ok(file)
+    }
+
+    /// Returns the path that correspond to this uuid, the path could not exists.
+    pub fn get_update_path(&self, uuid: Uuid) -> PathBuf {
+        self.path.join(uuid.to_string())
     }
 
     /// Copies the content of the update file pointed to by `uuid` to the `dst` directory.
