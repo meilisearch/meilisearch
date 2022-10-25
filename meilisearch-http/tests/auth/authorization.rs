@@ -515,6 +515,93 @@ async fn access_authorized_index_patterns() {
 }
 
 #[actix_rt::test]
+async fn raise_error_non_authorized_index_patterns() {
+    let mut server = Server::new_auth().await;
+    server.use_admin_key("MASTER_KEY").await;
+
+    // create products_1 index
+    let product_1_index = server.index("products_1");
+    let (response, code) = product_1_index.create(Some("id")).await;
+    println!("{response}");
+    assert_eq!(202, code, "{:?}", &response);
+
+    // create products_2 index
+    let product_2_index = server.index("products_2");
+    let (response, code) = product_2_index.create(Some("id")).await;
+    println!("{response}");
+    assert_eq!(202, code, "{:?}", &response);
+
+    // create test index
+    let test_index = server.index("test");
+    let (response, code) = test_index.create(Some("id")).await;
+    println!("{response}");
+    assert_eq!(202, code, "{:?}", &response);
+
+    // create key with all document access on indices with product_* pattern.
+    let content = json!({
+        "indexes": ["products_*"],
+        "actions": ["documents.*"],
+        "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
+    });
+
+    // Register the key
+    let (response, code) = server.add_api_key(content).await;
+    assert_eq!(201, code, "{:?}", &response);
+    assert!(response["key"].is_string());
+
+    // use created key.
+    let key = response["key"].as_str().unwrap();
+    server.use_api_key(&key);
+
+    // refer to products_1 and products_2 with modified api key.
+    let product_1_index = server.index("products_1");
+    let product_2_index = server.index("products_2");
+
+    // refer to  test index
+    let test_index = server.index("test");
+
+    // try to create a index via add documents route
+    let documents = json!([
+        {
+            "id": 1,
+            "content": "foo",
+        }
+    ]);
+
+    // Adding document to products_1 index. Should succeed with 202
+    let (response, code) = product_1_index.add_documents(documents.clone(), None).await;
+    assert_eq!(202, code, "{:?}", &response);
+    let task1_id = response["taskUid"].as_u64().unwrap();
+
+    // Adding document to products_2 index. Should succeed with 202
+    let (response, code) = product_2_index.add_documents(documents.clone(), None).await;
+    assert_eq!(202, code, "{:?}", &response);
+    let task2_id = response["taskUid"].as_u64().unwrap();
+
+    // Adding document to test index. Should Fail with 403 -- invalid_api_key
+    let (response, code) = test_index.add_documents(documents, None).await;
+    assert_eq!(403, code, "{:?}", &response);
+
+    server.use_api_key("MASTER_KEY");
+
+    // refer to products_1 with modified api key.
+    let product_1_index = server.index("products_1");
+    // refer to products_2 with modified api key.
+    let product_2_index = server.index("products_2");
+
+    product_1_index.wait_task(task1_id).await;
+    product_2_index.wait_task(task2_id).await;
+
+    let (response, code) = product_1_index.get_task(task1_id).await;
+    assert_eq!(200, code, "{:?}", &response);
+    assert_eq!(response["status"], "succeeded");
+
+    let (response, code) = product_1_index.get_task(task2_id).await;
+    assert_eq!(200, code, "{:?}", &response);
+    assert_eq!(response["status"], "succeeded");
+}
+
+#[actix_rt::test]
 async fn list_authorized_tasks_restricted_index() {
     let mut server = Server::new_auth().await;
     server.use_admin_key("MASTER_KEY").await;
