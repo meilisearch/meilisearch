@@ -113,6 +113,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
             opt.db_path.join("tasks"),
             opt.db_path.join("update_files"),
             opt.db_path.join("indexes"),
+            opt.snapshot_dir.clone(),
             opt.dumps_dir.clone(),
             opt.max_task_db_size.get_bytes() as usize,
             opt.max_index_size.get_bytes() as usize,
