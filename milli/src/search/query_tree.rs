@@ -313,7 +313,7 @@ pub struct TypoConfig<'a> {
 
 /// Return the `QueryKind` of a word depending on `authorize_typos`
 /// and the provided word length.
-fn typos(word: String, authorize_typos: bool, config: TypoConfig<'_>) -> QueryKind {
+fn typos(word: String, authorize_typos: bool, config: TypoConfig) -> QueryKind {
     if authorize_typos && !config.exact_words.map_or(false, |s| s.contains(&word)) {
         let count = word.chars().count().min(u8::MAX as usize) as u8;
         if count < config.word_len_one_typo {

@@ -263,7 +263,7 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
 /// that must be inserted into the database.
 /// 2. a roaring bitmap of all the document ids present in the database
 fn compute_facet_number_levels(
-    rtxn: &'_ heed::RoTxn,
+    rtxn: &heed::RoTxn,
     db: heed::Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
     compression_type: CompressionType,
     compression_level: Option<u32>,
