@@ -129,7 +129,7 @@ pub fn snapshot_task(task: &Task) -> String {
         started_at: _,
         finished_at: _,
         error,
-        canceled_by: _,
+        canceled_by,
         details,
         status,
         kind,
@@ -137,6 +137,9 @@ pub fn snapshot_task(task: &Task) -> String {
     snap.push('{');
     snap.push_str(&format!("uid: {uid}, "));
     snap.push_str(&format!("status: {status}, "));
+    if let Some(canceled_by) = canceled_by {
+        snap.push_str(&format!("canceled_by: {canceled_by}, "));
+    }
     if let Some(error) = error {
         snap.push_str(&format!("error: {error:?}, "));
     }

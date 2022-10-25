@@ -475,10 +475,11 @@ impl IndexScheduler {
     /// [`finished_at`](meilisearch_types::tasks::Task::finished_at) and [`started_at`](meilisearch_types::tasks::Task::started_at).
     pub(crate) fn process_batch(&self, batch: Batch) -> Result<Vec<Task>> {
         #[cfg(test)]
-        self.maybe_fail(crate::tests::FailureLocation::InsideProcessBatch)?;
-        #[cfg(test)]
-        self.maybe_fail(crate::tests::FailureLocation::PanicInsideProcessBatch)?;
-
+        {
+            self.maybe_fail(crate::tests::FailureLocation::InsideProcessBatch)?;
+            self.maybe_fail(crate::tests::FailureLocation::PanicInsideProcessBatch)?;
+            self.breakpoint(crate::Breakpoint::InsideProcessBatch);
+        }
         match batch {
             Batch::TaskCancelation(mut task) => {
                 // 1. Retrieve the tasks that matched the query at enqueue-time.
