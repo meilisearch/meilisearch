@@ -46,7 +46,6 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let (index_scheduler, auth_controller) = setup_meilisearch(&opt)?;
-    let index_scheduler = Arc::new(index_scheduler);
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     let analytics = if !opt.no_analytics {
