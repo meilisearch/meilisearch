@@ -899,7 +899,7 @@ impl IndexScheduler {
 
     pub(crate) fn delete_persisted_task_data(&self, task: &Task) -> Result<()> {
         match task.content_uuid() {
-            Some(content_file) => self.delete_update_file(*content_file),
+            Some(content_file) => self.delete_update_file(content_file),
             None => Ok(()),
         }
     }
