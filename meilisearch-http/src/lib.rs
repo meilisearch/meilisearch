@@ -110,6 +110,8 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
     let auth_controller_builder = || AuthController::new(&opt.db_path, &opt.master_key);
     let index_scheduler_builder = || {
         IndexScheduler::new(
+            // TODO find a better way to have the path of the auth store
+            opt.db_path.join("auth"),
             opt.db_path.join("tasks"),
             opt.db_path.join("update_files"),
             opt.db_path.join("indexes"),
