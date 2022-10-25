@@ -276,6 +276,28 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
         }
     }
 }
+
+/// Remove references to task ids that are greater than the id of the given task.
+pub(crate) fn filter_out_references_to_newer_tasks(task: &mut Task) {
+    let new_nbr_of_matched_tasks = match &mut task.kind {
+        KindWithContent::TaskCancelation { tasks, .. }
+        | KindWithContent::TaskDeletion { tasks, .. } => {
+            tasks.remove_range(task.uid..);
+            tasks.len()
+        }
+        _ => return,
+    };
+    match &mut task.details {
+        Some(
+            Details::TaskCancelation { matched_tasks, .. }
+            | Details::TaskDeletion { matched_tasks, .. },
+        ) => {
+            *matched_tasks = new_nbr_of_matched_tasks;
+        }
+        _ => (),
+    }
+}
+
 #[cfg(test)]
 impl IndexScheduler {
     /// Asserts that the index scheduler's content is internally consistent.

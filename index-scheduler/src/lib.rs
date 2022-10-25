@@ -50,7 +50,7 @@ use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use synchronoise::SignalEvent;
 use time::OffsetDateTime;
-use utils::{keep_tasks_within_datetimes, map_bound};
+use utils::{filter_out_references_to_newer_tasks, keep_tasks_within_datetimes, map_bound};
 use uuid::Uuid;
 
 use crate::index_mapper::IndexMapper;
@@ -565,7 +565,7 @@ impl IndexScheduler {
     pub fn register(&self, kind: KindWithContent) -> Result<Task> {
         let mut wtxn = self.env.write_txn()?;
 
-        let task = Task {
+        let mut task = Task {
             uid: self.next_task_id(&wtxn)?,
             enqueued_at: time::OffsetDateTime::now_utc(),
             started_at: None,
@@ -576,6 +576,12 @@ impl IndexScheduler {
             status: Status::Enqueued,
             kind: kind.clone(),
         };
+        // For deletion and cancelation tasks, we want to make extra sure that they
+        // don't attempt to delete/cancel tasks that are newer than themselves.
+        filter_out_references_to_newer_tasks(&mut task);
+        // Get rid of the mutability.
+        let task = task;
+
         self.all_tasks.append(&mut wtxn, &BEU32::new(task.uid), &task)?;
 
         for index in task.indexes() {
