@@ -29,13 +29,6 @@ mod utils;
 pub type Result<T> = std::result::Result<T, Error>;
 pub type TaskId = u32;
 
-use dump::{KindDump, TaskDump, UpdateFile};
-pub use error::Error;
-use meilisearch_types::milli::documents::DocumentsBatchBuilder;
-use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
-
-use utils::{keep_tasks_within_datetimes, map_bound};
-
 use std::ops::{Bound, RangeBounds};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -43,16 +36,21 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
+use dump::{KindDump, TaskDump, UpdateFile};
+pub use error::Error;
 use file_store::FileStore;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{self, Database, Env};
 use meilisearch_types::milli;
+use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::{CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
+use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use synchronoise::SignalEvent;
 use time::OffsetDateTime;
+use utils::{keep_tasks_within_datetimes, map_bound};
 use uuid::Uuid;
 
 use crate::index_mapper::IndexMapper;
@@ -933,9 +931,8 @@ mod tests {
     use time::Duration;
     use uuid::Uuid;
 
-    use crate::snapshot::{snapshot_bitmap, snapshot_index_scheduler};
-
     use super::*;
+    use crate::snapshot::{snapshot_bitmap, snapshot_index_scheduler};
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum FailureLocation {
