@@ -57,7 +57,7 @@ impl Task {
     }
 
     /// Return the list of indexes updated by this tasks.
-    pub fn indexes(&self) -> Option<Vec<&str>> {
+    pub fn indexes(&self) -> Vec<&str> {
         self.kind.indexes()
     }
 
@@ -154,25 +154,25 @@ impl KindWithContent {
         }
     }
 
-    pub fn indexes(&self) -> Option<Vec<&str>> {
+    pub fn indexes(&self) -> Vec<&str> {
         use KindWithContent::*;
 
         match self {
-            DumpCreation { .. } | Snapshot | TaskCancelation { .. } | TaskDeletion { .. } => None,
+            DumpCreation { .. } | Snapshot | TaskCancelation { .. } | TaskDeletion { .. } => vec![],
             DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentDeletion { index_uid, .. }
             | DocumentClear { index_uid }
             | SettingsUpdate { index_uid, .. }
             | IndexCreation { index_uid, .. }
             | IndexUpdate { index_uid, .. }
-            | IndexDeletion { index_uid } => Some(vec![index_uid]),
+            | IndexDeletion { index_uid } => vec![index_uid],
             IndexSwap { swaps } => {
                 let mut indexes = HashSet::<&str>::default();
                 for (lhs, rhs) in swaps {
                     indexes.insert(lhs.as_str());
                     indexes.insert(rhs.as_str());
                 }
-                Some(indexes.into_iter().collect())
+                indexes.into_iter().collect()
             }
         }
     }
