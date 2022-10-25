@@ -1,3 +1,4 @@
+pub mod compression;
 pub mod document_formats;
 pub mod error;
 pub mod index_uid;
