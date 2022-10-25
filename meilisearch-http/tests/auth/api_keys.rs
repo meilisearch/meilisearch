@@ -1400,13 +1400,13 @@ async fn error_patch_api_key_indexes_invalid_parameters() {
 
 #[actix_rt::test]
 async fn error_access_api_key_routes_no_master_key_set() {
-    let mut server = Server::new().await;
+    let server = Server::new().await;
 
     let expected_response = json!({
-        "message": "The Authorization header is missing. It must use the bearer authorization method.",
-        "code": "missing_authorization_header",
+        "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
+        "code": "missing_master_key",
         "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+        "link": "https://docs.meilisearch.com/errors#missing_master_key"
     });
     let expected_code = 401;
 
@@ -1430,32 +1430,32 @@ async fn error_access_api_key_routes_no_master_key_set() {
     assert_eq!(expected_code, code, "{:?}", &response);
     assert_eq!(response, expected_response);
 
-    server.use_api_key("MASTER_KEY");
+    // server.use_api_key("MASTER_KEY");
 
-    let expected_response = json!({"message": "The provided API key is invalid.",
-        "code": "invalid_api_key",
-        "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#invalid_api_key"
-    });
-    let expected_code = 403;
+    // let expected_response = json!({"message": "The provided API key is invalid.",
+    //     "code": "invalid_api_key",
+    //     "type": "auth",
+    //     "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+    // });
+    // let expected_code = 403;
 
-    let (response, code) = server.add_api_key(json!({})).await;
+    // let (response, code) = server.add_api_key(json!({})).await;
 
-    assert_eq!(expected_code, code, "{:?}", &response);
-    assert_eq!(response, expected_response);
+    // assert_eq!(expected_code, code, "{:?}", &response);
+    // assert_eq!(response, expected_response);
 
-    let (response, code) = server.patch_api_key("content", json!({})).await;
+    // let (response, code) = server.patch_api_key("content", json!({})).await;
 
-    assert_eq!(expected_code, code, "{:?}", &response);
-    assert_eq!(response, expected_response);
+    // assert_eq!(expected_code, code, "{:?}", &response);
+    // assert_eq!(response, expected_response);
 
-    let (response, code) = server.get_api_key("content").await;
+    // let (response, code) = server.get_api_key("content").await;
 
-    assert_eq!(expected_code, code, "{:?}", &response);
-    assert_eq!(response, expected_response);
+    // assert_eq!(expected_code, code, "{:?}", &response);
+    // assert_eq!(response, expected_response);
 
-    let (response, code) = server.list_api_keys().await;
+    // let (response, code) = server.list_api_keys().await;
 
-    assert_eq!(expected_code, code, "{:?}", &response);
-    assert_eq!(response, expected_response);
+    // assert_eq!(expected_code, code, "{:?}", &response);
+    // assert_eq!(response, expected_response);
 }

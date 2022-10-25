@@ -173,13 +173,28 @@ impl AuthController {
 pub struct AuthFilter {
     pub search_rules: SearchRules,
     pub allow_index_creation: bool,
+    master_key_missing: bool,
 }
 
+impl AuthFilter {
+    pub fn with_no_master_key() -> AuthFilter {
+        AuthFilter {
+            search_rules: SearchRules::default(),
+            allow_index_creation: true,
+            master_key_missing: true,
+        }
+    }
+
+    pub fn is_missing_master_key(&self) -> bool {
+        self.master_key_missing
+    }
+}
 impl Default for AuthFilter {
     fn default() -> Self {
         Self {
             search_rules: SearchRules::default(),
             allow_index_creation: true,
+            master_key_missing: false,
         }
     }
 }
