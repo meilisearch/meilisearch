@@ -35,6 +35,7 @@ use meilisearch_auth::AuthController;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod};
 use meilisearch_types::settings::apply_settings_to_builder;
+use meilisearch_types::versioning::{check_version_file, create_version_file};
 use meilisearch_types::{milli, VERSION_FILE_NAME};
 pub use option::Opt;
 
@@ -128,23 +129,23 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
         match (
             index_scheduler_builder().map_err(anyhow::Error::from),
             auth_controller_builder().map_err(anyhow::Error::from),
+            create_version_file(&opt.db_path).map_err(anyhow::Error::from),
         ) {
-            (Ok(i), Ok(a)) => Ok((i, a)),
-            (Err(e), _) | (_, Err(e)) => {
+            (Ok(i), Ok(a), Ok(())) => Ok((i, a)),
+            (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => {
                 std::fs::remove_dir_all(&opt.db_path)?;
                 Err(e)
             }
         }
     };
 
+    let empty_db = is_empty_db(&opt.db_path);
     let (index_scheduler, auth_controller) = if let Some(ref _path) = opt.import_snapshot {
         // handle the snapshot with something akin to the dumps
         // + the snapshot interval / spawning a thread
         todo!();
     } else if let Some(ref path) = opt.import_dump {
-        let empty_db = is_empty_db(&opt.db_path);
         let src_path_exists = path.exists();
-
         if empty_db && src_path_exists {
             let (mut index_scheduler, mut auth_controller) = meilisearch_builder()?;
             match import_dump(&opt.db_path, path, &mut index_scheduler, &mut auth_controller) {
@@ -172,6 +173,9 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
             }
         }
     } else {
+        if !empty_db {
+            check_version_file(&opt.db_path)?;
+        }
         meilisearch_builder()?
     };
 
