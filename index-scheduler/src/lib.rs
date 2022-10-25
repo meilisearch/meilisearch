@@ -1846,8 +1846,6 @@ mod tests {
         snapshot!(serde_json::to_string_pretty(&documents).unwrap());
     }
 
-    // TESTS WITH DISABLED AUTOBATCHING
-
     #[test]
     fn test_document_replace_without_autobatching() {
         let (index_scheduler, handle) = IndexScheduler::test(false, vec![]);
@@ -1950,6 +1948,360 @@ mod tests {
         snapshot!(snapshot_index_scheduler(&index_scheduler));
 
         // has everything being pushed successfully in milli?
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap());
+    }
+
+    #[test]
+    fn test_document_addition_cant_create_index_without_index() {
+        // We're going to autobatch multiple document addition that don't have
+        // the right to create an index while there is no index currently.
+        // Thus, everything should be batched together and a IndexDoesNotExists
+        // error should be throwed.
+        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+
+        for i in 0..10 {
+            let content = format!(
+                r#"{{
+                    "id": {},
+                    "doggo": "bob {}"
+                }}"#,
+                i, i
+            );
+
+            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let documents_count = meilisearch_types::document_formats::read_json(
+                content.as_bytes(),
+                file.as_file_mut(),
+            )
+            .unwrap() as u64;
+            file.persist().unwrap();
+            index_scheduler
+                .register(KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S("id")),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: false,
+                })
+                .unwrap();
+        }
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // Everything should be batched together.
+        handle.advance_n_batch(1);
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // The index should not exists.
+        snapshot!(format!("{}", index_scheduler.index("doggos").map(|_| ()).unwrap_err()), @"Index `doggos` not found.");
+    }
+
+    #[test]
+    fn test_document_addition_cant_create_index_without_index_without_autobatching() {
+        // We're going to execute multiple document addition that don't have
+        // the right to create an index while there is no index currently.
+        // Since the autobatching is disabled, every tasks should be processed
+        // sequentially and throw an IndexDoesNotExists.
+        let (index_scheduler, handle) = IndexScheduler::test(false, vec![]);
+
+        for i in 0..10 {
+            let content = format!(
+                r#"{{
+                    "id": {},
+                    "doggo": "bob {}"
+                }}"#,
+                i, i
+            );
+
+            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let documents_count = meilisearch_types::document_formats::read_json(
+                content.as_bytes(),
+                file.as_file_mut(),
+            )
+            .unwrap() as u64;
+            file.persist().unwrap();
+            index_scheduler
+                .register(KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S("id")),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: false,
+                })
+                .unwrap();
+        }
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // Nothing should be batched thus half of the tasks are processed.
+        handle.advance_n_batch(5);
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // Everything is processed.
+        handle.advance_n_batch(5);
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // The index should not exists.
+        snapshot!(format!("{}", index_scheduler.index("doggos").map(|_| ()).unwrap_err()), @"Index `doggos` not found.");
+    }
+
+    #[test]
+    fn test_document_addition_cant_create_index_with_index() {
+        // We're going to autobatch multiple document addition that don't have
+        // the right to create an index while there is already an index.
+        // Thus, everything should be batched together and no error should be
+        // throwed.
+        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+
+        // Create the index.
+        index_scheduler
+            .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
+            .unwrap();
+        handle.advance_n_batch(1);
+
+        for i in 0..10 {
+            let content = format!(
+                r#"{{
+                    "id": {},
+                    "doggo": "bob {}"
+                }}"#,
+                i, i
+            );
+
+            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let documents_count = meilisearch_types::document_formats::read_json(
+                content.as_bytes(),
+                file.as_file_mut(),
+            )
+            .unwrap() as u64;
+            file.persist().unwrap();
+            index_scheduler
+                .register(KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S("id")),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: false,
+                })
+                .unwrap();
+        }
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // Everything should be batched together.
+        handle.advance_n_batch(1);
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // Has everything being pushed successfully in milli?
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap());
+    }
+
+    #[test]
+    fn test_document_addition_cant_create_index_with_index_without_autobatching() {
+        // We're going to execute multiple document addition that don't have
+        // the right to create an index while there is no index currently.
+        // Since the autobatching is disabled, every tasks should be processed
+        // sequentially and throw an IndexDoesNotExists.
+        let (index_scheduler, handle) = IndexScheduler::test(false, vec![]);
+
+        // Create the index.
+        index_scheduler
+            .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
+            .unwrap();
+        handle.advance_n_batch(1);
+
+        for i in 0..10 {
+            let content = format!(
+                r#"{{
+                    "id": {},
+                    "doggo": "bob {}"
+                }}"#,
+                i, i
+            );
+
+            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let documents_count = meilisearch_types::document_formats::read_json(
+                content.as_bytes(),
+                file.as_file_mut(),
+            )
+            .unwrap() as u64;
+            file.persist().unwrap();
+            index_scheduler
+                .register(KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S("id")),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: false,
+                })
+                .unwrap();
+        }
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // Nothing should be batched thus half of the tasks are processed.
+        handle.advance_n_batch(5);
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // Everything is processed.
+        handle.advance_n_batch(5);
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // Has everything being pushed successfully in milli?
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap());
+    }
+
+    #[test]
+    fn test_document_addition_mixed_rights_with_index() {
+        // We're going to autobatch multiple document addition.
+        // - The index already exists
+        // - The first document addition don't have the right to create an index
+        //   can it batch with the other one?
+        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+
+        // Create the index.
+        index_scheduler
+            .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
+            .unwrap();
+        handle.advance_n_batch(1);
+
+        for i in 0..10 {
+            let content = format!(
+                r#"{{
+                    "id": {},
+                    "doggo": "bob {}"
+                }}"#,
+                i, i
+            );
+            let allow_index_creation = if i % 2 == 0 { false } else { true };
+
+            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let documents_count = meilisearch_types::document_formats::read_json(
+                content.as_bytes(),
+                file.as_file_mut(),
+            )
+            .unwrap() as u64;
+            file.persist().unwrap();
+            index_scheduler
+                .register(KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S("id")),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation,
+                })
+                .unwrap();
+        }
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // Everything should be batched together.
+        handle.advance_n_batch(1);
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // Has everything being pushed successfully in milli?
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap());
+    }
+
+    #[test]
+    fn test_document_addition_mixed_right_without_index_starts_with_cant_create() {
+        // We're going to autobatch multiple document addition.
+        // - The index does not exists
+        // - The first document addition don't have the right to create an index
+        // - The second do. They should not batch together.
+        // - The second should batch with everything else as it's going to create an index.
+        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+
+        for i in 0..10 {
+            let content = format!(
+                r#"{{
+                    "id": {},
+                    "doggo": "bob {}"
+                }}"#,
+                i, i
+            );
+            let allow_index_creation = if i % 2 == 0 { false } else { true };
+
+            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let documents_count = meilisearch_types::document_formats::read_json(
+                content.as_bytes(),
+                file.as_file_mut(),
+            )
+            .unwrap() as u64;
+            file.persist().unwrap();
+            index_scheduler
+                .register(KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S("id")),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation,
+                })
+                .unwrap();
+        }
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // A first batch should be processed with only the first documentAddition that's going to fail.
+        handle.advance_n_batch(1);
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // Everything else should be batched together.
+        handle.advance_n_batch(1);
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+        // Has everything being pushed successfully in milli?
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
