@@ -189,7 +189,7 @@ impl KindWithContent {
             }
             KindWithContent::DocumentDeletion { index_uid: _, documents_ids } => {
                 Some(Details::DocumentDeletion {
-                    received_document_ids: documents_ids.len(),
+                    matched_documents: documents_ids.len(),
                     deleted_documents: None,
                 })
             }
@@ -232,7 +232,7 @@ impl KindWithContent {
             }
             KindWithContent::DocumentDeletion { index_uid: _, documents_ids } => {
                 Some(Details::DocumentDeletion {
-                    received_document_ids: documents_ids.len(),
+                    matched_documents: documents_ids.len(),
                     deleted_documents: Some(0),
                 })
             }
@@ -418,41 +418,16 @@ impl FromStr for Kind {
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum Details {
-    DocumentAdditionOrUpdate {
-        received_documents: u64,
-        indexed_documents: Option<u64>,
-    },
-    SettingsUpdate {
-        settings: Box<Settings<Unchecked>>,
-    },
-    IndexInfo {
-        primary_key: Option<String>,
-    },
-    DocumentDeletion {
-        received_document_ids: usize,
-        // TODO why is this optional?
-        deleted_documents: Option<u64>,
-    },
-    ClearAll {
-        deleted_documents: Option<u64>,
-    },
-    TaskCancelation {
-        matched_tasks: u64,
-        canceled_tasks: Option<u64>,
-        original_query: String,
-    },
-    TaskDeletion {
-        matched_tasks: u64,
-        deleted_tasks: Option<u64>,
-        original_query: String,
-    },
-    Dump {
-        dump_uid: String,
-    },
+    DocumentAdditionOrUpdate { received_documents: u64, indexed_documents: Option<u64> },
+    SettingsUpdate { settings: Box<Settings<Unchecked>> },
+    IndexInfo { primary_key: Option<String> },
+    DocumentDeletion { matched_documents: usize, deleted_documents: Option<u64> },
+    ClearAll { deleted_documents: Option<u64> },
+    TaskCancelation { matched_tasks: u64, canceled_tasks: Option<u64>, original_query: String },
+    TaskDeletion { matched_tasks: u64, deleted_tasks: Option<u64>, original_query: String },
+    Dump { dump_uid: String },
     // TODO: Lo: Revisit this variant once we have decided on what the POST payload of swapping indexes should be
-    IndexSwap {
-        swaps: Vec<(String, String)>,
-    },
+    IndexSwap { swaps: Vec<(String, String)> },
 }
 
 /// Serialize a `time::Duration` as a best effort ISO 8601 while waiting for

@@ -143,7 +143,7 @@ impl CompatV5ToV6 {
                             received_document_ids,
                             deleted_documents,
                         } => v6::Details::DocumentDeletion {
-                            received_document_ids,
+                            matched_documents: received_document_ids,
                             deleted_documents,
                         },
                         v5::Details::ClearAll { deleted_documents } => {
