@@ -1,3 +1,4 @@
+#![allow(clippy::reversed_empty_ranges)]
 #[macro_use]
 pub mod documents;
 
