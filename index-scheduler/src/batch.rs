@@ -33,7 +33,7 @@ use meilisearch_types::milli::update::{
 use meilisearch_types::milli::{self, BEU32};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
 use meilisearch_types::tasks::{Details, Kind, KindWithContent, Status, Task};
-use meilisearch_types::Index;
+use meilisearch_types::{Index, VERSION_FILE_NAME};
 use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -559,9 +559,8 @@ impl IndexScheduler {
 
                 // 1. Snapshot the version file.
                 // TODO where can I find the path of this file and do we create it anyway?
-                // let dst = temp_snapshot_dir.path().join(VERSION_FILE_NAME);
-                // let src = self.base_path.join(VERSION_FILE_NAME);
-                // fs::copy(src, dst)?;
+                let dst = temp_snapshot_dir.path().join(VERSION_FILE_NAME);
+                fs::copy(&self.version_file_path, dst)?;
 
                 // TODO what is a meta-env in the previous version of the scheduler?
 
@@ -601,7 +600,7 @@ impl IndexScheduler {
                 // 3. Snapshot every indexes
                 // TODO we are opening all of the indexes it can be too much we should unload all
                 //      of the indexes we are trying to open. It would be even better to only unload
-                //      the one that were opened by us. Or maybe use a LRU in the index mapper.
+                //      the ones that were opened by us. Or maybe use a LRU in the index mapper.
                 for result in self.index_mapper.index_mapping.iter(&rtxn)? {
                     let (name, uuid) = result?;
                     let index = self.index_mapper.index(&rtxn, name)?;
@@ -618,7 +617,8 @@ impl IndexScheduler {
                 // 4. Snapshot the auth LMDB env
                 let dst = temp_snapshot_dir.path().join("auth").join("data.mdb");
                 fs::create_dir_all(&dst)?;
-                let auth = milli::heed::EnvOpenOptions::new().open(&self.auth_path)?;
+                let src = self.auth_path.join("data.mdb");
+                let auth = milli::heed::EnvOpenOptions::new().open(src)?;
                 auth.copy_to_path(dst, CompactionOption::Enabled)?;
 
                 todo!("tar-gz and append .snapshot at the end of the file");

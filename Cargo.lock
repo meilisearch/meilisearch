@@ -2337,6 +2337,7 @@ name = "meilisearch-types"
 version = "0.29.1"
 dependencies = [
  "actix-web",
+ "anyhow",
  "csv",
  "either",
  "enum-iterator",

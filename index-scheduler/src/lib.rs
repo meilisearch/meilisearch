@@ -248,6 +248,9 @@ pub struct IndexScheduler {
     /// The path to the folder containing the auth LMDB env.
     pub(crate) auth_path: PathBuf,
 
+    /// The path to the version file of Meilisearch.
+    pub(crate) version_file_path: PathBuf,
+
     // ================= test
     // The next entry is dedicated to the tests.
     /// Provide a way to set a breakpoint in multiple part of the scheduler.
@@ -286,6 +289,7 @@ impl IndexScheduler {
             snapshots_path: self.snapshots_path.clone(),
             dumps_path: self.dumps_path.clone(),
             auth_path: self.auth_path.clone(),
+            version_file_path: self.version_file_path.clone(),
             #[cfg(test)]
             test_breakpoint_sdr: self.test_breakpoint_sdr.clone(),
             #[cfg(test)]
@@ -314,6 +318,7 @@ impl IndexScheduler {
     /// Create an index scheduler and start its run loop.
     ///
     /// ## Arguments
+    /// - `version_file_path`: the path to the version file of Meilisearch
     /// - `auth_path`: the path to the folder containing the auth LMDB env
     /// - `tasks_path`: the path to the folder containing the task databases
     /// - `update_file_path`: the path to the file store containing the files associated to the tasks
@@ -326,6 +331,7 @@ impl IndexScheduler {
     /// together, to process multiple tasks at once.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
+        version_file_path: PathBuf,
         auth_path: PathBuf,
         tasks_path: PathBuf,
         update_file_path: PathBuf,
@@ -371,6 +377,7 @@ impl IndexScheduler {
             dumps_path,
             snapshots_path,
             auth_path,
+            version_file_path,
 
             #[cfg(test)]
             test_breakpoint_sdr,
@@ -975,6 +982,8 @@ mod tests {
             let (sender, receiver) = crossbeam::channel::bounded(0);
 
             let index_scheduler = Self::new(
+                tempdir.path().join(VERSION_FILE_NAME),
+                tempdir.path().join("auth"),
                 tempdir.path().join("db_path"),
                 tempdir.path().join("file_store"),
                 tempdir.path().join("indexes"),
