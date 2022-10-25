@@ -242,6 +242,9 @@ pub struct IndexScheduler {
     /// The path used to create the dumps.
     pub(crate) dumps_path: PathBuf,
 
+    /// The path used to create the snapshots.
+    pub(crate) snapshots_path: PathBuf,
+
     // ================= test
     // The next entry is dedicated to the tests.
     /// Provide a way to set a breakpoint in multiple part of the scheduler.
@@ -261,8 +264,8 @@ pub struct IndexScheduler {
     run_loop_iteration: Arc<RwLock<usize>>,
 }
 impl IndexScheduler {
-    fn private_clone(&self) -> Self {
-        Self {
+    fn private_clone(&self) -> IndexScheduler {
+        IndexScheduler {
             env: self.env.clone(),
             must_stop_processing: self.must_stop_processing.clone(),
             processing_tasks: self.processing_tasks.clone(),
@@ -277,6 +280,7 @@ impl IndexScheduler {
             index_mapper: self.index_mapper.clone(),
             wake_up: self.wake_up.clone(),
             autobatching_enabled: self.autobatching_enabled,
+            snapshots_path: self.snapshots_path.clone(),
             dumps_path: self.dumps_path.clone(),
             #[cfg(test)]
             test_breakpoint_sdr: self.test_breakpoint_sdr.clone(),
@@ -308,6 +312,7 @@ impl IndexScheduler {
     /// - `tasks_path`: the path to the folder containing the task databases
     /// - `update_file_path`: the path to the file store containing the files associated to the tasks
     /// - `indexes_path`: the path to the folder containing meilisearch's indexes
+    /// - `snapshots_path`: the path to the folder containing the snapshots
     /// - `dumps_path`: the path to the folder containing the dumps
     /// - `index_size`: the maximum size, in bytes, of each meilisearch index
     /// - `indexer_config`: configuration used during indexing for each meilisearch index
@@ -319,6 +324,7 @@ impl IndexScheduler {
         update_file_path: PathBuf,
         indexes_path: PathBuf,
         dumps_path: PathBuf,
+        snapshots_path: PathBuf,
         task_db_size: usize,
         index_size: usize,
         indexer_config: IndexerConfig,
@@ -356,6 +362,7 @@ impl IndexScheduler {
             wake_up: Arc::new(SignalEvent::auto(true)),
             autobatching_enabled,
             dumps_path,
+            snapshots_path,
 
             #[cfg(test)]
             test_breakpoint_sdr,
@@ -963,6 +970,7 @@ mod tests {
                 tempdir.path().join("db_path"),
                 tempdir.path().join("file_store"),
                 tempdir.path().join("indexes"),
+                tempdir.path().join("snapshots"),
                 tempdir.path().join("dumps"),
                 1024 * 1024,
                 1024 * 1024,
