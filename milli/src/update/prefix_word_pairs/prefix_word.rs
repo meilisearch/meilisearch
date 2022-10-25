@@ -30,9 +30,8 @@ pub fn index_prefix_word_database(
     debug!("Computing and writing the word prefix pair proximity docids into LMDB on disk...");
 
     let common_prefixes: Vec<_> = common_prefix_fst_words
-        .into_iter()
-        .map(|s| s.into_iter())
-        .flatten()
+        .iter()
+        .flat_map(|s| s.iter())
         .map(|s| s.as_str())
         .filter(|s| s.len() <= max_prefix_length)
         .collect();
@@ -73,7 +72,7 @@ pub fn index_prefix_word_database(
 
     // Now we do the same thing with the new prefixes and all word pairs in the DB
     let new_prefixes: Vec<_> = new_prefix_fst_words
-        .into_iter()
+        .iter()
         .map(|s| s.as_str())
         .filter(|s| s.len() <= max_prefix_length)
         .collect();

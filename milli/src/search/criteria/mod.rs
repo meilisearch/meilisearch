@@ -562,11 +562,11 @@ fn query_pair_proximity_docids(
                 )? {
                     Some(docids) => Ok(docids),
                     None => {
-                        let r_words = word_derivations(&right, true, 0, ctx.words_fst(), wdcache)?;
+                        let r_words = word_derivations(right, true, 0, ctx.words_fst(), wdcache)?;
                         all_word_pair_overall_proximity_docids(
                             ctx,
                             &[(left, 0)],
-                            &r_words,
+                            r_words,
                             proximity,
                         )
                     }
@@ -592,11 +592,11 @@ fn query_pair_proximity_docids(
                         Some(docids) => Ok(docids),
                         None => {
                             let r_words =
-                                word_derivations(&right, true, 0, ctx.words_fst(), wdcache)?;
+                                word_derivations(right, true, 0, ctx.words_fst(), wdcache)?;
                             all_word_pair_overall_proximity_docids(
                                 ctx,
                                 &[(left, 0)],
-                                &r_words,
+                                r_words,
                                 proximity,
                             )
                         }
@@ -609,17 +609,17 @@ fn query_pair_proximity_docids(
             }
         }
         (QueryKind::Exact { word: left, .. }, QueryKind::Tolerant { typo, word: right }) => {
-            let r_words = word_derivations(&right, prefix, *typo, ctx.words_fst(), wdcache)?;
-            all_word_pair_overall_proximity_docids(ctx, &[(left, 0)], &r_words, proximity)
+            let r_words = word_derivations(right, prefix, *typo, ctx.words_fst(), wdcache)?;
+            all_word_pair_overall_proximity_docids(ctx, &[(left, 0)], r_words, proximity)
         }
         (
             QueryKind::Tolerant { typo: l_typo, word: left },
             QueryKind::Tolerant { typo: r_typo, word: right },
         ) => {
             let l_words =
-                word_derivations(&left, false, *l_typo, ctx.words_fst(), wdcache)?.to_owned();
-            let r_words = word_derivations(&right, prefix, *r_typo, ctx.words_fst(), wdcache)?;
-            all_word_pair_overall_proximity_docids(ctx, &l_words, &r_words, proximity)
+                word_derivations(left, false, *l_typo, ctx.words_fst(), wdcache)?.to_owned();
+            let r_words = word_derivations(right, prefix, *r_typo, ctx.words_fst(), wdcache)?;
+            all_word_pair_overall_proximity_docids(ctx, &l_words, r_words, proximity)
         }
     }
 }

@@ -200,7 +200,7 @@ impl Index {
 
     pub fn new<P: AsRef<Path>>(options: heed::EnvOpenOptions, path: P) -> Result<Index> {
         let now = OffsetDateTime::now_utc();
-        Self::new_with_creation_dates(options, path, now.clone(), now)
+        Self::new_with_creation_dates(options, path, now, now)
     }
 
     fn set_creation_dates(

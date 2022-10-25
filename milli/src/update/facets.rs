@@ -332,8 +332,8 @@ fn compute_facet_number_levels(
 /// 1. a vector of grenad::Reader. The reader at index `i` corresponds to the elements of level `i + 1`
 /// that must be inserted into the database.
 /// 2. a roaring bitmap of all the document ids present in the database
-fn compute_facet_strings_levels<'t>(
-    rtxn: &'t heed::RoTxn,
+fn compute_facet_strings_levels(
+    rtxn: &heed::RoTxn,
     db: heed::Database<FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec>,
     compression_type: CompressionType,
     compression_level: Option<u32>,
