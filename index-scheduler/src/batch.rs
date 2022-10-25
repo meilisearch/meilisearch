@@ -560,7 +560,7 @@ impl IndexScheduler {
                 // 1. Snapshot the version file.
                 // TODO where can I find the path of this file and do we create it anyway?
                 // let dst = temp_snapshot_dir.path().join(VERSION_FILE_NAME);
-                // let src = self.src_path.join(VERSION_FILE_NAME);
+                // let src = self.base_path.join(VERSION_FILE_NAME);
                 // fs::copy(src, dst)?;
 
                 // TODO what is a meta-env in the previous version of the scheduler?
@@ -618,9 +618,7 @@ impl IndexScheduler {
                 // 4. Snapshot the auth LMDB env
                 let dst = temp_snapshot_dir.path().join("auth").join("data.mdb");
                 fs::create_dir_all(&dst)?;
-                // TODO find a better way to get the auth database path
-                let auth_path = self.env.path().join("..").join("auth");
-                let auth = milli::heed::EnvOpenOptions::new().open(auth_path)?;
+                let auth = milli::heed::EnvOpenOptions::new().open(&self.auth_path)?;
                 auth.copy_to_path(dst, CompactionOption::Enabled)?;
 
                 todo!("tar-gz and append .snapshot at the end of the file");

@@ -245,6 +245,9 @@ pub struct IndexScheduler {
     /// The path used to create the snapshots.
     pub(crate) snapshots_path: PathBuf,
 
+    /// The path to the folder containing the auth LMDB env.
+    pub(crate) auth_path: PathBuf,
+
     // ================= test
     // The next entry is dedicated to the tests.
     /// Provide a way to set a breakpoint in multiple part of the scheduler.
@@ -282,6 +285,7 @@ impl IndexScheduler {
             autobatching_enabled: self.autobatching_enabled,
             snapshots_path: self.snapshots_path.clone(),
             dumps_path: self.dumps_path.clone(),
+            auth_path: self.auth_path.clone(),
             #[cfg(test)]
             test_breakpoint_sdr: self.test_breakpoint_sdr.clone(),
             #[cfg(test)]
@@ -306,9 +310,11 @@ pub enum Breakpoint {
 }
 
 impl IndexScheduler {
+    // TODO create a struct of options with a documented field for each required option instead
     /// Create an index scheduler and start its run loop.
     ///
     /// ## Arguments
+    /// - `auth_path`: the path to the folder containing the auth LMDB env
     /// - `tasks_path`: the path to the folder containing the task databases
     /// - `update_file_path`: the path to the file store containing the files associated to the tasks
     /// - `indexes_path`: the path to the folder containing meilisearch's indexes
@@ -320,6 +326,7 @@ impl IndexScheduler {
     /// together, to process multiple tasks at once.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
+        auth_path: PathBuf,
         tasks_path: PathBuf,
         update_file_path: PathBuf,
         indexes_path: PathBuf,
@@ -363,6 +370,7 @@ impl IndexScheduler {
             autobatching_enabled,
             dumps_path,
             snapshots_path,
+            auth_path,
 
             #[cfg(test)]
             test_breakpoint_sdr,
