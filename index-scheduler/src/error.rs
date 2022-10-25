@@ -26,7 +26,7 @@ pub enum Error {
     Heed(#[from] heed::Error),
     #[error(transparent)]
     Milli(#[from] milli::Error),
-    #[error("An unexpected crash occurred when processing the task")]
+    #[error("An unexpected crash occurred when processing the task.")]
     ProcessBatchPanicked,
     #[error(transparent)]
     FileStore(#[from] file_store::Error),
