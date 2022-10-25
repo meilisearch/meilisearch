@@ -297,7 +297,7 @@ impl IndexScheduler {
                 details,
                 status,
                 kind,
-            } = task.clone();
+            } = task;
             assert_eq!(uid, task.uid);
             if let Some(task_index_uid) = &task_index_uid {
                 assert!(self
@@ -319,9 +319,6 @@ impl IndexScheduler {
                     .get(&rtxn, &BEI128::new(started_at.unix_timestamp_nanos()))
                     .unwrap()
                     .unwrap();
-                if !db_started_at.contains(task_id) {
-                    dbg!(&task);
-                }
                 assert!(db_started_at.contains(task_id));
             }
             if let Some(finished_at) = finished_at {
