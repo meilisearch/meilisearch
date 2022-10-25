@@ -508,7 +508,7 @@ impl IndexScheduler {
                     _ => unreachable!(),
                 }
 
-                // We must only remove the content files if the transaction is successfuly committed
+                // We must only remove the content files if the transaction is successfully committed
                 // and if errors occurs when we are deleting files we must do our best to delete
                 // everything. We do not return the encountered errors when deleting the content
                 // files as it is not a breaking operation and we can safely continue our job.
@@ -577,9 +577,10 @@ impl IndexScheduler {
                 // Note that there cannot be any update files deleted between those
                 // two read operations as the task processing is synchronous.
 
-                // 2.1 First copy the LMDB env and reorganize pages to reduce its size.
-                let dst = temp_snapshot_dir.path().join("data.mdb");
-                self.env.copy_to_path(dst, CompactionOption::Enabled)?;
+                // 2.1 First copy the LMDB env of the index-scheduler
+                let dst = temp_snapshot_dir.path().join("tasks");
+                fs::create_dir_all(&dst)?;
+                self.env.copy_to_path(dst.join("data.mdb"), CompactionOption::Enabled)?;
 
                 // 2.2 Create a read transaction on the index-scheduler
                 let rtxn = self.env.read_txn()?;
@@ -605,22 +606,22 @@ impl IndexScheduler {
                 for result in self.index_mapper.index_mapping.iter(&rtxn)? {
                     let (name, uuid) = result?;
                     let index = self.index_mapper.index(&rtxn, name)?;
-                    let dst = temp_snapshot_dir
-                        .path()
-                        .join("indexes")
-                        .join(uuid.to_string())
-                        .join("data.mdb");
-                    index.copy_to_path(dst, CompactionOption::Enabled)?;
+                    let dst = temp_snapshot_dir.path().join("indexes").join(uuid.to_string());
+                    fs::create_dir_all(&dst)?;
+                    index.copy_to_path(dst.join("data.mdb"), CompactionOption::Enabled)?;
                 }
 
                 drop(rtxn);
 
                 // 4. Snapshot the auth LMDB env
-                let dst = temp_snapshot_dir.path().join("auth").join("data.mdb");
+                let dst = temp_snapshot_dir.path().join("auth");
                 fs::create_dir_all(&dst)?;
-                let src = self.auth_path.join("data.mdb");
-                let auth = milli::heed::EnvOpenOptions::new().open(src)?;
-                auth.copy_to_path(dst, CompactionOption::Enabled)?;
+                // TODO We can't use the open_auth_store_env function here but we should
+                let auth = milli::heed::EnvOpenOptions::new()
+                    .map_size(1 * 1024 * 1024 * 1024) // 1 GiB
+                    .max_dbs(2)
+                    .open(&self.auth_path)?;
+                auth.copy_to_path(dst.join("data.mdb"), CompactionOption::Enabled)?;
 
                 // 5. Copy and tarball the flat snapshot
                 // 5.1 Find the original name of the database
@@ -630,7 +631,7 @@ impl IndexScheduler {
                 let db_name = base_path.file_name().and_then(OsStr::to_str).unwrap_or("data.ms");
 
                 // 5.2 Tarball the content of the snapshot in a tempfile with a .snapshot extension
-                let snapshot_path = self.snapshots_path.join(db_name).with_extension("snapshot");
+                let snapshot_path = self.snapshots_path.join(format!("{}.snapshot", db_name));
                 let temp_snapshot_file = tempfile::NamedTempFile::new_in(&self.snapshots_path)?;
                 compression::to_tar_gz(temp_snapshot_dir.path(), temp_snapshot_file.path())?;
                 let file = temp_snapshot_file.persist(&snapshot_path)?;
