@@ -106,17 +106,6 @@ fn document_word_positions_into_sorter(
                             *p = cmp::min(*p, prox);
                         })
                         .or_insert(prox);
-
-                    // We also compute the inverse proximity.
-                    let prox = prox + 1;
-                    if prox < MAX_DISTANCE {
-                        word_pair_proximity
-                            .entry((word.clone(), head.word.clone()))
-                            .and_modify(|p| {
-                                *p = cmp::min(*p, prox);
-                            })
-                            .or_insert(prox);
-                    }
                 }
             }
 
@@ -151,11 +140,10 @@ fn document_word_positions_into_sorter(
     let mut key_buffer = Vec::new();
     for ((w1, w2), prox) in word_pair_proximity {
         key_buffer.clear();
+        key_buffer.push(prox as u8);
         key_buffer.extend_from_slice(w1.as_bytes());
         key_buffer.push(0);
         key_buffer.extend_from_slice(w2.as_bytes());
-        key_buffer.push(0);
-        key_buffer.push(prox as u8);
 
         word_pair_proximity_docids_sorter.insert(&key_buffer, &document_id.to_ne_bytes())?;
     }

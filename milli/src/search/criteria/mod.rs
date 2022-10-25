@@ -71,6 +71,7 @@ pub trait Context<'c> {
     fn exact_word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
     fn word_prefix_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
     fn exact_word_prefix_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
+
     fn word_pair_proximity_docids(
         &self,
         left: &str,
@@ -80,6 +81,12 @@ pub trait Context<'c> {
     fn word_prefix_pair_proximity_docids(
         &self,
         left: &str,
+        right: &str,
+        proximity: u8,
+    ) -> heed::Result<Option<RoaringBitmap>>;
+    fn prefix_word_pair_proximity_docids(
+        &self,
+        prefix: &str,
         right: &str,
         proximity: u8,
     ) -> heed::Result<Option<RoaringBitmap>>;
@@ -111,6 +118,68 @@ pub struct CriteriaBuilder<'t> {
     words_prefixes_fst: fst::Set<Cow<'t, [u8]>>,
 }
 
+/// Return the docids for the following word pairs and proximities using [`Context::word_pair_proximity_docids`].
+/// * `left, right, prox`   (leftward proximity)
+/// * `right, left, prox-1` (rightward proximity)
+///
+/// ## Example
+/// For a document with the text `the good fox eats the apple`, we have:
+/// * `rightward_proximity(the, eats) = 3`
+/// * `leftward_proximity(eats, the) = 1`
+///
+/// So both the expressions `word_pair_overall_proximity_docids(ctx, the, eats, 3)`
+/// and `word_pair_overall_proximity_docids(ctx, the, eats, 2)` would return a bitmap containing
+/// the id of this document.
+fn word_pair_overall_proximity_docids(
+    ctx: &dyn Context,
+    left: &str,
+    right: &str,
+    prox: u8,
+) -> heed::Result<Option<RoaringBitmap>> {
+    let rightward = ctx.word_pair_proximity_docids(left, right, prox)?;
+    let leftward =
+        if prox > 1 { ctx.word_pair_proximity_docids(right, left, prox - 1)? } else { None };
+    if let Some(mut all) = rightward {
+        if let Some(leftward) = leftward {
+            all |= leftward;
+        }
+        Ok(Some(all))
+    } else {
+        Ok(leftward)
+    }
+}
+
+/// This function works identically to [`word_pair_overall_proximity_docids`] except that the
+/// right word is replaced by a prefix string.
+///
+/// It will return None if no documents were found or if the prefix does not exist in the
+/// `word_prefix_pair_proximity_docids` database.
+fn word_prefix_pair_overall_proximity_docids(
+    ctx: &dyn Context,
+    left: &str,
+    prefix: &str,
+    proximity: u8,
+) -> heed::Result<Option<RoaringBitmap>> {
+    // We retrieve the docids for the original and swapped word pairs:
+    // A: word1 prefix2 proximity
+    // B: prefix2 word1 proximity-1
+    let rightward = ctx.word_prefix_pair_proximity_docids(left, prefix, proximity)?;
+
+    let leftward = if proximity > 1 {
+        ctx.prefix_word_pair_proximity_docids(prefix, left, proximity - 1)?
+    } else {
+        None
+    };
+    if let Some(mut all) = rightward {
+        if let Some(leftward) = leftward {
+            all |= leftward;
+        }
+        Ok(Some(all))
+    } else {
+        Ok(leftward)
+    }
+}
+
 impl<'c> Context<'c> for CriteriaBuilder<'c> {
     fn documents_ids(&self) -> heed::Result<RoaringBitmap> {
         self.index.documents_ids(self.rtxn)
@@ -138,18 +207,24 @@ impl<'c> Context<'c> for CriteriaBuilder<'c> {
         right: &str,
         proximity: u8,
     ) -> heed::Result<Option<RoaringBitmap>> {
-        let key = (left, right, proximity);
-        self.index.word_pair_proximity_docids.get(self.rtxn, &key)
+        self.index.word_pair_proximity_docids.get(self.rtxn, &(proximity, left, right))
     }
 
     fn word_prefix_pair_proximity_docids(
         &self,
         left: &str,
+        prefix: &str,
+        proximity: u8,
+    ) -> heed::Result<Option<RoaringBitmap>> {
+        self.index.word_prefix_pair_proximity_docids.get(self.rtxn, &(proximity, left, prefix))
+    }
+    fn prefix_word_pair_proximity_docids(
+        &self,
+        prefix: &str,
         right: &str,
         proximity: u8,
     ) -> heed::Result<Option<RoaringBitmap>> {
-        let key = (left, right, proximity);
-        self.index.word_prefix_pair_proximity_docids.get(self.rtxn, &key)
+        self.index.prefix_word_pair_proximity_docids.get(self.rtxn, &(proximity, prefix, right))
     }
 
     fn words_fst<'t>(&self) -> &'t fst::Set<Cow<[u8]>> {
@@ -352,18 +427,31 @@ pub fn resolve_query_tree(
 pub fn resolve_phrase(ctx: &dyn Context, phrase: &[String]) -> Result<RoaringBitmap> {
     let mut candidates = RoaringBitmap::new();
     let mut first_iter = true;
-    let winsize = phrase.len().min(7);
-
+    let winsize = phrase.len().min(3);
     for win in phrase.windows(winsize) {
         // Get all the documents with the matching distance for each word pairs.
         let mut bitmaps = Vec::with_capacity(winsize.pow(2));
         for (offset, s1) in win.iter().enumerate() {
             for (dist, s2) in win.iter().skip(offset + 1).enumerate() {
-                match ctx.word_pair_proximity_docids(s1, s2, dist as u8 + 1)? {
-                    Some(m) => bitmaps.push(m),
-                    // If there are no document for this distance, there will be no
-                    // results for the phrase query.
-                    None => return Ok(RoaringBitmap::new()),
+                if dist == 0 {
+                    match ctx.word_pair_proximity_docids(s1, s2, 1)? {
+                        Some(m) => bitmaps.push(m),
+                        // If there are no document for this pair, there will be no
+                        // results for the phrase query.
+                        None => return Ok(RoaringBitmap::new()),
+                    }
+                } else {
+                    let mut bitmap = RoaringBitmap::new();
+                    for dist in 0..=dist {
+                        if let Some(m) = ctx.word_pair_proximity_docids(s1, s2, dist as u8 + 1)? {
+                            bitmap |= m
+                        }
+                    }
+                    if bitmap.is_empty() {
+                        return Ok(bitmap);
+                    } else {
+                        bitmaps.push(bitmap);
+                    }
                 }
             }
         }
@@ -387,7 +475,7 @@ pub fn resolve_phrase(ctx: &dyn Context, phrase: &[String]) -> Result<RoaringBit
     Ok(candidates)
 }
 
-fn all_word_pair_proximity_docids<T: AsRef<str>, U: AsRef<str>>(
+fn all_word_pair_overall_proximity_docids<T: AsRef<str>, U: AsRef<str>>(
     ctx: &dyn Context,
     left_words: &[(T, u8)],
     right_words: &[(U, u8)],
@@ -396,9 +484,9 @@ fn all_word_pair_proximity_docids<T: AsRef<str>, U: AsRef<str>>(
     let mut docids = RoaringBitmap::new();
     for (left, _l_typo) in left_words {
         for (right, _r_typo) in right_words {
-            let current_docids = ctx
-                .word_pair_proximity_docids(left.as_ref(), right.as_ref(), proximity)?
-                .unwrap_or_default();
+            let current_docids =
+                word_pair_overall_proximity_docids(ctx, left.as_ref(), right.as_ref(), proximity)?
+                    .unwrap_or_default();
             docids |= current_docids;
         }
     }
@@ -472,7 +560,8 @@ fn query_pair_proximity_docids(
     match (&left.kind, &right.kind) {
         (QueryKind::Exact { word: left, .. }, QueryKind::Exact { word: right, .. }) => {
             if prefix {
-                match ctx.word_prefix_pair_proximity_docids(
+                match word_prefix_pair_overall_proximity_docids(
+                    ctx,
                     left.as_str(),
                     right.as_str(),
                     proximity,
@@ -480,7 +569,12 @@ fn query_pair_proximity_docids(
                     Some(docids) => Ok(docids),
                     None => {
                         let r_words = word_derivations(&right, true, 0, ctx.words_fst(), wdcache)?;
-                        all_word_pair_proximity_docids(ctx, &[(left, 0)], &r_words, proximity)
+                        all_word_pair_overall_proximity_docids(
+                            ctx,
+                            &[(left, 0)],
+                            &r_words,
+                            proximity,
+                        )
                     }
                 }
             } else {
@@ -495,7 +589,8 @@ fn query_pair_proximity_docids(
             if prefix {
                 let mut docids = RoaringBitmap::new();
                 for (left, _) in l_words {
-                    let current_docids = match ctx.word_prefix_pair_proximity_docids(
+                    let current_docids = match word_prefix_pair_overall_proximity_docids(
+                        ctx,
                         left.as_str(),
                         right.as_str(),
                         proximity,
@@ -504,19 +599,24 @@ fn query_pair_proximity_docids(
                         None => {
                             let r_words =
                                 word_derivations(&right, true, 0, ctx.words_fst(), wdcache)?;
-                            all_word_pair_proximity_docids(ctx, &[(left, 0)], &r_words, proximity)
+                            all_word_pair_overall_proximity_docids(
+                                ctx,
+                                &[(left, 0)],
+                                &r_words,
+                                proximity,
+                            )
                         }
                     }?;
                     docids |= current_docids;
                 }
                 Ok(docids)
             } else {
-                all_word_pair_proximity_docids(ctx, &l_words, &[(right, 0)], proximity)
+                all_word_pair_overall_proximity_docids(ctx, &l_words, &[(right, 0)], proximity)
             }
         }
         (QueryKind::Exact { word: left, .. }, QueryKind::Tolerant { typo, word: right }) => {
             let r_words = word_derivations(&right, prefix, *typo, ctx.words_fst(), wdcache)?;
-            all_word_pair_proximity_docids(ctx, &[(left, 0)], &r_words, proximity)
+            all_word_pair_overall_proximity_docids(ctx, &[(left, 0)], &r_words, proximity)
         }
         (
             QueryKind::Tolerant { typo: l_typo, word: left },
@@ -525,7 +625,7 @@ fn query_pair_proximity_docids(
             let l_words =
                 word_derivations(&left, false, *l_typo, ctx.words_fst(), wdcache)?.to_owned();
             let r_words = word_derivations(&right, prefix, *r_typo, ctx.words_fst(), wdcache)?;
-            all_word_pair_proximity_docids(ctx, &l_words, &r_words, proximity)
+            all_word_pair_overall_proximity_docids(ctx, &l_words, &r_words, proximity)
         }
     }
 }
@@ -552,6 +652,7 @@ pub mod test {
         exact_word_prefix_docids: HashMap<String, RoaringBitmap>,
         word_pair_proximity_docids: HashMap<(String, String, i32), RoaringBitmap>,
         word_prefix_pair_proximity_docids: HashMap<(String, String, i32), RoaringBitmap>,
+        prefix_word_pair_proximity_docids: HashMap<(String, String, i32), RoaringBitmap>,
         docid_words: HashMap<u32, Vec<String>>,
     }
 
@@ -588,12 +689,21 @@ pub mod test {
 
         fn word_prefix_pair_proximity_docids(
             &self,
-            left: &str,
-            right: &str,
+            word: &str,
+            prefix: &str,
             proximity: u8,
         ) -> heed::Result<Option<RoaringBitmap>> {
-            let key = (left.to_string(), right.to_string(), proximity.into());
+            let key = (word.to_string(), prefix.to_string(), proximity.into());
             Ok(self.word_prefix_pair_proximity_docids.get(&key).cloned())
+        }
+        fn prefix_word_pair_proximity_docids(
+            &self,
+            prefix: &str,
+            word: &str,
+            proximity: u8,
+        ) -> heed::Result<Option<RoaringBitmap>> {
+            let key = (prefix.to_string(), word.to_string(), proximity.into());
+            Ok(self.prefix_word_pair_proximity_docids.get(&key).cloned())
         }
 
         fn words_fst<'t>(&self) -> &'t fst::Set<Cow<[u8]>> {
@@ -708,6 +818,8 @@ pub mod test {
 
             let mut word_pair_proximity_docids = HashMap::new();
             let mut word_prefix_pair_proximity_docids = HashMap::new();
+            let mut prefix_word_pair_proximity_docids = HashMap::new();
+
             for (lword, lcandidates) in &word_docids {
                 for (rword, rcandidates) in &word_docids {
                     if lword == rword {
@@ -740,15 +852,19 @@ pub mod test {
                             let lposition = docid_words.iter().position(|w| w == lword).unwrap();
                             let rposition =
                                 docid_words.iter().position(|w| w.starts_with(pword)).unwrap();
-                            let key = if lposition < rposition {
-                                (s(lword), s(pword), (rposition - lposition) as i32)
+                            if lposition < rposition {
+                                let key = (s(lword), s(pword), (rposition - lposition) as i32);
+                                let docids = word_prefix_pair_proximity_docids
+                                    .entry(key)
+                                    .or_insert(RoaringBitmap::new());
+                                docids.push(candidate);
                             } else {
-                                (s(lword), s(pword), (lposition - rposition + 1) as i32)
+                                let key = (s(lword), s(pword), (lposition - rposition) as i32);
+                                let docids = prefix_word_pair_proximity_docids
+                                    .entry(key)
+                                    .or_insert(RoaringBitmap::new());
+                                docids.push(candidate);
                             };
-                            let docids = word_prefix_pair_proximity_docids
-                                .entry(key)
-                                .or_insert(RoaringBitmap::new());
-                            docids.push(candidate);
                         }
                     }
                 }
@@ -766,6 +882,7 @@ pub mod test {
                 exact_word_prefix_docids,
                 word_pair_proximity_docids,
                 word_prefix_pair_proximity_docids,
+                prefix_word_pair_proximity_docids,
                 docid_words,
             }
         }

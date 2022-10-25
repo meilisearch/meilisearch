@@ -21,7 +21,7 @@ use crate::{
     default_criteria, BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec, Criterion,
     DocumentId, ExternalDocumentsIds, FacetDistribution, FieldDistribution, FieldId,
     FieldIdWordCountCodec, GeoPoint, ObkvCodec, Result, RoaringBitmapCodec, RoaringBitmapLenCodec,
-    Search, StrBEU32Codec, StrStrU8Codec, BEU16, BEU32,
+    Search, StrBEU32Codec, U8StrStrCodec, BEU16, BEU32,
 };
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
@@ -71,6 +71,7 @@ pub mod db_name {
     pub const DOCID_WORD_POSITIONS: &str = "docid-word-positions";
     pub const WORD_PAIR_PROXIMITY_DOCIDS: &str = "word-pair-proximity-docids";
     pub const WORD_PREFIX_PAIR_PROXIMITY_DOCIDS: &str = "word-prefix-pair-proximity-docids";
+    pub const PREFIX_WORD_PAIR_PROXIMITY_DOCIDS: &str = "prefix-word-pair-proximity-docids";
     pub const WORD_POSITION_DOCIDS: &str = "word-position-docids";
     pub const WORD_PREFIX_POSITION_DOCIDS: &str = "word-prefix-position-docids";
     pub const FIELD_ID_WORD_COUNT_DOCIDS: &str = "field-id-word-count-docids";
@@ -106,9 +107,11 @@ pub struct Index {
     pub docid_word_positions: Database<BEU32StrCodec, BoRoaringBitmapCodec>,
 
     /// Maps the proximity between a pair of words with all the docids where this relation appears.
-    pub word_pair_proximity_docids: Database<StrStrU8Codec, CboRoaringBitmapCodec>,
+    pub word_pair_proximity_docids: Database<U8StrStrCodec, CboRoaringBitmapCodec>,
     /// Maps the proximity between a pair of word and prefix with all the docids where this relation appears.
-    pub word_prefix_pair_proximity_docids: Database<StrStrU8Codec, CboRoaringBitmapCodec>,
+    pub word_prefix_pair_proximity_docids: Database<U8StrStrCodec, CboRoaringBitmapCodec>,
+    /// Maps the proximity between a pair of prefix and word with all the docids where this relation appears.
+    pub prefix_word_pair_proximity_docids: Database<U8StrStrCodec, CboRoaringBitmapCodec>,
 
     /// Maps the word and the position with the docids that corresponds to it.
     pub word_position_docids: Database<StrBEU32Codec, CboRoaringBitmapCodec>,
@@ -138,7 +141,7 @@ impl Index {
     pub fn new<P: AsRef<Path>>(mut options: heed::EnvOpenOptions, path: P) -> Result<Index> {
         use db_name::*;
 
-        options.max_dbs(17);
+        options.max_dbs(18);
         unsafe { options.flag(Flags::MdbAlwaysFreePages) };
 
         let env = options.open(path)?;
@@ -151,6 +154,8 @@ impl Index {
         let word_pair_proximity_docids = env.create_database(Some(WORD_PAIR_PROXIMITY_DOCIDS))?;
         let word_prefix_pair_proximity_docids =
             env.create_database(Some(WORD_PREFIX_PAIR_PROXIMITY_DOCIDS))?;
+        let prefix_word_pair_proximity_docids =
+            env.create_database(Some(PREFIX_WORD_PAIR_PROXIMITY_DOCIDS))?;
         let word_position_docids = env.create_database(Some(WORD_POSITION_DOCIDS))?;
         let field_id_word_count_docids = env.create_database(Some(FIELD_ID_WORD_COUNT_DOCIDS))?;
         let word_prefix_position_docids = env.create_database(Some(WORD_PREFIX_POSITION_DOCIDS))?;
@@ -175,6 +180,7 @@ impl Index {
             docid_word_positions,
             word_pair_proximity_docids,
             word_prefix_pair_proximity_docids,
+            prefix_word_pair_proximity_docids,
             word_position_docids,
             word_prefix_position_docids,
             field_id_word_count_docids,

@@ -203,7 +203,7 @@ impl<'a> Context for QueryTreeBuilder<'a> {
         right_word: &str,
         proximity: u8,
     ) -> heed::Result<Option<u64>> {
-        let key = (left_word, right_word, proximity);
+        let key = (proximity, left_word, right_word);
         self.index
             .word_pair_proximity_docids
             .remap_data_type::<CboRoaringBitmapLenCodec>()
