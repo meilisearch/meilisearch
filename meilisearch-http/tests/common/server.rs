@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use std::path::Path;
-use std::sync::Arc;
 
 use actix_http::body::MessageBody;
 use actix_web::dev::ServiceResponse;
@@ -39,8 +38,7 @@ impl Server {
         let options = default_settings(dir.path());
 
         let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
-        let service =
-            Service { index_scheduler: Arc::new(index_scheduler), auth, options, api_key: None };
+        let service = Service { index_scheduler, auth, options, api_key: None };
 
         Server { service, _dir: Some(dir) }
     }
@@ -55,8 +53,7 @@ impl Server {
         options.master_key = Some("MASTER_KEY".to_string());
 
         let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
-        let service =
-            Service { index_scheduler: Arc::new(index_scheduler), auth, options, api_key: None };
+        let service = Service { index_scheduler, auth, options, api_key: None };
 
         Server { service, _dir: Some(dir) }
     }
@@ -69,8 +66,7 @@ impl Server {
 
     pub async fn new_with_options(options: Opt) -> Result<Self, anyhow::Error> {
         let (index_scheduler, auth) = setup_meilisearch(&options)?;
-        let service =
-            Service { index_scheduler: Arc::new(index_scheduler), auth, options, api_key: None };
+        let service = Service { index_scheduler, auth, options, api_key: None };
 
         Ok(Server { service, _dir: None })
     }
