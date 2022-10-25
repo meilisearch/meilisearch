@@ -34,8 +34,8 @@ use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod};
-use meilisearch_types::milli::{self};
 use meilisearch_types::settings::apply_settings_to_builder;
+use meilisearch_types::{milli, VERSION_FILE_NAME};
 pub use option::Opt;
 
 use crate::error::MeilisearchHttpError;
@@ -110,7 +110,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
     let auth_controller_builder = || AuthController::new(&opt.db_path, &opt.master_key);
     let index_scheduler_builder = || {
         IndexScheduler::new(
-            // TODO find a better way to have the path of the auth store
+            opt.db_path.join(VERSION_FILE_NAME),
             opt.db_path.join("auth"),
             opt.db_path.join("tasks"),
             opt.db_path.join("update_files"),
