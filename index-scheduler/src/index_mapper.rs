@@ -30,7 +30,7 @@ pub struct IndexMapper {
 
     // TODO create a UUID Codec that uses the 16 bytes representation
     /// Map an index name with an index uuid currently available on disk.
-    index_mapping: Database<Str, SerdeBincode<Uuid>>,
+    pub(crate) index_mapping: Database<Str, SerdeBincode<Uuid>>,
 
     /// Path to the folder where the LMDB environments of each index are.
     base_path: PathBuf,
