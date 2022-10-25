@@ -483,12 +483,10 @@ impl IndexScheduler {
         };
         self.all_tasks.append(&mut wtxn, &BEU32::new(task.uid), &task)?;
 
-        if let Some(indexes) = task.indexes() {
-            for index in indexes {
-                self.update_index(&mut wtxn, index, |bitmap| {
-                    bitmap.insert(task.uid);
-                })?;
-            }
+        for index in task.indexes() {
+            self.update_index(&mut wtxn, index, |bitmap| {
+                bitmap.insert(task.uid);
+            })?;
         }
 
         self.update_status(&mut wtxn, Status::Enqueued, |bitmap| {
@@ -615,12 +613,10 @@ impl IndexScheduler {
 
         self.all_tasks.put(&mut wtxn, &BEU32::new(task.uid), &task)?;
 
-        if let Some(indexes) = task.indexes() {
-            for index in indexes {
-                self.update_index(&mut wtxn, index, |bitmap| {
-                    bitmap.insert(task.uid);
-                })?;
-            }
+        for index in task.indexes() {
+            self.update_index(&mut wtxn, index, |bitmap| {
+                bitmap.insert(task.uid);
+            })?;
         }
 
         self.update_status(&mut wtxn, task.status, |bitmap| {
@@ -1233,6 +1229,10 @@ mod tests {
             .unwrap();
         handle.wait_till(Breakpoint::AfterProcessing);
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_swap_processed");
+
+        index_scheduler.register(KindWithContent::IndexSwap { swaps: vec![] }).unwrap();
+        handle.wait_till(Breakpoint::AfterProcessing);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "third_empty_swap_processed");
     }
 
     #[test]

@@ -37,7 +37,7 @@ use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::autobatcher::BatchKind;
+use crate::autobatcher::{self, BatchKind};
 use crate::utils::{self, swap_index_uid_in_task};
 use crate::{Error, IndexScheduler, Query, Result, TaskId};
 
@@ -416,41 +416,47 @@ impl IndexScheduler {
             )));
         }
 
-        // 5. We take the next task and try to batch all the tasks associated with this index.
-        if let Some(task_id) = enqueued.min() {
-            let task = self.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
+        // 5. We make a batch from the unprioritised tasks. Start by taking the next enqueued task.
+        let task_id = if let Some(task_id) = enqueued.min() { task_id } else { return Ok(None) };
+        let task = self.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
 
-            // This is safe because all the remaining task are associated with
-            // AT LEAST one index. We can use the right or left one it doesn't
-            // matter.
-            let index_name = task.indexes().unwrap()[0];
-            let index_already_exists = self.index_mapper.exists(rtxn, index_name)?;
+        // If the task is not associated with any index, verify that it is an index swap and
+        // create the batch directly. Otherwise, get the index name associated with the task
+        // and use the autobatcher to batch the enqueued tasks associated with it
 
-            let index_tasks = self.index_tasks(rtxn, index_name)? & enqueued;
+        let index_name = if let Some(&index_name) = task.indexes().first() {
+            index_name
+        } else {
+            assert!(matches!(&task.kind, KindWithContent::IndexSwap { swaps } if swaps.is_empty()));
+            return Ok(Some(Batch::IndexSwap { task }));
+        };
 
-            // If autobatching is disabled we only take one task at a time.
-            let tasks_limit = if self.autobatching_enabled { usize::MAX } else { 1 };
+        let index_already_exists = self.index_mapper.exists(rtxn, index_name)?;
 
-            let enqueued = index_tasks
-                .into_iter()
-                .take(tasks_limit)
-                .map(|task_id| {
-                    self.get_task(rtxn, task_id)
-                        .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))
-                        .map(|task| (task.uid, task.kind))
-                })
-                .collect::<Result<Vec<_>>>()?;
+        let index_tasks = self.index_tasks(rtxn, index_name)? & enqueued;
 
-            if let Some((batchkind, create_index)) =
-                crate::autobatcher::autobatch(enqueued, index_already_exists)
-            {
-                return self.create_next_batch_index(
-                    rtxn,
-                    index_name.to_string(),
-                    batchkind,
-                    create_index,
-                );
-            }
+        // If autobatching is disabled we only take one task at a time.
+        let tasks_limit = if self.autobatching_enabled { usize::MAX } else { 1 };
+
+        let enqueued = index_tasks
+            .into_iter()
+            .take(tasks_limit)
+            .map(|task_id| {
+                self.get_task(rtxn, task_id)
+                    .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))
+                    .map(|task| (task.uid, task.kind))
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        if let Some((batchkind, create_index)) =
+            autobatcher::autobatch(enqueued, index_already_exists)
+        {
+            return self.create_next_batch_index(
+                rtxn,
+                index_name.to_string(),
+                batchkind,
+                create_index,
+            );
         }
 
         // If we found no tasks then we were notified for something that got autobatched
@@ -1034,9 +1040,8 @@ impl IndexScheduler {
 
         for task_id in to_delete_tasks.iter() {
             let task = self.get_task(wtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
-            if let Some(task_indexes) = task.indexes() {
-                affected_indexes.extend(task_indexes.into_iter().map(|x| x.to_owned()));
-            }
+
+            affected_indexes.extend(task.indexes().into_iter().map(|x| x.to_owned()));
             affected_statuses.insert(task.status);
             affected_kinds.insert(task.kind.as_kind());
             // Note: don't delete the persisted task data since
