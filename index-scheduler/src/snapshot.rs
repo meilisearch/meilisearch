@@ -227,11 +227,6 @@ pub fn snapshot_index_tasks(rtxn: &RoTxn, db: Database<Str, RoaringBitmapCodec>)
 }
 
 pub fn snapshot_index_mapper(rtxn: &RoTxn, mapper: &IndexMapper) -> String {
-    let names = mapper
-        .indexes(rtxn)
-        .unwrap()
-        .into_iter()
-        .map(|(n, _)| n)
-        .collect::<Vec<_>>();
+    let names = mapper.indexes(rtxn).unwrap().into_iter().map(|(n, _)| n).collect::<Vec<_>>();
     format!("{names:?}")
 }
