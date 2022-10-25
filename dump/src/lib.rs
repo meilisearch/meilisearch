@@ -129,7 +129,7 @@ pub enum KindDump {
         keys: Vec<Key>,
         instance_uid: Option<InstanceUid>,
     },
-    Snapshot,
+    SnapshotCreation,
 }
 
 impl From<Task> for TaskDump {
@@ -191,7 +191,7 @@ impl From<KindWithContent> for KindDump {
             KindWithContent::DumpCreation { dump_uid, keys, instance_uid } => {
                 KindDump::DumpCreation { dump_uid, keys, instance_uid }
             }
-            KindWithContent::Snapshot => KindDump::Snapshot,
+            KindWithContent::SnapshotCreation => KindDump::SnapshotCreation,
         }
     }
 }

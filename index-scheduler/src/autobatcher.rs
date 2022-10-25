@@ -60,7 +60,7 @@ impl From<KindWithContent> for AutobatchKind {
             KindWithContent::TaskCancelation { .. }
             | KindWithContent::TaskDeletion { .. }
             | KindWithContent::DumpCreation { .. }
-            | KindWithContent::Snapshot => {
+            | KindWithContent::SnapshotCreation => {
                 panic!("The autobatcher should never be called with tasks that don't apply to an index.")
             }
         }
