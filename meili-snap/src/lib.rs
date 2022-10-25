@@ -40,7 +40,8 @@ pub fn default_snapshot_settings_for_test<'a>(
         Cow::Owned(format!("{counter}"))
     };
 
-    let store_whole_snapshot = std::env::var("MEILI_TEST_FULL_SNAPS").unwrap_or("false".to_owned());
+    let store_whole_snapshot =
+        std::env::var("MEILI_TEST_FULL_SNAPS").unwrap_or_else(|_| "false".to_owned());
     let store_whole_snapshot: bool = store_whole_snapshot.parse().unwrap();
 
     (settings, snap_name, store_whole_snapshot)
