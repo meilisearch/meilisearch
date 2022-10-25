@@ -208,37 +208,15 @@ impl HeedAuthStore {
     ) -> Result<Option<Option<OffsetDateTime>>> {
         let rtxn = self.env.read_txn()?;
         let tuple = (&uid, &action);
-        match self.action_keyid_index_expiration.get(&rtxn, &tuple)? {
-            None => Ok(None),
-            Some(x) => {
-                if let Some(y) = index {
-                    if x.0.into_iter().any(|x| x == *y) {
-                        Ok(Some(x.1))
-                    } else {
-                        Ok(None)
-                    }
-                } else {
-                    self.prefix_first_expiration_date(uid, action)
-                }
-            }
-        }
-    }
 
-    pub fn prefix_first_expiration_date(
-        &self,
-        uid: Uuid,
-        action: Action,
-    ) -> Result<Option<Option<OffsetDateTime>>> {
-        let rtxn = self.env.read_txn()?;
-        let tuple = (&uid, &action);
         let exp = self
             .action_keyid_index_expiration
-            .prefix_iter(&rtxn, &tuple)?
-            .next()
-            .transpose()?
-            .map(|(_, expiration)| expiration);
-
-        Ok(exp.map(|x| x.1))
+            .get(&rtxn, &tuple)?
+            .filter(|(index_types, _)| {
+                index.map_or(true, |index| index_types.iter().any(|x| x == index))
+            })
+            .map(|(_, exp)| exp);
+        Ok(exp)
     }
 
     fn delete_key_from_inverted_db(&self, wtxn: &mut RwTxn, key: &KeyId) -> Result<()> {
@@ -264,12 +242,9 @@ impl<'a> milli::heed::BytesDecode<'a> for KeyIdActionCodec {
 
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
         let (key_id_bytes, action_bytes) = try_split_array_at(bytes)?;
-        let (action_bytes, _index) = match try_split_array_at(action_bytes)? {
-            (action, []) => (action, None),
-            (action, index) => (action, Some(index)),
-        };
+        let action_single_byte: &[u8; 1] = action_bytes.try_into().ok()?;
         let key_id = Uuid::from_bytes(*key_id_bytes);
-        let action = Action::from_repr(u8::from_be_bytes(*action_bytes))?;
+        let action = Action::from_repr(u8::from_be_bytes(*action_single_byte))?;
 
         Some((key_id, action))
     }
