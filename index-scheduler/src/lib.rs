@@ -708,7 +708,7 @@ impl IndexScheduler {
                 KindDump::DumpCreation { dump_uid, keys, instance_uid } => {
                     KindWithContent::DumpCreation { dump_uid, keys, instance_uid }
                 }
-                KindDump::Snapshot => KindWithContent::Snapshot,
+                KindDump::SnapshotCreation => KindWithContent::SnapshotCreation,
             },
         };
 
