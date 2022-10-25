@@ -18,6 +18,8 @@ use std::io::{BufReader, BufWriter};
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
 use actix_cors::Cors;
 use actix_http::body::MessageBody;
@@ -31,12 +33,14 @@ use error::PayloadError;
 use extractors::payload::PayloadConfig;
 use http::header::CONTENT_TYPE;
 use index_scheduler::IndexScheduler;
+use log::error;
 use meilisearch_auth::AuthController;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod};
 use meilisearch_types::settings::apply_settings_to_builder;
+use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::versioning::{check_version_file, create_version_file};
-use meilisearch_types::{milli, VERSION_FILE_NAME};
+use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
 pub use option::Opt;
 
 use crate::error::MeilisearchHttpError;
@@ -105,7 +109,7 @@ pub fn create_app(
 }
 
 // TODO: TAMO: Finish setting up things
-pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthController)> {
+pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, AuthController)> {
     // we don't want to create anything in the data.ms yet, thus we
     // wrap our two builders in a closure that'll be executed later.
     let auth_controller_builder = || AuthController::new(&opt.db_path, &opt.master_key);
@@ -140,10 +144,26 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
     };
 
     let empty_db = is_empty_db(&opt.db_path);
-    let (index_scheduler, auth_controller) = if let Some(ref _path) = opt.import_snapshot {
-        // handle the snapshot with something akin to the dumps
-        // + the snapshot interval / spawning a thread
-        todo!();
+    let (index_scheduler, auth_controller) = if let Some(ref snapshot_path) = opt.import_snapshot {
+        let snapshot_path_exists = snapshot_path.exists();
+        if empty_db && snapshot_path_exists {
+            match compression::from_tar_gz(snapshot_path, &opt.db_path) {
+                Ok(()) => meilisearch_builder()?,
+                Err(e) => {
+                    std::fs::remove_dir_all(&opt.db_path)?;
+                    return Err(e);
+                }
+            }
+        } else if !empty_db && !opt.ignore_snapshot_if_db_exists {
+            bail!(
+                "database already exists at {:?}, try to delete it or rename it",
+                opt.db_path.canonicalize().unwrap_or_else(|_| opt.db_path.to_owned())
+            )
+        } else if !snapshot_path_exists && !opt.ignore_missing_snapshot {
+            bail!("snapshot doesn't exist at {}", snapshot_path.display())
+        } else {
+            meilisearch_builder()?
+        }
     } else if let Some(ref path) = opt.import_dump {
         let src_path_exists = path.exists();
         if empty_db && src_path_exists {
@@ -179,23 +199,18 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(IndexScheduler, AuthContr
         meilisearch_builder()?
     };
 
-    /*
-    TODO: We should start a thread to handle the snapshots.
-    meilisearch
-        // snapshot
-        .set_ignore_missing_snapshot(opt.ignore_missing_snapshot)
-        .set_ignore_snapshot_if_db_exists(opt.ignore_snapshot_if_db_exists)
-        .set_snapshot_interval(Duration::from_secs(opt.snapshot_interval_sec))
-        .set_snapshot_dir(opt.snapshot_dir.clone())
-
-    if let Some(ref path) = opt.import_snapshot {
-        meilisearch.set_import_snapshot(path.clone());
-    }
-
+    // We create a loop in a thread that registers snapshotCreation tasks
+    let index_scheduler = Arc::new(index_scheduler);
     if opt.schedule_snapshot {
-        meilisearch.set_schedule_snapshot();
+        let snapshot_delay = Duration::from_secs(opt.snapshot_interval_sec);
+        let index_scheduler = index_scheduler.clone();
+        thread::spawn(move || loop {
+            thread::sleep(snapshot_delay);
+            if let Err(e) = index_scheduler.register(KindWithContent::SnapshotCreation) {
+                error!("Error while registering snapshot: {}", e);
+            }
+        });
     }
-    */
 
     Ok((index_scheduler, auth_controller))
 }
