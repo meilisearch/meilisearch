@@ -955,6 +955,7 @@ mod tests {
     use meilisearch_types::milli::update::IndexDocumentsMethod::{
         ReplaceDocuments, UpdateDocuments,
     };
+    use meilisearch_types::VERSION_FILE_NAME;
     use tempfile::TempDir;
     use time::Duration;
     use uuid::Uuid;

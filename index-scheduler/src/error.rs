@@ -32,6 +32,8 @@ pub enum Error {
     FileStore(#[from] file_store::Error),
     #[error(transparent)]
     IoError(#[from] std::io::Error),
+    #[error(transparent)]
+    Persist(#[from] tempfile::PersistError),
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
@@ -59,10 +61,11 @@ impl ErrorCode for Error {
             Error::Dump(e) => e.error_code(),
             Error::Milli(e) => e.error_code(),
             Error::ProcessBatchPanicked => Code::Internal,
-            // TODO: TAMO: are all these errors really internal?
+            // TODO: TAMO: are all these errors really internal?
             Error::Heed(_) => Code::Internal,
             Error::FileStore(_) => Code::Internal,
             Error::IoError(_) => Code::Internal,
+            Error::Persist(_) => Code::Internal,
             Error::Anyhow(_) => Code::Internal,
             Error::CorruptedTaskQueue => Code::Internal,
             Error::CorruptedDump => Code::Internal,
