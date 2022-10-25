@@ -331,7 +331,7 @@ impl IndexScheduler {
             }
             if let Some(canceled_by) = canceled_by {
                 let db_canceled_tasks = self.get_status(&rtxn, Status::Canceled).unwrap();
-                assert!(db_canceled_tasks.contains(canceled_by));
+                assert!(db_canceled_tasks.contains(uid));
                 let db_canceling_task = self.get_task(&rtxn, canceled_by).unwrap().unwrap();
                 assert_eq!(db_canceling_task.status, Status::Succeeded);
                 match db_canceling_task.kind {
