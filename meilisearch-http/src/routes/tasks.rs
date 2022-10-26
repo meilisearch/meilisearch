@@ -32,30 +32,12 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))));
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize)]
-#[serde(untagged, rename_all = "camelCase")]
-pub enum IndexUidView {
-    Multiple(Vec<String>),
-    Single(String),
-    #[default]
-    None,
-}
-impl IndexUidView {
-    fn new(indexes: &[&str]) -> Self {
-        match indexes {
-            [] => Self::None,
-            [index] => Self::Single(index.to_string()),
-            indexes => Self::Multiple(indexes.iter().map(ToString::to_string).collect()),
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskView {
     pub uid: TaskId,
     #[serde(default)]
-    pub index_uid: IndexUidView,
+    pub index_uid: Option<String>,
     pub status: Status,
     #[serde(rename = "type")]
     pub kind: Kind,
@@ -82,7 +64,7 @@ impl TaskView {
     pub fn from_task(task: &Task) -> TaskView {
         TaskView {
             uid: task.uid,
-            index_uid: IndexUidView::new(&task.indexes()),
+            index_uid: task.index_uid().map(ToOwned::to_owned),
             status: task.status,
             kind: task.kind.as_kind(),
             canceled_by: task.canceled_by,
