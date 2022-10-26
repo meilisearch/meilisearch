@@ -5,7 +5,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::Key;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::settings::Unchecked;
-use meilisearch_types::tasks::{Details, KindWithContent, Status, Task, TaskId};
+use meilisearch_types::tasks::{Details, IndexSwap, KindWithContent, Status, Task, TaskId};
 use meilisearch_types::InstanceUid;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
@@ -113,9 +113,7 @@ pub enum KindDump {
     IndexUpdate {
         primary_key: Option<String>,
     },
-    IndexSwap {
-        swaps: Vec<(String, String)>,
-    },
+    IndexSwap { swaps: Vec<IndexSwap> },
     TaskCancelation {
         query: String,
         tasks: RoaringBitmap,

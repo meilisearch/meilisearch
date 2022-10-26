@@ -971,6 +971,7 @@ mod tests {
     use meilisearch_types::milli::update::IndexDocumentsMethod::{
         ReplaceDocuments, UpdateDocuments,
     };
+    use meilisearch_types::tasks::IndexSwap;
     use meilisearch_types::VERSION_FILE_NAME;
     use tempfile::TempDir;
     use time::Duration;
@@ -1543,7 +1544,10 @@ mod tests {
 
         index_scheduler
             .register(KindWithContent::IndexSwap {
-                swaps: vec![("a".to_owned(), "b".to_owned()), ("c".to_owned(), "d".to_owned())],
+                swaps: vec![
+                    IndexSwap { indexes: ("a".to_owned(), "b".to_owned()) },
+                    IndexSwap { indexes: ("c".to_owned(), "d".to_owned()) },
+                ],
             })
             .unwrap();
         index_scheduler.assert_internally_consistent();
@@ -1553,7 +1557,9 @@ mod tests {
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "first_swap_processed");
 
         index_scheduler
-            .register(KindWithContent::IndexSwap { swaps: vec![("a".to_owned(), "c".to_owned())] })
+            .register(KindWithContent::IndexSwap {
+                swaps: vec![IndexSwap { indexes: ("a".to_owned(), "c".to_owned()) }],
+            })
             .unwrap();
         index_scheduler.assert_internally_consistent();
 

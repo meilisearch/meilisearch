@@ -5,7 +5,9 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::star_or::StarOr;
-use meilisearch_types::tasks::{serialize_duration, Details, Kind, KindWithContent, Status, Task};
+use meilisearch_types::tasks::{
+    serialize_duration, Details, IndexSwap, Kind, KindWithContent, Status, Task,
+};
 use serde::{Deserialize, Serialize};
 use serde_cs::vec::CS;
 use serde_json::json;
@@ -103,7 +105,7 @@ pub struct DetailsView {
     #[serde(flatten)]
     pub settings: Option<Box<Settings<Unchecked>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub indexes: Option<Vec<(String, String)>>,
+    pub swaps: Option<Vec<IndexSwap>>,
 }
 
 impl From<Details> for DetailsView {
@@ -151,7 +153,7 @@ impl From<Details> for DetailsView {
                 DetailsView { dump_uid: Some(dump_uid), ..DetailsView::default() }
             }
             Details::IndexSwap { swaps } => {
-                DetailsView { indexes: Some(swaps), ..Default::default() }
+                DetailsView { swaps: Some(swaps), ..Default::default() }
             }
         }
     }

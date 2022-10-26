@@ -10,7 +10,7 @@ source: index-scheduler/src/lib.rs
 1 {uid: 1, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "a", primary_key: Some("id") }}
 2 {uid: 2, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "d", primary_key: Some("id") }}
 3 {uid: 3, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "c", primary_key: Some("id") }}
-4 {uid: 4, status: succeeded, details: { indexes: [("a", "b"), ("c", "d")] }, kind: IndexSwap { swaps: [("a", "b"), ("c", "d")] }}
+4 {uid: 4, status: succeeded, details: { swaps: [IndexSwap { indexes: ("a", "b") }, IndexSwap { indexes: ("c", "d") }] }, kind: IndexSwap { swaps: [IndexSwap { indexes: ("a", "b") }, IndexSwap { indexes: ("c", "d") }] }}
 ----------------------------------------------------------------------
 ### Status:
 enqueued []
