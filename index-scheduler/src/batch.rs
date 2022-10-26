@@ -559,11 +559,8 @@ impl IndexScheduler {
                 let temp_snapshot_dir = tempfile::tempdir()?;
 
                 // 1. Snapshot the version file.
-                // TODO where can I find the path of this file and do we create it anyway?
                 let dst = temp_snapshot_dir.path().join(VERSION_FILE_NAME);
                 fs::copy(&self.version_file_path, dst)?;
-
-                // TODO what is a meta-env in the previous version of the scheduler?
 
                 // 2. Snapshot the index-scheduler LMDB env
                 //
