@@ -8,8 +8,8 @@ use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use serde::Deserialize;
 
 use crate::error::MeilisearchHttpError;
-use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
+use crate::extractors::authentication::{policies::*, AuthenticationError};
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::tasks::TaskView;
 
@@ -30,6 +30,7 @@ pub async fn swap_indexes(
 
     let mut swaps = vec![];
     let mut indexes_set = HashSet::<String>::default();
+    let mut unauthorized_indexes = HashSet::new();
     let mut unknown_indexes = HashSet::new();
     let mut duplicate_indexes = HashSet::new();
     for SwapIndexesPayload { indexes } in params.into_inner().into_iter() {
@@ -40,10 +41,10 @@ pub async fn swap_indexes(
             }
         };
         if !search_rules.is_index_authorized(&lhs) {
-            unknown_indexes.insert(lhs.clone());
+            unauthorized_indexes.insert(lhs.clone());
         }
         if !search_rules.is_index_authorized(&rhs) {
-            unknown_indexes.insert(rhs.clone());
+            unauthorized_indexes.insert(rhs.clone());
         }
         match index_scheduler.index(&lhs) {
             Ok(_) => (),
@@ -78,6 +79,9 @@ pub async fn swap_indexes(
         } else {
             return Err(MeilisearchHttpError::SwapDuplicateIndexesFound(duplicate_indexes).into());
         }
+    }
+    if !unauthorized_indexes.is_empty() {
+        return Err(AuthenticationError::InvalidToken.into());
     }
     if !unknown_indexes.is_empty() {
         let unknown_indexes: Vec<_> = unknown_indexes.into_iter().collect();
