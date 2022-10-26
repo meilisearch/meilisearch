@@ -77,7 +77,7 @@ impl From<MatchingStrategy> for TermsMatchingStrategy {
     }
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SearchHit {
     #[serde(flatten)]
     pub document: Document,
@@ -87,7 +87,7 @@ pub struct SearchHit {
     pub matches_position: Option<MatchesPosition>,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
     pub hits: Vec<SearchHit>,
