@@ -1,13 +1,7 @@
 #![allow(dead_code)]
 
 use std::path::Path;
-<<<<<<< HEAD
-||||||| parent of 931d5622 (test the details of all tasks type)
-use std::sync::Arc;
-=======
-use std::sync::Arc;
 use std::time::Duration;
->>>>>>> 931d5622 (test the details of all tasks type)
 
 use actix_http::body::MessageBody;
 use actix_web::dev::ServiceResponse;
