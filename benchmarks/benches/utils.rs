@@ -86,7 +86,7 @@ pub fn base_setup(conf: &Conf) -> Index {
 
     (conf.configure)(&mut builder);
 
-    builder.execute(|_| ()).unwrap();
+    builder.execute(|_| (), || false).unwrap();
     wtxn.commit().unwrap();
 
     let config = IndexerConfig::default();
@@ -96,7 +96,8 @@ pub fn base_setup(conf: &Conf) -> Index {
         update_method: IndexDocumentsMethod::ReplaceDocuments,
         ..Default::default()
     };
-    let builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
+    let builder =
+        IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| (), || false).unwrap();
     let documents = documents_from(conf.dataset, conf.dataset_format);
     let (builder, user_error) = builder.add_documents(documents).unwrap();
     user_error.unwrap();
