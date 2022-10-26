@@ -428,7 +428,7 @@ impl SearchAggregator {
             ret.max_terms_number = q.split_whitespace().count();
         }
 
-        if query.hits_per_page.or(query.page).is_some() {
+        if query.is_finite_pagination() {
             let limit = query.hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
             ret.max_limit = limit;
             ret.max_offset = query.page.unwrap_or(1).saturating_sub(1) * limit;

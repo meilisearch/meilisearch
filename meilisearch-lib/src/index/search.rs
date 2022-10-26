@@ -63,6 +63,12 @@ pub struct SearchQuery {
     pub matching_strategy: MatchingStrategy,
 }
 
+impl SearchQuery {
+    pub fn is_finite_pagination(&self) -> bool {
+        self.page.or(self.hits_per_page).is_some()
+    }
+}
+
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum MatchingStrategy {
@@ -138,13 +144,12 @@ impl Index {
             search.query(query);
         }
 
+        let is_finite_pagination = query.is_finite_pagination();
         search.terms_matching_strategy(query.matching_strategy.into());
 
         let max_total_hits = self
             .pagination_max_total_hits(&rtxn)?
             .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
-
-        let is_finite_pagination = query.page.or(query.hits_per_page).is_some();
 
         search.exhaustive_number_hits(is_finite_pagination);
 
