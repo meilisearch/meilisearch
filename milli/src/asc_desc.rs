@@ -70,7 +70,7 @@ impl FromStr for Member {
     type Err = AscDescError;
 
     fn from_str(text: &str) -> Result<Member, Self::Err> {
-        match text.strip_prefix("_geoPoint(").and_then(|text| text.strip_suffix(")")) {
+        match text.strip_prefix("_geoPoint(").and_then(|text| text.strip_suffix(')')) {
             Some(point) => {
                 let (lat, lng) = point
                     .split_once(',')

@@ -150,7 +150,7 @@ pub(crate) fn data_from_obkv_documents(
     spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
         docid_fid_facet_numbers_chunks,
         indexer,
-        lmdb_writer_sx.clone(),
+        lmdb_writer_sx,
         extract_facet_number_docids,
         merge_cbo_roaring_bitmaps,
         TypedChunk::FieldIdFacetNumberDocids,

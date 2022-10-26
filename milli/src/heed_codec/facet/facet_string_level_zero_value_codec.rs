@@ -34,7 +34,7 @@ where
     type EItem = (&'a str, C::EItem);
 
     fn bytes_encode((string, value): &'a Self::EItem) -> Option<Cow<[u8]>> {
-        let value_bytes = C::bytes_encode(&value)?;
+        let value_bytes = C::bytes_encode(value)?;
 
         let mut bytes = Vec::with_capacity(2 + string.len() + value_bytes.len());
         encode_prefix_string(string, &mut bytes).ok()?;

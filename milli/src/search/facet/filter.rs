@@ -96,7 +96,7 @@ impl<'a> Filter<'a> {
                 Either::Left(array) => {
                     let mut ors = vec![];
                     for rule in array {
-                        if let Some(filter) = Self::from_str(rule.as_ref())? {
+                        if let Some(filter) = Self::from_str(rule)? {
                             ors.push(filter.condition);
                         }
                     }
@@ -108,7 +108,7 @@ impl<'a> Filter<'a> {
                     }
                 }
                 Either::Right(rule) => {
-                    if let Some(filter) = Self::from_str(rule.as_ref())? {
+                    if let Some(filter) = Self::from_str(rule)? {
                         ands.push(filter.condition);
                     }
                 }
@@ -358,7 +358,7 @@ impl<'a> Filter<'a> {
                     index,
                     filterable_fields,
                 )?;
-                return Ok(all_ids - selected);
+                Ok(all_ids - selected)
             }
             FilterCondition::In { fid, els } => {
                 if crate::is_faceted(fid.value(), filterable_fields) {
@@ -377,38 +377,36 @@ impl<'a> Filter<'a> {
                         Ok(RoaringBitmap::new())
                     }
                 } else {
-                    return Err(fid.as_external_error(FilterError::AttributeNotFilterable {
+                    Err(fid.as_external_error(FilterError::AttributeNotFilterable {
                         attribute: fid.value(),
                         filterable_fields: filterable_fields.clone(),
-                    }))?;
+                    }))?
                 }
             }
             FilterCondition::Condition { fid, op } => {
                 if crate::is_faceted(fid.value(), filterable_fields) {
                     let field_ids_map = index.fields_ids_map(rtxn)?;
                     if let Some(fid) = field_ids_map.id(fid.value()) {
-                        Self::evaluate_operator(rtxn, index, fid, &op)
+                        Self::evaluate_operator(rtxn, index, fid, op)
                     } else {
-                        return Ok(RoaringBitmap::new());
+                        Ok(RoaringBitmap::new())
                     }
                 } else {
                     match fid.lexeme() {
                         attribute @ "_geo" => {
-                            return Err(fid.as_external_error(FilterError::BadGeo(attribute)))?;
+                            Err(fid.as_external_error(FilterError::BadGeo(attribute)))?
                         }
                         attribute if attribute.starts_with("_geoPoint(") => {
-                            return Err(fid.as_external_error(FilterError::BadGeo("_geoPoint")))?;
+                            Err(fid.as_external_error(FilterError::BadGeo("_geoPoint")))?
                         }
                         attribute @ "_geoDistance" => {
-                            return Err(fid.as_external_error(FilterError::Reserved(attribute)))?;
+                            Err(fid.as_external_error(FilterError::Reserved(attribute)))?
                         }
                         attribute => {
-                            return Err(fid.as_external_error(
-                                FilterError::AttributeNotFilterable {
-                                    attribute,
-                                    filterable_fields: filterable_fields.clone(),
-                                },
-                            ))?;
+                            Err(fid.as_external_error(FilterError::AttributeNotFilterable {
+                                attribute,
+                                filterable_fields: filterable_fields.clone(),
+                            }))?
                         }
                     }
                 }
@@ -477,10 +475,10 @@ impl<'a> Filter<'a> {
 
                     Ok(result)
                 } else {
-                    return Err(point[0].as_external_error(FilterError::AttributeNotFilterable {
+                    Err(point[0].as_external_error(FilterError::AttributeNotFilterable {
                         attribute: "_geo",
                         filterable_fields: filterable_fields.clone(),
-                    }))?;
+                    }))?
                 }
             }
         }

@@ -188,8 +188,8 @@ impl<'a> Context for QueryTreeBuilder<'a> {
     }
 
     fn min_word_len_for_typo(&self) -> heed::Result<(u8, u8)> {
-        let one = self.index.min_word_len_one_typo(&self.rtxn)?;
-        let two = self.index.min_word_len_two_typos(&self.rtxn)?;
+        let one = self.index.min_word_len_one_typo(self.rtxn)?;
+        let two = self.index.min_word_len_two_typos(self.rtxn)?;
         Ok((one, two))
     }
 
@@ -207,7 +207,7 @@ impl<'a> Context for QueryTreeBuilder<'a> {
         self.index
             .word_pair_proximity_docids
             .remap_data_type::<CboRoaringBitmapLenCodec>()
-            .get(&self.rtxn, &key)
+            .get(self.rtxn, &key)
     }
 }
 
@@ -313,7 +313,7 @@ pub struct TypoConfig<'a> {
 
 /// Return the `QueryKind` of a word depending on `authorize_typos`
 /// and the provided word length.
-fn typos<'a>(word: String, authorize_typos: bool, config: TypoConfig<'a>) -> QueryKind {
+fn typos(word: String, authorize_typos: bool, config: TypoConfig) -> QueryKind {
     if authorize_typos && !config.exact_words.map_or(false, |s| s.contains(&word)) {
         let count = word.chars().count().min(u8::MAX as usize) as u8;
         if count < config.word_len_one_typo {
@@ -556,7 +556,7 @@ fn create_matching_words(
                     for synonym in synonyms {
                         let synonym = synonym
                             .into_iter()
-                            .map(|syn| MatchingWord::new(syn.to_string(), 0, false))
+                            .map(|syn| MatchingWord::new(syn, 0, false))
                             .collect();
                         matching_words.push((synonym, vec![id]));
                     }
@@ -583,8 +583,7 @@ fn create_matching_words(
             PrimitiveQueryPart::Phrase(words) => {
                 let ids: Vec<_> =
                     (0..words.len()).into_iter().map(|i| id + i as PrimitiveWordId).collect();
-                let words =
-                    words.into_iter().map(|w| MatchingWord::new(w.to_string(), 0, false)).collect();
+                let words = words.into_iter().map(|w| MatchingWord::new(w, 0, false)).collect();
                 matching_words.push((words, ids));
             }
         }
@@ -639,7 +638,7 @@ fn create_matching_words(
                                 for synonym in synonyms {
                                     let synonym = synonym
                                         .into_iter()
-                                        .map(|syn| MatchingWord::new(syn.to_string(), 0, false))
+                                        .map(|syn| MatchingWord::new(syn, 0, false))
                                         .collect();
                                     matching_words.push((synonym, ids.clone()));
                                 }

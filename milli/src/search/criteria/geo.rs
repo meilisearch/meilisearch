@@ -90,7 +90,7 @@ impl Criterion for Geo<'_> {
                         let mut candidates = match (&query_tree, candidates) {
                             (_, Some(candidates)) => candidates,
                             (Some(qt), None) => {
-                                let context = CriteriaBuilder::new(&self.rtxn, &self.index)?;
+                                let context = CriteriaBuilder::new(self.rtxn, self.index)?;
                                 resolve_query_tree(&context, qt, params.wdcache)?
                             }
                             (None, None) => self.index.documents_ids(self.rtxn)?,
