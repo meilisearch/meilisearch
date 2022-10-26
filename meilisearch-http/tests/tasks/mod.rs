@@ -695,11 +695,12 @@ async fn test_summarized_index_swap() {
 
     server.index("doggos").create(None).await;
     server.index("cattos").create(None).await;
-    server
+    let (ret, _code) = server
         .index_swap(json!([
             { "indexes": ["doggos", "cattos"] }
         ]))
         .await;
+    dbg!(ret);
     server.wait_task(2).await;
     let (task, _) = server.get_task(2).await;
     assert_json_snapshot!(task, 
