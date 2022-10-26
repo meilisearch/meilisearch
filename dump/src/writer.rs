@@ -219,13 +219,13 @@ pub(crate) mod test {
             let (aft, bft) = (a.file_type().unwrap(), b.file_type().unwrap());
 
             if aft.is_dir() && bft.is_dir() {
-                a.file_name().cmp(&b.file_name())
+                a.file_name().into_string().unwrap().cmp(&b.file_name().into_string().unwrap())
             } else if aft.is_file() {
                 std::cmp::Ordering::Greater
             } else if bft.is_file() {
                 std::cmp::Ordering::Less
             } else {
-                a.file_name().cmp(&b.file_name())
+                a.file_name().into_string().unwrap().cmp(&b.file_name().into_string().unwrap())
             }
         });
 
