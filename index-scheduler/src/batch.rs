@@ -749,10 +749,8 @@ impl IndexScheduler {
                 let index_uid = op.index_uid();
                 let index = if must_create_index {
                     // create the index if it doesn't already exist
-                    let mut wtxn = self.env.write_txn()?;
-                    let index = self.index_mapper.create_index(&mut wtxn, index_uid)?;
-                    wtxn.commit()?;
-                    index
+                    let wtxn = self.env.write_txn()?;
+                    self.index_mapper.create_index(wtxn, index_uid)?
                 } else {
                     let rtxn = self.env.read_txn()?;
                     self.index_mapper.index(&rtxn, index_uid)?
@@ -765,12 +763,11 @@ impl IndexScheduler {
                 Ok(tasks)
             }
             Batch::IndexCreation { index_uid, primary_key, task } => {
-                let mut wtxn = self.env.write_txn()?;
+                let wtxn = self.env.write_txn()?;
                 if self.index_mapper.exists(&wtxn, &index_uid)? {
                     return Err(Error::IndexAlreadyExists(index_uid));
                 }
-                self.index_mapper.create_index(&mut wtxn, &index_uid)?;
-                wtxn.commit()?;
+                self.index_mapper.create_index(wtxn, &index_uid)?;
 
                 self.process_batch(Batch::IndexUpdate { index_uid, primary_key, task })
             }

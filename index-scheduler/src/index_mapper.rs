@@ -74,26 +74,31 @@ impl IndexMapper {
     }
 
     /// Get or create the index.
-    pub fn create_index(&self, wtxn: &mut RwTxn, name: &str) -> Result<Index> {
-        match self.index(wtxn, name) {
+    pub fn create_index(&self, mut wtxn: RwTxn, name: &str) -> Result<Index> {
+        let ret = match self.index(&mut wtxn, name) {
             Ok(index) => Ok(index),
             Err(Error::IndexNotFound(_)) => {
                 let uuid = Uuid::new_v4();
-                self.index_mapping.put(wtxn, name, &uuid)?;
+                self.index_mapping.put(&mut wtxn, name, &uuid)?;
 
                 let index_path = self.base_path.join(uuid.to_string());
                 fs::create_dir_all(&index_path)?;
                 let index = self.create_or_open_index(&index_path)?;
 
-                // TODO: this is far from perfect. If the caller don't commit or fail his commit
-                // then we end up with an available index that should not exist and is actually
-                // not available in the index_mapping database.
-                self.index_map.write().unwrap().insert(uuid, Available(index.clone()));
+                // TODO: it would be better to lazyly create the index. But we need an Index::open function for milli.
+                if let Some(BeingDeleted) =
+                    self.index_map.write().unwrap().insert(uuid, Available(index.clone()))
+                {
+                    panic!("Uuid v4 conflict.");
+                }
 
                 Ok(index)
             }
             error => error,
-        }
+        };
+        let index = ret?;
+        wtxn.commit()?;
+        Ok(index)
     }
 
     /// Removes the index from the mapping table and the in-memory index map
