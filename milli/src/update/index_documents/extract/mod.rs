@@ -25,8 +25,8 @@ use self::extract_word_docids::extract_word_docids;
 use self::extract_word_pair_proximity_docids::extract_word_pair_proximity_docids;
 use self::extract_word_position_docids::extract_word_position_docids;
 use super::helpers::{
-    as_cloneable_grenad, keep_first_prefix_value_merge_roaring_bitmaps, merge_cbo_roaring_bitmaps,
-    merge_roaring_bitmaps, CursorClonableMmap, GrenadParameters, MergeFn, MergeableReader,
+    as_cloneable_grenad, merge_cbo_roaring_bitmaps, merge_roaring_bitmaps, CursorClonableMmap,
+    GrenadParameters, MergeFn, MergeableReader,
 };
 use super::{helpers, TypedChunk};
 use crate::{FieldId, Result};
@@ -142,7 +142,7 @@ pub(crate) fn data_from_obkv_documents(
         indexer,
         lmdb_writer_sx.clone(),
         extract_facet_string_docids,
-        keep_first_prefix_value_merge_roaring_bitmaps,
+        merge_cbo_roaring_bitmaps,
         TypedChunk::FieldIdFacetStringDocids,
         "field-id-facet-string-docids",
     );

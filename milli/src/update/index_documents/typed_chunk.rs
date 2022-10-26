@@ -13,7 +13,8 @@ use super::helpers::{
     valid_lmdb_key, CursorClonableMmap,
 };
 use super::{ClonableMmap, MergeFn};
-use crate::heed_codec::facet::{decode_prefix_string, encode_prefix_string};
+use crate::facet::FacetType;
+use crate::update::facet::FacetsUpdate;
 use crate::update::index_documents::helpers::as_cloneable_grenad;
 use crate::{
     lat_lng_to_xyz, BoRoaringBitmapCodec, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index,
@@ -136,15 +137,14 @@ pub(crate) fn write_typed_chunk_into_index(
             )?;
             is_merged_database = true;
         }
-        TypedChunk::FieldIdFacetNumberDocids(facet_id_f64_docids_iter) => {
-            append_entries_into_database(
-                facet_id_f64_docids_iter,
-                &index.facet_id_f64_docids,
-                wtxn,
-                index_is_empty,
-                |value, _buffer| Ok(value),
-                merge_cbo_roaring_bitmaps,
-            )?;
+        TypedChunk::FieldIdFacetNumberDocids(facet_id_number_docids_iter) => {
+            let indexer = FacetsUpdate::new(index, FacetType::Number, facet_id_number_docids_iter);
+            indexer.execute(wtxn)?;
+            is_merged_database = true;
+        }
+        TypedChunk::FieldIdFacetStringDocids(facet_id_string_docids_iter) => {
+            let indexer = FacetsUpdate::new(index, FacetType::String, facet_id_string_docids_iter);
+            indexer.execute(wtxn)?;
             is_merged_database = true;
         }
         TypedChunk::FieldIdFacetExistsDocids(facet_id_exists_docids) => {
@@ -188,25 +188,6 @@ pub(crate) fn write_typed_chunk_into_index(
                     index_fid_docid_facet_strings.put(wtxn, key, value)?;
                 }
             }
-        }
-        TypedChunk::FieldIdFacetStringDocids(facet_id_string_docids) => {
-            append_entries_into_database(
-                facet_id_string_docids,
-                &index.facet_id_string_docids,
-                wtxn,
-                index_is_empty,
-                |value, _buffer| Ok(value),
-                |new_values, db_values, buffer| {
-                    let (_, new_values) = decode_prefix_string(new_values).unwrap();
-                    let new_values = RoaringBitmap::deserialize_from(new_values)?;
-                    let (db_original, db_values) = decode_prefix_string(db_values).unwrap();
-                    let db_values = RoaringBitmap::deserialize_from(db_values)?;
-                    let values = new_values | db_values;
-                    encode_prefix_string(db_original, buffer)?;
-                    Ok(values.serialize_into(buffer)?)
-                },
-            )?;
-            is_merged_database = true;
         }
         TypedChunk::GeoPoints(geo_points) => {
             let mut rtree = index.geo_rtree(wtxn)?.unwrap_or_default();

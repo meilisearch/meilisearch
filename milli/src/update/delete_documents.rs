@@ -1,23 +1,24 @@
 use std::collections::btree_map::Entry;
+use std::collections::{HashMap, HashSet};
 
 use fst::IntoStreamer;
-use heed::types::{ByteSlice, Str};
-use heed::{BytesDecode, BytesEncode, Database};
+use heed::types::{ByteSlice, DecodeIgnore, Str};
+use heed::Database;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
 
+use super::facet::delete::FacetsDelete;
 use super::ClearDocuments;
-use crate::error::{InternalError, SerializationError, UserError};
-use crate::heed_codec::facet::{
-    FacetLevelValueU32Codec, FacetStringLevelZeroValueCodec, FacetStringZeroBoundsValueCodec,
-};
+use crate::error::{InternalError, UserError};
+use crate::facet::FacetType;
+use crate::heed_codec::facet::FieldDocIdFacetCodec;
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::index::{db_name, main_key};
 use crate::{
-    DocumentId, ExternalDocumentsIds, FieldId, FieldIdMapMissingEntry, Index, Result,
-    RoaringBitmapCodec, SmallString32, BEU32,
+    ExternalDocumentsIds, FieldId, FieldIdMapMissingEntry, Index, Result, RoaringBitmapCodec,
+    SmallString32, BEU32,
 };
 
 pub struct DeleteDocuments<'t, 'u, 'i> {
@@ -25,6 +26,8 @@ pub struct DeleteDocuments<'t, 'u, 'i> {
     index: &'i Index,
     external_documents_ids: ExternalDocumentsIds<'static>,
     to_delete_docids: RoaringBitmap,
+    #[cfg(test)]
+    disable_soft_deletion: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -45,7 +48,14 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             index,
             external_documents_ids,
             to_delete_docids: RoaringBitmap::new(),
+            #[cfg(test)]
+            disable_soft_deletion: false,
         })
+    }
+
+    #[cfg(test)]
+    pub fn disable_soft_deletion(&mut self, disable: bool) {
+        self.disable_soft_deletion = disable;
     }
 
     pub fn delete_document(&mut self, docid: u32) {
@@ -64,6 +74,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
     pub fn execute(mut self) -> Result<DocumentDeletionResult> {
         self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
+
         // We retrieve the current documents ids that are in the database.
         let mut documents_ids = self.index.documents_ids(self.wtxn)?;
         let mut soft_deleted_docids = self.index.soft_deleted_documents_ids(self.wtxn)?;
@@ -127,7 +138,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         // the `soft_deleted_documents_ids` bitmap and early exit.
         let size_used = self.index.used_size()?;
         let map_size = self.index.env.map_size()? as u64;
-        let nb_documents = self.index.number_of_documents(self.wtxn)?;
+        let nb_documents = self.index.number_of_documents(&self.wtxn)?;
         let nb_soft_deleted = soft_deleted_docids.len();
 
         let percentage_available = 100 - (size_used * 100 / map_size);
@@ -145,7 +156,20 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         //   We run the deletion.
         // - With 100Go of disk and 50Go used including 15Go of soft-deleted documents
         //   We run the deletion.
-        if percentage_available > 10 && percentage_used_by_soft_deleted_documents < 10 {
+        let disable_soft_deletion = {
+            #[cfg(not(test))]
+            {
+                false
+            }
+            #[cfg(test)]
+            {
+                self.disable_soft_deletion
+            }
+        };
+        if !disable_soft_deletion
+            && percentage_available > 10
+            && percentage_used_by_soft_deleted_documents < 10
+        {
             self.index.put_soft_deleted_documents_ids(self.wtxn, &soft_deleted_docids)?;
             return Ok(DocumentDeletionResult {
                 deleted_documents: self.to_delete_docids.len(),
@@ -185,11 +209,11 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             prefix_word_pair_proximity_docids,
             word_position_docids,
             word_prefix_position_docids,
-            facet_id_f64_docids,
+            facet_id_f64_docids: _,
+            facet_id_string_docids: _,
+            field_id_docid_facet_f64s: _,
+            field_id_docid_facet_strings: _,
             facet_id_exists_docids,
-            facet_id_string_docids,
-            field_id_docid_facet_f64s,
-            field_id_docid_facet_strings,
             documents,
         } = self.index;
 
@@ -440,53 +464,41 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             self.index.put_geo_faceted_documents_ids(self.wtxn, &geo_faceted_doc_ids)?;
         }
 
+        for facet_type in [FacetType::Number, FacetType::String] {
+            let mut affected_facet_values = HashMap::new();
+            for field_id in self.index.faceted_fields_ids(self.wtxn)? {
+                // Remove docids from the number faceted documents ids
+                let mut docids =
+                    self.index.faceted_documents_ids(self.wtxn, field_id, facet_type)?;
+                docids -= &self.to_delete_docids;
+                self.index.put_faceted_documents_ids(self.wtxn, field_id, facet_type, &docids)?;
+
+                let facet_values = remove_docids_from_field_id_docid_facet_value(
+                    &self.index,
+                    self.wtxn,
+                    facet_type,
+                    field_id,
+                    &self.to_delete_docids,
+                )?;
+                if !facet_values.is_empty() {
+                    affected_facet_values.insert(field_id, facet_values);
+                }
+            }
+            FacetsDelete::new(
+                self.index,
+                facet_type,
+                affected_facet_values,
+                &self.to_delete_docids,
+            )
+            .execute(self.wtxn)?;
+        }
+
         // We delete the documents ids that are under the facet field id values.
-        remove_docids_from_facet_field_id_docids(
-            self.wtxn,
-            facet_id_f64_docids,
-            &self.to_delete_docids,
-        )?;
-        // We delete the documents ids that are under the facet field id values.
-        remove_docids_from_facet_field_id_docids(
+        remove_docids_from_facet_id_exists_docids(
             self.wtxn,
             facet_id_exists_docids,
             &self.to_delete_docids,
         )?;
-
-        remove_docids_from_facet_field_id_string_docids(
-            self.wtxn,
-            facet_id_string_docids,
-            &self.to_delete_docids,
-        )?;
-
-        // Remove the documents ids from the faceted documents ids.
-        for field_id in self.index.faceted_fields_ids(self.wtxn)? {
-            // Remove docids from the number faceted documents ids
-            let mut docids = self.index.number_faceted_documents_ids(self.wtxn, field_id)?;
-            docids -= &self.to_delete_docids;
-            self.index.put_number_faceted_documents_ids(self.wtxn, field_id, &docids)?;
-
-            remove_docids_from_field_id_docid_facet_value(
-                self.wtxn,
-                field_id_docid_facet_f64s,
-                field_id,
-                &self.to_delete_docids,
-                |(_fid, docid, _value)| docid,
-            )?;
-
-            // Remove docids from the string faceted documents ids
-            let mut docids = self.index.string_faceted_documents_ids(self.wtxn, field_id)?;
-            docids -= &self.to_delete_docids;
-            self.index.put_string_faceted_documents_ids(self.wtxn, field_id, &docids)?;
-
-            remove_docids_from_field_id_docid_facet_value(
-                self.wtxn,
-                field_id_docid_facet_strings,
-                field_id,
-                &self.to_delete_docids,
-                |(_fid, docid, _value)| docid,
-            )?;
-        }
 
         Ok(DocumentDeletionResult {
             deleted_documents: self.to_delete_docids.len(),
@@ -553,95 +565,41 @@ fn remove_from_word_docids(
     Ok(())
 }
 
-fn remove_docids_from_field_id_docid_facet_value<'a, C, K, F, DC, V>(
+fn remove_docids_from_field_id_docid_facet_value<'i, 'a>(
+    index: &'i Index,
     wtxn: &'a mut heed::RwTxn,
-    db: &heed::Database<C, DC>,
+    facet_type: FacetType,
     field_id: FieldId,
     to_remove: &RoaringBitmap,
-    convert: F,
-) -> heed::Result<()>
-where
-    C: heed::BytesDecode<'a, DItem = K>,
-    DC: heed::BytesDecode<'a, DItem = V>,
-    F: Fn(K) -> DocumentId,
-{
+) -> heed::Result<HashSet<Vec<u8>>> {
+    let db = match facet_type {
+        FacetType::String => {
+            index.field_id_docid_facet_strings.remap_types::<ByteSlice, DecodeIgnore>()
+        }
+        FacetType::Number => {
+            index.field_id_docid_facet_f64s.remap_types::<ByteSlice, DecodeIgnore>()
+        }
+    };
+    let mut all_affected_facet_values = HashSet::default();
     let mut iter = db
-        .remap_key_type::<ByteSlice>()
         .prefix_iter_mut(wtxn, &field_id.to_be_bytes())?
-        .remap_key_type::<C>();
+        .remap_key_type::<FieldDocIdFacetCodec<ByteSlice>>();
 
     while let Some(result) = iter.next() {
-        let (key, _) = result?;
-        if to_remove.contains(convert(key)) {
+        let ((_, docid, facet_value), _) = result?;
+        if to_remove.contains(docid) {
+            if !all_affected_facet_values.contains(facet_value) {
+                all_affected_facet_values.insert(facet_value.to_owned());
+            }
             // safety: we don't keep references from inside the LMDB database.
             unsafe { iter.del_current()? };
         }
     }
 
-    Ok(())
+    Ok(all_affected_facet_values)
 }
 
-fn remove_docids_from_facet_field_id_string_docids<'a, C, D>(
-    wtxn: &'a mut heed::RwTxn,
-    db: &heed::Database<C, D>,
-    to_remove: &RoaringBitmap,
-) -> crate::Result<()> {
-    let db_name = Some(crate::index::db_name::FACET_ID_STRING_DOCIDS);
-    let mut iter = db.remap_types::<ByteSlice, ByteSlice>().iter_mut(wtxn)?;
-    while let Some(result) = iter.next() {
-        let (key, val) = result?;
-        match FacetLevelValueU32Codec::bytes_decode(key) {
-            Some(_) => {
-                // If we are able to parse this key it means it is a facet string group
-                // level key. We must then parse the value using the appropriate codec.
-                let (group, mut docids) =
-                    FacetStringZeroBoundsValueCodec::<CboRoaringBitmapCodec>::bytes_decode(val)
-                        .ok_or(SerializationError::Decoding { db_name })?;
-
-                let previous_len = docids.len();
-                docids -= to_remove;
-                if docids.is_empty() {
-                    // safety: we don't keep references from inside the LMDB database.
-                    unsafe { iter.del_current()? };
-                } else if docids.len() != previous_len {
-                    let key = key.to_owned();
-                    let val = &(group, docids);
-                    let value_bytes =
-                        FacetStringZeroBoundsValueCodec::<CboRoaringBitmapCodec>::bytes_encode(val)
-                            .ok_or(SerializationError::Encoding { db_name })?;
-
-                    // safety: we don't keep references from inside the LMDB database.
-                    unsafe { iter.put_current(&key, &value_bytes)? };
-                }
-            }
-            None => {
-                // The key corresponds to a level zero facet string.
-                let (original_value, mut docids) =
-                    FacetStringLevelZeroValueCodec::bytes_decode(val)
-                        .ok_or(SerializationError::Decoding { db_name })?;
-
-                let previous_len = docids.len();
-                docids -= to_remove;
-                if docids.is_empty() {
-                    // safety: we don't keep references from inside the LMDB database.
-                    unsafe { iter.del_current()? };
-                } else if docids.len() != previous_len {
-                    let key = key.to_owned();
-                    let val = &(original_value, docids);
-                    let value_bytes = FacetStringLevelZeroValueCodec::bytes_encode(val)
-                        .ok_or(SerializationError::Encoding { db_name })?;
-
-                    // safety: we don't keep references from inside the LMDB database.
-                    unsafe { iter.put_current(&key, &value_bytes)? };
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn remove_docids_from_facet_field_id_docids<'a, C>(
+fn remove_docids_from_facet_id_exists_docids<'a, C>(
     wtxn: &'a mut heed::RwTxn,
     db: &heed::Database<C, CboRoaringBitmapCodec>,
     to_remove: &RoaringBitmap,
@@ -675,12 +633,13 @@ mod tests {
 
     use super::*;
     use crate::index::tests::TempIndex;
-    use crate::Filter;
+    use crate::{db_snap, Filter};
 
     fn delete_documents<'t>(
         wtxn: &mut RwTxn<'t, '_>,
         index: &'t Index,
         external_ids: &[&str],
+        disable_soft_deletion: bool,
     ) -> Vec<u32> {
         let external_document_ids = index.external_documents_ids(&wtxn).unwrap();
         let ids_to_delete: Vec<u32> = external_ids
@@ -690,14 +649,14 @@ mod tests {
 
         // Delete some documents.
         let mut builder = DeleteDocuments::new(wtxn, index).unwrap();
+        builder.disable_soft_deletion(disable_soft_deletion);
         external_ids.iter().for_each(|id| drop(builder.delete_external_id(id)));
         builder.execute().unwrap();
 
         ids_to_delete
     }
 
-    #[test]
-    fn delete_documents_with_numbers_as_primary_key() {
+    fn delete_documents_with_numbers_as_primary_key_(disable_soft_deletion: bool) {
         let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
@@ -717,9 +676,17 @@ mod tests {
         builder.delete_document(0);
         builder.delete_document(1);
         builder.delete_document(2);
+        builder.disable_soft_deletion(disable_soft_deletion);
         builder.execute().unwrap();
 
         wtxn.commit().unwrap();
+
+        // All these snapshots should be empty since the database was cleared
+        db_snap!(index, documents_ids, disable_soft_deletion);
+        db_snap!(index, word_docids, disable_soft_deletion);
+        db_snap!(index, word_pair_proximity_docids, disable_soft_deletion);
+        db_snap!(index, facet_id_exists_docids, disable_soft_deletion);
+        db_snap!(index, soft_deleted_documents_ids, disable_soft_deletion);
 
         let rtxn = index.read_txn().unwrap();
 
@@ -727,8 +694,17 @@ mod tests {
     }
 
     #[test]
-    fn delete_documents_with_strange_primary_key() {
+    fn delete_documents_with_numbers_as_primary_key() {
+        delete_documents_with_numbers_as_primary_key_(true);
+        delete_documents_with_numbers_as_primary_key_(false);
+    }
+
+    fn delete_documents_with_strange_primary_key_(disable_soft_deletion: bool) {
         let index = TempIndex::new();
+
+        index
+            .update_settings(|settings| settings.set_searchable_fields(vec!["name".to_string()]))
+            .unwrap();
 
         let mut wtxn = index.write_txn().unwrap();
         index
@@ -741,18 +717,33 @@ mod tests {
                 ]),
             )
             .unwrap();
+        wtxn.commit().unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
 
         // Delete not all of the documents but some of them.
         let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
         builder.delete_external_id("0");
         builder.delete_external_id("1");
+        builder.disable_soft_deletion(disable_soft_deletion);
         builder.execute().unwrap();
-
         wtxn.commit().unwrap();
+
+        db_snap!(index, documents_ids, disable_soft_deletion);
+        db_snap!(index, word_docids, disable_soft_deletion);
+        db_snap!(index, word_pair_proximity_docids, disable_soft_deletion);
+        db_snap!(index, soft_deleted_documents_ids, disable_soft_deletion);
     }
 
     #[test]
-    fn filtered_placeholder_search_should_not_return_deleted_documents() {
+    fn delete_documents_with_strange_primary_key() {
+        delete_documents_with_strange_primary_key_(true);
+        delete_documents_with_strange_primary_key_(false);
+    }
+
+    fn filtered_placeholder_search_should_not_return_deleted_documents_(
+        disable_soft_deletion: bool,
+    ) {
         let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
@@ -760,7 +751,7 @@ mod tests {
         index
             .update_settings_using_wtxn(&mut wtxn, |settings| {
                 settings.set_primary_key(S("docid"));
-                settings.set_filterable_fields(hashset! { S("label") });
+                settings.set_filterable_fields(hashset! { S("label"), S("label2") });
             })
             .unwrap();
 
@@ -768,31 +759,34 @@ mod tests {
             .add_documents_using_wtxn(
                 &mut wtxn,
                 documents!([
-                    { "docid": "1_4",  "label": "sign" },
-                    { "docid": "1_5",  "label": "letter" },
-                    { "docid": "1_7",  "label": "abstract,cartoon,design,pattern" },
-                    { "docid": "1_36", "label": "drawing,painting,pattern" },
-                    { "docid": "1_37", "label": "art,drawing,outdoor" },
-                    { "docid": "1_38", "label": "aquarium,art,drawing" },
-                    { "docid": "1_39", "label": "abstract" },
-                    { "docid": "1_40", "label": "cartoon" },
-                    { "docid": "1_41", "label": "art,drawing" },
-                    { "docid": "1_42", "label": "art,pattern" },
-                    { "docid": "1_43", "label": "abstract,art,drawing,pattern" },
-                    { "docid": "1_44", "label": "drawing" },
-                    { "docid": "1_45", "label": "art" },
-                    { "docid": "1_46", "label": "abstract,colorfulness,pattern" },
-                    { "docid": "1_47", "label": "abstract,pattern" },
-                    { "docid": "1_52", "label": "abstract,cartoon" },
-                    { "docid": "1_57", "label": "abstract,drawing,pattern" },
-                    { "docid": "1_58", "label": "abstract,art,cartoon" },
-                    { "docid": "1_68", "label": "design" },
-                    { "docid": "1_69", "label": "geometry" }
+                    { "docid": "1_4",  "label": ["sign"] },
+                    { "docid": "1_5",  "label": ["letter"] },
+                    { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"] },
+                    { "docid": "1_36", "label": ["drawing","painting","pattern"] },
+                    { "docid": "1_37", "label": ["art","drawing","outdoor"] },
+                    { "docid": "1_38", "label": ["aquarium","art","drawing"] },
+                    { "docid": "1_39", "label": ["abstract"] },
+                    { "docid": "1_40", "label": ["cartoon"] },
+                    { "docid": "1_41", "label": ["art","drawing"] },
+                    { "docid": "1_42", "label": ["art","pattern"] },
+                    { "docid": "1_43", "label": ["abstract","art","drawing","pattern"] },
+                    { "docid": "1_44", "label": ["drawing"] },
+                    { "docid": "1_45", "label": ["art"] },
+                    { "docid": "1_46", "label": ["abstract","colorfulness","pattern"] },
+                    { "docid": "1_47", "label": ["abstract","pattern"] },
+                    { "docid": "1_52", "label": ["abstract","cartoon"] },
+                    { "docid": "1_57", "label": ["abstract","drawing","pattern"] },
+                    { "docid": "1_58", "label": ["abstract","art","cartoon"] },
+                    { "docid": "1_68", "label": ["design"] },
+                    { "docid": "1_69", "label": ["geometry"] },
+                    { "docid": "1_70", "label2": ["geometry", 1.2] },
+                    { "docid": "1_71", "label2": ["design", 2.2] },
+                    { "docid": "1_72", "label2": ["geometry", 1.2] }
                 ]),
             )
             .unwrap();
 
-        delete_documents(&mut wtxn, &index, &["1_4"]);
+        delete_documents(&mut wtxn, &index, &["1_4", "1_70", "1_72"], disable_soft_deletion);
 
         // Placeholder search with filter
         let filter = Filter::from_str("label = sign").unwrap().unwrap();
@@ -800,10 +794,22 @@ mod tests {
         assert!(results.documents_ids.is_empty());
 
         wtxn.commit().unwrap();
+
+        db_snap!(index, soft_deleted_documents_ids, disable_soft_deletion);
+        db_snap!(index, word_docids, disable_soft_deletion);
+        db_snap!(index, facet_id_f64_docids, disable_soft_deletion);
+        db_snap!(index, word_pair_proximity_docids, disable_soft_deletion);
+        db_snap!(index, facet_id_exists_docids, disable_soft_deletion);
+        db_snap!(index, facet_id_string_docids, disable_soft_deletion);
     }
 
     #[test]
-    fn placeholder_search_should_not_return_deleted_documents() {
+    fn filtered_placeholder_search_should_not_return_deleted_documents() {
+        filtered_placeholder_search_should_not_return_deleted_documents_(true);
+        filtered_placeholder_search_should_not_return_deleted_documents_(false);
+    }
+
+    fn placeholder_search_should_not_return_deleted_documents_(disable_soft_deletion: bool) {
         let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
@@ -817,31 +823,35 @@ mod tests {
             .add_documents_using_wtxn(
                 &mut wtxn,
                 documents!([
-                    { "docid": "1_4",  "label": "sign" },
-                    { "docid": "1_5",  "label": "letter" },
-                    { "docid": "1_7",  "label": "abstract,cartoon,design,pattern" },
-                    { "docid": "1_36", "label": "drawing,painting,pattern" },
-                    { "docid": "1_37", "label": "art,drawing,outdoor" },
-                    { "docid": "1_38", "label": "aquarium,art,drawing" },
-                    { "docid": "1_39", "label": "abstract" },
-                    { "docid": "1_40", "label": "cartoon" },
-                    { "docid": "1_41", "label": "art,drawing" },
-                    { "docid": "1_42", "label": "art,pattern" },
-                    { "docid": "1_43", "label": "abstract,art,drawing,pattern" },
-                    { "docid": "1_44", "label": "drawing" },
-                    { "docid": "1_45", "label": "art" },
-                    { "docid": "1_46", "label": "abstract,colorfulness,pattern" },
-                    { "docid": "1_47", "label": "abstract,pattern" },
-                    { "docid": "1_52", "label": "abstract,cartoon" },
-                    { "docid": "1_57", "label": "abstract,drawing,pattern" },
-                    { "docid": "1_58", "label": "abstract,art,cartoon" },
-                    { "docid": "1_68", "label": "design" },
-                    { "docid": "1_69", "label": "geometry" }
+                    { "docid": "1_4",  "label": ["sign"] },
+                    { "docid": "1_5",  "label": ["letter"] },
+                    { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"] },
+                    { "docid": "1_36", "label": ["drawing","painting","pattern"] },
+                    { "docid": "1_37", "label": ["art","drawing","outdoor"] },
+                    { "docid": "1_38", "label": ["aquarium","art","drawing"] },
+                    { "docid": "1_39", "label": ["abstract"] },
+                    { "docid": "1_40", "label": ["cartoon"] },
+                    { "docid": "1_41", "label": ["art","drawing"] },
+                    { "docid": "1_42", "label": ["art","pattern"] },
+                    { "docid": "1_43", "label": ["abstract","art","drawing","pattern"] },
+                    { "docid": "1_44", "label": ["drawing"] },
+                    { "docid": "1_45", "label": ["art"] },
+                    { "docid": "1_46", "label": ["abstract","colorfulness","pattern"] },
+                    { "docid": "1_47", "label": ["abstract","pattern"] },
+                    { "docid": "1_52", "label": ["abstract","cartoon"] },
+                    { "docid": "1_57", "label": ["abstract","drawing","pattern"] },
+                    { "docid": "1_58", "label": ["abstract","art","cartoon"] },
+                    { "docid": "1_68", "label": ["design"] },
+                    { "docid": "1_69", "label": ["geometry"] },
+                    { "docid": "1_70", "label2": ["geometry", 1.2] },
+                    { "docid": "1_71", "label2": ["design", 2.2] },
+                    { "docid": "1_72", "label2": ["geometry", 1.2] }
                 ]),
             )
             .unwrap();
 
-        let deleted_internal_ids = delete_documents(&mut wtxn, &index, &["1_4"]);
+        let deleted_internal_ids =
+            delete_documents(&mut wtxn, &index, &["1_4"], disable_soft_deletion);
 
         // Placeholder search
         let results = index.search(&wtxn).execute().unwrap();
@@ -858,7 +868,12 @@ mod tests {
     }
 
     #[test]
-    fn search_should_not_return_deleted_documents() {
+    fn placeholder_search_should_not_return_deleted_documents() {
+        placeholder_search_should_not_return_deleted_documents_(true);
+        placeholder_search_should_not_return_deleted_documents_(false);
+    }
+
+    fn search_should_not_return_deleted_documents_(disable_soft_deletion: bool) {
         let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
@@ -872,31 +887,35 @@ mod tests {
             .add_documents_using_wtxn(
                 &mut wtxn,
                 documents!([
-                    {"docid": "1_4", "label": "sign"},
-                    {"docid": "1_5", "label": "letter"},
-                    {"docid": "1_7", "label": "abstract,cartoon,design,pattern"},
-                    {"docid": "1_36","label": "drawing,painting,pattern"},
-                    {"docid": "1_37","label": "art,drawing,outdoor"},
-                    {"docid": "1_38","label": "aquarium,art,drawing"},
-                    {"docid": "1_39","label": "abstract"},
-                    {"docid": "1_40","label": "cartoon"},
-                    {"docid": "1_41","label": "art,drawing"},
-                    {"docid": "1_42","label": "art,pattern"},
-                    {"docid": "1_43","label": "abstract,art,drawing,pattern"},
-                    {"docid": "1_44","label": "drawing"},
-                    {"docid": "1_45","label": "art"},
-                    {"docid": "1_46","label": "abstract,colorfulness,pattern"},
-                    {"docid": "1_47","label": "abstract,pattern"},
-                    {"docid": "1_52","label": "abstract,cartoon"},
-                    {"docid": "1_57","label": "abstract,drawing,pattern"},
-                    {"docid": "1_58","label": "abstract,art,cartoon"},
-                    {"docid": "1_68","label": "design"},
-                    {"docid": "1_69","label": "geometry"}
+                    { "docid": "1_4",  "label": ["sign"] },
+                    { "docid": "1_5",  "label": ["letter"] },
+                    { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"] },
+                    { "docid": "1_36", "label": ["drawing","painting","pattern"] },
+                    { "docid": "1_37", "label": ["art","drawing","outdoor"] },
+                    { "docid": "1_38", "label": ["aquarium","art","drawing"] },
+                    { "docid": "1_39", "label": ["abstract"] },
+                    { "docid": "1_40", "label": ["cartoon"] },
+                    { "docid": "1_41", "label": ["art","drawing"] },
+                    { "docid": "1_42", "label": ["art","pattern"] },
+                    { "docid": "1_43", "label": ["abstract","art","drawing","pattern"] },
+                    { "docid": "1_44", "label": ["drawing"] },
+                    { "docid": "1_45", "label": ["art"] },
+                    { "docid": "1_46", "label": ["abstract","colorfulness","pattern"] },
+                    { "docid": "1_47", "label": ["abstract","pattern"] },
+                    { "docid": "1_52", "label": ["abstract","cartoon"] },
+                    { "docid": "1_57", "label": ["abstract","drawing","pattern"] },
+                    { "docid": "1_58", "label": ["abstract","art","cartoon"] },
+                    { "docid": "1_68", "label": ["design"] },
+                    { "docid": "1_69", "label": ["geometry"] },
+                    { "docid": "1_70", "label2": ["geometry", 1.2] },
+                    { "docid": "1_71", "label2": ["design", 2.2] },
+                    { "docid": "1_72", "label2": ["geometry", 1.2] }
                 ]),
             )
             .unwrap();
 
-        let deleted_internal_ids = delete_documents(&mut wtxn, &index, &["1_7", "1_52"]);
+        let deleted_internal_ids =
+            delete_documents(&mut wtxn, &index, &["1_7", "1_52"], disable_soft_deletion);
 
         // search for abstract
         let results = index.search(&wtxn).query("abstract").execute().unwrap();
@@ -910,10 +929,19 @@ mod tests {
         }
 
         wtxn.commit().unwrap();
+
+        db_snap!(index, soft_deleted_documents_ids, disable_soft_deletion);
     }
 
     #[test]
-    fn geo_filtered_placeholder_search_should_not_return_deleted_documents() {
+    fn search_should_not_return_deleted_documents() {
+        search_should_not_return_deleted_documents_(true);
+        search_should_not_return_deleted_documents_(false);
+    }
+
+    fn geo_filtered_placeholder_search_should_not_return_deleted_documents_(
+        disable_soft_deletion: bool,
+    ) {
         let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
@@ -949,7 +977,8 @@ mod tests {
         ])).unwrap();
 
         let external_ids_to_delete = ["5", "6", "7", "12", "17", "19"];
-        let deleted_internal_ids = delete_documents(&mut wtxn, &index, &external_ids_to_delete);
+        let deleted_internal_ids =
+            delete_documents(&mut wtxn, &index, &external_ids_to_delete, disable_soft_deletion);
 
         // Placeholder search with geo filter
         let filter = Filter::from_str("_geoRadius(50.6924, 3.1763, 20000)").unwrap().unwrap();
@@ -964,10 +993,19 @@ mod tests {
         }
 
         wtxn.commit().unwrap();
+
+        db_snap!(index, soft_deleted_documents_ids, disable_soft_deletion);
+        db_snap!(index, facet_id_f64_docids, disable_soft_deletion);
+        db_snap!(index, facet_id_string_docids, disable_soft_deletion);
     }
 
     #[test]
-    fn get_documents_should_not_return_deleted_documents() {
+    fn geo_filtered_placeholder_search_should_not_return_deleted_documents() {
+        geo_filtered_placeholder_search_should_not_return_deleted_documents_(true);
+        geo_filtered_placeholder_search_should_not_return_deleted_documents_(false);
+    }
+
+    fn get_documents_should_not_return_deleted_documents_(disable_soft_deletion: bool) {
         let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
@@ -981,32 +1019,36 @@ mod tests {
             .add_documents_using_wtxn(
                 &mut wtxn,
                 documents!([
-                    { "docid": "1_4",  "label": "sign" },
-                    { "docid": "1_5",  "label": "letter" },
-                    { "docid": "1_7",  "label": "abstract,cartoon,design,pattern" },
-                    { "docid": "1_36", "label": "drawing,painting,pattern" },
-                    { "docid": "1_37", "label": "art,drawing,outdoor" },
-                    { "docid": "1_38", "label": "aquarium,art,drawing" },
-                    { "docid": "1_39", "label": "abstract" },
-                    { "docid": "1_40", "label": "cartoon" },
-                    { "docid": "1_41", "label": "art,drawing" },
-                    { "docid": "1_42", "label": "art,pattern" },
-                    { "docid": "1_43", "label": "abstract,art,drawing,pattern" },
-                    { "docid": "1_44", "label": "drawing" },
-                    { "docid": "1_45", "label": "art" },
-                    { "docid": "1_46", "label": "abstract,colorfulness,pattern" },
-                    { "docid": "1_47", "label": "abstract,pattern" },
-                    { "docid": "1_52", "label": "abstract,cartoon" },
-                    { "docid": "1_57", "label": "abstract,drawing,pattern" },
-                    { "docid": "1_58", "label": "abstract,art,cartoon" },
-                    { "docid": "1_68", "label": "design" },
-                    { "docid": "1_69", "label": "geometry" }
+                    { "docid": "1_4",  "label": ["sign"] },
+                    { "docid": "1_5",  "label": ["letter"] },
+                    { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"] },
+                    { "docid": "1_36", "label": ["drawing","painting","pattern"] },
+                    { "docid": "1_37", "label": ["art","drawing","outdoor"] },
+                    { "docid": "1_38", "label": ["aquarium","art","drawing"] },
+                    { "docid": "1_39", "label": ["abstract"] },
+                    { "docid": "1_40", "label": ["cartoon"] },
+                    { "docid": "1_41", "label": ["art","drawing"] },
+                    { "docid": "1_42", "label": ["art","pattern"] },
+                    { "docid": "1_43", "label": ["abstract","art","drawing","pattern"] },
+                    { "docid": "1_44", "label": ["drawing"] },
+                    { "docid": "1_45", "label": ["art"] },
+                    { "docid": "1_46", "label": ["abstract","colorfulness","pattern"] },
+                    { "docid": "1_47", "label": ["abstract","pattern"] },
+                    { "docid": "1_52", "label": ["abstract","cartoon"] },
+                    { "docid": "1_57", "label": ["abstract","drawing","pattern"] },
+                    { "docid": "1_58", "label": ["abstract","art","cartoon"] },
+                    { "docid": "1_68", "label": ["design"] },
+                    { "docid": "1_69", "label": ["geometry"] },
+                    { "docid": "1_70", "label2": ["geometry", 1.2] },
+                    { "docid": "1_71", "label2": ["design", 2.2] },
+                    { "docid": "1_72", "label2": ["geometry", 1.2] }
                 ]),
             )
             .unwrap();
 
         let deleted_external_ids = ["1_7", "1_52"];
-        let deleted_internal_ids = delete_documents(&mut wtxn, &index, &deleted_external_ids);
+        let deleted_internal_ids =
+            delete_documents(&mut wtxn, &index, &deleted_external_ids, disable_soft_deletion);
 
         // list all documents
         let results = index.all_documents(&wtxn).unwrap();
@@ -1036,10 +1078,17 @@ mod tests {
         }
 
         wtxn.commit().unwrap();
+
+        db_snap!(index, soft_deleted_documents_ids, disable_soft_deletion);
     }
 
     #[test]
-    fn stats_should_not_return_deleted_documents() {
+    fn get_documents_should_not_return_deleted_documents() {
+        get_documents_should_not_return_deleted_documents_(true);
+        get_documents_should_not_return_deleted_documents_(false);
+    }
+
+    fn stats_should_not_return_deleted_documents_(disable_soft_deletion: bool) {
         let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
@@ -1051,29 +1100,29 @@ mod tests {
             .unwrap();
 
         index.add_documents_using_wtxn(&mut wtxn, documents!([
-            { "docid": "1_4",  "label": "sign"},
-            { "docid": "1_5",  "label": "letter"},
-            { "docid": "1_7",  "label": "abstract,cartoon,design,pattern", "title": "Mickey Mouse"},
-            { "docid": "1_36", "label": "drawing,painting,pattern"},
-            { "docid": "1_37", "label": "art,drawing,outdoor"},
-            { "docid": "1_38", "label": "aquarium,art,drawing",            "title": "Nemo"},
-            { "docid": "1_39", "label": "abstract"},
-            { "docid": "1_40", "label": "cartoon"},
-            { "docid": "1_41", "label": "art,drawing"},
-            { "docid": "1_42", "label": "art,pattern"},
-            { "docid": "1_43", "label": "abstract,art,drawing,pattern",    "number": 32i32},
-            { "docid": "1_44", "label": "drawing",                         "number": 44i32},
-            { "docid": "1_45", "label": "art"},
-            { "docid": "1_46", "label": "abstract,colorfulness,pattern"},
-            { "docid": "1_47", "label": "abstract,pattern"},
-            { "docid": "1_52", "label": "abstract,cartoon"},
-            { "docid": "1_57", "label": "abstract,drawing,pattern"},
-            { "docid": "1_58", "label": "abstract,art,cartoon"},
-            { "docid": "1_68", "label": "design"},
-            { "docid": "1_69", "label": "geometry"}
+            { "docid": "1_4",  "label": ["sign"]},
+            { "docid": "1_5",  "label": ["letter"]},
+            { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"], "title": "Mickey Mouse"},
+            { "docid": "1_36", "label": ["drawing","painting","pattern"]},
+            { "docid": "1_37", "label": ["art","drawing","outdoor"]},
+            { "docid": "1_38", "label": ["aquarium","art","drawing"], "title": "Nemo"},
+            { "docid": "1_39", "label": ["abstract"]},
+            { "docid": "1_40", "label": ["cartoon"]},
+            { "docid": "1_41", "label": ["art","drawing"]},
+            { "docid": "1_42", "label": ["art","pattern"]},
+            { "docid": "1_43", "label": ["abstract","art","drawing","pattern"], "number": 32i32},
+            { "docid": "1_44", "label": ["drawing"], "number": 44i32},
+            { "docid": "1_45", "label": ["art"]},
+            { "docid": "1_46", "label": ["abstract","colorfulness","pattern"]},
+            { "docid": "1_47", "label": ["abstract","pattern"]},
+            { "docid": "1_52", "label": ["abstract","cartoon"]},
+            { "docid": "1_57", "label": ["abstract","drawing","pattern"]},
+            { "docid": "1_58", "label": ["abstract","art","cartoon"]},
+            { "docid": "1_68", "label": ["design"]},
+            { "docid": "1_69", "label": ["geometry"]}
         ])).unwrap();
 
-        delete_documents(&mut wtxn, &index, &["1_7", "1_52"]);
+        delete_documents(&mut wtxn, &index, &["1_7", "1_52"], disable_soft_deletion);
 
         // count internal documents
         let results = index.number_of_documents(&wtxn).unwrap();
@@ -1086,5 +1135,13 @@ mod tests {
         assert_eq!(Some(&2), results.get("number"));
 
         wtxn.commit().unwrap();
+
+        db_snap!(index, soft_deleted_documents_ids, disable_soft_deletion);
+    }
+
+    #[test]
+    fn stats_should_not_return_deleted_documents() {
+        stats_should_not_return_deleted_documents_(true);
+        stats_should_not_return_deleted_documents_(false);
     }
 }

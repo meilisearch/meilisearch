@@ -1,0 +1,4 @@
+---
+source: milli/src/update/delete_documents.rs
+---
+[4, 5, 6, 11, 16, 18, ]

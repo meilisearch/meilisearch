@@ -7,7 +7,7 @@ mod typed_chunk;
 use std::collections::HashSet;
 use std::io::{Cursor, Read, Seek};
 use std::iter::FromIterator;
-use std::num::{NonZeroU32, NonZeroUsize};
+use std::num::NonZeroU32;
 use std::result::Result as StdResult;
 
 use crossbeam_channel::{Receiver, Sender};
@@ -27,8 +27,7 @@ pub use self::enrich::{
 pub use self::helpers::{
     as_cloneable_grenad, create_sorter, create_writer, fst_stream_into_hashset,
     fst_stream_into_vec, merge_cbo_roaring_bitmaps, merge_roaring_bitmaps,
-    sorter_into_lmdb_database, valid_lmdb_key, write_into_lmdb_database, writer_into_reader,
-    ClonableMmap, MergeFn,
+    sorter_into_lmdb_database, valid_lmdb_key, writer_into_reader, ClonableMmap, MergeFn,
 };
 use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
 pub use self::transform::{Transform, TransformOutput};
@@ -36,8 +35,8 @@ use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
-    self, Facets, IndexerConfig, PrefixWordPairsProximityDocids, UpdateIndexingStep,
-    WordPrefixDocids, WordPrefixPositionDocids, WordsPrefixesFst,
+    self, IndexerConfig, PrefixWordPairsProximityDocids, UpdateIndexingStep, WordPrefixDocids,
+    WordPrefixPositionDocids, WordsPrefixesFst,
 };
 use crate::{Index, Result, RoaringBitmapCodec};
 
@@ -84,8 +83,6 @@ pub struct IndexDocuments<'t, 'u, 'i, 'a, FP, FA> {
 
 #[derive(Default, Debug, Clone)]
 pub struct IndexDocumentsConfig {
-    pub facet_level_group_size: Option<NonZeroUsize>,
-    pub facet_min_level_size: Option<NonZeroUsize>,
     pub words_prefix_threshold: Option<u32>,
     pub max_prefix_length: Option<usize>,
     pub words_positions_level_group_size: Option<NonZeroU32>,
@@ -445,18 +442,6 @@ where
             return Err(Error::InternalError(InternalError::AbortedIndexation));
         }
 
-        // Run the facets update operation.
-        let mut builder = Facets::new(self.wtxn, self.index);
-        builder.chunk_compression_type = self.indexer_config.chunk_compression_type;
-        builder.chunk_compression_level = self.indexer_config.chunk_compression_level;
-        if let Some(value) = self.config.facet_level_group_size {
-            builder.level_group_size(value);
-        }
-        if let Some(value) = self.config.facet_min_level_size {
-            builder.min_level_size(value);
-        }
-        builder.execute()?;
-
         databases_seen += 1;
         (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
             databases_seen,
@@ -643,7 +628,7 @@ mod tests {
     use crate::index::tests::TempIndex;
     use crate::search::TermsMatchingStrategy;
     use crate::update::DeleteDocuments;
-    use crate::BEU16;
+    use crate::{db_snap, BEU16};
 
     #[test]
     fn simple_document_replacement() {
@@ -1430,6 +1415,25 @@ mod tests {
             })
             .unwrap();
 
+        db_snap!(index, facet_id_string_docids, @r###"
+        3   0  first        1  [1, ]
+        3   0  second       1  [2, ]
+        3   0  third        1  [3, ]
+        3   0  zeroth       1  [0, ]
+        "###);
+        db_snap!(index, field_id_docid_facet_strings, @r###"
+        3   0    zeroth       zeroth
+        3   1    first        first
+        3   2    second       second
+        3   3    third        third
+        "###);
+        db_snap!(index, string_faceted_documents_ids, @r###"
+        0   []
+        1   []
+        2   []
+        3   [0, 1, 2, 3, ]
+        "###);
+
         let rtxn = index.read_txn().unwrap();
 
         let hidden = index.faceted_fields(&rtxn).unwrap();
@@ -1450,6 +1454,15 @@ mod tests {
             })
             .unwrap();
 
+        db_snap!(index, facet_id_string_docids, @"");
+        db_snap!(index, field_id_docid_facet_strings, @"");
+        db_snap!(index, string_faceted_documents_ids, @r###"
+        0   []
+        1   []
+        2   []
+        3   [0, 1, 2, 3, ]
+        "###);
+
         let rtxn = index.read_txn().unwrap();
 
         let facets = index.faceted_fields(&rtxn).unwrap();
@@ -1462,6 +1475,25 @@ mod tests {
                 settings.set_sortable_fields(hashset!(S("dog.race")));
             })
             .unwrap();
+
+        db_snap!(index, facet_id_string_docids, @r###"
+        3   0  first        1  [1, ]
+        3   0  second       1  [2, ]
+        3   0  third        1  [3, ]
+        3   0  zeroth       1  [0, ]
+        "###);
+        db_snap!(index, field_id_docid_facet_strings, @r###"
+        3   0    zeroth       zeroth
+        3   1    first        first
+        3   2    second       second
+        3   3    third        third
+        "###);
+        db_snap!(index, string_faceted_documents_ids, @r###"
+        0   []
+        1   []
+        2   []
+        3   [0, 1, 2, 3, ]
+        "###);
 
         let rtxn = index.read_txn().unwrap();
 

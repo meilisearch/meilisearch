@@ -2,18 +2,14 @@ use std::borrow::Cow;
 use std::fmt::Write;
 use std::path::Path;
 
-use heed::types::ByteSlice;
-use heed::BytesDecode;
 use roaring::RoaringBitmap;
 
-use crate::heed_codec::facet::{
-    FacetLevelValueU32Codec, FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec,
-    FacetStringZeroBoundsValueCodec,
-};
-use crate::{make_db_snap_from_iter, CboRoaringBitmapCodec, ExternalDocumentsIds, Index};
+use crate::facet::FacetType;
+use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
+use crate::{make_db_snap_from_iter, ExternalDocumentsIds, Index};
 
 #[track_caller]
-pub fn default_db_snapshot_settings_for_test(name: Option<&str>) -> insta::Settings {
+pub fn default_db_snapshot_settings_for_test(name: Option<&str>) -> (insta::Settings, String) {
     let mut settings = insta::Settings::clone_current();
     settings.set_prepend_module_to_snapshot(false);
     let path = Path::new(std::panic::Location::caller().file());
@@ -23,12 +19,63 @@ pub fn default_db_snapshot_settings_for_test(name: Option<&str>) -> insta::Setti
 
     if let Some(name) = name {
         settings
-            .set_snapshot_path(Path::new("snapshots").join(filename).join(test_name).join(name));
+            .set_snapshot_path(Path::new("snapshots").join(filename).join(&test_name).join(name));
     } else {
-        settings.set_snapshot_path(Path::new("snapshots").join(filename).join(test_name));
+        settings.set_snapshot_path(Path::new("snapshots").join(filename).join(&test_name));
     }
 
-    settings
+    (settings, test_name)
+}
+#[macro_export]
+macro_rules! milli_snap {
+    ($value:expr, $name:expr) => {
+        let (settings, _) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(None);
+        settings.bind(|| {
+            let snap = $value;
+            let snaps = $crate::snapshot_tests::convert_snap_to_hash_if_needed(&format!("{}", $name), &snap, false);
+            for (name, snap) in snaps {
+                insta::assert_snapshot!(name, snap);
+            }
+        });
+    };
+    ($value:expr) => {
+        let (settings, test_name) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(None);
+        settings.bind(|| {
+            let snap = $value;
+            let snaps = $crate::snapshot_tests::convert_snap_to_hash_if_needed(&format!("{}", test_name), &snap, false);
+            for (name, snap) in snaps {
+                insta::assert_snapshot!(name, snap);
+            }
+        });
+    };
+    ($value:expr, @$inline:literal) => {
+        let (settings, test_name) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(None);
+        settings.bind(|| {
+            let snap = $value;
+            let snaps = $crate::snapshot_tests::convert_snap_to_hash_if_needed(&format!("{}", test_name), &snap, true);
+            for (name, snap) in snaps {
+                if !name.ends_with(".full") {
+                    insta::assert_snapshot!(snap, @$inline);
+                } else {
+                    insta::assert_snapshot!(name, snap);
+                }
+            }
+        });
+    };
+    ($value:expr, $name:expr, @$inline:literal) => {
+        let (settings, _) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(None);
+        settings.bind(|| {
+            let snap = $value;
+            let snaps = $crate::snapshot_tests::convert_snap_to_hash_if_needed(&format!("{}", $name), &snap, true);
+            for (name, snap) in snaps {
+                if !name.ends_with(".full") {
+                    insta::assert_snapshot!(snap, @$inline);
+                } else {
+                    insta::assert_snapshot!(name, snap);
+                }
+            }
+        });
+    };
 }
 
 /**
@@ -99,7 +146,7 @@ db_snap!(index, word_docids, "some_identifier", @"");
 #[macro_export]
 macro_rules! db_snap {
     ($index:ident, $db_name:ident, $name:expr) => {
-        let settings = $crate::snapshot_tests::default_db_snapshot_settings_for_test(Some(
+        let (settings, _) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(Some(
             &format!("{}", $name),
         ));
         settings.bind(|| {
@@ -111,7 +158,7 @@ macro_rules! db_snap {
         });
     };
     ($index:ident, $db_name:ident) => {
-        let settings = $crate::snapshot_tests::default_db_snapshot_settings_for_test(None);
+        let (settings, _) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(None);
         settings.bind(|| {
             let snap = $crate::full_snap_of_db!($index, $db_name);
             let snaps = $crate::snapshot_tests::convert_snap_to_hash_if_needed(stringify!($db_name), &snap, false);
@@ -121,7 +168,7 @@ macro_rules! db_snap {
         });
     };
     ($index:ident, $db_name:ident, @$inline:literal) => {
-        let settings = $crate::snapshot_tests::default_db_snapshot_settings_for_test(None);
+        let (settings, _) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(None);
         settings.bind(|| {
             let snap = $crate::full_snap_of_db!($index, $db_name);
             let snaps = $crate::snapshot_tests::convert_snap_to_hash_if_needed(stringify!($db_name), &snap, true);
@@ -134,8 +181,8 @@ macro_rules! db_snap {
             }
         });
     };
-    ($index:ident, $db_name:ident, $name:literal, @$inline:literal) => {
-        let settings = $crate::snapshot_tests::default_db_snapshot_settings_for_test(Some(&format!("{}", $name)));
+    ($index:ident, $db_name:ident, $name:expr, @$inline:literal) => {
+        let (settings, _) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(Some(&format!("{}", $name)));
         settings.bind(|| {
             let snap = $crate::full_snap_of_db!($index, $db_name);
             let snaps = $crate::snapshot_tests::convert_snap_to_hash_if_needed(stringify!($db_name), &snap, true);
@@ -233,44 +280,35 @@ pub fn snap_word_prefix_position_docids(index: &Index) -> String {
 }
 pub fn snap_facet_id_f64_docids(index: &Index) -> String {
     let snap = make_db_snap_from_iter!(index, facet_id_f64_docids, |(
-        (facet_id, level, left, right),
-        b,
+        FacetGroupKey { field_id, level, left_bound },
+        FacetGroupValue { size, bitmap },
     )| {
-        &format!("{facet_id:<3} {level:<2} {left:<6} {right:<6} {}", display_bitmap(&b))
+        &format!("{field_id:<3} {level:<2} {left_bound:<6} {size:<2} {}", display_bitmap(&bitmap))
+    });
+    snap
+}
+pub fn snap_facet_id_exists_docids(index: &Index) -> String {
+    let snap = make_db_snap_from_iter!(index, facet_id_exists_docids, |(facet_id, docids)| {
+        &format!("{facet_id:<3} {}", display_bitmap(&docids))
     });
     snap
 }
 pub fn snap_facet_id_string_docids(index: &Index) -> String {
-    let rtxn = index.read_txn().unwrap();
-    let bytes_db = index.facet_id_string_docids.remap_types::<ByteSlice, ByteSlice>();
-    let iter = bytes_db.iter(&rtxn).unwrap();
-    let mut snap = String::new();
-
-    for x in iter {
-        let (key, value) = x.unwrap();
-        if let Some((field_id, normalized_str)) = FacetStringLevelZeroCodec::bytes_decode(key) {
-            let (orig_string, docids) =
-                FacetStringLevelZeroValueCodec::bytes_decode(value).unwrap();
-            snap.push_str(&format!(
-                "{field_id:<3} {normalized_str:<8} {orig_string:<8} {}\n",
-                display_bitmap(&docids)
-            ));
-        } else if let Some((field_id, level, left, right)) =
-            FacetLevelValueU32Codec::bytes_decode(key)
-        {
-            snap.push_str(&format!("{field_id:<3} {level:<2} {left:<6} {right:<6} "));
-            let (bounds, docids) =
-                FacetStringZeroBoundsValueCodec::<CboRoaringBitmapCodec>::bytes_decode(value)
-                    .unwrap();
-            if let Some((left, right)) = bounds {
-                snap.push_str(&format!("{left:<8} {right:<8} "));
-            }
-            snap.push_str(&display_bitmap(&docids));
-            snap.push('\n');
-        } else {
-            panic!();
-        }
-    }
+    let snap = make_db_snap_from_iter!(index, facet_id_string_docids, |(
+        FacetGroupKey { field_id, level, left_bound },
+        FacetGroupValue { size, bitmap },
+    )| {
+        &format!("{field_id:<3} {level:<2} {left_bound:<12} {size:<2} {}", display_bitmap(&bitmap))
+    });
+    snap
+}
+pub fn snap_field_id_docid_facet_strings(index: &Index) -> String {
+    let snap = make_db_snap_from_iter!(index, field_id_docid_facet_strings, |(
+        (field_id, doc_id, string),
+        other_string,
+    )| {
+        &format!("{field_id:<3} {doc_id:<4} {string:<12} {other_string}")
+    });
     snap
 }
 pub fn snap_documents_ids(index: &Index) -> String {
@@ -339,7 +377,7 @@ pub fn snap_number_faceted_documents_ids(index: &Index) -> String {
     let mut snap = String::new();
     for field_id in fields_ids_map.ids() {
         let number_faceted_documents_ids =
-            index.number_faceted_documents_ids(&rtxn, field_id).unwrap();
+            index.faceted_documents_ids(&rtxn, field_id, FacetType::Number).unwrap();
         writeln!(&mut snap, "{field_id:<3} {}", display_bitmap(&number_faceted_documents_ids))
             .unwrap();
     }
@@ -352,7 +390,7 @@ pub fn snap_string_faceted_documents_ids(index: &Index) -> String {
     let mut snap = String::new();
     for field_id in fields_ids_map.ids() {
         let string_faceted_documents_ids =
-            index.string_faceted_documents_ids(&rtxn, field_id).unwrap();
+            index.faceted_documents_ids(&rtxn, field_id, FacetType::String).unwrap();
         writeln!(&mut snap, "{field_id:<3} {}", display_bitmap(&string_faceted_documents_ids))
             .unwrap();
     }
@@ -453,6 +491,12 @@ macro_rules! full_snap_of_db {
     }};
     ($index:ident, facet_id_string_docids) => {{
         $crate::snapshot_tests::snap_facet_id_string_docids(&$index)
+    }};
+    ($index:ident, field_id_docid_facet_strings) => {{
+        $crate::snapshot_tests::snap_field_id_docid_facet_strings(&$index)
+    }};
+    ($index:ident, facet_id_exists_docids) => {{
+        $crate::snapshot_tests::snap_facet_id_exists_docids(&$index)
     }};
     ($index:ident, documents_ids) => {{
         $crate::snapshot_tests::snap_documents_ids(&$index)

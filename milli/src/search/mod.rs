@@ -15,7 +15,7 @@ use log::debug;
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
-pub use self::facet::{FacetDistribution, FacetNumberIter, Filter, DEFAULT_VALUES_PER_FACET};
+pub use self::facet::{FacetDistribution, Filter, DEFAULT_VALUES_PER_FACET};
 use self::fst_utils::{Complement, Intersection, StartsWith, Union};
 pub use self::matches::{
     FormatOptions, MatchBounds, Matcher, MatcherBuilder, MatchingWord, MatchingWords,
@@ -32,7 +32,7 @@ static LEVDIST2: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(2, true));
 
 mod criteria;
 mod distinct;
-mod facet;
+pub mod facet;
 mod fst_utils;
 mod matches;
 mod query_tree;

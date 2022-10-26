@@ -12,11 +12,13 @@ use rstar::RTree;
 use time::OffsetDateTime;
 
 use crate::error::{InternalError, UserError};
+use crate::facet::FacetType;
 use crate::fields_ids_map::FieldsIdsMap;
 use crate::heed_codec::facet::{
-    FacetLevelValueF64Codec, FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec,
-    FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec, FieldIdCodec,
+    FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
+    FieldIdCodec, OrderedF64Codec,
 };
+use crate::heed_codec::StrRefCodec;
 use crate::{
     default_criteria, BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec, Criterion,
     DocumentId, ExternalDocumentsIds, FacetDistribution, FieldDistribution, FieldId,
@@ -123,10 +125,10 @@ pub struct Index {
     /// Maps the facet field id and the docids for which this field exists
     pub facet_id_exists_docids: Database<FieldIdCodec, CboRoaringBitmapCodec>,
 
-    /// Maps the facet field id, level and the number with the docids that corresponds to it.
-    pub facet_id_f64_docids: Database<FacetLevelValueF64Codec, CboRoaringBitmapCodec>,
-    /// Maps the facet field id and the string with the original string and docids that corresponds to it.
-    pub facet_id_string_docids: Database<FacetStringLevelZeroCodec, FacetStringLevelZeroValueCodec>,
+    /// Maps the facet field id and ranges of numbers with the docids that corresponds to them.
+    pub facet_id_f64_docids: Database<FacetGroupKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>,
+    /// Maps the facet field id and ranges of strings with the docids that corresponds to them.
+    pub facet_id_string_docids: Database<FacetGroupKeyCodec<StrRefCodec>, FacetGroupValueCodec>,
 
     /// Maps the document id, the facet field id and the numbers.
     pub field_id_docid_facet_f64s: Database<FieldDocIdFacetF64Codec, Unit>,
@@ -775,68 +777,38 @@ impl Index {
 
     /* faceted documents ids */
 
-    /// Writes the documents ids that are faceted with numbers under this field id.
-    pub(crate) fn put_number_faceted_documents_ids(
+    /// Writes the documents ids that are faceted under this field id for the given facet type.
+    pub fn put_faceted_documents_ids(
         &self,
         wtxn: &mut RwTxn,
         field_id: FieldId,
+        facet_type: FacetType,
         docids: &RoaringBitmap,
     ) -> heed::Result<()> {
-        let mut buffer =
-            [0u8; main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len() + size_of::<FieldId>()];
-        buffer[..main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()]
-            .copy_from_slice(main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
-        buffer[main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
-            .copy_from_slice(&field_id.to_be_bytes());
+        let key = match facet_type {
+            FacetType::String => main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX,
+            FacetType::Number => main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX,
+        };
+        let mut buffer = vec![0u8; key.len() + size_of::<FieldId>()];
+        buffer[..key.len()].copy_from_slice(key.as_bytes());
+        buffer[key.len()..].copy_from_slice(&field_id.to_be_bytes());
         self.main.put::<_, ByteSlice, RoaringBitmapCodec>(wtxn, &buffer, docids)
     }
 
-    /// Retrieve all the documents ids that faceted with numbers under this field id.
-    pub fn number_faceted_documents_ids(
+    /// Retrieve all the documents ids that are faceted under this field id for the given facet type.
+    pub fn faceted_documents_ids(
         &self,
         rtxn: &RoTxn,
         field_id: FieldId,
+        facet_type: FacetType,
     ) -> heed::Result<RoaringBitmap> {
-        let mut buffer =
-            [0u8; main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len() + size_of::<FieldId>()];
-        buffer[..main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()]
-            .copy_from_slice(main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
-        buffer[main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
-            .copy_from_slice(&field_id.to_be_bytes());
-        match self.main.get::<_, ByteSlice, RoaringBitmapCodec>(rtxn, &buffer)? {
-            Some(docids) => Ok(docids),
-            None => Ok(RoaringBitmap::new()),
-        }
-    }
-
-    /// Writes the documents ids that are faceted with strings under this field id.
-    pub(crate) fn put_string_faceted_documents_ids(
-        &self,
-        wtxn: &mut RwTxn,
-        field_id: FieldId,
-        docids: &RoaringBitmap,
-    ) -> heed::Result<()> {
-        let mut buffer =
-            [0u8; main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + size_of::<FieldId>()];
-        buffer[..main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()]
-            .copy_from_slice(main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
-        buffer[main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
-            .copy_from_slice(&field_id.to_be_bytes());
-        self.main.put::<_, ByteSlice, RoaringBitmapCodec>(wtxn, &buffer, docids)
-    }
-
-    /// Retrieve all the documents ids that faceted with strings under this field id.
-    pub fn string_faceted_documents_ids(
-        &self,
-        rtxn: &RoTxn,
-        field_id: FieldId,
-    ) -> heed::Result<RoaringBitmap> {
-        let mut buffer =
-            [0u8; main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len() + size_of::<FieldId>()];
-        buffer[..main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()]
-            .copy_from_slice(main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
-        buffer[main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX.len()..]
-            .copy_from_slice(&field_id.to_be_bytes());
+        let key = match facet_type {
+            FacetType::String => main_key::STRING_FACETED_DOCUMENTS_IDS_PREFIX,
+            FacetType::Number => main_key::NUMBER_FACETED_DOCUMENTS_IDS_PREFIX,
+        };
+        let mut buffer = vec![0u8; key.len() + size_of::<FieldId>()];
+        buffer[..key.len()].copy_from_slice(key.as_bytes());
+        buffer[key.len()..].copy_from_slice(&field_id.to_be_bytes());
         match self.main.get::<_, ByteSlice, RoaringBitmapCodec>(rtxn, &buffer)? {
             Some(docids) => Ok(docids),
             None => Ok(RoaringBitmap::new()),

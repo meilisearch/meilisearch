@@ -2,6 +2,8 @@
 /target
 /Cargo.lock
 
+milli/target/
+
 # datasets
 *.csv
 *.mmdb
@@ -11,6 +13,8 @@
 # Snapshots
 ## ... large
 *.full.snap
-
-#  ... unreviewed
+## ... unreviewed
 *.snap.new
+
+# Fuzzcheck data for the facet indexing fuzz test
+milli/fuzz/update::facet::incremental::fuzz::fuzz/
