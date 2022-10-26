@@ -746,6 +746,7 @@ mod test {
     }
 
     #[test]
+    #[ignore]
     fn test_meilli_config_file_path_invalid() {
         temp_env::with_vars(vec![("MEILI_CONFIG_FILE_PATH", Some("../configgg.toml"))], || {
             let possible_error_messages = [
