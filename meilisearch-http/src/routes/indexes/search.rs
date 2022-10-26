@@ -15,7 +15,7 @@ use crate::extractors::sequential_extractor::SeqHandler;
 use crate::search::{
     perform_search, MatchingStrategy, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
     DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
-    DEFAULT_SEARCH_OFFSET
+    DEFAULT_SEARCH_OFFSET,
 };
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -72,9 +72,7 @@ impl From<SearchQueryGet> for SearchQuery {
             limit: other.limit,
             page: other.page,
             hits_per_page: other.hits_per_page,
-            attributes_to_retrieve: other
-                .attributes_to_retrieve
-                .map(|o| o.into_iter().collect()),
+            attributes_to_retrieve: other.attributes_to_retrieve.map(|o| o.into_iter().collect()),
             attributes_to_crop: other.attributes_to_crop.map(|o| o.into_iter().collect()),
             crop_length: other.crop_length,
             attributes_to_highlight: other.attributes_to_highlight.map(|o| o.into_iter().collect()),
