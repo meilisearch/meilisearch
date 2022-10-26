@@ -614,7 +614,7 @@ impl IndexScheduler {
                 fs::create_dir_all(&dst)?;
                 // TODO We can't use the open_auth_store_env function here but we should
                 let auth = milli::heed::EnvOpenOptions::new()
-                    .map_size(1 * 1024 * 1024 * 1024) // 1 GiB
+                    .map_size(1024 * 1024 * 1024) // 1 GiB
                     .max_dbs(2)
                     .open(&self.auth_path)?;
                 auth.copy_to_path(dst.join("data.mdb"), CompactionOption::Enabled)?;

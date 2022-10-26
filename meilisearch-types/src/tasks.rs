@@ -134,7 +134,7 @@ pub enum KindWithContent {
     SnapshotCreation,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexSwap {
     pub indexes: (String, String),
@@ -427,7 +427,7 @@ impl FromStr for Kind {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum Details {
     DocumentAdditionOrUpdate { received_documents: u64, indexed_documents: Option<u64> },
     SettingsUpdate { settings: Box<Settings<Unchecked>> },

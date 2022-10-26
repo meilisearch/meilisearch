@@ -32,7 +32,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))));
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskView {
     pub uid: TaskId,
@@ -78,7 +78,7 @@ impl TaskView {
     }
 }
 
-#[derive(Default, Debug, PartialEq, Clone, Serialize)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DetailsView {
     #[serde(skip_serializing_if = "Option::is_none")]
