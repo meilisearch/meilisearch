@@ -338,7 +338,6 @@ impl IndexScheduler {
 
 impl IndexScheduler {
     /// Create an index scheduler and start its run loop.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         options: IndexSchedulerOptions,
         #[cfg(test)] test_breakpoint_sdr: crossbeam::channel::Sender<(Breakpoint, bool)>,
