@@ -287,14 +287,12 @@ pub(crate) fn filter_out_references_to_newer_tasks(task: &mut Task) {
         }
         _ => return,
     };
-    match &mut task.details {
-        Some(
-            Details::TaskCancelation { matched_tasks, .. }
-            | Details::TaskDeletion { matched_tasks, .. },
-        ) => {
-            *matched_tasks = new_nbr_of_matched_tasks;
-        }
-        _ => (),
+    if let Some(
+        Details::TaskCancelation { matched_tasks, .. }
+        | Details::TaskDeletion { matched_tasks, .. },
+    ) = &mut task.details
+    {
+        *matched_tasks = new_nbr_of_matched_tasks;
     }
 }
 

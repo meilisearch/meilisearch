@@ -75,7 +75,7 @@ impl IndexMapper {
 
     /// Get or create the index.
     pub fn create_index(&self, mut wtxn: RwTxn, name: &str) -> Result<Index> {
-        match self.index(&mut wtxn, name) {
+        match self.index(&wtxn, name) {
             Ok(index) => {
                 wtxn.commit()?;
                 Ok(index)
