@@ -276,16 +276,16 @@ pub(crate) mod test {
         .
         ├---- indexes/
         │    └---- doggos/
-        │    │    ├---- settings.json
+        │    │    ├---- documents.jsonl
         │    │    ├---- metadata.json
-        │    │    └---- documents.jsonl
+        │    │    └---- settings.json
         ├---- tasks/
         │    ├---- update_files/
         │    │    └---- 1.jsonl
         │    └---- queue.jsonl
+        ├---- instance_uid.uuid
         ├---- keys.jsonl
-        ├---- metadata.json
-        └---- instance_uid.uuid
+        └---- metadata.json
         "###);
 
         // ==== checking the top level infos

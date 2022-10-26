@@ -686,7 +686,7 @@ async fn test_summarized_index_swap() {
         .await;
     assert_json_snapshot!(v, @r###"
     {
-      "message": "Indexes `cattos`, `doggos` not found.",
+      "message": "Indexes `doggos`, `cattos` not found.",
       "code": "index_not_found",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#index_not_found"
