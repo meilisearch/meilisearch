@@ -750,40 +750,65 @@ async fn test_summarized_index_swap() {
 }
 
 #[actix_web::test]
-#[ignore]
 async fn test_summarized_task_cancelation() {
     let server = Server::new().await;
     let index = server.index("doggos");
-    // to avoid being flaky we're only going to test to cancel an already finished task :(
+    // to avoid being flaky we're only going to cancel an already finished task :(
     index.create(None).await;
     index.wait_task(0).await;
-    let (ret, code) = server.cancel_task(json!({ "uid": [0] })).await;
-    dbg!(ret, code);
+    server.cancel_task(json!({ "uid": [0] })).await;
     index.wait_task(1).await;
     let (task, _) = index.get_task(1).await;
     assert_json_snapshot!(task, 
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
-      "uid": 0,
-      "indexUid": "test",
+      "uid": 1,
+      "indexUid": null,
       "status": "succeeded",
-      "type": "indexCreation",
+      "type": "taskCancelation",
       "details": {
-        "primaryKey": null
+        "matchedTasks": 1,
+        "canceledTasks": 0,
+        "originalQuery": "uid=0"
       },
-      "duration": "PT0.002782S",
-      "enqueuedAt": "2022-10-25T15:23:26.898722Z",
-      "startedAt": "2022-10-25T15:23:26.90063Z",
-      "finishedAt": "2022-10-25T15:23:26.903412Z"
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
     }
     "###);
 }
 
 #[actix_web::test]
-#[ignore]
 async fn test_summarized_task_deletion() {
     let server = Server::new().await;
+    let index = server.index("doggos");
+    // to avoid being flaky we're only going to delete an already finished task :(
+    index.create(None).await;
+    index.wait_task(0).await;
+    server.delete_task(json!({ "uid": [0] })).await;
+    index.wait_task(1).await;
+    let (task, _) = index.get_task(1).await;
+    assert_json_snapshot!(task, 
+        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        @r###"
+    {
+      "uid": 1,
+      "indexUid": null,
+      "status": "succeeded",
+      "type": "taskDeletion",
+      "details": {
+        "matchedTasks": 1,
+        "deletedTasks": 1,
+        "originalQuery": "uid=0"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
 
 }
 
