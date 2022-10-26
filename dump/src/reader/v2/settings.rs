@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::marker::PhantomData;
 use std::str::FromStr;
 
@@ -60,7 +60,7 @@ pub struct Settings<T> {
         deserialize_with = "deserialize_some",
         skip_serializing_if = "Option::is_none"
     )]
-    pub filterable_attributes: Option<Option<HashSet<String>>>,
+    pub filterable_attributes: Option<Option<BTreeSet<String>>>,
 
     #[serde(
         default,
