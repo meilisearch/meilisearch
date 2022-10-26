@@ -363,12 +363,11 @@ impl IndexScheduler {
             }
             match details {
                 Some(details) => match details {
-                    Details::IndexSwap { swaps: sw1 } => match &kind {
-                        KindWithContent::IndexSwap { swaps: sw2 } => {
+                    Details::IndexSwap { swaps: sw1 } => {
+                        if let KindWithContent::IndexSwap { swaps: sw2 } = &kind {
                             assert_eq!(&sw1, sw2);
                         }
-                        _ => panic!(),
-                    },
+                    }
                     Details::DocumentAdditionOrUpdate { received_documents, indexed_documents } => {
                         assert_eq!(kind.as_kind(), Kind::DocumentAdditionOrUpdate);
                         if let Some(indexed_documents) = indexed_documents {
@@ -466,16 +465,15 @@ impl IndexScheduler {
             assert!(self.get_status(&rtxn, status).unwrap().contains(uid));
             assert!(self.get_kind(&rtxn, kind.as_kind()).unwrap().contains(uid));
 
-            match kind {
-                KindWithContent::DocumentAdditionOrUpdate { content_file, .. } => match status {
+            if let KindWithContent::DocumentAdditionOrUpdate { content_file, .. } = kind {
+                match status {
                     Status::Enqueued | Status::Processing => {
                         assert!(self.file_store.__all_uuids().contains(&content_file));
                     }
                     Status::Succeeded | Status::Failed | Status::Canceled => {
                         assert!(!self.file_store.__all_uuids().contains(&content_file));
                     }
-                },
-                _ => (),
+                }
             }
         }
     }
