@@ -89,7 +89,7 @@ impl IndexMapper {
                 let index = self.create_or_open_index(&index_path)?;
 
                 wtxn.commit()?;
-                // TODO: it would be better to lazyly create the index. But we need an Index::open function for milli.
+                // TODO: it would be better to lazily create the index. But we need an Index::open function for milli.
                 if let Some(BeingDeleted) =
                     self.index_map.write().unwrap().insert(uuid, Available(index.clone()))
                 {
