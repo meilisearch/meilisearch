@@ -83,7 +83,14 @@ impl IndexMapper {
 
                 let index_path = self.base_path.join(uuid.to_string());
                 fs::create_dir_all(&index_path)?;
-                self.create_or_open_index(&index_path)
+                let index = self.create_or_open_index(&index_path)?;
+
+                // TODO: this is far from perfect. If the caller don't commit or fail his commit
+                // then we end up with an available index that should not exist and is actually
+                // not available in the index_mapping database.
+                self.index_map.write().unwrap().insert(uuid, Available(index.clone()));
+
+                Ok(index)
             }
             error => error,
         }
