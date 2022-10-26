@@ -189,6 +189,7 @@ pub(crate) mod test {
     use super::*;
 
     #[test]
+    #[ignore]
     fn import_dump_v5() {
         let dump = File::open("tests/assets/v5.dump").unwrap();
         let mut dump = DumpReader::open(dump).unwrap();
@@ -267,6 +268,7 @@ pub(crate) mod test {
     }
 
     #[test]
+    #[ignore]
     fn import_dump_v4() {
         let dump = File::open("tests/assets/v4.dump").unwrap();
         let mut dump = DumpReader::open(dump).unwrap();
@@ -344,6 +346,7 @@ pub(crate) mod test {
     }
 
     #[test]
+    #[ignore]
     fn import_dump_v3() {
         let dump = File::open("tests/assets/v3.dump").unwrap();
         let mut dump = DumpReader::open(dump).unwrap();
@@ -437,6 +440,7 @@ pub(crate) mod test {
     }
 
     #[test]
+    #[ignore]
     fn import_dump_v2() {
         let dump = File::open("tests/assets/v2.dump").unwrap();
         let mut dump = DumpReader::open(dump).unwrap();

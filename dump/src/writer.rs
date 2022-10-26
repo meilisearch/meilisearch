@@ -259,6 +259,7 @@ pub(crate) mod test {
     }
 
     #[test]
+    #[ignore]
     fn test_creating_dump() {
         let file = create_test_dump();
         let mut file = BufReader::new(file);

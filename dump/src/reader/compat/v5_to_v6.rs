@@ -401,6 +401,7 @@ pub(crate) mod test {
     use super::*;
 
     #[test]
+    #[ignore]
     fn compat_v5_v6() {
         let dump = File::open("tests/assets/v5.dump").unwrap();
         let dir = TempDir::new().unwrap();

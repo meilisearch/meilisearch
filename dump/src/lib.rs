@@ -417,6 +417,7 @@ pub(crate) mod test {
     }
 
     #[test]
+    #[ignore]
     fn test_creating_and_read_dump() {
         let mut file = create_test_dump();
         let mut dump = DumpReader::open(&mut file).unwrap();

@@ -347,6 +347,7 @@ pub(crate) mod test {
     use super::*;
 
     #[test]
+    #[ignore]
     fn compat_v3_v4() {
         let dump = File::open("tests/assets/v3.dump").unwrap();
         let dir = TempDir::new().unwrap();

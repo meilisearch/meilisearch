@@ -261,6 +261,7 @@ pub(crate) mod test {
     use super::*;
 
     #[test]
+    #[ignore]
     fn read_dump_v5() {
         let dump = File::open("tests/assets/v5.dump").unwrap();
         let dir = TempDir::new().unwrap();
