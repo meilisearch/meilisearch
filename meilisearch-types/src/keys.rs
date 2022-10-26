@@ -339,7 +339,9 @@ pub enum Error {
     MissingParameter(&'static str),
     #[error("`actions` field value `{0}` is invalid. It should be an array of string representing action names.")]
     InvalidApiKeyActions(Value),
-    #[error("`indexes` field value `{0}` is invalid. It should be an array of string representing index names.")]
+    #[error(
+        "`{0}` is not a valid index uid. It should be an array of string representing index names."
+    )]
     InvalidApiKeyIndexes(Value),
     #[error("`expiresAt` field value `{0}` is invalid. It should follow the RFC 3339 format to represents a date or datetime in the future or specified as a null value. e.g. 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM:SS'.")]
     InvalidApiKeyExpiresAt(Value),
