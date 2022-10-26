@@ -31,7 +31,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::resource("/stats").route(web::get().to(get_stats)))
         .service(web::resource("/version").route(web::get().to(get_version)))
         .service(web::scope("/indexes").configure(indexes::configure))
-        .service(web::scope("swap-indexes").configure(swap_indexes::configure));
+        .service(web::scope("/swap-indexes").configure(swap_indexes::configure));
 }
 
 /// Extracts the raw values from the `StarOr` types and
