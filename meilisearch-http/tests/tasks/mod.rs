@@ -677,6 +677,7 @@ async fn test_summarized_index_update() {
 }
 
 #[actix_web::test]
+#[ignore]
 async fn test_summarized_index_swap() {
     let server = Server::new().await;
     let (v, _) = server
@@ -684,6 +685,7 @@ async fn test_summarized_index_swap() {
             { "indexes": ["doggos", "cattos"] }
         ]))
         .await;
+    dbg!(&v);
     assert_json_snapshot!(v, @r###"
     {
       "message": "Indexes `cattos`, `doggos` not found.",
