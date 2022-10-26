@@ -20,7 +20,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SwapIndexesPayload {
-    swap: (String, String),
+    indexes: (String, String),
 }
 
 pub async fn swap_indexes(
@@ -33,7 +33,7 @@ pub async fn swap_indexes(
     let mut indexes_set = HashSet::<String>::default();
     let mut unknown_indexes = HashSet::new();
     let mut duplicate_indexes = HashSet::new();
-    for SwapIndexesPayload { swap: (lhs, rhs) } in params.into_inner().into_iter() {
+    for SwapIndexesPayload { indexes: (lhs, rhs) } in params.into_inner().into_iter() {
         if !search_rules.is_index_authorized(&lhs) {
             unknown_indexes.insert(lhs.clone());
         }

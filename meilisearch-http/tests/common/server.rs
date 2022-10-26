@@ -1,6 +1,13 @@
 #![allow(dead_code)]
 
 use std::path::Path;
+<<<<<<< HEAD
+||||||| parent of 931d5622 (test the details of all tasks type)
+use std::sync::Arc;
+=======
+use std::sync::Arc;
+use std::time::Duration;
+>>>>>>> 931d5622 (test the details of all tasks type)
 
 use actix_http::body::MessageBody;
 use actix_web::dev::ServiceResponse;
@@ -10,8 +17,9 @@ use clap::Parser;
 use meilisearch_http::option::{IndexerOpts, MaxMemory, Opt};
 use meilisearch_http::{analytics, create_app, setup_meilisearch};
 use once_cell::sync::Lazy;
-use serde_json::Value;
+use serde_json::{json, Value};
 use tempfile::TempDir;
+use tokio::time::sleep;
 
 use super::index::Index;
 use super::service::Service;
@@ -132,6 +140,42 @@ impl Server {
 
     pub async fn get_dump_status(&self, uid: &str) -> (Value, StatusCode) {
         self.service.get(format!("/dumps/{}/status", uid)).await
+    }
+
+    pub async fn create_dump(&self) -> (Value, StatusCode) {
+        self.service.post("/dumps", json!(null)).await
+    }
+
+    pub async fn index_swap(&self, value: Value) -> (Value, StatusCode) {
+        self.service.post("/swap-indexes", value).await
+    }
+
+    pub async fn cancel_task(&self, value: Value) -> (Value, StatusCode) {
+        self.service
+            .post(format!("/tasks/cancel?{}", yaup::to_string(&value).unwrap()), json!(null))
+            .await
+    }
+
+    pub async fn wait_task(&self, update_id: u64) -> Value {
+        // try several times to get status, or panic to not wait forever
+        let url = format!("/tasks/{}", update_id);
+        for _ in 0..100 {
+            let (response, status_code) = self.service.get(&url).await;
+            assert_eq!(200, status_code, "response: {}", response);
+
+            if response["status"] == "succeeded" || response["status"] == "failed" {
+                return response;
+            }
+
+            // wait 0.5 second.
+            sleep(Duration::from_millis(500)).await;
+        }
+        panic!("Timeout waiting for update id");
+    }
+
+    pub async fn get_task(&self, update_id: u64) -> (Value, StatusCode) {
+        let url = format!("/tasks/{}", update_id);
+        self.service.get(url).await
     }
 }
 
