@@ -156,6 +156,10 @@ impl Server {
             .await
     }
 
+    pub async fn delete_task(&self, value: Value) -> (Value, StatusCode) {
+        self.service.delete(format!("/tasks?{}", yaup::to_string(&value).unwrap())).await
+    }
+
     pub async fn wait_task(&self, update_id: u64) -> Value {
         // try several times to get status, or panic to not wait forever
         let url = format!("/tasks/{}", update_id);
