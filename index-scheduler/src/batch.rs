@@ -403,7 +403,6 @@ impl IndexScheduler {
         let to_delete = self.get_kind(rtxn, Kind::TaskDeletion)? & enqueued;
         if let Some(task_id) = to_delete.min() {
             let task = self.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
-
             return Ok(Some(Batch::TaskDeletion(task)));
         }
 
@@ -876,9 +875,9 @@ impl IndexScheduler {
             *lhs_tasks -= &index_lhs_task_ids;
             *lhs_tasks |= &index_rhs_task_ids;
         })?;
-        self.update_index(wtxn, rhs, |lhs_tasks| {
-            *lhs_tasks -= &index_rhs_task_ids;
-            *lhs_tasks |= &index_lhs_task_ids;
+        self.update_index(wtxn, rhs, |rhs_tasks| {
+            *rhs_tasks -= &index_rhs_task_ids;
+            *rhs_tasks |= &index_lhs_task_ids;
         })?;
 
         // 6. Swap in the index mapper
