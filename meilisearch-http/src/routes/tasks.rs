@@ -14,7 +14,7 @@ use serde_json::json;
 use time::{Duration, OffsetDateTime};
 use tokio::task;
 
-use super::fold_star_or;
+use super::{fold_star_or, SummarizedTaskView};
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
@@ -297,9 +297,9 @@ async fn cancel_tasks(
         KindWithContent::TaskCancelation { query: req.query_string().to_string(), tasks };
 
     let task = task::spawn_blocking(move || index_scheduler.register(task_cancelation)).await??;
-    let task_view = TaskView::from_task(&task);
+    let task: SummarizedTaskView = task.into();
 
-    Ok(HttpResponse::Ok().json(task_view))
+    Ok(HttpResponse::Ok().json(task))
 }
 
 async fn delete_tasks(
@@ -354,9 +354,9 @@ async fn delete_tasks(
         KindWithContent::TaskDeletion { query: req.query_string().to_string(), tasks };
 
     let task = task::spawn_blocking(move || index_scheduler.register(task_deletion)).await??;
-    let task_view = TaskView::from_task(&task);
+    let task: SummarizedTaskView = task.into();
 
-    Ok(HttpResponse::Ok().json(task_view))
+    Ok(HttpResponse::Ok().json(task))
 }
 
 #[derive(Debug, Serialize)]
