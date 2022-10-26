@@ -257,11 +257,6 @@ pub struct IndexScheduler {
     pub(crate) index_tasks: Database<Str, RoaringBitmapCodec>,
 
     /// Store the task ids of tasks which were enqueued at a specific date
-    ///
-    /// Note that since we store the date with nanosecond-level precision, it would be
-    /// reasonable to assume that there is only one task per key. However, it is not a
-    /// theoretical certainty, and we might want to make it possible to enqueue multiple
-    /// tasks at a time in the future.
     pub(crate) enqueued_at: Database<OwnedType<BEI128>, CboRoaringBitmapCodec>,
 
     /// Store the task ids of finished tasks which started being processed at a specific date
@@ -299,14 +294,14 @@ pub struct IndexScheduler {
     #[cfg(test)]
     test_breakpoint_sdr: crossbeam::channel::Sender<(Breakpoint, bool)>,
 
-    #[cfg(test)]
     /// A list of planned failures within the [`tick`](IndexScheduler::tick) method of the index scheduler.
     ///
     /// The first field is the iteration index and the second field identifies a location in the code.
+    #[cfg(test)]
     planned_failures: Vec<(usize, tests::FailureLocation)>,
 
-    #[cfg(test)]
     /// A counter that is incremented before every call to [`tick`](IndexScheduler::tick)
+    #[cfg(test)]
     run_loop_iteration: Arc<RwLock<usize>>,
 }
 
@@ -422,9 +417,7 @@ impl IndexScheduler {
                             | Error::HeedTransaction(_)
                             | Error::CreateBatch(_)
                     ) {
-                        {
-                            std::thread::sleep(Duration::from_secs(1));
-                        }
+                        std::thread::sleep(Duration::from_secs(1));
                     }
                 }
             }
@@ -633,7 +626,7 @@ impl IndexScheduler {
         })?;
 
         self.update_kind(&mut wtxn, task.kind.as_kind(), |bitmap| {
-            (bitmap.insert(task.uid));
+            bitmap.insert(task.uid);
         })?;
 
         utils::insert_task_datetime(&mut wtxn, self.enqueued_at, task.enqueued_at, task.uid)?;
@@ -914,6 +907,7 @@ impl IndexScheduler {
                 }
             }
         }
+
         self.processing_tasks.write().unwrap().stop_processing_at(finished_at);
 
         #[cfg(test)]
