@@ -719,7 +719,7 @@ async fn test_summarized_index_swap() {
 
     server.index("doggos").create(None).await;
     server.index("cattos").create(None).await;
-    let (ret, _code) = server
+    server
         .index_swap(json!([
             { "indexes": ["doggos", "cattos"] }
         ]))
