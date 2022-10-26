@@ -4,6 +4,7 @@ use std::mem::take;
 
 use log::debug;
 use roaring::RoaringBitmap;
+use slice_group_by::GroupBy;
 
 use super::{
     query_docids, query_pair_proximity_docids, resolve_phrase, resolve_query_tree, Context,
@@ -478,29 +479,30 @@ fn resolve_plane_sweep_candidates(
             }
             Phrase(words) => {
                 let mut groups_positions = Vec::with_capacity(words.len());
-                let mut consecutive = true;
-                let mut was_last_word_a_stop_word = false;
-                for word in words.iter() {
-                    if let Some(word) = word {
-                        let positions = match words_positions.get(word) {
-                            Some(positions) => positions.iter().map(|p| (p, 0, p)).collect(),
-                            None => return Ok(vec![]),
-                        };
-                        groups_positions.push(positions);
 
-                        if was_last_word_a_stop_word {
-                            consecutive = false;
-                        }
-                        was_last_word_a_stop_word = false;
-                    } else {
-                        if !was_last_word_a_stop_word {
-                            consecutive = false;
-                        }
-
-                        was_last_word_a_stop_word = true;
+                // group stop_words together.
+                for words in words.linear_group_by_key(Option::is_none) {
+                    // skip if it's a group of stop words.
+                    if matches!(words.first(), None | Some(None)) {
+                        continue;
                     }
+                    // make a consecutive plane-sweep on the subgroup of words.
+                    let mut subgroup = Vec::with_capacity(words.len());
+                    for word in words.into_iter().map(|w| w.as_deref().unwrap()) {
+                        match words_positions.get(word) {
+                            Some(positions) => {
+                                subgroup.push(positions.iter().map(|p| (p, 0, p)).collect())
+                            }
+                            None => return Ok(vec![]),
+                        }
+                    }
+                    groups_positions.push(plane_sweep(subgroup, true)?);
                 }
-                plane_sweep(groups_positions, consecutive)?
+                match groups_positions.len() {
+                    0 => vec![],
+                    1 => groups_positions.pop().unwrap(),
+                    _ => plane_sweep(groups_positions, false)?,
+                }
             }
             Or(_, ops) => {
                 let mut result = Vec::new();
