@@ -75,8 +75,11 @@ impl IndexMapper {
 
     /// Get or create the index.
     pub fn create_index(&self, mut wtxn: RwTxn, name: &str) -> Result<Index> {
-        let ret = match self.index(&mut wtxn, name) {
-            Ok(index) => Ok(index),
+        match self.index(&mut wtxn, name) {
+            Ok(index) => {
+                wtxn.commit()?;
+                Ok(index)
+            }
             Err(Error::IndexNotFound(_)) => {
                 let uuid = Uuid::new_v4();
                 self.index_mapping.put(&mut wtxn, name, &uuid)?;
@@ -85,6 +88,7 @@ impl IndexMapper {
                 fs::create_dir_all(&index_path)?;
                 let index = self.create_or_open_index(&index_path)?;
 
+                wtxn.commit()?;
                 // TODO: it would be better to lazyly create the index. But we need an Index::open function for milli.
                 if let Some(BeingDeleted) =
                     self.index_map.write().unwrap().insert(uuid, Available(index.clone()))
@@ -95,10 +99,7 @@ impl IndexMapper {
                 Ok(index)
             }
             error => error,
-        };
-        let index = ret?;
-        wtxn.commit()?;
-        Ok(index)
+        }
     }
 
     /// Removes the index from the mapping table and the in-memory index map
