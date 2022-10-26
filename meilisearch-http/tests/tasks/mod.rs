@@ -808,7 +808,6 @@ async fn test_summarized_task_deletion() {
       "finishedAt": "[date]"
     }
     "###);
-
 }
 
 #[actix_web::test]
