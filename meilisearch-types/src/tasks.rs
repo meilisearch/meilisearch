@@ -116,7 +116,7 @@ pub enum KindWithContent {
         primary_key: Option<String>,
     },
     IndexSwap {
-        swaps: Vec<(String, String)>,
+        swaps: Vec<IndexSwap>,
     },
     TaskCancelation {
         query: String,
@@ -132,6 +132,12 @@ pub enum KindWithContent {
         instance_uid: Option<InstanceUid>,
     },
     SnapshotCreation,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexSwap {
+    pub indexes: (String, String),
 }
 
 impl KindWithContent {
@@ -169,9 +175,9 @@ impl KindWithContent {
             | IndexDeletion { index_uid } => vec![index_uid],
             IndexSwap { swaps } => {
                 let mut indexes = HashSet::<&str>::default();
-                for (lhs, rhs) in swaps {
-                    indexes.insert(lhs.as_str());
-                    indexes.insert(rhs.as_str());
+                for swap in swaps {
+                    indexes.insert(swap.indexes.0.as_str());
+                    indexes.insert(swap.indexes.1.as_str());
                 }
                 indexes.into_iter().collect()
             }
@@ -383,6 +389,8 @@ impl FromStr for Kind {
             Ok(Kind::IndexCreation)
         } else if kind.eq_ignore_ascii_case("indexUpdate") {
             Ok(Kind::IndexUpdate)
+        } else if kind.eq_ignore_ascii_case("indexSwap") {
+            Ok(Kind::IndexSwap)
         } else if kind.eq_ignore_ascii_case("indexDeletion") {
             Ok(Kind::IndexDeletion)
         } else if kind.eq_ignore_ascii_case("documentAdditionOrUpdate") {
@@ -429,8 +437,7 @@ pub enum Details {
     TaskCancelation { matched_tasks: u64, canceled_tasks: Option<u64>, original_query: String },
     TaskDeletion { matched_tasks: u64, deleted_tasks: Option<u64>, original_query: String },
     Dump { dump_uid: String },
-    // TODO: Lo: Revisit this variant once we have decided on what the POST payload of swapping indexes should be
-    IndexSwap { swaps: Vec<(String, String)> },
+    IndexSwap { swaps: Vec<IndexSwap> },
 }
 
 /// Serialize a `time::Duration` as a best effort ISO 8601 while waiting for

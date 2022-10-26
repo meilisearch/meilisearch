@@ -38,6 +38,10 @@ pub enum MeilisearchHttpError {
         .0.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
     )]
     SwapDuplicateIndexesFound(Vec<String>),
+    #[error("Two indexes must be given for each swap. The list `{:?}` contains {} indexes.",
+        .0, .0.len()
+    )]
+    SwapIndexPayloadWrongLength(Vec<String>),
     #[error(transparent)]
     IndexUid(#[from] IndexUidFormatError),
     #[error(transparent)]
@@ -70,6 +74,7 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::IndexesNotFound(_) => Code::IndexNotFound,
             MeilisearchHttpError::SwapDuplicateIndexFound(_) => Code::DuplicateIndexFound,
             MeilisearchHttpError::SwapDuplicateIndexesFound(_) => Code::DuplicateIndexFound,
+            MeilisearchHttpError::SwapIndexPayloadWrongLength(_) => Code::BadRequest,
             MeilisearchHttpError::IndexUid(e) => e.error_code(),
             MeilisearchHttpError::SerdeJson(_) => Code::Internal,
             MeilisearchHttpError::HeedError(_) => Code::Internal,

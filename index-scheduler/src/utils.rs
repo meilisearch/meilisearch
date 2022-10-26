@@ -5,7 +5,7 @@ use std::ops::Bound;
 use meilisearch_types::heed::types::{DecodeIgnore, OwnedType};
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, BEU32};
-use meilisearch_types::tasks::{Details, Kind, KindWithContent, Status};
+use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status};
 use roaring::{MultiOps, RoaringBitmap};
 use time::OffsetDateTime;
 
@@ -244,7 +244,7 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
         K::IndexCreation { index_uid, .. } => index_uids.push(index_uid),
         K::IndexUpdate { index_uid, .. } => index_uids.push(index_uid),
         K::IndexSwap { swaps } => {
-            for (lhs, rhs) in swaps.iter_mut() {
+            for IndexSwap { indexes: (lhs, rhs) } in swaps.iter_mut() {
                 if lhs == swap.0 || lhs == swap.1 {
                     index_uids.push(lhs);
                 }
@@ -259,7 +259,7 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
         | K::SnapshotCreation => (),
     };
     if let Some(Details::IndexSwap { swaps }) = &mut task.details {
-        for (lhs, rhs) in swaps.iter_mut() {
+        for IndexSwap { indexes: (lhs, rhs) } in swaps.iter_mut() {
             if lhs == swap.0 || lhs == swap.1 {
                 index_uids.push(lhs);
             }

@@ -836,8 +836,8 @@ impl IndexScheduler {
                 } else {
                     unreachable!()
                 };
-                for (lhs, rhs) in swaps {
-                    self.apply_index_swap(&mut wtxn, task.uid, lhs, rhs)?;
+                for swap in swaps {
+                    self.apply_index_swap(&mut wtxn, task.uid, &swap.indexes.0, &swap.indexes.1)?;
                 }
                 wtxn.commit()?;
                 task.status = Status::Succeeded;
