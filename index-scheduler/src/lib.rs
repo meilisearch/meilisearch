@@ -459,6 +459,10 @@ impl IndexScheduler {
 
         let mut tasks = self.all_task_ids(&rtxn)?;
 
+        if let Some(from) = &query.from {
+            tasks.remove_range(from.saturating_add(1)..);
+        }
+
         if let Some(status) = &query.status {
             let mut status_tasks = RoaringBitmap::new();
             for status in status {
@@ -557,6 +561,10 @@ impl IndexScheduler {
             query.after_finished_at,
             query.before_finished_at,
         )?;
+
+        if let Some(limit) = query.limit {
+            tasks = tasks.into_iter().rev().take(limit as usize).collect();
+        }
 
         Ok(tasks)
     }
@@ -2025,6 +2033,56 @@ mod tests {
     #[test]
     fn simple_new() {
         crate::IndexScheduler::test(true, vec![]);
+    }
+
+    #[test]
+    fn query_tasks_from_and_limit() {
+        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+
+        let kind = index_creation_task("doggo", "bone");
+        let _task = index_scheduler.register(kind).unwrap();
+        index_scheduler.assert_internally_consistent();
+        let kind = index_creation_task("whalo", "plankton");
+        let _task = index_scheduler.register(kind).unwrap();
+        index_scheduler.assert_internally_consistent();
+        let kind = index_creation_task("catto", "his_own_vomit");
+        let _task = index_scheduler.register(kind).unwrap();
+        index_scheduler.assert_internally_consistent();
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
+
+        handle.advance_n_batch(3);
+        index_scheduler.assert_internally_consistent();
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "finished");
+
+        let query = Query { limit: Some(0), ..Default::default() };
+        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        snapshot!(snapshot_bitmap(&tasks), @"[]");
+
+        let query = Query { limit: Some(1), ..Default::default() };
+        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        snapshot!(snapshot_bitmap(&tasks), @"[2,]");
+
+        let query = Query { limit: Some(2), ..Default::default() };
+        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        snapshot!(snapshot_bitmap(&tasks), @"[1,2,]");
+
+        let query = Query { from: Some(1), ..Default::default() };
+        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        snapshot!(snapshot_bitmap(&tasks), @"[0,1,]");
+
+        let query = Query { from: Some(2), ..Default::default() };
+        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        snapshot!(snapshot_bitmap(&tasks), @"[0,1,2,]");
+
+        let query = Query { from: Some(1), limit: Some(1), ..Default::default() };
+        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        snapshot!(snapshot_bitmap(&tasks), @"[1,]");
+
+        let query = Query { from: Some(1), limit: Some(2), ..Default::default() };
+        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        snapshot!(snapshot_bitmap(&tasks), @"[0,1,]");
     }
 
     #[test]
