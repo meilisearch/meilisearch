@@ -282,7 +282,7 @@ pub(crate) mod test {
         }
         "###);
 
-        meili_snap::snapshot_hash!(format!("{:#?}", movies.settings()), @"06aa1988493485d9b2cda7c751e6bb15");
+        meili_snap::snapshot_hash!(format!("{:#?}", movies.settings()), @"4dfa34fa34f2c03259482e1e4555faa8");
         let documents = movies.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 110);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"786022a66ecb992c8a2a60fee070a5ab");
@@ -297,7 +297,7 @@ pub(crate) mod test {
         }
         "###);
 
-        meili_snap::snapshot_hash!(format!("{:#?}", spells.settings()), @"7d722fc2629eaa45032ed3deb0c9b4ce");
+        meili_snap::snapshot_hash!(format!("{:#?}", spells.settings()), @"1aa241a5e3afd8c85a4e7b9db42362d7");
         let documents = spells.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 10);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"235016433dd04262c7f2da01d1e808ce");

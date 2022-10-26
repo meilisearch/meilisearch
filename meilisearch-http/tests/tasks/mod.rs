@@ -1,5 +1,4 @@
 use meili_snap::insta::assert_json_snapshot;
-use meili_snap::snapshot;
 use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
