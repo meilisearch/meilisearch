@@ -32,7 +32,7 @@ use anyhow::bail;
 use error::PayloadError;
 use extractors::payload::PayloadConfig;
 use http::header::CONTENT_TYPE;
-use index_scheduler::IndexScheduler;
+use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use log::error;
 use meilisearch_auth::AuthController;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
@@ -114,19 +114,19 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Auth
     // wrap our two builders in a closure that'll be executed later.
     let auth_controller_builder = || AuthController::new(&opt.db_path, &opt.master_key);
     let index_scheduler_builder = || {
-        IndexScheduler::new(
-            opt.db_path.join(VERSION_FILE_NAME),
-            opt.db_path.join("auth"),
-            opt.db_path.join("tasks"),
-            opt.db_path.join("update_files"),
-            opt.db_path.join("indexes"),
-            opt.snapshot_dir.clone(),
-            opt.dumps_dir.clone(),
-            opt.max_task_db_size.get_bytes() as usize,
-            opt.max_index_size.get_bytes() as usize,
-            (&opt.indexer_options).try_into()?,
-            true,
-        )
+        IndexScheduler::new(IndexSchedulerOptions {
+            version_file_path: opt.db_path.join(VERSION_FILE_NAME),
+            auth_path: opt.db_path.join("auth"),
+            tasks_path: opt.db_path.join("tasks"),
+            update_file_path: opt.db_path.join("update_files"),
+            indexes_path: opt.db_path.join("indexes"),
+            snapshots_path: opt.snapshot_dir.clone(),
+            dumps_path: opt.dumps_dir.clone(),
+            task_db_size: opt.max_task_db_size.get_bytes() as usize,
+            index_size: opt.max_index_size.get_bytes() as usize,
+            indexer_config: (&opt.indexer_options).try_into()?,
+            autobatching_enabled: !opt.scheduler_options.disable_auto_batching,
+        })
     };
     let meilisearch_builder = || -> anyhow::Result<_> {
         // if anything wrong happens we delete the `data.ms` entirely.

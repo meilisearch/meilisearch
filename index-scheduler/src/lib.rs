@@ -206,28 +206,28 @@ pub enum Breakpoint {
 #[derive(Debug)]
 pub struct IndexSchedulerOptions {
     /// The path to the version file of Meilisearch.
-    version_file_path: PathBuf,
+    pub version_file_path: PathBuf,
     /// The path to the folder containing the auth LMDB env.
-    auth_path: PathBuf,
+    pub auth_path: PathBuf,
     /// The path to the folder containing the task databases.
-    tasks_path: PathBuf,
+    pub tasks_path: PathBuf,
     /// The path to the file store containing the files associated to the tasks.
-    update_file_path: PathBuf,
+    pub update_file_path: PathBuf,
     /// The path to the folder containing meilisearch's indexes.
-    indexes_path: PathBuf,
+    pub indexes_path: PathBuf,
     /// The path to the folder containing the snapshots.
-    snapshots_path: PathBuf,
+    pub snapshots_path: PathBuf,
     /// The path to the folder containing the dumps.
-    dumps_path: PathBuf,
+    pub dumps_path: PathBuf,
     /// The maximum size, in bytes, of each meilisearch index.
-    task_db_size: usize,
+    pub task_db_size: usize,
     /// The maximum size, in bytes, of the tasks index.
-    index_size: usize,
+    pub index_size: usize,
     /// Configuration used during indexing for each meilisearch index.
-    indexer_config: IndexerConfig,
+    pub indexer_config: IndexerConfig,
     /// Set to `true` iff the index scheduler is allowed to automatically
     /// batch tasks together, to process multiple tasks at once.
-    autobatching_enabled: bool,
+    pub autobatching_enabled: bool,
 }
 
 /// Structure which holds meilisearch's indexes and schedules the tasks
