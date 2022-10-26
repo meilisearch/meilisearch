@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use actix_web::web::Data;
 use actix_web::{web, HttpResponse};
@@ -29,10 +29,10 @@ pub async fn swap_indexes(
     let search_rules = &index_scheduler.filters().search_rules;
 
     let mut swaps = vec![];
-    let mut indexes_set = HashSet::<String>::default();
-    let mut unauthorized_indexes = HashSet::new();
-    let mut unknown_indexes = HashSet::new();
-    let mut duplicate_indexes = HashSet::new();
+    let mut indexes_set = BTreeSet::<String>::default();
+    let mut unauthorized_indexes = BTreeSet::new();
+    let mut unknown_indexes = BTreeSet::new();
+    let mut duplicate_indexes = BTreeSet::new();
     for SwapIndexesPayload { indexes } in params.into_inner().into_iter() {
         let (lhs, rhs) = match indexes.as_slice() {
             [lhs, rhs] => (lhs, rhs),
