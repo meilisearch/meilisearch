@@ -439,6 +439,7 @@ pub async fn update_all(
         Some(&req),
     );
 
+    println!("Registering a setting update");
     let allow_index_creation = index_scheduler.filters().allow_index_creation;
     let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
     let task = KindWithContent::SettingsUpdate {
