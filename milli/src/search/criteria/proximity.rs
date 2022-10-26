@@ -188,9 +188,13 @@ fn resolve_candidates<'t>(
                 if proximity == 0 {
                     let most_left = words
                         .first()
+                        .map(|o| o.as_ref())
+                        .flatten()
                         .map(|w| Query { prefix: false, kind: QueryKind::exact(w.clone()) });
                     let most_right = words
                         .last()
+                        .map(|o| o.as_ref())
+                        .flatten()
                         .map(|w| Query { prefix: false, kind: QueryKind::exact(w.clone()) });
 
                     match (most_left, most_right) {
@@ -473,7 +477,7 @@ fn resolve_plane_sweep_candidates(
             }
             Phrase(words) => {
                 let mut groups_positions = Vec::with_capacity(words.len());
-                for word in words {
+                for word in words.iter().filter_map(|w| w.as_ref()) {
                     let positions = match words_positions.get(word) {
                         Some(positions) => positions.iter().map(|p| (p, 0, p)).collect(),
                         None => return Ok(vec![]),

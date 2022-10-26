@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::mem::take;
 
+use itertools::Itertools;
 use log::debug;
 use roaring::RoaringBitmap;
 
@@ -259,8 +260,7 @@ fn resolve_candidates<'t>(
             Phrase(words) => {
                 let mut candidates = RoaringBitmap::new();
                 let mut first_loop = true;
-                for slice in words.windows(2) {
-                    let (left, right) = (&slice[0], &slice[1]);
+                for (left, right) in words.iter().filter_map(|w| w.as_ref()).tuple_windows() {
                     match ctx.word_pair_proximity_docids(left, right, 1)? {
                         Some(pair_docids) => {
                             if pair_docids.is_empty() {
