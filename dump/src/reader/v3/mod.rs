@@ -271,7 +271,7 @@ pub(crate) mod test {
         }
         "###);
 
-        meili_snap::snapshot_hash!(format!("{:#?}", products.settings()), @"f309b009608cc0b770b2f74516f92647");
+        meili_snap::snapshot_hash!(format!("{:#?}", products.settings()), @"7460d4b242b5c8b1bda223f63bbbf349");
         let documents = products.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 10);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"548284a84de510f71e88e6cdea495cf5");

@@ -1,0 +1,28 @@
+---
+source: index-scheduler/src/lib.rs
+expression: snapshot_index_scheduler(&index_scheduler)
+---
+### Autobatching Enabled = true
+### Processing Tasks:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, status: enqueued, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
+1 {uid: 1, status: enqueued, details: { received_documents: 12, indexed_documents: 0 }, kind: DocumentImport { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 12, allow_index_creation: true }}
+2 {uid: 2, status: enqueued, details: { received_documents: 5000, indexed_documents: 0 }, kind: DocumentImport { index_uid: "doggo", primary_key: Some("bone"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 5000, allow_index_creation: true }}
+----------------------------------------------------------------------
+### Status:
+enqueued [0,1,2,]
+----------------------------------------------------------------------
+### Kind:
+"documentImport" [1,2,]
+"indexCreation" [0,]
+----------------------------------------------------------------------
+### Index Tasks:
+catto [0,1,]
+doggo [2,]
+----------------------------------------------------------------------
+### Index Mapper:
+[]
+----------------------------------------------------------------------
+
