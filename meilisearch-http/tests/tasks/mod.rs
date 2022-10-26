@@ -677,21 +677,43 @@ async fn test_summarized_index_update() {
 }
 
 #[actix_web::test]
-#[ignore]
 async fn test_summarized_index_swap() {
     let server = Server::new().await;
-    let (v, _) = server
+    server
         .index_swap(json!([
             { "indexes": ["doggos", "cattos"] }
         ]))
         .await;
-    dbg!(&v);
-    assert_json_snapshot!(v, @r###"
+    server.wait_task(0).await;
+    let (task, _) = server.get_task(0).await;
+    assert_json_snapshot!(task, 
+        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        @r###"
     {
-      "message": "Indexes `cattos`, `doggos` not found.",
-      "code": "index_not_found",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#index_not_found"
+      "uid": 0,
+      "indexUid": null,
+      "status": "failed",
+      "type": "indexSwap",
+      "details": {
+        "swaps": [
+          {
+            "indexes": [
+              "doggos",
+              "cattos"
+            ]
+          }
+        ]
+      },
+      "error": {
+        "message": "Index `doggos` not found.",
+        "code": "index_not_found",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
     }
     "###);
 
@@ -702,14 +724,13 @@ async fn test_summarized_index_swap() {
             { "indexes": ["doggos", "cattos"] }
         ]))
         .await;
-    dbg!(ret);
-    server.wait_task(2).await;
-    let (task, _) = server.get_task(2).await;
+    server.wait_task(3).await;
+    let (task, _) = server.get_task(3).await;
     assert_json_snapshot!(task, 
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
-      "uid": 2,
+      "uid": 3,
       "indexUid": null,
       "status": "succeeded",
       "type": "indexSwap",

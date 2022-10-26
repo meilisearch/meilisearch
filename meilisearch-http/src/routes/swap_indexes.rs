@@ -7,6 +7,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use serde::Deserialize;
 
+use super::SummarizedTaskView;
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
@@ -31,7 +32,6 @@ pub async fn swap_indexes(
     let mut swaps = vec![];
     let mut indexes_set = BTreeSet::<String>::default();
     let mut unauthorized_indexes = BTreeSet::new();
-    let mut unknown_indexes = BTreeSet::new();
     let mut duplicate_indexes = BTreeSet::new();
     for SwapIndexesPayload { indexes } in params.into_inner().into_iter() {
         let (lhs, rhs) = match indexes.as_slice() {
@@ -45,20 +45,6 @@ pub async fn swap_indexes(
         }
         if !search_rules.is_index_authorized(rhs) {
             unauthorized_indexes.insert(rhs.clone());
-        }
-        match index_scheduler.index(lhs) {
-            Ok(_) => (),
-            Err(index_scheduler::Error::IndexNotFound(_)) => {
-                unknown_indexes.insert(lhs.clone());
-            }
-            Err(e) => return Err(e.into()),
-        }
-        match index_scheduler.index(rhs) {
-            Ok(_) => (),
-            Err(index_scheduler::Error::IndexNotFound(_)) => {
-                unknown_indexes.insert(rhs.clone());
-            }
-            Err(e) => return Err(e.into()),
         }
 
         swaps.push(IndexSwap { indexes: (lhs.clone(), rhs.clone()) });
@@ -83,19 +69,10 @@ pub async fn swap_indexes(
     if !unauthorized_indexes.is_empty() {
         return Err(AuthenticationError::InvalidToken.into());
     }
-    if !unknown_indexes.is_empty() {
-        let unknown_indexes: Vec<_> = unknown_indexes.into_iter().collect();
-        if let [index] = unknown_indexes.as_slice() {
-            return Err(index_scheduler::Error::IndexNotFound(index.clone()).into());
-        } else {
-            return Err(MeilisearchHttpError::IndexesNotFound(unknown_indexes).into());
-        }
-    }
 
     let task = KindWithContent::IndexSwap { swaps };
 
     let task = index_scheduler.register(task)?;
-    let task_view = TaskView::from_task(&task);
-
-    Ok(HttpResponse::Accepted().json(task_view))
+    let task: SummarizedTaskView = task.into();
+    Ok(HttpResponse::Accepted().json(task))
 }
