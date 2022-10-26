@@ -40,20 +40,20 @@ pub async fn swap_indexes(
                 return Err(MeilisearchHttpError::SwapIndexPayloadWrongLength(indexes).into());
             }
         };
-        if !search_rules.is_index_authorized(&lhs) {
+        if !search_rules.is_index_authorized(lhs) {
             unauthorized_indexes.insert(lhs.clone());
         }
-        if !search_rules.is_index_authorized(&rhs) {
+        if !search_rules.is_index_authorized(rhs) {
             unauthorized_indexes.insert(rhs.clone());
         }
-        match index_scheduler.index(&lhs) {
+        match index_scheduler.index(lhs) {
             Ok(_) => (),
             Err(index_scheduler::Error::IndexNotFound(_)) => {
                 unknown_indexes.insert(lhs.clone());
             }
             Err(e) => return Err(e.into()),
         }
-        match index_scheduler.index(&rhs) {
+        match index_scheduler.index(rhs) {
             Ok(_) => (),
             Err(index_scheduler::Error::IndexNotFound(_)) => {
                 unknown_indexes.insert(rhs.clone());

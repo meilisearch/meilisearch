@@ -2643,7 +2643,7 @@ mod tests {
                 }}"#,
                 i, i
             );
-            let allow_index_creation = if i % 2 == 0 { false } else { true };
+            let allow_index_creation = i % 2 != 0;
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
             let documents_count = meilisearch_types::document_formats::read_json(
@@ -2703,7 +2703,7 @@ mod tests {
                 }}"#,
                 i, i
             );
-            let allow_index_creation = if i % 2 == 0 { false } else { true };
+            let allow_index_creation = i % 2 != 0;
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
             let documents_count = meilisearch_types::document_formats::read_json(
