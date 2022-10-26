@@ -239,7 +239,7 @@ impl Performer for DocumentAddition {
         if let Some(primary) = self.primary {
             let mut builder = update::Settings::new(&mut txn, &index, &config);
             builder.set_primary_key(primary);
-            builder.execute(|_| ()).unwrap();
+            builder.execute(|_| (), || false).unwrap();
         }
 
         let indexing_config = IndexDocumentsConfig {
@@ -260,6 +260,7 @@ impl Performer for DocumentAddition {
             &config,
             indexing_config,
             |step| indexing_callback(step, &bars),
+            || false,
         )
         .unwrap();
         let (addition, user_error) = addition.add_documents(reader)?;
@@ -517,7 +518,7 @@ impl Performer for SettingsUpdate {
             bars.push(bar);
         }
 
-        update.execute(|step| indexing_callback(step, &bars))?;
+        update.execute(|step| indexing_callback(step, &bars), || false)?;
 
         txn.commit()?;
         Ok(())

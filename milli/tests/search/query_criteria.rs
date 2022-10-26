@@ -345,7 +345,7 @@ fn criteria_mixup() {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_criteria(criteria.iter().map(ToString::to_string).collect());
-        builder.execute(|_| ()).unwrap();
+        builder.execute(|_| (), || false).unwrap();
         wtxn.commit().unwrap();
 
         let mut rtxn = index.read_txn().unwrap();
@@ -385,12 +385,13 @@ fn criteria_ascdesc() {
         S("name"),
         S("age"),
     });
-    builder.execute(|_| ()).unwrap();
+    builder.execute(|_| (), || false).unwrap();
 
     // index documents
     let config = IndexerConfig { max_memory: Some(10 * 1024 * 1024), ..Default::default() };
     let indexing_config = IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-    let builder = IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| ()).unwrap();
+    let builder =
+        IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| (), || false).unwrap();
 
     let mut batch_builder = DocumentsBatchBuilder::new(Vec::new());
 
@@ -436,7 +437,7 @@ fn criteria_ascdesc() {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_criteria(vec![criterion.to_string()]);
-        builder.execute(|_| ()).unwrap();
+        builder.execute(|_| (), || false).unwrap();
         wtxn.commit().unwrap();
 
         let mut rtxn = index.read_txn().unwrap();

@@ -89,7 +89,7 @@ mod test {
         let config = IndexerConfig::default();
         let mut update = Settings::new(&mut txn, &index, &config);
         update.set_distinct_field(distinct.to_string());
-        update.execute(|_| ()).unwrap();
+        update.execute(|_| (), || false).unwrap();
 
         // add documents to the index
         let config = IndexerConfig::default();
@@ -98,7 +98,8 @@ mod test {
             ..Default::default()
         };
         let addition =
-            IndexDocuments::new(&mut txn, &index, &config, indexing_config, |_| ()).unwrap();
+            IndexDocuments::new(&mut txn, &index, &config, indexing_config, |_| (), || false)
+                .unwrap();
 
         let reader =
             crate::documents::DocumentsBatchReader::from_reader(Cursor::new(JSON.as_slice()))
