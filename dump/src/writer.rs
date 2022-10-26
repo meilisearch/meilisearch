@@ -191,6 +191,7 @@ pub(crate) mod test {
     use std::str::FromStr;
 
     use flate2::bufread::GzDecoder;
+    use meili_snap::insta;
     use meilisearch_types::settings::Unchecked;
 
     use super::*;

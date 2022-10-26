@@ -184,6 +184,8 @@ impl From<CompatIndexV5ToV6> for DumpIndexReader {
 pub(crate) mod test {
     use std::fs::File;
 
+    use meili_snap::insta;
+
     use super::*;
 
     #[test]

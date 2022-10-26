@@ -341,6 +341,7 @@ pub(crate) mod test {
     use std::io::BufReader;
 
     use flate2::bufread::GzDecoder;
+    use meili_snap::insta;
     use tempfile::TempDir;
 
     use super::*;

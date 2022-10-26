@@ -1107,7 +1107,6 @@ dependencies = [
  "big_s",
  "flate2",
  "http",
- "insta",
  "log",
  "maplit",
  "meili-snap",

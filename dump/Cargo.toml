@@ -23,7 +23,6 @@ uuid = { version = "1.1.2", features = ["serde", "v4"] }
 
 [dev-dependencies]
 big_s = "1.0.2"
-insta = { version = "1.19.1", features = ["json", "redactions"] }
 maplit = "1.0.2"
 meili-snap = { path = "../meili-snap" }
 meilisearch-types = { path = "../meilisearch-types" }
