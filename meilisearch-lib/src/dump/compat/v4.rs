@@ -70,7 +70,7 @@ impl From<TaskEvent> for NewTaskEvent {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[allow(clippy::large_enum_variant)]
 pub enum TaskContent {
     DocumentAddition {

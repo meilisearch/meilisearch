@@ -10,7 +10,7 @@ use http::header::CONTENT_TYPE;
 use meilisearch_auth::SearchRules;
 use meilisearch_lib::index::{
     SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
-    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
+    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
 };
 use meilisearch_lib::index_controller::Stats;
 use meilisearch_lib::MeiliSearch;
@@ -373,6 +373,7 @@ pub struct SearchAggregator {
     // pagination
     max_limit: usize,
     max_offset: usize,
+    finite_pagination: usize,
 
     // formatting
     highlight_pre_tag: bool,
@@ -427,11 +428,19 @@ impl SearchAggregator {
             ret.max_terms_number = q.split_whitespace().count();
         }
 
+        if query.is_finite_pagination() {
+            let limit = query.hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
+            ret.max_limit = limit;
+            ret.max_offset = query.page.unwrap_or(1).saturating_sub(1) * limit;
+            ret.finite_pagination = 1;
+        } else {
+            ret.max_limit = query.limit;
+            ret.max_offset = query.offset;
+            ret.finite_pagination = 0;
+        }
+
         ret.matching_strategy
             .insert(format!("{:?}", query.matching_strategy), 1);
-
-        ret.max_limit = query.limit;
-        ret.max_offset = query.offset.unwrap_or_default();
 
         ret.highlight_pre_tag = query.highlight_pre_tag != DEFAULT_HIGHLIGHT_PRE_TAG();
         ret.highlight_post_tag = query.highlight_post_tag != DEFAULT_HIGHLIGHT_POST_TAG();
@@ -491,6 +500,7 @@ impl SearchAggregator {
         // pagination
         self.max_limit = self.max_limit.max(other.max_limit);
         self.max_offset = self.max_offset.max(other.max_offset);
+        self.finite_pagination += other.finite_pagination;
 
         self.highlight_pre_tag |= other.highlight_pre_tag;
         self.highlight_post_tag |= other.highlight_post_tag;
@@ -534,6 +544,7 @@ impl SearchAggregator {
                 "pagination": {
                    "max_limit": self.max_limit,
                    "max_offset": self.max_offset,
+                   "finite_pagination": self.finite_pagination > self.total_received / 2,
                 },
                 "formatting": {
                     "highlight_pre_tag": self.highlight_pre_tag,

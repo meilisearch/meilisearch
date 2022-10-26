@@ -28,7 +28,7 @@ lazy_static = "1.4.0"
 log = "0.4.17"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
-milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.33.4", default-features = false }
+milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.34.0", default-features = false }
 mime = "0.3.16"
 num_cpus = "1.13.1"
 obkv = "0.2.0"
@@ -40,7 +40,7 @@ rand = "0.8.5"
 rayon = "1.5.3"
 regex = "1.6.0"
 reqwest = { version = "0.11.12", features = ["json", "rustls-tls"], default-features = false, optional = true }
-roaring = "0.9.0"
+roaring = "0.10.1"
 rustls = "0.20.6"
 serde = { version = "1.0.145", features = ["derive"] }
 serde_json = { version = "1.0.85", features = ["preserve_order"] }

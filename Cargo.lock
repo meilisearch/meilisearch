@@ -1183,8 +1183,8 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "0.33.4"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.4#4fc6331cb6526c07f3137584564cfe3493fb25bd"
+version = "0.34.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.34.0#2bf867982ab548a6d749c7534f69b44d3552ef70"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1202,8 +1202,8 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "0.33.4"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.4#4fc6331cb6526c07f3137584564cfe3493fb25bd"
+version = "0.34.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.34.0#2bf867982ab548a6d749c7534f69b44d3552ef70"
 dependencies = [
  "serde_json",
 ]
@@ -1360,9 +1360,9 @@ dependencies = [
 
 [[package]]
 name = "geoutils"
-version = "0.4.1"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e006f616a407d396ace1d2ebb3f43ed73189db8b098079bd129928d7645dd1e"
+checksum = "36d244a08113319b5ebcabad2b8b7925732d15eec46d7e7ac3c11734f3b7a6ad"
 
 [[package]]
 name = "getrandom"
@@ -1713,8 +1713,8 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "0.33.4"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.4#4fc6331cb6526c07f3137584564cfe3493fb25bd"
+version = "0.34.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.34.0#2bf867982ab548a6d749c7534f69b44d3552ef70"
 dependencies = [
  "serde_json",
 ]
@@ -2249,12 +2249,12 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.33.4"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.4#4fc6331cb6526c07f3137584564cfe3493fb25bd"
+version = "0.34.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.34.0#2bf867982ab548a6d749c7534f69b44d3552ef70"
 dependencies = [
  "bimap",
  "bincode",
- "bstr 0.2.17",
+ "bstr 1.0.1",
  "byteorder",
  "charabia",
  "concat-arrays",
@@ -2506,9 +2506,9 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
 name = "ordered-float"
-version = "2.10.0"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7940cf2ca942593318d07fcf2596cdca60a85c9e7fab408a5e21a4f9dcd40d87"
+checksum = "1f74e330193f90ec45e2b257fa3ef6df087784157ac1ad2c1e71c62837b03aa7"
 dependencies = [
  "num-traits",
 ]
@@ -3015,9 +3015,9 @@ dependencies = [
 
 [[package]]
 name = "retain_mut"
-version = "0.1.9"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4389f1d5789befaf6029ebd9f7dac4af7f7e3d61b69d4f30e2ac02b57e7712b0"
+checksum = "8c31b5c4033f8fdde8700e4657be2c497e7288f01515be52168c631e2e4d4086"
 
 [[package]]
 name = "ring"
@@ -3057,9 +3057,9 @@ dependencies = [
 
 [[package]]
 name = "roaring"
-version = "0.9.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd539cab4e32019956fe7e0cf160bb6d4802f4be2b52c4253d76d3bb0f85a5f7"
+checksum = "ef0fb5e826a8bde011ecae6a8539dd333884335c57ff0f003fbe27c25bbe8f71"
 dependencies = [
  "bytemuck",
  "byteorder",

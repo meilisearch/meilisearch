@@ -7,7 +7,7 @@ edition = "2021"
 enum-iterator = "1.1.2"
 hmac = "0.12.1"
 meilisearch-types = { path = "../meilisearch-types" }
-milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.33.4", default-features = false }
+milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.34.0", default-features = false }
 rand = "0.8.5"
 serde = { version = "1.0.145", features = ["derive"] }
 serde_json = { version = "1.0.85", features = ["preserve_order"] }
