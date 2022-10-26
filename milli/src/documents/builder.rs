@@ -60,7 +60,7 @@ impl<W: Write> DocumentsBatchBuilder<W> {
     /// Appends a new JSON object into the batch and updates the `DocumentsBatchIndex` accordingly.
     pub fn append_json_object(&mut self, object: &Object) -> io::Result<()> {
         // Make sure that we insert the fields ids in order as the obkv writer has this requirement.
-        let mut fields_ids: Vec<_> = object.keys().map(|k| self.fields_index.insert(&k)).collect();
+        let mut fields_ids: Vec<_> = object.keys().map(|k| self.fields_index.insert(k)).collect();
         fields_ids.sort_unstable();
 
         self.obkv_buffer.clear();

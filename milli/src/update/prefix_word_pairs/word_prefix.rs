@@ -195,9 +195,8 @@ pub fn index_word_prefix_database(
     // Make a prefix trie from the common prefixes that are shorter than self.max_prefix_length
     let prefixes = PrefixTrieNode::from_sorted_prefixes(
         common_prefix_fst_words
-            .into_iter()
-            .map(|s| s.into_iter())
-            .flatten()
+            .iter()
+            .flat_map(|s| s.iter())
             .map(|s| s.as_str())
             .filter(|s| s.len() <= max_prefix_length),
     );
@@ -237,10 +236,7 @@ pub fn index_word_prefix_database(
     // Now we do the same thing with the new prefixes and all word pairs in the DB
 
     let prefixes = PrefixTrieNode::from_sorted_prefixes(
-        new_prefix_fst_words
-            .into_iter()
-            .map(|s| s.as_str())
-            .filter(|s| s.len() <= max_prefix_length),
+        new_prefix_fst_words.iter().map(|s| s.as_str()).filter(|s| s.len() <= max_prefix_length),
     );
 
     if !prefixes.is_empty() {
@@ -366,7 +362,7 @@ fn execute_on_word_pairs_and_prefixes<I>(
                 &mut prefix_buffer,
                 &prefix_search_start,
                 |prefix_buffer| {
-                    batch.insert(&prefix_buffer, data.to_vec());
+                    batch.insert(prefix_buffer, data.to_vec());
                 },
             );
         }
@@ -484,7 +480,7 @@ impl PrefixTrieNode {
     fn set_search_start(&self, word: &[u8], search_start: &mut PrefixTrieNodeSearchStart) -> bool {
         let byte = word[0];
         if self.children[search_start.0].1 == byte {
-            return true;
+            true
         } else {
             match self.children[search_start.0..].binary_search_by_key(&byte, |x| x.1) {
                 Ok(position) => {
@@ -502,7 +498,7 @@ impl PrefixTrieNode {
     fn from_sorted_prefixes<'a>(prefixes: impl Iterator<Item = &'a str>) -> Self {
         let mut node = PrefixTrieNode::default();
         for prefix in prefixes {
-            node.insert_sorted_prefix(prefix.as_bytes().into_iter());
+            node.insert_sorted_prefix(prefix.as_bytes().iter());
         }
         node
     }

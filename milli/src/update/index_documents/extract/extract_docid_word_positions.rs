@@ -132,7 +132,7 @@ fn json_to_string<'a>(value: &'a Value, buffer: &'a mut String) -> Option<&'a st
     }
 
     if let Value::String(string) = value {
-        Some(&string)
+        Some(string)
     } else if inner(value, buffer) {
         Some(buffer)
     } else {

@@ -44,7 +44,7 @@ impl<D: Distinct> Criterion for Initial<'_, D> {
                     let mut candidates = resolve_query_tree(
                         self.ctx,
                         answer.query_tree.as_ref().unwrap(),
-                        &mut params.wdcache,
+                        params.wdcache,
                     )?;
 
                     // Apply the filters on the documents retrieved with the query tree.

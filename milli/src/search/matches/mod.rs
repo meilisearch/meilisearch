@@ -49,16 +49,16 @@ impl<'a, A> MatcherBuilder<'a, A> {
     pub fn build<'t, 'm>(&'m self, text: &'t str) -> Matcher<'t, 'm, A> {
         let crop_marker = match &self.crop_marker {
             Some(marker) => marker.as_str(),
-            None => &DEFAULT_CROP_MARKER,
+            None => DEFAULT_CROP_MARKER,
         };
 
         let highlight_prefix = match &self.highlight_prefix {
             Some(marker) => marker.as_str(),
-            None => &DEFAULT_HIGHLIGHT_PREFIX,
+            None => DEFAULT_HIGHLIGHT_PREFIX,
         };
         let highlight_suffix = match &self.highlight_suffix {
             Some(marker) => marker.as_str(),
-            None => &DEFAULT_HIGHLIGHT_SUFFIX,
+            None => DEFAULT_HIGHLIGHT_SUFFIX,
         };
         Matcher {
             text,
@@ -95,7 +95,7 @@ pub struct Match {
     token_position: usize,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct MatchBounds {
     pub start: usize,
     pub length: usize,
@@ -131,7 +131,7 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
             potential_matches.push((token_position, word_position, partial.char_len()));
 
             for (token_position, word_position, word) in words_positions {
-                partial = match partial.match_token(&word) {
+                partial = match partial.match_token(word) {
                     // token matches the partial match, but the match is not full,
                     // we temporarly save the current token then we try to match the next one.
                     Some(MatchType::Partial(partial)) => {

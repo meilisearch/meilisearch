@@ -202,7 +202,7 @@ impl Index {
 
     pub fn new<P: AsRef<Path>>(options: heed::EnvOpenOptions, path: P) -> Result<Index> {
         let now = OffsetDateTime::now_utc();
-        Self::new_with_creation_dates(options, path, now.clone(), now)
+        Self::new_with_creation_dates(options, path, now, now)
     }
 
     fn set_creation_dates(
@@ -322,7 +322,7 @@ impl Index {
     /// Writes the documents primary key, this is the field name that is used to store the id.
     pub(crate) fn put_primary_key(&self, wtxn: &mut RwTxn, primary_key: &str) -> heed::Result<()> {
         self.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
-        self.main.put::<_, Str, Str>(wtxn, main_key::PRIMARY_KEY_KEY, &primary_key)
+        self.main.put::<_, Str, Str>(wtxn, main_key::PRIMARY_KEY_KEY, primary_key)
     }
 
     /// Deletes the primary key of the documents, this can be done to reset indexes settings.
@@ -985,7 +985,7 @@ impl Index {
             let kv = self
                 .documents
                 .get(rtxn, &BEU32::new(id))?
-                .ok_or_else(|| UserError::UnknownInternalDocumentId { document_id: id })?;
+                .ok_or(UserError::UnknownInternalDocumentId { document_id: id })?;
             documents.push((id, kv));
         }
 
@@ -1044,7 +1044,7 @@ impl Index {
         wtxn: &mut RwTxn,
         time: &OffsetDateTime,
     ) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeJson<OffsetDateTime>>(wtxn, main_key::UPDATED_AT_KEY, &time)
+        self.main.put::<_, Str, SerdeJson<OffsetDateTime>>(wtxn, main_key::UPDATED_AT_KEY, time)
     }
 
     pub fn authorize_typos(&self, txn: &RoTxn) -> heed::Result<bool> {

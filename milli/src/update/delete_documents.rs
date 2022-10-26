@@ -182,12 +182,11 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         // and we can reset the soft deleted bitmap
         self.index.put_soft_deleted_documents_ids(self.wtxn, &RoaringBitmap::new())?;
 
-        let primary_key = self.index.primary_key(self.wtxn)?.ok_or_else(|| {
-            InternalError::DatabaseMissingEntry {
+        let primary_key =
+            self.index.primary_key(self.wtxn)?.ok_or(InternalError::DatabaseMissingEntry {
                 db_name: db_name::MAIN,
                 key: Some(main_key::PRIMARY_KEY_KEY),
-            }
-        })?;
+            })?;
 
         // Since we already checked if the DB was empty, if we can't find the primary key, then
         // something is wrong, and we must return an error.
@@ -457,7 +456,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                 .map(|point| (point, point.data.0))
                 .unzip();
             points_to_remove.iter().for_each(|point| {
-                rtree.remove(&point);
+                rtree.remove(point);
             });
             geo_faceted_doc_ids -= docids_to_remove;
 
@@ -546,7 +545,7 @@ fn remove_from_word_docids(
     // We create an iterator to be able to get the content and delete the word docids.
     // It's faster to acquire a cursor to get and delete or put, as we avoid traversing
     // the LMDB B-Tree two times but only once.
-    let mut iter = db.prefix_iter_mut(txn, &word)?;
+    let mut iter = db.prefix_iter_mut(txn, word)?;
     if let Some((key, mut docids)) = iter.next().transpose()? {
         if key == word {
             let previous_len = docids.len();

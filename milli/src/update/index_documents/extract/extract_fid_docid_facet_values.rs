@@ -67,7 +67,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
                 facet_exists_docids.entry(field_id).or_default().insert(document);
 
                 // For the other extraction tasks, prefix the key with the field_id and the document_id
-                key_buffer.extend_from_slice(&docid_bytes);
+                key_buffer.extend_from_slice(docid_bytes);
 
                 let value =
                     serde_json::from_slice(field_bytes).map_err(InternalError::SerdeJson)?;
@@ -107,8 +107,8 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     let facet_exists_docids_reader = writer_into_reader(facet_exists_docids_writer)?;
 
     Ok((
-        sorter_into_reader(fid_docid_facet_numbers_sorter, indexer.clone())?,
-        sorter_into_reader(fid_docid_facet_strings_sorter, indexer.clone())?,
+        sorter_into_reader(fid_docid_facet_numbers_sorter, indexer)?,
+        sorter_into_reader(fid_docid_facet_strings_sorter, indexer)?,
         facet_exists_docids_reader,
     ))
 }

@@ -25,9 +25,9 @@ const DOCUMENTS_BATCH_INDEX_KEY: [u8; 8] = u64::MAX.to_be_bytes();
 pub fn obkv_to_object(obkv: &KvReader<FieldId>, index: &DocumentsBatchIndex) -> Result<Object> {
     obkv.iter()
         .map(|(field_id, value)| {
-            let field_name = index.name(field_id).ok_or_else(|| {
-                FieldIdMapMissingEntry::FieldId { field_id, process: "obkv_to_object" }
-            })?;
+            let field_name = index
+                .name(field_id)
+                .ok_or(FieldIdMapMissingEntry::FieldId { field_id, process: "obkv_to_object" })?;
             let value = serde_json::from_slice(value).map_err(InternalError::SerdeJson)?;
             Ok((field_name.to_string(), value))
         })

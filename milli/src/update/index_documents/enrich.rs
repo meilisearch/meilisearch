@@ -140,7 +140,7 @@ fn fetch_or_generate_document_id(
                 }
                 None => Ok(Err(UserError::MissingDocumentId {
                     primary_key: primary_key.to_string(),
-                    document: obkv_to_object(&document, &documents_batch_index)?,
+                    document: obkv_to_object(document, documents_batch_index)?,
                 })),
             }
         }
@@ -156,7 +156,7 @@ fn fetch_or_generate_document_id(
                         if matching_documents_ids.len() >= 2 {
                             return Ok(Err(UserError::TooManyDocumentIds {
                                 primary_key: nested.name().to_string(),
-                                document: obkv_to_object(&document, &documents_batch_index)?,
+                                document: obkv_to_object(document, documents_batch_index)?,
                             }));
                         }
                     }
@@ -170,7 +170,7 @@ fn fetch_or_generate_document_id(
                 },
                 None => Ok(Err(UserError::MissingDocumentId {
                     primary_key: nested.name().to_string(),
-                    document: obkv_to_object(&document, &documents_batch_index)?,
+                    document: obkv_to_object(document, documents_batch_index)?,
                 })),
             }
         }
@@ -313,7 +313,7 @@ pub fn validate_document_id_value(document_id: Value) -> Result<StdResult<String
             None => Ok(Err(UserError::InvalidDocumentId { document_id: Value::String(string) })),
         },
         Value::Number(number) if number.is_i64() => Ok(Ok(number.to_string())),
-        content => Ok(Err(UserError::InvalidDocumentId { document_id: content.clone() })),
+        content => Ok(Err(UserError::InvalidDocumentId { document_id: content })),
     }
 }
 

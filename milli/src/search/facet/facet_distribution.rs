@@ -69,7 +69,7 @@ impl<'a> FacetDistribution<'a> {
     ) -> heed::Result<()> {
         match facet_type {
             FacetType::Number => {
-                let mut key_buffer: Vec<_> = field_id.to_be_bytes().iter().copied().collect();
+                let mut key_buffer: Vec<_> = field_id.to_be_bytes().to_vec();
 
                 let distribution_prelength = distribution.len();
                 let db = self.index.field_id_docid_facet_f64s;
@@ -94,7 +94,7 @@ impl<'a> FacetDistribution<'a> {
             }
             FacetType::String => {
                 let mut normalized_distribution = BTreeMap::new();
-                let mut key_buffer: Vec<_> = field_id.to_be_bytes().iter().copied().collect();
+                let mut key_buffer: Vec<_> = field_id.to_be_bytes().to_vec();
 
                 let db = self.index.field_id_docid_facet_strings;
                 'outer: for docid in candidates.into_iter() {
