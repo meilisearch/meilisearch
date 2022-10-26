@@ -35,8 +35,8 @@ use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::UserError;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
-    self, FacetsUpdateBulk, IndexerConfig, UpdateIndexingStep, WordPrefixDocids,
-    PrefixWordPairsProximityDocids, WordPrefixPositionDocids, WordsPrefixesFst,
+    self, IndexerConfig, PrefixWordPairsProximityDocids, UpdateIndexingStep, WordPrefixDocids,
+    WordPrefixPositionDocids, WordsPrefixesFst,
 };
 use crate::{Index, Result, RoaringBitmapCodec};
 
