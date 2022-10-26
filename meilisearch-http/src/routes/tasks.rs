@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_cs::vec::CS;
 use serde_json::json;
 use time::{Duration, OffsetDateTime};
-use tokio::task::block_in_place;
+use tokio::task;
 
 use super::fold_star_or;
 use crate::analytics::Analytics;
@@ -26,8 +26,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route(web::get().to(SeqHandler(get_tasks)))
             .route(web::delete().to(SeqHandler(delete_tasks))),
     )
-    .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))))
-    .service(web::resource("/cancel").route(web::post().to(SeqHandler(cancel_tasks))));
+    .service(web::resource("/cancel").route(web::post().to(SeqHandler(cancel_tasks))))
+    .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))));
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -294,7 +294,7 @@ async fn cancel_tasks(
     let task_cancelation =
         KindWithContent::TaskCancelation { query: req.query_string().to_string(), tasks };
 
-    let task = block_in_place(|| index_scheduler.register(task_cancelation))?;
+    let task = task::spawn_blocking(move || index_scheduler.register(task_cancelation)).await??;
     let task_view = TaskView::from_task(&task);
 
     Ok(HttpResponse::Ok().json(task_view))
@@ -351,7 +351,7 @@ async fn delete_tasks(
     let task_deletion =
         KindWithContent::TaskDeletion { query: req.query_string().to_string(), tasks };
 
-    let task = block_in_place(|| index_scheduler.register(task_deletion))?;
+    let task = task::spawn_blocking(move || index_scheduler.register(task_deletion)).await??;
     let task_view = TaskView::from_task(&task);
 
     Ok(HttpResponse::Ok().json(task_view))
