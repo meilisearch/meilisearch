@@ -684,37 +684,15 @@ async fn test_summarized_index_swap() {
             { "indexes": ["doggos", "cattos"] }
         ]))
         .await;
-    dbg!(v);
-    server.wait_task(0).await;
-    let (task, _) = server.get_task(0).await;
-    assert_json_snapshot!(task, 
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
-        @r###"
+    assert_json_snapshot!(v, @r###"
     {
-      "uid": 0,
-      "indexUid": null,
-      "status": "failed",
-      "type": "indexSwap",
-      "details": {
-        "indexes": [
-          [
-            "doggos",
-            "cattos"
-          ]
-        ]
-      },
-      "error": {
-        "message": "Index `doggos` not found.",
-        "code": "index_not_found",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_not_found"
-      },
-      "duration": "[duration]",
-      "enqueuedAt": "[date]",
-      "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "message": "Indexes `cattos`, `doggos` not found.",
+      "code": "index_not_found",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#index_not_found"
     }
     "###);
+
     server.index("doggos").create(None).await;
     server.index("cattos").create(None).await;
     server
@@ -722,22 +700,24 @@ async fn test_summarized_index_swap() {
             { "indexes": ["doggos", "cattos"] }
         ]))
         .await;
-    server.wait_task(3).await;
-    let (task, _) = server.get_task(3).await;
+    server.wait_task(2).await;
+    let (task, _) = server.get_task(2).await;
     assert_json_snapshot!(task, 
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
-      "uid": 3,
+      "uid": 2,
       "indexUid": null,
       "status": "succeeded",
       "type": "indexSwap",
       "details": {
-        "indexes": [
-          [
-            "doggos",
-            "cattos"
-          ]
+        "swaps": [
+          {
+            "indexes": [
+              "doggos",
+              "cattos"
+            ]
+          }
         ]
       },
       "duration": "[duration]",
