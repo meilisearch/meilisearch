@@ -361,8 +361,8 @@ impl IndexScheduler {
                     _ => panic!(),
                 }
             }
-            match details {
-                Some(details) => match details {
+            if let Some(details) = details {
+                match details {
                     Details::IndexSwap { swaps: sw1 } => {
                         if let KindWithContent::IndexSwap { swaps: sw2 } = &kind {
                             assert_eq!(&sw1, sw2);
@@ -458,8 +458,7 @@ impl IndexScheduler {
                             matches!(&kind, KindWithContent::DumpCreation { dump_uid: d2, keys: _, instance_uid: _ } if &d1 == d2 )
                         );
                     }
-                },
-                None => (),
+                }
             }
 
             assert!(self.get_status(&rtxn, status).unwrap().contains(uid));
