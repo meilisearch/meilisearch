@@ -8,8 +8,8 @@ use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use serde::Deserialize;
 
 use crate::error::MeilisearchHttpError;
-use crate::extractors::authentication::GuardedData;
-use crate::extractors::authentication::{policies::*, AuthenticationError};
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::tasks::TaskView;
 

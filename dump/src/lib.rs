@@ -113,7 +113,9 @@ pub enum KindDump {
     IndexUpdate {
         primary_key: Option<String>,
     },
-    IndexSwap { swaps: Vec<IndexSwap> },
+    IndexSwap {
+        swaps: Vec<IndexSwap>,
+    },
     TaskCancelation {
         query: String,
         tasks: RoaringBitmap,
