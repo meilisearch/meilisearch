@@ -433,6 +433,7 @@ pub fn autobatch(
 
 #[cfg(test)]
 mod tests {
+    use meilisearch_types::tasks::IndexSwap;
     use uuid::Uuid;
 
     use super::*;
@@ -492,7 +493,9 @@ mod tests {
     }
 
     fn idx_swap() -> KindWithContent {
-        KindWithContent::IndexSwap { swaps: vec![(String::from("doggo"), String::from("catto"))] }
+        KindWithContent::IndexSwap {
+            swaps: vec![IndexSwap { indexes: (String::from("doggo"), String::from("catto")) }],
+        }
     }
 
     #[test]

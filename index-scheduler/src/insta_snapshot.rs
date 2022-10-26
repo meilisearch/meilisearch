@@ -194,7 +194,7 @@ fn snapshot_details(d: &Details) -> String {
             format!("{{ dump_uid: {dump_uid:?} }}")
         },
         Details::IndexSwap { swaps } => {
-            format!("{{ indexes: {swaps:?} }}")
+            format!("{{ swaps: {swaps:?} }}")
         }
     }
 }

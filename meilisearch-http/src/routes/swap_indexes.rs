@@ -4,7 +4,7 @@ use actix_web::web::Data;
 use actix_web::{web, HttpResponse};
 use index_scheduler::IndexScheduler;
 use meilisearch_types::error::ResponseError;
-use meilisearch_types::tasks::KindWithContent;
+use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use serde::Deserialize;
 
 use crate::error::MeilisearchHttpError;
@@ -16,11 +16,10 @@ use crate::routes::tasks::TaskView;
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(SeqHandler(swap_indexes))));
 }
-
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SwapIndexesPayload {
-    indexes: (String, String),
+    indexes: Vec<String>,
 }
 
 pub async fn swap_indexes(
@@ -33,23 +32,43 @@ pub async fn swap_indexes(
     let mut indexes_set = HashSet::<String>::default();
     let mut unknown_indexes = HashSet::new();
     let mut duplicate_indexes = HashSet::new();
-    for SwapIndexesPayload { indexes: (lhs, rhs) } in params.into_inner().into_iter() {
+    for SwapIndexesPayload { indexes } in params.into_inner().into_iter() {
+        let (lhs, rhs) = match indexes.as_slice() {
+            [lhs, rhs] => (lhs, rhs),
+            _ => {
+                return Err(MeilisearchHttpError::SwapIndexPayloadWrongLength(indexes).into());
+            }
+        };
         if !search_rules.is_index_authorized(&lhs) {
             unknown_indexes.insert(lhs.clone());
         }
         if !search_rules.is_index_authorized(&rhs) {
             unknown_indexes.insert(rhs.clone());
         }
+        match index_scheduler.index(&lhs) {
+            Ok(_) => (),
+            Err(index_scheduler::Error::IndexNotFound(_)) => {
+                unknown_indexes.insert(lhs.clone());
+            }
+            Err(e) => return Err(e.into()),
+        }
+        match index_scheduler.index(&rhs) {
+            Ok(_) => (),
+            Err(index_scheduler::Error::IndexNotFound(_)) => {
+                unknown_indexes.insert(rhs.clone());
+            }
+            Err(e) => return Err(e.into()),
+        }
 
-        swaps.push((lhs.clone(), rhs.clone()));
+        swaps.push(IndexSwap { indexes: (lhs.clone(), rhs.clone()) });
 
         let is_unique_index_lhs = indexes_set.insert(lhs.clone());
         if !is_unique_index_lhs {
-            duplicate_indexes.insert(lhs);
+            duplicate_indexes.insert(lhs.clone());
         }
         let is_unique_index_rhs = indexes_set.insert(rhs.clone());
         if !is_unique_index_rhs {
-            duplicate_indexes.insert(rhs);
+            duplicate_indexes.insert(rhs.clone());
         }
     }
     if !duplicate_indexes.is_empty() {
