@@ -1,22 +1,23 @@
 #![allow(dead_code)]
 
-use clap::Parser;
 use std::path::Path;
+use std::time::Duration;
 
+use actix_http::body::MessageBody;
+use actix_web::dev::ServiceResponse;
 use actix_web::http::StatusCode;
 use byte_unit::{Byte, ByteUnit};
-use meilisearch_auth::AuthController;
-use meilisearch_http::setup_meilisearch;
-use meilisearch_lib::options::{IndexerOpts, MaxMemory};
+use clap::Parser;
+use meilisearch_http::option::{IndexerOpts, MaxMemory, Opt};
+use meilisearch_http::{analytics, create_app, setup_meilisearch};
 use once_cell::sync::Lazy;
-use serde_json::Value;
+use serde_json::{json, Value};
 use tempfile::TempDir;
-
-use crate::common::encoder::Encoder;
-use meilisearch_http::option::Opt;
+use tokio::time::sleep;
 
 use super::index::Index;
 use super::service::Service;
+use crate::common::encoder::Encoder;
 
 pub struct Server {
     pub service: Service,
@@ -38,19 +39,10 @@ impl Server {
 
         let options = default_settings(dir.path());
 
-        let meilisearch = setup_meilisearch(&options).unwrap();
-        let auth = AuthController::new(&options.db_path, &options.master_key).unwrap();
-        let service = Service {
-            meilisearch,
-            auth,
-            options,
-            api_key: None,
-        };
+        let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
+        let service = Service { index_scheduler, auth, options, api_key: None };
 
-        Server {
-            service,
-            _dir: Some(dir),
-        }
+        Server { service, _dir: Some(dir) }
     }
 
     pub async fn new_auth_with_options(mut options: Opt, dir: TempDir) -> Self {
@@ -62,19 +54,10 @@ impl Server {
 
         options.master_key = Some("MASTER_KEY".to_string());
 
-        let meilisearch = setup_meilisearch(&options).unwrap();
-        let auth = AuthController::new(&options.db_path, &options.master_key).unwrap();
-        let service = Service {
-            meilisearch,
-            auth,
-            options,
-            api_key: None,
-        };
+        let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
+        let service = Service { index_scheduler, auth, options, api_key: None };
 
-        Server {
-            service,
-            _dir: Some(dir),
-        }
+        Server { service, _dir: Some(dir) }
     }
 
     pub async fn new_auth() -> Self {
@@ -84,19 +67,27 @@ impl Server {
     }
 
     pub async fn new_with_options(options: Opt) -> Result<Self, anyhow::Error> {
-        let meilisearch = setup_meilisearch(&options)?;
-        let auth = AuthController::new(&options.db_path, &options.master_key)?;
-        let service = Service {
-            meilisearch,
-            auth,
-            options,
-            api_key: None,
-        };
+        let (index_scheduler, auth) = setup_meilisearch(&options)?;
+        let service = Service { index_scheduler, auth, options, api_key: None };
 
-        Ok(Server {
-            service,
-            _dir: None,
-        })
+        Ok(Server { service, _dir: None })
+    }
+
+    pub async fn init_web_app(
+        &self,
+    ) -> impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = ServiceResponse<impl MessageBody>,
+        Error = actix_web::Error,
+    > {
+        actix_web::test::init_service(create_app(
+            self.service.index_scheduler.clone().into(),
+            self.service.auth.clone(),
+            self.service.options.clone(),
+            analytics::MockAnalytics::new(&self.service.options),
+            true,
+        ))
+        .await
     }
 
     /// Returns a view to an index. There is no guarantee that the index exists.
@@ -105,11 +96,7 @@ impl Server {
     }
 
     pub fn index_with_encoder(&self, uid: impl AsRef<str>, encoder: Encoder) -> Index<'_> {
-        Index {
-            uid: uid.as_ref().to_string(),
-            service: &self.service,
-            encoder,
-        }
+        Index { uid: uid.as_ref().to_string(), service: &self.service, encoder }
     }
 
     pub async fn list_indexes(
@@ -127,9 +114,7 @@ impl Server {
             .map(|(offset, limit)| format!("{offset}&{limit}"))
             .or_else(|| offset.xor(limit));
         if let Some(query_parameter) = query_parameter {
-            self.service
-                .get(format!("/indexes?{query_parameter}"))
-                .await
+            self.service.get(format!("/indexes?{query_parameter}")).await
         } else {
             self.service.get("/indexes").await
         }
@@ -149,6 +134,46 @@ impl Server {
 
     pub async fn get_dump_status(&self, uid: &str) -> (Value, StatusCode) {
         self.service.get(format!("/dumps/{}/status", uid)).await
+    }
+
+    pub async fn create_dump(&self) -> (Value, StatusCode) {
+        self.service.post("/dumps", json!(null)).await
+    }
+
+    pub async fn index_swap(&self, value: Value) -> (Value, StatusCode) {
+        self.service.post("/swap-indexes", value).await
+    }
+
+    pub async fn cancel_task(&self, value: Value) -> (Value, StatusCode) {
+        self.service
+            .post(format!("/tasks/cancel?{}", yaup::to_string(&value).unwrap()), json!(null))
+            .await
+    }
+
+    pub async fn delete_task(&self, value: Value) -> (Value, StatusCode) {
+        self.service.delete(format!("/tasks?{}", yaup::to_string(&value).unwrap())).await
+    }
+
+    pub async fn wait_task(&self, update_id: u64) -> Value {
+        // try several times to get status, or panic to not wait forever
+        let url = format!("/tasks/{}", update_id);
+        for _ in 0..100 {
+            let (response, status_code) = self.service.get(&url).await;
+            assert_eq!(200, status_code, "response: {}", response);
+
+            if response["status"] == "succeeded" || response["status"] == "failed" {
+                return response;
+            }
+
+            // wait 0.5 second.
+            sleep(Duration::from_millis(500)).await;
+        }
+        panic!("Timeout waiting for update id");
+    }
+
+    pub async fn get_task(&self, update_id: u64) -> (Value, StatusCode) {
+        let url = format!("/tasks/{}", update_id);
+        self.service.get(url).await
     }
 }
 

@@ -1,0 +1,40 @@
+---
+source: index-scheduler/src/lib.rs
+---
+### Autobatching Enabled = true
+### Processing Tasks:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+1 {uid: 1, status: enqueued, details: { received_documents: 1, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "doggo", primary_key: Some("bone"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 1, allow_index_creation: true }}
+2 {uid: 2, status: succeeded, details: { matched_tasks: 1, deleted_tasks: Some(1), original_query: "test_query" }, kind: TaskDeletion { query: "test_query", tasks: RoaringBitmap<[0]> }}
+----------------------------------------------------------------------
+### Status:
+enqueued [1,]
+succeeded [2,]
+----------------------------------------------------------------------
+### Kind:
+"documentAdditionOrUpdate" [1,]
+"taskDeletion" [2,]
+----------------------------------------------------------------------
+### Index Tasks:
+doggo [1,]
+----------------------------------------------------------------------
+### Index Mapper:
+["catto"]
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [1,]
+[timestamp] [2,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [2,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [2,]
+----------------------------------------------------------------------
+### File Store:
+00000000-0000-0000-0000-000000000001
+
+----------------------------------------------------------------------
+

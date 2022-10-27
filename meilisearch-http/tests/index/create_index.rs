@@ -1,10 +1,10 @@
-use crate::common::encoder::Encoder;
-use crate::common::Server;
 use actix_web::http::header::ContentType;
 use actix_web::test;
 use http::header::ACCEPT_ENCODING;
-use meilisearch_http::{analytics, create_app};
 use serde_json::{json, Value};
+
+use crate::common::encoder::Encoder;
+use crate::common::Server;
 
 #[actix_rt::test]
 async fn create_index_no_primary_key() {
@@ -43,14 +43,7 @@ async fn create_index_with_gzip_encoded_request() {
 #[actix_rt::test]
 async fn create_index_with_gzip_encoded_request_and_receiving_brotli_encoded_response() {
     let server = Server::new().await;
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
+    let app = server.init_web_app().await;
 
     let body = serde_json::to_string(&json!({
         "uid": "test",

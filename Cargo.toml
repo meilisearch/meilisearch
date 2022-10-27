@@ -3,8 +3,11 @@ resolver = "2"
 members = [
     "meilisearch-http",
     "meilisearch-types",
-    "meilisearch-lib",
     "meilisearch-auth",
+    "meili-snap",
+    "index-scheduler",
+    "dump",
+    "file-store",
     "permissive-json-pointer",
 ]
 

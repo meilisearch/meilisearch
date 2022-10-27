@@ -1,12 +1,13 @@
-use crate::common::Server;
+use std::collections::HashMap;
+
 use ::time::format_description::well_known::Rfc3339;
 use maplit::hashmap;
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use time::{Duration, OffsetDateTime};
 
 use super::authorization::{ALL_ACTIONS, AUTHORIZATIONS};
+use crate::common::Server;
 
 fn generate_tenant_token(
     parent_uid: impl AsRef<str>,
@@ -17,12 +18,8 @@ fn generate_tenant_token(
 
     let parent_uid = parent_uid.as_ref();
     body.insert("apiKeyUid", json!(parent_uid));
-    encode(
-        &Header::default(),
-        &body,
-        &EncodingKey::from_secret(parent_key.as_ref().as_bytes()),
-    )
-    .unwrap()
+    encode(&Header::default(), &body, &EncodingKey::from_secret(parent_key.as_ref().as_bytes()))
+        .unwrap()
 }
 
 static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
@@ -473,7 +470,7 @@ async fn error_access_forbidden_routes() {
         "searchRules" => json!(["*"]),
         "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
     };
-    let web_token = generate_tenant_token(&uid, &key, tenant_token);
+    let web_token = generate_tenant_token(uid, key, tenant_token);
     server.use_api_key(&web_token);
 
     for ((method, route), actions) in AUTHORIZATIONS.iter() {
@@ -509,22 +506,18 @@ async fn error_access_expired_parent_key() {
         "searchRules" => json!(["*"]),
         "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
     };
-    let web_token = generate_tenant_token(&uid, &key, tenant_token);
+    let web_token = generate_tenant_token(uid, key, tenant_token);
     server.use_api_key(&web_token);
 
     // test search request while parent_key is not expired
-    let (response, code) = server
-        .dummy_request("POST", "/indexes/products/search")
-        .await;
+    let (response, code) = server.dummy_request("POST", "/indexes/products/search").await;
     assert_ne!(response, INVALID_RESPONSE.clone());
     assert_ne!(code, 403);
 
     // wait until the key is expired.
     thread::sleep(time::Duration::new(1, 0));
 
-    let (response, code) = server
-        .dummy_request("POST", "/indexes/products/search")
-        .await;
+    let (response, code) = server.dummy_request("POST", "/indexes/products/search").await;
     assert_eq!(response, INVALID_RESPONSE.clone());
     assert_eq!(code, 403);
 }
@@ -552,13 +545,11 @@ async fn error_access_modified_token() {
         "searchRules" => json!(["products"]),
         "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
     };
-    let web_token = generate_tenant_token(&uid, &key, tenant_token);
+    let web_token = generate_tenant_token(uid, key, tenant_token);
     server.use_api_key(&web_token);
 
     // test search request while web_token is valid
-    let (response, code) = server
-        .dummy_request("POST", "/indexes/products/search")
-        .await;
+    let (response, code) = server.dummy_request("POST", "/indexes/products/search").await;
     assert_ne!(response, INVALID_RESPONSE.clone());
     assert_ne!(code, 403);
 
@@ -567,7 +558,7 @@ async fn error_access_modified_token() {
         "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
     };
 
-    let alt = generate_tenant_token(&uid, &key, tenant_token);
+    let alt = generate_tenant_token(uid, key, tenant_token);
     let altered_token = [
         web_token.split('.').next().unwrap(),
         alt.split('.').nth(1).unwrap(),
@@ -576,9 +567,7 @@ async fn error_access_modified_token() {
     .join(".");
 
     server.use_api_key(&altered_token);
-    let (response, code) = server
-        .dummy_request("POST", "/indexes/products/search")
-        .await;
+    let (response, code) = server.dummy_request("POST", "/indexes/products/search").await;
     assert_eq!(response, INVALID_RESPONSE.clone());
     assert_eq!(code, 403);
 }

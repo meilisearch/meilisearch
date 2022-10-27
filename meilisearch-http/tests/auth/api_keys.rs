@@ -1,7 +1,9 @@
-use crate::common::Server;
+use std::{thread, time};
+
 use assert_json_diff::assert_json_include;
 use serde_json::{json, Value};
-use std::{thread, time};
+
+use crate::common::Server;
 
 #[actix_rt::test]
 async fn add_valid_api_key() {

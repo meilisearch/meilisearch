@@ -3,12 +3,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use actix_web::http::KeepAlive;
+use actix_web::web::Data;
 use actix_web::HttpServer;
+use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
-use meilisearch_http::analytics;
 use meilisearch_http::analytics::Analytics;
-use meilisearch_http::{create_app, setup_meilisearch, Opt};
-use meilisearch_lib::MeiliSearch;
+use meilisearch_http::{analytics, create_app, setup_meilisearch, Opt};
 
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -45,66 +45,64 @@ async fn main() -> anyhow::Result<()> {
         _ => unreachable!(),
     }
 
-    let meilisearch = setup_meilisearch(&opt)?;
-
-    let auth_controller = AuthController::new(&opt.db_path, &opt.master_key)?;
+    let (index_scheduler, auth_controller) = setup_meilisearch(&opt)?;
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
-    let (analytics, user) = if !opt.no_analytics {
-        analytics::SegmentAnalytics::new(&opt, &meilisearch).await
+    let analytics = if !opt.no_analytics {
+        analytics::SegmentAnalytics::new(&opt, index_scheduler.clone()).await
     } else {
         analytics::MockAnalytics::new(&opt)
     };
     #[cfg(any(debug_assertions, not(feature = "analytics")))]
-    let (analytics, user) = analytics::MockAnalytics::new(&opt);
+    let analytics = analytics::MockAnalytics::new(&opt);
 
-    print_launch_resume(&opt, &user, config_read_from);
+    print_launch_resume(&opt, analytics.clone(), config_read_from);
 
-    run_http(meilisearch, auth_controller, opt, analytics).await?;
+    run_http(index_scheduler, auth_controller, opt, analytics).await?;
 
     Ok(())
 }
 
 async fn run_http(
-    data: MeiliSearch,
+    index_scheduler: Arc<IndexScheduler>,
     auth_controller: AuthController,
     opt: Opt,
     analytics: Arc<dyn Analytics>,
 ) -> anyhow::Result<()> {
-    let _enable_dashboard = &opt.env == "development";
+    let enable_dashboard = &opt.env == "development";
     let opt_clone = opt.clone();
+    let index_scheduler = Data::from(index_scheduler);
+
     let http_server = HttpServer::new(move || {
-        create_app!(
-            data,
-            auth_controller,
-            _enable_dashboard,
-            opt_clone,
-            analytics.clone()
+        create_app(
+            index_scheduler.clone(),
+            auth_controller.clone(),
+            opt.clone(),
+            analytics.clone(),
+            enable_dashboard,
         )
     })
     // Disable signals allows the server to terminate immediately when a user enter CTRL-C
     .disable_signals()
     .keep_alive(KeepAlive::Os);
 
-    if let Some(config) = opt.get_ssl_config()? {
-        http_server
-            .bind_rustls(opt.http_addr, config)?
-            .run()
-            .await?;
+    if let Some(config) = opt_clone.get_ssl_config()? {
+        http_server.bind_rustls(opt_clone.http_addr, config)?.run().await?;
     } else {
-        http_server.bind(&opt.http_addr)?.run().await?;
+        http_server.bind(&opt_clone.http_addr)?.run().await?;
     }
     Ok(())
 }
 
-pub fn print_launch_resume(opt: &Opt, user: &str, config_read_from: Option<PathBuf>) {
+pub fn print_launch_resume(
+    opt: &Opt,
+    analytics: Arc<dyn Analytics>,
+    config_read_from: Option<PathBuf>,
+) {
     let commit_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
     let commit_date = option_env!("VERGEN_GIT_COMMIT_TIMESTAMP").unwrap_or("unknown");
-    let protocol = if opt.ssl_cert_path.is_some() && opt.ssl_key_path.is_some() {
-        "https"
-    } else {
-        "http"
-    };
+    let protocol =
+        if opt.ssl_cert_path.is_some() && opt.ssl_key_path.is_some() { "https" } else { "http" };
     let ascii_name = r#"
 888b     d888          d8b 888 d8b                                            888
 8888b   d8888          Y8P 888 Y8P                                            888
@@ -129,10 +127,7 @@ pub fn print_launch_resume(opt: &Opt, user: &str, config_read_from: Option<PathB
     eprintln!("Environment:\t\t{:?}", opt.env);
     eprintln!("Commit SHA:\t\t{:?}", commit_sha.to_string());
     eprintln!("Commit date:\t\t{:?}", commit_date.to_string());
-    eprintln!(
-        "Package version:\t{:?}",
-        env!("CARGO_PKG_VERSION").to_string()
-    );
+    eprintln!("Package version:\t{:?}", env!("CARGO_PKG_VERSION").to_string());
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     {
@@ -150,8 +145,8 @@ Anonymous telemetry:\t\"Enabled\""
         }
     }
 
-    if !user.is_empty() {
-        eprintln!("Instance UID:\t\t\"{}\"", user);
+    if let Some(instance_uid) = analytics.instance_uid() {
+        eprintln!("Instance UID:\t\t\"{}\"", instance_uid);
     }
 
     eprintln!();

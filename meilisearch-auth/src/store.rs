@@ -1,8 +1,7 @@
 use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::collections::HashSet;
-use std::convert::TryFrom;
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::fs::create_dir_all;
 use std::ops::Deref;
 use std::path::Path;
@@ -10,9 +9,11 @@ use std::str;
 use std::sync::Arc;
 
 use hmac::{Hmac, Mac};
+use meilisearch_types::keys::KeyId;
+use meilisearch_types::milli;
+use meilisearch_types::milli::heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
+use meilisearch_types::milli::heed::{Database, Env, EnvOpenOptions, RwTxn};
 use meilisearch_types::star_or::StarOr;
-use milli::heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
-use milli::heed::{Database, Env, EnvOpenOptions, RwTxn};
 use sha2::Sha256;
 use time::OffsetDateTime;
 use uuid::fmt::Hyphenated;
@@ -25,8 +26,6 @@ const AUTH_STORE_SIZE: usize = 1_073_741_824; //1GiB
 const AUTH_DB_PATH: &str = "auth";
 const KEY_DB_NAME: &str = "api-keys";
 const KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME: &str = "keyid-action-index-expiration";
-
-pub type KeyId = Uuid;
 
 #[derive(Clone)]
 pub struct HeedAuthStore {
@@ -59,12 +58,7 @@ impl HeedAuthStore {
         let keys = env.create_database(Some(KEY_DB_NAME))?;
         let action_keyid_index_expiration =
             env.create_database(Some(KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME))?;
-        Ok(Self {
-            env,
-            keys,
-            action_keyid_index_expiration,
-            should_close_on_drop: true,
-        })
+        Ok(Self { env, keys, action_keyid_index_expiration, should_close_on_drop: true })
     }
 
     pub fn set_drop_on_close(&mut self, v: bool) {
@@ -94,12 +88,8 @@ impl HeedAuthStore {
                 Action::All => actions.extend(enum_iterator::all::<Action>()),
                 Action::DocumentsAll => {
                     actions.extend(
-                        [
-                            Action::DocumentsGet,
-                            Action::DocumentsDelete,
-                            Action::DocumentsAdd,
-                        ]
-                        .iter(),
+                        [Action::DocumentsGet, Action::DocumentsDelete, Action::DocumentsAdd]
+                            .iter(),
                     );
                 }
                 Action::IndexesAll => {
@@ -109,6 +99,7 @@ impl HeedAuthStore {
                             Action::IndexesDelete,
                             Action::IndexesGet,
                             Action::IndexesUpdate,
+                            Action::IndexesSwap,
                         ]
                         .iter(),
                     );
@@ -120,7 +111,7 @@ impl HeedAuthStore {
                     actions.insert(Action::DumpsCreate);
                 }
                 Action::TasksAll => {
-                    actions.insert(Action::TasksGet);
+                    actions.extend([Action::TasksGet, Action::TasksDelete, Action::TasksCancel]);
                 }
                 Action::StatsAll => {
                     actions.insert(Action::StatsGet);
@@ -195,6 +186,13 @@ impl HeedAuthStore {
         wtxn.commit()?;
 
         Ok(existing)
+    }
+
+    pub fn delete_all_keys(&self) -> Result<()> {
+        let mut wtxn = self.env.write_txn()?;
+        self.keys.clear(&mut wtxn)?;
+        wtxn.commit()?;
+        Ok(())
     }
 
     pub fn list_api_keys(&self) -> Result<Vec<Key>> {

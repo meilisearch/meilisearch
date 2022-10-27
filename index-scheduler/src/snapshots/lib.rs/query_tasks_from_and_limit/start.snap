@@ -1,0 +1,39 @@
+---
+source: index-scheduler/src/lib.rs
+---
+### Autobatching Enabled = true
+### Processing Tasks:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, status: enqueued, details: { primary_key: Some("bone") }, kind: IndexCreation { index_uid: "doggo", primary_key: Some("bone") }}
+1 {uid: 1, status: enqueued, details: { primary_key: Some("plankton") }, kind: IndexCreation { index_uid: "whalo", primary_key: Some("plankton") }}
+2 {uid: 2, status: enqueued, details: { primary_key: Some("his_own_vomit") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("his_own_vomit") }}
+----------------------------------------------------------------------
+### Status:
+enqueued [0,1,2,]
+----------------------------------------------------------------------
+### Kind:
+"indexCreation" [0,1,2,]
+----------------------------------------------------------------------
+### Index Tasks:
+catto [2,]
+doggo [0,]
+whalo [1,]
+----------------------------------------------------------------------
+### Index Mapper:
+[]
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+----------------------------------------------------------------------
+### Started At:
+----------------------------------------------------------------------
+### Finished At:
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------
+

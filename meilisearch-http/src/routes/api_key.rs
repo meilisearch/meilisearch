@@ -1,18 +1,18 @@
 use std::str;
 
 use actix_web::{web, HttpRequest, HttpResponse};
+use meilisearch_auth::error::AuthControllerError;
+use meilisearch_auth::AuthController;
+use meilisearch_types::error::{Code, ResponseError};
+use meilisearch_types::keys::{Action, Key};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use meilisearch_auth::{error::AuthControllerError, Action, AuthController, Key};
-use meilisearch_types::error::{Code, ResponseError};
-
-use crate::extractors::{
-    authentication::{policies::*, GuardedData},
-    sequential_extractor::SeqHandler,
-};
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::GuardedData;
+use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::Pagination;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -51,10 +51,8 @@ pub async fn list_api_keys(
 ) -> Result<HttpResponse, ResponseError> {
     let page_view = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
         let keys = auth_controller.list_keys()?;
-        let page_view = paginate.auto_paginate_sized(
-            keys.into_iter()
-                .map(|k| KeyView::from_key(k, &auth_controller)),
-        );
+        let page_view = paginate
+            .auto_paginate_sized(keys.into_iter().map(|k| KeyView::from_key(k, &auth_controller)));
 
         Ok(page_view)
     })

@@ -1,49 +1,37 @@
-use actix_web::error::PayloadError;
+use std::io::{Cursor, ErrorKind};
+
 use actix_web::http::header::CONTENT_TYPE;
-use actix_web::web::Bytes;
-use actix_web::HttpMessage;
-use actix_web::{web, HttpRequest, HttpResponse};
+use actix_web::web::Data;
+use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use bstr::ByteSlice;
-use futures::{Stream, StreamExt};
+use futures::StreamExt;
+use index_scheduler::IndexScheduler;
 use log::debug;
-use meilisearch_lib::index_controller::{DocumentAdditionFormat, Update};
-use meilisearch_lib::milli::update::IndexDocumentsMethod;
-use meilisearch_lib::MeiliSearch;
+use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::heed::RoTxn;
+use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::star_or::StarOr;
+use meilisearch_types::tasks::KindWithContent;
+use meilisearch_types::{milli, Document, Index};
 use mime::Mime;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_cs::vec::CS;
 use serde_json::Value;
-use tokio::sync::mpsc;
 
 use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
-use crate::extractors::authentication::{policies::*, GuardedData};
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::GuardedData;
 use crate::extractors::payload::Payload;
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::{fold_star_or, PaginationView};
-use crate::task::SummarizedTaskView;
+use crate::routes::{fold_star_or, PaginationView, SummarizedTaskView};
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
-    vec![
-        "application/json".to_string(),
-        "application/x-ndjson".to_string(),
-        "text/csv".to_string(),
-    ]
+    vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]
 });
-
-/// This is required because Payload is not Sync nor Send
-fn payload_to_stream(mut payload: Payload) -> impl Stream<Item = Result<Bytes, PayloadError>> {
-    let (snd, recv) = mpsc::channel(1);
-    tokio::task::spawn_local(async move {
-        while let Some(data) = payload.next().await {
-            let _ = snd.send(data).await;
-        }
-    });
-    tokio_stream::wrappers::ReceiverStream::new(recv)
-}
 
 /// Extracts the mime type from the content type and return
 /// a meilisearch error if anything bad happen.
@@ -56,9 +44,7 @@ fn extract_mime_type(req: &HttpRequest) -> Result<Option<Mime>, MeilisearchHttpE
                 content_type.as_bytes().as_bstr().to_string(),
                 ACCEPTED_CONTENT_TYPE.clone(),
             )),
-            None => Err(MeilisearchHttpError::MissingContentType(
-                ACCEPTED_CONTENT_TYPE.clone(),
-            )),
+            None => Err(MeilisearchHttpError::MissingContentType(ACCEPTED_CONTENT_TYPE.clone())),
         },
     }
 }
@@ -93,32 +79,27 @@ pub struct GetDocument {
 }
 
 pub async fn get_document(
-    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     path: web::Path<DocumentParam>,
     params: web::Query<GetDocument>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = path.index_uid.clone();
-    let id = path.document_id.clone();
     let GetDocument { fields } = params.into_inner();
     let attributes_to_retrieve = fields.and_then(fold_star_or);
 
-    let document = meilisearch
-        .document(index, id, attributes_to_retrieve)
-        .await?;
+    let index = index_scheduler.index(&path.index_uid)?;
+    let document = retrieve_document(&index, &path.document_id, attributes_to_retrieve)?;
     debug!("returns: {:?}", document);
     Ok(HttpResponse::Ok().json(document))
 }
 
 pub async fn delete_document(
-    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let DocumentParam {
-        document_id,
-        index_uid,
-    } = path.into_inner();
-    let update = Update::DeleteDocuments(vec![document_id]);
-    let task: SummarizedTaskView = meilisearch.register_update(index_uid, update).await?.into();
+    let DocumentParam { document_id, index_uid } = path.into_inner();
+    let task = KindWithContent::DocumentDeletion { index_uid, documents_ids: vec![document_id] };
+    let task: SummarizedTaskView =
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
 }
@@ -134,21 +115,16 @@ pub struct BrowseQuery {
 }
 
 pub async fn get_all_documents(
-    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, MeiliSearch>,
-    path: web::Path<String>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
     params: web::Query<BrowseQuery>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
-    let BrowseQuery {
-        limit,
-        offset,
-        fields,
-    } = params.into_inner();
+    let BrowseQuery { limit, offset, fields } = params.into_inner();
     let attributes_to_retrieve = fields.and_then(fold_star_or);
 
-    let (total, documents) = meilisearch
-        .documents(path.into_inner(), offset, limit, attributes_to_retrieve)
-        .await?;
+    let index = index_scheduler.index(&index_uid)?;
+    let (total, documents) = retrieve_documents(&index, offset, limit, attributes_to_retrieve)?;
 
     let ret = PaginationView::new(offset, limit, total as usize, documents);
 
@@ -163,8 +139,8 @@ pub struct UpdateDocumentsQuery {
 }
 
 pub async fn add_documents(
-    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, MeiliSearch>,
-    path: web::Path<String>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
     req: HttpRequest,
@@ -172,19 +148,14 @@ pub async fn add_documents(
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
     let params = params.into_inner();
-    let index_uid = path.into_inner();
 
-    analytics.add_documents(
-        &params,
-        meilisearch.get_index(index_uid.clone()).await.is_err(),
-        &req,
-    );
+    analytics.add_documents(&params, index_scheduler.index(&index_uid).is_err(), &req);
 
-    let allow_index_creation = meilisearch.filters().allow_index_creation;
+    let allow_index_creation = index_scheduler.filters().allow_index_creation;
     let task = document_addition(
         extract_mime_type(&req)?,
-        meilisearch,
-        index_uid,
+        index_scheduler,
+        index_uid.into_inner(),
         params.primary_key,
         body,
         IndexDocumentsMethod::ReplaceDocuments,
@@ -196,7 +167,7 @@ pub async fn add_documents(
 }
 
 pub async fn update_documents(
-    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
     path: web::Path<String>,
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
@@ -206,16 +177,12 @@ pub async fn update_documents(
     debug!("called with params: {:?}", params);
     let index_uid = path.into_inner();
 
-    analytics.update_documents(
-        &params,
-        meilisearch.get_index(index_uid.clone()).await.is_err(),
-        &req,
-    );
+    analytics.update_documents(&params, index_scheduler.index(&index_uid).is_err(), &req);
 
-    let allow_index_creation = meilisearch.filters().allow_index_creation;
+    let allow_index_creation = index_scheduler.filters().allow_index_creation;
     let task = document_addition(
         extract_mime_type(&req)?,
-        meilisearch,
+        index_scheduler,
         index_uid,
         params.into_inner().primary_key,
         body,
@@ -229,83 +196,202 @@ pub async fn update_documents(
 
 async fn document_addition(
     mime_type: Option<Mime>,
-    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
     index_uid: String,
     primary_key: Option<String>,
-    body: Payload,
+    mut body: Payload,
     method: IndexDocumentsMethod,
     allow_index_creation: bool,
-) -> Result<SummarizedTaskView, ResponseError> {
-    let format = match mime_type
-        .as_ref()
-        .map(|m| (m.type_().as_str(), m.subtype().as_str()))
-    {
-        Some(("application", "json")) => DocumentAdditionFormat::Json,
-        Some(("application", "x-ndjson")) => DocumentAdditionFormat::Ndjson,
-        Some(("text", "csv")) => DocumentAdditionFormat::Csv,
+) -> Result<SummarizedTaskView, MeilisearchHttpError> {
+    let format = match mime_type.as_ref().map(|m| (m.type_().as_str(), m.subtype().as_str())) {
+        Some(("application", "json")) => PayloadType::Json,
+        Some(("application", "x-ndjson")) => PayloadType::Ndjson,
+        Some(("text", "csv")) => PayloadType::Csv,
         Some((type_, subtype)) => {
             return Err(MeilisearchHttpError::InvalidContentType(
                 format!("{}/{}", type_, subtype),
                 ACCEPTED_CONTENT_TYPE.clone(),
-            )
-            .into())
+            ))
         }
         None => {
-            return Err(
-                MeilisearchHttpError::MissingContentType(ACCEPTED_CONTENT_TYPE.clone()).into(),
-            )
+            return Err(MeilisearchHttpError::MissingContentType(ACCEPTED_CONTENT_TYPE.clone()))
         }
     };
 
-    let update = Update::DocumentAddition {
-        payload: Box::new(payload_to_stream(body)),
-        primary_key,
-        method,
-        format,
-        allow_index_creation,
+    // is your indexUid valid?
+    let index_uid = IndexUid::try_from(index_uid)?.into_inner();
+
+    let (uuid, mut update_file) = index_scheduler.create_update_file()?;
+
+    // TODO: this can be slow, maybe we should spawn a thread? But the payload isn't Send+Sync :weary:
+    // push the entire stream into a `Vec`.
+    // If someone sends us a never ending stream we're going to block the thread.
+    // TODO: Maybe we should write it to a file to reduce the RAM consumption
+    // and then reread it to convert it to obkv?
+    let mut buffer = Vec::new();
+    while let Some(bytes) = body.next().await {
+        buffer.extend_from_slice(&bytes?);
+    }
+    if buffer.is_empty() {
+        return Err(MeilisearchHttpError::MissingPayload(format));
+    }
+    let reader = Cursor::new(buffer);
+
+    let documents_count =
+        tokio::task::spawn_blocking(move || -> Result<_, MeilisearchHttpError> {
+            let documents_count = match format {
+                PayloadType::Json => read_json(reader, update_file.as_file_mut())?,
+                PayloadType::Csv => read_csv(reader, update_file.as_file_mut())?,
+                PayloadType::Ndjson => read_ndjson(reader, update_file.as_file_mut())?,
+            };
+            // we NEED to persist the file here because we moved the `udpate_file` in another task.
+            update_file.persist()?;
+            Ok(documents_count)
+        })
+        .await;
+
+    let documents_count = match documents_count {
+        Ok(Ok(documents_count)) => documents_count as u64,
+        // in this case the file has not possibly be persisted.
+        Ok(Err(e)) => return Err(e),
+        Err(e) => {
+            // Here the file MAY have been persisted or not.
+            // We don't know thus we ignore the file not found error.
+            match index_scheduler.delete_update_file(uuid) {
+                Ok(()) => (),
+                Err(index_scheduler::Error::FileStore(file_store::Error::IoError(e)))
+                    if e.kind() == ErrorKind::NotFound => {}
+                Err(e) => {
+                    log::warn!("Unknown error happened while deleting a malformed update file with uuid {uuid}: {e}");
+                }
+            }
+            // We still want to return the original error to the end user.
+            return Err(e.into());
+        }
     };
 
-    let task = meilisearch.register_update(index_uid, update).await?.into();
+    let task = KindWithContent::DocumentAdditionOrUpdate {
+        method,
+        content_file: uuid,
+        documents_count,
+        primary_key,
+        allow_index_creation,
+        index_uid,
+    };
+
+    let scheduler = index_scheduler.clone();
+    let task = match tokio::task::spawn_blocking(move || scheduler.register(task)).await? {
+        Ok(task) => task,
+        Err(e) => {
+            index_scheduler.delete_update_file(uuid)?;
+            return Err(e.into());
+        }
+    };
 
     debug!("returns: {:?}", task);
-    Ok(task)
+    Ok(task.into())
 }
 
 pub async fn delete_documents(
-    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     path: web::Path<String>,
     body: web::Json<Vec<Value>>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", body);
     let ids = body
         .iter()
-        .map(|v| {
-            v.as_str()
-                .map(String::from)
-                .unwrap_or_else(|| v.to_string())
-        })
+        .map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string()))
         .collect();
 
-    let update = Update::DeleteDocuments(ids);
-    let task: SummarizedTaskView = meilisearch
-        .register_update(path.into_inner(), update)
-        .await?
-        .into();
+    let task =
+        KindWithContent::DocumentDeletion { index_uid: path.into_inner(), documents_ids: ids };
+    let task: SummarizedTaskView =
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
 }
 
 pub async fn clear_all_documents(
-    meilisearch: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let update = Update::ClearDocuments;
-    let task: SummarizedTaskView = meilisearch
-        .register_update(path.into_inner(), update)
-        .await?
-        .into();
+    let task = KindWithContent::DocumentClear { index_uid: path.into_inner() };
+    let task: SummarizedTaskView =
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
+}
+
+fn all_documents<'a>(
+    index: &Index,
+    rtxn: &'a RoTxn,
+) -> Result<impl Iterator<Item = Result<Document, ResponseError>> + 'a, ResponseError> {
+    let fields_ids_map = index.fields_ids_map(rtxn)?;
+    let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
+
+    Ok(index.all_documents(rtxn)?.map(move |ret| {
+        ret.map_err(ResponseError::from).and_then(|(_key, document)| -> Result<_, ResponseError> {
+            Ok(milli::obkv_to_json(&all_fields, &fields_ids_map, document)?)
+        })
+    }))
+}
+
+fn retrieve_documents<S: AsRef<str>>(
+    index: &Index,
+    offset: usize,
+    limit: usize,
+    attributes_to_retrieve: Option<Vec<S>>,
+) -> Result<(u64, Vec<Document>), ResponseError> {
+    let rtxn = index.read_txn()?;
+
+    let mut documents = Vec::new();
+    for document in all_documents(index, &rtxn)?.skip(offset).take(limit) {
+        let document = match &attributes_to_retrieve {
+            Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
+                &document?,
+                attributes_to_retrieve.iter().map(|s| s.as_ref()),
+            ),
+            None => document?,
+        };
+        documents.push(document);
+    }
+
+    let number_of_documents = index.number_of_documents(&rtxn)?;
+    Ok((number_of_documents, documents))
+}
+
+fn retrieve_document<S: AsRef<str>>(
+    index: &Index,
+    doc_id: &str,
+    attributes_to_retrieve: Option<Vec<S>>,
+) -> Result<Document, ResponseError> {
+    let txn = index.read_txn()?;
+
+    let fields_ids_map = index.fields_ids_map(&txn)?;
+    let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
+
+    let internal_id = index
+        .external_documents_ids(&txn)?
+        .get(doc_id.as_bytes())
+        .ok_or_else(|| MeilisearchHttpError::DocumentNotFound(doc_id.to_string()))?;
+
+    let document = index
+        .documents(&txn, std::iter::once(internal_id))?
+        .into_iter()
+        .next()
+        .map(|(_, d)| d)
+        .ok_or_else(|| MeilisearchHttpError::DocumentNotFound(doc_id.to_string()))?;
+
+    let document = meilisearch_types::milli::obkv_to_json(&all_fields, &fields_ids_map, document)?;
+    let document = match &attributes_to_retrieve {
+        Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
+            &document,
+            attributes_to_retrieve.iter().map(|s| s.as_ref()),
+        ),
+        None => document,
+    };
+
+    Ok(document)
 }

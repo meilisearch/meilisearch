@@ -1,0 +1,60 @@
+---
+source: index-scheduler/src/lib.rs
+---
+### Autobatching Enabled = true
+### Processing Tasks:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "b", primary_key: Some("id") }}
+1 {uid: 1, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "c", primary_key: Some("id") }}
+2 {uid: 2, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "d", primary_key: Some("id") }}
+3 {uid: 3, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "a", primary_key: Some("id") }}
+4 {uid: 4, status: succeeded, details: { swaps: [IndexSwap { indexes: ("c", "b") }, IndexSwap { indexes: ("a", "d") }] }, kind: IndexSwap { swaps: [IndexSwap { indexes: ("c", "b") }, IndexSwap { indexes: ("a", "d") }] }}
+5 {uid: 5, status: succeeded, details: { swaps: [IndexSwap { indexes: ("a", "c") }] }, kind: IndexSwap { swaps: [IndexSwap { indexes: ("a", "c") }] }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+succeeded [0,1,2,3,4,5,]
+----------------------------------------------------------------------
+### Kind:
+"indexCreation" [0,1,2,3,]
+"indexSwap" [4,5,]
+----------------------------------------------------------------------
+### Index Tasks:
+a [3,4,5,]
+b [0,4,]
+c [1,4,5,]
+d [2,4,]
+----------------------------------------------------------------------
+### Index Mapper:
+["a", "b", "c", "d"]
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+[timestamp] [5,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+[timestamp] [5,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+[timestamp] [5,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------
+
