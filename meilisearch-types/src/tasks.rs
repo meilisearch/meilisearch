@@ -381,6 +381,24 @@ pub enum Kind {
     SnapshotCreation,
 }
 
+impl Kind {
+    pub fn related_to_one_index(&self) -> bool {
+        match self {
+            Kind::DocumentAdditionOrUpdate
+            | Kind::DocumentDeletion
+            | Kind::SettingsUpdate
+            | Kind::IndexCreation
+            | Kind::IndexDeletion
+            | Kind::IndexUpdate => true,
+            Kind::IndexSwap
+            | Kind::TaskCancelation
+            | Kind::TaskDeletion
+            | Kind::DumpCreation
+            | Kind::SnapshotCreation => false,
+        }
+    }
+}
+
 impl FromStr for Kind {
     type Err = ResponseError;
 

@@ -705,7 +705,7 @@ async fn test_summarized_index_swap() {
         ]
       },
       "error": {
-        "message": "Index `doggos` not found.",
+        "message": "Indexes `cattos`, `doggos` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#index_not_found"

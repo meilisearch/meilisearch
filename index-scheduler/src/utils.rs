@@ -1,5 +1,6 @@
 //! Utility functions on the DBs. Mainly getter and setters.
 
+use std::collections::{BTreeSet, HashSet};
 use std::ops::Bound;
 
 use meilisearch_types::heed::types::{DecodeIgnore, OwnedType};
@@ -294,6 +295,33 @@ pub(crate) fn filter_out_references_to_newer_tasks(task: &mut Task) {
     {
         *matched_tasks = new_nbr_of_matched_tasks;
     }
+}
+
+pub(crate) fn check_index_swap_validity(task: &Task) -> Result<()> {
+    let swaps =
+        if let KindWithContent::IndexSwap { swaps } = &task.kind { swaps } else { return Ok(()) };
+    let mut all_indexes = HashSet::new();
+    let mut duplicate_indexes = BTreeSet::new();
+    for IndexSwap { indexes: (lhs, rhs) } in swaps {
+        for name in [lhs, rhs] {
+            let is_new = all_indexes.insert(name);
+            if !is_new {
+                duplicate_indexes.insert(name);
+            }
+        }
+    }
+    if !duplicate_indexes.is_empty() {
+        if duplicate_indexes.len() == 1 {
+            return Err(Error::SwapDuplicateIndexFound(
+                duplicate_indexes.into_iter().next().unwrap().clone(),
+            ));
+        } else {
+            return Err(Error::SwapDuplicateIndexesFound(
+                duplicate_indexes.into_iter().cloned().collect(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
