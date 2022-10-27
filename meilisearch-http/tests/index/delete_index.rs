@@ -44,7 +44,6 @@ async fn error_delete_unexisting_index() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn loop_delete_add_documents() {
     let server = Server::new().await;
     let index = server.index("test");
