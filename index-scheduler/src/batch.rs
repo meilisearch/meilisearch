@@ -875,7 +875,6 @@ impl IndexScheduler {
         }
 
         // 2. Get the task set for index = name that appeared before the index swap task
-
         let mut index_lhs_task_ids = self.index_tasks(wtxn, lhs)?;
         index_lhs_task_ids.remove_range(task_id..);
         let mut index_rhs_task_ids = self.index_tasks(wtxn, rhs)?;
