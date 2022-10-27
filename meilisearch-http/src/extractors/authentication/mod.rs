@@ -60,9 +60,7 @@ impl<P, D> GuardedData<P, D> {
 
                 None => Err(AuthenticationError::IrretrievableState.into()),
             },
-            None if missing_master_key => {
-                Err(AuthenticationError::MissingMasterKey.into())
-            }
+            None if missing_master_key => Err(AuthenticationError::MissingMasterKey.into()),
             None => Err(AuthenticationError::MissingAuthorizationHeader.into()),
         }
     }
