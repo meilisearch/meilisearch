@@ -200,11 +200,9 @@ async fn get_task(
         }
         Some(filters)
     };
-    println!("task_id {:?}", task_id);
     let task: TaskView = meilisearch
         .get_task(task_id.into_inner(), filters)
         .await?
         .into();
-    println!("get_task {:?}", task);
     Ok(HttpResponse::Ok().json(task))
 }

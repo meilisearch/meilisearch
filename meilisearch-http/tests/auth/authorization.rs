@@ -457,13 +457,11 @@ async fn access_authorized_index_patterns() {
     // create products_1 index
     let index_1 = server.index("products_1");
     let (response, code) = index_1.create(Some("id")).await;
-    println!("{response}");
     assert_eq!(202, code, "{:?}", &response);
 
     // create products index
     let index_ = server.index("products");
     let (response, code) = index_.create(Some("id")).await;
-    println!("{response}");
     assert_eq!(202, code, "{:?}", &response);
 
     // create key with all document access on indices with product_* pattern.
@@ -524,19 +522,16 @@ async fn raise_error_non_authorized_index_patterns() {
     // create products_1 index
     let product_1_index = server.index("products_1");
     let (response, code) = product_1_index.create(Some("id")).await;
-    println!("{response}");
     assert_eq!(202, code, "{:?}", &response);
 
     // create products_2 index
     let product_2_index = server.index("products_2");
     let (response, code) = product_2_index.create(Some("id")).await;
-    println!("{response}");
     assert_eq!(202, code, "{:?}", &response);
 
     // create test index
     let test_index = server.index("test");
     let (response, code) = test_index.create(Some("id")).await;
-    println!("{response}");
     assert_eq!(202, code, "{:?}", &response);
 
     // create key with all document access on indices with product_* pattern.
@@ -669,7 +664,6 @@ async fn list_authorized_tasks_restricted_index() {
 
     let (response, code) = server.service.get("/tasks").await;
     assert_eq!(200, code, "{:?}", &response);
-    println!("{}", response);
     let response = response["results"].as_array().unwrap();
     // key should have access on `products` index.
     assert!(response.iter().any(|task| task["indexUid"] == "products"));

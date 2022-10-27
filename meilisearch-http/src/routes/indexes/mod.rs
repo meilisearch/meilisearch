@@ -77,7 +77,6 @@ pub async fn create_index(
     let IndexCreateRequest {
         primary_key, uid, ..
     } = body.into_inner();
-    println!("{}", uid);
     let allow_index_creation = meilisearch
         .filters()
         .search_rules

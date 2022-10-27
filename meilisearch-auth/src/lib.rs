@@ -108,8 +108,6 @@ impl AuthController {
         }
 
         filters.allow_index_creation = self.is_key_authorized(uid, Action::IndexesAdd, None)?;
-        println!("{}", filters.allow_index_creation);
-        println!("{:?}", filters.search_rules);
         Ok(filters)
     }
 
