@@ -78,7 +78,6 @@ static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
 });
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn error_access_expired_key() {
     use std::{thread, time};
 
@@ -110,7 +109,6 @@ async fn error_access_expired_key() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn error_access_unauthorized_index() {
     let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");
@@ -141,7 +139,6 @@ async fn error_access_unauthorized_index() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn error_access_unauthorized_action() {
     let mut server = Server::new_auth().await;
 
@@ -169,7 +166,6 @@ async fn error_access_unauthorized_action() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn access_authorized_master_key() {
     let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");
@@ -184,7 +180,6 @@ async fn access_authorized_master_key() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn access_authorized_restricted_index() {
     let mut server = Server::new_auth().await;
     for ((method, route), actions) in AUTHORIZATIONS.iter() {
@@ -221,7 +216,6 @@ async fn access_authorized_restricted_index() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn access_authorized_no_index_restriction() {
     let mut server = Server::new_auth().await;
 
@@ -259,7 +253,6 @@ async fn access_authorized_no_index_restriction() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn access_authorized_stats_restricted_index() {
     let mut server = Server::new_auth().await;
     server.use_admin_key("MASTER_KEY").await;
@@ -300,7 +293,6 @@ async fn access_authorized_stats_restricted_index() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn access_authorized_stats_no_index_restriction() {
     let mut server = Server::new_auth().await;
     server.use_admin_key("MASTER_KEY").await;
@@ -341,7 +333,6 @@ async fn access_authorized_stats_no_index_restriction() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn list_authorized_indexes_restricted_index() {
     let mut server = Server::new_auth().await;
     server.use_admin_key("MASTER_KEY").await;
@@ -383,7 +374,6 @@ async fn list_authorized_indexes_restricted_index() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn list_authorized_indexes_no_index_restriction() {
     let mut server = Server::new_auth().await;
     server.use_admin_key("MASTER_KEY").await;
