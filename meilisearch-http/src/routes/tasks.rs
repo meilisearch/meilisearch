@@ -465,10 +465,7 @@ async fn get_task(
 
     analytics.publish("Tasks Seen".to_string(), json!({ "per_task_uid": true }), Some(&req));
 
-    let query = index_scheduler::Query {
-        uid: Some(vec![task_id]),
-        ..Query::default()
-    };
+    let query = index_scheduler::Query { uid: Some(vec![task_id]), ..Query::default() };
 
     if let Some(task) = index_scheduler
         .get_tasks_from_authorized_indexes(
