@@ -100,7 +100,7 @@ pub struct Query {
 }
 
 impl Query {
-    /// Return `true` iff every field of the query is set to `None`, such that the query
+    /// Return `true` if every field of the query is set to `None`, such that the query
     /// matches all tasks.
     pub fn is_empty(&self) -> bool {
         matches!(
@@ -569,9 +569,7 @@ impl IndexScheduler {
         let rtxn = self.env.read_txn()?;
         let processing_tasks = self.processing_tasks.read().unwrap().processing.clone();
         let index_tasks = self.index_tasks(&rtxn, index)?;
-
         let nbr_index_processing_tasks = processing_tasks.intersection_len(&index_tasks);
-
         Ok(nbr_index_processing_tasks > 0)
     }
 
@@ -582,7 +580,7 @@ impl IndexScheduler {
     ///
     /// 1. IndexSwap tasks are not publicly associated with any index, but they are associated
     /// with many indexes internally.
-    /// 2. The user may not have the rights to access the tasks (internally) associated wuth all indexes.
+    /// 2. The user may not have the rights to access the tasks (internally) associated with all indexes.
     pub fn get_task_ids_from_authorized_indexes(
         &self,
         rtxn: &RoTxn,
@@ -601,8 +599,8 @@ impl IndexScheduler {
         // must be discarded.
         if let Some(authorized_indexes) = authorized_indexes {
             let all_indexes_iter = self.index_tasks.iter(rtxn)?;
-            for iter_el in all_indexes_iter {
-                let (index, index_tasks) = iter_el?;
+            for result in all_indexes_iter {
+                let (index, index_tasks) = result?;
                 if !authorized_indexes.contains(&index.to_owned()) {
                     tasks -= index_tasks;
                 }
@@ -619,7 +617,7 @@ impl IndexScheduler {
     ///
     /// 1. IndexSwap tasks are not publicly associated with any index, but they are associated
     /// with many indexes internally.
-    /// 2. The user may not have the rights to access the tasks (internally) associated wuth all indexes.
+    /// 2. The user may not have the rights to access the tasks (internally) associated with all indexes.
     pub fn get_tasks_from_authorized_indexes(
         &self,
         query: Query,
