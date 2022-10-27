@@ -41,7 +41,7 @@ pub use error::Error;
 use file_store::FileStore;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
-use meilisearch_types::heed::{self, Database, Env};
+use meilisearch_types::heed::{self, Database, Env, RoTxn};
 use meilisearch_types::milli;
 use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::update::IndexerConfig;
@@ -393,6 +393,10 @@ impl IndexScheduler {
         Ok(this)
     }
 
+    pub fn read_txn(&self) -> Result<RoTxn> {
+        self.env.read_txn().map_err(|e| e.into())
+    }
+
     /// Start the run loop for the given index scheduler.
     ///
     /// This function will execute in a different thread and must be called
@@ -442,10 +446,8 @@ impl IndexScheduler {
         self.index_mapper.indexes(&rtxn)
     }
 
-    /// Return the task ids matched by the given query.
-    pub fn get_task_ids(&self, query: &Query) -> Result<RoaringBitmap> {
-        let rtxn = self.env.read_txn()?;
-
+    /// Return the task ids matched by the given query from the index scheduler's point of view.
+    pub(crate) fn get_task_ids(&self, rtxn: &RoTxn, query: &Query) -> Result<RoaringBitmap> {
         let ProcessingTasks { started_at: started_at_processing, processing: processing_tasks } =
             self.processing_tasks.read().unwrap().clone();
 
@@ -561,10 +563,72 @@ impl IndexScheduler {
         Ok(tasks)
     }
 
-    /// Returns the tasks matched by the given query.
-    pub fn get_tasks(&self, query: Query) -> Result<Vec<Task>> {
-        let tasks = self.get_task_ids(&query)?;
+    /// Return true iff there is at least one task associated with this index
+    /// that is processing.
+    pub fn is_index_processing(&self, index: &str) -> Result<bool> {
         let rtxn = self.env.read_txn()?;
+        let processing_tasks = self.processing_tasks.read().unwrap().processing.clone();
+        let index_tasks = self.index_tasks(&rtxn, index)?;
+
+        let nbr_index_processing_tasks = processing_tasks.intersection_len(&index_tasks);
+
+        Ok(nbr_index_processing_tasks > 0)
+    }
+
+    /// Return the task ids matching the query from the user's point of view.
+    ///
+    /// There are two differences between an internal query and a query executed by
+    /// the user.
+    ///
+    /// 1. IndexSwap tasks are not publicly associated with any index, but they are associated
+    /// with many indexes internally.
+    /// 2. The user may not have the rights to access the tasks (internally) associated wuth all indexes.
+    pub fn get_task_ids_from_authorized_indexes(
+        &self,
+        rtxn: &RoTxn,
+        query: &Query,
+        authorized_indexes: &Option<Vec<String>>,
+    ) -> Result<RoaringBitmap> {
+        let mut tasks = self.get_task_ids(rtxn, &query)?;
+
+        // If the query contains a list of index_uid, then we must exclude IndexSwap tasks
+        // from the result (because it is not publicly associated with any index)
+        if query.index_uid.is_some() {
+            tasks -= self.get_kind(rtxn, Kind::IndexSwap)?
+        }
+
+        // Any task that is internally associated with a non-authorized index
+        // must be discarded.
+        if let Some(authorized_indexes) = authorized_indexes {
+            let all_indexes_iter = self.index_tasks.iter(rtxn)?;
+            for iter_el in all_indexes_iter {
+                let (index, index_tasks) = iter_el?;
+                if !authorized_indexes.contains(&index.to_owned()) {
+                    tasks -= index_tasks;
+                }
+            }
+        }
+
+        Ok(tasks)
+    }
+
+    /// Return the tasks matching the query from the user's point of view.
+    ///
+    /// There are two differences between an internal query and a query executed by
+    /// the user.
+    ///
+    /// 1. IndexSwap tasks are not publicly associated with any index, but they are associated
+    /// with many indexes internally.
+    /// 2. The user may not have the rights to access the tasks (internally) associated wuth all indexes.
+    pub fn get_tasks_from_authorized_indexes(
+        &self,
+        query: Query,
+        authorized_indexes: Option<Vec<String>>,
+    ) -> Result<Vec<Task>> {
+        let rtxn = self.env.read_txn()?;
+
+        let tasks =
+            self.get_task_ids_from_authorized_indexes(&rtxn, &query, &authorized_indexes)?;
 
         let tasks = self.get_existing_tasks(
             &rtxn,
@@ -1187,12 +1251,7 @@ mod tests {
         handle.wait_till(Breakpoint::AfterProcessing);
         index_scheduler.assert_internally_consistent();
 
-        let mut tasks = index_scheduler.get_tasks(Query::default()).unwrap();
-        tasks.reverse();
-        assert_eq!(tasks.len(), 3);
-        assert_eq!(tasks[0].status, Status::Succeeded);
-        assert_eq!(tasks[1].status, Status::Succeeded);
-        assert_eq!(tasks[2].status, Status::Succeeded);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
     }
 
     #[test]
@@ -1231,13 +1290,7 @@ mod tests {
         handle.wait_till(Breakpoint::AfterProcessing);
         index_scheduler.assert_internally_consistent();
 
-        let mut tasks = index_scheduler.get_tasks(Query::default()).unwrap();
-        tasks.reverse();
-        assert_eq!(tasks.len(), 4);
-        assert_eq!(tasks[0].status, Status::Succeeded);
-        assert_eq!(tasks[1].status, Status::Succeeded);
-        assert_eq!(tasks[2].status, Status::Succeeded);
-        assert_eq!(tasks[3].status, Status::Succeeded);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
     }
 
     #[test]
@@ -1493,15 +1546,7 @@ mod tests {
             index_scheduler.assert_internally_consistent();
         }
 
-        let mut tasks = index_scheduler.get_tasks(Query::default()).unwrap();
-        tasks.reverse();
-        assert_eq!(tasks.len(), 6);
-        assert_eq!(tasks[0].status, Status::Succeeded);
-        assert_eq!(tasks[1].status, Status::Succeeded);
-        assert_eq!(tasks[2].status, Status::Succeeded);
-        assert_eq!(tasks[3].status, Status::Succeeded);
-        assert_eq!(tasks[4].status, Status::Succeeded);
-        assert_eq!(tasks[5].status, Status::Succeeded);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
     }
 
     #[test]
@@ -2054,37 +2099,45 @@ mod tests {
 
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "finished");
 
+        let rtxn = index_scheduler.env.read_txn().unwrap();
         let query = Query { limit: Some(0), ..Default::default() };
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[]");
 
         let query = Query { limit: Some(1), ..Default::default() };
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[2,]");
 
         let query = Query { limit: Some(2), ..Default::default() };
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[1,2,]");
 
         let query = Query { from: Some(1), ..Default::default() };
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[0,1,]");
 
         let query = Query { from: Some(2), ..Default::default() };
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[0,1,2,]");
 
         let query = Query { from: Some(1), limit: Some(1), ..Default::default() };
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[1,]");
 
         let query = Query { from: Some(1), limit: Some(2), ..Default::default() };
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[0,1,]");
     }
 
     #[test]
-    fn query_processing_tasks() {
+    fn query_tasks_simple() {
         let start_time = OffsetDateTime::now_utc();
 
         let (index_scheduler, handle) =
@@ -2101,19 +2154,24 @@ mod tests {
 
         handle.wait_till(Breakpoint::BatchCreated);
 
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+
         let query = Query { status: Some(vec![Status::Processing]), ..Default::default() };
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[0,]"); // only the processing tasks in the first tick
 
         let query = Query { status: Some(vec![Status::Enqueued]), ..Default::default() };
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[1,2,]"); // only the enqueued tasks in the first tick
 
         let query = Query {
             status: Some(vec![Status::Enqueued, Status::Processing]),
             ..Default::default()
         };
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[0,1,2,]"); // both enqueued and processing tasks in the first tick
 
         let query = Query {
@@ -2121,7 +2179,8 @@ mod tests {
             after_started_at: Some(start_time),
             ..Default::default()
         };
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         // both enqueued and processing tasks in the first tick, but limited to those with a started_at
         // that comes after the start of the test, which should excludes the enqueued tasks
         snapshot!(snapshot_bitmap(&tasks), @"[0,]");
@@ -2131,7 +2190,8 @@ mod tests {
             before_started_at: Some(start_time),
             ..Default::default()
         };
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         // both enqueued and processing tasks in the first tick, but limited to those with a started_at
         // that comes before the start of the test, which should excludes all of them
         snapshot!(snapshot_bitmap(&tasks), @"[]");
@@ -2142,13 +2202,16 @@ mod tests {
             before_started_at: Some(start_time + Duration::minutes(1)),
             ..Default::default()
         };
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         // both enqueued and processing tasks in the first tick, but limited to those with a started_at
         // that comes after the start of the test and before one minute after the start of the test,
         // which should exclude the enqueued tasks and include the only processing task
         snapshot!(snapshot_bitmap(&tasks), @"[0,]");
 
         handle.wait_till(Breakpoint::BatchCreated);
+
+        let rtxn = index_scheduler.env.read_txn().unwrap();
 
         let second_start_time = OffsetDateTime::now_utc();
 
@@ -2158,7 +2221,8 @@ mod tests {
             before_started_at: Some(start_time + Duration::minutes(1)),
             ..Default::default()
         };
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         // both succeeded and processing tasks in the first tick, but limited to those with a started_at
         // that comes after the start of the test and before one minute after the start of the test,
         // which should include all tasks
@@ -2169,7 +2233,8 @@ mod tests {
             before_started_at: Some(start_time),
             ..Default::default()
         };
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         // both succeeded and processing tasks in the first tick, but limited to those with a started_at
         // that comes before the start of the test, which should exclude all tasks
         snapshot!(snapshot_bitmap(&tasks), @"[]");
@@ -2180,7 +2245,8 @@ mod tests {
             before_started_at: Some(second_start_time + Duration::minutes(1)),
             ..Default::default()
         };
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         // both succeeded and processing tasks in the first tick, but limited to those with a started_at
         // that comes after the start of the second part of the test and before one minute after the
         // second start of the test, which should exclude all tasks
@@ -2188,7 +2254,11 @@ mod tests {
 
         // now we make one more batch, the started_at field of the new tasks will be past `second_start_time`
         handle.wait_till(Breakpoint::BatchCreated);
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         // we run the same query to verify that, and indeed find that the last task is matched
         snapshot!(snapshot_bitmap(&tasks), @"[2,]");
 
@@ -2198,15 +2268,19 @@ mod tests {
             before_started_at: Some(second_start_time + Duration::minutes(1)),
             ..Default::default()
         };
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         // enqueued, succeeded, or processing tasks started after the second part of the test, should
         // again only return the last task
         snapshot!(snapshot_bitmap(&tasks), @"[2,]");
 
         handle.wait_till(Breakpoint::AfterProcessing);
+        let rtxn = index_scheduler.read_txn().unwrap();
+
         // now the last task should have failed
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "end");
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         // so running the last query should return nothing
         snapshot!(snapshot_bitmap(&tasks), @"[]");
 
@@ -2216,7 +2290,8 @@ mod tests {
             before_started_at: Some(second_start_time + Duration::minutes(1)),
             ..Default::default()
         };
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         // but the same query on failed tasks should return the last task
         snapshot!(snapshot_bitmap(&tasks), @"[2,]");
 
@@ -2226,7 +2301,8 @@ mod tests {
             before_started_at: Some(second_start_time + Duration::minutes(1)),
             ..Default::default()
         };
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         // but the same query on failed tasks should return the last task
         snapshot!(snapshot_bitmap(&tasks), @"[2,]");
 
@@ -2237,7 +2313,8 @@ mod tests {
             before_started_at: Some(second_start_time + Duration::minutes(1)),
             ..Default::default()
         };
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         // same query but with an invalid uid
         snapshot!(snapshot_bitmap(&tasks), @"[]");
 
@@ -2248,9 +2325,75 @@ mod tests {
             before_started_at: Some(second_start_time + Duration::minutes(1)),
             ..Default::default()
         };
-        let tasks = index_scheduler.get_task_ids(&query).unwrap();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         // same query but with a valid uid
         snapshot!(snapshot_bitmap(&tasks), @"[2,]");
+    }
+
+    #[test]
+    fn query_tasks_special_rules() {
+        let (index_scheduler, handle) =
+            IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
+
+        let kind = index_creation_task("catto", "mouse");
+        let _task = index_scheduler.register(kind).unwrap();
+        let kind = index_creation_task("doggo", "sheep");
+        let _task = index_scheduler.register(kind).unwrap();
+        let kind = KindWithContent::IndexSwap {
+            swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "doggo".to_owned()) }],
+        };
+        let _task = index_scheduler.register(kind).unwrap();
+        let kind = KindWithContent::IndexSwap {
+            swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "whalo".to_owned()) }],
+        };
+        let _task = index_scheduler.register(kind).unwrap();
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
+
+        handle.wait_till(Breakpoint::BatchCreated);
+
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+
+        let query = Query { index_uid: Some(vec!["catto".to_owned()]), ..Default::default() };
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
+        // only the first task associated with catto is returned, the indexSwap tasks are excluded!
+        snapshot!(snapshot_bitmap(&tasks), @"[0,]");
+
+        let query = Query { index_uid: Some(vec!["catto".to_owned()]), ..Default::default() };
+        let tasks = index_scheduler
+            .get_task_ids_from_authorized_indexes(&rtxn, &query, &Some(vec!["doggo".to_owned()]))
+            .unwrap();
+        // we have asked for only the tasks associated with catto, but are only authorized to retrieve the tasks
+        // associated with doggo -> empty result
+        snapshot!(snapshot_bitmap(&tasks), @"[]");
+
+        let query = Query::default();
+        let tasks = index_scheduler
+            .get_task_ids_from_authorized_indexes(&rtxn, &query, &Some(vec!["doggo".to_owned()]))
+            .unwrap();
+        // we asked for all the tasks, but we are only authorized to retrieve the doggo tasks
+        // -> only the index creation of doggo should be returned
+        snapshot!(snapshot_bitmap(&tasks), @"[1,]");
+
+        let query = Query::default();
+        let tasks = index_scheduler
+            .get_task_ids_from_authorized_indexes(
+                &rtxn,
+                &query,
+                &Some(vec!["catto".to_owned(), "doggo".to_owned()]),
+            )
+            .unwrap();
+        // we asked for all the tasks, but we are only authorized to retrieve the doggo and catto tasks
+        // -> all tasks except the swap of catto with whalo are returned
+        snapshot!(snapshot_bitmap(&tasks), @"[0,1,2,]");
+
+        let query = Query::default();
+        let tasks =
+            index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
+        // we asked for all the tasks with all index authorized -> all tasks returned
+        snapshot!(snapshot_bitmap(&tasks), @"[0,1,2,3,]");
     }
 
     #[test]

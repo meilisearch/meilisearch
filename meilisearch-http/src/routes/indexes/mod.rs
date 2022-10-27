@@ -1,11 +1,11 @@
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use index_scheduler::{IndexScheduler, Query};
+use index_scheduler::IndexScheduler;
 use log::debug;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::{self, FieldDistribution, Index};
-use meilisearch_types::tasks::{KindWithContent, Status};
+use meilisearch_types::tasks::KindWithContent;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
@@ -202,14 +202,7 @@ impl IndexStats {
         index_uid: String,
     ) -> Result<Self, ResponseError> {
         // we check if there is currently a task processing associated with this index.
-        let processing_task = index_scheduler.get_tasks(Query {
-            status: Some(vec![Status::Processing]),
-            index_uid: Some(vec![index_uid.clone()]),
-            limit: Some(1),
-            ..Query::default()
-        })?;
-        let is_processing = !processing_task.is_empty();
-
+        let is_processing = index_scheduler.is_index_processing(&index_uid)?;
         let index = index_scheduler.index(&index_uid)?;
         let rtxn = index.read_txn()?;
         Ok(IndexStats {

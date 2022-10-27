@@ -1,0 +1,59 @@
+---
+source: index-scheduler/src/lib.rs
+---
+### Autobatching Enabled = true
+### Processing Tasks:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, status: succeeded, details: { primary_key: None }, kind: IndexCreation { index_uid: "doggos", primary_key: None }}
+1 {uid: 1, status: succeeded, details: { primary_key: None }, kind: IndexCreation { index_uid: "cattos", primary_key: None }}
+2 {uid: 2, status: succeeded, details: { primary_key: None }, kind: IndexCreation { index_uid: "girafos", primary_key: None }}
+3 {uid: 3, status: succeeded, details: { deleted_documents: Some(0) }, kind: DocumentClear { index_uid: "doggos" }}
+4 {uid: 4, status: succeeded, details: { deleted_documents: Some(0) }, kind: DocumentClear { index_uid: "cattos" }}
+5 {uid: 5, status: succeeded, details: { deleted_documents: Some(0) }, kind: DocumentClear { index_uid: "girafos" }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+succeeded [0,1,2,3,4,5,]
+----------------------------------------------------------------------
+### Kind:
+"documentDeletion" [3,4,5,]
+"indexCreation" [0,1,2,]
+----------------------------------------------------------------------
+### Index Tasks:
+cattos [1,4,]
+doggos [0,3,]
+girafos [2,5,]
+----------------------------------------------------------------------
+### Index Mapper:
+["cattos", "doggos", "girafos"]
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+[timestamp] [5,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+[timestamp] [5,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+[timestamp] [5,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------
+

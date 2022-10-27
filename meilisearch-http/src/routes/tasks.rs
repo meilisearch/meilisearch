@@ -291,8 +291,11 @@ async fn cancel_tasks(
         return Err(index_scheduler::Error::TaskCancelationWithEmptyQuery.into());
     }
 
-    let filtered_query = filter_out_inaccessible_indexes_from_query(&index_scheduler, &query);
-    let tasks = index_scheduler.get_task_ids(&filtered_query)?;
+    let tasks = index_scheduler.get_task_ids_from_authorized_indexes(
+        &index_scheduler.read_txn()?,
+        &query,
+        &index_scheduler.filters().search_rules.authorized_indexes(),
+    )?;
     let task_cancelation =
         KindWithContent::TaskCancelation { query: req.query_string().to_string(), tasks };
 
@@ -348,8 +351,11 @@ async fn delete_tasks(
         return Err(index_scheduler::Error::TaskDeletionWithEmptyQuery.into());
     }
 
-    let filtered_query = filter_out_inaccessible_indexes_from_query(&index_scheduler, &query);
-    let tasks = index_scheduler.get_task_ids(&filtered_query)?;
+    let tasks = index_scheduler.get_task_ids_from_authorized_indexes(
+        &index_scheduler.read_txn()?,
+        &query,
+        &index_scheduler.filters().search_rules.authorized_indexes(),
+    )?;
     let task_deletion =
         KindWithContent::TaskDeletion { query: req.query_string().to_string(), tasks };
 
@@ -425,10 +431,15 @@ async fn get_tasks(
         before_finished_at,
         after_finished_at,
     };
-    let query = filter_out_inaccessible_indexes_from_query(&index_scheduler, &query);
 
-    let mut tasks_results: Vec<TaskView> =
-        index_scheduler.get_tasks(query)?.into_iter().map(|t| TaskView::from_task(&t)).collect();
+    let mut tasks_results: Vec<TaskView> = index_scheduler
+        .get_tasks_from_authorized_indexes(
+            query,
+            index_scheduler.filters().search_rules.authorized_indexes(),
+        )?
+        .into_iter()
+        .map(|t| TaskView::from_task(&t))
+        .collect();
 
     // If we were able to fetch the number +1 tasks we asked
     // it means that there is more to come.
@@ -454,55 +465,21 @@ async fn get_task(
 
     analytics.publish("Tasks Seen".to_string(), json!({ "per_task_uid": true }), Some(&req));
 
-    let search_rules = &index_scheduler.filters().search_rules;
-    let mut filters = index_scheduler::Query::default();
-    if !search_rules.is_index_authorized("*") {
-        for (index, _policy) in search_rules.clone() {
-            filters = filters.with_index(index);
-        }
-    }
+    let mut query = index_scheduler::Query::default();
+    query.uid = Some(vec![task_id]);
 
-    filters.uid = Some(vec![task_id]);
-
-    if let Some(task) = index_scheduler.get_tasks(filters)?.first() {
+    if let Some(task) = index_scheduler
+        .get_tasks_from_authorized_indexes(
+            query,
+            index_scheduler.filters().search_rules.authorized_indexes(),
+        )?
+        .first()
+    {
         let task_view = TaskView::from_task(task);
         Ok(HttpResponse::Ok().json(task_view))
     } else {
         Err(index_scheduler::Error::TaskNotFound(task_id).into())
     }
-}
-
-fn filter_out_inaccessible_indexes_from_query<const ACTION: u8>(
-    index_scheduler: &GuardedData<ActionPolicy<ACTION>, Data<IndexScheduler>>,
-    query: &Query,
-) -> Query {
-    let mut query = query.clone();
-
-    // First remove all indexes from the query, we will add them back later
-    let indexes = query.index_uid.take();
-
-    let search_rules = &index_scheduler.filters().search_rules;
-
-    // We filter on potential indexes and make sure that the search filter
-    // restrictions are also applied.
-    match indexes {
-        Some(indexes) => {
-            for name in indexes.iter() {
-                if search_rules.is_index_authorized(name) {
-                    query = query.with_index(name.to_string());
-                }
-            }
-        }
-        None => {
-            if !search_rules.is_index_authorized("*") {
-                for (index, _policy) in search_rules.clone() {
-                    query = query.with_index(index.to_string());
-                }
-            }
-        }
-    };
-
-    query
 }
 
 pub(crate) mod date_deserializer {
