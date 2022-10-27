@@ -8,6 +8,7 @@ use crate::common::{default_settings, GetAllDocumentsOptions, Server};
 
 // all the following test are ignored on windows. See #2364
 #[actix_rt::test]
+#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v1() {
     let temp = tempfile::tempdir().unwrap();
 
