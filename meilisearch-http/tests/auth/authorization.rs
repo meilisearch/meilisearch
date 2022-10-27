@@ -80,13 +80,15 @@ static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
     })
 });
 
+const MASTER_KEY: &str = "MASTER_KEY";
+
 #[actix_rt::test]
 #[cfg_attr(target_os = "windows", ignore)]
 async fn error_access_expired_key() {
     use std::{thread, time};
 
     let mut server = Server::new_auth().await;
-    server.use_api_key("MASTER_KEY");
+    server.use_api_key(MASTER_KEY);
 
     let content = json!({
         "indexes": ["products"],
@@ -122,7 +124,7 @@ async fn error_access_expired_key() {
 #[cfg_attr(target_os = "windows", ignore)]
 async fn error_access_unauthorized_index() {
     let mut server = Server::new_auth().await;
-    server.use_api_key("MASTER_KEY");
+    server.use_api_key(MASTER_KEY);
 
     let content = json!({
         "indexes": ["sales"],
@@ -162,7 +164,7 @@ async fn error_access_unauthorized_action() {
 
     for ((method, route), action) in AUTHORIZATIONS.iter() {
         // create a new API key letting only the needed action.
-        server.use_api_key("MASTER_KEY");
+        server.use_api_key(MASTER_KEY);
 
         let content = json!({
             "indexes": ["products"],
@@ -193,7 +195,7 @@ async fn error_access_unauthorized_action() {
 #[cfg_attr(target_os = "windows", ignore)]
 async fn access_authorized_master_key() {
     let mut server = Server::new_auth().await;
-    server.use_api_key("MASTER_KEY");
+    server.use_api_key(MASTER_KEY);
 
     // master key must have access to all routes.
     for ((method, route), _) in AUTHORIZATIONS.iter() {
@@ -217,7 +219,7 @@ async fn access_authorized_restricted_index() {
     for ((method, route), actions) in AUTHORIZATIONS.iter() {
         for action in actions {
             // create a new API key letting only the needed action.
-            server.use_api_key("MASTER_KEY");
+            server.use_api_key(MASTER_KEY);
 
             let content = json!({
                 "indexes": ["products"],
@@ -255,7 +257,7 @@ async fn access_authorized_no_index_restriction() {
     for ((method, route), actions) in AUTHORIZATIONS.iter() {
         for action in actions {
             // create a new API key letting only the needed action.
-            server.use_api_key("MASTER_KEY");
+            server.use_api_key(MASTER_KEY);
 
             let content = json!({
                 "indexes": ["*"],
@@ -289,7 +291,7 @@ async fn access_authorized_no_index_restriction() {
 #[cfg_attr(target_os = "windows", ignore)]
 async fn access_authorized_stats_restricted_index() {
     let mut server = Server::new_auth().await;
-    server.use_admin_key("MASTER_KEY").await;
+    server.use_admin_key(MASTER_KEY).await;
 
     // create index `test`
     let index = server.index("test");
@@ -329,7 +331,7 @@ async fn access_authorized_stats_restricted_index() {
 #[cfg_attr(target_os = "windows", ignore)]
 async fn access_authorized_stats_no_index_restriction() {
     let mut server = Server::new_auth().await;
-    server.use_admin_key("MASTER_KEY").await;
+    server.use_admin_key(MASTER_KEY).await;
 
     // create index `test`
     let index = server.index("test");
@@ -369,7 +371,7 @@ async fn access_authorized_stats_no_index_restriction() {
 #[cfg_attr(target_os = "windows", ignore)]
 async fn list_authorized_indexes_restricted_index() {
     let mut server = Server::new_auth().await;
-    server.use_admin_key("MASTER_KEY").await;
+    server.use_admin_key(MASTER_KEY).await;
 
     // create index `test`
     let index = server.index("test");
@@ -410,7 +412,7 @@ async fn list_authorized_indexes_restricted_index() {
 #[cfg_attr(target_os = "windows", ignore)]
 async fn list_authorized_indexes_no_index_restriction() {
     let mut server = Server::new_auth().await;
-    server.use_admin_key("MASTER_KEY").await;
+    server.use_admin_key(MASTER_KEY).await;
 
     // create index `test`
     let index = server.index("test");
@@ -450,7 +452,7 @@ async fn list_authorized_indexes_no_index_restriction() {
 #[actix_rt::test]
 async fn access_authorized_index_patterns() {
     let mut server = Server::new_auth().await;
-    server.use_admin_key("MASTER_KEY").await;
+    server.use_admin_key(MASTER_KEY).await;
 
     // create products_1 index
     let index_1 = server.index("products_1");
@@ -502,7 +504,7 @@ async fn access_authorized_index_patterns() {
     let (response, code) = index_.add_documents(documents, None).await;
     assert_eq!(403, code, "{:?}", &response);
 
-    server.use_api_key("MASTER_KEY");
+    server.use_api_key(MASTER_KEY);
 
     // refer to products_1 with modified api key.
     let index_1 = server.index("products_1");
@@ -517,7 +519,7 @@ async fn access_authorized_index_patterns() {
 #[actix_rt::test]
 async fn raise_error_non_authorized_index_patterns() {
     let mut server = Server::new_auth().await;
-    server.use_admin_key("MASTER_KEY").await;
+    server.use_admin_key(MASTER_KEY).await;
 
     // create products_1 index
     let product_1_index = server.index("products_1");
@@ -582,7 +584,7 @@ async fn raise_error_non_authorized_index_patterns() {
     let (response, code) = test_index.add_documents(documents, None).await;
     assert_eq!(403, code, "{:?}", &response);
 
-    server.use_api_key("MASTER_KEY");
+    server.use_api_key(MASTER_KEY);
 
     // refer to products_1 with modified api key.
     let product_1_index = server.index("products_1");
@@ -602,9 +604,15 @@ async fn raise_error_non_authorized_index_patterns() {
 }
 
 #[actix_rt::test]
+async fn pattern_search() {
+    let server = Server::new_auth().await;
+    server.use_admin_key(MASTER_KEY).await
+}
+
+#[actix_rt::test]
 async fn list_authorized_tasks_restricted_index() {
     let mut server = Server::new_auth().await;
-    server.use_admin_key("MASTER_KEY").await;
+    server.use_admin_key(MASTER_KEY).await;
 
     // create index `test`
     let index = server.index("test");
@@ -644,7 +652,7 @@ async fn list_authorized_tasks_restricted_index() {
 #[actix_rt::test]
 async fn list_authorized_tasks_no_index_restriction() {
     let mut server = Server::new_auth().await;
-    server.use_admin_key("MASTER_KEY").await;
+    server.use_admin_key(MASTER_KEY).await;
 
     // create index `test`
     let index = server.index("test");
@@ -684,7 +692,7 @@ async fn list_authorized_tasks_no_index_restriction() {
 #[actix_rt::test]
 async fn error_creating_index_without_action() {
     let mut server = Server::new_auth().await;
-    server.use_api_key("MASTER_KEY");
+    server.use_api_key(MASTER_KEY);
 
     // create key with access on all indexes.
     let content = json!({
@@ -772,7 +780,7 @@ async fn lazy_create_index() {
     ];
 
     for content in contents {
-        server.use_api_key("MASTER_KEY");
+        server.use_api_key(MASTER_KEY);
         let (response, code) = server.add_api_key(content).await;
         assert_eq!(201, code, "{:?}", &response);
         assert!(response["key"].is_string());
@@ -831,7 +839,7 @@ async fn lazy_create_index() {
 #[actix_rt::test]
 async fn error_creating_index_without_index() {
     let mut server = Server::new_auth().await;
-    server.use_api_key("MASTER_KEY");
+    server.use_api_key(MASTER_KEY);
 
     // create key with access on all indexes.
     let content = json!({
