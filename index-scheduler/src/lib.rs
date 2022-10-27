@@ -589,10 +589,12 @@ impl IndexScheduler {
     ) -> Result<RoaringBitmap> {
         let mut tasks = self.get_task_ids(rtxn, query)?;
 
-        // If the query contains a list of index_uid, then we must exclude IndexSwap tasks
-        // from the result (because it is not publicly associated with any index)
+        // If the query contains a list of `index_uid`, then we must exclude all the kind that
+        // arn't associated to one and only one index.
         if query.index_uid.is_some() {
-            tasks -= self.get_kind(rtxn, Kind::IndexSwap)?
+            for kind in enum_iterator::all::<Kind>().filter(|kind| !kind.related_to_one_index()) {
+                tasks -= self.get_kind(rtxn, kind)?;
+            }
         }
 
         // Any task that is internally associated with a non-authorized index
