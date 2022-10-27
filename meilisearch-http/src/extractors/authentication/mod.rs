@@ -48,6 +48,8 @@ impl<P, D> GuardedData<P, D> {
     where
         P: Policy + 'static,
     {
+        let missing_master_key = auth.get_master_key().is_none();
+
         match Self::authenticate(auth, String::new(), None).await? {
             Some(filters) => match data {
                 Some(data) => Ok(Self {
@@ -55,8 +57,10 @@ impl<P, D> GuardedData<P, D> {
                     filters,
                     _marker: PhantomData,
                 }),
+
                 None => Err(AuthenticationError::IrretrievableState.into()),
             },
+            None if missing_master_key => Err(AuthenticationError::MissingMasterKey.into()),
             None => Err(AuthenticationError::MissingAuthorizationHeader.into()),
         }
     }

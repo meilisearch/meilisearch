@@ -144,6 +144,7 @@ pub enum Code {
     InvalidStore,
     InvalidToken,
     MissingAuthorizationHeader,
+    MissingMasterKey,
     NoSpaceLeftOnDevice,
     DumpNotFound,
     TaskNotFound,
@@ -230,6 +231,9 @@ impl Code {
             InvalidToken => ErrCode::authentication("invalid_api_key", StatusCode::FORBIDDEN),
             MissingAuthorizationHeader => {
                 ErrCode::authentication("missing_authorization_header", StatusCode::UNAUTHORIZED)
+            }
+            MissingMasterKey => {
+                ErrCode::authentication("missing_master_key", StatusCode::UNAUTHORIZED)
             }
             TaskNotFound => ErrCode::invalid("task_not_found", StatusCode::NOT_FOUND),
             DumpNotFound => ErrCode::invalid("dump_not_found", StatusCode::NOT_FOUND),

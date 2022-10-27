@@ -1403,10 +1403,10 @@ async fn error_access_api_key_routes_no_master_key_set() {
     let mut server = Server::new().await;
 
     let expected_response = json!({
-        "message": "The Authorization header is missing. It must use the bearer authorization method.",
-        "code": "missing_authorization_header",
+        "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
+        "code": "missing_master_key",
         "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+        "link": "https://docs.meilisearch.com/errors#missing_master_key"
     });
     let expected_code = 401;
 
