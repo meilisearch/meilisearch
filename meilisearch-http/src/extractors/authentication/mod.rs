@@ -48,8 +48,7 @@ impl<P, D> GuardedData<P, D> {
     where
         P: Policy + 'static,
     {
-        let auth_clone = auth.clone();
-        let master_key: Option<&String> = auth_clone.get_master_key();
+        let missing_master_key = auth.get_master_key().is_none();
 
         match Self::authenticate(auth, String::new(), None).await? {
             Some(filters) => match data {
@@ -61,10 +60,10 @@ impl<P, D> GuardedData<P, D> {
 
                 None => Err(AuthenticationError::IrretrievableState.into()),
             },
-            None => match master_key {
-                Some(_) => Err(AuthenticationError::MissingAuthorizationHeader.into()),
-                None => Err(AuthenticationError::MissingMasterKey.into()),
-            },
+            None if missing_master_key => {
+                Err(AuthenticationError::MissingMasterKey.into())
+            }
+            None => Err(AuthenticationError::MissingAuthorizationHeader.into()),
         }
     }
 
