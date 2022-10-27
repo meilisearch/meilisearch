@@ -451,7 +451,7 @@ impl IndexScheduler {
         let ProcessingTasks { started_at: started_at_processing, processing: processing_tasks } =
             self.processing_tasks.read().unwrap().clone();
 
-        let mut tasks = self.all_task_ids(&rtxn)?;
+        let mut tasks = self.all_task_ids(rtxn)?;
 
         if let Some(from) = &query.from {
             tasks.remove_range(from.saturating_add(1)..);
@@ -465,7 +465,7 @@ impl IndexScheduler {
                     Status::Processing => {
                         status_tasks |= &processing_tasks;
                     }
-                    status => status_tasks |= &self.get_status(&rtxn, *status)?,
+                    status => status_tasks |= &self.get_status(rtxn, *status)?,
                 };
             }
             if !status.contains(&Status::Processing) {
@@ -482,7 +482,7 @@ impl IndexScheduler {
         if let Some(kind) = &query.kind {
             let mut kind_tasks = RoaringBitmap::new();
             for kind in kind {
-                kind_tasks |= self.get_kind(&rtxn, *kind)?;
+                kind_tasks |= self.get_kind(rtxn, *kind)?;
             }
             tasks &= &kind_tasks;
         }
@@ -490,7 +490,7 @@ impl IndexScheduler {
         if let Some(index) = &query.index_uid {
             let mut index_tasks = RoaringBitmap::new();
             for index in index {
-                index_tasks |= self.index_tasks(&rtxn, index)?;
+                index_tasks |= self.index_tasks(rtxn, index)?;
             }
             tasks &= &index_tasks;
         }
@@ -531,7 +531,7 @@ impl IndexScheduler {
             };
 
             keep_tasks_within_datetimes(
-                &rtxn,
+                rtxn,
                 &mut filtered_non_processing_tasks,
                 self.started_at,
                 query.after_started_at,
@@ -541,7 +541,7 @@ impl IndexScheduler {
         };
 
         keep_tasks_within_datetimes(
-            &rtxn,
+            rtxn,
             &mut tasks,
             self.enqueued_at,
             query.after_enqueued_at,
@@ -549,7 +549,7 @@ impl IndexScheduler {
         )?;
 
         keep_tasks_within_datetimes(
-            &rtxn,
+            rtxn,
             &mut tasks,
             self.finished_at,
             query.after_finished_at,
@@ -589,7 +589,7 @@ impl IndexScheduler {
         query: &Query,
         authorized_indexes: &Option<Vec<String>>,
     ) -> Result<RoaringBitmap> {
-        let mut tasks = self.get_task_ids(rtxn, &query)?;
+        let mut tasks = self.get_task_ids(rtxn, query)?;
 
         // If the query contains a list of index_uid, then we must exclude IndexSwap tasks
         // from the result (because it is not publicly associated with any index)
