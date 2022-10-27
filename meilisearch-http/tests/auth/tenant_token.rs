@@ -203,7 +203,6 @@ macro_rules! compute_forbidden_search {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn search_authorized_simple_token() {
     let tenant_tokens = vec![
         hashmap! {
@@ -252,7 +251,6 @@ async fn search_authorized_simple_token() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn search_authorized_filter_token() {
     let tenant_tokens = vec![
         hashmap! {
@@ -306,7 +304,6 @@ async fn search_authorized_filter_token() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn filter_search_authorized_filter_token() {
     let tenant_tokens = vec![
         hashmap! {
@@ -360,7 +357,6 @@ async fn filter_search_authorized_filter_token() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn error_search_token_forbidden_parent_key() {
     let tenant_tokens = vec![
         hashmap! {
@@ -393,7 +389,6 @@ async fn error_search_token_forbidden_parent_key() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn error_search_forbidden_token() {
     let tenant_tokens = vec![
         // bad index
@@ -448,7 +443,6 @@ async fn error_search_forbidden_token() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn error_access_forbidden_routes() {
     let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");
@@ -483,7 +477,6 @@ async fn error_access_forbidden_routes() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn error_access_expired_parent_key() {
     use std::{thread, time};
     let mut server = Server::new_auth().await;
@@ -523,7 +516,6 @@ async fn error_access_expired_parent_key() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn error_access_modified_token() {
     let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");
