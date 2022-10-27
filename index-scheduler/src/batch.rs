@@ -41,7 +41,7 @@ use uuid::Uuid;
 
 use crate::autobatcher::{self, BatchKind};
 use crate::utils::{self, swap_index_uid_in_task};
-use crate::{Error, IndexScheduler, Query, Result, TaskId};
+use crate::{Error, IndexScheduler, Result, TaskId};
 
 /// Represents a combination of tasks that can all be processed at the same time.
 ///
@@ -875,11 +875,10 @@ impl IndexScheduler {
         }
 
         // 2. Get the task set for index = name that appeared before the index swap task
-        let mut index_lhs_task_ids =
-            self.get_task_ids(&Query::default().with_index(lhs.to_owned()))?;
+
+        let mut index_lhs_task_ids = self.index_tasks(wtxn, lhs)?;
         index_lhs_task_ids.remove_range(task_id..);
-        let mut index_rhs_task_ids =
-            self.get_task_ids(&Query::default().with_index(rhs.to_owned()))?;
+        let mut index_rhs_task_ids = self.index_tasks(wtxn, rhs)?;
         index_rhs_task_ids.remove_range(task_id..);
 
         // 3. before_name -> new_name in the task's KindWithContent

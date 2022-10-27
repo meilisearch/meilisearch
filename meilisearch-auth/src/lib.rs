@@ -215,6 +215,27 @@ impl SearchRules {
             }
         }
     }
+
+    /// Return the list of indexes such that `self.is_index_authorized(index) == true`,
+    /// or `None` if all indexes satisfy this condition.
+    pub fn authorized_indexes(&self) -> Option<Vec<String>> {
+        match self {
+            SearchRules::Set(set) => {
+                if set.contains("*") {
+                    None
+                } else {
+                    Some(set.iter().cloned().collect())
+                }
+            }
+            SearchRules::Map(map) => {
+                if map.contains_key("*") {
+                    None
+                } else {
+                    Some(map.keys().cloned().collect())
+                }
+            }
+        }
+    }
 }
 
 impl IntoIterator for SearchRules {
