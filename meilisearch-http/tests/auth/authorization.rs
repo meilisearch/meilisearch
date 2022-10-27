@@ -272,7 +272,8 @@ async fn access_authorized_stats_restricted_index() {
     let index = server.index("products");
     let (response, code) = index.create(Some("product_id")).await;
     assert_eq!(202, code, "{:?}", &response);
-    index.wait_task(0).await;
+    let task_id = response["taskUid"].as_u64().unwrap();
+    index.wait_task(task_id).await;
 
     // create key with access on `products` index only.
     let content = json!({
@@ -312,7 +313,8 @@ async fn access_authorized_stats_no_index_restriction() {
     let index = server.index("products");
     let (response, code) = index.create(Some("product_id")).await;
     assert_eq!(202, code, "{:?}", &response);
-    index.wait_task(0).await;
+    let task_id = response["taskUid"].as_u64().unwrap();
+    index.wait_task(task_id).await;
 
     // create key with access on all indexes.
     let content = json!({
@@ -352,7 +354,8 @@ async fn list_authorized_indexes_restricted_index() {
     let index = server.index("products");
     let (response, code) = index.create(Some("product_id")).await;
     assert_eq!(202, code, "{:?}", &response);
-    index.wait_task(0).await;
+    let task_id = response["taskUid"].as_u64().unwrap();
+    index.wait_task(task_id).await;
 
     // create key with access on `products` index only.
     let content = json!({
@@ -393,7 +396,8 @@ async fn list_authorized_indexes_no_index_restriction() {
     let index = server.index("products");
     let (response, code) = index.create(Some("product_id")).await;
     assert_eq!(202, code, "{:?}", &response);
-    index.wait_task(0).await;
+    let task_id = response["taskUid"].as_u64().unwrap();
+    index.wait_task(task_id).await;
 
     // create key with access on all indexes.
     let content = json!({
@@ -433,7 +437,8 @@ async fn list_authorized_tasks_restricted_index() {
     let index = server.index("products");
     let (response, code) = index.create(Some("product_id")).await;
     assert_eq!(202, code, "{:?}", &response);
-    index.wait_task(0).await;
+    let task_id = response["taskUid"].as_u64().unwrap();
+    index.wait_task(task_id).await;
 
     // create key with access on `products` index only.
     let content = json!({
@@ -473,7 +478,8 @@ async fn list_authorized_tasks_no_index_restriction() {
     let index = server.index("products");
     let (response, code) = index.create(Some("product_id")).await;
     assert_eq!(202, code, "{:?}", &response);
-    index.wait_task(0).await;
+    let task_id = response["taskUid"].as_u64().unwrap();
+    index.wait_task(task_id).await;
 
     // create key with access on all indexes.
     let content = json!({
