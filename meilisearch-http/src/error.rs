@@ -24,20 +24,6 @@ pub enum MeilisearchHttpError {
     MissingPayload(PayloadType),
     #[error("The provided payload reached the size limit.")]
     PayloadTooLarge,
-    #[error(
-        "Indexes {} not found.",
-        .0.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
-    )]
-    IndexesNotFound(Vec<String>),
-    #[error(
-        "Indexes must be declared only once during a swap. `{0}` was specified several times."
-    )]
-    SwapDuplicateIndexFound(String),
-    #[error(
-        "Indexes must be declared only once during a swap. {} were specified several times.",
-        .0.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
-    )]
-    SwapDuplicateIndexesFound(Vec<String>),
     #[error("Two indexes must be given for each swap. The list `{:?}` contains {} indexes.",
         .0, .0.len()
     )]
@@ -71,9 +57,6 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::DocumentNotFound(_) => Code::DocumentNotFound,
             MeilisearchHttpError::InvalidExpression(_, _) => Code::Filter,
             MeilisearchHttpError::PayloadTooLarge => Code::PayloadTooLarge,
-            MeilisearchHttpError::IndexesNotFound(_) => Code::IndexNotFound,
-            MeilisearchHttpError::SwapDuplicateIndexFound(_) => Code::DuplicateIndexFound,
-            MeilisearchHttpError::SwapDuplicateIndexesFound(_) => Code::DuplicateIndexFound,
             MeilisearchHttpError::SwapIndexPayloadWrongLength(_) => Code::BadRequest,
             MeilisearchHttpError::IndexUid(e) => e.error_code(),
             MeilisearchHttpError::SerdeJson(_) => Code::Internal,

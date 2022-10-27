@@ -17,7 +17,7 @@ tasks individally, but should be much faster since we are only performing
 one indexing operation.
 */
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::BufWriter;
@@ -33,7 +33,7 @@ use meilisearch_types::milli::update::{
 };
 use meilisearch_types::milli::{self, BEU32};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
-use meilisearch_types::tasks::{Details, Kind, KindWithContent, Status, Task};
+use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::{compression, Index, VERSION_FILE_NAME};
 use roaring::RoaringBitmap;
 use time::OffsetDateTime;
@@ -832,6 +832,26 @@ impl IndexScheduler {
                 } else {
                     unreachable!()
                 };
+                let mut not_found_indexes = BTreeSet::new();
+                for IndexSwap { indexes: (lhs, rhs) } in swaps {
+                    for index in [lhs, rhs] {
+                        let index_exists = self.index_mapper.index_exists(&wtxn, index)?;
+                        if !index_exists {
+                            not_found_indexes.insert(index);
+                        }
+                    }
+                }
+                if !not_found_indexes.is_empty() {
+                    if not_found_indexes.len() == 1 {
+                        return Err(Error::IndexNotFound(
+                            not_found_indexes.into_iter().next().unwrap().clone(),
+                        ));
+                    } else {
+                        return Err(Error::IndexesNotFound(
+                            not_found_indexes.into_iter().cloned().collect(),
+                        ));
+                    }
+                }
                 for swap in swaps {
                     self.apply_index_swap(&mut wtxn, task.uid, &swap.indexes.0, &swap.indexes.1)?;
                 }
@@ -854,7 +874,7 @@ impl IndexScheduler {
             return Err(Error::IndexNotFound(rhs.to_owned()));
         }
 
-        // 2. Get the task set for index = name.
+        // 2. Get the task set for index = name that appeared before the index swap task
         let mut index_lhs_task_ids =
             self.get_task_ids(&Query::default().with_index(lhs.to_owned()))?;
         index_lhs_task_ids.remove_range(task_id..);

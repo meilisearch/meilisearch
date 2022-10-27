@@ -9,8 +9,22 @@ use crate::TaskId;
 pub enum Error {
     #[error("Index `{0}` not found.")]
     IndexNotFound(String),
+    #[error(
+        "Indexes {} not found.",
+        .0.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
+    )]
+    IndexesNotFound(Vec<String>),
     #[error("Index `{0}` already exists.")]
     IndexAlreadyExists(String),
+    #[error(
+        "Indexes must be declared only once during a swap. `{0}` was specified several times."
+    )]
+    SwapDuplicateIndexFound(String),
+    #[error(
+        "Indexes must be declared only once during a swap. {} were specified several times.",
+        .0.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
+    )]
+    SwapDuplicateIndexesFound(Vec<String>),
     #[error("Corrupted dump.")]
     CorruptedDump,
     #[error("Task `{0}` not found.")]
@@ -53,11 +67,13 @@ impl ErrorCode for Error {
     fn error_code(&self) -> Code {
         match self {
             Error::IndexNotFound(_) => Code::IndexNotFound,
+            Error::IndexesNotFound(_) => Code::IndexNotFound,
             Error::IndexAlreadyExists(_) => Code::IndexAlreadyExists,
+            Error::SwapDuplicateIndexesFound(_) => Code::BadRequest,
+            Error::SwapDuplicateIndexFound(_) => Code::BadRequest,
             Error::TaskNotFound(_) => Code::TaskNotFound,
             Error::TaskDeletionWithEmptyQuery => Code::TaskDeletionWithEmptyQuery,
             Error::TaskCancelationWithEmptyQuery => Code::TaskCancelationWithEmptyQuery,
-
             Error::Dump(e) => e.error_code(),
             Error::Milli(e) => e.error_code(),
             Error::ProcessBatchPanicked => Code::Internal,
