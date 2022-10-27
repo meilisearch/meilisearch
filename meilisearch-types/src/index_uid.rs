@@ -2,14 +2,24 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Eq;
 use std::error::Error;
 use std::fmt;
+use std::hash::Hash;
 use std::ops::Deref;
 use std::str::FromStr;
 const PATTERN_IDENTIFIER: char = '*';
 
-#[derive(Debug, Clone, Eq, Hash)]
+#[derive(Debug, Clone, Eq)]
 pub enum IndexType {
     Name(IndexUid),
     Pattern(IndexPattern),
+}
+
+impl Hash for IndexType {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            Self::Name(x) => x.as_str().hash(state),
+            Self::Pattern(x) => x.original_pattern.hash(state),
+        }
+    }
 }
 
 impl PartialEq for IndexType {

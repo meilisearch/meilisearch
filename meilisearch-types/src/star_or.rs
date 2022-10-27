@@ -7,10 +7,19 @@ use std::ops::Deref;
 use std::str::FromStr;
 /// A type that tries to match either a star (*) or
 /// any other thing that implements `FromStr`.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone)]
 pub enum StarOr<T> {
     Star,
     Other(T),
+}
+
+impl<T: Hash> Hash for StarOr<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            Self::Star => "*".hash(state),
+            Self::Other(x) => x.hash(state),
+        }
+    }
 }
 
 impl<T: FromStr> FromStr for StarOr<T> {

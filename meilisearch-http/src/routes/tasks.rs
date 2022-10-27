@@ -116,7 +116,7 @@ async fn get_tasks(
             } else {
                 let mut filters = TaskFilter::default();
                 for (index, _policy) in search_rules.clone() {
-                    filters.filter_index(index.into());
+                    filters.filter_index(index);
                 }
                 Some(filters)
             }
@@ -196,7 +196,7 @@ async fn get_task(
     } else {
         let mut filters = TaskFilter::default();
         for (index, _policy) in search_rules.clone() {
-            filters.filter_index(index.into());
+            filters.filter_index(index);
         }
         Some(filters)
     };
