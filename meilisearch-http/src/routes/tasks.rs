@@ -1,18 +1,20 @@
-use actix_web::{web, HttpRequest, HttpResponse};
-use meilisearch_lib::tasks::task::{TaskContent, TaskEvent, TaskId};
-use meilisearch_lib::tasks::TaskFilter;
-use meilisearch_lib::MeiliSearch;
-use meilisearch_types::error::ResponseError;
-use meilisearch_types::index_uid::IndexUid;
-use meilisearch_types::star_or::StarOr;
-use serde::Deserialize;
-use serde_cs::vec::CS;
-use serde_json::json;
+use std::str::FromStr;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::task::{TaskListView, TaskStatus, TaskType, TaskView};
+use actix_web::{web, HttpRequest, HttpResponse};
+use meilisearch_lib::index_resolver::IndexResolverError;
+use meilisearch_lib::tasks::task::{TaskContent, TaskEvent, TaskId};
+use meilisearch_lib::tasks::TaskFilter;
+use meilisearch_lib::MeiliSearch;
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::{star_or::StarOr, StarIndexType};
+use serde::Deserialize;
+use serde_cs::vec::CS;
+use serde_json::json;
 
 use super::fold_star_or;
 
@@ -98,19 +100,21 @@ async fn get_tasks(
         Some(indexes) => {
             let mut filters = TaskFilter::default();
             for name in indexes {
-                if search_rules.is_index_authorized(&name) {
+                if search_rules.is_index_authorized(
+                    &StarIndexType::from_str(&name).map_err(IndexResolverError::from)?,
+                ) {
                     filters.filter_index(name.to_string());
                 }
             }
             Some(filters)
         }
         None => {
-            if search_rules.is_index_authorized("*") {
+            if search_rules.is_index_authorized(&StarIndexType::Star) {
                 None
             } else {
                 let mut filters = TaskFilter::default();
                 for (index, _policy) in search_rules.clone() {
-                    filters.filter_index(index);
+                    filters.filter_index(index.into());
                 }
                 Some(filters)
             }
@@ -185,12 +189,12 @@ async fn get_task(
     );
 
     let search_rules = &meilisearch.filters().search_rules;
-    let filters = if search_rules.is_index_authorized("*") {
+    let filters = if search_rules.is_index_authorized(&StarIndexType::Star) {
         None
     } else {
         let mut filters = TaskFilter::default();
         for (index, _policy) in search_rules.clone() {
-            filters.filter_index(index);
+            filters.filter_index(index.into());
         }
         Some(filters)
     };

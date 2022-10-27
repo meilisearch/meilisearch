@@ -1,12 +1,12 @@
 use serde::{Deserialize, Serialize};
+use std::cmp::Eq;
 use std::error::Error;
 use std::fmt;
 use std::ops::Deref;
 use std::str::FromStr;
-
 const PATTERN_IDENTIFIER: char = '*';
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, Hash)]
 pub enum IndexType {
     Name(IndexUid),
     Pattern(IndexPattern),
@@ -15,9 +15,9 @@ pub enum IndexType {
 impl PartialEq for IndexType {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Name(left), Self::Name(right)) => left == right,
+            (Self::Name(left), _) => other == left.as_str(),
+            (_, Self::Name(right)) => self == right.as_str(),
             (Self::Pattern(left), Self::Pattern(right)) => left.deref() == right.deref(),
-            (_, _) => false,
         }
     }
 }
@@ -50,7 +50,7 @@ impl PartialEq<str> for IndexType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct IndexPattern {
     prefix: String,
     original_pattern: String,
@@ -92,6 +92,8 @@ pub enum IndexTypeError {
     Name(IndexUidFormatError),
     Pattern(IndexPatternError),
 }
+
+impl Error for IndexTypeError {}
 
 impl fmt::Display for IndexTypeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -136,7 +138,7 @@ impl FromStr for IndexType {
 }
 /// An index uid is composed of only ascii alphanumeric characters, - and _, between 1 and 400
 /// bytes long
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "test-traits", derive(proptest_derive::Arbitrary))]
 pub struct IndexUid(
     #[cfg_attr(feature = "test-traits", proptest(regex("[a-zA-Z0-9_-]{1,400}")))] String,
@@ -166,7 +168,7 @@ impl std::ops::Deref for IndexUid {
 }
 
 impl TryFrom<String> for IndexUid {
-    type Error = IndexUidFormatError;
+    type Error = IndexTypeError;
 
     fn try_from(uid: String) -> Result<Self, Self::Error> {
         if !uid
@@ -175,7 +177,9 @@ impl TryFrom<String> for IndexUid {
             || uid.is_empty()
             || uid.len() > 400
         {
-            Err(IndexUidFormatError { invalid_uid: uid })
+            Err(IndexTypeError::Name(IndexUidFormatError {
+                invalid_uid: uid,
+            }))
         } else {
             Ok(IndexUid(uid))
         }
@@ -183,9 +187,9 @@ impl TryFrom<String> for IndexUid {
 }
 
 impl FromStr for IndexUid {
-    type Err = IndexUidFormatError;
+    type Err = IndexTypeError;
 
-    fn from_str(uid: &str) -> Result<IndexUid, IndexUidFormatError> {
+    fn from_str(uid: &str) -> Result<IndexUid, IndexTypeError> {
         uid.to_string().try_into()
     }
 }

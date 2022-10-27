@@ -1,7 +1,7 @@
 use std::fmt;
 
 use meilisearch_types::error::{Code, ErrorCode};
-use meilisearch_types::index_uid::IndexUidFormatError;
+use meilisearch_types::index_uid::IndexTypeError;
 use meilisearch_types::internal_error;
 use tokio::sync::mpsc::error::SendError as MpscSendError;
 use tokio::sync::oneshot::error::RecvError as OneshotRecvError;
@@ -28,7 +28,7 @@ pub enum IndexResolverError {
     #[error("{0}")]
     Milli(#[from] milli::Error),
     #[error("{0}")]
-    BadlyFormatted(#[from] IndexUidFormatError),
+    BadlyFormatted(#[from] IndexTypeError),
 }
 
 impl<T> From<MpscSendError<T>> for IndexResolverError

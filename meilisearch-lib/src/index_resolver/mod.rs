@@ -6,7 +6,7 @@ use std::convert::TryFrom;
 use std::path::Path;
 use std::sync::Arc;
 
-use error::{IndexResolverError, Result};
+pub use error::{IndexResolverError, Result};
 use index_store::{IndexStore, MapIndexStore};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;

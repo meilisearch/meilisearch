@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use actix_web::{web, HttpRequest, HttpResponse};
 use log::debug;
 use meilisearch_auth::IndexSearchRules;
@@ -5,8 +7,10 @@ use meilisearch_lib::index::{
     MatchingStrategy, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
     DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
 };
+use meilisearch_lib::index_resolver::IndexResolverError;
 use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::StarIndexType;
 use serde::Deserialize;
 use serde_cs::vec::CS;
 use serde_json::Value;
@@ -140,11 +144,9 @@ pub async fn search_with_url_query(
 
     let index_uid = path.into_inner();
     // Tenant token search_rules.
-    if let Some(search_rules) = meilisearch
-        .filters()
-        .search_rules
-        .get_index_search_rules(&index_uid)
-    {
+    if let Some(search_rules) = meilisearch.filters().search_rules.get_index_search_rules(
+        &StarIndexType::from_str(&index_uid).map_err(IndexResolverError::from)?,
+    ) {
         add_search_rules(&mut query, search_rules);
     }
 
@@ -174,11 +176,9 @@ pub async fn search_with_post(
 
     let index_uid = path.into_inner();
     // Tenant token search_rules.
-    if let Some(search_rules) = meilisearch
-        .filters()
-        .search_rules
-        .get_index_search_rules(&index_uid)
-    {
+    if let Some(search_rules) = meilisearch.filters().search_rules.get_index_search_rules(
+        &StarIndexType::from_str(&index_uid).map_err(IndexResolverError::from)?,
+    ) {
         add_search_rules(&mut query, search_rules);
     }
 

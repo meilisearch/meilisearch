@@ -12,6 +12,7 @@ use bytes::Bytes;
 use futures::Stream;
 use futures::StreamExt;
 use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::StarIndexType;
 use milli::update::IndexDocumentsMethod;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -601,7 +602,7 @@ where
         let processing_tasks = self.scheduler.read().await.get_processing_tasks().await?;
 
         for (index_uid, index) in self.index_resolver.list().await? {
-            if !search_rules.is_index_authorized(&index_uid) {
+            if !search_rules.is_index_authorized(&StarIndexType::from_str(&index_uid)?) {
                 continue;
             }
 

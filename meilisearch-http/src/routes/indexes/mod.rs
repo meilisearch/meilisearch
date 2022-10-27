@@ -1,16 +1,19 @@
-use actix_web::{web, HttpRequest, HttpResponse};
-use log::debug;
-use meilisearch_lib::index_controller::Update;
-use meilisearch_lib::MeiliSearch;
-use meilisearch_types::error::ResponseError;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
-use time::OffsetDateTime;
+use std::str::FromStr;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::{policies::*, AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::task::SummarizedTaskView;
+use actix_web::{web, HttpRequest, HttpResponse};
+use log::debug;
+use meilisearch_lib::index_controller::Update;
+use meilisearch_lib::index_resolver::IndexResolverError;
+use meilisearch_lib::MeiliSearch;
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::StarIndexType;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use time::OffsetDateTime;
 
 use super::Pagination;
 
@@ -46,9 +49,10 @@ pub async fn list_indexes(
     let search_rules = &data.filters().search_rules;
     let indexes: Vec<_> = data.list_indexes().await?;
     let nb_indexes = indexes.len();
-    let iter = indexes
-        .into_iter()
-        .filter(|i| search_rules.is_index_authorized(&i.uid));
+    let iter = indexes.into_iter().filter(|i| {
+        StarIndexType::from_str(&i.uid)
+            .map_or(false, |index| search_rules.is_index_authorized(&index))
+    });
     let ret = paginate
         .into_inner()
         .auto_paginate_unsized(nb_indexes, iter);
@@ -73,8 +77,11 @@ pub async fn create_index(
     let IndexCreateRequest {
         primary_key, uid, ..
     } = body.into_inner();
-
-    let allow_index_creation = meilisearch.filters().search_rules.is_index_authorized(&uid);
+    println!("{}", uid);
+    let allow_index_creation = meilisearch
+        .filters()
+        .search_rules
+        .is_index_authorized(&StarIndexType::from_str(&uid).map_err(IndexResolverError::from)?);
     if allow_index_creation {
         analytics.publish(
             "Index Created".to_string(),

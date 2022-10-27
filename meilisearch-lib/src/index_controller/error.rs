@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use meilisearch_types::error::{Code, ErrorCode};
-use meilisearch_types::index_uid::IndexUidFormatError;
+use meilisearch_types::index_uid::IndexTypeError;
 use meilisearch_types::internal_error;
 use tokio::task::JoinError;
 
@@ -65,8 +65,8 @@ impl ErrorCode for IndexControllerError {
     }
 }
 
-impl From<IndexUidFormatError> for IndexControllerError {
-    fn from(err: IndexUidFormatError) -> Self {
+impl From<IndexTypeError> for IndexControllerError {
+    fn from(err: IndexTypeError) -> Self {
         IndexResolverError::from(err).into()
     }
 }

@@ -6,7 +6,7 @@ mod analytics;
 mod dump;
 pub mod index;
 pub mod index_controller;
-mod index_resolver;
+pub mod index_resolver;
 mod snapshot;
 pub mod tasks;
 mod update_file_store;

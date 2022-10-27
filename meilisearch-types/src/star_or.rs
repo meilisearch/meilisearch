@@ -1,13 +1,13 @@
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{Display, Formatter};
+use std::hash::Hash;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::str::FromStr;
-
 /// A type that tries to match either a star (*) or
 /// any other thing that implements `FromStr`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub enum StarOr<T> {
     Star,
     Other(T),

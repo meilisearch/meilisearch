@@ -604,9 +604,38 @@ async fn raise_error_non_authorized_index_patterns() {
 }
 
 #[actix_rt::test]
-async fn pattern_search() {
-    let server = Server::new_auth().await;
-    server.use_admin_key(MASTER_KEY).await
+async fn pattern_indexes() {
+    // Create server with master key
+    let mut server = Server::new_auth().await;
+    server.use_admin_key(MASTER_KEY).await;
+
+    // index.* constraints on products_* index pattern
+    let content = json!({
+        "indexes": ["products_*"],
+        "actions": ["indexes.*"],
+        "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
+    });
+
+    // Generate and use the api key
+    let (response, code) = server.add_api_key(content).await;
+    assert_eq!(201, code, "{:?}", &response);
+    let key = response["key"].as_str().expect("Key is not string");
+    server.use_api_key(&key);
+
+    // Create Index products_1 using generated api key
+    let products_1 = server.index("products_1");
+    let (response, code) = products_1.create(Some("id")).await;
+    assert_eq!(202, code, "{:?}", &response);
+
+    // Fail to create products_* using generated api key
+    let products_1 = server.index("products_*");
+    let (response, code) = products_1.create(Some("id")).await;
+    assert_eq!(400, code, "{:?}", &response);
+
+    // Fail to create test_1 using generated api key
+    let products_1 = server.index("test_1");
+    let (response, code) = products_1.create(Some("id")).await;
+    assert_eq!(403, code, "{:?}", &response);
 }
 
 #[actix_rt::test]
@@ -791,6 +820,86 @@ async fn lazy_create_index() {
 
         // try to create a index via add documents route
         let index = server.index("test");
+        let documents = json!([
+            {
+                "id": 1,
+                "content": "foo",
+            }
+        ]);
+
+        let (response, code) = index.add_documents(documents, None).await;
+        assert_eq!(202, code, "{:?}", &response);
+        let task_id = response["taskUid"].as_u64().unwrap();
+
+        index.wait_task(task_id).await;
+
+        let (response, code) = index.get_task(task_id).await;
+        assert_eq!(200, code, "{:?}", &response);
+        assert_eq!(response["status"], "succeeded");
+
+        // try to create a index via add settings route
+        let index = server.index("test1");
+        let settings = json!({ "distinctAttribute": "test"});
+
+        let (response, code) = index.update_settings(settings).await;
+        assert_eq!(202, code, "{:?}", &response);
+        let task_id = response["taskUid"].as_u64().unwrap();
+
+        index.wait_task(task_id).await;
+
+        let (response, code) = index.get_task(task_id).await;
+        assert_eq!(200, code, "{:?}", &response);
+        assert_eq!(response["status"], "succeeded");
+
+        // try to create a index via add specialized settings route
+        let index = server.index("test2");
+        let (response, code) = index.update_distinct_attribute(json!("test")).await;
+        assert_eq!(202, code, "{:?}", &response);
+        let task_id = response["taskUid"].as_u64().unwrap();
+
+        index.wait_task(task_id).await;
+
+        let (response, code) = index.get_task(task_id).await;
+        assert_eq!(200, code, "{:?}", &response);
+        assert_eq!(response["status"], "succeeded");
+    }
+}
+
+#[actix_rt::test]
+async fn lazy_create_index_from_pattern() {
+    let mut server = Server::new_auth().await;
+
+    // create key with access on all indexes.
+    let contents = vec![
+        json!({
+            "indexes": ["products_*"],
+            "actions": ["*"],
+            "expiresAt": "2050-11-13T00:00:00Z"
+        }),
+        json!({
+            "indexes": ["products_*"],
+            "actions": ["indexes.*", "documents.*", "settings.*", "tasks.*"],
+            "expiresAt": "2050-11-13T00:00:00Z"
+        }),
+        json!({
+            "indexes": ["products_*"],
+            "actions": ["indexes.create", "documents.add", "settings.update", "tasks.get"],
+            "expiresAt": "2050-11-13T00:00:00Z"
+        }),
+    ];
+
+    for content in contents {
+        server.use_api_key(MASTER_KEY);
+        let (response, code) = server.add_api_key(content).await;
+        assert_eq!(201, code, "{:?}", &response);
+        assert!(response["key"].is_string());
+
+        // use created key.
+        let key = response["key"].as_str().unwrap();
+        server.use_api_key(&key);
+
+        // try to create a index via add documents route
+        let index = server.index("products_1");
         let documents = json!([
             {
                 "id": 1,
