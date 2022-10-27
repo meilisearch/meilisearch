@@ -84,7 +84,7 @@ pub(crate) enum IndexOperation {
     },
     Settings {
         index_uid: String,
-        // TODO what's that boolean, does it mean that it removes things or what?
+        // The boolean indicates if it's a settings deletion or creation.
         settings: Vec<(bool, Settings<Unchecked>)>,
         tasks: Vec<Task>,
     },
@@ -92,7 +92,7 @@ pub(crate) enum IndexOperation {
         index_uid: String,
         cleared_tasks: Vec<Task>,
 
-        // TODO what's that boolean, does it mean that it removes things or what?
+        // The boolean indicates if it's a settings deletion or creation.
         settings: Vec<(bool, Settings<Unchecked>)>,
         settings_tasks: Vec<Task>,
     },
@@ -105,7 +105,7 @@ pub(crate) enum IndexOperation {
         content_files: Vec<Uuid>,
         document_import_tasks: Vec<Task>,
 
-        // TODO what's that boolean, does it mean that it removes things or what?
+        // The boolean indicates if it's a settings deletion or creation.
         settings: Vec<(bool, Settings<Unchecked>)>,
         settings_tasks: Vec<Task>,
     },
@@ -1049,22 +1049,23 @@ impl IndexScheduler {
             }
             IndexOperation::Settings { index_uid: _, settings, mut tasks } => {
                 let indexer_config = self.index_mapper.indexer_config();
-                // TODO merge the settings to only do *one* reindexation.
+                let mut builder = milli::update::Settings::new(index_wtxn, index, indexer_config);
+
                 for (task, (_, settings)) in tasks.iter_mut().zip(settings) {
                     let checked_settings = settings.clone().check();
                     task.details = Some(Details::SettingsUpdate { settings: Box::new(settings) });
-
-                    let mut builder =
-                        milli::update::Settings::new(index_wtxn, index, indexer_config);
                     apply_settings_to_builder(&checked_settings, &mut builder);
-                    let must_stop_processing = self.must_stop_processing.clone();
-                    builder.execute(
-                        |indexing_step| debug!("update: {:?}", indexing_step),
-                        || must_stop_processing.get(),
-                    )?;
 
+                    // We can apply the status right now and if an update fail later
+                    // the whole batch will be marked as failed.
                     task.status = Status::Succeeded;
                 }
+
+                let must_stop_processing = self.must_stop_processing.clone();
+                builder.execute(
+                    |indexing_step| debug!("update: {:?}", indexing_step),
+                    || must_stop_processing.get(),
+                )?;
 
                 Ok(tasks)
             }
