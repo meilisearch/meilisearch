@@ -993,7 +993,7 @@ mod tests {
             autobatching_enabled: bool,
             planned_failures: Vec<(usize, FailureLocation)>,
         ) -> (Self, IndexSchedulerHandle) {
-            let tempdir = TempDir::new_in(".").unwrap();
+            let tempdir = TempDir::new().unwrap();
             let (sender, receiver) = crossbeam::channel::bounded(0);
 
             let options = IndexSchedulerOptions {
