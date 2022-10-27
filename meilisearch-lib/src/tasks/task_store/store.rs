@@ -10,6 +10,7 @@ use std::ops::Bound::{Excluded, Unbounded};
 use std::result::Result as StdResult;
 use std::sync::Arc;
 
+use meilisearch_types::StarIndexType;
 use milli::heed::types::{OwnedType, SerdeJson, Str};
 use milli::heed::{Database, Env, RoTxn, RwTxn};
 use milli::heed_codec::RoaringBitmapCodec;
@@ -154,7 +155,7 @@ impl Store {
     fn compute_candidates<'a>(
         &'a self,
         txn: &'a RoTxn,
-        indexes: &HashSet<String>,
+        indexes: &HashSet<StarIndexType>,
         from: TaskId,
     ) -> Result<impl Iterator<Item = Result<Task>> + 'a> {
         let mut candidates = RoaringBitmap::new();
@@ -178,6 +179,8 @@ impl Store {
 
 #[cfg(test)]
 pub mod test {
+    use std::str::FromStr;
+
     use itertools::Itertools;
     use meilisearch_types::index_uid::IndexUid;
     use milli::heed::EnvOpenOptions;
@@ -301,7 +304,7 @@ pub mod test {
             .unwrap();
 
         let mut filter = TaskFilter::default();
-        filter.filter_index("test".into());
+        filter.filter_index(StarIndexType::from_str("test").unwrap());
 
         let tasks = store.list_tasks(&txn, None, Some(filter), None).unwrap();
 
@@ -338,7 +341,7 @@ pub mod test {
         store.put(&mut txn, &task_2).unwrap();
 
         let mut filter = TaskFilter::default();
-        filter.filter_index("test".into());
+        filter.filter_index(StarIndexType::from_str("test").unwrap());
 
         let tasks = store.list_tasks(&txn, None, Some(filter), None).unwrap();
 
@@ -367,7 +370,7 @@ pub mod test {
         store.put(&mut txn, &task_2).unwrap();
 
         let mut filter = TaskFilter::default();
-        filter.filter_index("test".into());
+        filter.filter_index(StarIndexType::from_str("test").unwrap());
 
         let tasks = store.list_tasks(&txn, None, Some(filter), None).unwrap();
 

@@ -1,4 +1,13 @@
+use actix_web::error::PayloadError;
+use bytes::Bytes;
+use futures::Stream;
+use futures::StreamExt;
 use meilisearch_auth::SearchRules;
+use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::StarIndexType;
+
+use milli::update::IndexDocumentsMethod;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::io::Cursor;
@@ -6,15 +15,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-
-use actix_web::error::PayloadError;
-use bytes::Bytes;
-use futures::Stream;
-use futures::StreamExt;
-use meilisearch_types::index_uid::IndexUid;
-use meilisearch_types::StarIndexType;
-use milli::update::IndexDocumentsMethod;
-use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use tokio::sync::RwLock;
 use tokio::task::spawn_blocking;
@@ -462,7 +462,7 @@ where
         }
 
         let mut filter = TaskFilter::default();
-        filter.filter_index(index_uid);
+        filter.filter_index(StarIndexType::from_str(&index_uid).map_err(IndexResolverError::from)?);
         let task = self
             .scheduler
             .read()
@@ -501,7 +501,7 @@ where
             .await?;
 
         let mut filter = TaskFilter::default();
-        filter.filter_index(index_uid);
+        filter.filter_index(StarIndexType::from_str(&index_uid).map_err(IndexResolverError::from)?);
 
         let tasks = self
             .scheduler

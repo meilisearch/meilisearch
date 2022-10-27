@@ -103,7 +103,9 @@ async fn get_tasks(
                 if search_rules.is_index_authorized(
                     &StarIndexType::from_str(&name).map_err(IndexResolverError::from)?,
                 ) {
-                    filters.filter_index(name.to_string());
+                    filters.filter_index(
+                        StarIndexType::from_str(&name).map_err(IndexResolverError::from)?,
+                    );
                 }
             }
             Some(filters)
@@ -198,11 +200,11 @@ async fn get_task(
         }
         Some(filters)
     };
-
+    println!("task_id {:?}", task_id);
     let task: TaskView = meilisearch
         .get_task(task_id.into_inner(), filters)
         .await?
         .into();
-
+    println!("get_task {:?}", task);
     Ok(HttpResponse::Ok().json(task))
 }

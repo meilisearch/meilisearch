@@ -266,7 +266,7 @@ async fn document_addition(
     };
 
     let task = meilisearch.register_update(index_uid, update).await?.into();
-
+    println!("{:?}", task);
     debug!("returns: {:?}", task);
     Ok(task)
 }

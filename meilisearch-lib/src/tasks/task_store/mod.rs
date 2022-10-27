@@ -16,6 +16,7 @@ use super::task::{Task, TaskContent, TaskId};
 use super::Result;
 use crate::tasks::task::TaskEvent;
 use crate::update_file_store::UpdateFileStore;
+use meilisearch_types::StarIndexType;
 
 #[cfg(test)]
 pub use store::test::MockStore as Store;
@@ -27,7 +28,7 @@ type FilterFn = Box<dyn Fn(&Task) -> bool + Sync + Send + 'static>;
 /// Defines constraints to be applied when querying for Tasks from the store.
 #[derive(Default)]
 pub struct TaskFilter {
-    indexes: Option<HashSet<String>>,
+    indexes: Option<HashSet<StarIndexType>>,
     filter_fn: Option<FilterFn>,
 }
 
@@ -37,17 +38,17 @@ impl TaskFilter {
             Some(index_uid) => self
                 .indexes
                 .as_ref()
-                .map_or(true, |indexes| indexes.contains(index_uid)),
+                .map_or(true, |indexes| indexes.iter().any(|x| x == index_uid)),
             None => false,
         }
     }
 
-    fn filtered_indexes(&self) -> Option<&HashSet<String>> {
+    fn filtered_indexes(&self) -> Option<&HashSet<StarIndexType>> {
         self.indexes.as_ref()
     }
 
     /// Adds an index to the filter, so the filter must match this index.
-    pub fn filter_index(&mut self, index: String) {
+    pub fn filter_index(&mut self, index: StarIndexType) {
         self.indexes
             .get_or_insert_with(Default::default)
             .insert(index);
@@ -105,6 +106,7 @@ impl TaskStore {
     }
 
     pub async fn get_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Task> {
+        println!("task store{:?}", id);
         let store = self.store.clone();
         let task = tokio::task::spawn_blocking(move || -> Result<_> {
             let txn = store.rtxn()?;
