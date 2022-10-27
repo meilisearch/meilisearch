@@ -73,7 +73,7 @@ pub(crate) fn get_highest_level<'t>(
     let field_id_prefix = &field_id.to_be_bytes();
     Ok(db
         .as_polymorph()
-        .rev_prefix_iter::<_, ByteSlice, DecodeIgnore>(&txn, field_id_prefix)?
+        .rev_prefix_iter::<_, ByteSlice, DecodeIgnore>(txn, field_id_prefix)?
         .next()
         .map(|el| {
             let (key, _) = el.unwrap();
@@ -105,12 +105,9 @@ pub(crate) mod tests {
     pub fn get_random_looking_index() -> FacetIndex<OrderedF64Codec> {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
         let mut txn = index.env.write_txn().unwrap();
-
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
-        let keys =
-            std::iter::from_fn(|| Some(rng.gen_range(0..256))).take(128).collect::<Vec<u32>>();
 
-        for (_i, key) in keys.into_iter().enumerate() {
+        for (_i, key) in std::iter::from_fn(|| Some(rng.gen_range(0..256))).take(128).enumerate() {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(key);
             bitmap.insert(key + 100);

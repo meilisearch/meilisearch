@@ -138,7 +138,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         // the `soft_deleted_documents_ids` bitmap and early exit.
         let size_used = self.index.used_size()?;
         let map_size = self.index.env.map_size()? as u64;
-        let nb_documents = self.index.number_of_documents(&self.wtxn)?;
+        let nb_documents = self.index.number_of_documents(self.wtxn)?;
         let nb_soft_deleted = soft_deleted_docids.len();
 
         let percentage_available = 100 - (size_used * 100 / map_size);
@@ -474,7 +474,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                 self.index.put_faceted_documents_ids(self.wtxn, field_id, facet_type, &docids)?;
 
                 let facet_values = remove_docids_from_field_id_docid_facet_value(
-                    &self.index,
+                    self.index,
                     self.wtxn,
                     facet_type,
                     field_id,

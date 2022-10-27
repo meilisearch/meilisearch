@@ -401,7 +401,7 @@ pub mod tests {
     fn parse() {
         use FilterCondition as Fc;
 
-        fn p<'a>(s: &'a str) -> impl std::fmt::Display + 'a {
+        fn p(s: &str) -> impl std::fmt::Display + '_ {
             Fc::parse(s).unwrap().unwrap()
         }
 
@@ -494,7 +494,7 @@ pub mod tests {
     fn error() {
         use FilterCondition as Fc;
 
-        fn p<'a>(s: &'a str) -> impl std::fmt::Display + 'a {
+        fn p(s: &str) -> impl std::fmt::Display + '_ {
             Fc::parse(s).unwrap_err().to_string()
         }
 

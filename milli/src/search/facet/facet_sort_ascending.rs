@@ -50,6 +50,7 @@ struct AscendingFacetSort<'t, 'e> {
     rtxn: &'t heed::RoTxn<'e>,
     db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
+    #[allow(clippy::type_complexity)]
     stack: Vec<(
         RoaringBitmap,
         std::iter::Take<
@@ -91,9 +92,9 @@ impl<'t, 'e> Iterator for AscendingFacetSort<'t, 'e> {
                     }
                     let starting_key_below =
                         FacetGroupKey { field_id: self.field_id, level: level - 1, left_bound };
-                    let iter = match self.db.range(&self.rtxn, &(starting_key_below..)) {
+                    let iter = match self.db.range(self.rtxn, &(starting_key_below..)) {
                         Ok(iter) => iter,
-                        Err(e) => return Some(Err(e.into())),
+                        Err(e) => return Some(Err(e)),
                     }
                     .take(group_size as usize);
 

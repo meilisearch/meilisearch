@@ -100,7 +100,7 @@ impl<'i, 'b> FacetsDelete<'i, 'b> {
                     max_group_size: self.max_group_size,
                 };
                 for facet_value in affected_facet_values {
-                    inc.delete(wtxn, field_id, facet_value.as_slice(), &self.docids_to_delete)?;
+                    inc.delete(wtxn, field_id, facet_value.as_slice(), self.docids_to_delete)?;
                 }
             }
         }

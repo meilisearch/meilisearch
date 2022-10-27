@@ -127,7 +127,7 @@ impl FacetsUpdateIncrementalInner {
         if let Some(e) = prefix_iter.next() {
             let (key_bytes, value) = e?;
             Ok((
-                FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(&key_bytes)
+                FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(key_bytes)
                     .ok_or(Error::Encoding)?
                     .into_owned(),
                 value,
@@ -146,11 +146,11 @@ impl FacetsUpdateIncrementalInner {
                             .as_polymorph()
                             .prefix_iter::<_, ByteSlice, FacetGroupValueCodec>(
                                 txn,
-                                &prefix.as_slice(),
+                                prefix.as_slice(),
                             )?;
                         let (key_bytes, value) = iter.next().unwrap()?;
                         Ok((
-                            FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(&key_bytes)
+                            FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(key_bytes)
                                 .ok_or(Error::Encoding)?
                                 .into_owned(),
                             value,
@@ -185,15 +185,15 @@ impl FacetsUpdateIncrementalInner {
         let mut iter = self
             .db
             .as_polymorph()
-            .prefix_iter::<_, ByteSlice, DecodeIgnore>(&txn, &level0_prefix)?;
+            .prefix_iter::<_, ByteSlice, DecodeIgnore>(txn, &level0_prefix)?;
 
         if iter.next().is_none() {
             drop(iter);
             self.db.put(txn, &key, &value)?;
-            return Ok(InsertionResult::Insert);
+            Ok(InsertionResult::Insert)
         } else {
             drop(iter);
-            let old_value = self.db.get(&txn, &key)?;
+            let old_value = self.db.get(txn, &key)?;
             match old_value {
                 Some(mut updated_value) => {
                     // now merge the two
@@ -236,7 +236,7 @@ impl FacetsUpdateIncrementalInner {
 
         let max_group_size = self.max_group_size;
 
-        let result = self.insert_in_level(txn, field_id, level - 1, facet_value.clone(), docids)?;
+        let result = self.insert_in_level(txn, field_id, level - 1, &(*facet_value), docids)?;
         // level below inserted an element
 
         let (insertion_key, insertion_value) =
@@ -312,13 +312,13 @@ impl FacetsUpdateIncrementalInner {
         };
 
         let mut iter =
-            self.db.range(&txn, &(start_key..))?.take((size_left as usize) + (size_right as usize));
+            self.db.range(txn, &(start_key..))?.take((size_left as usize) + (size_right as usize));
 
         let group_left = {
             let mut values_left = RoaringBitmap::new();
 
             let mut i = 0;
-            while let Some(next) = iter.next() {
+            for next in iter.by_ref() {
                 let (_key, value) = next?;
                 i += 1;
                 values_left |= &value.bitmap;
@@ -339,7 +339,7 @@ impl FacetsUpdateIncrementalInner {
                 FacetGroupValue { bitmap: mut values_right, .. },
             ) = iter.next().unwrap()?;
 
-            while let Some(next) = iter.next() {
+            for next in iter.by_ref() {
                 let (_, value) = next?;
                 values_right |= &value.bitmap;
             }
@@ -359,7 +359,7 @@ impl FacetsUpdateIncrementalInner {
     }
 
     /// Insert the given facet value and corresponding document ids in the database.
-    pub fn insert<'a, 't>(
+    pub fn insert<'t>(
         &self,
         txn: &'t mut RwTxn,
         field_id: u16,
@@ -371,7 +371,7 @@ impl FacetsUpdateIncrementalInner {
         }
         let group_size = self.group_size;
 
-        let highest_level = get_highest_level(&txn, self.db, field_id)?;
+        let highest_level = get_highest_level(txn, self.db, field_id)?;
 
         let result =
             self.insert_in_level(txn, field_id, highest_level as u8, facet_value, docids)?;
@@ -391,7 +391,7 @@ impl FacetsUpdateIncrementalInner {
         let size_highest_level = self
             .db
             .as_polymorph()
-            .prefix_iter::<_, ByteSlice, ByteSlice>(&txn, &highest_level_prefix)?
+            .prefix_iter::<_, ByteSlice, ByteSlice>(txn, &highest_level_prefix)?
             .count();
 
         if size_highest_level < self.group_size as usize * self.min_level_size as usize {
@@ -401,7 +401,7 @@ impl FacetsUpdateIncrementalInner {
         let mut groups_iter = self
             .db
             .as_polymorph()
-            .prefix_iter::<_, ByteSlice, FacetGroupValueCodec>(&txn, &highest_level_prefix)?;
+            .prefix_iter::<_, ByteSlice, FacetGroupValueCodec>(txn, &highest_level_prefix)?;
 
         let nbr_new_groups = size_highest_level / self.group_size as usize;
         let nbr_leftover_elements = size_highest_level % self.group_size as usize;
@@ -412,7 +412,7 @@ impl FacetsUpdateIncrementalInner {
             let mut values = RoaringBitmap::new();
             for _ in 0..group_size {
                 let (key_bytes, value_i) = groups_iter.next().unwrap()?;
-                let key_i = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(&key_bytes)
+                let key_i = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(key_bytes)
                     .ok_or(Error::Encoding)?;
 
                 if first_key.is_none() {
@@ -435,7 +435,7 @@ impl FacetsUpdateIncrementalInner {
             let mut values = RoaringBitmap::new();
             for _ in 0..nbr_leftover_elements {
                 let (key_bytes, value_i) = groups_iter.next().unwrap()?;
-                let key_i = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(&key_bytes)
+                let key_i = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(key_bytes)
                     .ok_or(Error::Encoding)?;
 
                 if first_key.is_none() {
@@ -494,7 +494,7 @@ impl FacetsUpdateIncrementalInner {
         let (deletion_key, mut bitmap) =
             self.find_insertion_key_value(field_id, level, facet_value, txn)?;
 
-        let result = self.delete_in_level(txn, field_id, level - 1, facet_value.clone(), docids)?;
+        let result = self.delete_in_level(txn, field_id, level - 1, &(*facet_value), docids)?;
 
         let mut decrease_size = false;
         let next_key = match result {
@@ -547,13 +547,13 @@ impl FacetsUpdateIncrementalInner {
         docids: &RoaringBitmap,
     ) -> Result<DeletionResult> {
         let key = FacetGroupKey { field_id, level: 0, left_bound: facet_value };
-        let mut bitmap = self.db.get(&txn, &key)?.unwrap().bitmap;
+        let mut bitmap = self.db.get(txn, &key)?.unwrap().bitmap;
         bitmap -= docids;
 
         if bitmap.is_empty() {
             let mut next_key = None;
             if let Some((next, _)) =
-                self.db.remap_data_type::<DecodeIgnore>().get_greater_than(&txn, &key)?
+                self.db.remap_data_type::<DecodeIgnore>().get_greater_than(txn, &key)?
             {
                 if next.field_id == field_id && next.level == 0 {
                     next_key = Some(next.left_bound.to_vec());
@@ -567,7 +567,7 @@ impl FacetsUpdateIncrementalInner {
         }
     }
 
-    pub fn delete<'a, 't>(
+    pub fn delete<'t>(
         &self,
         txn: &'t mut RwTxn,
         field_id: u16,
@@ -582,7 +582,7 @@ impl FacetsUpdateIncrementalInner {
         {
             return Ok(());
         }
-        let highest_level = get_highest_level(&txn, self.db, field_id)?;
+        let highest_level = get_highest_level(txn, self.db, field_id)?;
 
         let result =
             self.delete_in_level(txn, field_id, highest_level as u8, facet_value, docids)?;
@@ -603,7 +603,7 @@ impl FacetsUpdateIncrementalInner {
             || self
                 .db
                 .as_polymorph()
-                .prefix_iter::<_, ByteSlice, ByteSlice>(&txn, &highest_level_prefix)?
+                .prefix_iter::<_, ByteSlice, ByteSlice>(txn, &highest_level_prefix)?
                 .count()
                 >= self.min_level_size as usize
         {
@@ -614,7 +614,7 @@ impl FacetsUpdateIncrementalInner {
             .db
             .as_polymorph()
             .prefix_iter::<_, ByteSlice, ByteSlice>(txn, &highest_level_prefix)?;
-        while let Some(el) = iter.next() {
+        for el in iter.by_ref() {
             let (k, _) = el?;
             to_delete.push(
                 FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(k)
@@ -640,7 +640,7 @@ impl<'a> FacetGroupKey<&'a [u8]> {
     }
 }
 
-impl<'a> FacetGroupKey<Vec<u8>> {
+impl FacetGroupKey<Vec<u8>> {
     pub fn as_ref(&self) -> FacetGroupKey<&[u8]> {
         FacetGroupKey {
             field_id: self.field_id,
@@ -804,7 +804,7 @@ mod tests {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(i);
             index.verify_structure_validity(&txn, 0);
-            index.insert(&mut txn, 0, &(&(i as f64)), &bitmap);
+            index.insert(&mut txn, 0, &(i as f64), &bitmap);
         }
 
         for i in (200..256).into_iter().rev() {
