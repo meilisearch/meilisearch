@@ -106,7 +106,6 @@ impl TaskStore {
     }
 
     pub async fn get_task(&self, id: TaskId, filter: Option<TaskFilter>) -> Result<Task> {
-        println!("task store{:?}", id);
         let store = self.store.clone();
         let task = tokio::task::spawn_blocking(move || -> Result<_> {
             let txn = store.rtxn()?;

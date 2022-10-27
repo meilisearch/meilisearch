@@ -894,6 +894,7 @@ async fn lazy_create_index_from_pattern() {
 
         // try to create a index via add documents route
         let index = server.index("products_1");
+        let test = server.index("test");
         let documents = json!([
             {
                 "id": 1,
@@ -901,7 +902,7 @@ async fn lazy_create_index_from_pattern() {
             }
         ]);
 
-        let (response, code) = index.add_documents(documents, None).await;
+        let (response, code) = index.add_documents(documents.clone(), None).await;
         assert_eq!(202, code, "{:?}", &response);
         let task_id = response["taskUid"].as_u64().unwrap();
 
@@ -911,8 +912,12 @@ async fn lazy_create_index_from_pattern() {
         assert_eq!(200, code, "{:?}", &response);
         assert_eq!(response["status"], "succeeded");
 
+        // Fail to create test index
+        let (response, code) = test.add_documents(documents, None).await;
+        assert_eq!(403, code, "{:?}", &response);
+
         // try to create a index via add settings route
-        let index = server.index("test1");
+        let index = server.index("products_2");
         let settings = json!({ "distinctAttribute": "test"});
 
         let (response, code) = index.update_settings(settings).await;
@@ -925,8 +930,16 @@ async fn lazy_create_index_from_pattern() {
         assert_eq!(200, code, "{:?}", &response);
         assert_eq!(response["status"], "succeeded");
 
+        // Fail to create test index
+
+        let index = server.index("test");
+        let settings = json!({ "distinctAttribute": "test"});
+
+        let (response, code) = index.update_settings(settings).await;
+        assert_eq!(403, code, "{:?}", &response);
+
         // try to create a index via add specialized settings route
-        let index = server.index("test2");
+        let index = server.index("products_3");
         let (response, code) = index.update_distinct_attribute(json!("test")).await;
         assert_eq!(202, code, "{:?}", &response);
         let task_id = response["taskUid"].as_u64().unwrap();
@@ -936,6 +949,13 @@ async fn lazy_create_index_from_pattern() {
         let (response, code) = index.get_task(task_id).await;
         assert_eq!(200, code, "{:?}", &response);
         assert_eq!(response["status"], "succeeded");
+
+        // Fail to create test index
+        let index = server.index("test");
+        let settings = json!({ "distinctAttribute": "test"});
+
+        let (response, code) = index.update_settings(settings).await;
+        assert_eq!(403, code, "{:?}", &response);
     }
 }
 
@@ -946,7 +966,7 @@ async fn error_creating_index_without_index() {
 
     // create key with access on all indexes.
     let content = json!({
-        "indexes": ["unexpected"],
+        "indexes": ["unexpected","products_*"],
         "actions": ["*"],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -984,6 +1004,34 @@ async fn error_creating_index_without_index() {
 
     // try to create a index via create index route
     let index = server.index("test3");
+    let (response, code) = index.create(None).await;
+    assert_eq!(403, code, "{:?}", &response);
+
+    // try to create a index via add documents route
+    let index = server.index("products");
+    let documents = json!([
+        {
+            "id": 1,
+            "content": "foo",
+        }
+    ]);
+
+    let (response, code) = index.add_documents(documents, None).await;
+    assert_eq!(403, code, "{:?}", &response);
+
+    // try to create a index via add settings route
+    let index = server.index("products");
+    let settings = json!({ "distinctAttribute": "test"});
+    let (response, code) = index.update_settings(settings).await;
+    assert_eq!(403, code, "{:?}", &response);
+
+    // try to create a index via add specialized settings route
+    let index = server.index("products");
+    let (response, code) = index.update_distinct_attribute(json!("test")).await;
+    assert_eq!(403, code, "{:?}", &response);
+
+    // try to create a index via create index route
+    let index = server.index("products");
     let (response, code) = index.create(None).await;
     assert_eq!(403, code, "{:?}", &response);
 }
