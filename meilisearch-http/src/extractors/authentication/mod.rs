@@ -48,22 +48,23 @@ impl<P, D> GuardedData<P, D> {
     where
         P: Policy + 'static,
     {
+        let auth_clone = auth.clone();
+        let master_key: Option<&String> = auth_clone.get_master_key();
+
         match Self::authenticate(auth, String::new(), None).await? {
             Some(filters) => match data {
-                Some(data) => {
-                    if filters.is_missing_master_key() {
-                        Err(AuthenticationError::MissingMasterKey.into())
-                    } else {
-                        Ok(Self {
-                            data,
-                            filters,
-                            _marker: PhantomData,
-                        })
-                    }
-                }
+                Some(data) => Ok(Self {
+                    data,
+                    filters,
+                    _marker: PhantomData,
+                }),
+
                 None => Err(AuthenticationError::IrretrievableState.into()),
             },
-            None => Err(AuthenticationError::MissingAuthorizationHeader.into()),
+            None => match master_key {
+                Some(_) => Err(AuthenticationError::MissingAuthorizationHeader.into()),
+                None => Err(AuthenticationError::MissingMasterKey.into()),
+            },
         }
     }
 
@@ -177,9 +178,6 @@ pub mod policies {
             token: &str,
             index: Option<&str>,
         ) -> Option<AuthFilter> {
-            if auth.get_master_key().is_none() && is_keys_action(A) {
-                return Some(AuthFilter::with_no_master_key());
-            }
             // authenticate if token is the master key.
             // master key can only have access to keys routes.
             // if master key is None only keys routes are inaccessible.
