@@ -197,10 +197,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
         &self,
         rtxn: &'t RoTxn,
         field_id: u16,
-        handle_group: &mut dyn FnMut(
-            &[RoaringBitmap],
-            &'t [u8],
-        ) -> Result<()>,
+        handle_group: &mut dyn FnMut(&[RoaringBitmap], &'t [u8]) -> Result<()>,
     ) -> Result<()> {
         // we read the elements one by one and
         // 1. keep track of the left bound
@@ -255,10 +252,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
         rtxn: &'t RoTxn,
         field_id: u16,
         level: u8,
-        handle_group: &mut dyn FnMut(
-            &[RoaringBitmap],
-            &'t [u8],
-        ) -> Result<()>,
+        handle_group: &mut dyn FnMut(&[RoaringBitmap], &'t [u8]) -> Result<()>,
     ) -> Result<Vec<grenad::Reader<File>>> {
         if level == 0 {
             self.read_level_0(rtxn, field_id, handle_group)?;
