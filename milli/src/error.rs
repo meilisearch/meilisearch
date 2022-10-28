@@ -11,7 +11,7 @@ use crate::documents::{self, DocumentsBatchCursorError};
 use crate::{CriterionError, DocumentId, FieldId, Object, SortError};
 
 pub fn is_reserved_keyword(keyword: &str) -> bool {
-    ["_geo", "_geoDistance", "_geoPoint", "_geoRadius"].contains(&keyword)
+    ["_geo", "_geoDistance", "_geoPoint", "_geoRadius", "_geoBoundingBox"].contains(&keyword)
 }
 
 #[derive(Error, Debug)]
