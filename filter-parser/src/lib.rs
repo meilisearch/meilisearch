@@ -503,10 +503,12 @@ pub mod tests {
         // Test geo radius
         insta::assert_display_snapshot!(p("_geoRadius(12, 13, 14)"), @"_geoRadius({12}, {13}, {14})");
         insta::assert_display_snapshot!(p("NOT _geoRadius(12, 13, 14)"), @"NOT (_geoRadius({12}, {13}, {14}))");
+        insta::assert_display_snapshot!(p("_geoRadius(12,13,14)"), @"_geoRadius({12}, {13}, {14})");
 
         // Test geo bounding box
         insta::assert_display_snapshot!(p("_geoBoundingBox((12, 13), (14, 15))"), @"_geoBoundingBox(({12}, {13}), ({14}, {15}))");
         insta::assert_display_snapshot!(p("NOT _geoBoundingBox((12, 13), (14, 15))"), @"NOT (_geoBoundingBox(({12}, {13}), ({14}, {15})))");
+        insta::assert_display_snapshot!(p("_geoBoundingBox((12,13),(14,15))"), @"_geoBoundingBox(({12}, {13}), ({14}, {15}))");
 
         // Test OR + AND
         insta::assert_display_snapshot!(p("channel = ponce AND 'dog race' != 'bernese mountain'"), @"AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ]");
