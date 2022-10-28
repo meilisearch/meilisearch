@@ -437,12 +437,10 @@ impl<'a> Filter<'a> {
                         Token::new(top_left_point[1].span, Some("180.0".to_string()));
 
                     let selected_lng = if top_left[1] > bottom_right[1] {
-                        dbg!("test");
-
                         let condition_left = FilterCondition::Condition {
                             fid: geo_lng_token.clone(),
                             op: Condition::Between {
-                                from: dbg!(top_left_point[1].clone()),
+                                from: top_left_point[1].clone(),
                                 to: max_lng_token,
                             },
                         };
@@ -455,8 +453,8 @@ impl<'a> Filter<'a> {
                         let condition_right = FilterCondition::Condition {
                             fid: geo_lng_token,
                             op: Condition::Between {
-                                from: dbg!(min_lng_token),
-                                to: dbg!(bottom_right_point[1].clone()),
+                                from: min_lng_token,
+                                to: bottom_right_point[1].clone(),
                             },
                         };
                         let right = Filter { condition: condition_right }.inner_evaluate(
@@ -465,9 +463,7 @@ impl<'a> Filter<'a> {
                             filterable_fields,
                         )?;
 
-                        dbg!(&left);
-                        dbg!(&right);
-                        dbg!(left | right)
+                        left | right
                     } else {
                         let condition_lng = FilterCondition::Condition {
                             fid: geo_lng_token,
@@ -482,8 +478,6 @@ impl<'a> Filter<'a> {
                             filterable_fields,
                         )?
                     };
-
-                    dbg!(&selected_lng);
 
                     Ok(selected_lat & selected_lng)
                 } else {
@@ -610,6 +604,12 @@ mod tests {
             "Attribute `_geo` is not filterable. This index does not have configured filterable attributes."
         ));
 
+        let filter = Filter::from_str("_geoBoundingBox((42, 150), (30, 10))").unwrap().unwrap();
+        let error = filter.evaluate(&rtxn, &index).unwrap_err();
+        assert!(error.to_string().starts_with(
+            "Attribute `_geo` is not filterable. This index does not have configured filterable attributes."
+        ));
+
         let filter = Filter::from_str("dog = \"bernese mountain\"").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().starts_with(
@@ -627,6 +627,12 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         let filter = Filter::from_str("_geoRadius(-100, 150, 10)").unwrap().unwrap();
+        let error = filter.evaluate(&rtxn, &index).unwrap_err();
+        assert!(error.to_string().starts_with(
+            "Attribute `_geo` is not filterable. Available filterable attributes are: `title`."
+        ));
+
+        let filter = Filter::from_str("_geoBoundingBox((42, 150), (30, 10))").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().starts_with(
             "Attribute `_geo` is not filterable. Available filterable attributes are: `title`."
@@ -777,6 +783,92 @@ mod tests {
 
         // georadius have a bad longitude
         let filter = Filter::from_str("_geoRadius(-10, 180.000001, 10)").unwrap().unwrap();
+        let error = filter.evaluate(&rtxn, &index).unwrap_err();
+        assert!(error.to_string().contains(
+            "Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees."
+        ));
+    }
+
+    #[test]
+    fn geo_bounding_box_error() {
+        let index = TempIndex::new();
+
+        index
+            .update_settings(|settings| {
+                settings.set_searchable_fields(vec![S("_geo"), S("price")]); // to keep the fields order
+                settings.set_filterable_fields(hashset! { S("_geo"), S("price") });
+            })
+            .unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+
+        // geoboundingbox top left coord have a bad latitude
+        let filter =
+            Filter::from_str("_geoBoundingBox((-90.0000001, 150), (30, 10))").unwrap().unwrap();
+        let error = filter.evaluate(&rtxn, &index).unwrap_err();
+        assert!(
+            error.to_string().starts_with(
+                "Bad latitude `-90.0000001`. Latitude must be contained between -90 and 90 degrees."
+            ),
+            "{}",
+            error.to_string()
+        );
+
+        // geoboundingbox top left coord have a bad latitude
+        let filter =
+            Filter::from_str("_geoBoundingBox((90.0000001, 150), (30, 10))").unwrap().unwrap();
+        let error = filter.evaluate(&rtxn, &index).unwrap_err();
+        assert!(
+            error.to_string().starts_with(
+                "Bad latitude `90.0000001`. Latitude must be contained between -90 and 90 degrees."
+            ),
+            "{}",
+            error.to_string()
+        );
+
+        // geoboundingbox bottom right coord have a bad latitude
+        let filter =
+            Filter::from_str("_geoBoundingBox((30, 10), (-90.0000001, 150))").unwrap().unwrap();
+        let error = filter.evaluate(&rtxn, &index).unwrap_err();
+        assert!(error.to_string().contains(
+            "Bad latitude `-90.0000001`. Latitude must be contained between -90 and 90 degrees."
+        ));
+
+        // geoboundingbox bottom right coord have a bad latitude
+        let filter =
+            Filter::from_str("_geoBoundingBox((30, 10), (90.0000001, 150))").unwrap().unwrap();
+        let error = filter.evaluate(&rtxn, &index).unwrap_err();
+        assert!(error.to_string().contains(
+            "Bad latitude `90.0000001`. Latitude must be contained between -90 and 90 degrees."
+        ));
+
+        // geoboundingbox top left coord have a bad longitude
+        let filter =
+            Filter::from_str("_geoBoundingBox((-10, 180.000001), (30, 10))").unwrap().unwrap();
+        let error = filter.evaluate(&rtxn, &index).unwrap_err();
+        assert!(error.to_string().contains(
+            "Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees."
+        ));
+
+        // geoboundingbox top left coord have a bad longitude
+        let filter =
+            Filter::from_str("_geoBoundingBox((-10, -180.000001), (30, 10))").unwrap().unwrap();
+        let error = filter.evaluate(&rtxn, &index).unwrap_err();
+        assert!(error.to_string().contains(
+            "Bad longitude `-180.000001`. Longitude must be contained between -180 and 180 degrees."
+        ));
+
+        // geoboundingbox bottom right coord have a bad longitude
+        let filter =
+            Filter::from_str("_geoBoundingBox((30, 10), (-10, -180.000001))").unwrap().unwrap();
+        let error = filter.evaluate(&rtxn, &index).unwrap_err();
+        assert!(error.to_string().contains(
+            "Bad longitude `-180.000001`. Longitude must be contained between -180 and 180 degrees."
+        ));
+
+        // geoboundingbox bottom right coord have a bad longitude
+        let filter =
+            Filter::from_str("_geoBoundingBox((30, 10), (-10, 180.000001))").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().contains(
             "Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees."
