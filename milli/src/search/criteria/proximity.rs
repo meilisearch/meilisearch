@@ -497,7 +497,7 @@ fn resolve_plane_sweep_candidates(
                         }
                     }
                     match subgroup.len() {
-                        0 => {},
+                        0 => {}
                         1 => groups_positions.push(subgroup.pop().unwrap()),
                         _ => groups_positions.push(plane_sweep(subgroup, true)?),
                     }
