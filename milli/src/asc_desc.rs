@@ -92,7 +92,10 @@ impl FromStr for Member {
                 Ok(Member::Geo([lat, lng]))
             }
             None => {
-                if is_reserved_keyword(text) || text.starts_with("_geoRadius(") || text.starts_with("_geoBoundingBox(") {
+                if is_reserved_keyword(text)
+                    || text.starts_with("_geoRadius(")
+                    || text.starts_with("_geoBoundingBox(")
+                {
                     return Err(AscDescError::ReservedKeyword { name: text.to_string() })?;
                 }
                 Ok(Member::Field(text.to_string()))

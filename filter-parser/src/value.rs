@@ -6,7 +6,10 @@ use nom::sequence::{delimited, terminated};
 use nom::{InputIter, InputLength, InputTake, Slice};
 
 use crate::error::{ExpectedValueKind, NomErrorExt};
-use crate::{parse_geo_point, parse_geo_radius, parse_geo_bounding_box, Error, ErrorKind, IResult, Span, Token};
+use crate::{
+    parse_geo_bounding_box, parse_geo_point, parse_geo_radius, Error, ErrorKind, IResult, Span,
+    Token,
+};
 
 /// This function goes through all characters in the [Span] if it finds any escaped character (`\`).
 /// It generates a new string with all `\` removed from the [Span].
@@ -91,7 +94,9 @@ pub fn parse_value(input: Span) -> IResult<Token> {
         }
     }
     match parse_geo_radius(input) {
-        Ok(_) => return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::MisusedGeoRadius))),
+        Ok(_) => {
+            return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::MisusedGeoRadius)))
+        }
         // if we encountered a failure it means the user badly wrote a _geoRadius filter.
         // But instead of showing him how to fix his syntax we are going to tell him he should not use this filter as a value.
         Err(e) if e.is_failure() => {
@@ -101,11 +106,19 @@ pub fn parse_value(input: Span) -> IResult<Token> {
     }
 
     match parse_geo_bounding_box(input) {
-        Ok(_) => return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::MisusedGeoBoundingBox))),
+        Ok(_) => {
+            return Err(nom::Err::Failure(Error::new_from_kind(
+                input,
+                ErrorKind::MisusedGeoBoundingBox,
+            )))
+        }
         // if we encountered a failure it means the user badly wrote a _geoBoundingBox filter.
         // But instead of showing him how to fix his syntax we are going to tell him he should not use this filter as a value.
         Err(e) if e.is_failure() => {
-            return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::MisusedGeoBoundingBox)))
+            return Err(nom::Err::Failure(Error::new_from_kind(
+                input,
+                ErrorKind::MisusedGeoBoundingBox,
+            )))
         }
         _ => (),
     }
