@@ -236,7 +236,7 @@ impl FacetsUpdateIncrementalInner {
 
         let max_group_size = self.max_group_size;
 
-        let result = self.insert_in_level(txn, field_id, level - 1, &(*facet_value), docids)?;
+        let result = self.insert_in_level(txn, field_id, level - 1, facet_value, docids)?;
         // level below inserted an element
 
         let (insertion_key, insertion_value) =
@@ -494,7 +494,7 @@ impl FacetsUpdateIncrementalInner {
         let (deletion_key, mut bitmap) =
             self.find_insertion_key_value(field_id, level, facet_value, txn)?;
 
-        let result = self.delete_in_level(txn, field_id, level - 1, &(*facet_value), docids)?;
+        let result = self.delete_in_level(txn, field_id, level - 1, facet_value, docids)?;
 
         let mut decrease_size = false;
         let next_key = match result {

@@ -192,11 +192,12 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
 
         Ok((subwriters, all_docids))
     }
+    #[allow(clippy::type_complexity)]
     fn read_level_0<'t>(
         &self,
         rtxn: &'t RoTxn,
         field_id: u16,
-        #[allow(clippy::type_complexity)] handle_group: &mut dyn FnMut(
+        handle_group: &mut dyn FnMut(
             &[RoaringBitmap],
             &'t [u8],
         ) -> Result<()>,
@@ -248,12 +249,13 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
     /// ## Returns:
     /// A vector of grenad::Reader. The reader at index `i` corresponds to the elements of level `i + 1`
     /// that must be inserted into the database.
+    #[allow(clippy::type_complexity)]
     fn compute_higher_levels<'t>(
         &self,
         rtxn: &'t RoTxn,
         field_id: u16,
         level: u8,
-        #[allow(clippy::type_complexity)] handle_group: &mut dyn FnMut(
+        handle_group: &mut dyn FnMut(
             &[RoaringBitmap],
             &'t [u8],
         ) -> Result<()>,
