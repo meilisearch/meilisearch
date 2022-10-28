@@ -204,7 +204,7 @@ pub(crate) mod test {
 
     use big_s::S;
     use maplit::btreeset;
-    use meilisearch_types::index_uid::IndexUid;
+    use meilisearch_types::index_uid::IndexType;
     use meilisearch_types::keys::{Action, Key};
     use meilisearch_types::milli::update::Setting;
     use meilisearch_types::milli::{self};
@@ -342,7 +342,7 @@ pub(crate) mod test {
                 name: Some(S("doggos_key")),
                 uid: Uuid::from_str("9f8a34da-b6b2-42f0-939b-dbd4c3448655").unwrap(),
                 actions: vec![Action::DocumentsAll],
-                indexes: vec![StarOr::Other(IndexUid::from_str("doggos").unwrap())],
+                indexes: vec![StarOr::Other(IndexType::from_str("doggos").unwrap())],
                 expires_at: Some(datetime!(4130-03-14 12:21 UTC)),
                 created_at: datetime!(1960-11-15 0:00 UTC),
                 updated_at: datetime!(2022-11-10 0:00 UTC),
