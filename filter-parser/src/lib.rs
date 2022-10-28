@@ -18,6 +18,7 @@
 //! doubleQuoted   = "\"" .* all but double quotes "\""
 //! word           = (alphanumeric | _ | - | .)+
 //! geoRadius      = "_geoRadius(" WS* float WS* "," WS* float WS* "," float WS* ")"
+//! geoBoundingBox = "_geoBoundingBox((" WS * float WS* "," WS* float WS* "), (" WS* float WS* "," WS* float WS* ")")
 //! ```
 //!
 //! Other BNF grammar used to handle some specific errors:
@@ -130,6 +131,7 @@ pub enum FilterCondition<'a> {
     Or(Vec<Self>),
     And(Vec<Self>),
     GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a> },
+    GeoBoundingBox { top_left_point: [Token<'a>; 2], bottom_right_point: [Token<'a>; 2]},
 }
 
 impl<'a> FilterCondition<'a> {
@@ -325,6 +327,49 @@ fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
     Ok((input, res))
 }
 
+/// geoBoundingBox      = WS* "_geoBoundingBox((float WS* "," WS* float WS* "), (float WS* "," WS* float WS* ")")
+/// If we parse `_geoBoundingBox` we MUST parse the rest of the expression.
+fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
+    // we want to allow space BEFORE the _geoBoundingBox but not after
+    let parsed = preceded(
+        tuple((multispace0, word_exact("_geoBoundingBox"))),
+        // if we were able to parse `_geoBoundingBox` and can't parse the rest of the input we return a failure
+        cut(
+            delimited(
+                char('('),
+                separated_list1(
+                    tag(","),
+                    ws(
+                        delimited(
+                            char('('),
+                            separated_list1(
+                                tag(","),
+                                ws(recognize_float)
+                            ),
+                            char(')')
+                        )
+                    )
+                ),
+                char(')')
+            )
+        ),
+    )(input)
+    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::Geo)));
+
+    let (input, args) = parsed?;
+
+    if args.len() != 2 {
+        return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::Geo)));
+    }
+
+    //TODO: Check sub array length
+    let res = FilterCondition::GeoBoundingBox {
+        top_left_point: [args[0][0].into(), args[0][1].into()],
+        bottom_right_point: [args[1][0].into(), args[1][1].into()]
+    };
+    Ok((input, res))
+}
+
 /// geoPoint      = WS* "_geoPoint(float WS* "," WS* float WS* "," WS* float)
 fn parse_geo_point(input: Span) -> IResult<FilterCondition> {
     // we want to forbid space BEFORE the _geoPoint but not after
@@ -367,6 +412,7 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
             }),
         ),
         parse_geo_radius,
+        parse_geo_bounding_box,
         parse_in,
         parse_not_in,
         parse_condition,
@@ -512,7 +558,7 @@ pub mod tests {
 
         insta::assert_display_snapshot!(p("channel =    "), @r###"
         Was expecting a value but instead got nothing.
-        14:14 channel =    
+        14:14 channel =
         "###);
 
         insta::assert_display_snapshot!(p("channel = 🐻"), @r###"
@@ -714,6 +760,9 @@ impl<'a> std::fmt::Display for FilterCondition<'a> {
             }
             FilterCondition::GeoLowerThan { point, radius } => {
                 write!(f, "_geoRadius({}, {}, {})", point[0], point[1], radius)
+            }
+            FilterCondition::GeoBoundingBox { top_left_point, bottom_right_point } => {
+                write!(f, "_geoBoundingBox(({}, {}), ({}, {}))", top_left_point[0], top_left_point[1], bottom_right_point[0], bottom_right_point[1])
             }
         }
     }
