@@ -57,8 +57,10 @@ pub enum ExpectedValueKind {
 #[derive(Debug)]
 pub enum ErrorKind<'a> {
     ReservedGeo(&'a str),
-    Geo,
-    MisusedGeo,
+    GeoRadius,
+    GeoBoundingBox,
+    MisusedGeoRadius,
+    MisusedGeoBoundingBox,
     InvalidPrimary,
     ExpectedEof,
     ExpectedValue(ExpectedValueKind),
@@ -150,14 +152,20 @@ impl<'a> Display for Error<'a> {
             ErrorKind::ExpectedEof => {
                 writeln!(f, "Found unexpected characters at the end of the filter: `{}`. You probably forgot an `OR` or an `AND` rule.", escaped_input)?
             }
-            ErrorKind::Geo => {
+            ErrorKind::GeoRadius => {
                 writeln!(f, "The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`.")?
+            }
+            ErrorKind::GeoBoundingBox => {
+                writeln!(f, "The `_geoBoundingBox` filter expects two pair of arguments: `_geoBoundingBox((latitude, longitude), (latitude, longitude))`.")?
             }
             ErrorKind::ReservedGeo(name) => {
                 writeln!(f, "`{}` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance) built-in rule to filter on `_geo` coordinates.", name.escape_debug())?
             }
-            ErrorKind::MisusedGeo => {
+            ErrorKind::MisusedGeoRadius => {
                 writeln!(f, "The `_geoRadius` filter is an operation and can't be used as a value.")?
+            }
+            ErrorKind::MisusedGeoBoundingBox => {
+                writeln!(f, "The `_geoBoundingBox` filter is an operation and can't be used as a value.")?
             }
             ErrorKind::ReservedKeyword(word) => {
                 writeln!(f, "`{word}` is a reserved keyword and thus cannot be used as a field name unless it is put inside quotes. Use \"{word}\" or \'{word}\' instead.")?

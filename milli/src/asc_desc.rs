@@ -55,6 +55,9 @@ impl From<AscDescError> for CriterionError {
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoRadius") => {
                 CriterionError::ReservedNameForFilter { name: "_geoRadius".to_string() }
             }
+            AscDescError::ReservedKeyword { name } if name.starts_with("_geoBoundingBox") => {
+                CriterionError::ReservedNameForFilter { name: "_geoBoundingBox".to_string() }
+            }
             AscDescError::ReservedKeyword { name } => CriterionError::ReservedName { name },
         }
     }

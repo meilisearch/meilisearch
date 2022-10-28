@@ -45,6 +45,7 @@ mod error;
 mod value;
 
 use std::fmt::Debug;
+use std::str::FromStr;
 
 pub use condition::{parse_condition, parse_to, Condition};
 use condition::{parse_exists, parse_not_exists};
@@ -71,7 +72,7 @@ const MAX_FILTER_DEPTH: usize = 200;
 #[derive(Debug, Clone, Eq)]
 pub struct Token<'a> {
     /// The token in the original input, it should be used when possible.
-    span: Span<'a>,
+    pub span: Span<'a>,
     /// If you need to modify the original input you can use the `value` field
     /// to store your modified input.
     value: Option<String>,
@@ -101,7 +102,7 @@ impl<'a> Token<'a> {
     }
 
     pub fn parse_finite_float(&self) -> Result<f64, Error> {
-        let value: f64 = self.span.parse().map_err(|e| self.as_external_error(e))?;
+        let value: f64 = self.value().parse().map_err(|e| self.as_external_error(e))?;
         if value.is_finite() {
             Ok(value)
         } else {
@@ -131,7 +132,7 @@ pub enum FilterCondition<'a> {
     Or(Vec<Self>),
     And(Vec<Self>),
     GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a> },
-    GeoBoundingBox { top_left_point: [Token<'a>; 2], bottom_right_point: [Token<'a>; 2]},
+    GeoBoundingBox { top_left_point: [Token<'a>; 2], bottom_right_point: [Token<'a>; 2] },
 }
 
 impl<'a> FilterCondition<'a> {
@@ -312,12 +313,12 @@ fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
         // if we were able to parse `_geoRadius` and can't parse the rest of the input we return a failure
         cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
     )(input)
-    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::Geo)));
+    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::GeoRadius)));
 
     let (input, args) = parsed?;
 
     if args.len() != 3 {
-        return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::Geo)));
+        return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::GeoRadius)));
     }
 
     let res = FilterCondition::GeoLowerThan {
@@ -334,38 +335,27 @@ fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
     let parsed = preceded(
         tuple((multispace0, word_exact("_geoBoundingBox"))),
         // if we were able to parse `_geoBoundingBox` and can't parse the rest of the input we return a failure
-        cut(
-            delimited(
-                char('('),
-                separated_list1(
-                    tag(","),
-                    ws(
-                        delimited(
-                            char('('),
-                            separated_list1(
-                                tag(","),
-                                ws(recognize_float)
-                            ),
-                            char(')')
-                        )
-                    )
-                ),
-                char(')')
-            )
-        ),
+        cut(delimited(
+            char('('),
+            separated_list1(
+                tag(","),
+                ws(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
+            ),
+            char(')'),
+        )),
     )(input)
-    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::Geo)));
+    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::GeoBoundingBox)));
 
     let (input, args) = parsed?;
 
-    if args.len() != 2 {
-        return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::Geo)));
+    if args.len() != 2 || args[0].len() != 2 || args[1].len() != 2 {
+        return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::GeoBoundingBox)));
     }
 
     //TODO: Check sub array length
     let res = FilterCondition::GeoBoundingBox {
         top_left_point: [args[0][0].into(), args[0][1].into()],
-        bottom_right_point: [args[1][0].into(), args[1][1].into()]
+        bottom_right_point: [args[1][0].into(), args[1][1].into()],
     };
     Ok((input, res))
 }
@@ -762,7 +752,14 @@ impl<'a> std::fmt::Display for FilterCondition<'a> {
                 write!(f, "_geoRadius({}, {}, {})", point[0], point[1], radius)
             }
             FilterCondition::GeoBoundingBox { top_left_point, bottom_right_point } => {
-                write!(f, "_geoBoundingBox(({}, {}), ({}, {}))", top_left_point[0], top_left_point[1], bottom_right_point[0], bottom_right_point[1])
+                write!(
+                    f,
+                    "_geoBoundingBox(({}, {}), ({}, {}))",
+                    top_left_point[0],
+                    top_left_point[1],
+                    bottom_right_point[0],
+                    bottom_right_point[1]
+                )
             }
         }
     }

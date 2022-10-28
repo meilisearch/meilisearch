@@ -385,6 +385,114 @@ impl<'a> Filter<'a> {
                     }))?
                 }
             }
+            FilterCondition::GeoBoundingBox { top_left_point, bottom_right_point } => {
+                if filterable_fields.contains("_geo") {
+                    let top_left: [f64; 2] = [
+                        top_left_point[0].parse_finite_float()?,
+                        top_left_point[1].parse_finite_float()?,
+                    ];
+                    let bottom_right: [f64; 2] = [
+                        bottom_right_point[0].parse_finite_float()?,
+                        bottom_right_point[1].parse_finite_float()?,
+                    ];
+                    if !(-90.0..=90.0).contains(&top_left[0]) {
+                        return Err(top_left_point[0]
+                            .as_external_error(FilterError::BadGeoLat(top_left[0])))?;
+                    }
+                    if !(-180.0..=180.0).contains(&top_left[1]) {
+                        return Err(top_left_point[1]
+                            .as_external_error(FilterError::BadGeoLng(top_left[1])))?;
+                    }
+                    if !(-90.0..=90.0).contains(&bottom_right[0]) {
+                        return Err(bottom_right_point[0]
+                            .as_external_error(FilterError::BadGeoLat(bottom_right[0])))?;
+                    }
+                    if !(-180.0..=180.0).contains(&bottom_right[1]) {
+                        return Err(bottom_right_point[1]
+                            .as_external_error(FilterError::BadGeoLng(bottom_right[1])))?;
+                    }
+
+                    let geo_lat_token =
+                        Token::new(top_left_point[0].span, Some("_geo.lat".to_string()));
+
+                    let condition_lat = FilterCondition::Condition {
+                        fid: geo_lat_token,
+                        op: Condition::Between {
+                            from: bottom_right_point[0].clone(),
+                            to: top_left_point[0].clone(),
+                        },
+                    };
+
+                    let selected_lat = Filter { condition: condition_lat }.inner_evaluate(
+                        rtxn,
+                        index,
+                        filterable_fields,
+                    )?;
+
+                    let geo_lng_token =
+                        Token::new(top_left_point[1].span, Some("_geo.lng".to_string()));
+                    let min_lng_token =
+                        Token::new(top_left_point[1].span, Some("-180.0".to_string()));
+                    let max_lng_token =
+                        Token::new(top_left_point[1].span, Some("180.0".to_string()));
+
+                    let selected_lng = if top_left[1] > bottom_right[1] {
+                        dbg!("test");
+
+                        let condition_left = FilterCondition::Condition {
+                            fid: geo_lng_token.clone(),
+                            op: Condition::Between {
+                                from: dbg!(top_left_point[1].clone()),
+                                to: max_lng_token,
+                            },
+                        };
+                        let left = Filter { condition: condition_left }.inner_evaluate(
+                            rtxn,
+                            index,
+                            filterable_fields,
+                        )?;
+
+                        let condition_right = FilterCondition::Condition {
+                            fid: geo_lng_token,
+                            op: Condition::Between {
+                                from: dbg!(min_lng_token),
+                                to: dbg!(bottom_right_point[1].clone()),
+                            },
+                        };
+                        let right = Filter { condition: condition_right }.inner_evaluate(
+                            rtxn,
+                            index,
+                            filterable_fields,
+                        )?;
+
+                        dbg!(&left);
+                        dbg!(&right);
+                        dbg!(left | right)
+                    } else {
+                        let condition_lng = FilterCondition::Condition {
+                            fid: geo_lng_token,
+                            op: Condition::Between {
+                                from: top_left_point[1].clone(),
+                                to: bottom_right_point[1].clone(),
+                            },
+                        };
+                        Filter { condition: condition_lng }.inner_evaluate(
+                            rtxn,
+                            index,
+                            filterable_fields,
+                        )?
+                    };
+
+                    dbg!(&selected_lng);
+
+                    Ok(selected_lat & selected_lng)
+                } else {
+                    Err(top_left_point[0].as_external_error(FilterError::AttributeNotFilterable {
+                        attribute: "_geo",
+                        filterable_fields: filterable_fields.clone(),
+                    }))?
+                }
+            }
         }
     }
 }
