@@ -118,6 +118,7 @@ pub enum Code {
     IndexAlreadyExists,
     IndexNotFound,
     InvalidIndexUid,
+    InvalidIndexPattern,
     InvalidMinWordLengthForTypo,
 
     DuplicateIndexFound,
@@ -192,7 +193,9 @@ impl Code {
             // thrown when requesting an unexisting index
             IndexNotFound => ErrCode::invalid("index_not_found", StatusCode::NOT_FOUND),
             InvalidIndexUid => ErrCode::invalid("invalid_index_uid", StatusCode::BAD_REQUEST),
-
+            InvalidIndexPattern => {
+                ErrCode::invalid("invalid_index_pattern", StatusCode::BAD_REQUEST)
+            }
             // invalid state error
             InvalidState => ErrCode::internal("invalid_state", StatusCode::INTERNAL_SERVER_ERROR),
             // thrown when no primary key has been set

@@ -36,6 +36,19 @@ impl<T: FromStr> FromStr for StarOr<T> {
     }
 }
 
+impl<T: FromStr> TryFrom<String> for StarOr<T> {
+    type Error = T::Err;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::from_str(&value)
+    }
+}
+impl<T: FromStr> TryFrom<&str> for StarOr<T> {
+    type Error = T::Err;
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::from_str(value)
+    }
+}
+
 impl<T: Deref<Target = str>> Deref for StarOr<T> {
     type Target = str;
 

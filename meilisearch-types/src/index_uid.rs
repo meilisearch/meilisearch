@@ -98,6 +98,15 @@ pub enum IndexTypeError {
 
 impl Error for IndexTypeError {}
 
+impl ErrorCode for IndexTypeError {
+    fn error_code(&self) -> Code {
+        match self {
+            Self::Name(_) => Code::InvalidIndexUid,
+            Self::Pattern(_) => Code::InvalidIndexPattern,
+        }
+    }
+}
+
 impl fmt::Display for IndexTypeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -136,7 +145,6 @@ impl FromStr for IndexType {
         s.to_owned().try_into()
     }
 }
-use serde::{Deserialize, Serialize};
 
 use crate::error::{Code, ErrorCode};
 
