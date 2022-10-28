@@ -100,10 +100,8 @@ impl<'t> Iterator for DescendingFacetSort<'t> {
                     let iter = match self
                         .db
                         .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>()
-                        .rev_range(
-                            self.rtxn,
-                            &(Bound::Included(starting_key_below), end_key_kelow),
-                        ) {
+                        .rev_range(self.rtxn, &(Bound::Included(starting_key_below), end_key_kelow))
+                    {
                         Ok(iter) => iter,
                         Err(e) => return Some(Err(e)),
                     }
