@@ -1,11 +1,10 @@
-use crate::common::{GetAllDocumentsOptions, GetDocumentOptions, Server};
 use actix_web::test;
 use http::header::ACCEPT_ENCODING;
-
-use crate::common::encoder::Encoder;
-use meilisearch_http::{analytics, create_app};
 use serde_json::{json, Value};
 use urlencoding::encode as urlencode;
+
+use crate::common::encoder::Encoder;
+use crate::common::{GetAllDocumentsOptions, GetDocumentOptions, Server};
 
 // TODO: partial test since we are testing error, amd error is not yet fully implemented in
 // transplant
@@ -59,14 +58,8 @@ async fn get_document() {
         })
     );
 
-    let (response, code) = index
-        .get_document(
-            0,
-            Some(GetDocumentOptions {
-                fields: Some(vec!["id"]),
-            }),
-        )
-        .await;
+    let (response, code) =
+        index.get_document(0, Some(GetDocumentOptions { fields: Some(vec!["id"]) })).await;
     assert_eq!(code, 200);
     assert_eq!(
         response,
@@ -76,12 +69,7 @@ async fn get_document() {
     );
 
     let (response, code) = index
-        .get_document(
-            0,
-            Some(GetDocumentOptions {
-                fields: Some(vec!["nested.content"]),
-            }),
-        )
+        .get_document(0, Some(GetDocumentOptions { fields: Some(vec!["nested.content"]) }))
         .await;
     assert_eq!(code, 200);
     assert_eq!(
@@ -95,10 +83,8 @@ async fn get_document() {
 #[actix_rt::test]
 async fn error_get_unexisting_index_all_documents() {
     let server = Server::new().await;
-    let (response, code) = server
-        .index("test")
-        .get_all_documents(GetAllDocumentsOptions::default())
-        .await;
+    let (response, code) =
+        server.index("test").get_all_documents(GetAllDocumentsOptions::default()).await;
 
     let expected_response = json!({
         "message": "Index `test` not found.",
@@ -120,9 +106,7 @@ async fn get_no_document() {
 
     index.wait_task(0).await;
 
-    let (response, code) = index
-        .get_all_documents(GetAllDocumentsOptions::default())
-        .await;
+    let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
     assert_eq!(code, 200);
     assert!(response["results"].as_array().unwrap().is_empty());
 }
@@ -133,9 +117,7 @@ async fn get_all_documents_no_options() {
     let index = server.index("test");
     index.load_test_set().await;
 
-    let (response, code) = index
-        .get_all_documents(GetAllDocumentsOptions::default())
-        .await;
+    let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
     assert_eq!(code, 200);
     let arr = response["results"].as_array().unwrap();
     assert_eq!(arr.len(), 20);
@@ -167,15 +149,7 @@ async fn get_all_documents_no_options_with_response_compression() {
     let index = server.index(index_uid);
     index.load_test_set().await;
 
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
-
+    let app = server.init_web_app().await;
     let req = test::TestRequest::get()
         .uri(&format!("/indexes/{}/documents?", urlencode(index_uid)))
         .insert_header((ACCEPT_ENCODING, "gzip"))
@@ -201,10 +175,7 @@ async fn test_get_all_documents_limit() {
     index.load_test_set().await;
 
     let (response, code) = index
-        .get_all_documents(GetAllDocumentsOptions {
-            limit: Some(5),
-            ..Default::default()
-        })
+        .get_all_documents(GetAllDocumentsOptions { limit: Some(5), ..Default::default() })
         .await;
     assert_eq!(code, 200);
     assert_eq!(response["results"].as_array().unwrap().len(), 5);
@@ -221,10 +192,7 @@ async fn test_get_all_documents_offset() {
     index.load_test_set().await;
 
     let (response, code) = index
-        .get_all_documents(GetAllDocumentsOptions {
-            offset: Some(5),
-            ..Default::default()
-        })
+        .get_all_documents(GetAllDocumentsOptions { offset: Some(5), ..Default::default() })
         .await;
     assert_eq!(code, 200);
     assert_eq!(response["results"].as_array().unwrap().len(), 20);
@@ -347,24 +315,12 @@ async fn get_document_s_nested_attributes_to_retrieve() {
     assert_eq!(code, 202);
     index.wait_task(1).await;
 
-    let (response, code) = index
-        .get_document(
-            0,
-            Some(GetDocumentOptions {
-                fields: Some(vec!["content"]),
-            }),
-        )
-        .await;
+    let (response, code) =
+        index.get_document(0, Some(GetDocumentOptions { fields: Some(vec!["content"]) })).await;
     assert_eq!(code, 200);
     assert_eq!(response, json!({}));
-    let (response, code) = index
-        .get_document(
-            1,
-            Some(GetDocumentOptions {
-                fields: Some(vec!["content"]),
-            }),
-        )
-        .await;
+    let (response, code) =
+        index.get_document(1, Some(GetDocumentOptions { fields: Some(vec!["content"]) })).await;
     assert_eq!(code, 200);
     assert_eq!(
         response,
@@ -377,12 +333,7 @@ async fn get_document_s_nested_attributes_to_retrieve() {
     );
 
     let (response, code) = index
-        .get_document(
-            0,
-            Some(GetDocumentOptions {
-                fields: Some(vec!["content.truc"]),
-            }),
-        )
+        .get_document(0, Some(GetDocumentOptions { fields: Some(vec!["content.truc"]) }))
         .await;
     assert_eq!(code, 200);
     assert_eq!(
@@ -392,12 +343,7 @@ async fn get_document_s_nested_attributes_to_retrieve() {
         })
     );
     let (response, code) = index
-        .get_document(
-            1,
-            Some(GetDocumentOptions {
-                fields: Some(vec!["content.truc"]),
-            }),
-        )
+        .get_document(1, Some(GetDocumentOptions { fields: Some(vec!["content.truc"]) }))
         .await;
     assert_eq!(code, 200);
     assert_eq!(
@@ -414,20 +360,13 @@ async fn get_document_s_nested_attributes_to_retrieve() {
 async fn get_documents_displayed_attributes_is_ignored() {
     let server = Server::new().await;
     let index = server.index("test");
-    index
-        .update_settings(json!({"displayedAttributes": ["gender"]}))
-        .await;
+    index.update_settings(json!({"displayedAttributes": ["gender"]})).await;
     index.load_test_set().await;
 
-    let (response, code) = index
-        .get_all_documents(GetAllDocumentsOptions::default())
-        .await;
+    let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
     assert_eq!(code, 200);
     assert_eq!(response["results"].as_array().unwrap().len(), 20);
-    assert_eq!(
-        response["results"][0].as_object().unwrap().keys().count(),
-        16
-    );
+    assert_eq!(response["results"][0].as_object().unwrap().keys().count(), 16);
     assert!(response["results"][0]["gender"] != json!(null));
 
     assert_eq!(response["offset"], json!(0));

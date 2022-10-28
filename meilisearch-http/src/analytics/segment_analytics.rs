@@ -7,13 +7,9 @@ use std::time::{Duration, Instant};
 use actix_web::http::header::USER_AGENT;
 use actix_web::HttpRequest;
 use http::header::CONTENT_TYPE;
+use index_scheduler::IndexScheduler;
 use meilisearch_auth::SearchRules;
-use meilisearch_lib::index::{
-    SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
-    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
-};
-use meilisearch_lib::index_controller::Stats;
-use meilisearch_lib::MeiliSearch;
+use meilisearch_types::InstanceUid;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use segment::message::{Identify, Track, User};
@@ -25,24 +21,27 @@ use tokio::select;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use uuid::Uuid;
 
+use super::{config_user_id_path, MEILISEARCH_CONFIG_PATH};
 use crate::analytics::Analytics;
 use crate::option::default_http_addr;
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
+use crate::routes::{create_all_stats, Stats};
+use crate::search::{
+    SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
+};
 use crate::Opt;
-
-use super::{config_user_id_path, MEILISEARCH_CONFIG_PATH};
 
 const ANALYTICS_HEADER: &str = "X-Meilisearch-Client";
 
 /// Write the instance-uid in the `data.ms` and in `~/.config/MeiliSearch/path-to-db-instance-uid`. Ignore the errors.
-fn write_user_id(db_path: &Path, user_id: &str) {
+fn write_user_id(db_path: &Path, user_id: &InstanceUid) {
     let _ = fs::write(db_path.join("instance-uid"), user_id.as_bytes());
-    if let Some((meilisearch_config_path, user_id_path)) = MEILISEARCH_CONFIG_PATH
-        .as_ref()
-        .zip(config_user_id_path(db_path))
+    if let Some((meilisearch_config_path, user_id_path)) =
+        MEILISEARCH_CONFIG_PATH.as_ref().zip(config_user_id_path(db_path))
     {
         let _ = fs::create_dir_all(&meilisearch_config_path);
-        let _ = fs::write(user_id_path, user_id.as_bytes());
+        let _ = fs::write(user_id_path, user_id.to_string());
     }
 }
 
@@ -71,31 +70,28 @@ pub enum AnalyticsMsg {
 }
 
 pub struct SegmentAnalytics {
+    instance_uid: InstanceUid,
     sender: Sender<AnalyticsMsg>,
     user: User,
 }
 
 impl SegmentAnalytics {
-    pub async fn new(opt: &Opt, meilisearch: &MeiliSearch) -> (Arc<dyn Analytics>, String) {
-        let user_id = super::find_user_id(&opt.db_path);
-        let first_time_run = user_id.is_none();
-        let user_id = user_id.unwrap_or_else(|| Uuid::new_v4().to_string());
-        write_user_id(&opt.db_path, &user_id);
+    pub async fn new(opt: &Opt, index_scheduler: Arc<IndexScheduler>) -> Arc<dyn Analytics> {
+        let instance_uid = super::find_user_id(&opt.db_path);
+        let first_time_run = instance_uid.is_none();
+        let instance_uid = instance_uid.unwrap_or_else(|| Uuid::new_v4());
+        write_user_id(&opt.db_path, &instance_uid);
 
-        let client = reqwest::Client::builder()
-            .connect_timeout(Duration::from_secs(10))
-            .build();
+        let client = reqwest::Client::builder().connect_timeout(Duration::from_secs(10)).build();
 
         // if reqwest throws an error we won't be able to send analytics
         if client.is_err() {
             return super::MockAnalytics::new(opt);
         }
 
-        let client = HttpClient::new(
-            client.unwrap(),
-            "https://telemetry.meilisearch.com".to_string(),
-        );
-        let user = User::UserId { user_id };
+        let client =
+            HttpClient::new(client.unwrap(), "https://telemetry.meilisearch.com".to_string());
+        let user = User::UserId { user_id: instance_uid.to_string() };
         let mut batcher = AutoBatcher::new(client, Batcher::new(None), SEGMENT_API_KEY.to_string());
 
         // If Meilisearch is Launched for the first time:
@@ -104,9 +100,7 @@ impl SegmentAnalytics {
         if first_time_run {
             let _ = batcher
                 .push(Track {
-                    user: User::UserId {
-                        user_id: "total_launch".to_string(),
-                    },
+                    user: User::UserId { user_id: "total_launch".to_string() },
                     event: "Launched".to_string(),
                     ..Default::default()
                 })
@@ -133,18 +127,19 @@ impl SegmentAnalytics {
             add_documents_aggregator: DocumentsAggregator::default(),
             update_documents_aggregator: DocumentsAggregator::default(),
         });
-        tokio::spawn(segment.run(meilisearch.clone()));
+        tokio::spawn(segment.run(index_scheduler.clone()));
 
-        let this = Self {
-            sender,
-            user: user.clone(),
-        };
+        let this = Self { instance_uid, sender, user: user.clone() };
 
-        (Arc::new(this), user.to_string())
+        Arc::new(this)
     }
 }
 
 impl super::Analytics for SegmentAnalytics {
+    fn instance_uid(&self) -> Option<&InstanceUid> {
+        Some(&self.instance_uid)
+    }
+
     fn publish(&self, event_name: String, mut send: Value, request: Option<&HttpRequest>) {
         let user_agent = request.map(|req| extract_user_agents(req));
 
@@ -155,21 +150,15 @@ impl super::Analytics for SegmentAnalytics {
             properties: send,
             ..Default::default()
         };
-        let _ = self
-            .sender
-            .try_send(AnalyticsMsg::BatchMessage(event.into()));
+        let _ = self.sender.try_send(AnalyticsMsg::BatchMessage(event.into()));
     }
 
     fn get_search(&self, aggregate: SearchAggregator) {
-        let _ = self
-            .sender
-            .try_send(AnalyticsMsg::AggregateGetSearch(aggregate));
+        let _ = self.sender.try_send(AnalyticsMsg::AggregateGetSearch(aggregate));
     }
 
     fn post_search(&self, aggregate: SearchAggregator) {
-        let _ = self
-            .sender
-            .try_send(AnalyticsMsg::AggregatePostSearch(aggregate));
+        let _ = self.sender.try_send(AnalyticsMsg::AggregatePostSearch(aggregate));
     }
 
     fn add_documents(
@@ -179,9 +168,7 @@ impl super::Analytics for SegmentAnalytics {
         request: &HttpRequest,
     ) {
         let aggregate = DocumentsAggregator::from_query(documents_query, index_creation, request);
-        let _ = self
-            .sender
-            .try_send(AnalyticsMsg::AggregateAddDocuments(aggregate));
+        let _ = self.sender.try_send(AnalyticsMsg::AggregateAddDocuments(aggregate));
     }
 
     fn update_documents(
@@ -191,9 +178,7 @@ impl super::Analytics for SegmentAnalytics {
         request: &HttpRequest,
     ) {
         let aggregate = DocumentsAggregator::from_query(documents_query, index_creation, request);
-        let _ = self
-            .sender
-            .try_send(AnalyticsMsg::AggregateUpdateDocuments(aggregate));
+        let _ = self.sender.try_send(AnalyticsMsg::AggregateUpdateDocuments(aggregate));
     }
 }
 
@@ -252,11 +237,8 @@ impl Segment {
             infos
         };
 
-        let number_of_documents = stats
-            .indexes
-            .values()
-            .map(|index| index.number_of_documents)
-            .collect::<Vec<u64>>();
+        let number_of_documents =
+            stats.indexes.values().map(|index| index.number_of_documents).collect::<Vec<u64>>();
 
         json!({
             "start_since_days": FIRST_START_TIMESTAMP.elapsed().as_secs() / (60 * 60 * 24), // one day
@@ -270,7 +252,7 @@ impl Segment {
         })
     }
 
-    async fn run(mut self, meilisearch: MeiliSearch) {
+    async fn run(mut self, index_scheduler: Arc<IndexScheduler>) {
         const INTERVAL: Duration = Duration::from_secs(60 * 60); // one hour
                                                                  // The first batch must be sent after one hour.
         let mut interval =
@@ -279,7 +261,7 @@ impl Segment {
         loop {
             select! {
                 _ = interval.tick() => {
-                    self.tick(meilisearch.clone()).await;
+                    self.tick(index_scheduler.clone()).await;
                 },
                 msg = self.inbox.recv() => {
                     match msg {
@@ -295,8 +277,8 @@ impl Segment {
         }
     }
 
-    async fn tick(&mut self, meilisearch: MeiliSearch) {
-        if let Ok(stats) = meilisearch.get_all_stats(&SearchRules::default()).await {
+    async fn tick(&mut self, index_scheduler: Arc<IndexScheduler>) {
+        if let Ok(stats) = create_all_stats(index_scheduler.into(), &SearchRules::default()) {
             let _ = self
                 .batcher
                 .push(Identify {
@@ -373,6 +355,7 @@ pub struct SearchAggregator {
     // pagination
     max_limit: usize,
     max_offset: usize,
+    finite_pagination: usize,
 
     // formatting
     highlight_pre_tag: bool,
@@ -403,11 +386,7 @@ impl SearchAggregator {
             let syntax = match filter {
                 Value::String(_) => "string".to_string(),
                 Value::Array(values) => {
-                    if values
-                        .iter()
-                        .map(|v| v.to_string())
-                        .any(|s| RE.is_match(&s))
-                    {
+                    if values.iter().map(|v| v.to_string()).any(|s| RE.is_match(&s)) {
                         "mixed".to_string()
                     } else {
                         "array".to_string()
@@ -427,11 +406,18 @@ impl SearchAggregator {
             ret.max_terms_number = q.split_whitespace().count();
         }
 
-        ret.matching_strategy
-            .insert(format!("{:?}", query.matching_strategy), 1);
+        if query.is_finite_pagination() {
+            let limit = query.hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
+            ret.max_limit = limit;
+            ret.max_offset = query.page.unwrap_or(1).saturating_sub(1) * limit;
+            ret.finite_pagination = 1;
+        } else {
+            ret.max_limit = query.limit;
+            ret.max_offset = query.offset;
+            ret.finite_pagination = 0;
+        }
 
-        ret.max_limit = query.limit;
-        ret.max_offset = query.offset.unwrap_or_default();
+        ret.matching_strategy.insert(format!("{:?}", query.matching_strategy), 1);
 
         ret.highlight_pre_tag = query.highlight_pre_tag != DEFAULT_HIGHLIGHT_PRE_TAG();
         ret.highlight_post_tag = query.highlight_post_tag != DEFAULT_HIGHLIGHT_POST_TAG();
@@ -463,17 +449,14 @@ impl SearchAggregator {
         self.time_spent.append(&mut other.time_spent);
         // sort
         self.sort_with_geo_point |= other.sort_with_geo_point;
-        self.sort_sum_of_criteria_terms = self
-            .sort_sum_of_criteria_terms
-            .saturating_add(other.sort_sum_of_criteria_terms);
-        self.sort_total_number_of_criteria = self
-            .sort_total_number_of_criteria
-            .saturating_add(other.sort_total_number_of_criteria);
+        self.sort_sum_of_criteria_terms =
+            self.sort_sum_of_criteria_terms.saturating_add(other.sort_sum_of_criteria_terms);
+        self.sort_total_number_of_criteria =
+            self.sort_total_number_of_criteria.saturating_add(other.sort_total_number_of_criteria);
         // filter
         self.filter_with_geo_radius |= other.filter_with_geo_radius;
-        self.filter_sum_of_criteria_terms = self
-            .filter_sum_of_criteria_terms
-            .saturating_add(other.filter_sum_of_criteria_terms);
+        self.filter_sum_of_criteria_terms =
+            self.filter_sum_of_criteria_terms.saturating_add(other.filter_sum_of_criteria_terms);
         self.filter_total_number_of_criteria = self
             .filter_total_number_of_criteria
             .saturating_add(other.filter_total_number_of_criteria);
@@ -491,6 +474,7 @@ impl SearchAggregator {
         // pagination
         self.max_limit = self.max_limit.max(other.max_limit);
         self.max_offset = self.max_offset.max(other.max_offset);
+        self.finite_pagination += other.finite_pagination;
 
         self.highlight_pre_tag |= other.highlight_pre_tag;
         self.highlight_post_tag |= other.highlight_post_tag;
@@ -534,6 +518,7 @@ impl SearchAggregator {
                 "pagination": {
                    "max_limit": self.max_limit,
                    "max_offset": self.max_offset,
+                   "finite_pagination": self.finite_pagination > self.total_received / 2,
                 },
                 "formatting": {
                     "highlight_pre_tag": self.highlight_pre_tag,

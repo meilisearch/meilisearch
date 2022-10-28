@@ -1,10 +1,10 @@
 mod data;
 
-use crate::common::{default_settings, GetAllDocumentsOptions, Server};
 use meilisearch_http::Opt;
 use serde_json::json;
 
 use self::data::GetDump;
+use crate::common::{default_settings, GetAllDocumentsOptions, Server};
 
 // all the following test are ignored on windows. See #2364
 #[actix_rt::test]
@@ -17,28 +17,19 @@ async fn import_dump_v1() {
         GetDump::MoviesWithSettingsV1.path(),
         GetDump::RubyGemsWithSettingsV1.path(),
     ] {
-        let options = Opt {
-            import_dump: Some(path),
-            ..default_settings(temp.path())
-        };
-        let error = Server::new_with_options(options)
-            .await
-            .map(|_| ())
-            .unwrap_err();
+        let options = Opt { import_dump: Some(path), ..default_settings(temp.path()) };
+        let error = Server::new_with_options(options).await.map(drop).unwrap_err();
 
         assert_eq!(error.to_string(), "The version 1 of the dumps is not supported anymore. You can re-export your dump from a version between 0.21 and 0.24, or start fresh from a version 0.25 onwards.");
     }
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v2_movie_raw() {
     let temp = tempfile::tempdir().unwrap();
 
-    let options = Opt {
-        import_dump: Some(GetDump::MoviesRawV2.path()),
-        ..default_settings(temp.path())
-    };
+    let options =
+        Opt { import_dump: Some(GetDump::MoviesRawV2.path()), ..default_settings(temp.path()) };
     let server = Server::new_with_options(options).await.unwrap();
 
     let (indexes, code) = server.list_indexes(None, None).await;
@@ -95,7 +86,6 @@ async fn import_dump_v2_movie_raw() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v2_movie_with_settings() {
     let temp = tempfile::tempdir().unwrap();
 
@@ -159,7 +149,6 @@ async fn import_dump_v2_movie_with_settings() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v2_rubygems_with_settings() {
     let temp = tempfile::tempdir().unwrap();
 
@@ -223,14 +212,11 @@ async fn import_dump_v2_rubygems_with_settings() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v3_movie_raw() {
     let temp = tempfile::tempdir().unwrap();
 
-    let options = Opt {
-        import_dump: Some(GetDump::MoviesRawV3.path()),
-        ..default_settings(temp.path())
-    };
+    let options =
+        Opt { import_dump: Some(GetDump::MoviesRawV3.path()), ..default_settings(temp.path()) };
     let server = Server::new_with_options(options).await.unwrap();
 
     let (indexes, code) = server.list_indexes(None, None).await;
@@ -287,7 +273,6 @@ async fn import_dump_v3_movie_raw() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v3_movie_with_settings() {
     let temp = tempfile::tempdir().unwrap();
 
@@ -351,7 +336,6 @@ async fn import_dump_v3_movie_with_settings() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v3_rubygems_with_settings() {
     let temp = tempfile::tempdir().unwrap();
 
@@ -415,14 +399,11 @@ async fn import_dump_v3_rubygems_with_settings() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v4_movie_raw() {
     let temp = tempfile::tempdir().unwrap();
 
-    let options = Opt {
-        import_dump: Some(GetDump::MoviesRawV4.path()),
-        ..default_settings(temp.path())
-    };
+    let options =
+        Opt { import_dump: Some(GetDump::MoviesRawV4.path()), ..default_settings(temp.path()) };
     let server = Server::new_with_options(options).await.unwrap();
 
     let (indexes, code) = server.list_indexes(None, None).await;
@@ -479,7 +460,6 @@ async fn import_dump_v4_movie_raw() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v4_movie_with_settings() {
     let temp = tempfile::tempdir().unwrap();
 
@@ -543,7 +523,6 @@ async fn import_dump_v4_movie_with_settings() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v4_rubygems_with_settings() {
     let temp = tempfile::tempdir().unwrap();
 
@@ -607,14 +586,11 @@ async fn import_dump_v4_rubygems_with_settings() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v5() {
     let temp = tempfile::tempdir().unwrap();
 
-    let options = Opt {
-        import_dump: Some(GetDump::TestV5.path()),
-        ..default_settings(temp.path())
-    };
+    let options =
+        Opt { import_dump: Some(GetDump::TestV5.path()), ..default_settings(temp.path()) };
     let mut server = Server::new_auth_with_options(options, temp).await;
     server.use_api_key("MASTER_KEY");
 
@@ -654,14 +630,10 @@ async fn import_dump_v5() {
     assert_eq!(code, 200);
     assert_eq!(stats, expected_stats);
 
-    let (docs, code) = index2
-        .get_all_documents(GetAllDocumentsOptions::default())
-        .await;
+    let (docs, code) = index2.get_all_documents(GetAllDocumentsOptions::default()).await;
     assert_eq!(code, 200);
     assert_eq!(docs["results"].as_array().unwrap().len(), 10);
-    let (docs, code) = index1
-        .get_all_documents(GetAllDocumentsOptions::default())
-        .await;
+    let (docs, code) = index1.get_all_documents(GetAllDocumentsOptions::default()).await;
     assert_eq!(code, 200);
     assert_eq!(docs["results"].as_array().unwrap().len(), 10);
 

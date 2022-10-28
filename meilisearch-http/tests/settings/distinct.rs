@@ -1,23 +1,20 @@
-use crate::common::Server;
 use serde_json::json;
+
+use crate::common::Server;
 
 #[actix_rt::test]
 async fn set_and_reset_distinct_attribute() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let (_response, _code) = index
-        .update_settings(json!({ "distinctAttribute": "test"}))
-        .await;
+    let (_response, _code) = index.update_settings(json!({ "distinctAttribute": "test"})).await;
     index.wait_task(0).await;
 
     let (response, _) = index.settings().await;
 
     assert_eq!(response["distinctAttribute"], "test");
 
-    index
-        .update_settings(json!({ "distinctAttribute": null }))
-        .await;
+    index.update_settings(json!({ "distinctAttribute": null })).await;
 
     index.wait_task(1).await;
 

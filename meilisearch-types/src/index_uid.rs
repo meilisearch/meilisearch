@@ -68,10 +68,7 @@ pub struct IndexPattern {
 
 impl IndexPattern {
     fn from_pattern(pattern: String, original_pattern: String) -> Self {
-        Self {
-            prefix: pattern,
-            original_pattern,
-        }
+        Self { prefix: pattern, original_pattern }
     }
 }
 
@@ -87,11 +84,7 @@ pub struct IndexPatternError(String);
 
 impl fmt::Display for IndexPatternError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Pattern should end with {}. Received => {}",
-            PATTERN_IDENTIFIER, self.0
-        )
+        write!(f, "Pattern should end with {}. Received => {}", PATTERN_IDENTIFIER, self.0)
     }
 }
 
@@ -130,10 +123,7 @@ impl TryFrom<String> for IndexType {
     type Error = IndexTypeError;
     fn try_from(value: String) -> Result<Self, Self::Error> {
         if let Some(x) = value.strip_suffix(PATTERN_IDENTIFIER) {
-            Ok(Self::Pattern(IndexPattern::from_pattern(
-                x.to_owned(),
-                value,
-            )))
+            Ok(Self::Pattern(IndexPattern::from_pattern(x.to_owned(), value)))
         } else {
             Ok(Self::Name(IndexUid::try_from(value)?))
         }
@@ -146,6 +136,10 @@ impl FromStr for IndexType {
         s.to_owned().try_into()
     }
 }
+use serde::{Deserialize, Serialize};
+
+use crate::error::{Code, ErrorCode};
+
 /// An index uid is composed of only ascii alphanumeric characters, - and _, between 1 and 400
 /// bytes long
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
@@ -181,15 +175,11 @@ impl TryFrom<String> for IndexUid {
     type Error = IndexTypeError;
 
     fn try_from(uid: String) -> Result<Self, Self::Error> {
-        if !uid
-            .chars()
-            .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
+        if !uid.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
             || uid.is_empty()
             || uid.len() > 400
         {
-            Err(IndexTypeError::Name(IndexUidFormatError {
-                invalid_uid: uid,
-            }))
+            Err(IndexTypeError::Name(IndexUidFormatError { invalid_uid: uid }))
         } else {
             Ok(IndexUid(uid))
         }
@@ -228,3 +218,9 @@ impl fmt::Display for IndexUidFormatError {
 }
 
 impl Error for IndexUidFormatError {}
+
+impl ErrorCode for IndexUidFormatError {
+    fn error_code(&self) -> Code {
+        Code::InvalidIndexUid
+    }
+}

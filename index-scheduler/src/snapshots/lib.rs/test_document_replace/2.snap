@@ -1,0 +1,54 @@
+---
+source: index-scheduler/src/lib.rs
+---
+### Autobatching Enabled = true
+### Processing Tasks:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
+1 {uid: 1, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 1, allow_index_creation: true }}
+2 {uid: 2, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000002, documents_count: 1, allow_index_creation: true }}
+3 {uid: 3, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000003, documents_count: 1, allow_index_creation: true }}
+4 {uid: 4, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000004, documents_count: 1, allow_index_creation: true }}
+5 {uid: 5, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000005, documents_count: 1, allow_index_creation: true }}
+6 {uid: 6, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000006, documents_count: 1, allow_index_creation: true }}
+7 {uid: 7, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000007, documents_count: 1, allow_index_creation: true }}
+8 {uid: 8, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000008, documents_count: 1, allow_index_creation: true }}
+9 {uid: 9, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000009, documents_count: 1, allow_index_creation: true }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+succeeded [0,1,2,3,4,5,6,7,8,9,]
+----------------------------------------------------------------------
+### Kind:
+"documentAdditionOrUpdate" [0,1,2,3,4,5,6,7,8,9,]
+----------------------------------------------------------------------
+### Index Tasks:
+doggos [0,1,2,3,4,5,6,7,8,9,]
+----------------------------------------------------------------------
+### Index Mapper:
+["doggos"]
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+[timestamp] [5,]
+[timestamp] [6,]
+[timestamp] [7,]
+[timestamp] [8,]
+[timestamp] [9,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,1,2,3,4,5,6,7,8,9,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,1,2,3,4,5,6,7,8,9,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------
+

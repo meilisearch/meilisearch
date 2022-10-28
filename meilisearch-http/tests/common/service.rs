@@ -1,15 +1,18 @@
+use std::sync::Arc;
+
 use actix_web::http::header::ContentType;
+use actix_web::http::StatusCode;
+use actix_web::test;
 use actix_web::test::TestRequest;
-use actix_web::{http::StatusCode, test};
+use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
-use meilisearch_lib::MeiliSearch;
+use meilisearch_http::{analytics, create_app, Opt};
 use serde_json::Value;
 
 use crate::common::encoder::Encoder;
-use meilisearch_http::{analytics, create_app, Opt};
 
 pub struct Service {
-    pub meilisearch: MeiliSearch,
+    pub index_scheduler: Arc<IndexScheduler>,
     pub auth: AuthController,
     pub options: Opt,
     pub api_key: Option<String>,
@@ -85,12 +88,12 @@ impl Service {
     }
 
     pub async fn request(&self, mut req: test::TestRequest) -> (Value, StatusCode) {
-        let app = test::init_service(create_app!(
-            &self.meilisearch,
-            &self.auth,
+        let app = test::init_service(create_app(
+            self.index_scheduler.clone().into(),
+            self.auth.clone(),
+            self.options.clone(),
+            analytics::MockAnalytics::new(&self.options),
             true,
-            self.options,
-            analytics::MockAnalytics::new(&self.options).0
         ))
         .await;
 

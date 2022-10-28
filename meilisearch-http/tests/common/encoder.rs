@@ -1,9 +1,10 @@
+use std::io::{Read, Write};
+
 use actix_http::header::TryIntoHeaderPair;
 use bytes::Bytes;
 use flate2::read::{GzDecoder, ZlibDecoder};
 use flate2::write::{GzEncoder, ZlibEncoder};
 use flate2::Compression;
-use std::io::{Read, Write};
 
 #[derive(Clone, Copy)]
 pub enum Encoder {
@@ -18,24 +19,18 @@ impl Encoder {
         match self {
             Self::Gzip => {
                 let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-                encoder
-                    .write_all(&body.into())
-                    .expect("Failed to encode request body");
+                encoder.write_all(&body.into()).expect("Failed to encode request body");
                 encoder.finish().expect("Failed to encode request body")
             }
             Self::Deflate => {
                 let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-                encoder
-                    .write_all(&body.into())
-                    .expect("Failed to encode request body");
+                encoder.write_all(&body.into()).expect("Failed to encode request body");
                 encoder.finish().unwrap()
             }
             Self::Plain => Vec::from(body.into()),
             Self::Brotli => {
                 let mut encoder = brotli::CompressorWriter::new(Vec::new(), 32 * 1024, 3, 22);
-                encoder
-                    .write_all(&body.into())
-                    .expect("Failed to encode request body");
+                encoder.write_all(&body.into()).expect("Failed to encode request body");
                 encoder.flush().expect("Failed to encode request body");
                 encoder.into_inner()
             }
@@ -57,9 +52,7 @@ impl Encoder {
                     .expect("Invalid zlib stream");
             }
             Self::Plain => {
-                buffer
-                    .write_all(input.as_ref())
-                    .expect("Unexpected memory copying issue");
+                buffer.write_all(input.as_ref()).expect("Unexpected memory copying issue");
             }
             Self::Brotli => {
                 brotli::Decompressor::new(input.as_ref(), 4096)
@@ -80,8 +73,6 @@ impl Encoder {
     }
 
     pub fn iterator() -> impl Iterator<Item = Self> {
-        [Self::Plain, Self::Gzip, Self::Deflate, Self::Brotli]
-            .iter()
-            .copied()
+        [Self::Plain, Self::Gzip, Self::Deflate, Self::Brotli].iter().copied()
     }
 }

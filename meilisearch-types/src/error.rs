@@ -1,6 +1,9 @@
 use std::fmt;
 
-use actix_web::{self as aweb, http::StatusCode, HttpResponseBuilder};
+use actix_web::http::StatusCode;
+use actix_web::{self as aweb, HttpResponseBuilder};
+use aweb::rt::task::JoinError;
+use milli::heed::{Error as HeedError, MdbError};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -8,10 +11,7 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "test-traits", derive(proptest_derive::Arbitrary))]
 pub struct ResponseError {
     #[serde(skip)]
-    #[cfg_attr(
-        feature = "test-traits",
-        proptest(strategy = "strategy::status_code_strategy()")
-    )]
+    #[cfg_attr(feature = "test-traits", proptest(strategy = "strategy::status_code_strategy()"))]
     code: StatusCode,
     message: String,
     #[serde(rename = "code")]
@@ -60,9 +60,7 @@ where
 impl aweb::error::ResponseError for ResponseError {
     fn error_response(&self) -> aweb::HttpResponse {
         let json = serde_json::to_vec(self).unwrap();
-        HttpResponseBuilder::new(self.status_code())
-            .content_type("application/json")
-            .body(json)
+        HttpResponseBuilder::new(self.status_code()).content_type("application/json").body(json)
     }
 
     fn status_code(&self) -> StatusCode {
@@ -122,6 +120,8 @@ pub enum Code {
     InvalidIndexUid,
     InvalidMinWordLengthForTypo,
 
+    DuplicateIndexFound,
+
     // invalid state error
     InvalidState,
     MissingPrimaryKey,
@@ -144,9 +144,12 @@ pub enum Code {
     InvalidStore,
     InvalidToken,
     MissingAuthorizationHeader,
+    MissingMasterKey,
     NoSpaceLeftOnDevice,
     DumpNotFound,
     TaskNotFound,
+    TaskDeletionWithEmptyQuery,
+    TaskCancelationWithEmptyQuery,
     PayloadTooLarge,
     RetrieveDocument,
     SearchDocuments,
@@ -154,6 +157,8 @@ pub enum Code {
 
     DumpAlreadyInProgress,
     DumpProcessFailed,
+    // Only used when importing a dump
+    UnretrievableErrorCode,
 
     InvalidContentType,
     MissingContentType,
@@ -220,10 +225,9 @@ impl Code {
 
             BadParameter => ErrCode::invalid("bad_parameter", StatusCode::BAD_REQUEST),
             BadRequest => ErrCode::invalid("bad_request", StatusCode::BAD_REQUEST),
-            DatabaseSizeLimitReached => ErrCode::internal(
-                "database_size_limit_reached",
-                StatusCode::INTERNAL_SERVER_ERROR,
-            ),
+            DatabaseSizeLimitReached => {
+                ErrCode::internal("database_size_limit_reached", StatusCode::INTERNAL_SERVER_ERROR)
+            }
             DocumentNotFound => ErrCode::invalid("document_not_found", StatusCode::NOT_FOUND),
             Internal => ErrCode::internal("internal", StatusCode::INTERNAL_SERVER_ERROR),
             InvalidGeoField => ErrCode::invalid("invalid_geo_field", StatusCode::BAD_REQUEST),
@@ -231,7 +235,16 @@ impl Code {
             MissingAuthorizationHeader => {
                 ErrCode::authentication("missing_authorization_header", StatusCode::UNAUTHORIZED)
             }
+            MissingMasterKey => {
+                ErrCode::authentication("missing_master_key", StatusCode::UNAUTHORIZED)
+            }
             TaskNotFound => ErrCode::invalid("task_not_found", StatusCode::NOT_FOUND),
+            TaskDeletionWithEmptyQuery => {
+                ErrCode::invalid("missing_filters", StatusCode::BAD_REQUEST)
+            }
+            TaskCancelationWithEmptyQuery => {
+                ErrCode::invalid("missing_filters", StatusCode::BAD_REQUEST)
+            }
             DumpNotFound => ErrCode::invalid("dump_not_found", StatusCode::NOT_FOUND),
             NoSpaceLeftOnDevice => {
                 ErrCode::internal("no_space_left_on_device", StatusCode::INTERNAL_SERVER_ERROR)
@@ -260,6 +273,10 @@ impl Code {
                 ErrCode::invalid("invalid_content_type", StatusCode::UNSUPPORTED_MEDIA_TYPE)
             }
             MissingPayload => ErrCode::invalid("missing_payload", StatusCode::BAD_REQUEST),
+            // This one can only happen when importing a dump and encountering an unknown code in the task queue.
+            UnretrievableErrorCode => {
+                ErrCode::invalid("unretrievable_error_code", StatusCode::BAD_REQUEST)
+            }
 
             // error related to keys
             ApiKeyNotFound => ErrCode::invalid("api_key_not_found", StatusCode::NOT_FOUND),
@@ -282,6 +299,9 @@ impl Code {
             ImmutableField => ErrCode::invalid("immutable_field", StatusCode::BAD_REQUEST),
             InvalidMinWordLengthForTypo => {
                 ErrCode::invalid("invalid_min_word_length_for_typo", StatusCode::BAD_REQUEST)
+            }
+            DuplicateIndexFound => {
+                ErrCode::invalid("duplicate_index_found", StatusCode::BAD_REQUEST)
             }
         }
     }
@@ -316,26 +336,77 @@ struct ErrCode {
 
 impl ErrCode {
     fn authentication(error_name: &'static str, status_code: StatusCode) -> ErrCode {
-        ErrCode {
-            status_code,
-            error_name,
-            error_type: ErrorType::AuthenticationError,
-        }
+        ErrCode { status_code, error_name, error_type: ErrorType::AuthenticationError }
     }
 
     fn internal(error_name: &'static str, status_code: StatusCode) -> ErrCode {
-        ErrCode {
-            status_code,
-            error_name,
-            error_type: ErrorType::InternalError,
-        }
+        ErrCode { status_code, error_name, error_type: ErrorType::InternalError }
     }
 
     fn invalid(error_name: &'static str, status_code: StatusCode) -> ErrCode {
-        ErrCode {
-            status_code,
-            error_name,
-            error_type: ErrorType::InvalidRequestError,
+        ErrCode { status_code, error_name, error_type: ErrorType::InvalidRequestError }
+    }
+}
+
+impl ErrorCode for JoinError {
+    fn error_code(&self) -> Code {
+        Code::Internal
+    }
+}
+
+impl ErrorCode for milli::Error {
+    fn error_code(&self) -> Code {
+        use milli::{Error, UserError};
+
+        match self {
+            Error::InternalError(_) => Code::Internal,
+            Error::IoError(_) => Code::Internal,
+            Error::UserError(ref error) => {
+                match error {
+                    // TODO: wait for spec for new error codes.
+                    UserError::SerdeJson(_)
+                    | UserError::InvalidLmdbOpenOptions
+                    | UserError::DocumentLimitReached
+                    | UserError::AccessingSoftDeletedDocument { .. }
+                    | UserError::UnknownInternalDocumentId { .. } => Code::Internal,
+                    UserError::InvalidStoreFile => Code::InvalidStore,
+                    UserError::NoSpaceLeftOnDevice => Code::NoSpaceLeftOnDevice,
+                    UserError::MaxDatabaseSizeReached => Code::DatabaseSizeLimitReached,
+                    UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
+                    UserError::InvalidFilter(_) => Code::Filter,
+                    UserError::MissingDocumentId { .. } => Code::MissingDocumentId,
+                    UserError::InvalidDocumentId { .. } | UserError::TooManyDocumentIds { .. } => {
+                        Code::InvalidDocumentId
+                    }
+                    UserError::MissingPrimaryKey => Code::MissingPrimaryKey,
+                    UserError::PrimaryKeyCannotBeChanged(_) => Code::PrimaryKeyAlreadyPresent,
+                    UserError::SortRankingRuleMissing => Code::Sort,
+                    UserError::InvalidFacetsDistribution { .. } => Code::BadRequest,
+                    UserError::InvalidSortableAttribute { .. } => Code::Sort,
+                    UserError::CriterionError(_) => Code::InvalidRankingRule,
+                    UserError::InvalidGeoField { .. } => Code::InvalidGeoField,
+                    UserError::SortError(_) => Code::Sort,
+                    UserError::InvalidMinTypoWordLenSetting(_, _) => {
+                        Code::InvalidMinWordLengthForTypo
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl ErrorCode for HeedError {
+    fn error_code(&self) -> Code {
+        match self {
+            HeedError::Mdb(MdbError::MapFull) => Code::DatabaseSizeLimitReached,
+            HeedError::Mdb(MdbError::Invalid) => Code::InvalidStore,
+            HeedError::Io(_)
+            | HeedError::Mdb(_)
+            | HeedError::Encoding
+            | HeedError::Decoding
+            | HeedError::InvalidDatabaseTyping
+            | HeedError::DatabaseClosing
+            | HeedError::BadOpenOptions => Code::Internal,
         }
     }
 }

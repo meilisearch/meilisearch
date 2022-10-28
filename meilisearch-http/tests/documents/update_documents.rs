@@ -1,7 +1,7 @@
-use crate::common::{GetAllDocumentsOptions, Server};
+use serde_json::json;
 
 use crate::common::encoder::Encoder;
-use serde_json::json;
+use crate::common::{GetAllDocumentsOptions, Server};
 
 #[actix_rt::test]
 async fn error_document_update_create_index_bad_uid() {
@@ -84,10 +84,7 @@ async fn update_document() {
 
     let (response, code) = index.get_document(1, None).await;
     assert_eq!(code, 200);
-    assert_eq!(
-        response.to_string(),
-        r##"{"doc_id":1,"content":"foo","other":"bar"}"##
-    );
+    assert_eq!(response.to_string(), r##"{"doc_id":1,"content":"foo","other":"bar"}"##);
 }
 
 #[actix_rt::test]
@@ -125,10 +122,7 @@ async fn update_document_gzip_encoded() {
 
     let (response, code) = index.get_document(1, None).await;
     assert_eq!(code, 200);
-    assert_eq!(
-        response.to_string(),
-        r##"{"doc_id":1,"content":"foo","other":"bar"}"##
-    );
+    assert_eq!(response.to_string(), r##"{"doc_id":1,"content":"foo","other":"bar"}"##);
 }
 
 #[actix_rt::test]
@@ -143,10 +137,7 @@ async fn update_larger_dataset() {
     assert_eq!(response["type"], "documentAdditionOrUpdate");
     assert_eq!(response["details"]["indexedDocuments"], 77);
     let (response, code) = index
-        .get_all_documents(GetAllDocumentsOptions {
-            limit: Some(1000),
-            ..Default::default()
-        })
+        .get_all_documents(GetAllDocumentsOptions { limit: Some(1000), ..Default::default() })
         .await;
     assert_eq!(code, 200);
     assert_eq!(response["results"].as_array().unwrap().len(), 77);

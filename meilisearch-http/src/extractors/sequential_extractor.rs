@@ -1,7 +1,10 @@
 #![allow(non_snake_case)]
-use std::{future::Future, pin::Pin, task::Poll};
+use std::future::Future;
+use std::pin::Pin;
+use std::task::Poll;
 
-use actix_web::{dev::Payload, FromRequest, Handler, HttpRequest};
+use actix_web::dev::Payload;
+use actix_web::{FromRequest, Handler, HttpRequest};
 use pin_project_lite::pin_project;
 
 /// `SeqHandler` is an actix `Handler` that enforces that extractors errors are returned in the

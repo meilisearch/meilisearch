@@ -1,0 +1,59 @@
+---
+source: index-scheduler/src/lib.rs
+---
+### Autobatching Enabled = true
+### Processing Tasks:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "a", primary_key: Some("id") }}
+1 {uid: 1, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "b", primary_key: Some("id") }}
+2 {uid: 2, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "c", primary_key: Some("id") }}
+3 {uid: 3, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "d", primary_key: Some("id") }}
+4 {uid: 4, status: failed, error: ResponseError { code: 200, message: "Indexes `e`, `f` not found.", error_code: "index_not_found", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#index_not_found" }, details: { swaps: [IndexSwap { indexes: ("a", "b") }, IndexSwap { indexes: ("c", "e") }, IndexSwap { indexes: ("d", "f") }] }, kind: IndexSwap { swaps: [IndexSwap { indexes: ("a", "b") }, IndexSwap { indexes: ("c", "e") }, IndexSwap { indexes: ("d", "f") }] }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+succeeded [0,1,2,3,]
+failed [4,]
+----------------------------------------------------------------------
+### Kind:
+"indexCreation" [0,1,2,3,]
+"indexSwap" [4,]
+----------------------------------------------------------------------
+### Index Tasks:
+a [0,4,]
+b [1,4,]
+c [2,4,]
+d [3,4,]
+e [4,]
+f [4,]
+----------------------------------------------------------------------
+### Index Mapper:
+["a", "b", "c", "d"]
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------
+

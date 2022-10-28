@@ -3,10 +3,12 @@
 
 mod errors;
 mod formatted;
+mod pagination;
 
-use crate::common::Server;
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
+
+use crate::common::Server;
 
 pub(self) static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     json!([
@@ -198,9 +200,7 @@ async fn search_with_filter_string_notation() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    index
-        .update_settings(json!({"filterableAttributes": ["title"]}))
-        .await;
+    index.update_settings(json!({"filterableAttributes": ["title"]})).await;
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
@@ -220,9 +220,7 @@ async fn search_with_filter_string_notation() {
 
     let index = server.index("nested");
 
-    index
-        .update_settings(json!({"filterableAttributes": ["cattos", "doggos.age"]}))
-        .await;
+    index.update_settings(json!({"filterableAttributes": ["cattos", "doggos.age"]})).await;
 
     let documents = NESTED_DOCUMENTS.clone();
     index.add_documents(documents, None).await;
@@ -261,9 +259,7 @@ async fn search_with_filter_array_notation() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    index
-        .update_settings(json!({"filterableAttributes": ["title"]}))
-        .await;
+    index.update_settings(json!({"filterableAttributes": ["title"]})).await;
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
@@ -291,9 +287,7 @@ async fn search_with_sort_on_numbers() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    index
-        .update_settings(json!({"sortableAttributes": ["id"]}))
-        .await;
+    index.update_settings(json!({"sortableAttributes": ["id"]})).await;
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
@@ -313,9 +307,7 @@ async fn search_with_sort_on_numbers() {
 
     let index = server.index("nested");
 
-    index
-        .update_settings(json!({"sortableAttributes": ["doggos.age"]}))
-        .await;
+    index.update_settings(json!({"sortableAttributes": ["doggos.age"]})).await;
 
     let documents = NESTED_DOCUMENTS.clone();
     index.add_documents(documents, None).await;
@@ -339,9 +331,7 @@ async fn search_with_sort_on_strings() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    index
-        .update_settings(json!({"sortableAttributes": ["title"]}))
-        .await;
+    index.update_settings(json!({"sortableAttributes": ["title"]})).await;
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
@@ -361,9 +351,7 @@ async fn search_with_sort_on_strings() {
 
     let index = server.index("nested");
 
-    index
-        .update_settings(json!({"sortableAttributes": ["doggos.name"]}))
-        .await;
+    index.update_settings(json!({"sortableAttributes": ["doggos.name"]})).await;
 
     let documents = NESTED_DOCUMENTS.clone();
     index.add_documents(documents, None).await;
@@ -387,9 +375,7 @@ async fn search_with_multiple_sort() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    index
-        .update_settings(json!({"sortableAttributes": ["id", "title"]}))
-        .await;
+    index.update_settings(json!({"sortableAttributes": ["id", "title"]})).await;
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
@@ -409,9 +395,7 @@ async fn search_facet_distribution() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    index
-        .update_settings(json!({"filterableAttributes": ["title"]}))
-        .await;
+    index.update_settings(json!({"filterableAttributes": ["title"]})).await;
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
@@ -433,9 +417,7 @@ async fn search_facet_distribution() {
 
     let index = server.index("nested");
 
-    index
-        .update_settings(json!({"filterableAttributes": ["father", "doggos.name"]}))
-        .await;
+    index.update_settings(json!({"filterableAttributes": ["father", "doggos.name"]})).await;
 
     let documents = NESTED_DOCUMENTS.clone();
     index.add_documents(documents, None).await;
@@ -466,9 +448,7 @@ async fn search_facet_distribution() {
         )
         .await;
 
-    index
-        .update_settings(json!({"filterableAttributes": ["doggos"]}))
-        .await;
+    index.update_settings(json!({"filterableAttributes": ["doggos"]})).await;
     index.wait_task(4).await;
 
     index
@@ -501,10 +481,7 @@ async fn search_facet_distribution() {
                     dist["doggos.name"],
                     json!({ "bobby": 1, "buddy": 1, "gros bill": 1, "turbo": 1, "fast": 1})
                 );
-                assert_eq!(
-                    dist["doggos.age"],
-                    json!({ "2": 1, "4": 1, "5": 1, "6": 1, "8": 1})
-                );
+                assert_eq!(dist["doggos.age"], json!({ "2": 1, "4": 1, "5": 1, "6": 1, "8": 1}));
             },
         )
         .await;
@@ -515,17 +492,14 @@ async fn displayed_attributes() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    index
-        .update_settings(json!({ "displayedAttributes": ["title"] }))
-        .await;
+    index.update_settings(json!({ "displayedAttributes": ["title"] })).await;
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
     index.wait_task(1).await;
 
-    let (response, code) = index
-        .search_post(json!({ "attributesToRetrieve": ["title", "id"] }))
-        .await;
+    let (response, code) =
+        index.search_post(json!({ "attributesToRetrieve": ["title", "id"] })).await;
     assert_eq!(code, 200, "{}", response);
     assert!(response["hits"][0].get("title").is_some());
 }
@@ -535,9 +509,7 @@ async fn placeholder_search_is_hard_limited() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let documents: Vec<_> = (0..1200)
-        .map(|i| json!({ "id": i, "text": "I am unique!" }))
-        .collect();
+    let documents: Vec<_> = (0..1200).map(|i| json!({ "id": i, "text": "I am unique!" })).collect();
     index.add_documents(documents.into(), None).await;
     index.wait_task(0).await;
 
@@ -566,9 +538,7 @@ async fn placeholder_search_is_hard_limited() {
         )
         .await;
 
-    index
-        .update_settings(json!({ "pagination": { "maxTotalHits": 10_000 } }))
-        .await;
+    index.update_settings(json!({ "pagination": { "maxTotalHits": 10_000 } })).await;
     index.wait_task(1).await;
 
     index
@@ -602,9 +572,7 @@ async fn search_is_hard_limited() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let documents: Vec<_> = (0..1200)
-        .map(|i| json!({ "id": i, "text": "I am unique!" }))
-        .collect();
+    let documents: Vec<_> = (0..1200).map(|i| json!({ "id": i, "text": "I am unique!" })).collect();
     index.add_documents(documents.into(), None).await;
     index.wait_task(0).await;
 
@@ -635,9 +603,7 @@ async fn search_is_hard_limited() {
         )
         .await;
 
-    index
-        .update_settings(json!({ "pagination": { "maxTotalHits": 10_000 } }))
-        .await;
+    index.update_settings(json!({ "pagination": { "maxTotalHits": 10_000 } })).await;
     index.wait_task(1).await;
 
     index
@@ -673,13 +639,9 @@ async fn faceting_max_values_per_facet() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    index
-        .update_settings(json!({ "filterableAttributes": ["number"] }))
-        .await;
+    index.update_settings(json!({ "filterableAttributes": ["number"] })).await;
 
-    let documents: Vec<_> = (0..10_000)
-        .map(|id| json!({ "id": id, "number": id * 10 }))
-        .collect();
+    let documents: Vec<_> = (0..10_000).map(|id| json!({ "id": id, "number": id * 10 })).collect();
     index.add_documents(json!(documents), None).await;
     index.wait_task(1).await;
 
@@ -696,9 +658,7 @@ async fn faceting_max_values_per_facet() {
         )
         .await;
 
-    index
-        .update_settings(json!({ "faceting": { "maxValuesPerFacet": 10_000 } }))
-        .await;
+    index.update_settings(json!({ "faceting": { "maxValuesPerFacet": 10_000 } })).await;
     index.wait_task(2).await;
 
     index

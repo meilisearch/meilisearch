@@ -1,0 +1,36 @@
+---
+source: index-scheduler/src/lib.rs
+---
+### Autobatching Enabled = true
+### Processing Tasks:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+succeeded [0,]
+----------------------------------------------------------------------
+### Kind:
+"documentAdditionOrUpdate" [0,]
+----------------------------------------------------------------------
+### Index Tasks:
+doggos [0,]
+----------------------------------------------------------------------
+### Index Mapper:
+["doggos"]
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------
+

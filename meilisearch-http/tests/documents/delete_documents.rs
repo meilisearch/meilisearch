@@ -29,9 +29,7 @@ async fn delete_one_unexisting_document() {
 async fn delete_one_document() {
     let server = Server::new().await;
     let index = server.index("test");
-    index
-        .add_documents(json!([{ "id": 0, "content": "foobar" }]), None)
-        .await;
+    index.add_documents(json!([{ "id": 0, "content": "foobar" }]), None).await;
     index.wait_task(0).await;
     let (_response, code) = server.index("test").delete_document(0).await;
     assert_eq!(code, 202);
@@ -68,9 +66,7 @@ async fn clear_all_documents() {
     assert_eq!(code, 202);
 
     let _update = index.wait_task(1).await;
-    let (response, code) = index
-        .get_all_documents(GetAllDocumentsOptions::default())
-        .await;
+    let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
     assert_eq!(code, 200);
     assert!(response["results"].as_array().unwrap().is_empty());
 }
@@ -85,9 +81,7 @@ async fn clear_all_documents_empty_index() {
     assert_eq!(code, 202);
 
     let _update = index.wait_task(0).await;
-    let (response, code) = index
-        .get_all_documents(GetAllDocumentsOptions::default())
-        .await;
+    let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
     assert_eq!(code, 200);
     assert!(response["results"].as_array().unwrap().is_empty());
 }
@@ -121,9 +115,7 @@ async fn delete_batch() {
     assert_eq!(code, 202);
 
     let _update = index.wait_task(1).await;
-    let (response, code) = index
-        .get_all_documents(GetAllDocumentsOptions::default())
-        .await;
+    let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
     assert_eq!(code, 200);
     assert_eq!(response["results"].as_array().unwrap().len(), 1);
     assert_eq!(response["results"][0]["id"], json!(3));
@@ -139,9 +131,7 @@ async fn delete_no_document_batch() {
     assert_eq!(code, 202, "{}", _response);
 
     let _update = index.wait_task(1).await;
-    let (response, code) = index
-        .get_all_documents(GetAllDocumentsOptions::default())
-        .await;
+    let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
     assert_eq!(code, 200);
     assert_eq!(response["results"].as_array().unwrap().len(), 3);
 }

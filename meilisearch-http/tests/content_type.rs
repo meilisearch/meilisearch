@@ -2,10 +2,10 @@
 
 mod common;
 
-use crate::common::Server;
 use actix_web::test;
-use meilisearch_http::{analytics, create_app};
 use serde_json::{json, Value};
+
+use crate::common::Server;
 
 enum HttpVerb {
     Put,
@@ -59,14 +59,8 @@ async fn error_json_bad_content_type() {
 
     let document = "{}";
     let server = Server::new().await;
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
+    let app = server.init_web_app().await;
+
     for (verb, route) in routes {
         // Good content-type, we probably have an error since we didn't send anything in the json
         // so we only ensure we didn't get a bad media type error.
@@ -82,11 +76,7 @@ async fn error_json_bad_content_type() {
         "calling the route `{}` with a content-type of json isn't supposed to throw a bad media type error", route);
 
         // No content-type.
-        let req = verb
-            .test_request()
-            .uri(route)
-            .set_payload(document)
-            .to_request();
+        let req = verb.test_request().uri(route).set_payload(document).to_request();
         let res = test::call_service(&app, req).await;
         let status_code = res.status();
         let body = test::read_body(res).await;
@@ -142,14 +132,7 @@ async fn extract_actual_content_type() {
     let route = "/indexes/doggo/documents";
     let documents = "[{}]";
     let server = Server::new().await;
-    let app = test::init_service(create_app!(
-        &server.service.meilisearch,
-        &server.service.auth,
-        true,
-        server.service.options,
-        analytics::MockAnalytics::new(&server.service.options).0
-    ))
-    .await;
+    let app = server.init_web_app().await;
 
     // Good content-type, we probably have an error since we didn't send anything in the json
     // so we only ensure we didn't get a bad media type error.

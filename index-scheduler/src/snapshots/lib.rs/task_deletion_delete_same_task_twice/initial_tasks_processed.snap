@@ -1,0 +1,40 @@
+---
+source: index-scheduler/src/lib.rs
+---
+### Autobatching Enabled = true
+### Processing Tasks:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
+1 {uid: 1, status: enqueued, details: { received_documents: 1, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "doggo", primary_key: Some("bone"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 1, allow_index_creation: true }}
+----------------------------------------------------------------------
+### Status:
+enqueued [1,]
+succeeded [0,]
+----------------------------------------------------------------------
+### Kind:
+"documentAdditionOrUpdate" [0,1,]
+----------------------------------------------------------------------
+### Index Tasks:
+catto [0,]
+doggo [1,]
+----------------------------------------------------------------------
+### Index Mapper:
+["catto"]
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### File Store:
+00000000-0000-0000-0000-000000000001
+
+----------------------------------------------------------------------
+

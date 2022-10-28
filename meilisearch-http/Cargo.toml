@@ -4,27 +4,16 @@ description = "Meilisearch HTTP server"
 edition = "2021"
 license = "MIT"
 name = "meilisearch-http"
-version = "0.29.1"
+version = "0.30.0"
 
 [[bin]]
 name = "meilisearch"
 path = "src/main.rs"
 
-[build-dependencies]
-anyhow = { version = "1.0.65", optional = true }
-cargo_toml = { version = "0.12.4", optional = true }
-hex = { version = "0.4.3", optional = true }
-reqwest = { version = "0.11.12", features = ["blocking", "rustls-tls"], default-features = false, optional = true }
-sha-1 = { version = "0.10.0", optional = true }
-static-files = { version = "0.2.3", optional = true }
-tempfile = { version = "3.3.0", optional = true }
-vergen = { version = "7.4.2", default-features = false, features = ["git"] }
-zip = { version = "0.6.2", optional = true }
-
 [dependencies]
 actix-cors = "0.6.3"
+actix-http = { version = "3.2.2", default-features = false, features = ["compress-brotli", "compress-gzip", "rustls"] }
 actix-web = { version = "4.2.1", default-features = false, features = ["macros", "compress-brotli", "compress-gzip", "cookies", "rustls"] }
-actix-http = "3.2.2"
 actix-web-static-files = { git = "https://github.com/kilork/actix-web-static-files.git", rev = "2d3b6160", optional = true }
 anyhow = { version = "1.0.65", features = ["backtrace"] }
 async-stream = "0.3.3"
@@ -34,28 +23,33 @@ byte-unit = { version = "4.0.14", default-features = false, features = ["std", "
 bytes = "1.2.1"
 clap = { version = "4.0.9", features = ["derive", "env"] }
 crossbeam-channel = "0.5.6"
+dump = { path = "../dump" }
 either = "1.8.0"
 env_logger = "0.9.1"
+file-store = { path = "../file-store" }
 flate2 = "1.0.24"
 fst = "0.4.7"
 futures = "0.3.24"
 futures-util = "0.3.24"
 http = "0.2.8"
+index-scheduler = { path = "../index-scheduler" }
 indexmap = { version = "1.9.1", features = ["serde-1"] }
 itertools = "0.10.5"
 jsonwebtoken = "8.1.1"
+lazy_static = "1.4.0"
 log = "0.4.17"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
-meilisearch-lib = { path = "../meilisearch-lib", default-features = false }
 mimalloc = { version = "0.1.29", default-features = false }
 mime = "0.3.16"
 num_cpus = "1.13.1"
 obkv = "0.2.0"
 once_cell = "1.15.0"
 parking_lot = "0.12.1"
+permissive-json-pointer = { path = "../permissive-json-pointer" }
 pin-project-lite = "0.2.9"
 platform-dirs = "0.3.0"
+prometheus = { version = "0.13.2", features = ["process"], optional = true }
 rand = "0.8.5"
 rayon = "1.5.3"
 regex = "1.6.0"
@@ -80,8 +74,7 @@ tokio-stream = "0.1.10"
 toml = "0.5.9"
 uuid = { version = "1.1.2", features = ["serde", "v4"] }
 walkdir = "2.3.2"
-prometheus = { version = "0.13.2", features = ["process"], optional = true }
-lazy_static = "1.4.0"
+yaup = "0.2.0"
 
 [dev-dependencies]
 actix-rt = "2.7.0"
@@ -89,12 +82,24 @@ assert-json-diff = "2.0.2"
 brotli = "3.3.4"
 manifest-dir-macros = "0.1.16"
 maplit = "1.0.2"
+meili-snap = {path = "../meili-snap"}
+temp-env = "0.3.1"
 urlencoding = "2.1.2"
 yaup = "0.2.1"
-temp-env = "0.3.1"
+
+[build-dependencies]
+anyhow = { version = "1.0.65", optional = true }
+cargo_toml = { version = "0.12.4", optional = true }
+hex = { version = "0.4.3", optional = true }
+reqwest = { version = "0.11.12", features = ["blocking", "rustls-tls"], default-features = false, optional = true }
+sha-1 = { version = "0.10.0", optional = true }
+static-files = { version = "0.2.3", optional = true }
+tempfile = { version = "3.3.0", optional = true }
+vergen = { version = "7.4.2", default-features = false, features = ["git"] }
+zip = { version = "0.6.2", optional = true }
 
 [features]
-default = ["analytics", "meilisearch-lib/default", "mini-dashboard"]
+default = ["analytics", "meilisearch-types/default", "mini-dashboard"]
 metrics = ["prometheus"]
 analytics = ["segment"]
 mini-dashboard = [
@@ -108,11 +113,11 @@ mini-dashboard = [
     "tempfile",
     "zip",
 ]
-chinese = ["meilisearch-lib/chinese"]
-hebrew = ["meilisearch-lib/hebrew"]
-japanese = ["meilisearch-lib/japanese"]
-thai = ["meilisearch-lib/thai"]
+chinese = ["meilisearch-types/chinese"]
+hebrew = ["meilisearch-types/hebrew"]
+japanese = ["meilisearch-types/japanese"]
+thai = ["meilisearch-types/thai"]
 
 [package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.2/build.zip"
-sha1 = "c69feffc6b590e38a46981a85c47f48905d4082a"
+assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.3/build.zip"
+sha1 = "fb893012023cc33090c549e0eaf10adff335cf6f"
