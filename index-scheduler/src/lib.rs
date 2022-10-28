@@ -47,6 +47,7 @@ use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::{CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
+use meilisearch_types::StarIndexType;
 use roaring::RoaringBitmap;
 use synchronoise::SignalEvent;
 use time::OffsetDateTime;
@@ -586,7 +587,7 @@ impl IndexScheduler {
         &self,
         rtxn: &RoTxn,
         query: &Query,
-        authorized_indexes: &Option<Vec<String>>,
+        authorized_indexes: &Option<Vec<StarIndexType>>,
     ) -> Result<RoaringBitmap> {
         let mut tasks = self.get_task_ids(rtxn, query)?;
 
@@ -604,8 +605,10 @@ impl IndexScheduler {
             let all_indexes_iter = self.index_tasks.iter(rtxn)?;
             for result in all_indexes_iter {
                 let (index, index_tasks) = result?;
-                if !authorized_indexes.contains(&index.to_owned()) {
-                    tasks -= index_tasks;
+                if let Ok(x) = index.try_into() {
+                    if !authorized_indexes.contains(&x) {
+                        tasks -= index_tasks;
+                    }
                 }
             }
         }
@@ -624,7 +627,7 @@ impl IndexScheduler {
     pub fn get_tasks_from_authorized_indexes(
         &self,
         query: Query,
-        authorized_indexes: Option<Vec<String>>,
+        authorized_indexes: Option<Vec<StarIndexType>>,
     ) -> Result<Vec<Task>> {
         let rtxn = self.env.read_txn()?;
 
@@ -2419,7 +2422,11 @@ mod tests {
 
         let query = Query { index_uid: Some(vec!["catto".to_owned()]), ..Default::default() };
         let tasks = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &Some(vec!["doggo".to_owned()]))
+            .get_task_ids_from_authorized_indexes(
+                &rtxn,
+                &query,
+                &Some(vec!["doggo".try_into().unwrap()]),
+            )
             .unwrap();
         // we have asked for only the tasks associated with catto, but are only authorized to retrieve the tasks
         // associated with doggo -> empty result
@@ -2427,7 +2434,11 @@ mod tests {
 
         let query = Query::default();
         let tasks = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &Some(vec!["doggo".to_owned()]))
+            .get_task_ids_from_authorized_indexes(
+                &rtxn,
+                &query,
+                &Some(vec!["doggo".try_into().unwrap()]),
+            )
             .unwrap();
         // we asked for all the tasks, but we are only authorized to retrieve the doggo tasks
         // -> only the index creation of doggo should be returned
@@ -2438,7 +2449,7 @@ mod tests {
             .get_task_ids_from_authorized_indexes(
                 &rtxn,
                 &query,
-                &Some(vec!["catto".to_owned(), "doggo".to_owned()]),
+                &Some(vec!["catto".try_into().unwrap(), "doggo".try_into().unwrap()]),
             )
             .unwrap();
         // we asked for all the tasks, but we are only authorized to retrieve the doggo and catto tasks

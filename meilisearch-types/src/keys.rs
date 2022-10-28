@@ -9,8 +9,7 @@ use time::{Date, OffsetDateTime, PrimitiveDateTime};
 use uuid::Uuid;
 
 use crate::error::{Code, ErrorCode};
-use crate::index_uid::IndexUid;
-use crate::star_or::StarOr;
+use crate::StarIndexType;
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -24,7 +23,7 @@ pub struct Key {
     pub name: Option<String>,
     pub uid: KeyId,
     pub actions: Vec<Action>,
-    pub indexes: Vec<StarOr<IndexUid>>,
+    pub indexes: Vec<StarIndexType>,
     #[serde(with = "time::serde::rfc3339::option")]
     pub expires_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339")]
@@ -128,7 +127,7 @@ impl Key {
             description: Some("Use it for anything that is not a search operation. Caution! Do not expose it on a public frontend".to_string()),
             uid,
             actions: vec![Action::All],
-            indexes: vec![StarOr::Star],
+            indexes: vec![StarIndexType::Star],
             expires_at: None,
             created_at: now,
             updated_at: now,
@@ -143,7 +142,7 @@ impl Key {
             description: Some("Use it to search from the frontend".to_string()),
             uid,
             actions: vec![Action::Search],
-            indexes: vec![StarOr::Star],
+            indexes: vec![StarIndexType::Star],
             expires_at: None,
             created_at: now,
             updated_at: now,
