@@ -45,7 +45,6 @@ mod error;
 mod value;
 
 use std::fmt::Debug;
-use std::str::FromStr;
 
 pub use condition::{parse_condition, parse_to, Condition};
 use condition::{parse_exists, parse_not_exists};
@@ -505,6 +504,10 @@ pub mod tests {
         insta::assert_display_snapshot!(p("_geoRadius(12, 13, 14)"), @"_geoRadius({12}, {13}, {14})");
         insta::assert_display_snapshot!(p("NOT _geoRadius(12, 13, 14)"), @"NOT (_geoRadius({12}, {13}, {14}))");
 
+        // Test geo bounding box
+        insta::assert_display_snapshot!(p("_geoBoundingBox((12, 13), (14, 15))"), @"_geoBoundingBox(({12}, {13}), ({14}, {15}))");
+        insta::assert_display_snapshot!(p("NOT _geoBoundingBox((12, 13), (14, 15))"), @"NOT (_geoBoundingBox(({12}, {13}), ({14}, {15})))");
+
         // Test OR + AND
         insta::assert_display_snapshot!(p("channel = ponce AND 'dog race' != 'bernese mountain'"), @"AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ]");
         insta::assert_display_snapshot!(p("channel = ponce OR 'dog race' != 'bernese mountain'"), @"OR[{channel} = {ponce}, {dog race} != {bernese mountain}, ]");
@@ -562,7 +565,7 @@ pub mod tests {
         "###);
 
         insta::assert_display_snapshot!(p("'OR'"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `\'OR\'`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `_geoRadius`, or `_geoBoundingBox` at `\'OR\'`.
         1:5 'OR'
         "###);
 
@@ -572,12 +575,12 @@ pub mod tests {
         "###);
 
         insta::assert_display_snapshot!(p("channel Ponce"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `channel Ponce`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `_geoRadius`, or `_geoBoundingBox` at `channel Ponce`.
         1:14 channel Ponce
         "###);
 
         insta::assert_display_snapshot!(p("channel = Ponce OR"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` but instead got nothing.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `_geoRadius`, or `_geoBoundingBox` but instead got nothing.
         19:19 channel = Ponce OR
         "###);
 
@@ -591,13 +594,28 @@ pub mod tests {
         1:16 _geoRadius = 12
         "###);
 
+        insta::assert_display_snapshot!(p("_geoBoundingBox"), @r###"
+        The `_geoBoundingBox` filter expects two pair of arguments: `_geoBoundingBox((latitude, longitude), (latitude, longitude))`.
+        1:16 _geoBoundingBox
+        "###);
+
+        insta::assert_display_snapshot!(p("_geoBoundingBox = 12"), @r###"
+        The `_geoBoundingBox` filter expects two pair of arguments: `_geoBoundingBox((latitude, longitude), (latitude, longitude))`.
+        1:21 _geoBoundingBox = 12
+        "###);
+
+        insta::assert_display_snapshot!(p("_geoBoundingBox(1.0, 1.0)"), @r###"
+        The `_geoBoundingBox` filter expects two pair of arguments: `_geoBoundingBox((latitude, longitude), (latitude, longitude))`.
+        1:26 _geoBoundingBox(1.0, 1.0)
+        "###);
+
         insta::assert_display_snapshot!(p("_geoPoint(12, 13, 14)"), @r###"
-        `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance) built-in rule to filter on `_geo` coordinates.
+        `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance), or _geoBoundingBox((latitude, longitude), (latitude, longitude)) built-in rules to filter on `_geo` coordinates.
         1:22 _geoPoint(12, 13, 14)
         "###);
 
         insta::assert_display_snapshot!(p("position <= _geoPoint(12, 13, 14)"), @r###"
-        `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance) built-in rule to filter on `_geo` coordinates.
+        `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance), or _geoBoundingBox((latitude, longitude), (latitude, longitude)) built-in rules to filter on `_geo` coordinates.
         13:34 position <= _geoPoint(12, 13, 14)
         "###);
 
@@ -627,12 +645,12 @@ pub mod tests {
         "###);
 
         insta::assert_display_snapshot!(p("colour NOT EXIST"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `colour NOT EXIST`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `_geoRadius`, or `_geoBoundingBox` at `colour NOT EXIST`.
         1:17 colour NOT EXIST
         "###);
 
         insta::assert_display_snapshot!(p("subscribers 100 TO1000"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `subscribers 100 TO1000`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `_geoRadius`, or `_geoBoundingBox` at `subscribers 100 TO1000`.
         1:23 subscribers 100 TO1000
         "###);
 

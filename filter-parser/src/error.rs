@@ -144,10 +144,10 @@ impl<'a> Display for Error<'a> {
                 writeln!(f, "Expression `{}` is missing the following closing delimiter: `{}`.", escaped_input, c)?
             }
             ErrorKind::InvalidPrimary if input.trim().is_empty() => {
-                writeln!(f, "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` but instead got nothing.")?
+                writeln!(f, "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `_geoRadius`, or `_geoBoundingBox` but instead got nothing.")?
             }
             ErrorKind::InvalidPrimary => {
-                writeln!(f, "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `{}`.", escaped_input)?
+                writeln!(f, "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `_geoRadius`, or `_geoBoundingBox` at `{}`.", escaped_input)?
             }
             ErrorKind::ExpectedEof => {
                 writeln!(f, "Found unexpected characters at the end of the filter: `{}`. You probably forgot an `OR` or an `AND` rule.", escaped_input)?
@@ -159,7 +159,7 @@ impl<'a> Display for Error<'a> {
                 writeln!(f, "The `_geoBoundingBox` filter expects two pair of arguments: `_geoBoundingBox((latitude, longitude), (latitude, longitude))`.")?
             }
             ErrorKind::ReservedGeo(name) => {
-                writeln!(f, "`{}` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance) built-in rule to filter on `_geo` coordinates.", name.escape_debug())?
+                writeln!(f, "`{}` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance), or _geoBoundingBox((latitude, longitude), (latitude, longitude)) built-in rules to filter on `_geo` coordinates.", name.escape_debug())?
             }
             ErrorKind::MisusedGeoRadius => {
                 writeln!(f, "The `_geoRadius` filter is an operation and can't be used as a value.")?

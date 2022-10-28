@@ -193,6 +193,9 @@ impl From<AscDescError> for SortError {
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoRadius") => {
                 SortError::ReservedNameForFilter { name: String::from("_geoRadius") }
             }
+            AscDescError::ReservedKeyword { name } if name.starts_with("_geoBoundingBox") => {
+                SortError::ReservedNameForFilter { name: String::from("_geoBoundingBox") }
+            }
             AscDescError::ReservedKeyword { name } => SortError::ReservedName { name },
         }
     }
