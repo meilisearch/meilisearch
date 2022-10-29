@@ -15,6 +15,7 @@ use slice_group_by::GroupBy;
 mod distinct;
 mod facet_distribution;
 mod filters;
+mod phrase_search;
 mod query_criteria;
 mod sort;
 mod typo_tolerance;

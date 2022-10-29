@@ -299,9 +299,11 @@ fn attribute_start_with_docids(
             }
             Phrase(phrase) => {
                 for word in phrase {
-                    let wc = ctx.word_position_docids(word, pos)?;
-                    if let Some(word_candidates) = wc {
-                        attribute_candidates_array.push(word_candidates);
+                    if let Some(word) = word {
+                        let wc = ctx.word_position_docids(word, pos)?;
+                        if let Some(word_candidates) = wc {
+                            attribute_candidates_array.push(word_candidates);
+                        }
                     }
                     pos += 1;
                 }
@@ -323,7 +325,7 @@ fn intersection_of(mut rbs: Vec<&RoaringBitmap>) -> RoaringBitmap {
 
 #[derive(Debug, Clone)]
 pub enum ExactQueryPart {
-    Phrase(Vec<String>),
+    Phrase(Vec<Option<String>>),
     Synonyms(Vec<String>),
 }
 

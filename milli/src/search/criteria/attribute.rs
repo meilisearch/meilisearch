@@ -579,6 +579,7 @@ fn flatten_query_tree(query_tree: &Operation) -> FlattenedQueryTree {
             Phrase(words) => {
                 let queries = words
                     .iter()
+                    .filter_map(|w| w.as_ref())
                     .map(|word| vec![Query { prefix: false, kind: QueryKind::exact(word.clone()) }])
                     .collect();
                 vec![queries]

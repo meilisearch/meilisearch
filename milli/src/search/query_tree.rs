@@ -4,7 +4,6 @@ use std::{fmt, mem};
 
 use charabia::classifier::ClassifiedTokenIter;
 use charabia::{SeparatorKind, TokenKind};
-use fst::Set;
 use roaring::RoaringBitmap;
 use slice_group_by::GroupBy;
 
@@ -18,8 +17,9 @@ type IsPrefix = bool;
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Operation {
     And(Vec<Operation>),
-    // serie of consecutive non prefix and exact words
-    Phrase(Vec<String>),
+    // series of consecutive non prefix and exact words
+    // `None` means a stop word.
+    Phrase(Vec<Option<String>>),
     Or(IsOptionalWord, Vec<Operation>),
     Query(Query),
 }
@@ -75,9 +75,13 @@ impl Operation {
         }
     }
 
-    fn phrase(mut words: Vec<String>) -> Self {
+    fn phrase(mut words: Vec<Option<String>>) -> Self {
         if words.len() == 1 {
-            Self::Query(Query { prefix: false, kind: QueryKind::exact(words.pop().unwrap()) })
+            if let Some(word) = words.pop().unwrap() {
+                Self::Query(Query { prefix: false, kind: QueryKind::exact(word) })
+            } else {
+                Self::Phrase(words)
+            }
         } else {
             Self::Phrase(words)
         }
@@ -264,8 +268,7 @@ impl<'a> QueryTreeBuilder<'a> {
         &self,
         query: ClassifiedTokenIter<A>,
     ) -> Result<Option<(Operation, PrimitiveQuery, MatchingWords)>> {
-        let stop_words = self.index.stop_words(self.rtxn)?;
-        let primitive_query = create_primitive_query(query, stop_words, self.words_limit);
+        let primitive_query = create_primitive_query(query, self.words_limit);
         if !primitive_query.is_empty() {
             let qt = create_query_tree(
                 self,
@@ -370,7 +373,10 @@ fn create_query_tree(
             PrimitiveQueryPart::Word(word, prefix) => {
                 let mut children = synonyms(ctx, &[&word])?.unwrap_or_default();
                 if let Some((left, right)) = split_best_frequency(ctx, &word)? {
-                    children.push(Operation::Phrase(vec![left.to_string(), right.to_string()]));
+                    children.push(Operation::Phrase(vec![
+                        Some(left.to_string()),
+                        Some(right.to_string()),
+                    ]));
                 }
                 let (word_len_one_typo, word_len_two_typo) = ctx.min_word_len_for_typo()?;
                 let exact_words = ctx.exact_words();
@@ -583,7 +589,11 @@ fn create_matching_words(
             PrimitiveQueryPart::Phrase(words) => {
                 let ids: Vec<_> =
                     (0..words.len()).into_iter().map(|i| id + i as PrimitiveWordId).collect();
-                let words = words.into_iter().map(|w| MatchingWord::new(w, 0, false)).collect();
+                let words = words
+                    .into_iter()
+                    .filter_map(|w| w)
+                    .map(|w| MatchingWord::new(w, 0, false))
+                    .collect();
                 matching_words.push((words, ids));
             }
         }
@@ -685,7 +695,7 @@ pub type PrimitiveQuery = Vec<PrimitiveQueryPart>;
 
 #[derive(Debug, Clone)]
 pub enum PrimitiveQueryPart {
-    Phrase(Vec<String>),
+    Phrase(Vec<Option<String>>),
     Word(String, IsPrefix),
 }
 
@@ -710,7 +720,6 @@ impl PrimitiveQueryPart {
 /// the primitive query is an intermediate state to build the query tree.
 fn create_primitive_query<A>(
     query: ClassifiedTokenIter<A>,
-    stop_words: Option<Set<&[u8]>>,
     words_limit: Option<usize>,
 ) -> PrimitiveQuery
 where
@@ -735,9 +744,14 @@ where
                 // 2. if the word is not the last token of the query and is not a stop_word we push it as a non-prefix word,
                 // 3. if the word is the last token of the query we push it as a prefix word.
                 if quoted {
-                    phrase.push(token.lemma().to_string());
+                    if let TokenKind::StopWord = token.kind {
+                        phrase.push(None)
+                    } else {
+                        phrase.push(Some(token.lemma().to_string()));
+                    }
                 } else if peekable.peek().is_some() {
-                    if !stop_words.as_ref().map_or(false, |swords| swords.contains(token.lemma())) {
+                    if let TokenKind::StopWord = token.kind {
+                    } else {
                         primitive_query
                             .push(PrimitiveQueryPart::Word(token.lemma().to_string(), false));
                     }
@@ -820,7 +834,7 @@ mod test {
             words_limit: Option<usize>,
             query: ClassifiedTokenIter<A>,
         ) -> Result<Option<(Operation, PrimitiveQuery)>> {
-            let primitive_query = create_primitive_query(query, None, words_limit);
+            let primitive_query = create_primitive_query(query, words_limit);
             if !primitive_query.is_empty() {
                 let qt = create_query_tree(
                     self,
@@ -1065,7 +1079,7 @@ mod test {
         OR
           AND
             OR
-              PHRASE ["word", "split"]
+              PHRASE [Some("word"), Some("split")]
               Tolerant { word: "wordsplit", max typo: 2 }
             Exact { word: "fish" }
           Tolerant { word: "wordsplitfish", max typo: 1 }
@@ -1084,7 +1098,7 @@ mod test {
 
         insta::assert_debug_snapshot!(query_tree, @r###"
         OR
-          PHRASE ["quickbrown", "fox"]
+          PHRASE [Some("quickbrown"), Some("fox")]
           PrefixTolerant { word: "quickbrownfox", max typo: 2 }
         "###);
     }
@@ -1101,7 +1115,7 @@ mod test {
 
         insta::assert_debug_snapshot!(query_tree, @r###"
         AND
-          PHRASE ["hey", "friends"]
+          PHRASE [Some("hey"), Some("friends")]
           Exact { word: "wooop" }
         "###);
     }
@@ -1138,8 +1152,8 @@ mod test {
 
         insta::assert_debug_snapshot!(query_tree, @r###"
         AND
-          PHRASE ["hey", "friends"]
-          PHRASE ["wooop", "wooop"]
+          PHRASE [Some("hey"), Some("friends")]
+          PHRASE [Some("wooop"), Some("wooop")]
         "###);
     }
 
@@ -1187,7 +1201,7 @@ mod test {
             .unwrap();
 
         insta::assert_debug_snapshot!(query_tree, @r###"
-        PHRASE ["hey", "my"]
+        PHRASE [Some("hey"), Some("my")]
         "###);
     }
 
@@ -1252,7 +1266,7 @@ mod test {
 
         insta::assert_debug_snapshot!(query_tree, @r###"
         AND
-          PHRASE ["hey", "my"]
+          PHRASE [Some("hey"), Some("my")]
           Exact { word: "good" }
         "###);
     }
