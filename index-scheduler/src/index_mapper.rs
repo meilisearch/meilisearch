@@ -1,12 +1,16 @@
+use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::{fs, thread};
 
 use log::error;
-use meilisearch_types::heed::types::{SerdeBincode, Str};
-use meilisearch_types::heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn};
+use meilisearch_types::heed::types::Str;
+use meilisearch_types::heed::{
+    BytesDecode, BytesEncode, Database, Env, EnvOpenOptions, RoTxn, RwTxn,
+};
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::Index;
 use uuid::Uuid;
@@ -28,9 +32,8 @@ pub struct IndexMapper {
     /// Keep track of the opened indexes. Used mainly by the index resolver.
     index_map: Arc<RwLock<HashMap<Uuid, IndexStatus>>>,
 
-    // TODO create a UUID Codec that uses the 16 bytes representation
     /// Map an index name with an index uuid currently available on disk.
-    pub(crate) index_mapping: Database<Str, SerdeBincode<Uuid>>,
+    pub(crate) index_mapping: Database<Str, UuidCodec>,
 
     /// Path to the folder where the LMDB environments of each index are.
     base_path: PathBuf,
@@ -226,5 +229,24 @@ impl IndexMapper {
 
     pub fn indexer_config(&self) -> &IndexerConfig {
         &self.indexer_config
+    }
+}
+
+/// A heed codec for value of struct Uuid.
+pub struct UuidCodec;
+
+impl<'a> BytesDecode<'a> for UuidCodec {
+    type DItem = Uuid;
+
+    fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
+        bytes.try_into().ok().map(Uuid::from_bytes)
+    }
+}
+
+impl BytesEncode<'_> for UuidCodec {
+    type EItem = Uuid;
+
+    fn bytes_encode(item: &Self::EItem) -> Option<Cow<[u8]>> {
+        Some(Cow::Borrowed(item.as_bytes()))
     }
 }
