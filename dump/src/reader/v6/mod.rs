@@ -1,7 +1,6 @@
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, ErrorKind};
 use std::path::Path;
-use std::str::FromStr;
 
 pub use meilisearch_types::milli;
 use tempfile::TempDir;
