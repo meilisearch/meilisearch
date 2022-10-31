@@ -34,8 +34,8 @@ jobs:
     - name: Run cargo test
       uses: actions-rs/cargo@v1
       with:
-        command: test
-        args: --locked --release
+        command: nextest
+        args: run --locked --release
 
   # We run tests in debug also, to make sure that the debug_assertions are hit
   test-debug:
@@ -53,8 +53,8 @@ jobs:
       - name: Run tests in debug
         uses: actions-rs/cargo@v1
         with:
-          command: test
-          args: --locked
+          command: nextest
+          args: run --locked
 
   clippy:
     name: Run Clippy
