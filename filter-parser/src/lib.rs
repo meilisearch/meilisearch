@@ -343,9 +343,7 @@ fn parse_error_reserved_keyword(input: Span) -> IResult<FilterCondition> {
     }
 }
 
-/**
-primary        = (WS* "(" WS* expression WS* ")" WS*) | geoRadius | condition | exists | not_exists | to
-*/
+/// primary        = (WS* "(" WS* expression WS* ")" WS*) | geoRadius | condition | exists | not_exists | to
 fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
     if depth > MAX_FILTER_DEPTH {
         return Err(nom::Err::Error(Error::new_from_kind(input, ErrorKind::DepthLimitReached)));
