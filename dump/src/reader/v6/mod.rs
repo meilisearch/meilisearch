@@ -1,7 +1,6 @@
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, ErrorKind};
 use std::path::Path;
-use std::str::FromStr;
 
 pub use meilisearch_types::milli;
 use tempfile::TempDir;
@@ -45,7 +44,7 @@ pub type Code = meilisearch_types::error::Code;
 
 pub struct V6Reader {
     dump: TempDir,
-    instance_uid: Uuid,
+    instance_uid: Option<Uuid>,
     metadata: Metadata,
     tasks: BufReader<File>,
     keys: BufReader<File>,
@@ -54,8 +53,11 @@ pub struct V6Reader {
 impl V6Reader {
     pub fn open(dump: TempDir) -> Result<Self> {
         let meta_file = fs::read(dump.path().join("metadata.json"))?;
-        let instance_uid = fs::read_to_string(dump.path().join("instance_uid.uuid"))?;
-        let instance_uid = Uuid::from_str(&instance_uid)?;
+        let instance_uid = match fs::read_to_string(dump.path().join("instance_uid.uuid")) {
+            Ok(uuid) => Some(Uuid::parse_str(&uuid)?),
+            Err(e) if e.kind() == ErrorKind::NotFound => None,
+            Err(e) => return Err(e.into()),
+        };
 
         Ok(V6Reader {
             metadata: serde_json::from_reader(&*meta_file)?,
@@ -75,7 +77,7 @@ impl V6Reader {
     }
 
     pub fn instance_uid(&self) -> Result<Option<Uuid>> {
-        Ok(Some(self.instance_uid))
+        Ok(self.instance_uid)
     }
 
     pub fn indexes(&self) -> Result<Box<dyn Iterator<Item = Result<V6IndexReader>> + '_>> {

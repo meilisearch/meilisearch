@@ -5,13 +5,14 @@ use std::sync::{Arc, RwLock};
 use std::{fs, thread};
 
 use log::error;
-use meilisearch_types::heed::types::{SerdeBincode, Str};
+use meilisearch_types::heed::types::Str;
 use meilisearch_types::heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn};
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::Index;
 use uuid::Uuid;
 
 use self::IndexStatus::{Available, BeingDeleted};
+use crate::uuid_codec::UuidCodec;
 use crate::{Error, Result};
 
 const INDEX_MAPPING: &str = "index-mapping";
@@ -28,9 +29,8 @@ pub struct IndexMapper {
     /// Keep track of the opened indexes. Used mainly by the index resolver.
     index_map: Arc<RwLock<HashMap<Uuid, IndexStatus>>>,
 
-    // TODO create a UUID Codec that uses the 16 bytes representation
     /// Map an index name with an index uuid currently available on disk.
-    pub(crate) index_mapping: Database<Str, SerdeBincode<Uuid>>,
+    pub(crate) index_mapping: Database<Str, UuidCodec>,
 
     /// Path to the folder where the LMDB environments of each index are.
     base_path: PathBuf,
