@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 # Checks if dependency are installed.
-(hash curl > /dev/null 2>&1 || echo "${0}: curl command not found in PATH.") || exit 1
-(hash jq > /dev/null 2>&1 || echo "${0}: jq command not found in PATH.") || exit 1
+(hash curl > /dev/null 2>&1 || echo "${0}: curl command not found in PATH.") && exit 1
+(hash jq > /dev/null 2>&1 || echo "${0}: jq command not found in PATH.") && exit 1
 
 #################################### GLOBALS ###################################
 
