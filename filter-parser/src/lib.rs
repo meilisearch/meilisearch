@@ -519,7 +519,7 @@ pub mod tests {
         "###);
 
         insta::assert_display_snapshot!(p("'OR'"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `\'OR\'`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `\'OR\'`.
         1:5 'OR'
         "###);
 
@@ -529,12 +529,12 @@ pub mod tests {
         "###);
 
         insta::assert_display_snapshot!(p("channel Ponce"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `channel Ponce`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `channel Ponce`.
         1:14 channel Ponce
         "###);
 
         insta::assert_display_snapshot!(p("channel = Ponce OR"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` but instead got nothing.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` but instead got nothing.
         19:19 channel = Ponce OR
         "###);
 
@@ -584,12 +584,12 @@ pub mod tests {
         "###);
 
         insta::assert_display_snapshot!(p("colour NOT EXIST"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `colour NOT EXIST`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `colour NOT EXIST`.
         1:17 colour NOT EXIST
         "###);
 
         insta::assert_display_snapshot!(p("subscribers 100 TO1000"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `subscribers 100 TO1000`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `subscribers 100 TO1000`.
         1:23 subscribers 100 TO1000
         "###);
 
