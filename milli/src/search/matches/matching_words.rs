@@ -2,6 +2,7 @@ use std::cmp::{min, Reverse};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::ops::{Index, IndexMut};
+use std::rc::Rc;
 
 use charabia::Token;
 use levenshtein_automata::{Distance, DFA};
@@ -14,11 +15,11 @@ type IsPrefix = bool;
 /// referencing words that match the given query tree.
 #[derive(Default)]
 pub struct MatchingWords {
-    inner: Vec<(Vec<MatchingWord>, Vec<PrimitiveWordId>)>,
+    inner: Vec<(Vec<Rc<MatchingWord>>, Vec<PrimitiveWordId>)>,
 }
 
 impl MatchingWords {
-    pub fn new(mut matching_words: Vec<(Vec<MatchingWord>, Vec<PrimitiveWordId>)>) -> Self {
+    pub fn new(mut matching_words: Vec<(Vec<Rc<MatchingWord>>, Vec<PrimitiveWordId>)>) -> Self {
         // Sort word by len in DESC order prioritizing the longuest matches,
         // in order to highlight the longuest part of the matched word.
         matching_words.sort_unstable_by_key(|(mw, _)| Reverse((mw.len(), mw[0].word.len())));
@@ -35,7 +36,8 @@ impl MatchingWords {
 /// Iterator over terms that match the given token,
 /// This allow to lazily evaluate matches.
 pub struct MatchesIter<'a, 'b> {
-    inner: Box<dyn Iterator<Item = &'a (Vec<MatchingWord>, Vec<PrimitiveWordId>)> + 'a>,
+    #[allow(clippy::type_complexity)]
+    inner: Box<dyn Iterator<Item = &'a (Vec<Rc<MatchingWord>>, Vec<PrimitiveWordId>)> + 'a>,
     token: &'b Token<'b>,
 }
 
@@ -126,7 +128,7 @@ pub enum MatchType<'a> {
 /// Structure helper to match several tokens in a row in order to complete a partial match.
 #[derive(Debug, PartialEq)]
 pub struct PartialMatch<'a> {
-    matching_words: &'a [MatchingWord],
+    matching_words: &'a [Rc<MatchingWord>],
     ids: &'a [PrimitiveWordId],
     char_len: usize,
 }
@@ -332,10 +334,15 @@ mod tests {
 
     #[test]
     fn matching_words() {
+        let all = vec![
+            Rc::new(MatchingWord::new("split".to_string(), 1, true)),
+            Rc::new(MatchingWord::new("this".to_string(), 0, false)),
+            Rc::new(MatchingWord::new("world".to_string(), 1, true)),
+        ];
         let matching_words = vec![
-            (vec![MatchingWord::new("split".to_string(), 1, true)], vec![0]),
-            (vec![MatchingWord::new("this".to_string(), 0, false)], vec![1]),
-            (vec![MatchingWord::new("world".to_string(), 1, true)], vec![2]),
+            (vec![all[0].clone()], vec![0]),
+            (vec![all[1].clone()], vec![1]),
+            (vec![all[2].clone()], vec![2]),
         ];
 
         let matching_words = MatchingWords::new(matching_words);

@@ -1,5 +1,9 @@
 use std::borrow::Cow;
 use std::cmp::max;
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
+use std::hash::Hash;
+use std::rc::Rc;
 use std::{fmt, mem};
 
 use charabia::classifier::ClassifiedTokenIter;
@@ -540,6 +544,30 @@ fn create_query_tree(
     Ok(Operation::or(true, operation_children))
 }
 
+#[derive(Default, Debug)]
+struct MatchingWordCache {
+    all: Vec<Rc<MatchingWord>>,
+    map: HashMap<(String, u8, bool), Rc<MatchingWord>>,
+}
+impl MatchingWordCache {
+    fn insert(&mut self, word: String, typo: u8, prefix: bool) -> Rc<MatchingWord> {
+        // Toggle the (un)commented code to switch between cached and non-cached
+        // implementations.
+
+        // self.all.push(MatchingWord::new(word, typo, prefix));
+        // self.all.len() - 1
+        match self.map.entry((word.clone(), typo, prefix)) {
+            Entry::Occupied(idx) => idx.get().clone(),
+            Entry::Vacant(vacant) => {
+                let matching_word = Rc::new(MatchingWord::new(word, typo, prefix));
+                self.all.push(matching_word.clone());
+                vacant.insert(matching_word.clone());
+                matching_word
+            }
+        }
+    }
+}
+
 /// Main function that matchings words used for crop and highlight.
 fn create_matching_words(
     ctx: &impl Context,
@@ -551,7 +579,8 @@ fn create_matching_words(
         ctx: &impl Context,
         authorize_typos: bool,
         part: PrimitiveQueryPart,
-        matching_words: &mut Vec<(Vec<MatchingWord>, Vec<PrimitiveWordId>)>,
+        matching_words: &mut Vec<(Vec<Rc<MatchingWord>>, Vec<PrimitiveWordId>)>,
+        matching_word_cache: &mut MatchingWordCache,
         id: PrimitiveWordId,
     ) -> Result<()> {
         match part {
@@ -562,15 +591,15 @@ fn create_matching_words(
                     for synonym in synonyms {
                         let synonym = synonym
                             .into_iter()
-                            .map(|syn| MatchingWord::new(syn, 0, false))
+                            .map(|syn| matching_word_cache.insert(syn, 0, false))
                             .collect();
                         matching_words.push((synonym, vec![id]));
                     }
                 }
 
                 if let Some((left, right)) = split_best_frequency(ctx, &word)? {
-                    let left = MatchingWord::new(left.to_string(), 0, false);
-                    let right = MatchingWord::new(right.to_string(), 0, false);
+                    let left = matching_word_cache.insert(left.to_string(), 0, false);
+                    let right = matching_word_cache.insert(right.to_string(), 0, false);
                     matching_words.push((vec![left, right], vec![id]));
                 }
 
@@ -580,8 +609,10 @@ fn create_matching_words(
                     TypoConfig { max_typos: 2, word_len_one_typo, word_len_two_typo, exact_words };
 
                 let matching_word = match typos(word, authorize_typos, config) {
-                    QueryKind::Exact { word, .. } => MatchingWord::new(word, 0, prefix),
-                    QueryKind::Tolerant { typo, word } => MatchingWord::new(word, typo, prefix),
+                    QueryKind::Exact { word, .. } => matching_word_cache.insert(word, 0, prefix),
+                    QueryKind::Tolerant { typo, word } => {
+                        matching_word_cache.insert(word, typo, prefix)
+                    }
                 };
                 matching_words.push((vec![matching_word], vec![id]));
             }
@@ -589,8 +620,11 @@ fn create_matching_words(
             PrimitiveQueryPart::Phrase(words) => {
                 let ids: Vec<_> =
                     (0..words.len()).into_iter().map(|i| id + i as PrimitiveWordId).collect();
-                let words =
-                    words.into_iter().flatten().map(|w| MatchingWord::new(w, 0, false)).collect();
+                let words = words
+                    .into_iter()
+                    .flatten()
+                    .map(|w| matching_word_cache.insert(w, 0, false))
+                    .collect();
                 matching_words.push((words, ids));
             }
         }
@@ -603,7 +637,8 @@ fn create_matching_words(
         ctx: &impl Context,
         authorize_typos: bool,
         query: &[PrimitiveQueryPart],
-        matching_words: &mut Vec<(Vec<MatchingWord>, Vec<PrimitiveWordId>)>,
+        matching_words: &mut Vec<(Vec<Rc<MatchingWord>>, Vec<PrimitiveWordId>)>,
+        matching_word_cache: &mut MatchingWordCache,
         mut id: PrimitiveWordId,
     ) -> Result<()> {
         const MAX_NGRAM: usize = 3;
@@ -621,6 +656,7 @@ fn create_matching_words(
                                 authorize_typos,
                                 part.clone(),
                                 matching_words,
+                                matching_word_cache,
                                 id,
                             )?;
                         }
@@ -645,7 +681,7 @@ fn create_matching_words(
                                 for synonym in synonyms {
                                     let synonym = synonym
                                         .into_iter()
-                                        .map(|syn| MatchingWord::new(syn, 0, false))
+                                        .map(|syn| matching_word_cache.insert(syn, 0, false))
                                         .collect();
                                     matching_words.push((synonym, ids.clone()));
                                 }
@@ -662,10 +698,10 @@ fn create_matching_words(
                             };
                             let matching_word = match typos(word, authorize_typos, config) {
                                 QueryKind::Exact { word, .. } => {
-                                    MatchingWord::new(word, 0, is_prefix)
+                                    matching_word_cache.insert(word, 0, is_prefix)
                                 }
                                 QueryKind::Tolerant { typo, word } => {
-                                    MatchingWord::new(word, typo, is_prefix)
+                                    matching_word_cache.insert(word, typo, is_prefix)
                                 }
                             };
                             matching_words.push((vec![matching_word], ids));
@@ -673,7 +709,14 @@ fn create_matching_words(
                     }
 
                     if !is_last {
-                        ngrams(ctx, authorize_typos, tail, matching_words, id + 1)?;
+                        ngrams(
+                            ctx,
+                            authorize_typos,
+                            tail,
+                            matching_words,
+                            matching_word_cache,
+                            id + 1,
+                        )?;
                     }
                 }
             }
@@ -683,8 +726,9 @@ fn create_matching_words(
         Ok(())
     }
 
+    let mut matching_word_cache = MatchingWordCache::default();
     let mut matching_words = Vec::new();
-    ngrams(ctx, authorize_typos, query, &mut matching_words, 0)?;
+    ngrams(ctx, authorize_typos, query, &mut matching_words, &mut matching_word_cache, 0)?;
     Ok(MatchingWords::new(matching_words))
 }
 
@@ -806,7 +850,9 @@ pub fn maximum_proximity(operation: &Operation) -> usize {
 
 #[cfg(test)]
 mod test {
+    use std::alloc::{GlobalAlloc, System};
     use std::collections::HashMap;
+    use std::sync::atomic::{self, AtomicI64};
 
     use charabia::Tokenize;
     use maplit::hashmap;
@@ -814,6 +860,7 @@ mod test {
     use rand::{Rng, SeedableRng};
 
     use super::*;
+    use crate::index::tests::TempIndex;
     use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
 
     #[derive(Debug)]
@@ -1309,5 +1356,54 @@ mod test {
             query_tree,
             Operation::Query(Query { prefix: true, kind: QueryKind::Exact { .. } })
         ));
+    }
+
+    #[global_allocator]
+    static ALLOC: CountingAlloc =
+        CountingAlloc { resident: AtomicI64::new(0), allocated: AtomicI64::new(0) };
+
+    pub struct CountingAlloc {
+        pub resident: AtomicI64,
+        pub allocated: AtomicI64,
+    }
+    unsafe impl GlobalAlloc for CountingAlloc {
+        unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
+            self.allocated.fetch_add(layout.size() as i64, atomic::Ordering::SeqCst);
+            self.resident.fetch_add(layout.size() as i64, atomic::Ordering::SeqCst);
+
+            System.alloc(layout)
+        }
+
+        unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
+            self.resident.fetch_sub(layout.size() as i64, atomic::Ordering::SeqCst);
+            System.dealloc(ptr, layout)
+        }
+    }
+
+    // This test must be run
+    #[test]
+    fn ten_words() {
+        let resident_before = ALLOC.resident.load(atomic::Ordering::SeqCst);
+        let allocated_before = ALLOC.allocated.load(atomic::Ordering::SeqCst);
+
+        let index = TempIndex::new();
+        let rtxn = index.read_txn().unwrap();
+        let query = "a beautiful summer house by the beach overlooking what seems";
+        let mut builder = QueryTreeBuilder::new(&rtxn, &index).unwrap();
+        builder.words_limit(10);
+        let x = builder.build(query.tokenize()).unwrap().unwrap();
+        let resident_after = ALLOC.resident.load(atomic::Ordering::SeqCst);
+        let allocated_after = ALLOC.allocated.load(atomic::Ordering::SeqCst);
+
+        insta::assert_snapshot!(format!("{}", resident_after - resident_before), @"4521710");
+        insta::assert_snapshot!(format!("{}", allocated_after - allocated_before), @"7259092");
+
+        // Note, if the matching word cache is deactivated, the memory usage is:
+        // insta::assert_snapshot!(format!("{}", resident_after - resident_before), @"91311265");
+        // insta::assert_snapshot!(format!("{}", allocated_after - allocated_before), @"125948410");
+        // or about 20x more resident memory (90MB vs 4.5MB)
+
+        // Use x
+        let _x = x;
     }
 }
