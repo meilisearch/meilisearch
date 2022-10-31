@@ -23,9 +23,9 @@ jobs:
           escaped_tag=$(printf "%q" ${{ github.ref_name }})
 
           if [[ $escaped_tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo ::set-output name=stable::true
+            echo "stable=true" >> ${GITHUB_OUTPUT}
           else
-            echo ::set-output name=stable::false
+            echo "stable=false" >> ${GITHUB_OUTPUT}
           fi
       - name: Check release validity
         if: github.event_name != 'schedule' && steps.check-tag-format.outputs.stable == 'true'
@@ -66,7 +66,7 @@ jobs:
         file: target/release/${{ matrix.artifact_name }}
         asset_name: ${{ matrix.asset_name }}
         tag: ${{ github.ref }}
-        
+
   publish-macos-apple-silicon:
     name: Publish binary for macOS silicon
     runs-on: ${{ matrix.os }}
