@@ -1,21 +1,18 @@
-use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::convert::TryInto;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::{fs, thread};
 
 use log::error;
 use meilisearch_types::heed::types::Str;
-use meilisearch_types::heed::{
-    BytesDecode, BytesEncode, Database, Env, EnvOpenOptions, RoTxn, RwTxn,
-};
+use meilisearch_types::heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn};
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::Index;
 use uuid::Uuid;
 
 use self::IndexStatus::{Available, BeingDeleted};
+use crate::uuid_codec::UuidCodec;
 use crate::{Error, Result};
 
 const INDEX_MAPPING: &str = "index-mapping";
@@ -229,24 +226,5 @@ impl IndexMapper {
 
     pub fn indexer_config(&self) -> &IndexerConfig {
         &self.indexer_config
-    }
-}
-
-/// A heed codec for value of struct Uuid.
-pub struct UuidCodec;
-
-impl<'a> BytesDecode<'a> for UuidCodec {
-    type DItem = Uuid;
-
-    fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-        bytes.try_into().ok().map(Uuid::from_bytes)
-    }
-}
-
-impl BytesEncode<'_> for UuidCodec {
-    type EItem = Uuid;
-
-    fn bytes_encode(item: &Self::EItem) -> Option<Cow<[u8]>> {
-        Some(Cow::Borrowed(item.as_bytes()))
     }
 }
