@@ -31,6 +31,11 @@ jobs:
       with:
         command: build
         args: --locked --release --no-default-features
+    - name: Install cargo-nextest
+      uses: actions-rs/cargo@v1
+      with:
+        command: install
+        args: cargo-nextest
     - name: Run cargo test
       uses: actions-rs/cargo@v1
       with:
@@ -50,6 +55,11 @@ jobs:
           override: true
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.0.0
+      - name: Install cargo-nextest
+        uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: cargo-nextest
       - name: Run tests in debug
         uses: actions-rs/cargo@v1
         with:
