@@ -596,17 +596,17 @@ pub mod tests {
         "###);
 
         insta::assert_display_snapshot!(p("_geoBoundingBox"), @r###"
-        The `_geoBoundingBox` filter expects two pair of arguments: `_geoBoundingBox((latitude, longitude), (latitude, longitude))`.
+        The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox((latitude, longitude), (latitude, longitude))`.
         1:16 _geoBoundingBox
         "###);
 
         insta::assert_display_snapshot!(p("_geoBoundingBox = 12"), @r###"
-        The `_geoBoundingBox` filter expects two pair of arguments: `_geoBoundingBox((latitude, longitude), (latitude, longitude))`.
+        The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox((latitude, longitude), (latitude, longitude))`.
         1:21 _geoBoundingBox = 12
         "###);
 
         insta::assert_display_snapshot!(p("_geoBoundingBox(1.0, 1.0)"), @r###"
-        The `_geoBoundingBox` filter expects two pair of arguments: `_geoBoundingBox((latitude, longitude), (latitude, longitude))`.
+        The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox((latitude, longitude), (latitude, longitude))`.
         1:26 _geoBoundingBox(1.0, 1.0)
         "###);
 
