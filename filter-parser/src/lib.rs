@@ -351,7 +351,6 @@ fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
         return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::GeoBoundingBox)));
     }
 
-    //TODO: Check sub array length
     let res = FilterCondition::GeoBoundingBox {
         top_left_point: [args[0][0].into(), args[0][1].into()],
         bottom_right_point: [args[1][0].into(), args[1][1].into()],
