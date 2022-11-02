@@ -24,6 +24,7 @@ pub type Unchecked = settings::Unchecked;
 
 pub type Task = tasks::Task;
 pub type TaskEvent = tasks::TaskEvent;
+pub type TaskContent = tasks::TaskContent;
 pub type Key = keys::Key;
 
 // everything related to the settings
@@ -153,27 +154,41 @@ impl V4IndexReader {
         let meta = File::open(path.join("meta.json"))?;
         let meta: DumpMeta = serde_json::from_reader(meta)?;
 
-        let mut index_tasks: Vec<Task> = vec![];
+        let mut created_at = None;
+        let mut updated_at = None;
 
         for line in tasks.lines() {
             let task: Task = serde_json::from_str(&line?)?;
 
             if task.index_uid.to_string() == name {
-                index_tasks.push(task)
+                if updated_at.is_none() {
+                    updated_at = match task.events.last() {
+                        Some(TaskEvent::Created(ts)) => Some(*ts),
+                        _ => None,
+                    };
+                }
+
+                if created_at.is_none() {
+                    created_at = match task.content {
+                        TaskContent::IndexCreation { primary_key } => match task.events.first() {
+                            Some(TaskEvent::Created(ts)) => Some(*ts),
+                            _ => None,
+                        },
+                        _ => None,
+                    };
+                }
+
+                if created_at.is_some() {
+                    break;
+                }
             }
         }
 
         let metadata = IndexMetadata {
             uid: name,
             primary_key: meta.primary_key,
-            created_at: match index_tasks.first().unwrap().events.first() {
-                Some(TaskEvent::Created(ts)) => *ts,
-                _ => OffsetDateTime::now_utc(),
-            },
-            updated_at: match index_tasks.last().unwrap().events.last() {
-                Some(TaskEvent::Created(ts)) => *ts,
-                _ => OffsetDateTime::now_utc(),
-            },
+            created_at: created_at.unwrap_or(OffsetDateTime::now_utc()),
+            updated_at: updated_at.unwrap_or(OffsetDateTime::now_utc()),
         };
 
         let ret = V4IndexReader {
