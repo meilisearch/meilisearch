@@ -36,7 +36,7 @@ jobs:
         toolchain: stable
         override: true
     - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2.0.0
+      uses: Swatinem/rust-cache@v2.0.1
     - name: Run cargo check
       uses: actions-rs/cargo@v1
       with:
@@ -60,7 +60,7 @@ jobs:
           override: true
           components: rustfmt
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.0.0
+        uses: Swatinem/rust-cache@v2.0.1
       - name: Run cargo fmt
         # Since we never ran the `build.rs` script in the benchmark directory we are missing one auto-generated import file.
         # Since we want to trigger (and fail) this action as fast as possible, instead of building the benchmark crate
