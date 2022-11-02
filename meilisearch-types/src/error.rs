@@ -240,10 +240,10 @@ impl Code {
             }
             TaskNotFound => ErrCode::invalid("task_not_found", StatusCode::NOT_FOUND),
             TaskDeletionWithEmptyQuery => {
-                ErrCode::invalid("missing_filters", StatusCode::BAD_REQUEST)
+                ErrCode::invalid("missing_task_filters", StatusCode::BAD_REQUEST)
             }
             TaskCancelationWithEmptyQuery => {
-                ErrCode::invalid("missing_filters", StatusCode::BAD_REQUEST)
+                ErrCode::invalid("missing_task_filters", StatusCode::BAD_REQUEST)
             }
             DumpNotFound => ErrCode::invalid("dump_not_found", StatusCode::NOT_FOUND),
             NoSpaceLeftOnDevice => {
