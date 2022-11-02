@@ -151,13 +151,12 @@ impl ProcessingTasks {
         self.processing = processing;
     }
 
-    /// Set the processing tasks to an empty list.
-    fn stop_processing_at(&mut self, stopped_at: OffsetDateTime) {
-        self.started_at = stopped_at;
+    /// Set the processing tasks to an empty list
+    fn stop_processing(&mut self) {
         self.processing = RoaringBitmap::new();
     }
 
-    /// Returns `true` if there, at least, is one task that is currently processing we must stop.
+    /// Returns `true` if there, at least, is one task that is currently processing that we must stop.
     fn must_cancel_processing_tasks(&self, canceled_tasks: &RoaringBitmap) -> bool {
         !self.processing.is_disjoint(canceled_tasks)
     }
@@ -449,8 +448,9 @@ impl IndexScheduler {
 
     /// Return the task ids matched by the given query from the index scheduler's point of view.
     pub(crate) fn get_task_ids(&self, rtxn: &RoTxn, query: &Query) -> Result<RoaringBitmap> {
-        let ProcessingTasks { started_at: started_at_processing, processing: processing_tasks } =
-            self.processing_tasks.read().unwrap().clone();
+        let ProcessingTasks {
+            started_at: started_at_processing, processing: processing_tasks, ..
+        } = self.processing_tasks.read().unwrap().clone();
 
         let mut tasks = self.all_task_ids(rtxn)?;
 
@@ -947,6 +947,12 @@ impl IndexScheduler {
                 #[cfg(test)]
                 self.breakpoint(Breakpoint::AbortedIndexation);
                 wtxn.abort().map_err(Error::HeedTransaction)?;
+
+                // We make sure that we don't call `stop_processing` on the `processing_tasks`,
+                // this is because we want to let the next tick call `create_next_batch` and keep
+                // the `started_at` date times and `processings` of the current processing tasks.
+                // This date time is used by the task cancelation to store the right `started_at`
+                // date in the task on disk.
                 return Ok(0);
             }
             // In case of a failure we must get back and patch all the tasks with the error.
@@ -976,7 +982,7 @@ impl IndexScheduler {
             }
         }
 
-        self.processing_tasks.write().unwrap().stop_processing_at(finished_at);
+        self.processing_tasks.write().unwrap().stop_processing();
 
         #[cfg(test)]
         self.maybe_fail(tests::FailureLocation::CommittingWtxn)?;
