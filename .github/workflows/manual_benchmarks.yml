@@ -50,7 +50,9 @@ jobs:
 
       # Generate critcmp files
       - name: Install critcmp
-        run: cargo install critcmp
+        uses: taiki-e/install-action@v1
+        with:
+          tool: critcmp
       - name: Export cripcmp file
         run: |
           critcmp --export ${{ steps.file.outputs.basename }} > ${{ steps.file.outputs.basename }}.json
