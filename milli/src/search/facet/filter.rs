@@ -101,9 +101,9 @@ impl<'a> Filter<'a> {
                     }
 
                     match ors.len() {
+                        0 => (),
                         1 => ands.push(ors.pop().unwrap()),
-                        n if n > 1 => ands.push(FilterCondition::Or(ors)),
-                        _ => (),
+                        _ => ands.push(FilterCondition::Or(ors)),
                     }
                 }
                 Either::Right(rule) => {
