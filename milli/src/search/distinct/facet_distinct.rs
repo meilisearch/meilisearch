@@ -123,6 +123,7 @@ impl<'a> FacetDistinctIter<'a> {
     }
 }
 
+#[allow(clippy::drop_non_drop)]
 fn facet_values_prefix_key(distinct: FieldId, id: DocumentId) -> [u8; FID_SIZE + DOCID_SIZE] {
     concat_arrays!(distinct.to_be_bytes(), id.to_be_bytes())
 }

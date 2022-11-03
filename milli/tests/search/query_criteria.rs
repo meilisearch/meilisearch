@@ -200,7 +200,7 @@ test_criterion!(
 #[test]
 fn criteria_mixup() {
     use Criterion::*;
-    let index = search::setup_search_index_with_criteria(&vec![
+    let index = search::setup_search_index_with_criteria(&[
         Words,
         Attribute,
         Desc(S("asc_desc_rank")),

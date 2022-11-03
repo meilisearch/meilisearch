@@ -38,9 +38,9 @@ where
 
     if let Some(first_bound) = get_first_facet_value::<ByteSliceRefCodec>(rtxn, db, field_id)? {
         fd.iterate(candidates, highest_level, first_bound, usize::MAX)?;
-        return Ok(());
+        Ok(())
     } else {
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -84,7 +84,7 @@ where
                 }
             }
         }
-        return Ok(ControlFlow::Continue(()));
+        Ok(ControlFlow::Continue(()))
     }
     fn iterate(
         &mut self,
@@ -98,7 +98,7 @@ where
         }
         let starting_key =
             FacetGroupKey { field_id: self.field_id, level, left_bound: starting_bound };
-        let iter = self.db.range(&self.rtxn, &(&starting_key..)).unwrap().take(group_size);
+        let iter = self.db.range(self.rtxn, &(&starting_key..)).unwrap().take(group_size);
 
         for el in iter {
             let (key, value) = el.unwrap();
@@ -108,7 +108,7 @@ where
                 return Ok(ControlFlow::Break(()));
             }
             let docids_in_common = value.bitmap & candidates;
-            if docids_in_common.len() > 0 {
+            if !docids_in_common.is_empty() {
                 let cf = self.iterate(
                     &docids_in_common,
                     level - 1,
@@ -121,8 +121,7 @@ where
                 }
             }
         }
-
-        return Ok(ControlFlow::Continue(()));
+        Ok(ControlFlow::Continue(()))
     }
 }
 

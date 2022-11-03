@@ -125,10 +125,7 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
             words_positions: &mut impl Iterator<Item = (usize, usize, &'a Token<'a>)>,
             matches: &mut Vec<Match>,
         ) -> bool {
-            let mut potential_matches = Vec::new();
-
-            // Add first match to potential matches.
-            potential_matches.push((token_position, word_position, partial.char_len()));
+            let mut potential_matches = vec![(token_position, word_position, partial.char_len())];
 
             for (token_position, word_position, word) in words_positions {
                 partial = match partial.match_token(word) {

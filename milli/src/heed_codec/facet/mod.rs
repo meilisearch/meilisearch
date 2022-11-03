@@ -88,8 +88,7 @@ impl<'a> heed::BytesEncode<'a> for FacetGroupValueCodec {
     type EItem = FacetGroupValue;
 
     fn bytes_encode(value: &'a Self::EItem) -> Option<Cow<'a, [u8]>> {
-        let mut v = vec![];
-        v.push(value.size);
+        let mut v = vec![value.size];
         CboRoaringBitmapCodec::serialize_into(&value.bitmap, &mut v);
         Some(Cow::Owned(v))
     }

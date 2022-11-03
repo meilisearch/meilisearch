@@ -60,7 +60,7 @@ where
         f.run(highest_level, starting_left_bound, rightmost_bound, group_size)?;
         Ok(())
     } else {
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -77,7 +77,7 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
     fn run_level_0(&mut self, starting_left_bound: &'t [u8], group_size: usize) -> Result<()> {
         let left_key =
             FacetGroupKey { field_id: self.field_id, level: 0, left_bound: starting_left_bound };
-        let iter = self.db.range(&self.rtxn, &(left_key..))?.take(group_size);
+        let iter = self.db.range(self.rtxn, &(left_key..))?.take(group_size);
         for el in iter {
             let (key, value) = el?;
             // the right side of the iter range is unbounded, so we need to make sure that we are not iterating
@@ -145,7 +145,7 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
 
         let left_key =
             FacetGroupKey { field_id: self.field_id, level, left_bound: starting_left_bound };
-        let mut iter = self.db.range(&self.rtxn, &(left_key..))?.take(group_size);
+        let mut iter = self.db.range(self.rtxn, &(left_key..))?.take(group_size);
 
         // We iterate over the range while keeping in memory the previous value
         let (mut previous_key, mut previous_value) = iter.next().unwrap()?;
@@ -348,6 +348,7 @@ mod tests {
                     &mut docids,
                 )
                 .unwrap();
+                #[allow(clippy::format_push_string)]
                 results.push_str(&format!("{}\n", display_bitmap(&docids)));
             }
             milli_snap!(results, format!("included_{i}"));
@@ -366,6 +367,7 @@ mod tests {
                     &mut docids,
                 )
                 .unwrap();
+                #[allow(clippy::format_push_string)]
                 results.push_str(&format!("{}\n", display_bitmap(&docids)));
             }
             milli_snap!(results, format!("excluded_{i}"));

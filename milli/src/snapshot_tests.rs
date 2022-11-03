@@ -314,8 +314,8 @@ pub fn snap_field_id_docid_facet_strings(index: &Index) -> String {
 pub fn snap_documents_ids(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
     let documents_ids = index.documents_ids(&rtxn).unwrap();
-    let snap = display_bitmap(&documents_ids);
-    snap
+
+    display_bitmap(&documents_ids)
 }
 pub fn snap_stop_words(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
@@ -326,8 +326,8 @@ pub fn snap_stop_words(index: &Index) -> String {
 pub fn snap_soft_deleted_documents_ids(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
     let soft_deleted_documents_ids = index.soft_deleted_documents_ids(&rtxn).unwrap();
-    let soft_deleted_documents_ids = display_bitmap(&soft_deleted_documents_ids);
-    soft_deleted_documents_ids
+
+    display_bitmap(&soft_deleted_documents_ids)
 }
 pub fn snap_field_distributions(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
@@ -350,8 +350,8 @@ pub fn snap_fields_ids_map(index: &Index) -> String {
 pub fn snap_geo_faceted_documents_ids(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
     let geo_faceted_documents_ids = index.geo_faceted_documents_ids(&rtxn).unwrap();
-    let snap = display_bitmap(&geo_faceted_documents_ids);
-    snap
+
+    display_bitmap(&geo_faceted_documents_ids)
 }
 pub fn snap_external_documents_ids(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();

@@ -1,6 +1,4 @@
 #![cfg_attr(all(test, fuzzing), feature(no_coverage))]
-#![allow(clippy::reversed_empty_ranges)]
-#![allow(clippy::too_many_arguments)]
 #[macro_use]
 pub mod documents;
 

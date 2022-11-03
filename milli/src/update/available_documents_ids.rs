@@ -21,6 +21,7 @@ impl AvailableDocumentsIds {
 
                 let iter = match last_id.checked_add(1) {
                     Some(id) => id..=u32::max_value(),
+                    #[allow(clippy::reversed_empty_ranges)]
                     None => 1..=0, // empty range iterator
                 };
 

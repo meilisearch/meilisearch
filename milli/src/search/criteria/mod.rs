@@ -96,6 +96,7 @@ pub trait Context<'c> {
         &self,
         docid: DocumentId,
     ) -> heed::Result<HashMap<String, RoaringBitmap>>;
+    #[allow(clippy::type_complexity)]
     fn word_position_iterator(
         &self,
         word: &str,
@@ -883,7 +884,7 @@ pub mod test {
 
             let mut keys = word_docids.keys().collect::<Vec<_>>();
             keys.sort_unstable();
-            let words_fst = fst::Set::from_iter(keys).unwrap().map_data(|v| Cow::Owned(v)).unwrap();
+            let words_fst = fst::Set::from_iter(keys).unwrap().map_data(Cow::Owned).unwrap();
 
             TestContext {
                 words_fst,

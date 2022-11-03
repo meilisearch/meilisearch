@@ -138,7 +138,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         // the `soft_deleted_documents_ids` bitmap and early exit.
         let size_used = self.index.used_size()?;
         let map_size = self.index.env.map_size()? as u64;
-        let nb_documents = self.index.number_of_documents(&self.wtxn)?;
+        let nb_documents = self.index.number_of_documents(self.wtxn)?;
         let nb_soft_deleted = soft_deleted_docids.len();
 
         let percentage_available = 100 - (size_used * 100 / map_size);
@@ -474,7 +474,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                 self.index.put_faceted_documents_ids(self.wtxn, field_id, facet_type, &docids)?;
 
                 let facet_values = remove_docids_from_field_id_docid_facet_value(
-                    &self.index,
+                    self.index,
                     self.wtxn,
                     facet_type,
                     field_id,
@@ -641,7 +641,7 @@ mod tests {
         external_ids: &[&str],
         disable_soft_deletion: bool,
     ) -> Vec<u32> {
-        let external_document_ids = index.external_documents_ids(&wtxn).unwrap();
+        let external_document_ids = index.external_documents_ids(wtxn).unwrap();
         let ids_to_delete: Vec<u32> = external_ids
             .iter()
             .map(|id| external_document_ids.get(id.as_bytes()).unwrap())
@@ -858,7 +858,7 @@ mod tests {
         assert!(!results.documents_ids.is_empty());
         for id in results.documents_ids.iter() {
             assert!(
-                !deleted_internal_ids.contains(&id),
+                !deleted_internal_ids.contains(id),
                 "The document {} was supposed to be deleted",
                 id
             );
@@ -922,7 +922,7 @@ mod tests {
         assert!(!results.documents_ids.is_empty());
         for id in results.documents_ids.iter() {
             assert!(
-                !deleted_internal_ids.contains(&id),
+                !deleted_internal_ids.contains(id),
                 "The document {} was supposed to be deleted",
                 id
             );
@@ -986,7 +986,7 @@ mod tests {
         assert!(!results.documents_ids.is_empty());
         for id in results.documents_ids.iter() {
             assert!(
-                !deleted_internal_ids.contains(&id),
+                !deleted_internal_ids.contains(id),
                 "The document {} was supposed to be deleted",
                 id
             );

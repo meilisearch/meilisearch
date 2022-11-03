@@ -51,6 +51,7 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
             )
             .map_err(|lng| GeoError::BadLongitude { document_id: document_id(), value: lng })?;
 
+            #[allow(clippy::drop_non_drop)]
             let bytes: [u8; 16] = concat_arrays![lat.to_ne_bytes(), lng.to_ne_bytes()];
             writer.insert(docid_bytes, bytes)?;
         } else if lat.is_none() && lng.is_some() {

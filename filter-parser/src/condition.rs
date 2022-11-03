@@ -48,17 +48,14 @@ pub fn parse_condition(input: Span) -> IResult<FilterCondition> {
 pub fn parse_exists(input: Span) -> IResult<FilterCondition> {
     let (input, key) = terminated(parse_value, tag("EXISTS"))(input)?;
 
-    Ok((input, FilterCondition::Condition { fid: key.into(), op: Exists }))
+    Ok((input, FilterCondition::Condition { fid: key, op: Exists }))
 }
 /// exist          = value "NOT" WS+ "EXISTS"
 pub fn parse_not_exists(input: Span) -> IResult<FilterCondition> {
     let (input, key) = parse_value(input)?;
 
     let (input, _) = tuple((tag("NOT"), multispace1, tag("EXISTS")))(input)?;
-    Ok((
-        input,
-        FilterCondition::Not(Box::new(FilterCondition::Condition { fid: key.into(), op: Exists })),
-    ))
+    Ok((input, FilterCondition::Not(Box::new(FilterCondition::Condition { fid: key, op: Exists }))))
 }
 
 /// to             = value value "TO" WS+ value

@@ -39,6 +39,7 @@ struct DescendingFacetSort<'t> {
     rtxn: &'t heed::RoTxn<'t>,
     db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
+    #[allow(clippy::type_complexity)]
     stack: Vec<(
         RoaringBitmap,
         std::iter::Take<
@@ -54,7 +55,7 @@ impl<'t> Iterator for DescendingFacetSort<'t> {
     fn next(&mut self) -> Option<Self::Item> {
         'outer: loop {
             let (documents_ids, deepest_iter, right_bound) = self.stack.last_mut()?;
-            while let Some(result) = deepest_iter.next() {
+            for result in deepest_iter.by_ref() {
                 let (
                     FacetGroupKey { level, left_bound, field_id },
                     FacetGroupValue { size: group_size, mut bitmap },
@@ -99,12 +100,10 @@ impl<'t> Iterator for DescendingFacetSort<'t> {
                     let iter = match self
                         .db
                         .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>()
-                        .rev_range(
-                            &self.rtxn,
-                            &(Bound::Included(starting_key_below), end_key_kelow),
-                        ) {
+                        .rev_range(self.rtxn, &(Bound::Included(starting_key_below), end_key_kelow))
+                    {
                         Ok(iter) => iter,
-                        Err(e) => return Some(Err(e.into())),
+                        Err(e) => return Some(Err(e)),
                     }
                     .take(group_size as usize);
 

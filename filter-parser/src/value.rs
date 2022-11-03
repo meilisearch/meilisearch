@@ -78,7 +78,7 @@ pub fn word_exact<'a, 'b: 'a>(tag: &'b str) -> impl Fn(Span<'a>) -> IResult<'a, 
 }
 
 /// value          = WS* ( word | singleQuoted | doubleQuoted) WS+
-pub fn parse_value<'a>(input: Span<'a>) -> IResult<Token<'a>> {
+pub fn parse_value(input: Span) -> IResult<Token> {
     // to get better diagnostic message we are going to strip the left whitespaces from the input right now
     let (input, _) = take_while(char::is_whitespace)(input)?;
 

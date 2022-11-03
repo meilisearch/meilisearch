@@ -111,7 +111,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
         }
 
         for &field_id in field_ids.iter() {
-            let (level_readers, all_docids) = self.compute_levels_for_field_id(field_id, &wtxn)?;
+            let (level_readers, all_docids) = self.compute_levels_for_field_id(field_id, wtxn)?;
 
             handle_all_docids(wtxn, field_id, all_docids)?;
 
@@ -192,6 +192,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
 
         Ok((subwriters, all_docids))
     }
+    #[allow(clippy::type_complexity)]
     fn read_level_0<'t>(
         &self,
         rtxn: &'t RoTxn,
@@ -245,6 +246,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
     /// ## Returns:
     /// A vector of grenad::Reader. The reader at index `i` corresponds to the elements of level `i + 1`
     /// that must be inserted into the database.
+    #[allow(clippy::type_complexity)]
     fn compute_higher_levels<'t>(
         &self,
         rtxn: &'t RoTxn,
@@ -341,7 +343,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
                 handle_group(&bitmaps, left_bounds.first().unwrap())?;
             }
         }
-        return Ok(sub_writers);
+        Ok(sub_writers)
     }
 }
 
