@@ -211,7 +211,7 @@ pub struct TaskDateQuery {
 pub struct TasksFilterQuery {
     #[serde(rename = "type")]
     kind: Option<CS<StarOr<Kind>>>,
-    uid: Option<CS<u32>>,
+    uid: Option<CS<TaskId>>,
     status: Option<CS<StarOr<Status>>>,
     index_uid: Option<CS<StarOr<String>>>,
     #[serde(default = "DEFAULT_LIMIT")]
@@ -457,15 +457,25 @@ async fn get_tasks(
 
 async fn get_task(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, Data<IndexScheduler>>,
-    task_id: web::Path<TaskId>,
+    task_uid: web::Path<String>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let task_id = task_id.into_inner();
+    let task_uid_string = task_uid.into_inner();
+    let task_uid: TaskId = match task_uid_string.parse() {
+        Ok(id) => id,
+        Err(e) => {
+            return Err(index_scheduler::Error::InvalidTaskUids {
+                task_uids: task_uid_string,
+                error_message: e.to_string(),
+            }
+            .into())
+        }
+    };
 
     analytics.publish("Tasks Seen".to_string(), json!({ "per_task_uid": true }), Some(&req));
 
-    let query = index_scheduler::Query { uid: Some(vec![task_id]), ..Query::default() };
+    let query = index_scheduler::Query { uid: Some(vec![task_uid]), ..Query::default() };
 
     if let Some(task) = index_scheduler
         .get_tasks_from_authorized_indexes(
@@ -477,7 +487,7 @@ async fn get_task(
         let task_view = TaskView::from_task(task);
         Ok(HttpResponse::Ok().json(task_view))
     } else {
-        Err(index_scheduler::Error::TaskNotFound(task_id).into())
+        Err(index_scheduler::Error::TaskNotFound(task_uid).into())
     }
 }
 

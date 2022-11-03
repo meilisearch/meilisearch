@@ -27,6 +27,10 @@ pub enum Error {
     SwapDuplicateIndexesFound(Vec<String>),
     #[error("Corrupted dump.")]
     CorruptedDump,
+    #[error(
+        "Tasks uids must be a comma-separated list of numbers. `{task_uids}` is invalid {error_message}"
+    )]
+    InvalidTaskUids { task_uids: String, error_message: String },
     #[error("Task `{0}` not found.")]
     TaskNotFound(TaskId),
     #[error("Query parameters to filter the tasks to delete are missing. Available query parameters are: `uid`, `indexUid`, `status`, `type`.")]
@@ -71,6 +75,7 @@ impl ErrorCode for Error {
             Error::IndexAlreadyExists(_) => Code::IndexAlreadyExists,
             Error::SwapDuplicateIndexesFound(_) => Code::DuplicateIndexFound,
             Error::SwapDuplicateIndexFound(_) => Code::DuplicateIndexFound,
+            Error::InvalidTaskUids { .. } => Code::InvalidTaskUid,
             Error::TaskNotFound(_) => Code::TaskNotFound,
             Error::TaskDeletionWithEmptyQuery => Code::TaskDeletionWithEmptyQuery,
             Error::TaskCancelationWithEmptyQuery => Code::TaskCancelationWithEmptyQuery,

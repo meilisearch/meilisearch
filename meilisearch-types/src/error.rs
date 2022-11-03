@@ -147,6 +147,7 @@ pub enum Code {
     MissingMasterKey,
     NoSpaceLeftOnDevice,
     DumpNotFound,
+    InvalidTaskUid,
     TaskNotFound,
     TaskDeletionWithEmptyQuery,
     TaskCancelationWithEmptyQuery,
@@ -238,6 +239,7 @@ impl Code {
             MissingMasterKey => {
                 ErrCode::authentication("missing_master_key", StatusCode::UNAUTHORIZED)
             }
+            InvalidTaskUid => ErrCode::invalid("invalid_task_uid", StatusCode::BAD_REQUEST),
             TaskNotFound => ErrCode::invalid("task_not_found", StatusCode::NOT_FOUND),
             TaskDeletionWithEmptyQuery => {
                 ErrCode::invalid("missing_task_filters", StatusCode::BAD_REQUEST)
