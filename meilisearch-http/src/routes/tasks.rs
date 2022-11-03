@@ -214,6 +214,7 @@ pub struct TasksFilterQuery {
     uid: Option<CS<u32>>,
     status: Option<CS<StarOr<Status>>>,
     index_uid: Option<CS<StarOr<String>>>,
+    canceled_by: Option<CS<TaskId>>,
     #[serde(default = "DEFAULT_LIMIT")]
     limit: u32,
     from: Option<TaskId>,
@@ -226,9 +227,10 @@ pub struct TasksFilterQuery {
 pub struct TaskDeletionQuery {
     #[serde(rename = "type")]
     kind: Option<CS<Kind>>,
-    uid: Option<CS<u32>>,
+    uid: Option<CS<TaskId>>,
     status: Option<CS<Status>>,
     index_uid: Option<CS<IndexUid>>,
+    canceled_by: Option<CS<TaskId>>,
     #[serde(flatten)]
     dates: TaskDateQuery,
 }
@@ -315,6 +317,7 @@ async fn delete_tasks(
         uid,
         status,
         index_uid,
+        canceled_by,
         dates:
             TaskDateQuery {
                 after_enqueued_at,
@@ -331,6 +334,7 @@ async fn delete_tasks(
     let status: Option<Vec<_>> = status.map(|x| x.into_iter().collect());
     let index_uid: Option<Vec<_>> =
         index_uid.map(|x| x.into_iter().map(|x| x.to_string()).collect());
+    let canceled_by: Option<Vec<_>> = canceled_by.map(|x| x.into_iter().collect());
 
     let query = Query {
         limit: None,
@@ -384,6 +388,7 @@ async fn get_tasks(
         uid,
         status,
         index_uid,
+        canceled_by,
         limit,
         from,
         dates:
@@ -403,13 +408,16 @@ async fn get_tasks(
     let uid: Option<Vec<_>> = uid.map(|x| x.into_iter().collect());
     let status: Option<Vec<_>> = status.and_then(fold_star_or);
     let index_uid: Option<Vec<_>> = index_uid.and_then(fold_star_or);
+    let canceled_by: Option<Vec<_>> = canceled_by.map(|x| x.into_iter().collect());
 
     analytics.publish(
         "Tasks Seen".to_string(),
         json!({
-            "filtered_by_index_uid": index_uid.as_ref().map_or(false, |v| !v.is_empty()),
-            "filtered_by_type": kind.as_ref().map_or(false, |v| !v.is_empty()),
+            "filtered_by_kind": kind.as_ref().map_or(false, |v| !v.is_empty()),
+            "filtered_by_uid": uid.as_ref().map_or(false, |v| !v.is_empty()),
             "filtered_by_status": status.as_ref().map_or(false, |v| !v.is_empty()),
+            "filtered_by_index_uid": index_uid.as_ref().map_or(false, |v| !v.is_empty()),
+            "filtered_by_canceled_by": canceled_by.as_ref().map_or(false, |v| !v.is_empty()),
         }),
         Some(&req),
     );
