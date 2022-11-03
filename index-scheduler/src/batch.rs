@@ -41,7 +41,7 @@ use uuid::Uuid;
 
 use crate::autobatcher::{self, BatchKind};
 use crate::utils::{self, swap_index_uid_in_task};
-use crate::{Error, IndexScheduler, Result, TaskId};
+use crate::{Error, IndexScheduler, ProcessingTasks, Result, TaskId};
 
 /// Represents a combination of tasks that can all be processed at the same time.
 ///
@@ -50,15 +50,39 @@ use crate::{Error, IndexScheduler, Result, TaskId};
 /// be processed.
 #[derive(Debug)]
 pub(crate) enum Batch {
-    TaskCancelation(Task),
+    TaskCancelation {
+        /// The task cancelation itself.
+        task: Task,
+        /// The date and time at which the previously processing tasks started.
+        previous_started_at: OffsetDateTime,
+        /// The list of tasks that were processing when this task cancelation appeared.
+        previous_processing_tasks: RoaringBitmap,
+    },
     TaskDeletion(Task),
     SnapshotCreation(Vec<Task>),
     Dump(Task),
-    IndexOperation { op: IndexOperation, must_create_index: bool },
-    IndexCreation { index_uid: String, primary_key: Option<String>, task: Task },
-    IndexUpdate { index_uid: String, primary_key: Option<String>, task: Task },
-    IndexDeletion { index_uid: String, tasks: Vec<Task>, index_has_been_created: bool },
-    IndexSwap { task: Task },
+    IndexOperation {
+        op: IndexOperation,
+        must_create_index: bool,
+    },
+    IndexCreation {
+        index_uid: String,
+        primary_key: Option<String>,
+        task: Task,
+    },
+    IndexUpdate {
+        index_uid: String,
+        primary_key: Option<String>,
+        task: Task,
+    },
+    IndexDeletion {
+        index_uid: String,
+        tasks: Vec<Task>,
+        index_has_been_created: bool,
+    },
+    IndexSwap {
+        task: Task,
+    },
 }
 
 /// A [batch](Batch) that combines multiple tasks operating on an index.
@@ -115,7 +139,7 @@ impl Batch {
     /// Return the task ids associated with this batch.
     pub fn ids(&self) -> Vec<TaskId> {
         match self {
-            Batch::TaskCancelation(task)
+            Batch::TaskCancelation { task, .. }
             | Batch::TaskDeletion(task)
             | Batch::Dump(task)
             | Batch::IndexCreation { task, .. }
@@ -394,9 +418,15 @@ impl IndexScheduler {
 
         // 1. we get the last task to cancel.
         if let Some(task_id) = to_cancel.max() {
-            return Ok(Some(Batch::TaskCancelation(
-                self.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?,
-            )));
+            // We retrieve the tasks that were processing before this tasks cancelation started.
+            // We must *not* reset the processing tasks before calling this method.
+            let ProcessingTasks { started_at, processing } =
+                &*self.processing_tasks.read().unwrap();
+            return Ok(Some(Batch::TaskCancelation {
+                task: self.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?,
+                previous_started_at: *started_at,
+                previous_processing_tasks: processing.clone(),
+            }));
         }
 
         // 2. we get the next task to delete
@@ -482,7 +512,7 @@ impl IndexScheduler {
             self.breakpoint(crate::Breakpoint::InsideProcessBatch);
         }
         match batch {
-            Batch::TaskCancelation(mut task) => {
+            Batch::TaskCancelation { mut task, previous_started_at, previous_processing_tasks } => {
                 // 1. Retrieve the tasks that matched the query at enqueue-time.
                 let matched_tasks =
                     if let KindWithContent::TaskCancelation { tasks, query: _ } = &task.kind {
@@ -492,8 +522,13 @@ impl IndexScheduler {
                     };
 
                 let mut wtxn = self.env.write_txn()?;
-                let canceled_tasks_content_uuids =
-                    self.cancel_matched_tasks(&mut wtxn, task.uid, matched_tasks)?;
+                let canceled_tasks_content_uuids = self.cancel_matched_tasks(
+                    &mut wtxn,
+                    task.uid,
+                    matched_tasks,
+                    previous_started_at,
+                    &previous_processing_tasks,
+                )?;
 
                 task.status = Status::Succeeded;
                 match &mut task.details {
@@ -1199,6 +1234,8 @@ impl IndexScheduler {
         wtxn: &mut RwTxn,
         cancel_task_id: TaskId,
         matched_tasks: &RoaringBitmap,
+        previous_started_at: OffsetDateTime,
+        previous_processing_tasks: &RoaringBitmap,
     ) -> Result<Vec<Uuid>> {
         let now = OffsetDateTime::now_utc();
 
@@ -1213,6 +1250,9 @@ impl IndexScheduler {
         for mut task in self.get_existing_tasks(wtxn, tasks_to_cancel.iter())? {
             if let Some(uuid) = task.content_uuid() {
                 content_files_to_delete.push(uuid);
+            }
+            if previous_processing_tasks.contains(task.uid) {
+                task.started_at = Some(previous_started_at);
             }
             task.status = Status::Canceled;
             task.canceled_by = Some(cancel_task_id);
