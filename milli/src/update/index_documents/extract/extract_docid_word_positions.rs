@@ -80,7 +80,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
                                 .map_err(|_| SerializationError::InvalidNumberSerialization)?;
                             let position = absolute_from_relative_position(field_id, position);
                             docid_word_positions_sorter
-                                .insert(&key_buffer, &position.to_ne_bytes())?;
+                                .insert(&key_buffer, position.to_ne_bytes())?;
                         }
                     }
                 }

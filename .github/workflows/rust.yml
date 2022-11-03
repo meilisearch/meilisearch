@@ -66,6 +66,24 @@ jobs:
         with:
           command: clippy
 
+  clippy:
+    name: Run Clippy
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: clippy
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2.0.0
+      - name: Run cargo clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+
   fmt:
     name: Run Rustfmt
     runs-on: ubuntu-20.04

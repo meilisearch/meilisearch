@@ -145,7 +145,7 @@ fn document_word_positions_into_sorter(
         key_buffer.push(0);
         key_buffer.extend_from_slice(w2.as_bytes());
 
-        word_pair_proximity_docids_sorter.insert(&key_buffer, &document_id.to_ne_bytes())?;
+        word_pair_proximity_docids_sorter.insert(&key_buffer, document_id.to_ne_bytes())?;
     }
 
     Ok(())

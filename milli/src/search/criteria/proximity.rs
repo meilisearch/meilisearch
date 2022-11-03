@@ -488,7 +488,7 @@ fn resolve_plane_sweep_candidates(
                     }
                     // make a consecutive plane-sweep on the subgroup of words.
                     let mut subgroup = Vec::with_capacity(words.len());
-                    for word in words.into_iter().map(|w| w.as_deref().unwrap()) {
+                    for word in words.iter().map(|w| w.as_deref().unwrap()) {
                         match words_positions.get(word) {
                             Some(positions) => {
                                 subgroup.push(positions.iter().map(|p| (p, 0, p)).collect())

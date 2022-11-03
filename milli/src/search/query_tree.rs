@@ -591,7 +591,7 @@ fn create_matching_words(
                     (0..words.len()).into_iter().map(|i| id + i as PrimitiveWordId).collect();
                 let words = words
                     .into_iter()
-                    .filter_map(|w| w)
+                    .flatten()
                     .map(|w| MatchingWord::new(w, 0, false))
                     .collect();
                 matching_words.push((words, ids));
