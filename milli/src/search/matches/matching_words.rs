@@ -225,7 +225,7 @@ fn bytes_to_highlight(source: &str, target: &str) -> usize {
         for (col, char_t) in target.chars().enumerate() {
             let col = col + 1;
             let last_match_row = *last_row.get(&char_t).unwrap_or(&0);
-            let cost = if char_s == char_t { 0 } else { 1 };
+            let cost = usize::from(char_s != char_t);
 
             let dist_add = matrix[(row, col + 1)] + 1;
             let dist_del = matrix[(row + 1, col)] + 1;

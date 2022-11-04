@@ -36,7 +36,7 @@ impl<'t, 'u, 'i> WordsPrefixesFst<'t, 'u, 'i> {
     /// Default value is `4` bytes. This value must be between 1 and 25 will be clamped
     /// to these bounds, otherwise.
     pub fn max_prefix_length(&mut self, value: usize) -> &mut Self {
-        self.max_prefix_length = value.min(25).max(1); // clamp [1, 25]
+        self.max_prefix_length = value.clamp(1, 25);
         self
     }
 

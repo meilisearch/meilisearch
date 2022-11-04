@@ -329,7 +329,7 @@ impl FacetsUpdateIncrementalInner {
 
             let key =
                 FacetGroupKey { field_id, level, left_bound: insertion_key.left_bound.clone() };
-            let value = FacetGroupValue { size: size_left as u8, bitmap: values_left };
+            let value = FacetGroupValue { size: size_left, bitmap: values_left };
             (key, value)
         };
 
@@ -345,7 +345,7 @@ impl FacetsUpdateIncrementalInner {
             }
 
             let key = FacetGroupKey { field_id, level, left_bound: right_left_bound.to_vec() };
-            let value = FacetGroupValue { size: size_right as u8, bitmap: values_right };
+            let value = FacetGroupValue { size: size_right, bitmap: values_right };
             (key, value)
         };
         drop(iter);
@@ -373,8 +373,7 @@ impl FacetsUpdateIncrementalInner {
 
         let highest_level = get_highest_level(txn, self.db, field_id)?;
 
-        let result =
-            self.insert_in_level(txn, field_id, highest_level as u8, facet_value, docids)?;
+        let result = self.insert_in_level(txn, field_id, highest_level, facet_value, docids)?;
         match result {
             InsertionResult::InPlace => return Ok(()),
             InsertionResult::Expand => return Ok(()),
@@ -425,7 +424,7 @@ impl FacetsUpdateIncrementalInner {
                 level: highest_level + 1,
                 left_bound: first_key.unwrap().left_bound,
             };
-            let value = FacetGroupValue { size: group_size as u8, bitmap: values };
+            let value = FacetGroupValue { size: group_size, bitmap: values };
             to_add.push((key.into_owned(), value));
         }
         // now we add the rest of the level, in case its size is > group_size * min_level_size
@@ -584,8 +583,7 @@ impl FacetsUpdateIncrementalInner {
         }
         let highest_level = get_highest_level(txn, self.db, field_id)?;
 
-        let result =
-            self.delete_in_level(txn, field_id, highest_level as u8, facet_value, docids)?;
+        let result = self.delete_in_level(txn, field_id, highest_level, facet_value, docids)?;
         match result {
             DeletionResult::InPlace => return Ok(()),
             DeletionResult::Reduce { .. } => return Ok(()),
