@@ -398,7 +398,23 @@ impl Kind {
         }
     }
 }
-
+impl Display for Kind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Kind::DocumentAdditionOrUpdate => write!(f, "documentAdditionOrUpdate"),
+            Kind::DocumentDeletion => write!(f, "documentDeletion"),
+            Kind::SettingsUpdate => write!(f, "settingsUpdate"),
+            Kind::IndexCreation => write!(f, "indexCreation"),
+            Kind::IndexDeletion => write!(f, "indexDeletion"),
+            Kind::IndexUpdate => write!(f, "indexUpdate"),
+            Kind::IndexSwap => write!(f, "indexSwap"),
+            Kind::TaskCancelation => write!(f, "taskCancelation"),
+            Kind::TaskDeletion => write!(f, "taskDeletion"),
+            Kind::DumpCreation => write!(f, "dumpCreation"),
+            Kind::SnapshotCreation => write!(f, "snapshotCreation"),
+        }
+    }
+}
 impl FromStr for Kind {
     type Err = ResponseError;
 

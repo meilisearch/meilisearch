@@ -70,7 +70,7 @@ pub struct Query {
     /// The minimum [task id](`meilisearch_types::tasks::Task::uid`) to be matched
     pub from: Option<u32>,
     /// The allowed [statuses](`meilisearch_types::tasks::Task::status`) of the matched tasls
-    pub status: Option<Vec<Status>>,
+    pub statuses: Option<Vec<Status>>,
     /// The allowed [kinds](meilisearch_types::tasks::Kind) of the matched tasks.
     ///
     /// The kind of a task is given by:
@@ -80,11 +80,11 @@ pub struct Query {
     /// task.kind.as_kind()
     /// # }
     /// ```
-    pub kind: Option<Vec<Kind>>,
+    pub types: Option<Vec<Kind>>,
     /// The allowed [index ids](meilisearch_types::tasks::Task::index_uid) of the matched tasks
-    pub index_uid: Option<Vec<String>>,
+    pub index_uids: Option<Vec<String>>,
     /// The [task ids](`meilisearch_types::tasks::Task::uid`) to be matched
-    pub uid: Option<Vec<TaskId>>,
+    pub uids: Option<Vec<TaskId>>,
 
     /// Exclusive upper bound of the matched tasks' [`enqueued_at`](meilisearch_types::tasks::Task::enqueued_at) field.
     pub before_enqueued_at: Option<OffsetDateTime>,
@@ -109,10 +109,10 @@ impl Query {
             Query {
                 limit: None,
                 from: None,
-                status: None,
-                kind: None,
-                index_uid: None,
-                uid: None,
+                statuses: None,
+                types: None,
+                index_uids: None,
+                uids: None,
                 before_enqueued_at: None,
                 after_enqueued_at: None,
                 before_started_at: None,
@@ -125,9 +125,9 @@ impl Query {
 
     /// Add an [index id](meilisearch_types::tasks::Task::index_uid) to the list of permitted indexes.
     pub fn with_index(self, index_uid: String) -> Self {
-        let mut index_vec = self.index_uid.unwrap_or_default();
+        let mut index_vec = self.index_uids.unwrap_or_default();
         index_vec.push(index_uid);
-        Self { index_uid: Some(index_vec), ..self }
+        Self { index_uids: Some(index_vec), ..self }
     }
 }
 
@@ -458,7 +458,7 @@ impl IndexScheduler {
             tasks.remove_range(from.saturating_add(1)..);
         }
 
-        if let Some(status) = &query.status {
+        if let Some(status) = &query.statuses {
             let mut status_tasks = RoaringBitmap::new();
             for status in status {
                 match status {
@@ -475,12 +475,12 @@ impl IndexScheduler {
             tasks &= status_tasks;
         }
 
-        if let Some(uids) = &query.uid {
+        if let Some(uids) = &query.uids {
             let uids = RoaringBitmap::from_iter(uids);
             tasks &= &uids;
         }
 
-        if let Some(kind) = &query.kind {
+        if let Some(kind) = &query.types {
             let mut kind_tasks = RoaringBitmap::new();
             for kind in kind {
                 kind_tasks |= self.get_kind(rtxn, *kind)?;
@@ -488,7 +488,7 @@ impl IndexScheduler {
             tasks &= &kind_tasks;
         }
 
-        if let Some(index) = &query.index_uid {
+        if let Some(index) = &query.index_uids {
             let mut index_tasks = RoaringBitmap::new();
             for index in index {
                 index_tasks |= self.index_tasks(rtxn, index)?;
@@ -592,7 +592,7 @@ impl IndexScheduler {
 
         // If the query contains a list of `index_uid`, then we must exclude all the kind that
         // arn't associated to one and only one index.
-        if query.index_uid.is_some() {
+        if query.index_uids.is_some() {
             for kind in enum_iterator::all::<Kind>().filter(|kind| !kind.related_to_one_index()) {
                 tasks -= self.get_kind(rtxn, kind)?;
             }
@@ -2218,18 +2218,18 @@ mod tests {
 
         let rtxn = index_scheduler.env.read_txn().unwrap();
 
-        let query = Query { status: Some(vec![Status::Processing]), ..Default::default() };
+        let query = Query { statuses: Some(vec![Status::Processing]), ..Default::default() };
         let tasks =
             index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[0,]"); // only the processing tasks in the first tick
 
-        let query = Query { status: Some(vec![Status::Enqueued]), ..Default::default() };
+        let query = Query { statuses: Some(vec![Status::Enqueued]), ..Default::default() };
         let tasks =
             index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         snapshot!(snapshot_bitmap(&tasks), @"[1,2,]"); // only the enqueued tasks in the first tick
 
         let query = Query {
-            status: Some(vec![Status::Enqueued, Status::Processing]),
+            statuses: Some(vec![Status::Enqueued, Status::Processing]),
             ..Default::default()
         };
         let tasks =
@@ -2237,7 +2237,7 @@ mod tests {
         snapshot!(snapshot_bitmap(&tasks), @"[0,1,2,]"); // both enqueued and processing tasks in the first tick
 
         let query = Query {
-            status: Some(vec![Status::Enqueued, Status::Processing]),
+            statuses: Some(vec![Status::Enqueued, Status::Processing]),
             after_started_at: Some(start_time),
             ..Default::default()
         };
@@ -2248,7 +2248,7 @@ mod tests {
         snapshot!(snapshot_bitmap(&tasks), @"[0,]");
 
         let query = Query {
-            status: Some(vec![Status::Enqueued, Status::Processing]),
+            statuses: Some(vec![Status::Enqueued, Status::Processing]),
             before_started_at: Some(start_time),
             ..Default::default()
         };
@@ -2259,7 +2259,7 @@ mod tests {
         snapshot!(snapshot_bitmap(&tasks), @"[]");
 
         let query = Query {
-            status: Some(vec![Status::Enqueued, Status::Processing]),
+            statuses: Some(vec![Status::Enqueued, Status::Processing]),
             after_started_at: Some(start_time),
             before_started_at: Some(start_time + Duration::minutes(1)),
             ..Default::default()
@@ -2278,7 +2278,7 @@ mod tests {
         let second_start_time = OffsetDateTime::now_utc();
 
         let query = Query {
-            status: Some(vec![Status::Succeeded, Status::Processing]),
+            statuses: Some(vec![Status::Succeeded, Status::Processing]),
             after_started_at: Some(start_time),
             before_started_at: Some(start_time + Duration::minutes(1)),
             ..Default::default()
@@ -2291,7 +2291,7 @@ mod tests {
         snapshot!(snapshot_bitmap(&tasks), @"[0,1,]");
 
         let query = Query {
-            status: Some(vec![Status::Succeeded, Status::Processing]),
+            statuses: Some(vec![Status::Succeeded, Status::Processing]),
             before_started_at: Some(start_time),
             ..Default::default()
         };
@@ -2302,7 +2302,7 @@ mod tests {
         snapshot!(snapshot_bitmap(&tasks), @"[]");
 
         let query = Query {
-            status: Some(vec![Status::Enqueued, Status::Succeeded, Status::Processing]),
+            statuses: Some(vec![Status::Enqueued, Status::Succeeded, Status::Processing]),
             after_started_at: Some(second_start_time),
             before_started_at: Some(second_start_time + Duration::minutes(1)),
             ..Default::default()
@@ -2325,7 +2325,7 @@ mod tests {
         snapshot!(snapshot_bitmap(&tasks), @"[2,]");
 
         let query = Query {
-            status: Some(vec![Status::Enqueued, Status::Succeeded, Status::Processing]),
+            statuses: Some(vec![Status::Enqueued, Status::Succeeded, Status::Processing]),
             after_started_at: Some(second_start_time),
             before_started_at: Some(second_start_time + Duration::minutes(1)),
             ..Default::default()
@@ -2347,7 +2347,7 @@ mod tests {
         snapshot!(snapshot_bitmap(&tasks), @"[]");
 
         let query = Query {
-            status: Some(vec![Status::Failed]),
+            statuses: Some(vec![Status::Failed]),
             after_started_at: Some(second_start_time),
             before_started_at: Some(second_start_time + Duration::minutes(1)),
             ..Default::default()
@@ -2358,7 +2358,7 @@ mod tests {
         snapshot!(snapshot_bitmap(&tasks), @"[2,]");
 
         let query = Query {
-            status: Some(vec![Status::Failed]),
+            statuses: Some(vec![Status::Failed]),
             after_started_at: Some(second_start_time),
             before_started_at: Some(second_start_time + Duration::minutes(1)),
             ..Default::default()
@@ -2369,8 +2369,8 @@ mod tests {
         snapshot!(snapshot_bitmap(&tasks), @"[2,]");
 
         let query = Query {
-            status: Some(vec![Status::Failed]),
-            uid: Some(vec![1]),
+            statuses: Some(vec![Status::Failed]),
+            uids: Some(vec![1]),
             after_started_at: Some(second_start_time),
             before_started_at: Some(second_start_time + Duration::minutes(1)),
             ..Default::default()
@@ -2381,8 +2381,8 @@ mod tests {
         snapshot!(snapshot_bitmap(&tasks), @"[]");
 
         let query = Query {
-            status: Some(vec![Status::Failed]),
-            uid: Some(vec![2]),
+            statuses: Some(vec![Status::Failed]),
+            uids: Some(vec![2]),
             after_started_at: Some(second_start_time),
             before_started_at: Some(second_start_time + Duration::minutes(1)),
             ..Default::default()
@@ -2417,13 +2417,13 @@ mod tests {
 
         let rtxn = index_scheduler.env.read_txn().unwrap();
 
-        let query = Query { index_uid: Some(vec!["catto".to_owned()]), ..Default::default() };
+        let query = Query { index_uids: Some(vec!["catto".to_owned()]), ..Default::default() };
         let tasks =
             index_scheduler.get_task_ids_from_authorized_indexes(&rtxn, &query, &None).unwrap();
         // only the first task associated with catto is returned, the indexSwap tasks are excluded!
         snapshot!(snapshot_bitmap(&tasks), @"[0,]");
 
-        let query = Query { index_uid: Some(vec!["catto".to_owned()]), ..Default::default() };
+        let query = Query { index_uids: Some(vec!["catto".to_owned()]), ..Default::default() };
         let tasks = index_scheduler
             .get_task_ids_from_authorized_indexes(&rtxn, &query, &Some(vec!["doggo".to_owned()]))
             .unwrap();

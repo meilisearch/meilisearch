@@ -147,7 +147,11 @@ pub enum Code {
     MissingMasterKey,
     NoSpaceLeftOnDevice,
     DumpNotFound,
-    InvalidTaskUid,
+    InvalidTaskDate,
+    InvalidTaskStatuses,
+    InvalidTaskTypes,
+    InvalidTaskCanceledBy,
+    InvalidTaskUids,
     TaskNotFound,
     TaskDeletionWithEmptyQuery,
     TaskCancelationWithEmptyQuery,
@@ -239,7 +243,21 @@ impl Code {
             MissingMasterKey => {
                 ErrCode::authentication("missing_master_key", StatusCode::UNAUTHORIZED)
             }
-            InvalidTaskUid => ErrCode::invalid("invalid_task_uid", StatusCode::BAD_REQUEST),
+            InvalidTaskDate => {
+                ErrCode::invalid("invalid_task_date_filter", StatusCode::BAD_REQUEST)
+            }
+            InvalidTaskUids => {
+                ErrCode::invalid("invalid_task_uids_filter", StatusCode::BAD_REQUEST)
+            }
+            InvalidTaskStatuses => {
+                ErrCode::invalid("invalid_task_statuses_filter", StatusCode::BAD_REQUEST)
+            }
+            InvalidTaskTypes => {
+                ErrCode::invalid("invalid_task_types_filter", StatusCode::BAD_REQUEST)
+            }
+            InvalidTaskCanceledBy => {
+                ErrCode::invalid("invalid_task_canceled_by_filter", StatusCode::BAD_REQUEST)
+            }
             TaskNotFound => ErrCode::invalid("task_not_found", StatusCode::NOT_FOUND),
             TaskDeletionWithEmptyQuery => {
                 ErrCode::invalid("missing_task_filters", StatusCode::BAD_REQUEST)
