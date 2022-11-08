@@ -111,7 +111,7 @@ This project integrates a tool to create automated changelogs: the [release-draf
 
 ### How to Publish the Release <!-- omit in toc -->
 
-Make a PR modifying all the `Cargo.toml` files with the right version.
+Make a PR modifying all the `Cargo.toml` files with the right version by using our automation -> Go to [this GitHub Action](https://github.com/meilisearch/milli/actions/workflows/update-cargo-toml-version.yml), click on `Run workflow`, and fill the appropriate version before validating. A PR updating all the versions in the `Cargo.toml` files will be created.
 
 Once the changes are merged on `main`, you can publish the current draft release via the [GitHub interface](https://github.com/meilisearch/milli/releases): on this page, click on `Edit` (related to the draft release) > update the description if needed > when you are ready, click on `Publish release`.
 
