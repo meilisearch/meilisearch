@@ -284,6 +284,7 @@ async fn test_summarized_delete_batch() {
       "indexUid": "test",
       "status": "failed",
       "type": "documentDeletion",
+      "canceledBy": null,
       "details": {
         "matchedDocuments": 3,
         "deletedDocuments": null
@@ -313,10 +314,12 @@ async fn test_summarized_delete_batch() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentDeletion",
+      "canceledBy": null,
       "details": {
         "matchedDocuments": 1,
         "deletedDocuments": 0
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -340,6 +343,7 @@ async fn test_summarized_delete_document() {
       "indexUid": "test",
       "status": "failed",
       "type": "documentDeletion",
+      "canceledBy": null,
       "details": {
         "matchedDocuments": 1,
         "deletedDocuments": null
@@ -369,10 +373,12 @@ async fn test_summarized_delete_document() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentDeletion",
+      "canceledBy": null,
       "details": {
         "matchedDocuments": 1,
         "deletedDocuments": 0
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -398,6 +404,7 @@ async fn test_summarized_settings_update() {
       "indexUid": "test",
       "status": "failed",
       "type": "settingsUpdate",
+      "canceledBy": null,
       "details": {
         "rankingRules": [
           "custom"
@@ -427,6 +434,7 @@ async fn test_summarized_settings_update() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "settingsUpdate",
+      "canceledBy": null,
       "details": {
         "displayedAttributes": [
           "doggos",
@@ -440,6 +448,7 @@ async fn test_summarized_settings_update() {
           "iq"
         ]
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -463,9 +472,11 @@ async fn test_summarized_index_creation() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "indexCreation",
+      "canceledBy": null,
       "details": {
         "primaryKey": null
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -484,6 +495,7 @@ async fn test_summarized_index_creation() {
       "indexUid": "test",
       "status": "failed",
       "type": "indexCreation",
+      "canceledBy": null,
       "details": {
         "primaryKey": "doggos"
       },
@@ -596,6 +608,7 @@ async fn test_summarized_index_update() {
       "indexUid": "test",
       "status": "failed",
       "type": "indexUpdate",
+      "canceledBy": null,
       "details": {
         "primaryKey": null
       },
@@ -623,6 +636,7 @@ async fn test_summarized_index_update() {
       "indexUid": "test",
       "status": "failed",
       "type": "indexUpdate",
+      "canceledBy": null,
       "details": {
         "primaryKey": "bones"
       },
@@ -653,9 +667,11 @@ async fn test_summarized_index_update() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "indexUpdate",
+      "canceledBy": null,
       "details": {
         "primaryKey": null
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -674,9 +690,11 @@ async fn test_summarized_index_update() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "indexUpdate",
+      "canceledBy": null,
       "details": {
         "primaryKey": "bones"
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -703,6 +721,7 @@ async fn test_summarized_index_swap() {
       "indexUid": null,
       "status": "failed",
       "type": "indexSwap",
+      "canceledBy": null,
       "details": {
         "swaps": [
           {
@@ -743,6 +762,7 @@ async fn test_summarized_index_swap() {
       "indexUid": null,
       "status": "succeeded",
       "type": "indexSwap",
+      "canceledBy": null,
       "details": {
         "swaps": [
           {
@@ -753,6 +773,7 @@ async fn test_summarized_index_swap() {
           }
         ]
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -812,11 +833,13 @@ async fn test_summarized_task_deletion() {
       "indexUid": null,
       "status": "succeeded",
       "type": "taskDeletion",
+      "canceledBy": null,
       "details": {
         "matchedTasks": 1,
         "deletedTasks": 1,
-        "originalFilters": "uid=0"
+        "originalFilters": "uids=0"
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -839,6 +862,8 @@ async fn test_summarized_dump_creation() {
       "indexUid": null,
       "status": "succeeded",
       "type": "dumpCreation",
+      "canceledBy": null,
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
