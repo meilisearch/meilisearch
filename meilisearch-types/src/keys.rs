@@ -1,4 +1,5 @@
 use std::hash::Hash;
+use std::str::FromStr;
 
 use enum_iterator::Sequence;
 use serde::{Deserialize, Serialize};
@@ -9,7 +10,7 @@ use time::{Date, OffsetDateTime, PrimitiveDateTime};
 use uuid::Uuid;
 
 use crate::error::{Code, ErrorCode};
-use crate::index_uid::IndexUid;
+use crate::index_uid::{IndexUid, IndexUidFormatError};
 use crate::star_or::StarOr;
 
 type Result<T> = std::result::Result<T, Error>;
@@ -64,7 +65,15 @@ impl Key {
         let indexes = value
             .get("indexes")
             .map(|ind| {
-                from_value(ind.clone()).map_err(|_| Error::InvalidApiKeyIndexes(ind.clone()))
+                from_value::<Vec<String>>(ind.clone())
+                    // If it's not a vec of string, return an API key parsing error.
+                    .map_err(|_| Error::InvalidApiKeyIndexes(ind.clone()))
+                    .and_then(|ind| {
+                        ind.into_iter()
+                            // If it's not a valid Index uid, return an Index Uid parsing error.
+                            .map(|i| StarOr::<IndexUid>::from_str(&i).map_err(Error::from))
+                            .collect()
+                    })
             })
             .ok_or(Error::MissingParameter("indexes"))??;
 
@@ -339,10 +348,10 @@ pub enum Error {
     MissingParameter(&'static str),
     #[error("`actions` field value `{0}` is invalid. It should be an array of string representing action names.")]
     InvalidApiKeyActions(Value),
-    #[error(
-        "`{0}` is not a valid index uid. It should be an array of string representing index names."
-    )]
+    #[error("`indexes` field value `{0}` is invalid. It should be an array of string representing index names.")]
     InvalidApiKeyIndexes(Value),
+    #[error("{0}")]
+    InvalidApiKeyIndexUid(IndexUidFormatError),
     #[error("`expiresAt` field value `{0}` is invalid. It should follow the RFC 3339 format to represents a date or datetime in the future or specified as a null value. e.g. 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM:SS'.")]
     InvalidApiKeyExpiresAt(Value),
     #[error("`description` field value `{0}` is invalid. It should be a string or specified as a null value.")]
@@ -357,12 +366,20 @@ pub enum Error {
     ImmutableField(String),
 }
 
+impl From<IndexUidFormatError> for Error {
+    fn from(e: IndexUidFormatError) -> Self {
+        Self::InvalidApiKeyIndexUid(e)
+    }
+}
+
 impl ErrorCode for Error {
     fn error_code(&self) -> Code {
         match self {
             Self::MissingParameter(_) => Code::MissingParameter,
             Self::InvalidApiKeyActions(_) => Code::InvalidApiKeyActions,
-            Self::InvalidApiKeyIndexes(_) => Code::InvalidApiKeyIndexes,
+            Self::InvalidApiKeyIndexes(_) | Self::InvalidApiKeyIndexUid(_) => {
+                Code::InvalidApiKeyIndexes
+            }
             Self::InvalidApiKeyExpiresAt(_) => Code::InvalidApiKeyExpiresAt,
             Self::InvalidApiKeyDescription(_) => Code::InvalidApiKeyDescription,
             Self::InvalidApiKeyName(_) => Code::InvalidApiKeyName,
