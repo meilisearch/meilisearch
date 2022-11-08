@@ -693,7 +693,7 @@ pub(crate) mod date_deserializer {
                 DeserializeDateOption::Before => Ok(datetime),
                 DeserializeDateOption::After => {
                     let datetime =
-                        datetime.checked_add(Duration::days(1)).unwrap_or_else(|| datetime);
+                        datetime.checked_add(Duration::days(1)).unwrap_or(datetime);
                     Ok(datetime)
                 }
             }
