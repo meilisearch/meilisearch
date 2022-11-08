@@ -134,20 +134,22 @@ impl From<Details> for DetailsView {
             Details::ClearAll { deleted_documents } => {
                 DetailsView { deleted_documents: Some(deleted_documents), ..DetailsView::default() }
             }
-            Details::TaskCancelation { matched_tasks, canceled_tasks, original_query } => {
+            Details::TaskCancelation { matched_tasks, canceled_tasks, original_filters } => {
                 DetailsView {
                     matched_tasks: Some(matched_tasks),
                     canceled_tasks: Some(canceled_tasks),
-                    original_filters: Some(original_query),
+                    original_filters: Some(original_filters),
                     ..DetailsView::default()
                 }
             }
-            Details::TaskDeletion { matched_tasks, deleted_tasks, original_query } => DetailsView {
-                matched_tasks: Some(matched_tasks),
-                deleted_tasks: Some(deleted_tasks),
-                original_filters: Some(original_query),
-                ..DetailsView::default()
-            },
+            Details::TaskDeletion { matched_tasks, deleted_tasks, original_filters } => {
+                DetailsView {
+                    matched_tasks: Some(matched_tasks),
+                    deleted_tasks: Some(deleted_tasks),
+                    original_filters: Some(original_filters),
+                    ..DetailsView::default()
+                }
+            }
             Details::Dump { dump_uid } => {
                 DetailsView { dump_uid: Some(dump_uid), ..DetailsView::default() }
             }
@@ -876,7 +878,7 @@ mod tests {
                 .unwrap()
                 .validate()
                 .unwrap_err();
-            snapshot!(format!("{err}"), @"Task status `finished` is invalid. Available task statuses are `enqueued`, `processing`, `succeeded`, `failed`, `canceled`");
+            snapshot!(format!("{err}"), @"Task status `finished` is invalid. Available task statuses are `enqueued`, `processing`, `succeeded`, `failed`, `canceled`.");
         }
     }
     #[test]
@@ -948,7 +950,7 @@ mod tests {
             let json = r#" { "from": 12, "limit": 15, "indexUids": "toto,tata-78", "statuses": "succeeded,enqueued", "afterEnqueuedAt": "2012-04-23", "uids": "1,2,3" }"#;
             let query =
                 serde_json::from_str::<TasksFilterQueryRaw>(json).unwrap().validate().unwrap();
-            snapshot!(format!("{:?}", query), @r###"TasksFilterQuery { limit: 15, from: Some(12), common: TaskCommonQuery { types: None, uids: Some([1, 2, 3]), statuses: Some([Succeeded, Enqueued]), index_uids: Some(["toto", "tata-78"]) }, dates: TaskDateQuery { after_enqueued_at: Some(2012-04-24 0:00:00.0 +00:00:00), before_enqueued_at: None, after_started_at: None, before_started_at: None, after_finished_at: None, before_finished_at: None } }"###);
+            snapshot!(format!("{:?}", query), @r###"TasksFilterQuery { limit: 15, from: Some(12), common: TaskCommonQuery { types: None, uids: Some([1, 2, 3]), canceled_by: None, statuses: Some([Succeeded, Enqueued]), index_uids: Some(["toto", "tata-78"]) }, dates: TaskDateQuery { after_enqueued_at: Some(2012-04-24 0:00:00.0 +00:00:00), before_enqueued_at: None, after_started_at: None, before_started_at: None, after_finished_at: None, before_finished_at: None } }"###);
         }
         {
             // Stars should translate to `None` in the query
@@ -956,7 +958,7 @@ mod tests {
             let json = r#" { "indexUids": "*", "statuses": "succeeded,*", "afterEnqueuedAt": "2012-04-23", "uids": "1,2,3" }"#;
             let query =
                 serde_json::from_str::<TasksFilterQueryRaw>(json).unwrap().validate().unwrap();
-            snapshot!(format!("{:?}", query), @"TasksFilterQuery { limit: 20, from: None, common: TaskCommonQuery { types: None, uids: Some([1, 2, 3]), statuses: None, index_uids: None }, dates: TaskDateQuery { after_enqueued_at: Some(2012-04-24 0:00:00.0 +00:00:00), before_enqueued_at: None, after_started_at: None, before_started_at: None, after_finished_at: None, before_finished_at: None } }");
+            snapshot!(format!("{:?}", query), @"TasksFilterQuery { limit: 20, from: None, common: TaskCommonQuery { types: None, uids: Some([1, 2, 3]), canceled_by: None, statuses: None, index_uids: None }, dates: TaskDateQuery { after_enqueued_at: Some(2012-04-24 0:00:00.0 +00:00:00), before_enqueued_at: None, after_started_at: None, before_started_at: None, after_finished_at: None, before_finished_at: None } }");
         }
         {
             // Stars should also translate to `None` in task deletion/cancelation queries
@@ -965,7 +967,7 @@ mod tests {
                 .unwrap()
                 .validate()
                 .unwrap();
-            snapshot!(format!("{:?}", query), @"TaskDeletionOrCancelationQuery { common: TaskCommonQuery { types: None, uids: Some([1, 2, 3]), statuses: None, index_uids: None }, dates: TaskDateQuery { after_enqueued_at: Some(2012-04-24 0:00:00.0 +00:00:00), before_enqueued_at: None, after_started_at: None, before_started_at: None, after_finished_at: None, before_finished_at: None } }");
+            snapshot!(format!("{:?}", query), @"TaskDeletionOrCancelationQuery { common: TaskCommonQuery { types: None, uids: Some([1, 2, 3]), canceled_by: None, statuses: None, index_uids: None }, dates: TaskDateQuery { after_enqueued_at: Some(2012-04-24 0:00:00.0 +00:00:00), before_enqueued_at: None, after_started_at: None, before_started_at: None, after_finished_at: None, before_finished_at: None } }");
         }
         {
             // Stars in uids not allowed

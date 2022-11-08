@@ -779,11 +779,13 @@ async fn test_summarized_task_cancelation() {
       "indexUid": null,
       "status": "succeeded",
       "type": "taskCancelation",
+      "canceledBy": null,
       "details": {
         "matchedTasks": 1,
         "canceledTasks": 0,
-        "originalQuery": "uid=0"
+        "originalFilters": "uids=0"
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -813,7 +815,7 @@ async fn test_summarized_task_deletion() {
       "details": {
         "matchedTasks": 1,
         "deletedTasks": 1,
-        "originalQuery": "uid=0"
+        "originalFilters": "uid=0"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
