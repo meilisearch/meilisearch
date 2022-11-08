@@ -589,11 +589,8 @@ fn create_matching_words(
             PrimitiveQueryPart::Phrase(words) => {
                 let ids: Vec<_> =
                     (0..words.len()).into_iter().map(|i| id + i as PrimitiveWordId).collect();
-                let words = words
-                    .into_iter()
-                    .filter_map(|w| w)
-                    .map(|w| MatchingWord::new(w, 0, false))
-                    .collect();
+                let words =
+                    words.into_iter().flatten().map(|w| MatchingWord::new(w, 0, false)).collect();
                 matching_words.push((words, ids));
             }
         }

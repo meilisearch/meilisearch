@@ -248,7 +248,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                     skip_insertion = true;
                 } else {
                     // we associate the base document with the new key, everything will get merged later.
-                    self.original_sorter.insert(&docid.to_be_bytes(), base_obkv)?;
+                    self.original_sorter.insert(docid.to_be_bytes(), base_obkv)?;
                     match self.flatten_from_fields_ids_map(KvReader::new(base_obkv))? {
                         Some(buffer) => {
                             self.flattened_sorter.insert(docid.to_be_bytes(), &buffer)?
@@ -261,7 +261,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             if !skip_insertion {
                 self.new_documents_ids.insert(docid);
                 // We use the extracted/generated user id as the key for this document.
-                self.original_sorter.insert(&docid.to_be_bytes(), obkv_buffer.clone())?;
+                self.original_sorter.insert(docid.to_be_bytes(), obkv_buffer.clone())?;
 
                 match self.flatten_from_fields_ids_map(KvReader::new(&obkv_buffer))? {
                     Some(buffer) => self.flattened_sorter.insert(docid.to_be_bytes(), &buffer)?,

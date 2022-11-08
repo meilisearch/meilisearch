@@ -431,20 +431,17 @@ pub fn resolve_phrase(ctx: &dyn Context, phrase: &[Option<String>]) -> Result<Ro
     for win in phrase.windows(winsize) {
         // Get all the documents with the matching distance for each word pairs.
         let mut bitmaps = Vec::with_capacity(winsize.pow(2));
-        for (offset, s1) in win.iter().enumerate().filter_map(|(index, word)| {
-            if let Some(word) = word {
-                Some((index, word))
-            } else {
-                None
-            }
-        }) {
-            for (dist, s2) in win.iter().skip(offset + 1).enumerate().filter_map(|(index, word)| {
-                if let Some(word) = word {
-                    Some((index, word))
-                } else {
-                    None
-                }
-            }) {
+        for (offset, s1) in win
+            .iter()
+            .enumerate()
+            .filter_map(|(index, word)| word.as_ref().map(|word| (index, word)))
+        {
+            for (dist, s2) in win
+                .iter()
+                .skip(offset + 1)
+                .enumerate()
+                .filter_map(|(index, word)| word.as_ref().map(|word| (index, word)))
+            {
                 if dist == 0 {
                     match ctx.word_pair_proximity_docids(s1, s2, 1)? {
                         Some(m) => bitmaps.push(m),

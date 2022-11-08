@@ -41,7 +41,7 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
             key_buffer.extend_from_slice(word_bytes);
             key_buffer.extend_from_slice(&position.to_be_bytes());
 
-            word_position_docids_sorter.insert(&key_buffer, &document_id.to_ne_bytes())?;
+            word_position_docids_sorter.insert(&key_buffer, document_id.to_ne_bytes())?;
         }
     }
 

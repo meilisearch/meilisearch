@@ -43,7 +43,7 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
         let key_bytes = FacetGroupKeyCodec::<StrRefCodec>::bytes_encode(&key).unwrap();
 
         // document id is encoded in native-endian because of the CBO roaring bitmap codec
-        facet_string_docids_sorter.insert(&key_bytes, &document_id.to_ne_bytes())?;
+        facet_string_docids_sorter.insert(&key_bytes, document_id.to_ne_bytes())?;
     }
 
     sorter_into_reader(facet_string_docids_sorter, indexer)
