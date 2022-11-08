@@ -6,31 +6,30 @@ source: index-scheduler/src/lib.rs
 []
 ----------------------------------------------------------------------
 ### All Tasks:
-0 {uid: 0, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "a", primary_key: Some("id") }}
-1 {uid: 1, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "b", primary_key: Some("id") }}
-2 {uid: 2, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "c", primary_key: Some("id") }}
-3 {uid: 3, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "d", primary_key: Some("id") }}
-4 {uid: 4, status: enqueued, details: { swaps: [IndexSwap { indexes: ("a", "b") }, IndexSwap { indexes: ("c", "d") }] }, kind: IndexSwap { swaps: [IndexSwap { indexes: ("a", "b") }, IndexSwap { indexes: ("c", "d") }] }}
-5 {uid: 5, status: enqueued, details: { swaps: [IndexSwap { indexes: ("a", "c") }] }, kind: IndexSwap { swaps: [IndexSwap { indexes: ("a", "c") }] }}
+0 {uid: 0, status: succeeded, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
+1 {uid: 1, status: canceled, canceled_by: 3, details: { primary_key: Some("sheep") }, kind: IndexCreation { index_uid: "doggo", primary_key: Some("sheep") }}
+2 {uid: 2, status: canceled, canceled_by: 3, details: { swaps: [IndexSwap { indexes: ("catto", "doggo") }] }, kind: IndexSwap { swaps: [IndexSwap { indexes: ("catto", "doggo") }] }}
+3 {uid: 3, status: succeeded, details: { matched_tasks: 3, canceled_tasks: Some(0), original_query: "test_query" }, kind: TaskCancelation { query: "test_query", tasks: RoaringBitmap<[0, 1, 2]> }}
 ----------------------------------------------------------------------
 ### Status:
-enqueued [4,5,]
-succeeded [0,1,2,3,]
+enqueued []
+succeeded [0,3,]
+canceled [1,2,]
 ----------------------------------------------------------------------
 ### Kind:
-"indexCreation" [0,1,2,3,]
-"indexSwap" [4,5,]
+"indexCreation" [0,1,]
+"indexSwap" [2,]
+"taskCancelation" [3,]
 ----------------------------------------------------------------------
 ### Index Tasks:
-a [0,4,5,]
-b [1,4,]
-c [2,4,5,]
-d [3,4,]
+catto [0,2,]
+doggo [1,2,]
 ----------------------------------------------------------------------
 ### Index Mapper:
-["a", "b", "c", "d"]
+["catto"]
 ----------------------------------------------------------------------
 ### Canceled By:
+3 [1,2,]
 
 ----------------------------------------------------------------------
 ### Enqueued At:
@@ -38,19 +37,14 @@ d [3,4,]
 [timestamp] [1,]
 [timestamp] [2,]
 [timestamp] [3,]
-[timestamp] [4,]
-[timestamp] [5,]
 ----------------------------------------------------------------------
 ### Started At:
 [timestamp] [0,]
-[timestamp] [1,]
-[timestamp] [2,]
 [timestamp] [3,]
 ----------------------------------------------------------------------
 ### Finished At:
 [timestamp] [0,]
-[timestamp] [1,]
-[timestamp] [2,]
+[timestamp] [1,2,]
 [timestamp] [3,]
 ----------------------------------------------------------------------
 ### File Store:

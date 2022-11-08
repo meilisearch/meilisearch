@@ -1187,6 +1187,7 @@ impl IndexScheduler {
         let mut affected_indexes = HashSet::new();
         let mut affected_statuses = HashSet::new();
         let mut affected_kinds = HashSet::new();
+        let mut affected_canceled_by = RoaringBitmap::new();
 
         for task_id in to_delete_tasks.iter() {
             let task = self.get_task(wtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
@@ -1205,6 +1206,9 @@ impl IndexScheduler {
             if let Some(finished_at) = task.finished_at {
                 utils::remove_task_datetime(wtxn, self.finished_at, finished_at, task.uid)?;
             }
+            if let Some(canceled_by) = task.canceled_by {
+                affected_canceled_by.insert(canceled_by);
+            }
         }
 
         for index in affected_indexes {
@@ -1221,6 +1225,17 @@ impl IndexScheduler {
 
         for task in to_delete_tasks.iter() {
             self.all_tasks.delete(wtxn, &BEU32::new(task))?;
+        }
+        for canceled_by in affected_canceled_by {
+            let canceled_by = BEU32::new(canceled_by);
+            if let Some(mut tasks) = self.canceled_by.get(wtxn, &canceled_by)? {
+                tasks -= &to_delete_tasks;
+                if tasks.is_empty() {
+                    self.canceled_by.delete(wtxn, &canceled_by)?;
+                } else {
+                    self.canceled_by.put(wtxn, &canceled_by, &tasks)?;
+                }
+            }
         }
 
         Ok(to_delete_tasks.len())
@@ -1259,6 +1274,7 @@ impl IndexScheduler {
             task.finished_at = Some(now);
             self.update_task(wtxn, &task)?;
         }
+        self.canceled_by.put(wtxn, &BEU32::new(cancel_task_id), &tasks_to_cancel)?;
 
         Ok(content_files_to_delete)
     }

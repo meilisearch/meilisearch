@@ -162,19 +162,37 @@ impl From<Details> for DetailsView {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TaskCommonQueryRaw {
     uids: Option<CS<String>>,
+    canceled_by: Option<CS<String>>,
     types: Option<CS<StarOr<String>>>,
     statuses: Option<CS<StarOr<String>>>,
     index_uids: Option<CS<StarOr<String>>>,
 }
 impl TaskCommonQueryRaw {
     fn validate(self) -> Result<TaskCommonQuery, ResponseError> {
-        let Self { uids, types, statuses, index_uids } = self;
+        let Self { uids, canceled_by, types, statuses, index_uids } = self;
         let uids = if let Some(uids) = uids {
             Some(
                 uids.into_iter()
                     .map(|uid_string| {
                         uid_string.parse::<u32>().map_err(|_e| {
                             index_scheduler::Error::InvalidTaskUids { task_uid: uid_string }.into()
+                        })
+                    })
+                    .collect::<Result<Vec<u32>, ResponseError>>()?,
+            )
+        } else {
+            None
+        };
+        let canceled_by = if let Some(canceled_by) = canceled_by {
+            Some(
+                canceled_by
+                    .into_iter()
+                    .map(|canceled_by_string| {
+                        canceled_by_string.parse::<u32>().map_err(|_e| {
+                            index_scheduler::Error::InvalidTaskCanceledBy {
+                                canceled_by: canceled_by_string,
+                            }
+                            .into()
                         })
                     })
                     .collect::<Result<Vec<u32>, ResponseError>>()?,
@@ -235,7 +253,7 @@ impl TaskCommonQueryRaw {
             } else {
                 None
             };
-        Ok(TaskCommonQuery { types, uids, statuses, index_uids })
+        Ok(TaskCommonQuery { types, uids, canceled_by, statuses, index_uids })
     }
 }
 
@@ -402,6 +420,7 @@ pub struct TaskDateQuery {
 pub struct TaskCommonQuery {
     types: Option<Vec<Kind>>,
     uids: Option<Vec<TaskId>>,
+    canceled_by: Option<Vec<TaskId>>,
     statuses: Option<Vec<Status>>,
     index_uids: Option<Vec<String>>,
 }
@@ -427,7 +446,7 @@ async fn cancel_tasks(
 ) -> Result<HttpResponse, ResponseError> {
     let query = params.into_inner().validate()?;
     let TaskDeletionOrCancelationQuery {
-        common: TaskCommonQuery { types, uids, statuses, index_uids },
+        common: TaskCommonQuery { types, uids, canceled_by, statuses, index_uids },
         dates:
             TaskDateQuery {
                 after_enqueued_at,
@@ -446,6 +465,7 @@ async fn cancel_tasks(
         types,
         index_uids,
         uids,
+        canceled_by,
         before_enqueued_at,
         after_enqueued_at,
         before_started_at,
@@ -478,7 +498,7 @@ async fn delete_tasks(
     params: web::Query<TaskDeletionOrCancelationQueryRaw>,
 ) -> Result<HttpResponse, ResponseError> {
     let TaskDeletionOrCancelationQuery {
-        common: TaskCommonQuery { types, uids, statuses, index_uids },
+        common: TaskCommonQuery { types, uids, canceled_by, statuses, index_uids },
         dates:
             TaskDateQuery {
                 after_enqueued_at,
@@ -497,6 +517,7 @@ async fn delete_tasks(
         types,
         index_uids,
         uids,
+        canceled_by,
         after_enqueued_at,
         before_enqueued_at,
         after_started_at,
@@ -538,7 +559,7 @@ async fn get_tasks(
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let TasksFilterQuery {
-        common: TaskCommonQuery { types, uids, statuses, index_uids },
+        common: TaskCommonQuery { types, uids, canceled_by, statuses, index_uids },
         limit,
         from,
         dates:
@@ -572,6 +593,7 @@ async fn get_tasks(
         types,
         index_uids,
         uids,
+        canceled_by,
         before_enqueued_at,
         after_enqueued_at,
         before_started_at,
