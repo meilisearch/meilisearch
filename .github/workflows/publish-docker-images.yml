@@ -1,10 +1,10 @@
 ---
 on:
   schedule:
-    - cron: "0 4 * * *" # Every day at 4:00am
+    - cron: '0 4 * * *' # Every day at 4:00am
   push:
     tags:
-      - "*"
+      - '*'
 
 name: Publish tagged images to Docker Hub
 
