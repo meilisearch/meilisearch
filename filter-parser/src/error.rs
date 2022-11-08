@@ -65,6 +65,7 @@ pub enum ErrorKind<'a> {
     MalformedValue,
     InOpeningBracket,
     InClosingBracket,
+    NonFiniteFloat,
     InExpectedValue(ExpectedValueKind),
     ReservedKeyword(String),
     MissingClosingDelimiter(char),
@@ -166,6 +167,9 @@ impl<'a> Display for Error<'a> {
             }
             ErrorKind::InClosingBracket => {
                 writeln!(f, "Expected matching `]` after the list of field names given to `IN[`")?
+            }
+            ErrorKind::NonFiniteFloat => {
+                writeln!(f, "Non finite floats are not supported")?
             }
             ErrorKind::InExpectedValue(ExpectedValueKind::ReservedKeyword) => {
                 writeln!(f, "Expected only comma-separated field names inside `IN[..]` but instead found `{escaped_input}`, which is a keyword. To use `{escaped_input}` as a field name or a value, surround it by quotes.")?

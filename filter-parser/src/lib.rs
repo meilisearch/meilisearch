@@ -44,7 +44,6 @@ mod error;
 mod value;
 
 use std::fmt::Debug;
-use std::str::FromStr;
 
 pub use condition::{parse_condition, parse_to, Condition};
 use condition::{parse_exists, parse_not_exists};
@@ -100,12 +99,13 @@ impl<'a> Token<'a> {
         Error::new_from_external(self.span, error)
     }
 
-    pub fn parse<T>(&self) -> Result<T, Error>
-    where
-        T: FromStr,
-        T::Err: std::error::Error,
-    {
-        self.span.parse().map_err(|e| self.as_external_error(e))
+    pub fn parse_finite_float(&self) -> Result<f64, Error> {
+        let value: f64 = self.span.parse().map_err(|e| self.as_external_error(e))?;
+        if value.is_finite() {
+            Ok(value)
+        } else {
+            Err(Error::new_from_kind(self.span, ErrorKind::NonFiniteFloat))
+        }
     }
 }
 

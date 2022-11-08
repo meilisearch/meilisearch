@@ -169,11 +169,19 @@ impl<'a> Filter<'a> {
         // field id and the level.
 
         let (left, right) = match operator {
-            Condition::GreaterThan(val) => (Excluded(val.parse()?), Included(f64::MAX)),
-            Condition::GreaterThanOrEqual(val) => (Included(val.parse()?), Included(f64::MAX)),
-            Condition::LowerThan(val) => (Included(f64::MIN), Excluded(val.parse()?)),
-            Condition::LowerThanOrEqual(val) => (Included(f64::MIN), Included(val.parse()?)),
-            Condition::Between { from, to } => (Included(from.parse()?), Included(to.parse()?)),
+            Condition::GreaterThan(val) => {
+                (Excluded(val.parse_finite_float()?), Included(f64::MAX))
+            }
+            Condition::GreaterThanOrEqual(val) => {
+                (Included(val.parse_finite_float()?), Included(f64::MAX))
+            }
+            Condition::LowerThan(val) => (Included(f64::MIN), Excluded(val.parse_finite_float()?)),
+            Condition::LowerThanOrEqual(val) => {
+                (Included(f64::MIN), Included(val.parse_finite_float()?))
+            }
+            Condition::Between { from, to } => {
+                (Included(from.parse_finite_float()?), Included(to.parse_finite_float()?))
+            }
             Condition::Exists => {
                 let exist = index.exists_faceted_documents_ids(rtxn, field_id)?;
                 return Ok(exist);
@@ -190,7 +198,7 @@ impl<'a> Filter<'a> {
                     )?
                     .map(|v| v.bitmap)
                     .unwrap_or_default();
-                let number = val.parse::<f64>().ok();
+                let number = val.parse_finite_float().ok();
                 let number_docids = match number {
                     Some(n) => {
                         let n = Included(n);
@@ -389,7 +397,8 @@ impl<'a> Filter<'a> {
             }
             FilterCondition::GeoLowerThan { point, radius } => {
                 if filterable_fields.contains("_geo") {
-                    let base_point: [f64; 2] = [point[0].parse()?, point[1].parse()?];
+                    let base_point: [f64; 2] =
+                        [point[0].parse_finite_float()?, point[1].parse_finite_float()?];
                     if !(-90.0..=90.0).contains(&base_point[0]) {
                         return Err(
                             point[0].as_external_error(FilterError::BadGeoLat(base_point[0]))
@@ -400,7 +409,7 @@ impl<'a> Filter<'a> {
                             point[1].as_external_error(FilterError::BadGeoLng(base_point[1]))
                         )?;
                     }
-                    let radius = radius.parse()?;
+                    let radius = radius.parse_finite_float()?;
                     let rtree = match index.geo_rtree(rtxn)? {
                         Some(rtree) => rtree,
                         None => return Ok(RoaringBitmap::new()),
