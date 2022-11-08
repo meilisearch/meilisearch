@@ -719,6 +719,7 @@ mod tests {
     use super::*;
     use crate::error::Error;
     use crate::index::tests::TempIndex;
+    use crate::update::DeleteDocuments;
     use crate::{Criterion, Filter, SearchResult};
 
     #[test]
@@ -1493,5 +1494,35 @@ mod tests {
                 assert!(matches!(pagination_max_total_hits, Setting::NotSet));
             })
             .unwrap();
+    }
+
+    #[test]
+    fn settings_must_ignore_soft_deleted() {
+        use serde_json::json;
+
+        let index = TempIndex::new();
+
+        let mut docs = vec![];
+        for i in 0..10 {
+            docs.push(json!({ "id": i, "title": format!("{:x}", i) }));
+        }
+        index.add_documents(documents! { docs }).unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
+        (0..5).for_each(|id| drop(builder.delete_external_id(&id.to_string())));
+        builder.execute().unwrap();
+
+        index
+            .update_settings_using_wtxn(&mut wtxn, |settings| {
+                settings.set_searchable_fields(vec!["id".to_string()]);
+            })
+            .unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.write_txn().unwrap();
+        let docs: StdResult<Vec<_>, _> = index.all_documents(&rtxn).unwrap().collect();
+        let docs = docs.unwrap();
+        assert_eq!(docs.len(), 5);
     }
 }
