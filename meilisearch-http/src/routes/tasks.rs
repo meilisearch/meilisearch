@@ -17,7 +17,6 @@ use time::{Duration, OffsetDateTime};
 use tokio::task;
 
 use self::date_deserializer::{deserialize_date, DeserializeDateOption};
-
 use super::{fold_star_or, SummarizedTaskView};
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
@@ -692,8 +691,7 @@ pub(crate) mod date_deserializer {
             match option {
                 DeserializeDateOption::Before => Ok(datetime),
                 DeserializeDateOption::After => {
-                    let datetime =
-                        datetime.checked_add(Duration::days(1)).unwrap_or(datetime);
+                    let datetime = datetime.checked_add(Duration::days(1)).unwrap_or(datetime);
                     Ok(datetime)
                 }
             }
