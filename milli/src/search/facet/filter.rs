@@ -698,4 +698,60 @@ mod tests {
         let option = Filter::from_str("     ").unwrap();
         assert_eq!(option, None);
     }
+
+    #[test]
+    fn non_finite_float() {
+        let index = TempIndex::new();
+
+        index
+            .update_settings(|settings| {
+                settings.set_searchable_fields(vec![S("price")]); // to keep the fields order
+                settings.set_filterable_fields(hashset! { S("price") });
+            })
+            .unwrap();
+        index
+            .add_documents(documents!([
+                {
+                    "id": "test_1",
+                    "price": "inf"
+                },
+                {
+                    "id": "test_2",
+                    "price": "2000"
+                },
+                {
+                    "id": "test_3",
+                    "price": "infinity"
+                },
+            ]))
+            .unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        let filter = Filter::from_str("price = inf").unwrap().unwrap();
+        let result = filter.evaluate(&rtxn, &index).unwrap();
+        assert!(result.contains(0));
+        let filter = Filter::from_str("price < inf").unwrap().unwrap();
+        assert!(matches!(
+            filter.evaluate(&rtxn, &index),
+            Err(crate::Error::UserError(crate::error::UserError::InvalidFilter(_)))
+        ));
+
+        let filter = Filter::from_str("price = NaN").unwrap().unwrap();
+        let result = filter.evaluate(&rtxn, &index).unwrap();
+        assert!(result.is_empty());
+        let filter = Filter::from_str("price < NaN").unwrap().unwrap();
+        assert!(matches!(
+            filter.evaluate(&rtxn, &index),
+            Err(crate::Error::UserError(crate::error::UserError::InvalidFilter(_)))
+        ));
+
+        let filter = Filter::from_str("price = infinity").unwrap().unwrap();
+        let result = filter.evaluate(&rtxn, &index).unwrap();
+        assert!(result.contains(2));
+        let filter = Filter::from_str("price < infinity").unwrap().unwrap();
+        assert!(matches!(
+            filter.evaluate(&rtxn, &index),
+            Err(crate::Error::UserError(crate::error::UserError::InvalidFilter(_)))
+        ));
+    }
 }
