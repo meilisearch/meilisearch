@@ -578,9 +578,8 @@ impl<'a, 'i> Transform<'a, 'i> {
         );
 
         let mut obkv_buffer = Vec::new();
-        for result in self.index.documents.iter(wtxn)? {
+        for result in self.index.all_documents(wtxn)? {
             let (docid, obkv) = result?;
-            let docid = docid.get();
 
             obkv_buffer.clear();
             let mut obkv_writer = obkv::KvWriter::<_, FieldId>::new(&mut obkv_buffer);
