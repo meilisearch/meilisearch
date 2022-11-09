@@ -1332,8 +1332,8 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "0.35.0"
-source = "git+https://github.com/meilisearch/milli.git#2e539249cb16f5e88be9f21ab712f8b4266cad36"
+version = "0.36.0"
+source = "git+https://github.com/meilisearch/milli.git#e75829aded245a38515129f3796e8bce68fc8ea7"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1351,8 +1351,8 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "0.35.0"
-source = "git+https://github.com/meilisearch/milli.git#2e539249cb16f5e88be9f21ab712f8b4266cad36"
+version = "0.36.0"
+source = "git+https://github.com/meilisearch/milli.git#e75829aded245a38515129f3796e8bce68fc8ea7"
 dependencies = [
  "serde_json",
 ]
@@ -1617,7 +1617,7 @@ checksum = "2540771e65fc8cb83cd6e8a237f70c319bd5c29f78ed1084ba5d50eeac86f7f9"
 [[package]]
 name = "heed"
 version = "0.12.2"
-source = "git+https://github.com/meilisearch/heed?tag=v0.12.3#076971765f4ce09591ed7e19e45ea817580a53e3"
+source = "git+https://github.com/meilisearch/heed?branch=lmdb-master-3#e126f2b6edad12070b1ce6c2a1786def8e680895"
 dependencies = [
  "byteorder",
  "heed-traits",
@@ -1634,12 +1634,12 @@ dependencies = [
 [[package]]
 name = "heed-traits"
 version = "0.7.0"
-source = "git+https://github.com/meilisearch/heed?tag=v0.12.3#076971765f4ce09591ed7e19e45ea817580a53e3"
+source = "git+https://github.com/meilisearch/heed?branch=lmdb-master-3#e126f2b6edad12070b1ce6c2a1786def8e680895"
 
 [[package]]
 name = "heed-types"
 version = "0.7.2"
-source = "git+https://github.com/meilisearch/heed?tag=v0.12.3#076971765f4ce09591ed7e19e45ea817580a53e3"
+source = "git+https://github.com/meilisearch/heed?branch=lmdb-master-3#e126f2b6edad12070b1ce6c2a1786def8e680895"
 dependencies = [
  "bincode",
  "heed-traits",
@@ -1897,8 +1897,8 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "0.35.0"
-source = "git+https://github.com/meilisearch/milli.git#2e539249cb16f5e88be9f21ab712f8b4266cad36"
+version = "0.36.0"
+source = "git+https://github.com/meilisearch/milli.git#e75829aded245a38515129f3796e8bce68fc8ea7"
 dependencies = [
  "serde_json",
 ]
@@ -2155,7 +2155,7 @@ checksum = "d4d2456c373231a208ad294c33dc5bff30051eafd954cd4caae83a712b12854d"
 [[package]]
 name = "lmdb-rkv-sys"
 version = "0.15.0"
-source = "git+https://github.com/meilisearch/lmdb-rs#8f0fe377a98d177cabbd056e777778f559df2bb6"
+source = "git+https://github.com/meilisearch/lmdb-rs?branch=lmdb-master-3#f11cc8e02e06b8f968e08098e11644637e329792"
 dependencies = [
  "cc",
  "libc",
@@ -2416,8 +2416,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.35.0"
-source = "git+https://github.com/meilisearch/milli.git#2e539249cb16f5e88be9f21ab712f8b4266cad36"
+version = "0.36.0"
+source = "git+https://github.com/meilisearch/milli.git#e75829aded245a38515129f3796e8bce68fc8ea7"
 dependencies = [
  "bimap",
  "bincode",
