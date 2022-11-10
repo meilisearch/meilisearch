@@ -41,10 +41,10 @@ jobs:
           echo version: $MILESTONE_VERSION
           if [[ $MILESTONE_VERSION =~ ^v[0-9]+\.[0-9]+\.0$ ]]; then
             echo 'This is NOT a patch release'
-            echo ::set-output name=is-patch::false
+            echo "is-patch=false" >> $GITHUB_OUTPUT
           elif [[ $MILESTONE_VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo 'This is a patch release'
-            echo ::set-output name=is-patch::true
+            echo "is-patch=true" >> $GITHUB_OUTPUT
           else
             echo "Not a valid format of release, check the Milestone's title."
             echo 'Should be vX.Y.Z'

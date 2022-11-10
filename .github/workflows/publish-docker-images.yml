@@ -25,9 +25,9 @@ jobs:
           escaped_tag=$(printf "%q" ${{ github.ref_name }})
 
           if [[ $escaped_tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo ::set-output name=stable::true
+            echo "stable=true" >> $GITHUB_OUTPUT
           else
-            echo ::set-output name=stable::false
+            echo "stable=false" >> $GITHUB_OUTPUT
           fi
 
       # Check only the validity of the tag for official releases (not for pre-releases or other tags)
