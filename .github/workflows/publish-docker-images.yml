@@ -25,7 +25,7 @@ jobs:
           escaped_tag=$(printf "%q" ${{ github.ref_name }})
 
           if [[ $escaped_tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "stable=true" >> ${GITHUB_OUTPUT}
+            echo "stable=true" >> $GITHUB_OUTPUT
           else
             echo "stable=false" >> ${GITHUB_OUTPUT}
           fi
