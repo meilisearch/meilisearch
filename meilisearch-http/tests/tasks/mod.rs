@@ -67,37 +67,37 @@ async fn list_tasks_with_star_filters() {
     index
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
-    let (response, code) = index.service.get("/tasks?indexUid=test").await;
+    let (response, code) = index.service.get("/tasks?indexUids=test").await;
     assert_eq!(code, 200);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 
-    let (response, code) = index.service.get("/tasks?indexUid=*").await;
+    let (response, code) = index.service.get("/tasks?indexUids=*").await;
     assert_eq!(code, 200);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 
-    let (response, code) = index.service.get("/tasks?indexUid=*,pasteque").await;
+    let (response, code) = index.service.get("/tasks?indexUids=*,pasteque").await;
     assert_eq!(code, 200);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 
-    let (response, code) = index.service.get("/tasks?type=*").await;
+    let (response, code) = index.service.get("/tasks?types=*").await;
     assert_eq!(code, 200);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 
     let (response, code) =
-        index.service.get("/tasks?type=*,documentAdditionOrUpdate&status=*").await;
+        index.service.get("/tasks?types=*,documentAdditionOrUpdate&statuses=*").await;
     assert_eq!(code, 200, "{:?}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 
     let (response, code) = index
         .service
-        .get("/tasks?type=*,documentAdditionOrUpdate&status=*,failed&indexUid=test")
+        .get("/tasks?types=*,documentAdditionOrUpdate&statuses=*,failed&indexUids=test")
         .await;
     assert_eq!(code, 200, "{:?}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 
     let (response, code) = index
         .service
-        .get("/tasks?type=*,documentAdditionOrUpdate&status=*,failed&indexUid=test,*")
+        .get("/tasks?types=*,documentAdditionOrUpdate&statuses=*,failed&indexUids=test,*")
         .await;
     assert_eq!(code, 200, "{:?}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
@@ -231,10 +231,12 @@ async fn test_summarized_document_addition_or_update() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
         "indexedDocuments": 1
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -253,10 +255,12 @@ async fn test_summarized_document_addition_or_update() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
         "indexedDocuments": 1
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -280,6 +284,7 @@ async fn test_summarized_delete_batch() {
       "indexUid": "test",
       "status": "failed",
       "type": "documentDeletion",
+      "canceledBy": null,
       "details": {
         "matchedDocuments": 3,
         "deletedDocuments": null
@@ -309,10 +314,12 @@ async fn test_summarized_delete_batch() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentDeletion",
+      "canceledBy": null,
       "details": {
         "matchedDocuments": 1,
         "deletedDocuments": 0
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -336,6 +343,7 @@ async fn test_summarized_delete_document() {
       "indexUid": "test",
       "status": "failed",
       "type": "documentDeletion",
+      "canceledBy": null,
       "details": {
         "matchedDocuments": 1,
         "deletedDocuments": null
@@ -365,10 +373,12 @@ async fn test_summarized_delete_document() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentDeletion",
+      "canceledBy": null,
       "details": {
         "matchedDocuments": 1,
         "deletedDocuments": 0
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -394,6 +404,7 @@ async fn test_summarized_settings_update() {
       "indexUid": "test",
       "status": "failed",
       "type": "settingsUpdate",
+      "canceledBy": null,
       "details": {
         "rankingRules": [
           "custom"
@@ -423,6 +434,7 @@ async fn test_summarized_settings_update() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "settingsUpdate",
+      "canceledBy": null,
       "details": {
         "displayedAttributes": [
           "doggos",
@@ -436,6 +448,7 @@ async fn test_summarized_settings_update() {
           "iq"
         ]
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -459,9 +472,11 @@ async fn test_summarized_index_creation() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "indexCreation",
+      "canceledBy": null,
       "details": {
         "primaryKey": null
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -480,6 +495,7 @@ async fn test_summarized_index_creation() {
       "indexUid": "test",
       "status": "failed",
       "type": "indexCreation",
+      "canceledBy": null,
       "details": {
         "primaryKey": "doggos"
       },
@@ -512,6 +528,7 @@ async fn test_summarized_index_deletion() {
       "indexUid": "test",
       "status": "failed",
       "type": "indexDeletion",
+      "canceledBy": null,
       "error": {
         "message": "Index `test` not found.",
         "code": "index_not_found",
@@ -538,9 +555,11 @@ async fn test_summarized_index_deletion() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "indexDeletion",
+      "canceledBy": null,
       "details": {
         "deletedDocuments": 1
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -560,9 +579,11 @@ async fn test_summarized_index_deletion() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "indexDeletion",
+      "canceledBy": null,
       "details": {
         "deletedDocuments": 1
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -587,6 +608,7 @@ async fn test_summarized_index_update() {
       "indexUid": "test",
       "status": "failed",
       "type": "indexUpdate",
+      "canceledBy": null,
       "details": {
         "primaryKey": null
       },
@@ -614,6 +636,7 @@ async fn test_summarized_index_update() {
       "indexUid": "test",
       "status": "failed",
       "type": "indexUpdate",
+      "canceledBy": null,
       "details": {
         "primaryKey": "bones"
       },
@@ -644,9 +667,11 @@ async fn test_summarized_index_update() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "indexUpdate",
+      "canceledBy": null,
       "details": {
         "primaryKey": null
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -665,9 +690,11 @@ async fn test_summarized_index_update() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "indexUpdate",
+      "canceledBy": null,
       "details": {
         "primaryKey": "bones"
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -694,6 +721,7 @@ async fn test_summarized_index_swap() {
       "indexUid": null,
       "status": "failed",
       "type": "indexSwap",
+      "canceledBy": null,
       "details": {
         "swaps": [
           {
@@ -734,6 +762,7 @@ async fn test_summarized_index_swap() {
       "indexUid": null,
       "status": "succeeded",
       "type": "indexSwap",
+      "canceledBy": null,
       "details": {
         "swaps": [
           {
@@ -744,6 +773,7 @@ async fn test_summarized_index_swap() {
           }
         ]
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -759,7 +789,7 @@ async fn test_summarized_task_cancelation() {
     // to avoid being flaky we're only going to cancel an already finished task :(
     index.create(None).await;
     index.wait_task(0).await;
-    server.cancel_task(json!({ "uid": [0] })).await;
+    server.cancel_task(json!({ "uids": [0] })).await;
     index.wait_task(1).await;
     let (task, _) = index.get_task(1).await;
     assert_json_snapshot!(task, 
@@ -770,11 +800,13 @@ async fn test_summarized_task_cancelation() {
       "indexUid": null,
       "status": "succeeded",
       "type": "taskCancelation",
+      "canceledBy": null,
       "details": {
         "matchedTasks": 1,
         "canceledTasks": 0,
-        "originalQuery": "uid=0"
+        "originalFilters": "uids=0"
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -790,7 +822,7 @@ async fn test_summarized_task_deletion() {
     // to avoid being flaky we're only going to delete an already finished task :(
     index.create(None).await;
     index.wait_task(0).await;
-    server.delete_task(json!({ "uid": [0] })).await;
+    server.delete_task(json!({ "uids": [0] })).await;
     index.wait_task(1).await;
     let (task, _) = index.get_task(1).await;
     assert_json_snapshot!(task, 
@@ -801,11 +833,13 @@ async fn test_summarized_task_deletion() {
       "indexUid": null,
       "status": "succeeded",
       "type": "taskDeletion",
+      "canceledBy": null,
       "details": {
         "matchedTasks": 1,
         "deletedTasks": 1,
-        "originalQuery": "uid=0"
+        "originalFilters": "uids=0"
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -828,6 +862,8 @@ async fn test_summarized_dump_creation() {
       "indexUid": null,
       "status": "succeeded",
       "type": "dumpCreation",
+      "canceledBy": null,
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
