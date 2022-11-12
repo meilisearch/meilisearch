@@ -182,8 +182,8 @@ impl V4IndexReader {
         let metadata = IndexMetadata {
             uid: name,
             primary_key: meta.primary_key,
-            created_at: created_at.unwrap_or(OffsetDateTime::now_utc()),
-            updated_at: updated_at.unwrap_or(OffsetDateTime::now_utc()),
+            created_at: created_at.unwrap_or_else(OffsetDateTime::now_utc),
+            updated_at: updated_at.unwrap_or_else(OffsetDateTime::now_utc),
         };
 
         let ret = V4IndexReader {
