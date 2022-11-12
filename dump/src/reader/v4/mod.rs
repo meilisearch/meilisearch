@@ -13,7 +13,7 @@ pub mod meta;
 pub mod settings;
 pub mod tasks;
 
-use self::meta::{DumpMeta, IndexUuid};
+use self::meta::{DumpMeta, IndexMeta, IndexUuid};
 use super::compat::v4_to_v5::CompatV4ToV5;
 use crate::{Error, IndexMetadata, Result, Version};
 
@@ -23,8 +23,6 @@ pub type Checked = settings::Checked;
 pub type Unchecked = settings::Unchecked;
 
 pub type Task = tasks::Task;
-pub type TaskEvent = tasks::TaskEvent;
-pub type TaskContent = tasks::TaskContent;
 pub type Key = keys::Key;
 
 // everything related to the settings
@@ -102,6 +100,7 @@ impl V4Reader {
             V4IndexReader::new(
                 index.uid.clone(),
                 &self.dump.path().join("indexes").join(index.index_meta.uuid.to_string()),
+                &index.index_meta,
                 BufReader::new(self.tasks.get_ref().try_clone().unwrap()),
             )
         }))
@@ -150,7 +149,12 @@ pub struct V4IndexReader {
 }
 
 impl V4IndexReader {
-    pub fn new(name: String, path: &Path, tasks: BufReader<File>) -> Result<Self> {
+    pub fn new(
+        name: String,
+        path: &Path,
+        index_metadata: &IndexMeta,
+        tasks: BufReader<File>,
+    ) -> Result<Self> {
         let meta = File::open(path.join("meta.json"))?;
         let meta: DumpMeta = serde_json::from_reader(meta)?;
 
@@ -162,23 +166,14 @@ impl V4IndexReader {
 
             if task.index_uid.to_string() == name {
                 if updated_at.is_none() {
-                    updated_at = match task.events.last() {
-                        Some(TaskEvent::Created(ts)) => Some(*ts),
-                        _ => None,
-                    };
+                    updated_at = task.updated_at()
                 }
 
                 if created_at.is_none() {
-                    created_at = match task.content {
-                        TaskContent::IndexCreation { primary_key } => match task.events.first() {
-                            Some(TaskEvent::Created(ts)) => Some(*ts),
-                            _ => None,
-                        },
-                        _ => None,
-                    };
+                    created_at = task.created_at()
                 }
 
-                if created_at.is_some() {
+                if task.id as usize == index_metadata.creation_task_id {
                     break;
                 }
             }

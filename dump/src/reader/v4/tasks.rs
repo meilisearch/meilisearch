@@ -104,6 +104,33 @@ impl Task {
         })
     }
 
+    pub fn updated_at(&self) -> Option<OffsetDateTime> {
+        match self.events.last() {
+            Some(TaskEvent::Created(ts)) => Some(*ts),
+            _ => None,
+        }
+    }
+
+    pub fn created_at(&self) -> Option<OffsetDateTime> {
+        match &self.content {
+            TaskContent::IndexCreation { primary_key: _ } => match self.events.first() {
+                Some(TaskEvent::Created(ts)) => Some(*ts),
+                _ => None,
+            },
+            TaskContent::DocumentAddition {
+                content_uuid: _,
+                merge_strategy: _,
+                primary_key: _,
+                documents_count: _,
+                allow_index_creation: _,
+            } => match self.events.first() {
+                Some(TaskEvent::Created(ts)) => Some(*ts),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
     /// Return the content_uuid of the `Task` if there is one.
     pub fn get_content_uuid(&self) -> Option<Uuid> {
         match self {
