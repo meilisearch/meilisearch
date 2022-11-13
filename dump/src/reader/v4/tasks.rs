@@ -104,6 +104,13 @@ impl Task {
         })
     }
 
+    pub fn processed_at(&self) -> Option<OffsetDateTime> {
+        match self.events.last() {
+            Some(TaskEvent::Succeded { result: _, timestamp }) => Some(timestamp.clone()),
+            _ => None,
+        }
+    }
+
     pub fn updated_at(&self) -> Option<OffsetDateTime> {
         match self.events.last() {
             Some(TaskEvent::Created(ts)) => Some(*ts),

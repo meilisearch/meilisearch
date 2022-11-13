@@ -174,6 +174,8 @@ impl V4IndexReader {
                 }
 
                 if task.id as usize == index_metadata.creation_task_id {
+                    created_at = task.processed_at();
+
                     break;
                 }
             }
