@@ -134,6 +134,14 @@ impl Task {
                 Some(TaskEvent::Created(ts)) => Some(*ts),
                 _ => None,
             },
+            TaskContent::SettingsUpdate {
+                settings: _,
+                is_deletion: _,
+                allow_index_creation: _,
+            } => match self.events.first() {
+                Some(TaskEvent::Created(ts)) => Some(*ts),
+                _ => None,
+            },
             _ => None,
         }
     }
