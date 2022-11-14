@@ -44,7 +44,7 @@ word2    : doggo
 2. **Inner loop:** Then, we iterate over all the prefixes of `word2` that are
 in the list of sorted prefixes. And we insert the key `prefix`
 and the value (`docids`) to a sorted map which we call the “batch”. For example,
-at the end of the first inner loop, we may have:
+at the end of the first outer loop, we may have:
 ```text
 Outer loop 1:
 ------------------------------
@@ -85,7 +85,7 @@ end of the batch.
 
 4. On the third iteration of the outer loop, we have:
 ```text
-Outer loop 4:
+Outer loop 3:
 ------------------------------
 proximity: 1
 word1    : good
@@ -340,17 +340,16 @@ fn execute_on_word_pairs_and_prefixes<I>(
         if prox_different_than_prev || word1_different_than_prev || word2_start_different_than_prev
         {
             batch.flush(&mut merge_buffer, &mut insert)?;
+            batch.proximity = proximity;
             // don't forget to reset the value of batch.word1 and prev_word2_start
             if word1_different_than_prev {
-                prefix_search_start.0 = 0;
                 batch.word1.clear();
                 batch.word1.extend_from_slice(word1);
-                batch.proximity = proximity;
             }
             if word2_start_different_than_prev {
-                // word2_start_different_than_prev == true
                 prev_word2_start = word2[0];
             }
+            prefix_search_start.0 = 0;
             // Optimisation: find the search start in the prefix trie to iterate over the prefixes of word2
             empty_prefixes = !prefixes.set_search_start(word2, &mut prefix_search_start);
         }
