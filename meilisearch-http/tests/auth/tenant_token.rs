@@ -473,7 +473,7 @@ async fn error_access_forbidden_routes() {
         "searchRules" => json!(["*"]),
         "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
     };
-    let web_token = generate_tenant_token(&uid, &key, tenant_token);
+    let web_token = generate_tenant_token(uid, key, tenant_token);
     server.use_api_key(&web_token);
 
     for ((method, route), actions) in AUTHORIZATIONS.iter() {
@@ -509,7 +509,7 @@ async fn error_access_expired_parent_key() {
         "searchRules" => json!(["*"]),
         "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
     };
-    let web_token = generate_tenant_token(&uid, &key, tenant_token);
+    let web_token = generate_tenant_token(uid, key, tenant_token);
     server.use_api_key(&web_token);
 
     // test search request while parent_key is not expired
@@ -552,7 +552,7 @@ async fn error_access_modified_token() {
         "searchRules" => json!(["products"]),
         "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
     };
-    let web_token = generate_tenant_token(&uid, &key, tenant_token);
+    let web_token = generate_tenant_token(uid, key, tenant_token);
     server.use_api_key(&web_token);
 
     // test search request while web_token is valid
@@ -567,7 +567,7 @@ async fn error_access_modified_token() {
         "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
     };
 
-    let alt = generate_tenant_token(&uid, &key, tenant_token);
+    let alt = generate_tenant_token(uid, key, tenant_token);
     let altered_token = [
         web_token.split('.').next().unwrap(),
         alt.split('.').nth(1).unwrap(),

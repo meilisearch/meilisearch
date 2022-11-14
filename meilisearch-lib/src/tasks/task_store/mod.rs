@@ -117,7 +117,7 @@ impl TaskStore {
         match filter {
             Some(filter) => filter
                 .pass(&task)
-                .then(|| task)
+                .then_some(task)
                 .ok_or(TaskError::UnexistingTask(id)),
             None => Ok(task),
         }
