@@ -60,9 +60,9 @@ pub enum Error {
     InvalidIndexUid { index_uid: String },
     #[error("Task `{0}` not found.")]
     TaskNotFound(TaskId),
-    #[error("Query parameters to filter the tasks to delete are missing. Available query parameters are: `uid`, `indexUid`, `status`, `type`.")]
+    #[error("Query parameters to filter the tasks to delete are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.")]
     TaskDeletionWithEmptyQuery,
-    #[error("Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uid`, `indexUid`, `status`, `type`.")]
+    #[error("Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.")]
     TaskCancelationWithEmptyQuery,
 
     #[error(transparent)]
@@ -102,11 +102,11 @@ impl ErrorCode for Error {
             Error::IndexAlreadyExists(_) => Code::IndexAlreadyExists,
             Error::SwapDuplicateIndexesFound(_) => Code::DuplicateIndexFound,
             Error::SwapDuplicateIndexFound(_) => Code::DuplicateIndexFound,
-            Error::InvalidTaskDate { .. } => Code::InvalidTaskDate,
-            Error::InvalidTaskUids { .. } => Code::InvalidTaskUids,
-            Error::InvalidTaskStatuses { .. } => Code::InvalidTaskStatuses,
-            Error::InvalidTaskTypes { .. } => Code::InvalidTaskTypes,
-            Error::InvalidTaskCanceledBy { .. } => Code::InvalidTaskCanceledBy,
+            Error::InvalidTaskDate { .. } => Code::InvalidTaskDateFilter,
+            Error::InvalidTaskUids { .. } => Code::InvalidTaskUidsFilter,
+            Error::InvalidTaskStatuses { .. } => Code::InvalidTaskStatusesFilter,
+            Error::InvalidTaskTypes { .. } => Code::InvalidTaskTypesFilter,
+            Error::InvalidTaskCanceledBy { .. } => Code::InvalidTaskCanceledByFilter,
             Error::InvalidIndexUid { .. } => Code::InvalidIndexUid,
             Error::TaskNotFound(_) => Code::TaskNotFound,
             Error::TaskDeletionWithEmptyQuery => Code::TaskDeletionWithEmptyQuery,
