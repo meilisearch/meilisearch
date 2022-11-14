@@ -106,7 +106,7 @@ impl Task {
 
     pub fn processed_at(&self) -> Option<OffsetDateTime> {
         match self.events.last() {
-            Some(TaskEvent::Succeded { result: _, timestamp }) => Some(timestamp.clone()),
+            Some(TaskEvent::Succeded { result: _, timestamp }) => Some(*timestamp),
             _ => None,
         }
     }
