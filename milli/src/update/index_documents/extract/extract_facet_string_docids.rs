@@ -6,7 +6,7 @@ use heed::BytesEncode;
 use super::helpers::{create_sorter, sorter_into_reader, try_split_array_at, GrenadParameters};
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
 use crate::heed_codec::StrRefCodec;
-use crate::update::index_documents::merge_cbo_roaring_bitmaps;
+use crate::update::index_documents::{merge_cbo_roaring_bitmaps, valid_lmdb_key};
 use crate::{FieldId, Result};
 
 /// Extracts the facet string and the documents ids where this facet string appear.
@@ -41,9 +41,10 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
         let normalised_value = std::str::from_utf8(normalized_value_bytes)?;
         let key = FacetGroupKey { field_id, level: 0, left_bound: normalised_value };
         let key_bytes = FacetGroupKeyCodec::<StrRefCodec>::bytes_encode(&key).unwrap();
-
-        // document id is encoded in native-endian because of the CBO roaring bitmap codec
-        facet_string_docids_sorter.insert(&key_bytes, document_id.to_ne_bytes())?;
+        if valid_lmdb_key(&key_bytes) {
+            // document id is encoded in native-endian because of the CBO roaring bitmap codec
+            facet_string_docids_sorter.insert(&key_bytes, document_id.to_ne_bytes())?;
+        }
     }
 
     sorter_into_reader(facet_string_docids_sorter, indexer)

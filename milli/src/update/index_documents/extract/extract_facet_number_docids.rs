@@ -38,7 +38,6 @@ pub fn extract_facet_number_docids<R: io::Read + io::Seek>(
 
         let key = FacetGroupKey { field_id, level: 0, left_bound: number };
         let key_bytes = FacetGroupKeyCodec::<OrderedF64Codec>::bytes_encode(&key).unwrap();
-
         facet_number_docids_sorter.insert(key_bytes, document_id.to_ne_bytes())?;
     }
 
