@@ -69,7 +69,7 @@ const MEILI_MAX_INDEXING_THREADS: &str = "MEILI_MAX_INDEXING_THREADS";
 const DISABLE_AUTO_BATCHING: &str = "DISABLE_AUTO_BATCHING";
 const DEFAULT_LOG_EVERY_N: usize = 100000;
 
-#[derive(Debug, Clone, Parser, Serialize, Deserialize)]
+#[derive(Debug, Clone, Parser, Deserialize)]
 #[clap(version, next_display_order = None)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct Opt {
@@ -84,7 +84,6 @@ pub struct Opt {
     pub http_addr: String,
 
     /// Sets the instance's master key, automatically protecting all routes except `GET /health`.
-    #[serde(skip_serializing)]
     #[clap(long, env = MEILI_MASTER_KEY)]
     pub master_key: Option<String>,
 
@@ -99,7 +98,7 @@ pub struct Opt {
     /// All gathered data is used solely for the purpose of improving Meilisearch, and can be deleted
     /// at any time.
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
-    #[serde(skip_serializing, default)] // we can't send true
+    #[serde(default)] // we can't send true
     #[clap(long, env = MEILI_NO_ANALYTICS)]
     pub no_analytics: bool,
 
@@ -121,39 +120,35 @@ pub struct Opt {
     pub http_payload_size_limit: Byte,
 
     /// Sets the server's SSL certificates.
-    #[serde(skip_serializing)]
     #[clap(long, env = MEILI_SSL_CERT_PATH, value_parser)]
     pub ssl_cert_path: Option<PathBuf>,
 
     /// Sets the server's SSL key files.
-    #[serde(skip_serializing)]
     #[clap(long, env = MEILI_SSL_KEY_PATH, value_parser)]
     pub ssl_key_path: Option<PathBuf>,
 
     /// Enables client authentication in the specified path.
-    #[serde(skip_serializing)]
     #[clap(long, env = MEILI_SSL_AUTH_PATH, value_parser)]
     pub ssl_auth_path: Option<PathBuf>,
 
     /// Sets the server's OCSP file. *Optional*
     ///
     /// Reads DER-encoded OCSP response from OCSPFILE and staple to certificate.
-    #[serde(skip_serializing)]
     #[clap(long, env = MEILI_SSL_OCSP_PATH, value_parser)]
     pub ssl_ocsp_path: Option<PathBuf>,
 
     /// Makes SSL authentication mandatory.
-    #[serde(skip_serializing, default)]
+    #[serde(default)]
     #[clap(long, env = MEILI_SSL_REQUIRE_AUTH)]
     pub ssl_require_auth: bool,
 
     /// Activates SSL session resumption.
-    #[serde(skip_serializing, default)]
+    #[serde(default)]
     #[clap(long, env = MEILI_SSL_RESUMPTION)]
     pub ssl_resumption: bool,
 
     /// Activates SSL tickets.
-    #[serde(skip_serializing, default)]
+    #[serde(default)]
     #[clap(long, env = MEILI_SSL_TICKETS)]
     pub ssl_tickets: bool,
 
@@ -251,7 +246,6 @@ pub struct Opt {
 
     /// Set the path to a configuration file that should be used to setup the engine.
     /// Format must be TOML.
-    #[serde(skip_serializing)]
     #[clap(long)]
     pub config_file_path: Option<PathBuf>,
 }
@@ -439,16 +433,15 @@ impl Opt {
     }
 }
 
-#[derive(Debug, Clone, Parser, Deserialize, Serialize)]
+#[derive(Debug, Clone, Parser, Deserialize)]
 pub struct IndexerOpts {
     /// Sets the amount of documents to skip before printing
     /// a log regarding the indexing advancement.
-    #[serde(skip_serializing, default = "default_log_every_n")]
+    #[serde(default = "default_log_every_n")]
     #[clap(long, default_value_t = default_log_every_n(), hide = true)] // 100k
     pub log_every_n: usize,
 
     /// Grenad max number of chunks in bytes.
-    #[serde(skip_serializing)]
     #[clap(long, hide = true)]
     pub max_nb_chunks: Option<usize>,
 
@@ -488,7 +481,7 @@ impl IndexerOpts {
     }
 }
 
-#[derive(Debug, Clone, Parser, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Parser, Default, Deserialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct SchedulerConfig {
     /// Deactivates auto-batching when provided.
