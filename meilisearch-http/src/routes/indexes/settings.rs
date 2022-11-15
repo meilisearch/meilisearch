@@ -123,17 +123,6 @@ macro_rules! make_setting_route {
             }
         }
     };
-    ($route:literal, $update_verb:ident, $type:ty, $attr:ident, $camelcase_attr:literal) => {
-        make_setting_route!(
-            $route,
-            $update_verb,
-            $type,
-            $attr,
-            $camelcase_attr,
-            _analytics,
-            |_, _| {}
-        );
-    };
 }
 
 make_setting_route!(
@@ -187,7 +176,22 @@ make_setting_route!(
     put,
     Vec<String>,
     displayed_attributes,
-    "displayedAttributes"
+    "displayedAttributes",
+    analytics,
+    |displayed: &Option<Vec<String>>, req: &HttpRequest| {
+        use serde_json::json;
+
+        analytics.publish(
+            "DisplayedAttributes Updated".to_string(),
+            json!({
+                "displayed_attributes": {
+                    "total": displayed.as_ref().map(|displayed| displayed.len()),
+                    "with_wildcard": displayed.as_ref().map(|displayed| displayed.iter().any(|displayed| displayed == "*")),
+                },
+            }),
+            Some(req),
+        );
+    }
 );
 
 make_setting_route!(
@@ -247,6 +251,7 @@ make_setting_route!(
             json!({
                 "searchable_attributes": {
                     "total": setting.as_ref().map(|searchable| searchable.len()),
+                    "with_wildcard": setting.as_ref().map(|searchable| searchable.iter().any(|searchable| searchable == "*")),
                 },
             }),
             Some(req),
@@ -259,7 +264,21 @@ make_setting_route!(
     put,
     std::collections::BTreeSet<String>,
     stop_words,
-    "stopWords"
+    "stopWords",
+    analytics,
+    |stop_words: &Option<std::collections::BTreeSet<String>>, req: &HttpRequest| {
+        use serde_json::json;
+
+        analytics.publish(
+            "StopWords Updated".to_string(),
+            json!({
+                "stop_words": {
+                    "total": stop_words.as_ref().map(|stop_words| stop_words.len()),
+                },
+            }),
+            Some(req),
+        );
+    }
 );
 
 make_setting_route!(
@@ -267,10 +286,39 @@ make_setting_route!(
     put,
     std::collections::BTreeMap<String, Vec<String>>,
     synonyms,
-    "synonyms"
+    "synonyms",
+    analytics,
+    |synonyms: &Option<std::collections::BTreeMap<String, Vec<String>>>, req: &HttpRequest| {
+        use serde_json::json;
+
+        analytics.publish(
+            "Synonyms Updated".to_string(),
+            json!({
+                "synonyms": {
+                    "total": synonyms.as_ref().map(|synonyms| synonyms.len()),
+                },
+            }),
+            Some(req),
+        );
+    }
 );
 
-make_setting_route!("/distinct-attribute", put, String, distinct_attribute, "distinctAttribute");
+make_setting_route!(
+    "/distinct-attribute",
+    put,
+    String,
+    distinct_attribute,
+    "distinctAttribute",
+    analytics,
+    |distinct: &Option<String>, req: &HttpRequest| {
+        use serde_json::json;
+        analytics.publish(
+            "DistinctAttribute Updated".to_string(),
+            json!({ "distinct_attribute": distinct.is_some() }),
+            Some(req),
+        );
+    }
+);
 
 make_setting_route!(
     "/ranking-rules",
@@ -383,6 +431,11 @@ pub async fn update_all(
             },
             "searchable_attributes": {
                 "total": new_settings.searchable_attributes.as_ref().set().map(|searchable| searchable.len()),
+                "with_wildcard": new_settings.searchable_attributes.as_ref().set().map(|searchable| searchable.iter().any(|searchable| searchable == "*")),
+            },
+            "displayed_attributes": {
+                "total": new_settings.displayed_attributes.as_ref().set().map(|displayed| displayed.len()),
+                "with_wildcard": new_settings.displayed_attributes.as_ref().set().map(|displayed| displayed.iter().any(|displayed| displayed == "*")),
             },
            "sortable_attributes": {
                 "total": new_settings.sortable_attributes.as_ref().set().map(|sort| sort.len()),
@@ -392,6 +445,7 @@ pub async fn update_all(
                 "total": new_settings.filterable_attributes.as_ref().set().map(|filter| filter.len()),
                 "has_geo": new_settings.filterable_attributes.as_ref().set().map(|filter| filter.iter().any(|s| s == "_geo")),
             },
+            "distinct_attribute": new_settings.distinct_attribute.as_ref().set().is_some(),
             "typo_tolerance": {
                 "enabled": new_settings.typo_tolerance
                     .as_ref()
@@ -434,6 +488,12 @@ pub async fn update_all(
                     .as_ref()
                     .set()
                     .and_then(|s| s.max_total_hits.as_ref().set()),
+            },
+            "stop_words": {
+                "total": new_settings.stop_words.as_ref().set().map(|stop_words| stop_words.len()),
+            },
+            "synonyms": {
+                "total": new_settings.synonyms.as_ref().set().map(|synonyms| synonyms.len()),
             },
         }),
         Some(&req),
