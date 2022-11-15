@@ -21,7 +21,7 @@ use serde::Deserialize;
 use serde_cs::vec::CS;
 use serde_json::Value;
 
-use crate::analytics::Analytics;
+use crate::analytics::{Analytics, DocumentDeletionKind};
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
@@ -95,7 +95,11 @@ pub async fn get_document(
 pub async fn delete_document(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     path: web::Path<DocumentParam>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    analytics.delete_documents(DocumentDeletionKind::PerDocumentId, &req);
+
     let DocumentParam { document_id, index_uid } = path.into_inner();
     let task = KindWithContent::DocumentDeletion { index_uid, documents_ids: vec![document_id] };
     let task: SummarizedTaskView =
@@ -296,8 +300,13 @@ pub async fn delete_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     path: web::Path<String>,
     body: web::Json<Vec<Value>>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", body);
+
+    analytics.delete_documents(DocumentDeletionKind::PerBatch, &req);
+
     let ids = body
         .iter()
         .map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string()))
@@ -315,7 +324,11 @@ pub async fn delete_documents(
 pub async fn clear_all_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     path: web::Path<String>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    analytics.delete_documents(DocumentDeletionKind::ClearAll, &req);
+
     let task = KindWithContent::DocumentClear { index_uid: path.into_inner() };
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();

@@ -5,7 +5,7 @@ use actix_web::HttpRequest;
 use meilisearch_types::InstanceUid;
 use serde_json::Value;
 
-use super::{find_user_id, Analytics};
+use super::{find_user_id, Analytics, DocumentDeletionKind};
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
 use crate::Opt;
 
@@ -49,6 +49,7 @@ impl Analytics for MockAnalytics {
         _request: &HttpRequest,
     ) {
     }
+    fn delete_documents(&self, _kind: DocumentDeletionKind, _request: &HttpRequest) {}
     fn update_documents(
         &self,
         _documents_query: &UpdateDocumentsQuery,

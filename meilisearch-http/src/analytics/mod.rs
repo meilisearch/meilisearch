@@ -54,6 +54,13 @@ fn find_user_id(db_path: &Path) -> Option<InstanceUid> {
         .and_then(|uid| InstanceUid::from_str(&uid).ok())
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum DocumentDeletionKind {
+    PerDocumentId,
+    ClearAll,
+    PerBatch,
+}
+
 pub trait Analytics: Sync + Send {
     fn instance_uid(&self) -> Option<&InstanceUid>;
 
@@ -73,6 +80,10 @@ pub trait Analytics: Sync + Send {
         index_creation: bool,
         request: &HttpRequest,
     );
+
+    // this method should be called to aggregate a add documents request
+    fn delete_documents(&self, kind: DocumentDeletionKind, request: &HttpRequest);
+
     // this method should be called to batch a update documents request
     fn update_documents(
         &self,
