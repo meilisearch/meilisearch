@@ -251,7 +251,7 @@ impl From<Opt> for Infos {
             scheduler_options,
             config_file_path,
             #[cfg(all(not(debug_assertions), feature = "analytics"))]
-                no_analytics: _,
+            no_analytics: _,
         } = options;
 
         let SchedulerConfig { disable_auto_batching } = scheduler_options;
@@ -263,7 +263,7 @@ impl From<Opt> for Infos {
         } = indexer_options;
 
         // We're going to override every sensible information.
-        // We consider an information as sensible if it contains a path, an address or a key.
+        // We consider information sensible if it contains a path, an address, or a key.
         Self {
             env,
             db_path: db_path != PathBuf::from("./data.ms"),
