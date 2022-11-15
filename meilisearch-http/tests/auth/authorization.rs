@@ -99,7 +99,7 @@ async fn error_access_expired_key() {
     assert!(response["key"].is_string());
 
     let key = response["key"].as_str().unwrap();
-    server.use_api_key(&key);
+    server.use_api_key(key);
 
     // wait until the key is expired.
     thread::sleep(time::Duration::new(1, 0));
@@ -135,7 +135,7 @@ async fn error_access_unauthorized_index() {
     assert!(response["key"].is_string());
 
     let key = response["key"].as_str().unwrap();
-    server.use_api_key(&key);
+    server.use_api_key(key);
 
     for (method, route) in AUTHORIZATIONS
         .keys()
@@ -175,7 +175,7 @@ async fn error_access_unauthorized_action() {
         assert!(response["key"].is_string());
 
         let key = response["key"].as_str().unwrap();
-        server.use_api_key(&key);
+        server.use_api_key(key);
         let (response, code) = server.dummy_request(method, route).await;
 
         assert_eq!(
@@ -230,7 +230,7 @@ async fn access_authorized_restricted_index() {
             assert!(response["key"].is_string());
 
             let key = response["key"].as_str().unwrap();
-            server.use_api_key(&key);
+            server.use_api_key(key);
 
             let (response, code) = server.dummy_request(method, route).await;
 
@@ -268,7 +268,7 @@ async fn access_authorized_no_index_restriction() {
             assert!(response["key"].is_string());
 
             let key = response["key"].as_str().unwrap();
-            server.use_api_key(&key);
+            server.use_api_key(key);
 
             let (response, code) = server.dummy_request(method, route).await;
 
@@ -313,7 +313,7 @@ async fn access_authorized_stats_restricted_index() {
 
     // use created key.
     let key = response["key"].as_str().unwrap();
-    server.use_api_key(&key);
+    server.use_api_key(key);
 
     let (response, code) = server.stats().await;
     assert_eq!(200, code, "{:?}", &response);
@@ -353,7 +353,7 @@ async fn access_authorized_stats_no_index_restriction() {
 
     // use created key.
     let key = response["key"].as_str().unwrap();
-    server.use_api_key(&key);
+    server.use_api_key(key);
 
     let (response, code) = server.stats().await;
     assert_eq!(200, code, "{:?}", &response);
@@ -393,7 +393,7 @@ async fn list_authorized_indexes_restricted_index() {
 
     // use created key.
     let key = response["key"].as_str().unwrap();
-    server.use_api_key(&key);
+    server.use_api_key(key);
 
     let (response, code) = server.list_indexes(None, None).await;
     assert_eq!(200, code, "{:?}", &response);
@@ -434,7 +434,7 @@ async fn list_authorized_indexes_no_index_restriction() {
 
     // use created key.
     let key = response["key"].as_str().unwrap();
-    server.use_api_key(&key);
+    server.use_api_key(key);
 
     let (response, code) = server.list_indexes(None, None).await;
     assert_eq!(200, code, "{:?}", &response);
@@ -474,7 +474,7 @@ async fn list_authorized_tasks_restricted_index() {
 
     // use created key.
     let key = response["key"].as_str().unwrap();
-    server.use_api_key(&key);
+    server.use_api_key(key);
 
     let (response, code) = server.service.get("/tasks").await;
     assert_eq!(200, code, "{:?}", &response);
@@ -514,7 +514,7 @@ async fn list_authorized_tasks_no_index_restriction() {
 
     // use created key.
     let key = response["key"].as_str().unwrap();
-    server.use_api_key(&key);
+    server.use_api_key(key);
 
     let (response, code) = server.service.get("/tasks").await;
     assert_eq!(200, code, "{:?}", &response);
@@ -545,7 +545,7 @@ async fn error_creating_index_without_action() {
 
     // use created key.
     let key = response["key"].as_str().unwrap();
-    server.use_api_key(&key);
+    server.use_api_key(key);
 
     let expected_error = json!({
         "message": "Index `test` not found.",
@@ -625,7 +625,7 @@ async fn lazy_create_index() {
 
         // use created key.
         let key = response["key"].as_str().unwrap();
-        server.use_api_key(&key);
+        server.use_api_key(key);
 
         // try to create a index via add documents route
         let index = server.index("test");
@@ -692,7 +692,7 @@ async fn error_creating_index_without_index() {
 
     // use created key.
     let key = response["key"].as_str().unwrap();
-    server.use_api_key(&key);
+    server.use_api_key(key);
 
     // try to create a index via add documents route
     let index = server.index("test");

@@ -213,7 +213,7 @@ impl TaskQueue {
         let head = self.queue.pop()?;
         let result = {
             let mut ref_head = head.borrow_mut();
-            f(&mut *ref_head)
+            f(&mut ref_head)
         };
         if !head.borrow().tasks.is_empty() {
             // After being mutated, the head is reinserted to the correct position.
