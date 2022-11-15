@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 
 use actix_web::http::header::USER_AGENT;
 use actix_web::HttpRequest;
+use byte_unit::Byte;
 use http::header::CONTENT_TYPE;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::SearchRules;
@@ -14,6 +15,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use segment::message::{Identify, Track, User};
 use segment::{AutoBatcher, Batcher, HttpClient};
+use serde::Serialize;
 use serde_json::{json, Value};
 use sysinfo::{DiskExt, System, SystemExt};
 use time::OffsetDateTime;
@@ -23,7 +25,7 @@ use uuid::Uuid;
 
 use super::{config_user_id_path, MEILISEARCH_CONFIG_PATH};
 use crate::analytics::Analytics;
-use crate::option::default_http_addr;
+use crate::option::{default_http_addr, IndexerOpts, MaxMemory, MaxThreads, SchedulerConfig};
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
 use crate::routes::{create_all_stats, Stats};
 use crate::search::{
@@ -182,6 +184,124 @@ impl super::Analytics for SegmentAnalytics {
     }
 }
 
+/// This structure represent the `infos` field we send in the analytics.
+/// It's quite close to the `Opt` structure except all sensitive informations
+/// have been simplified to a boolean.
+/// It's send as-is in amplitude thus you should never update a name of the
+/// struct without the approval of the PM.
+#[derive(Debug, Clone, Serialize)]
+struct Infos {
+    env: String,
+    db_path: bool,
+    import_dump: bool,
+    dumps_dir: bool,
+    ignore_missing_dump: bool,
+    ignore_dump_if_db_exists: bool,
+    import_snapshot: bool,
+    schedule_snapshot: bool,
+    snapshot_dir: bool,
+    snapshot_interval_sec: u64,
+    ignore_missing_snapshot: bool,
+    ignore_snapshot_if_db_exists: bool,
+    http_addr: bool,
+    max_index_size: Byte,
+    max_task_db_size: Byte,
+    http_payload_size_limit: Byte,
+    disable_auto_batching: bool,
+    log_level: String,
+    max_indexing_memory: MaxMemory,
+    max_indexing_threads: MaxThreads,
+    with_configuration_file: bool,
+    ssl_auth_path: bool,
+    ssl_cert_path: bool,
+    ssl_key_path: bool,
+    ssl_ocsp_path: bool,
+    ssl_require_auth: bool,
+    ssl_resumption: bool,
+    ssl_tickets: bool,
+}
+
+impl From<Opt> for Infos {
+    fn from(options: Opt) -> Self {
+        // We wants to decompose this whole struct by hand to be sure we don't forget
+        // to add analytics when we add a field in the Opt.
+        // Thus we must not insert `..` at the end.
+        let Opt {
+            db_path,
+            http_addr,
+            master_key: _,
+            env,
+            max_index_size,
+            max_task_db_size,
+            http_payload_size_limit,
+            ssl_cert_path,
+            ssl_key_path,
+            ssl_auth_path,
+            ssl_ocsp_path,
+            ssl_require_auth,
+            ssl_resumption,
+            ssl_tickets,
+            import_snapshot,
+            ignore_missing_snapshot,
+            ignore_snapshot_if_db_exists,
+            snapshot_dir,
+            schedule_snapshot,
+            snapshot_interval_sec,
+            import_dump,
+            ignore_missing_dump,
+            ignore_dump_if_db_exists,
+            dumps_dir,
+            log_level,
+            indexer_options,
+            scheduler_options,
+            config_file_path,
+            #[cfg(all(not(debug_assertions), feature = "analytics"))]
+                no_analytics: _,
+        } = options;
+
+        let SchedulerConfig { disable_auto_batching } = scheduler_options;
+        let IndexerOpts {
+            log_every_n: _,
+            max_nb_chunks: _,
+            max_indexing_memory,
+            max_indexing_threads,
+        } = indexer_options;
+
+        // We're going to override every sensible information.
+        // We consider information sensible if it contains a path, an address, or a key.
+        Self {
+            env,
+            db_path: db_path != PathBuf::from("./data.ms"),
+            import_dump: import_dump.is_some(),
+            dumps_dir: dumps_dir != PathBuf::from("dumps/"),
+            ignore_missing_dump,
+            ignore_dump_if_db_exists,
+            import_snapshot: import_snapshot.is_some(),
+            schedule_snapshot,
+            snapshot_dir: snapshot_dir != PathBuf::from("snapshots/"),
+            snapshot_interval_sec,
+            ignore_missing_snapshot,
+            ignore_snapshot_if_db_exists,
+            http_addr: http_addr != default_http_addr(),
+            max_index_size,
+            max_task_db_size,
+            http_payload_size_limit,
+            disable_auto_batching,
+            log_level,
+            max_indexing_memory,
+            max_indexing_threads,
+            with_configuration_file: config_file_path.is_some(),
+            ssl_auth_path: ssl_auth_path.is_some(),
+            ssl_cert_path: ssl_cert_path.is_some(),
+            ssl_key_path: ssl_key_path.is_some(),
+            ssl_ocsp_path: ssl_ocsp_path.is_some(),
+            ssl_require_auth,
+            ssl_resumption,
+            ssl_tickets,
+        }
+    }
+}
+
 pub struct Segment {
     inbox: Receiver<AnalyticsMsg>,
     user: User,
@@ -212,31 +332,6 @@ impl Segment {
                     "server_provider": std::env::var("MEILI_SERVER_PROVIDER").ok(),
             })
         });
-        // The infos are all cli option except every option containing sensitive information.
-        // We consider an information as sensible if it contains a path, an address or a key.
-        let infos = {
-            // First we see if any sensitive fields were used.
-            let db_path = opt.db_path != PathBuf::from("./data.ms");
-            let import_dump = opt.import_dump.is_some();
-            let dumps_dir = opt.dumps_dir != PathBuf::from("dumps/");
-            let import_snapshot = opt.import_snapshot.is_some();
-            let snapshots_dir = opt.snapshot_dir != PathBuf::from("snapshots/");
-            let http_addr = opt.http_addr != default_http_addr();
-
-            let mut infos = serde_json::to_value(opt).unwrap();
-
-            // Then we overwrite all sensitive field with a boolean representing if
-            // the feature was used or not.
-            infos["db_path"] = json!(db_path);
-            infos["import_dump"] = json!(import_dump);
-            infos["dumps_dir"] = json!(dumps_dir);
-            infos["import_snapshot"] = json!(import_snapshot);
-            infos["snapshot_dir"] = json!(snapshots_dir);
-            infos["http_addr"] = json!(http_addr);
-
-            infos
-        };
-
         let number_of_documents =
             stats.indexes.values().map(|index| index.number_of_documents).collect::<Vec<u64>>();
 
@@ -248,7 +343,7 @@ impl Segment {
                 "indexes_number": stats.indexes.len(),
                 "documents_number": number_of_documents,
             },
-            "infos": infos,
+            "infos": Infos::from(opt.clone()),
         })
     }
 
