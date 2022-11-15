@@ -256,7 +256,7 @@ impl From<Opt> for Infos {
             scheduler_options,
             config_file_path,
             #[cfg(all(not(debug_assertions), feature = "analytics"))]
-            no_analytics: _,
+                no_analytics: _,
         } = options;
 
         let SchedulerConfig { disable_auto_batching } = scheduler_options;
