@@ -184,6 +184,11 @@ impl super::Analytics for SegmentAnalytics {
     }
 }
 
+/// This structure represent the `infos` field we send in the analytics.
+/// It's quite close to the `Opt` structure except all sensitive informations
+/// have been simplified to a boolean.
+/// It's send as-is in amplitude thus you should never update a name of the
+/// struct without the approval of the PM.
 #[derive(Debug, Clone, Serialize)]
 struct Infos {
     env: String,
