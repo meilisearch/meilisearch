@@ -1,4 +1,4 @@
-use meili_snap::insta::assert_json_snapshot;
+use meili_snap::insta::{self, assert_json_snapshot};
 use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
@@ -171,6 +171,131 @@ async fn list_tasks_status_and_type_filtered() {
         .await;
     assert_eq!(code, 200, "{}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
+}
+
+#[actix_rt::test]
+async fn get_task_filter_error() {
+    let server = Server::new().await;
+
+    let (response, code) = server.tasks_filter(json!( { "lol": "pied" })).await;
+    assert_eq!(code, 400, "{}", response);
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Query deserialize error: unknown field `lol`",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "###);
+
+    let (response, code) = server.tasks_filter(json!( { "uids": "pied" })).await;
+    assert_eq!(code, 400, "{}", response);
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Task uid `pied` is invalid. It should only contain numeric characters.",
+      "code": "invalid_task_uids_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_task_uids_filter"
+    }
+    "###);
+
+    let (response, code) = server.tasks_filter(json!( { "from": "pied" })).await;
+    assert_eq!(code, 400, "{}", response);
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Query deserialize error: invalid digit found in string",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "###);
+
+    let (response, code) = server.tasks_filter(json!( { "beforeStartedAt": "pied" })).await;
+    assert_eq!(code, 400, "{}", response);
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Task `beforeStartedAt` `pied` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "code": "invalid_task_date_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_task_date_filter"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn delete_task_filter_error() {
+    let server = Server::new().await;
+
+    let (response, code) = server.delete_tasks(json!(null)).await;
+    assert_eq!(code, 400, "{}", response);
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Query parameters to filter the tasks to delete are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
+      "code": "missing_task_filters",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_task_filters"
+    }
+    "###);
+
+    let (response, code) = server.delete_tasks(json!({ "lol": "pied" })).await;
+    assert_eq!(code, 400, "{}", response);
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Query deserialize error: unknown field `lol`",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "###);
+
+    let (response, code) = server.delete_tasks(json!({ "uids": "pied" })).await;
+    assert_eq!(code, 400, "{}", response);
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Task uid `pied` is invalid. It should only contain numeric characters.",
+      "code": "invalid_task_uids_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_task_uids_filter"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn cancel_task_filter_error() {
+    let server = Server::new().await;
+
+    let (response, code) = server.cancel_tasks(json!(null)).await;
+    assert_eq!(code, 400, "{}", response);
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
+      "code": "missing_task_filters",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_task_filters"
+    }
+    "###);
+
+    let (response, code) = server.cancel_tasks(json!({ "lol": "pied" })).await;
+    assert_eq!(code, 400, "{}", response);
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Query deserialize error: unknown field `lol`",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "###);
+
+    let (response, code) = server.cancel_tasks(json!({ "uids": "pied" })).await;
+    assert_eq!(code, 400, "{}", response);
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Task uid `pied` is invalid. It should only contain numeric characters.",
+      "code": "invalid_task_uids_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_task_uids_filter"
+    }
+    "###);
 }
 
 macro_rules! assert_valid_summarized_task {
@@ -789,7 +914,7 @@ async fn test_summarized_task_cancelation() {
     // to avoid being flaky we're only going to cancel an already finished task :(
     index.create(None).await;
     index.wait_task(0).await;
-    server.cancel_task(json!({ "uids": [0] })).await;
+    server.cancel_tasks(json!({ "uids": [0] })).await;
     index.wait_task(1).await;
     let (task, _) = index.get_task(1).await;
     assert_json_snapshot!(task, 
@@ -822,7 +947,7 @@ async fn test_summarized_task_deletion() {
     // to avoid being flaky we're only going to delete an already finished task :(
     index.create(None).await;
     index.wait_task(0).await;
-    server.delete_task(json!({ "uids": [0] })).await;
+    server.delete_tasks(json!({ "uids": [0] })).await;
     index.wait_task(1).await;
     let (task, _) = index.get_task(1).await;
     assert_json_snapshot!(task, 

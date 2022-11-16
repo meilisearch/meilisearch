@@ -132,6 +132,10 @@ impl Server {
         self.service.get("/tasks").await
     }
 
+    pub async fn tasks_filter(&self, filter: Value) -> (Value, StatusCode) {
+        self.service.get(format!("/tasks?{}", yaup::to_string(&filter).unwrap())).await
+    }
+
     pub async fn get_dump_status(&self, uid: &str) -> (Value, StatusCode) {
         self.service.get(format!("/dumps/{}/status", uid)).await
     }
@@ -144,13 +148,13 @@ impl Server {
         self.service.post("/swap-indexes", value).await
     }
 
-    pub async fn cancel_task(&self, value: Value) -> (Value, StatusCode) {
+    pub async fn cancel_tasks(&self, value: Value) -> (Value, StatusCode) {
         self.service
             .post(format!("/tasks/cancel?{}", yaup::to_string(&value).unwrap()), json!(null))
             .await
     }
 
-    pub async fn delete_task(&self, value: Value) -> (Value, StatusCode) {
+    pub async fn delete_tasks(&self, value: Value) -> (Value, StatusCode) {
         self.service.delete(format!("/tasks?{}", yaup::to_string(&value).unwrap())).await
     }
 
