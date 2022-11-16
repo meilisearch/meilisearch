@@ -82,7 +82,7 @@ pub struct DetailsView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub received_documents: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub indexed_documents: Option<u64>,
+    pub indexed_documents: Option<Option<u64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub primary_key: Option<Option<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -112,7 +112,7 @@ impl From<Details> for DetailsView {
             Details::DocumentAdditionOrUpdate { received_documents, indexed_documents } => {
                 DetailsView {
                     received_documents: Some(received_documents),
-                    indexed_documents,
+                    indexed_documents: Some(indexed_documents),
                     ..DetailsView::default()
                 }
             }

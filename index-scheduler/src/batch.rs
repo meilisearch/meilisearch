@@ -1272,6 +1272,7 @@ impl IndexScheduler {
             task.status = Status::Canceled;
             task.canceled_by = Some(cancel_task_id);
             task.finished_at = Some(now);
+            task.details = task.details.map(|d| d.to_failed());
             self.update_task(wtxn, &task)?;
         }
         self.canceled_by.put(wtxn, &BEU32::new(cancel_task_id), &tasks_to_cancel)?;

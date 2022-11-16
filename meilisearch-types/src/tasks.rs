@@ -474,6 +474,27 @@ pub enum Details {
     IndexSwap { swaps: Vec<IndexSwap> },
 }
 
+impl Details {
+    pub fn to_failed(&self) -> Self {
+        let mut details = self.clone();
+        match &mut details {
+            Self::DocumentAdditionOrUpdate { indexed_documents, .. } => {
+                *indexed_documents = Some(0)
+            }
+            Self::DocumentDeletion { deleted_documents, .. } => *deleted_documents = Some(0),
+            Self::ClearAll { deleted_documents } => *deleted_documents = Some(0),
+            Self::TaskCancelation { canceled_tasks, .. } => *canceled_tasks = Some(0),
+            Self::TaskDeletion { deleted_tasks, .. } => *deleted_tasks = Some(0),
+            Self::SettingsUpdate { .. }
+            | Self::IndexInfo { .. }
+            | Self::Dump { .. }
+            | Self::IndexSwap { .. } => (),
+        }
+
+        details
+    }
+}
+
 /// Serialize a `time::Duration` as a best effort ISO 8601 while waiting for
 /// https://github.com/time-rs/time/issues/378.
 /// This code is a port of the old code of time that was removed in 0.2.

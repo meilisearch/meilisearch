@@ -412,7 +412,7 @@ async fn test_summarized_delete_batch() {
       "canceledBy": null,
       "details": {
         "matchedDocuments": 3,
-        "deletedDocuments": null
+        "deletedDocuments": 0
       },
       "error": {
         "message": "Index `test` not found.",
@@ -471,7 +471,7 @@ async fn test_summarized_delete_document() {
       "canceledBy": null,
       "details": {
         "matchedDocuments": 1,
-        "deletedDocuments": null
+        "deletedDocuments": 0
       },
       "error": {
         "message": "Index `test` not found.",
