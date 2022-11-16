@@ -537,7 +537,7 @@ async fn delete_tasks(
         &index_scheduler.filters().search_rules.authorized_indexes(),
     )?;
     let task_deletion =
-        KindWithContent::TaskDeletion { query: req.query_string().to_string(), tasks };
+        KindWithContent::TaskDeletion { query: format!("?{}", req.query_string()), tasks };
 
     let task = task::spawn_blocking(move || index_scheduler.register(task_deletion)).await??;
     let task: SummarizedTaskView = task.into();

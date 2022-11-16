@@ -837,7 +837,7 @@ async fn test_summarized_task_deletion() {
       "details": {
         "matchedTasks": 1,
         "deletedTasks": 1,
-        "originalFilters": "uids=0"
+        "originalFilters": "?uids=0"
       },
       "error": null,
       "duration": "[duration]",
