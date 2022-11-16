@@ -988,6 +988,7 @@ impl IndexScheduler {
                     task.finished_at = Some(finished_at);
                     task.status = Status::Failed;
                     task.error = Some(error.clone());
+                    task.details = task.details.map(|d| d.to_failed());
 
                     #[cfg(test)]
                     self.maybe_fail(tests::FailureLocation::UpdatingTaskAfterProcessBatchFailure)?;
