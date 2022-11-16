@@ -27,6 +27,7 @@ use super::{config_user_id_path, DocumentDeletionKind, MEILISEARCH_CONFIG_PATH};
 use crate::analytics::Analytics;
 use crate::option::{default_http_addr, IndexerOpts, MaxMemory, MaxThreads, SchedulerConfig};
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
+use crate::routes::tasks::TasksFilterQueryRaw;
 use crate::routes::{create_all_stats, Stats};
 use crate::search::{
     SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
@@ -70,6 +71,7 @@ pub enum AnalyticsMsg {
     AggregateAddDocuments(DocumentsAggregator),
     AggregateDeleteDocuments(DocumentsDeletionAggregator),
     AggregateUpdateDocuments(DocumentsAggregator),
+    AggregateTasks(TasksAggregator),
     AggregateHealth(HealthAggregator),
 }
 
@@ -131,6 +133,7 @@ impl SegmentAnalytics {
             add_documents_aggregator: DocumentsAggregator::default(),
             delete_documents_aggregator: DocumentsDeletionAggregator::default(),
             update_documents_aggregator: DocumentsAggregator::default(),
+            get_tasks_aggregator: TasksAggregator::default(),
             health_aggregator: HealthAggregator::default(),
         });
         tokio::spawn(segment.run(index_scheduler.clone()));
@@ -190,6 +193,11 @@ impl super::Analytics for SegmentAnalytics {
     ) {
         let aggregate = DocumentsAggregator::from_query(documents_query, index_creation, request);
         let _ = self.sender.try_send(AnalyticsMsg::AggregateUpdateDocuments(aggregate));
+    }
+
+    fn get_tasks(&self, query: &TasksFilterQueryRaw, request: &HttpRequest) {
+        let aggregate = TasksAggregator::from_query(query, request);
+        let _ = self.sender.try_send(AnalyticsMsg::AggregateTasks(aggregate));
     }
 
     fn health_seen(&self, request: &HttpRequest) {
@@ -326,6 +334,7 @@ pub struct Segment {
     add_documents_aggregator: DocumentsAggregator,
     delete_documents_aggregator: DocumentsDeletionAggregator,
     update_documents_aggregator: DocumentsAggregator,
+    get_tasks_aggregator: TasksAggregator,
     health_aggregator: HealthAggregator,
 }
 
@@ -382,6 +391,7 @@ impl Segment {
                         Some(AnalyticsMsg::AggregateAddDocuments(agreg)) => self.add_documents_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregateDeleteDocuments(agreg)) => self.delete_documents_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregateUpdateDocuments(agreg)) => self.update_documents_aggregator.aggregate(agreg),
+                        Some(AnalyticsMsg::AggregateTasks(agreg)) => self.get_tasks_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregateHealth(agreg)) => self.health_aggregator.aggregate(agreg),
                         None => (),
                     }
@@ -416,6 +426,8 @@ impl Segment {
             .into_event(&self.user, "Documents Deleted");
         let update_documents = std::mem::take(&mut self.update_documents_aggregator)
             .into_event(&self.user, "Documents Updated");
+        let get_tasks =
+            std::mem::take(&mut self.get_tasks_aggregator).into_event(&self.user, "Tasks Seen");
         let health =
             std::mem::take(&mut self.health_aggregator).into_event(&self.user, "Health Seen");
 
@@ -433,6 +445,9 @@ impl Segment {
         }
         if let Some(update_documents) = update_documents {
             let _ = self.batcher.push(update_documents).await;
+        }
+        if let Some(get_tasks) = get_tasks {
+            let _ = self.batcher.push(get_tasks).await;
         }
         if let Some(health) = health {
             let _ = self.batcher.push(health).await;
@@ -823,6 +838,91 @@ impl DocumentsDeletionAggregator {
         self.per_document_id |= other.per_document_id;
         self.clear_all |= other.clear_all;
         self.per_batch |= other.per_batch;
+    }
+
+    pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
+        // if we had no timestamp it means we never encountered any events and
+        // thus we don't need to send this event.
+        let timestamp = self.timestamp?;
+
+        Some(Track {
+            timestamp: Some(timestamp),
+            user: user.clone(),
+            event: event_name.to_string(),
+            properties: serde_json::to_value(self).ok()?,
+            ..Default::default()
+        })
+    }
+}
+
+#[derive(Default, Serialize)]
+pub struct TasksAggregator {
+    #[serde(skip)]
+    timestamp: Option<OffsetDateTime>,
+
+    // context
+    #[serde(rename = "user-agent")]
+    user_agents: HashSet<String>,
+
+    filtered_by_uid: bool,
+    filtered_by_index_uid: bool,
+    filtered_by_type: bool,
+    filtered_by_status: bool,
+    filtered_by_canceled_by: bool,
+    filtered_by_before_enqueued_at: bool,
+    filtered_by_after_enqueued_at: bool,
+    filtered_by_before_started_at: bool,
+    filtered_by_after_started_at: bool,
+    filtered_by_before_finished_at: bool,
+    filtered_by_after_finished_at: bool,
+    total_received: usize,
+}
+
+impl TasksAggregator {
+    pub fn from_query(query: &TasksFilterQueryRaw, request: &HttpRequest) -> Self {
+        Self {
+            timestamp: Some(OffsetDateTime::now_utc()),
+            user_agents: extract_user_agents(request).into_iter().collect(),
+            filtered_by_uid: query.common.uids.is_some(),
+            filtered_by_index_uid: query.common.index_uids.is_some(),
+            filtered_by_type: query.common.types.is_some(),
+            filtered_by_status: query.common.statuses.is_some(),
+            filtered_by_canceled_by: query.common.canceled_by.is_some(),
+            filtered_by_before_enqueued_at: query.dates.before_enqueued_at.is_some(),
+            filtered_by_after_enqueued_at: query.dates.after_enqueued_at.is_some(),
+            filtered_by_before_started_at: query.dates.before_started_at.is_some(),
+            filtered_by_after_started_at: query.dates.after_started_at.is_some(),
+            filtered_by_before_finished_at: query.dates.before_finished_at.is_some(),
+            filtered_by_after_finished_at: query.dates.after_finished_at.is_some(),
+            total_received: 1,
+        }
+    }
+
+    /// Aggregate one [DocumentsAggregator] into another.
+    pub fn aggregate(&mut self, other: Self) {
+        if self.timestamp.is_none() {
+            self.timestamp = other.timestamp;
+        }
+
+        // we can't create a union because there is no `into_union` method
+        for user_agent in other.user_agents {
+            self.user_agents.insert(user_agent);
+        }
+
+        self.filtered_by_uid |= other.filtered_by_uid;
+        self.filtered_by_index_uid |= other.filtered_by_index_uid;
+        self.filtered_by_type |= other.filtered_by_type;
+        self.filtered_by_status |= other.filtered_by_status;
+        self.filtered_by_canceled_by |= other.filtered_by_canceled_by;
+        self.filtered_by_before_enqueued_at |= other.filtered_by_before_enqueued_at;
+        self.filtered_by_after_enqueued_at |= other.filtered_by_after_enqueued_at;
+        self.filtered_by_before_started_at |= other.filtered_by_before_started_at;
+        self.filtered_by_after_started_at |= other.filtered_by_after_started_at;
+        self.filtered_by_before_finished_at |= other.filtered_by_before_finished_at;
+        self.filtered_by_after_finished_at |= other.filtered_by_after_finished_at;
+        self.filtered_by_after_finished_at |= other.filtered_by_after_finished_at;
+
+        self.total_received = self.total_received.saturating_add(other.total_received);
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
