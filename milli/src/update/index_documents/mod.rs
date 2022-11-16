@@ -1821,4 +1821,24 @@ mod tests {
         let words_fst = index.words_fst(&rtxn).unwrap();
         assert!(!words_fst.contains(&long_word));
     }
+
+    #[test]
+    fn long_facet_values_must_not_crash() {
+        let index = TempIndex::new();
+
+        // this is obviousy too long
+        let long_word = "lol".repeat(1000);
+        let doc1 = documents! {[{
+            "id": "1",
+            "title": long_word,
+        }]};
+
+        index
+            .update_settings(|settings| {
+                settings.set_filterable_fields(hashset! { S("title") });
+            })
+            .unwrap();
+
+        index.add_documents(doc1).unwrap();
+    }
 }
