@@ -91,4 +91,7 @@ pub trait Analytics: Sync + Send {
         index_creation: bool,
         request: &HttpRequest,
     );
+
+    // this method should be called to aggregate a add documents request
+    fn health_seen(&self, request: &HttpRequest);
 }
