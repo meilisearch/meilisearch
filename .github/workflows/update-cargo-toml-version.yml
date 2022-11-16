@@ -23,8 +23,10 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
-      - name: Install sd
-        run: cargo install sd
+      - name: Install critcmp
+        uses: taiki-e/install-action@v1
+        with:
+          tool: sd
       - name: Update all Cargo.toml files
         run: |
           raw_new_version=$(echo $NEW_VERSION | cut -d 'v' -f 2)
