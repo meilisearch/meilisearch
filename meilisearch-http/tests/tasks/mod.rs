@@ -804,7 +804,7 @@ async fn test_summarized_task_cancelation() {
       "details": {
         "matchedTasks": 1,
         "canceledTasks": 0,
-        "originalFilters": "uids=0"
+        "originalFilters": "?uids=0"
       },
       "error": null,
       "duration": "[duration]",
