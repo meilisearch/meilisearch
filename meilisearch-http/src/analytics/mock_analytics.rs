@@ -57,4 +57,5 @@ impl Analytics for MockAnalytics {
         _request: &HttpRequest,
     ) {
     }
+    fn health_seen(&self, _request: &HttpRequest) {}
 }

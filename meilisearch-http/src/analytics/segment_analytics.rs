@@ -70,6 +70,7 @@ pub enum AnalyticsMsg {
     AggregateAddDocuments(DocumentsAggregator),
     AggregateDeleteDocuments(DocumentsDeletionAggregator),
     AggregateUpdateDocuments(DocumentsAggregator),
+    AggregateHealth(HealthAggregator),
 }
 
 pub struct SegmentAnalytics {
@@ -130,6 +131,7 @@ impl SegmentAnalytics {
             add_documents_aggregator: DocumentsAggregator::default(),
             delete_documents_aggregator: DocumentsDeletionAggregator::default(),
             update_documents_aggregator: DocumentsAggregator::default(),
+            health_aggregator: HealthAggregator::default(),
         });
         tokio::spawn(segment.run(index_scheduler.clone()));
 
@@ -188,6 +190,11 @@ impl super::Analytics for SegmentAnalytics {
     ) {
         let aggregate = DocumentsAggregator::from_query(documents_query, index_creation, request);
         let _ = self.sender.try_send(AnalyticsMsg::AggregateUpdateDocuments(aggregate));
+    }
+
+    fn health_seen(&self, request: &HttpRequest) {
+        let aggregate = HealthAggregator::from_query(request);
+        let _ = self.sender.try_send(AnalyticsMsg::AggregateHealth(aggregate));
     }
 }
 
@@ -319,6 +326,7 @@ pub struct Segment {
     add_documents_aggregator: DocumentsAggregator,
     delete_documents_aggregator: DocumentsDeletionAggregator,
     update_documents_aggregator: DocumentsAggregator,
+    health_aggregator: HealthAggregator,
 }
 
 impl Segment {
@@ -374,6 +382,7 @@ impl Segment {
                         Some(AnalyticsMsg::AggregateAddDocuments(agreg)) => self.add_documents_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregateDeleteDocuments(agreg)) => self.delete_documents_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregateUpdateDocuments(agreg)) => self.update_documents_aggregator.aggregate(agreg),
+                        Some(AnalyticsMsg::AggregateHealth(agreg)) => self.health_aggregator.aggregate(agreg),
                         None => (),
                     }
                 }
@@ -407,6 +416,8 @@ impl Segment {
             .into_event(&self.user, "Documents Deleted");
         let update_documents = std::mem::take(&mut self.update_documents_aggregator)
             .into_event(&self.user, "Documents Updated");
+        let health =
+            std::mem::take(&mut self.health_aggregator).into_event(&self.user, "Health Seen");
 
         if let Some(get_search) = get_search {
             let _ = self.batcher.push(get_search).await;
@@ -422,6 +433,9 @@ impl Segment {
         }
         if let Some(update_documents) = update_documents {
             let _ = self.batcher.push(update_documents).await;
+        }
+        if let Some(health) = health {
+            let _ = self.batcher.push(health).await;
         }
         let _ = self.batcher.flush().await;
     }
@@ -809,6 +823,56 @@ impl DocumentsDeletionAggregator {
         self.per_document_id |= other.per_document_id;
         self.clear_all |= other.clear_all;
         self.per_batch |= other.per_batch;
+    }
+
+    pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
+        // if we had no timestamp it means we never encountered any events and
+        // thus we don't need to send this event.
+        let timestamp = self.timestamp?;
+
+        Some(Track {
+            timestamp: Some(timestamp),
+            user: user.clone(),
+            event: event_name.to_string(),
+            properties: serde_json::to_value(self).ok()?,
+            ..Default::default()
+        })
+    }
+}
+
+#[derive(Default, Serialize)]
+pub struct HealthAggregator {
+    #[serde(skip)]
+    timestamp: Option<OffsetDateTime>,
+
+    // context
+    #[serde(rename = "user-agent")]
+    user_agents: HashSet<String>,
+
+    total_received: usize,
+}
+
+impl HealthAggregator {
+    pub fn from_query(request: &HttpRequest) -> Self {
+        let mut ret = Self::default();
+        ret.timestamp = Some(OffsetDateTime::now_utc());
+
+        ret.user_agents = extract_user_agents(request).into_iter().collect();
+        ret.total_received = 1;
+        ret
+    }
+
+    /// Aggregate one [DocumentsAggregator] into another.
+    pub fn aggregate(&mut self, other: Self) {
+        if self.timestamp.is_none() {
+            self.timestamp = other.timestamp;
+        }
+
+        // we can't create a union because there is no `into_union` method
+        for user_agent in other.user_agents {
+            self.user_agents.insert(user_agent);
+        }
+        self.total_received = self.total_received.saturating_add(other.total_received);
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
