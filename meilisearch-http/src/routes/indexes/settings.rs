@@ -314,7 +314,11 @@ make_setting_route!(
         use serde_json::json;
         analytics.publish(
             "DistinctAttribute Updated".to_string(),
-            json!({ "distinct_attribute": distinct.is_some() }),
+            json!({
+                "distinct_attribute": {
+                    "set": distinct.is_some(),
+                }
+            }),
             Some(req),
         );
     }
@@ -445,7 +449,9 @@ pub async fn update_all(
                 "total": new_settings.filterable_attributes.as_ref().set().map(|filter| filter.len()),
                 "has_geo": new_settings.filterable_attributes.as_ref().set().map(|filter| filter.iter().any(|s| s == "_geo")),
             },
-            "distinct_attribute": new_settings.distinct_attribute.as_ref().set().is_some(),
+            "distinct_attribute": {
+                "set": new_settings.distinct_attribute.as_ref().set().is_some()
+            },
             "typo_tolerance": {
                 "enabled": new_settings.typo_tolerance
                     .as_ref()
