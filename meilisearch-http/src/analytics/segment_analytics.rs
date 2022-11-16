@@ -23,7 +23,7 @@ use tokio::select;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use uuid::Uuid;
 
-use super::{config_user_id_path, MEILISEARCH_CONFIG_PATH};
+use super::{config_user_id_path, DocumentDeletionKind, MEILISEARCH_CONFIG_PATH};
 use crate::analytics::Analytics;
 use crate::option::{default_http_addr, IndexerOpts, MaxMemory, MaxThreads, SchedulerConfig};
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
@@ -68,6 +68,7 @@ pub enum AnalyticsMsg {
     AggregateGetSearch(SearchAggregator),
     AggregatePostSearch(SearchAggregator),
     AggregateAddDocuments(DocumentsAggregator),
+    AggregateDeleteDocuments(DocumentsDeletionAggregator),
     AggregateUpdateDocuments(DocumentsAggregator),
 }
 
@@ -127,6 +128,7 @@ impl SegmentAnalytics {
             post_search_aggregator: SearchAggregator::default(),
             get_search_aggregator: SearchAggregator::default(),
             add_documents_aggregator: DocumentsAggregator::default(),
+            delete_documents_aggregator: DocumentsDeletionAggregator::default(),
             update_documents_aggregator: DocumentsAggregator::default(),
         });
         tokio::spawn(segment.run(index_scheduler.clone()));
@@ -171,6 +173,11 @@ impl super::Analytics for SegmentAnalytics {
     ) {
         let aggregate = DocumentsAggregator::from_query(documents_query, index_creation, request);
         let _ = self.sender.try_send(AnalyticsMsg::AggregateAddDocuments(aggregate));
+    }
+
+    fn delete_documents(&self, kind: DocumentDeletionKind, request: &HttpRequest) {
+        let aggregate = DocumentsDeletionAggregator::from_query(kind, request);
+        let _ = self.sender.try_send(AnalyticsMsg::AggregateDeleteDocuments(aggregate));
     }
 
     fn update_documents(
@@ -310,6 +317,7 @@ pub struct Segment {
     get_search_aggregator: SearchAggregator,
     post_search_aggregator: SearchAggregator,
     add_documents_aggregator: DocumentsAggregator,
+    delete_documents_aggregator: DocumentsDeletionAggregator,
     update_documents_aggregator: DocumentsAggregator,
 }
 
@@ -364,6 +372,7 @@ impl Segment {
                         Some(AnalyticsMsg::AggregateGetSearch(agreg)) => self.get_search_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregatePostSearch(agreg)) => self.post_search_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregateAddDocuments(agreg)) => self.add_documents_aggregator.aggregate(agreg),
+                        Some(AnalyticsMsg::AggregateDeleteDocuments(agreg)) => self.delete_documents_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregateUpdateDocuments(agreg)) => self.update_documents_aggregator.aggregate(agreg),
                         None => (),
                     }
@@ -394,6 +403,8 @@ impl Segment {
             .into_event(&self.user, "Documents Searched POST");
         let add_documents = std::mem::take(&mut self.add_documents_aggregator)
             .into_event(&self.user, "Documents Added");
+        let delete_documents = std::mem::take(&mut self.delete_documents_aggregator)
+            .into_event(&self.user, "Documents Deleted");
         let update_documents = std::mem::take(&mut self.update_documents_aggregator)
             .into_event(&self.user, "Documents Updated");
 
@@ -405,6 +416,9 @@ impl Segment {
         }
         if let Some(add_documents) = add_documents {
             let _ = self.batcher.push(add_documents).await;
+        }
+        if let Some(delete_documents) = delete_documents {
+            let _ = self.batcher.push(delete_documents).await;
         }
         if let Some(update_documents) = update_documents {
             let _ = self.batcher.push(update_documents).await;
@@ -715,5 +729,67 @@ impl DocumentsAggregator {
                 ..Default::default()
             })
         }
+    }
+}
+
+#[derive(Default, Serialize)]
+pub struct DocumentsDeletionAggregator {
+    #[serde(skip)]
+    timestamp: Option<OffsetDateTime>,
+
+    // context
+    #[serde(rename = "user-agent")]
+    user_agents: HashSet<String>,
+
+    total_received: usize,
+    per_document_id: bool,
+    clear_all: bool,
+    per_batch: bool,
+}
+
+impl DocumentsDeletionAggregator {
+    pub fn from_query(kind: DocumentDeletionKind, request: &HttpRequest) -> Self {
+        let mut ret = Self::default();
+        ret.timestamp = Some(OffsetDateTime::now_utc());
+
+        ret.user_agents = extract_user_agents(request).into_iter().collect();
+        ret.total_received = 1;
+        match kind {
+            DocumentDeletionKind::PerDocumentId => ret.per_document_id = true,
+            DocumentDeletionKind::ClearAll => ret.clear_all = true,
+            DocumentDeletionKind::PerBatch => ret.per_batch = true,
+        }
+
+        ret
+    }
+
+    /// Aggregate one [DocumentsAggregator] into another.
+    pub fn aggregate(&mut self, other: Self) {
+        if self.timestamp.is_none() {
+            self.timestamp = other.timestamp;
+        }
+
+        // we can't create a union because there is no `into_union` method
+        for user_agent in other.user_agents {
+            self.user_agents.insert(user_agent);
+        }
+        self.total_received = self.total_received.saturating_add(other.total_received);
+        self.per_document_id |= other.per_document_id;
+        self.clear_all |= other.clear_all;
+        self.per_batch |= other.per_batch;
+    }
+
+    pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
+        // if we had no timestamp it means we never encountered any events and
+        // thus we don't need to send this event.
+        let timestamp = self.timestamp?;
+
+        Some(Track {
+            timestamp: Some(timestamp),
+            user: user.clone(),
+            event: event_name.to_string(),
+            properties: serde_json::to_value(self).ok()?,
+            ..Default::default()
+        })
     }
 }
