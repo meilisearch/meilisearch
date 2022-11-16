@@ -97,7 +97,7 @@ _[Read more about this](https://github.com/meilisearch/integration-guides/blob/m
 
 ### How to Publish a new Release
 
-The full Meilisearch release process is described in [this guide](https://github.com/meilisearch/core-team/blob/main/resources/meilisearch-release.md). Please follow it carefully before doing any release.
+The full Meilisearch release process is described in [this guide](https://github.com/meilisearch/engine-team/blob/main/resources/meilisearch-release.md). Please follow it carefully before doing any release.
 
 ### Release assets
 
