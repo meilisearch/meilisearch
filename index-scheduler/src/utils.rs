@@ -398,11 +398,17 @@ impl IndexScheduler {
                     }
                     Details::DocumentAdditionOrUpdate { received_documents, indexed_documents } => {
                         assert_eq!(kind.as_kind(), Kind::DocumentAdditionOrUpdate);
-                        if let Some(indexed_documents) = indexed_documents {
-                            assert_eq!(status, Status::Succeeded);
-                            assert!(indexed_documents <= received_documents);
-                        } else {
-                            assert_ne!(status, Status::Succeeded);
+                        match indexed_documents {
+                            Some(0) => assert_ne!(status, Status::Enqueued),
+                            Some(indexed_documents) => {
+                                assert_eq!(status, Status::Succeeded);
+                                assert!(indexed_documents <= received_documents);
+                            }
+                            None => {
+                                assert_ne!(status, Status::Succeeded);
+                                assert_ne!(status, Status::Canceled);
+                                assert_ne!(status, Status::Failed);
+                            }
                         }
                     }
                     Details::SettingsUpdate { settings: _ } => {
