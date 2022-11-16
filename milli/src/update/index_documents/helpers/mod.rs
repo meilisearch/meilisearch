@@ -18,8 +18,20 @@ pub use merge_functions::{
     serialize_roaring_bitmap, MergeFn,
 };
 
+/// The maximum length a LMDB key can be.
+///
+/// Note that the actual allowed length is a little bit higher, but
+/// we keep a margin of safety.
+const MAX_LMDB_KEY_LENGTH: usize = 500;
+
+/// The maximum length a field value can be when inserted in an LMDB key.
+///
+/// This number is determined by the keys of the different facet databases
+/// and adding a margin of safety.
+pub const MAX_FACET_VALUE_LENGTH: usize = MAX_LMDB_KEY_LENGTH - 20;
+
 /// The maximum length a word can be
-pub const MAX_WORD_LENGTH: usize = 250;
+pub const MAX_WORD_LENGTH: usize = MAX_LMDB_KEY_LENGTH / 2;
 
 pub fn valid_lmdb_key(key: impl AsRef<[u8]>) -> bool {
     key.as_ref().len() <= MAX_WORD_LENGTH * 2 && !key.as_ref().is_empty()

@@ -12,6 +12,7 @@ use serde_json::Value;
 use super::helpers::{create_sorter, keep_first, sorter_into_reader, GrenadParameters};
 use crate::error::InternalError;
 use crate::facet::value_encoding::f64_into_bytes;
+use crate::update::index_documents::helpers::MAX_FACET_VALUE_LENGTH;
 use crate::update::index_documents::{create_writer, writer_into_reader};
 use crate::{CboRoaringBitmapCodec, DocumentId, FieldId, Result, BEU32};
 
@@ -85,10 +86,16 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
                     }
                 }
 
-                // insert  normalized and original facet string in sorter
+                // insert normalized and original facet string in sorter
                 for (normalized, original) in strings.into_iter().filter(|(n, _)| !n.is_empty()) {
+                    let normalised_truncated_value: String = normalized
+                        .char_indices()
+                        .take_while(|(idx, _)| idx + 4 < MAX_FACET_VALUE_LENGTH)
+                        .map(|(_, c)| c)
+                        .collect();
+
                     key_buffer.truncate(size_of::<FieldId>() + size_of::<DocumentId>());
-                    key_buffer.extend_from_slice(normalized.as_bytes());
+                    key_buffer.extend_from_slice(normalised_truncated_value.as_bytes());
                     fid_docid_facet_strings_sorter.insert(&key_buffer, original.as_bytes())?;
                 }
             }

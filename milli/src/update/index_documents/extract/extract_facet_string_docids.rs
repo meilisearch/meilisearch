@@ -6,7 +6,8 @@ use heed::BytesEncode;
 use super::helpers::{create_sorter, sorter_into_reader, try_split_array_at, GrenadParameters};
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
 use crate::heed_codec::StrRefCodec;
-use crate::update::index_documents::{merge_cbo_roaring_bitmaps, valid_lmdb_key};
+use crate::update::index_documents::helpers::MAX_FACET_VALUE_LENGTH;
+use crate::update::index_documents::merge_cbo_roaring_bitmaps;
 use crate::{FieldId, Result};
 
 /// Extracts the facet string and the documents ids where this facet string appear.
@@ -38,13 +39,21 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
             try_split_array_at::<_, 4>(bytes).unwrap();
         let document_id = u32::from_be_bytes(document_id_bytes);
 
-        let normalised_value = std::str::from_utf8(normalized_value_bytes)?;
+        let mut normalised_value = std::str::from_utf8(normalized_value_bytes)?;
+
+        let normalised_truncated_value: String;
+        if normalised_value.len() > MAX_FACET_VALUE_LENGTH {
+            normalised_truncated_value = normalised_value
+                .char_indices()
+                .take_while(|(idx, _)| idx + 4 < MAX_FACET_VALUE_LENGTH)
+                .map(|(_, c)| c)
+                .collect();
+            normalised_value = normalised_truncated_value.as_str();
+        }
         let key = FacetGroupKey { field_id, level: 0, left_bound: normalised_value };
         let key_bytes = FacetGroupKeyCodec::<StrRefCodec>::bytes_encode(&key).unwrap();
-        if valid_lmdb_key(&key_bytes) {
-            // document id is encoded in native-endian because of the CBO roaring bitmap codec
-            facet_string_docids_sorter.insert(&key_bytes, document_id.to_ne_bytes())?;
-        }
+        // document id is encoded in native-endian because of the CBO roaring bitmap codec
+        facet_string_docids_sorter.insert(&key_bytes, document_id.to_ne_bytes())?;
     }
 
     sorter_into_reader(facet_string_docids_sorter, indexer)
