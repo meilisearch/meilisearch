@@ -412,28 +412,31 @@ impl IndexScheduler {
     /// only once per index scheduler.
     fn run(&self) {
         let run = self.private_clone();
-        std::thread::spawn(move || loop {
-            run.wake_up.wait();
+        std::thread::Builder::new()
+            .name(String::from("scheduler"))
+            .spawn(move || loop {
+                run.wake_up.wait();
 
-            match run.tick() {
-                Ok(0) => (),
-                Ok(_) => run.wake_up.signal(),
-                Err(e) => {
-                    log::error!("{}", e);
-                    // Wait one second when an irrecoverable error occurs.
-                    if matches!(
-                        e,
-                        Error::CorruptedTaskQueue
-                            | Error::TaskDatabaseUpdate(_)
-                            | Error::HeedTransaction(_)
-                            | Error::CreateBatch(_)
-                    ) {
-                        std::thread::sleep(Duration::from_secs(1));
+                match run.tick() {
+                    Ok(0) => (),
+                    Ok(_) => run.wake_up.signal(),
+                    Err(e) => {
+                        log::error!("{}", e);
+                        // Wait one second when an irrecoverable error occurs.
+                        if matches!(
+                            e,
+                            Error::CorruptedTaskQueue
+                                | Error::TaskDatabaseUpdate(_)
+                                | Error::HeedTransaction(_)
+                                | Error::CreateBatch(_)
+                        ) {
+                            std::thread::sleep(Duration::from_secs(1));
+                        }
+                        run.wake_up.signal();
                     }
-                    run.wake_up.signal();
                 }
-            }
-        });
+            })
+            .unwrap();
     }
 
     pub fn indexer_config(&self) -> &IndexerConfig {
@@ -925,7 +928,10 @@ impl IndexScheduler {
         // 2. Process the tasks
         let res = {
             let cloned_index_scheduler = self.private_clone();
-            let handle = std::thread::spawn(move || cloned_index_scheduler.process_batch(batch));
+            let handle = std::thread::Builder::new()
+                .name(String::from("batch-operation"))
+                .spawn(move || cloned_index_scheduler.process_batch(batch))
+                .unwrap();
             handle.join().unwrap_or(Err(Error::ProcessBatchPanicked))
         };
 

@@ -204,12 +204,15 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Auth
     if opt.schedule_snapshot {
         let snapshot_delay = Duration::from_secs(opt.snapshot_interval_sec);
         let index_scheduler = index_scheduler.clone();
-        thread::spawn(move || loop {
-            thread::sleep(snapshot_delay);
-            if let Err(e) = index_scheduler.register(KindWithContent::SnapshotCreation) {
-                error!("Error while registering snapshot: {}", e);
-            }
-        });
+        thread::Builder::new()
+            .name(String::from("register-snapshot-tasks"))
+            .spawn(move || loop {
+                thread::sleep(snapshot_delay);
+                if let Err(e) = index_scheduler.register(KindWithContent::SnapshotCreation) {
+                    error!("Error while registering snapshot: {}", e);
+                }
+            })
+            .unwrap();
     }
 
     Ok((index_scheduler, auth_controller))
