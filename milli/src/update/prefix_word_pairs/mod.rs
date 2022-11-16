@@ -239,7 +239,7 @@ mod tests {
         db_snap!(index, prefix_word_pair_proximity_docids, "update");
     }
     #[test]
-    fn test_batch_bug_3034() {
+    fn test_batch_bug_3043() {
         // https://github.com/meilisearch/meilisearch/issues/3043
         let mut index = TempIndex::new();
         index.index_documents_config.words_prefix_threshold = Some(50);
