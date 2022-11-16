@@ -664,7 +664,7 @@ impl SearchAggregator {
                 "pagination": {
                    "max_limit": self.max_limit,
                    "max_offset": self.max_offset,
-                   "finite_pagination": self.finite_pagination > self.total_received / 2,
+                   "most_used_navigation": if self.finite_pagination > (self.total_received / 2) { "exhaustive" } else { "estimated" },
                 },
                 "formatting": {
                     "max_attributes_to_retrieve": self.max_attributes_to_retrieve,
