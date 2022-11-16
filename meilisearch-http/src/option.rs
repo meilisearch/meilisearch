@@ -501,8 +501,10 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
     type Error = anyhow::Error;
 
     fn try_from(other: &IndexerOpts) -> Result<Self, Self::Error> {
-        let thread_pool =
-            rayon::ThreadPoolBuilder::new().num_threads(*other.max_indexing_threads).build()?;
+        let thread_pool = rayon::ThreadPoolBuilder::new()
+            .thread_name(|index| format!("indexing-thread:{index}"))
+            .num_threads(*other.max_indexing_threads)
+            .build()?;
 
         Ok(Self {
             log_every_n: Some(other.log_every_n),
