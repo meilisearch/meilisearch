@@ -467,11 +467,18 @@ pub struct SearchAggregator {
     finite_pagination: usize,
 
     // formatting
+    max_attributes_to_retrieve: usize,
+    max_attributes_to_highlight: usize,
     highlight_pre_tag: bool,
     highlight_post_tag: bool,
+    max_attributes_to_crop: usize,
     crop_marker: bool,
     show_matches_position: bool,
     crop_length: bool,
+
+    // facets
+    facets_sum_of_terms: usize,
+    facets_total_number_of_facets: usize,
 }
 
 impl SearchAggregator {
@@ -552,16 +559,19 @@ impl SearchAggregator {
         for user_agent in other.user_agents.into_iter() {
             self.user_agents.insert(user_agent);
         }
+
         // request
         self.total_received = self.total_received.saturating_add(other.total_received);
         self.total_succeeded = self.total_succeeded.saturating_add(other.total_succeeded);
         self.time_spent.append(&mut other.time_spent);
+
         // sort
         self.sort_with_geo_point |= other.sort_with_geo_point;
         self.sort_sum_of_criteria_terms =
             self.sort_sum_of_criteria_terms.saturating_add(other.sort_sum_of_criteria_terms);
         self.sort_total_number_of_criteria =
             self.sort_total_number_of_criteria.saturating_add(other.sort_total_number_of_criteria);
+
         // filter
         self.filter_with_geo_radius |= other.filter_with_geo_radius;
         self.filter_sum_of_criteria_terms =
@@ -576,20 +586,34 @@ impl SearchAggregator {
         // q
         self.max_terms_number = self.max_terms_number.max(other.max_terms_number);
 
-        for (key, value) in other.matching_strategy.into_iter() {
-            let matching_strategy = self.matching_strategy.entry(key).or_insert(0);
-            *matching_strategy = matching_strategy.saturating_add(value);
-        }
         // pagination
         self.max_limit = self.max_limit.max(other.max_limit);
         self.max_offset = self.max_offset.max(other.max_offset);
         self.finite_pagination += other.finite_pagination;
 
+        // formatting
+        self.max_attributes_to_retrieve =
+            self.max_attributes_to_retrieve.max(other.max_attributes_to_retrieve);
+        self.max_attributes_to_highlight =
+            self.max_attributes_to_highlight.max(other.max_attributes_to_highlight);
         self.highlight_pre_tag |= other.highlight_pre_tag;
         self.highlight_post_tag |= other.highlight_post_tag;
+        self.max_attributes_to_crop = self.max_attributes_to_crop.max(other.max_attributes_to_crop);
         self.crop_marker |= other.crop_marker;
         self.show_matches_position |= other.show_matches_position;
         self.crop_length |= other.crop_length;
+
+        // facets
+        self.facets_sum_of_terms =
+            self.facets_sum_of_terms.saturating_add(other.facets_sum_of_terms);
+        self.facets_total_number_of_facets =
+            self.facets_total_number_of_facets.saturating_add(other.facets_total_number_of_facets);
+
+        // matching strategy
+        for (key, value) in other.matching_strategy.into_iter() {
+            let matching_strategy = self.matching_strategy.entry(key).or_insert(0);
+            *matching_strategy = matching_strategy.saturating_add(value);
+        }
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
@@ -622,7 +646,6 @@ impl SearchAggregator {
                 },
                 "q": {
                    "max_terms_number": self.max_terms_number,
-                   "most_used_matching_strategy": self.matching_strategy.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
                 },
                 "pagination": {
                    "max_limit": self.max_limit,
@@ -630,12 +653,21 @@ impl SearchAggregator {
                    "finite_pagination": self.finite_pagination > self.total_received / 2,
                 },
                 "formatting": {
+                    "max_attributes_to_retrieve": self.max_attributes_to_retrieve,
+                    "max_attributes_to_highlight": self.max_attributes_to_highlight,
                     "highlight_pre_tag": self.highlight_pre_tag,
                     "highlight_post_tag": self.highlight_post_tag,
+                    "max_attributes_to_crop": self.max_attributes_to_crop,
                     "crop_marker": self.crop_marker,
                     "show_matches_position": self.show_matches_position,
                     "crop_length": self.crop_length,
                 },
+                "facets": {
+                    "avg_facets_number": format!("{:.2}", self.facets_sum_of_terms as f64 / self.facets_total_number_of_facets as f64),
+                },
+                "matching_strategy": {
+                    "most_used_strategy": self.matching_strategy.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
+                }
             });
 
             Some(Track {
