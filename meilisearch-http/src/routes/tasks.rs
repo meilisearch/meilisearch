@@ -442,8 +442,9 @@ pub struct TaskDeletionOrCancelationQuery {
 
 async fn cancel_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_CANCEL }>, Data<IndexScheduler>>,
-    req: HttpRequest,
     params: web::Query<TaskDeletionOrCancelationQueryRaw>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let query = params.into_inner().validate()?;
     let TaskDeletionOrCancelationQuery {
@@ -458,6 +459,24 @@ async fn cancel_tasks(
                 before_finished_at,
             },
     } = query;
+
+    analytics.publish(
+        "Tasks Canceled".to_string(),
+        json!({
+            "filtered_by_uid": uids.is_some(),
+            "filtered_by_index_uid": index_uids.is_some(),
+            "filtered_by_type": types.is_some(),
+            "filtered_by_status": statuses.is_some(),
+            "filtered_by_canceled_by": canceled_by.is_some(),
+            "filtered_by_before_enqueued_at": before_enqueued_at.is_some(),
+            "filtered_by_after_enqueued_at": after_enqueued_at.is_some(),
+            "filtered_by_before_started_at": before_started_at.is_some(),
+            "filtered_by_after_started_at": after_started_at.is_some(),
+            "filtered_by_before_finished_at": before_finished_at.is_some(),
+            "filtered_by_after_finished_at": after_finished_at.is_some(),
+        }),
+        Some(&req),
+    );
 
     let query = Query {
         limit: None,
@@ -495,8 +514,9 @@ async fn cancel_tasks(
 
 async fn delete_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_DELETE }>, Data<IndexScheduler>>,
-    req: HttpRequest,
     params: web::Query<TaskDeletionOrCancelationQueryRaw>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let TaskDeletionOrCancelationQuery {
         common: TaskCommonQuery { types, uids, canceled_by, statuses, index_uids },
@@ -510,6 +530,24 @@ async fn delete_tasks(
                 before_finished_at,
             },
     } = params.into_inner().validate()?;
+
+    analytics.publish(
+        "Tasks Deleted".to_string(),
+        json!({
+            "filtered_by_uid": uids.is_some(),
+            "filtered_by_index_uid": index_uids.is_some(),
+            "filtered_by_type": types.is_some(),
+            "filtered_by_status": statuses.is_some(),
+            "filtered_by_canceled_by": canceled_by.is_some(),
+            "filtered_by_before_enqueued_at": before_enqueued_at.is_some(),
+            "filtered_by_after_enqueued_at": after_enqueued_at.is_some(),
+            "filtered_by_before_started_at": before_started_at.is_some(),
+            "filtered_by_after_started_at": after_started_at.is_some(),
+            "filtered_by_before_finished_at": before_finished_at.is_some(),
+            "filtered_by_after_finished_at": after_finished_at.is_some(),
+        }),
+        Some(&req),
+    );
 
     let query = Query {
         limit: None,
@@ -577,9 +615,17 @@ async fn get_tasks(
     analytics.publish(
         "Tasks Seen".to_string(),
         json!({
-            "filtered_by_index_uid": index_uids.as_ref().map_or(false, |v| !v.is_empty()),
-            "filtered_by_type": types.as_ref().map_or(false, |v| !v.is_empty()),
-            "filtered_by_status": statuses.as_ref().map_or(false, |v| !v.is_empty()),
+            "filtered_by_uid": uids.is_some(),
+            "filtered_by_index_uid": index_uids.is_some(),
+            "filtered_by_type": types.is_some(),
+            "filtered_by_status": statuses.is_some(),
+            "filtered_by_canceled_by": canceled_by.is_some(),
+            "filtered_by_before_enqueued_at": before_enqueued_at.is_some(),
+            "filtered_by_after_enqueued_at": after_enqueued_at.is_some(),
+            "filtered_by_before_started_at": before_started_at.is_some(),
+            "filtered_by_after_started_at": after_started_at.is_some(),
+            "filtered_by_before_finished_at": before_finished_at.is_some(),
+            "filtered_by_after_finished_at": after_finished_at.is_some(),
         }),
         Some(&req),
     );
