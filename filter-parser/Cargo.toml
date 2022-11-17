@@ -1,6 +1,6 @@
 [package]
 name = "filter-parser"
-version = "0.36.0"
+version = "0.37.0"
 edition = "2021"
 description = "The parser for the Meilisearch filter syntax"
 publish = false
