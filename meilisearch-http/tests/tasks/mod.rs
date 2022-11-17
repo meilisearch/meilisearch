@@ -411,7 +411,7 @@ async fn test_summarized_delete_batch() {
       "type": "documentDeletion",
       "canceledBy": null,
       "details": {
-        "matchedDocuments": 3,
+        "providedIds": 3,
         "deletedDocuments": 0
       },
       "error": {
@@ -441,7 +441,7 @@ async fn test_summarized_delete_batch() {
       "type": "documentDeletion",
       "canceledBy": null,
       "details": {
-        "matchedDocuments": 1,
+        "providedIds": 1,
         "deletedDocuments": 0
       },
       "error": null,
@@ -470,7 +470,7 @@ async fn test_summarized_delete_document() {
       "type": "documentDeletion",
       "canceledBy": null,
       "details": {
-        "matchedDocuments": 1,
+        "providedIds": 1,
         "deletedDocuments": 0
       },
       "error": {
@@ -500,7 +500,7 @@ async fn test_summarized_delete_document() {
       "type": "documentDeletion",
       "canceledBy": null,
       "details": {
-        "matchedDocuments": 1,
+        "providedIds": 1,
         "deletedDocuments": 0
       },
       "error": null,

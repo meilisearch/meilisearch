@@ -427,7 +427,7 @@ impl IndexScheduler {
                         _ => panic!(),
                     },
                     Details::DocumentDeletion {
-                        matched_documents: received_document_ids,
+                        provided_ids: received_document_ids,
                         deleted_documents,
                     } => {
                         if let Some(deleted_documents) = deleted_documents {

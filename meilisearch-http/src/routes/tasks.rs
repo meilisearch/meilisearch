@@ -86,7 +86,7 @@ pub struct DetailsView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub primary_key: Option<Option<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub matched_documents: Option<usize>,
+    pub provided_ids: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deleted_documents: Option<Option<u64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -123,10 +123,10 @@ impl From<Details> for DetailsView {
                 DetailsView { primary_key: Some(primary_key), ..DetailsView::default() }
             }
             Details::DocumentDeletion {
-                matched_documents: received_document_ids,
+                provided_ids: received_document_ids,
                 deleted_documents,
             } => DetailsView {
-                matched_documents: Some(received_document_ids),
+                provided_ids: Some(received_document_ids),
                 deleted_documents: Some(deleted_documents),
                 ..DetailsView::default()
             },
