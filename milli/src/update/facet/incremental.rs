@@ -131,11 +131,11 @@ impl FacetsUpdateIncrementalInner {
                     let mut iter =
                         self.db.as_polymorph().prefix_iter::<_, ByteSlice, FacetGroupValueCodec>(
                             txn,
-                            &prefix.as_slice(),
+                            prefix.as_slice(),
                         )?;
                     let (key_bytes, value) = iter.next().unwrap()?;
                     Ok((
-                        FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(&key_bytes)
+                        FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(key_bytes)
                             .ok_or(Error::Encoding)?
                             .into_owned(),
                         value,
