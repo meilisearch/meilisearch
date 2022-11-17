@@ -21,7 +21,7 @@ mod api_key;
 mod dump;
 pub mod indexes;
 mod swap_indexes;
-mod tasks;
+pub mod tasks;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::scope("/tasks").configure(tasks::configure))

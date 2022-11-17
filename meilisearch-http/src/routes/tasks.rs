@@ -162,11 +162,11 @@ impl From<Details> for DetailsView {
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TaskCommonQueryRaw {
-    uids: Option<CS<String>>,
-    canceled_by: Option<CS<String>>,
-    types: Option<CS<StarOr<String>>>,
-    statuses: Option<CS<StarOr<String>>>,
-    index_uids: Option<CS<StarOr<String>>>,
+    pub uids: Option<CS<String>>,
+    pub canceled_by: Option<CS<String>>,
+    pub types: Option<CS<StarOr<String>>>,
+    pub statuses: Option<CS<StarOr<String>>>,
+    pub index_uids: Option<CS<StarOr<String>>>,
 }
 impl TaskCommonQueryRaw {
     fn validate(self) -> Result<TaskCommonQuery, ResponseError> {
@@ -261,12 +261,12 @@ impl TaskCommonQueryRaw {
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TaskDateQueryRaw {
-    after_enqueued_at: Option<String>,
-    before_enqueued_at: Option<String>,
-    after_started_at: Option<String>,
-    before_started_at: Option<String>,
-    after_finished_at: Option<String>,
-    before_finished_at: Option<String>,
+    pub after_enqueued_at: Option<String>,
+    pub before_enqueued_at: Option<String>,
+    pub after_started_at: Option<String>,
+    pub before_started_at: Option<String>,
+    pub after_finished_at: Option<String>,
+    pub before_finished_at: Option<String>,
 }
 impl TaskDateQueryRaw {
     fn validate(self) -> Result<TaskDateQuery, ResponseError> {
@@ -339,21 +339,21 @@ impl TaskDateQueryRaw {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TasksFilterQueryRaw {
     #[serde(flatten)]
-    common: TaskCommonQueryRaw,
+    pub common: TaskCommonQueryRaw,
     #[serde(default = "DEFAULT_LIMIT")]
-    limit: u32,
-    from: Option<TaskId>,
+    pub limit: u32,
+    pub from: Option<TaskId>,
     #[serde(flatten)]
-    dates: TaskDateQueryRaw,
+    pub dates: TaskDateQueryRaw,
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TaskDeletionOrCancelationQueryRaw {
     #[serde(flatten)]
-    common: TaskCommonQueryRaw,
+    pub common: TaskCommonQueryRaw,
     #[serde(flatten)]
-    dates: TaskDateQueryRaw,
+    pub dates: TaskDateQueryRaw,
 }
 
 impl TasksFilterQueryRaw {
@@ -442,8 +442,9 @@ pub struct TaskDeletionOrCancelationQuery {
 
 async fn cancel_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_CANCEL }>, Data<IndexScheduler>>,
-    req: HttpRequest,
     params: web::Query<TaskDeletionOrCancelationQueryRaw>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let query = params.into_inner().validate()?;
     let TaskDeletionOrCancelationQuery {
@@ -458,6 +459,24 @@ async fn cancel_tasks(
                 before_finished_at,
             },
     } = query;
+
+    analytics.publish(
+        "Tasks Canceled".to_string(),
+        json!({
+            "filtered_by_uid": uids.is_some(),
+            "filtered_by_index_uid": index_uids.is_some(),
+            "filtered_by_type": types.is_some(),
+            "filtered_by_status": statuses.is_some(),
+            "filtered_by_canceled_by": canceled_by.is_some(),
+            "filtered_by_before_enqueued_at": before_enqueued_at.is_some(),
+            "filtered_by_after_enqueued_at": after_enqueued_at.is_some(),
+            "filtered_by_before_started_at": before_started_at.is_some(),
+            "filtered_by_after_started_at": after_started_at.is_some(),
+            "filtered_by_before_finished_at": before_finished_at.is_some(),
+            "filtered_by_after_finished_at": after_finished_at.is_some(),
+        }),
+        Some(&req),
+    );
 
     let query = Query {
         limit: None,
@@ -495,8 +514,9 @@ async fn cancel_tasks(
 
 async fn delete_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_DELETE }>, Data<IndexScheduler>>,
-    req: HttpRequest,
     params: web::Query<TaskDeletionOrCancelationQueryRaw>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let TaskDeletionOrCancelationQuery {
         common: TaskCommonQuery { types, uids, canceled_by, statuses, index_uids },
@@ -510,6 +530,24 @@ async fn delete_tasks(
                 before_finished_at,
             },
     } = params.into_inner().validate()?;
+
+    analytics.publish(
+        "Tasks Deleted".to_string(),
+        json!({
+            "filtered_by_uid": uids.is_some(),
+            "filtered_by_index_uid": index_uids.is_some(),
+            "filtered_by_type": types.is_some(),
+            "filtered_by_status": statuses.is_some(),
+            "filtered_by_canceled_by": canceled_by.is_some(),
+            "filtered_by_before_enqueued_at": before_enqueued_at.is_some(),
+            "filtered_by_after_enqueued_at": after_enqueued_at.is_some(),
+            "filtered_by_before_started_at": before_started_at.is_some(),
+            "filtered_by_after_started_at": after_started_at.is_some(),
+            "filtered_by_before_finished_at": before_finished_at.is_some(),
+            "filtered_by_after_finished_at": after_finished_at.is_some(),
+        }),
+        Some(&req),
+    );
 
     let query = Query {
         limit: None,
@@ -559,6 +597,8 @@ async fn get_tasks(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    analytics.get_tasks(&params, &req);
+
     let TasksFilterQuery {
         common: TaskCommonQuery { types, uids, canceled_by, statuses, index_uids },
         limit,
@@ -573,16 +613,6 @@ async fn get_tasks(
                 before_finished_at,
             },
     } = params.into_inner().validate()?;
-
-    analytics.publish(
-        "Tasks Seen".to_string(),
-        json!({
-            "filtered_by_index_uid": index_uids.as_ref().map_or(false, |v| !v.is_empty()),
-            "filtered_by_type": types.as_ref().map_or(false, |v| !v.is_empty()),
-            "filtered_by_status": statuses.as_ref().map_or(false, |v| !v.is_empty()),
-        }),
-        Some(&req),
-    );
 
     // We +1 just to know if there is more after this "page" or not.
     let limit = limit.saturating_add(1);
