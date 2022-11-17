@@ -196,7 +196,7 @@ impl KindWithContent {
             }
             KindWithContent::DocumentDeletion { index_uid: _, documents_ids } => {
                 Some(Details::DocumentDeletion {
-                    matched_documents: documents_ids.len(),
+                    provided_ids: documents_ids.len(),
                     deleted_documents: None,
                 })
             }
@@ -239,7 +239,7 @@ impl KindWithContent {
             }
             KindWithContent::DocumentDeletion { index_uid: _, documents_ids } => {
                 Some(Details::DocumentDeletion {
-                    matched_documents: documents_ids.len(),
+                    provided_ids: documents_ids.len(),
                     deleted_documents: Some(0),
                 })
             }
@@ -466,7 +466,7 @@ pub enum Details {
     DocumentAdditionOrUpdate { received_documents: u64, indexed_documents: Option<u64> },
     SettingsUpdate { settings: Box<Settings<Unchecked>> },
     IndexInfo { primary_key: Option<String> },
-    DocumentDeletion { matched_documents: usize, deleted_documents: Option<u64> },
+    DocumentDeletion { provided_ids: usize, deleted_documents: Option<u64> },
     ClearAll { deleted_documents: Option<u64> },
     TaskCancelation { matched_tasks: u64, canceled_tasks: Option<u64>, original_filters: String },
     TaskDeletion { matched_tasks: u64, deleted_tasks: Option<u64>, original_filters: String },
