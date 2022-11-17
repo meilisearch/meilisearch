@@ -1542,9 +1542,9 @@ checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
 
 [[package]]
 name = "grenad"
-version = "0.4.3"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e46ef6273921c5c0cced57632b48c02a968a57f9af929ef78f980409c2e26f2"
+checksum = "5232b2d157b7bf63d7abe1b12177039e58db2f29e377517c0cdee1578cca4c93"
 dependencies = [
  "bytemuck",
  "byteorder",
