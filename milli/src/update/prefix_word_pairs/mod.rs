@@ -238,4 +238,51 @@ mod tests {
         db_snap!(index, word_prefix_pair_proximity_docids, "update");
         db_snap!(index, prefix_word_pair_proximity_docids, "update");
     }
+    #[test]
+    fn test_batch_bug_3043() {
+        // https://github.com/meilisearch/meilisearch/issues/3043
+        let mut index = TempIndex::new();
+        index.index_documents_config.words_prefix_threshold = Some(50);
+        index.index_documents_config.autogenerate_docids = true;
+
+        index
+            .update_settings(|settings| {
+                settings.set_searchable_fields(vec!["text".to_owned()]);
+            })
+            .unwrap();
+
+        let batch_reader_from_documents = |documents| {
+            let mut builder = DocumentsBatchBuilder::new(Vec::new());
+            for object in documents {
+                builder.append_json_object(&object).unwrap();
+            }
+            DocumentsBatchReader::from_reader(Cursor::new(builder.into_inner().unwrap())).unwrap()
+        };
+
+        let mut documents = documents_with_enough_different_words_for_prefixes(&["y"]);
+        // now we add some documents where the text should populate the word_prefix_pair_proximity_docids database
+        documents.push(
+            serde_json::json!({
+                "text": "x y"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        );
+        documents.push(
+            serde_json::json!({
+                "text": "x a y"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        );
+
+        let documents = batch_reader_from_documents(documents);
+        index.add_documents(documents).unwrap();
+
+        db_snap!(index, word_pair_proximity_docids);
+        db_snap!(index, word_prefix_pair_proximity_docids);
+        db_snap!(index, prefix_word_pair_proximity_docids);
+    }
 }
