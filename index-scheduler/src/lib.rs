@@ -197,6 +197,9 @@ mod db_name {
 #[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Breakpoint {
+    // this state is only encountered while creating the scheduler in the test suite.
+    Init,
+
     Start,
     BatchCreated,
     BeforeProcessing,
@@ -414,25 +417,30 @@ impl IndexScheduler {
         let run = self.private_clone();
         std::thread::Builder::new()
             .name(String::from("scheduler"))
-            .spawn(move || loop {
-                run.wake_up.wait();
+            .spawn(move || {
+                #[cfg(test)]
+                run.breakpoint(Breakpoint::Init);
 
-                match run.tick() {
-                    Ok(0) => (),
-                    Ok(_) => run.wake_up.signal(),
-                    Err(e) => {
-                        log::error!("{}", e);
-                        // Wait one second when an irrecoverable error occurs.
-                        if matches!(
-                            e,
-                            Error::CorruptedTaskQueue
-                                | Error::TaskDatabaseUpdate(_)
-                                | Error::HeedTransaction(_)
-                                | Error::CreateBatch(_)
-                        ) {
-                            std::thread::sleep(Duration::from_secs(1));
+                loop {
+                    run.wake_up.wait();
+
+                    match run.tick() {
+                        Ok(0) => (),
+                        Ok(_) => run.wake_up.signal(),
+                        Err(e) => {
+                            log::error!("{}", e);
+                            // Wait one second when an irrecoverable error occurs.
+                            if matches!(
+                                e,
+                                Error::CorruptedTaskQueue
+                                    | Error::TaskDatabaseUpdate(_)
+                                    | Error::HeedTransaction(_)
+                                    | Error::CreateBatch(_)
+                            ) {
+                                std::thread::sleep(Duration::from_secs(1));
+                            }
+                            run.wake_up.signal();
                         }
-                        run.wake_up.signal();
                     }
                 }
             })
@@ -945,6 +953,7 @@ impl IndexScheduler {
             Ok(tasks) => {
                 #[cfg(test)]
                 self.breakpoint(Breakpoint::ProcessBatchSucceeded);
+
                 #[allow(unused_variables)]
                 for (i, mut task) in tasks.into_iter().enumerate() {
                     task.started_at = Some(started_at);
@@ -1058,6 +1067,7 @@ mod tests {
     use std::time::Instant;
 
     use big_s::S;
+    use crossbeam::channel::RecvTimeoutError;
     use file_store::File;
     use meili_snap::snapshot;
     use meilisearch_types::milli::obkv_to_json;
@@ -1069,6 +1079,7 @@ mod tests {
     use tempfile::TempDir;
     use time::Duration;
     use uuid::Uuid;
+    use Breakpoint::*;
 
     use super::*;
     use crate::insta_snapshot::{snapshot_bitmap, snapshot_index_scheduler};
@@ -1108,8 +1119,21 @@ mod tests {
 
             let index_scheduler = Self::new(options, sender, planned_failures).unwrap();
 
-            let index_scheduler_handle =
-                IndexSchedulerHandle { _tempdir: tempdir, test_breakpoint_rcv: receiver };
+            // To be 100% consistent between all test we're going to start the scheduler right now
+            // and ensure it's in the expected starting state.
+            let breakpoint = match receiver.recv_timeout(std::time::Duration::from_secs(1)) {
+                Ok(b) => b,
+                Err(RecvTimeoutError::Timeout) => {
+                    panic!("The scheduler seems to be waiting for a new task while your test is waiting for a breakpoint.")
+                }
+                Err(RecvTimeoutError::Disconnected) => panic!("The scheduler crashed."),
+            };
+            assert_eq!(breakpoint, (Init, false));
+            let index_scheduler_handle = IndexSchedulerHandle {
+                _tempdir: tempdir,
+                test_breakpoint_rcv: receiver,
+                last_breakpoint: breakpoint.0,
+            };
 
             (index_scheduler, index_scheduler_handle)
         }
@@ -1186,26 +1210,130 @@ mod tests {
     pub struct IndexSchedulerHandle {
         _tempdir: TempDir,
         test_breakpoint_rcv: crossbeam::channel::Receiver<(Breakpoint, bool)>,
+        last_breakpoint: Breakpoint,
     }
 
     impl IndexSchedulerHandle {
-        /// Wait until the provided breakpoint is reached.
-        fn wait_till(&self, breakpoint: Breakpoint) {
-            self.test_breakpoint_rcv.iter().find(|b| *b == (breakpoint, false));
+        /// Advance the scheduler to the next tick.
+        /// Panic
+        /// * If the scheduler is waiting for a task to be registered.
+        /// * If the breakpoint queue is in a bad state.
+        #[track_caller]
+        fn advance(&mut self) -> Breakpoint {
+            let (breakpoint_1, b) = match self
+                .test_breakpoint_rcv
+                .recv_timeout(std::time::Duration::from_secs(5))
+            {
+                Ok(b) => b,
+                Err(RecvTimeoutError::Timeout) => {
+                    panic!("The scheduler seems to be waiting for a new task while your test is waiting for a breakpoint.")
+                }
+                Err(RecvTimeoutError::Disconnected) => panic!("The scheduler crashed."),
+            };
+            // if we've already encountered a breakpoint we're supposed to be stuck on the false
+            // and we expect the same variant with the true to come now.
+            assert_eq!(
+                (breakpoint_1, b),
+                (self.last_breakpoint, true),
+                "Internal error in the test suite. In the previous iteration I got `({:?}, false)` and now I got `({:?}, {:?})`.",
+                self.last_breakpoint,
+                breakpoint_1,
+                b,
+            );
+
+            let (breakpoint_2, b) = match self
+                .test_breakpoint_rcv
+                .recv_timeout(std::time::Duration::from_secs(5))
+            {
+                Ok(b) => b,
+                Err(RecvTimeoutError::Timeout) => {
+                    panic!("The scheduler seems to be waiting for a new task while your test is waiting for a breakpoint.")
+                }
+                Err(RecvTimeoutError::Disconnected) => panic!("The scheduler crashed."),
+            };
+            assert!(
+                b == false,
+                "Found the breakpoint handle in a bad state. Check your test suite"
+            );
+
+            self.last_breakpoint = breakpoint_2;
+
+            breakpoint_2
         }
 
-        /// Wait for `n` tasks.
-        fn advance_n_batch(&self, n: usize) {
-            for _ in 0..n {
-                self.wait_till(Breakpoint::AfterProcessing);
+        /// Advance the scheduler until all the provided breakpoints are reached in order.
+        #[track_caller]
+        fn advance_till(&mut self, breakpoints: impl IntoIterator<Item = Breakpoint>) {
+            for breakpoint in breakpoints {
+                let b = self.advance();
+                assert_eq!(
+                    b, breakpoint,
+                    "Was expecting the breakpoint `{:?}` but instead got `{:?}`.",
+                    breakpoint, b
+                );
             }
+        }
+
+        /// Wait for `n` successful batches.
+        #[track_caller]
+        fn advance_n_successful_batches(&mut self, n: usize) {
+            for _ in 0..n {
+                self.advance_one_successful_batch();
+            }
+        }
+
+        /// Wait for `n` failed batches.
+        #[track_caller]
+        fn advance_n_failed_batches(&mut self, n: usize) {
+            for _ in 0..n {
+                self.advance_one_failed_batch();
+            }
+        }
+
+        // Wait for one successful batch.
+        #[track_caller]
+        fn advance_one_successful_batch(&mut self) {
+            self.advance_till([Start, BatchCreated]);
+            loop {
+                match self.advance() {
+                    // the process_batch function can call itself recursively, thus we need to
+                    // accept as may InsideProcessBatch as possible before moving to the next state.
+                    InsideProcessBatch => (),
+                    // the batch went successfully, we can stop the loop and go on with the next states.
+                    ProcessBatchSucceeded => break,
+                    AbortedIndexation => panic!("The batch was aborted."),
+                    ProcessBatchFailed => panic!("The batch failed."),
+                    breakpoint => panic!("Encountered an impossible breakpoint `{:?}`, this is probably an issue with the test suite.", breakpoint),
+                }
+            }
+
+            self.advance_till([AfterProcessing]);
+        }
+
+        // Wait for one failed batch.
+        #[track_caller]
+        fn advance_one_failed_batch(&mut self) {
+            self.advance_till([Start, BatchCreated]);
+            loop {
+                match self.advance() {
+                    // the process_batch function can call itself recursively, thus we need to
+                    // accept as may InsideProcessBatch as possible before moving to the next state.
+                    InsideProcessBatch => (),
+                    // the batch went failed, we can stop the loop and go on with the next states.
+                    ProcessBatchFailed => break,
+                    ProcessBatchSucceeded => panic!("The batch succeeded. (and it wasn't supposed to sorry)"),
+                    AbortedIndexation => panic!("The batch was aborted."),
+                    breakpoint => panic!("Encountered an impossible breakpoint `{:?}`, this is probably an issue with the test suite.", breakpoint),
+                }
+            }
+            self.advance_till([AfterProcessing]);
         }
     }
 
     #[test]
     fn register() {
         // In this test, the handle doesn't make any progress, we only check that the tasks are registered
-        let (index_scheduler, _handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut _handle) = IndexScheduler::test(true, vec![]);
 
         let kinds = [
             index_creation_task("catto", "mouse"),
@@ -1230,109 +1358,100 @@ mod tests {
             assert_eq!(task.kind.as_kind(), k);
         }
 
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "everything_is_succesfully_registered");
     }
 
     #[test]
     fn insert_task_while_another_task_is_processing() {
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         index_scheduler.register(index_creation_task("index_a", "id")).unwrap();
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
-        handle.wait_till(Breakpoint::BatchCreated);
-        index_scheduler.assert_internally_consistent();
+        handle.advance_till([Start, BatchCreated]);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_batch_creation");
 
         // while the task is processing can we register another task?
         index_scheduler.register(index_creation_task("index_b", "id")).unwrap();
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
 
         index_scheduler
             .register(KindWithContent::IndexDeletion { index_uid: S("index_a") })
             .unwrap();
-        index_scheduler.assert_internally_consistent();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_third_task");
     }
 
     /// We send a lot of tasks but notify the tasks scheduler only once as
     /// we send them very fast, we must make sure that they are all processed.
     #[test]
     fn process_tasks_inserted_without_new_signal() {
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         index_scheduler
             .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
             .unwrap();
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
         index_scheduler
             .register(KindWithContent::IndexCreation { index_uid: S("cattos"), primary_key: None })
             .unwrap();
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
 
         index_scheduler
             .register(KindWithContent::IndexDeletion { index_uid: S("doggos") })
             .unwrap();
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_third_task");
 
-        handle.wait_till(Breakpoint::Start);
-        index_scheduler.assert_internally_consistent();
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "processed_the_first_task");
 
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "processed_the_second_task");
 
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
-
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "processed_the_third_task");
     }
 
     #[test]
     fn process_tasks_without_autobatching() {
-        let (index_scheduler, handle) = IndexScheduler::test(false, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(false, vec![]);
 
         index_scheduler
             .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
             .unwrap();
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
         index_scheduler
             .register(KindWithContent::DocumentClear { index_uid: S("doggos") })
             .unwrap();
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
 
         index_scheduler
             .register(KindWithContent::DocumentClear { index_uid: S("doggos") })
             .unwrap();
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_third_task");
 
         index_scheduler
             .register(KindWithContent::DocumentClear { index_uid: S("doggos") })
             .unwrap();
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_fourth_task");
 
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "first");
 
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second");
 
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "third");
 
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "fourth");
     }
 
     #[test]
     fn task_deletion_undeleteable() {
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
         let (file1, documents_count1) = sample_documents(&index_scheduler, 1, 1);
@@ -1360,21 +1479,16 @@ mod tests {
                 tasks: RoaringBitmap::from_iter([0, 1]),
             })
             .unwrap();
-        index_scheduler.assert_internally_consistent();
-
         // again, no progress made at all, but one more task is registered
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "task_deletion_enqueued");
 
         // now we create the first batch
-        handle.wait_till(Breakpoint::BatchCreated);
-        index_scheduler.assert_internally_consistent();
+        handle.advance_till([Start, BatchCreated]);
 
         // the task deletion should now be "processing"
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "task_deletion_processing");
 
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
-
+        handle.advance_till([InsideProcessBatch, ProcessBatchSucceeded, AfterProcessing]);
         // after the task deletion is processed, no task should actually have been deleted,
         // because the tasks with ids 0 and 1 were still "enqueued", and thus undeleteable
         // the "task deletion" task should be marked as "succeeded" and, in its details, the
@@ -1384,7 +1498,7 @@ mod tests {
 
     #[test]
     fn task_deletion_deleteable() {
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
         let (file1, documents_count1) = sample_documents(&index_scheduler, 1, 1);
@@ -1400,12 +1514,9 @@ mod tests {
             let _ = index_scheduler.register(task).unwrap();
             index_scheduler.assert_internally_consistent();
         }
-
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_tasks_enqueued");
 
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
-
+        handle.advance_one_successful_batch();
         // first addition of documents should be successful
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_tasks_processed");
 
@@ -1416,17 +1527,15 @@ mod tests {
                 tasks: RoaringBitmap::from_iter([0]),
             })
             .unwrap();
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_the_task_deletion");
 
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
-
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "task_deletion_processed");
     }
 
     #[test]
     fn task_deletion_delete_same_task_twice() {
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
         let (file1, documents_count1) = sample_documents(&index_scheduler, 1, 1);
@@ -1442,12 +1551,9 @@ mod tests {
             let _ = index_scheduler.register(task).unwrap();
             index_scheduler.assert_internally_consistent();
         }
-
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_tasks_enqueued");
 
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
-
+        handle.advance_one_successful_batch();
         // first addition of documents should be successful
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_tasks_processed");
 
@@ -1462,7 +1568,7 @@ mod tests {
             index_scheduler.assert_internally_consistent();
         }
         for _ in 0..2 {
-            handle.wait_till(Breakpoint::AfterProcessing);
+            handle.advance_one_successful_batch();
             index_scheduler.assert_internally_consistent();
         }
 
@@ -1471,7 +1577,7 @@ mod tests {
 
     #[test]
     fn document_addition() {
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         let content = r#"
         {
@@ -1494,25 +1600,18 @@ mod tests {
                 allow_index_creation: true,
             })
             .unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_register");
 
-        index_scheduler.assert_internally_consistent();
+        handle.advance_till([Start, BatchCreated]);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_the_batch_creation");
 
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
-
-        handle.wait_till(Breakpoint::BatchCreated);
-        index_scheduler.assert_internally_consistent();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
-
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        handle.advance_till([InsideProcessBatch, ProcessBatchSucceeded, AfterProcessing]);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "once_everything_is_processed");
     }
 
     #[test]
     fn document_addition_and_index_deletion() {
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         let content = r#"
         {
@@ -1523,7 +1622,7 @@ mod tests {
         index_scheduler
             .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
             .unwrap();
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
         let documents_count =
@@ -1540,25 +1639,22 @@ mod tests {
                 allow_index_creation: true,
             })
             .unwrap();
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
 
         index_scheduler
             .register(KindWithContent::IndexDeletion { index_uid: S("doggos") })
             .unwrap();
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_third_task");
 
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
-
-        handle.wait_till(Breakpoint::Start); // The index creation.
-        handle.wait_till(Breakpoint::Start); // before anything happens.
-        handle.wait_till(Breakpoint::Start); // after the execution of the two tasks in a single batch.
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        handle.advance_one_successful_batch(); // The index creation.
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "before_index_creation");
+        handle.advance_one_successful_batch(); // // after the execution of the two tasks in a single batch.
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "both_task_succeeded");
     }
 
     #[test]
     fn do_not_batch_task_of_different_indexes() {
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
         let index_names = ["doggos", "cattos", "girafos"];
 
         for name in index_names {
@@ -1579,7 +1675,7 @@ mod tests {
         }
 
         for _ in 0..(index_names.len() * 2) {
-            handle.wait_till(Breakpoint::AfterProcessing);
+            handle.advance_one_successful_batch();
             index_scheduler.assert_internally_consistent();
         }
 
@@ -1588,7 +1684,7 @@ mod tests {
 
     #[test]
     fn swap_indexes() {
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         let to_enqueue = [
             index_creation_task("a", "id"),
@@ -1602,19 +1698,14 @@ mod tests {
             index_scheduler.assert_internally_consistent();
         }
 
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
-
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
-
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
-
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_tasks_processed");
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "create_a");
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "create_b");
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "create_c");
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "create_d");
 
         index_scheduler
             .register(KindWithContent::IndexSwap {
@@ -1624,31 +1715,28 @@ mod tests {
                 ],
             })
             .unwrap();
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "first_swap_registered");
         index_scheduler
             .register(KindWithContent::IndexSwap {
                 swaps: vec![IndexSwap { indexes: ("a".to_owned(), "c".to_owned()) }],
             })
             .unwrap();
-        index_scheduler.assert_internally_consistent();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "two_swaps_registered");
 
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "first_swap_processed");
 
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_swap_processed");
 
         index_scheduler.register(KindWithContent::IndexSwap { swaps: vec![] }).unwrap();
-        handle.wait_till(Breakpoint::AfterProcessing);
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "third_empty_swap_processed");
     }
 
     #[test]
     fn swap_indexes_errors() {
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         let to_enqueue = [
             index_creation_task("a", "id"),
@@ -1661,8 +1749,8 @@ mod tests {
             let _ = index_scheduler.register(task).unwrap();
             index_scheduler.assert_internally_consistent();
         }
-        handle.advance_n_batch(4);
-        index_scheduler.assert_internally_consistent();
+        handle.advance_n_successful_batches(4);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_the_index_creation");
 
         let first_snap = snapshot_index_scheduler(&index_scheduler);
         snapshot!(first_snap, name: "initial_tasks_processed");
@@ -1677,7 +1765,6 @@ mod tests {
             .unwrap_err();
         snapshot!(format!("{err}"), @"Indexes must be declared only once during a swap. `a`, `b` were specified several times.");
 
-        index_scheduler.assert_internally_consistent();
         let second_snap = snapshot_index_scheduler(&index_scheduler);
         assert_eq!(first_snap, second_snap);
 
@@ -1691,15 +1778,14 @@ mod tests {
                 ],
             })
             .unwrap();
-        handle.advance_n_batch(1);
+        handle.advance_one_failed_batch();
         // Now the first swap should have an error message saying `e` and `f` do not exist
-        index_scheduler.assert_internally_consistent();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "first_swap_failed");
     }
 
     #[test]
     fn document_addition_and_index_deletion_on_unexisting_index() {
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         let content = r#"
         {
@@ -1728,15 +1814,14 @@ mod tests {
 
         snapshot!(snapshot_index_scheduler(&index_scheduler));
 
-        handle.wait_till(Breakpoint::Start); // before anything happens.
-        handle.wait_till(Breakpoint::Start); // after the execution of the two tasks in a single batch.
+        handle.advance_n_successful_batches(1);
 
         snapshot!(snapshot_index_scheduler(&index_scheduler));
     }
 
     #[test]
     fn cancel_enqueued_task() {
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
         file0.persist().unwrap();
@@ -1754,16 +1839,13 @@ mod tests {
         }
 
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_tasks_enqueued");
-
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
-
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "cancel_processed");
     }
 
     #[test]
     fn cancel_succeeded_task() {
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
         file0.persist().unwrap();
@@ -1771,9 +1853,9 @@ mod tests {
         let _ = index_scheduler
             .register(replace_document_import_task("catto", None, 0, documents_count0))
             .unwrap();
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
-        handle.wait_till(Breakpoint::AfterProcessing);
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_task_processed");
 
         index_scheduler
@@ -1783,15 +1865,13 @@ mod tests {
             })
             .unwrap();
 
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
-
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "cancel_processed");
     }
 
     #[test]
     fn cancel_processing_task() {
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
         file0.persist().unwrap();
@@ -1799,9 +1879,9 @@ mod tests {
         let _ = index_scheduler
             .register(replace_document_import_task("catto", None, 0, documents_count0))
             .unwrap();
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
-        handle.wait_till(Breakpoint::InsideProcessBatch);
+        handle.advance_till([Start, BatchCreated, InsideProcessBatch]);
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_task_processing");
 
         index_scheduler
@@ -1810,23 +1890,20 @@ mod tests {
                 tasks: RoaringBitmap::from_iter([0]),
             })
             .unwrap();
-        index_scheduler.assert_internally_consistent();
 
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "cancel_task_registered");
         // Now we check that we can reach the AbortedIndexation error handling
-        handle.wait_till(Breakpoint::AbortedIndexation);
-        index_scheduler.assert_internally_consistent();
+        handle.advance_till([AbortedIndexation]);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "aborted_indexation");
 
-        handle.wait_till(Breakpoint::AfterProcessing);
-
-        index_scheduler.assert_internally_consistent();
-
+        // handle.advance_till([Start, BatchCreated, BeforeProcessing, AfterProcessing]);
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "cancel_processed");
     }
 
     #[test]
     fn cancel_mix_of_tasks() {
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
         file0.persist().unwrap();
@@ -1844,30 +1921,28 @@ mod tests {
             let _ = index_scheduler.register(task).unwrap();
             index_scheduler.assert_internally_consistent();
         }
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "first_task_processed");
 
-        handle.wait_till(Breakpoint::InsideProcessBatch);
+        handle.advance_till([Start, BatchCreated, InsideProcessBatch]);
         index_scheduler
             .register(KindWithContent::TaskCancelation {
                 query: "test_query".to_owned(),
                 tasks: RoaringBitmap::from_iter([0, 1, 2]),
             })
             .unwrap();
-        index_scheduler.assert_internally_consistent();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "processing_second_task_cancel_enqueued");
 
-        handle.wait_till(Breakpoint::AbortedIndexation);
-        index_scheduler.assert_internally_consistent();
+        handle.advance_till([AbortedIndexation]);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "aborted_indexation");
 
-        handle.wait_till(Breakpoint::AfterProcessing);
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "cancel_processed");
     }
 
     #[test]
     fn test_document_replace() {
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         for i in 0..10 {
             let content = format!(
@@ -1897,14 +1972,10 @@ mod tests {
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
-
         snapshot!(snapshot_index_scheduler(&index_scheduler));
 
-        index_scheduler.assert_internally_consistent();
         // everything should be batched together.
-        handle.advance_n_batch(1);
-        index_scheduler.assert_internally_consistent();
-
+        handle.advance_n_successful_batches(1);
         snapshot!(snapshot_index_scheduler(&index_scheduler));
 
         // has everything being pushed successfully in milli?
@@ -1922,7 +1993,7 @@ mod tests {
 
     #[test]
     fn test_document_update() {
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         for i in 0..10 {
             let content = format!(
@@ -1952,14 +2023,10 @@ mod tests {
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
-
         snapshot!(snapshot_index_scheduler(&index_scheduler));
 
-        index_scheduler.assert_internally_consistent();
         // everything should be batched together.
-        handle.advance_n_batch(1);
-        index_scheduler.assert_internally_consistent();
-
+        handle.advance_n_successful_batches(1);
         snapshot!(snapshot_index_scheduler(&index_scheduler));
 
         // has everything being pushed successfully in milli?
@@ -1977,7 +2044,7 @@ mod tests {
 
     #[test]
     fn test_mixed_document_addition() {
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         for i in 0..10 {
             let method = if i % 2 == 0 { UpdateDocuments } else { ReplaceDocuments };
@@ -2009,17 +2076,14 @@ mod tests {
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_the_10_tasks");
 
         // Only half of the task should've been processed since we can't autobatch replace and update together.
-        handle.advance_n_batch(5);
-        index_scheduler.assert_internally_consistent();
+        handle.advance_n_successful_batches(5);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "five_tasks_processed");
 
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
-
-        handle.advance_n_batch(5);
-        index_scheduler.assert_internally_consistent();
+        handle.advance_n_successful_batches(5);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
         // has everything being pushed successfully in milli?
         let index = index_scheduler.index("doggos").unwrap();
@@ -2036,7 +2100,7 @@ mod tests {
 
     #[test]
     fn test_document_replace_without_autobatching() {
-        let (index_scheduler, handle) = IndexScheduler::test(false, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(false, vec![]);
 
         for i in 0..10 {
             let content = format!(
@@ -2066,20 +2130,15 @@ mod tests {
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_the_10_tasks");
 
         // Nothing should be batched thus half of the tasks are processed.
-        handle.advance_n_batch(5);
-        index_scheduler.assert_internally_consistent();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        handle.advance_n_successful_batches(5);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "five_tasks_processed");
 
         // Everything is processed.
-        handle.advance_n_batch(5);
-        index_scheduler.assert_internally_consistent();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        handle.advance_n_successful_batches(5);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
         // has everything being pushed successfully in milli?
         let index = index_scheduler.index("doggos").unwrap();
@@ -2096,7 +2155,7 @@ mod tests {
 
     #[test]
     fn test_document_update_without_autobatching() {
-        let (index_scheduler, handle) = IndexScheduler::test(false, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(false, vec![]);
 
         for i in 0..10 {
             let content = format!(
@@ -2126,20 +2185,15 @@ mod tests {
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_the_10_tasks");
 
         // Nothing should be batched thus half of the tasks are processed.
-        handle.advance_n_batch(5);
-        index_scheduler.assert_internally_consistent();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        handle.advance_n_successful_batches(5);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "five_tasks_processed");
 
         // Everything is processed.
-        handle.advance_n_batch(5);
-        index_scheduler.assert_internally_consistent();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        handle.advance_n_successful_batches(5);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
         // has everything being pushed successfully in milli?
         let index = index_scheduler.index("doggos").unwrap();
@@ -2169,24 +2223,20 @@ mod tests {
 
     #[test]
     fn query_tasks_from_and_limit() {
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         let kind = index_creation_task("doggo", "bone");
         let _task = index_scheduler.register(kind).unwrap();
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
         let kind = index_creation_task("whalo", "plankton");
         let _task = index_scheduler.register(kind).unwrap();
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
         let kind = index_creation_task("catto", "his_own_vomit");
         let _task = index_scheduler.register(kind).unwrap();
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_third_task");
 
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
-
-        handle.advance_n_batch(3);
-        index_scheduler.assert_internally_consistent();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "finished");
+        handle.advance_n_successful_batches(3);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "processed_all_tasks");
 
         let rtxn = index_scheduler.env.read_txn().unwrap();
         let query = Query { limit: Some(0), ..Default::default() };
@@ -2229,7 +2279,7 @@ mod tests {
     fn query_tasks_simple() {
         let start_time = OffsetDateTime::now_utc();
 
-        let (index_scheduler, handle) =
+        let (index_scheduler, mut handle) =
             IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
 
         let kind = index_creation_task("catto", "mouse");
@@ -2241,7 +2291,7 @@ mod tests {
 
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
 
-        handle.wait_till(Breakpoint::BatchCreated);
+        handle.advance_till([Start, BatchCreated]);
 
         let rtxn = index_scheduler.env.read_txn().unwrap();
 
@@ -2298,7 +2348,14 @@ mod tests {
         // which should exclude the enqueued tasks and include the only processing task
         snapshot!(snapshot_bitmap(&tasks), @"[0,]");
 
-        handle.wait_till(Breakpoint::BatchCreated);
+        handle.advance_till([
+            InsideProcessBatch,
+            InsideProcessBatch,
+            ProcessBatchSucceeded,
+            AfterProcessing,
+            Start,
+            BatchCreated,
+        ]);
 
         let rtxn = index_scheduler.env.read_txn().unwrap();
 
@@ -2342,7 +2399,14 @@ mod tests {
         snapshot!(snapshot_bitmap(&tasks), @"[]");
 
         // now we make one more batch, the started_at field of the new tasks will be past `second_start_time`
-        handle.wait_till(Breakpoint::BatchCreated);
+        handle.advance_till([
+            InsideProcessBatch,
+            InsideProcessBatch,
+            ProcessBatchSucceeded,
+            AfterProcessing,
+            Start,
+            BatchCreated,
+        ]);
 
         let rtxn = index_scheduler.env.read_txn().unwrap();
 
@@ -2363,7 +2427,7 @@ mod tests {
         // again only return the last task
         snapshot!(snapshot_bitmap(&tasks), @"[2,]");
 
-        handle.wait_till(Breakpoint::AfterProcessing);
+        handle.advance_till([ProcessBatchFailed, AfterProcessing]);
         let rtxn = index_scheduler.read_txn().unwrap();
 
         // now the last task should have failed
@@ -2422,7 +2486,7 @@ mod tests {
 
     #[test]
     fn query_tasks_special_rules() {
-        let (index_scheduler, handle) =
+        let (index_scheduler, mut handle) =
             IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
 
         let kind = index_creation_task("catto", "mouse");
@@ -2440,7 +2504,7 @@ mod tests {
 
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
 
-        handle.wait_till(Breakpoint::BatchCreated);
+        handle.advance_till([Start, BatchCreated]);
 
         let rtxn = index_scheduler.env.read_txn().unwrap();
 
@@ -2487,7 +2551,7 @@ mod tests {
 
     #[test]
     fn query_tasks_canceled_by() {
-        let (index_scheduler, handle) =
+        let (index_scheduler, mut handle) =
             IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
 
         let kind = index_creation_task("catto", "mouse");
@@ -2499,13 +2563,13 @@ mod tests {
         };
         let _task = index_scheduler.register(kind).unwrap();
 
-        handle.advance_n_batch(1);
+        handle.advance_n_successful_batches(1);
         let kind = KindWithContent::TaskCancelation {
             query: "test_query".to_string(),
             tasks: [0, 1, 2, 3].into_iter().collect(),
         };
         let task_cancelation = index_scheduler.register(kind).unwrap();
-        handle.advance_n_batch(1);
+        handle.advance_n_successful_batches(1);
 
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
 
@@ -2527,26 +2591,24 @@ mod tests {
 
     #[test]
     fn fail_in_process_batch_for_index_creation() {
-        let (index_scheduler, handle) =
+        let (index_scheduler, mut handle) =
             IndexScheduler::test(true, vec![(1, FailureLocation::InsideProcessBatch)]);
 
         let kind = index_creation_task("catto", "mouse");
 
         let _task = index_scheduler.register(kind).unwrap();
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_register");
 
-        handle.wait_till(Breakpoint::AfterProcessing);
+        handle.advance_one_failed_batch();
 
         // Still in the first iteration
         assert_eq!(*index_scheduler.run_loop_iteration.read().unwrap(), 1);
-        // No matter what happens in process_batch, the index_scheduler should be internally consistent
-        index_scheduler.assert_internally_consistent();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "index_creation_failed");
     }
 
     #[test]
     fn fail_in_process_batch_for_document_addition() {
-        let (index_scheduler, handle) =
+        let (index_scheduler, mut handle) =
             IndexScheduler::test(true, vec![(1, FailureLocation::InsideProcessBatch)]);
 
         let content = r#"
@@ -2570,23 +2632,21 @@ mod tests {
                 allow_index_creation: true,
             })
             .unwrap();
-        index_scheduler.assert_internally_consistent();
-        handle.wait_till(Breakpoint::BatchCreated);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
+        handle.advance_till([Start, BatchCreated]);
 
         snapshot!(
             snapshot_index_scheduler(&index_scheduler),
             name: "document_addition_batch_created"
         );
 
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
-
+        handle.advance_till([ProcessBatchFailed, AfterProcessing]);
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "document_addition_failed");
     }
 
     #[test]
     fn fail_in_update_task_after_process_batch_success_for_document_addition() {
-        let (index_scheduler, handle) = IndexScheduler::test(
+        let (index_scheduler, mut handle) = IndexScheduler::test(
             true,
             vec![(1, FailureLocation::UpdatingTaskAfterProcessBatchSuccess { task_uid: 0 })],
         );
@@ -2612,22 +2672,30 @@ mod tests {
                 allow_index_creation: true,
             })
             .unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
-        // This tests that the index scheduler pauses for one second when an irrecoverable failure occurs
-        let start_time = Instant::now();
-
-        index_scheduler.assert_internally_consistent();
-        handle.wait_till(Breakpoint::Start);
-
-        index_scheduler.assert_internally_consistent();
+        handle.advance_till([Start]);
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "document_addition_succeeded_but_index_scheduler_not_updated");
 
-        handle.wait_till(Breakpoint::AfterProcessing);
-        index_scheduler.assert_internally_consistent();
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_iteration");
+        handle.advance_till([BatchCreated, InsideProcessBatch, ProcessBatchSucceeded]);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_batch_succeeded");
 
-        let test_duration = start_time.elapsed();
-        assert!(test_duration.as_millis() > 1000);
+        // At this point the next time the scheduler will try to progress it should encounter
+        // a critical failure and have to wait for 1s before retrying anything.
+
+        let before_failure = Instant::now();
+        handle.advance_till([Start]);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_failing_to_commit");
+        let failure_duration = before_failure.elapsed();
+        assert!(failure_duration.as_millis() > 1000);
+
+        handle.advance_till([
+            BatchCreated,
+            InsideProcessBatch,
+            ProcessBatchSucceeded,
+            AfterProcessing,
+        ]);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "task_successfully_processed");
     }
 
     #[test]
@@ -2636,7 +2704,7 @@ mod tests {
         // the right to create an index while there is no index currently.
         // Thus, everything should be batched together and a IndexDoesNotExists
         // error should be throwed.
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         for i in 0..10 {
             let content = format!(
@@ -2666,14 +2734,17 @@ mod tests {
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_the_10_tasks");
 
         // Everything should be batched together.
-        handle.advance_n_batch(1);
-        index_scheduler.assert_internally_consistent();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        handle.advance_till([
+            Start,
+            BatchCreated,
+            InsideProcessBatch,
+            ProcessBatchFailed,
+            AfterProcessing,
+        ]);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_processing_the_10_tasks");
 
         // The index should not exists.
         snapshot!(format!("{}", index_scheduler.index("doggos").map(|_| ()).unwrap_err()), @"Index `doggos` not found.");
@@ -2685,7 +2756,7 @@ mod tests {
         // the right to create an index while there is no index currently.
         // Since the autobatching is disabled, every tasks should be processed
         // sequentially and throw an IndexDoesNotExists.
-        let (index_scheduler, handle) = IndexScheduler::test(false, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(false, vec![]);
 
         for i in 0..10 {
             let content = format!(
@@ -2715,20 +2786,15 @@ mod tests {
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_the_10_tasks");
 
         // Nothing should be batched thus half of the tasks are processed.
-        handle.advance_n_batch(5);
-        index_scheduler.assert_internally_consistent();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        handle.advance_n_failed_batches(5);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "five_tasks_processed");
 
         // Everything is processed.
-        handle.advance_n_batch(5);
-        index_scheduler.assert_internally_consistent();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        handle.advance_n_failed_batches(5);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
         // The index should not exists.
         snapshot!(format!("{}", index_scheduler.index("doggos").map(|_| ()).unwrap_err()), @"Index `doggos` not found.");
@@ -2740,15 +2806,15 @@ mod tests {
         // the right to create an index while there is already an index.
         // Thus, everything should be batched together and no error should be
         // throwed.
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         // Create the index.
         index_scheduler
             .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
             .unwrap();
-        index_scheduler.assert_internally_consistent();
-        handle.advance_n_batch(1);
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "processed_the_first_task");
 
         for i in 0..10 {
             let content = format!(
@@ -2778,14 +2844,11 @@ mod tests {
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_the_10_tasks");
 
         // Everything should be batched together.
-        handle.advance_n_batch(1);
-        index_scheduler.assert_internally_consistent();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        handle.advance_n_successful_batches(1);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_processing_the_10_tasks");
 
         // Has everything being pushed successfully in milli?
         let index = index_scheduler.index("doggos").unwrap();
@@ -2806,14 +2869,15 @@ mod tests {
         // the right to create an index while there is no index currently.
         // Since the autobatching is disabled, every tasks should be processed
         // sequentially and throw an IndexDoesNotExists.
-        let (index_scheduler, handle) = IndexScheduler::test(false, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(false, vec![]);
 
         // Create the index.
         index_scheduler
             .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
             .unwrap();
-        handle.advance_n_batch(1);
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "processed_the_first_task");
 
         for i in 0..10 {
             let content = format!(
@@ -2843,20 +2907,15 @@ mod tests {
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_the_10_tasks");
 
         // Nothing should be batched thus half of the tasks are processed.
-        handle.advance_n_batch(5);
-        index_scheduler.assert_internally_consistent();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        handle.advance_n_successful_batches(5);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "five_tasks_processed");
 
         // Everything is processed.
-        handle.advance_n_batch(5);
-        index_scheduler.assert_internally_consistent();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        handle.advance_n_successful_batches(5);
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
         // Has everything being pushed successfully in milli?
         let index = index_scheduler.index("doggos").unwrap();
@@ -2877,14 +2936,15 @@ mod tests {
         // - The index already exists
         // - The first document addition don't have the right to create an index
         //   can it batch with the other one?
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         // Create the index.
         index_scheduler
             .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
             .unwrap();
-        handle.advance_n_batch(1);
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "processed_the_first_task");
 
         for i in 0..10 {
             let content = format!(
@@ -2915,14 +2975,11 @@ mod tests {
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_the_10_tasks");
 
         // Everything should be batched together.
-        handle.advance_n_batch(1);
-        index_scheduler.assert_internally_consistent();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
         // Has everything being pushed successfully in milli?
         let index = index_scheduler.index("doggos").unwrap();
@@ -2944,7 +3001,7 @@ mod tests {
         // - The first document addition don't have the right to create an index
         // - The second do. They should not batch together.
         // - The second should batch with everything else as it's going to create an index.
-        let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         for i in 0..10 {
             let content = format!(
@@ -2975,20 +3032,15 @@ mod tests {
                 .unwrap();
             index_scheduler.assert_internally_consistent();
         }
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_the_10_tasks");
 
         // A first batch should be processed with only the first documentAddition that's going to fail.
-        handle.advance_n_batch(1);
-        index_scheduler.assert_internally_consistent();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        handle.advance_one_failed_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "only_first_task_failed");
 
         // Everything else should be batched together.
-        handle.advance_n_batch(1);
-        index_scheduler.assert_internally_consistent();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler));
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
         // Has everything being pushed successfully in milli?
         let index = index_scheduler.index("doggos").unwrap();
@@ -3005,20 +3057,19 @@ mod tests {
 
     #[test]
     fn panic_in_process_batch_for_index_creation() {
-        let (index_scheduler, handle) =
+        let (index_scheduler, mut handle) =
             IndexScheduler::test(true, vec![(1, FailureLocation::PanicInsideProcessBatch)]);
 
         let kind = index_creation_task("catto", "mouse");
 
         let _task = index_scheduler.register(kind).unwrap();
-        index_scheduler.assert_internally_consistent();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
-        handle.wait_till(Breakpoint::AfterProcessing);
+        handle.advance_till([Start, BatchCreated, ProcessBatchFailed, AfterProcessing]);
 
         // Still in the first iteration
         assert_eq!(*index_scheduler.run_loop_iteration.read().unwrap(), 1);
         // No matter what happens in process_batch, the index_scheduler should be internally consistent
-        index_scheduler.assert_internally_consistent();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "index_creation_failed");
     }
 }

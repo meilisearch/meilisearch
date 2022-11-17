@@ -10,6 +10,8 @@ use crate::index_mapper::IndexMapper;
 use crate::{IndexScheduler, Kind, Status, BEI128};
 
 pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
+    scheduler.assert_internally_consistent();
+
     let IndexScheduler {
         autobatching_enabled,
         must_stop_processing: _,

@@ -1,6 +1,5 @@
 ---
 source: index-scheduler/src/lib.rs
-assertion_line: 2670
 ---
 ### Autobatching Enabled = true
 ### Processing Tasks:
