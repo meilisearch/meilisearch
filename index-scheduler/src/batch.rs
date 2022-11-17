@@ -535,7 +535,7 @@ impl IndexScheduler {
                     Some(Details::TaskCancelation {
                         matched_tasks: _,
                         canceled_tasks,
-                        original_filters: _,
+                        original_filter: _,
                     }) => {
                         *canceled_tasks = Some(canceled_tasks_content_uuids.len() as u64);
                     }
@@ -579,7 +579,7 @@ impl IndexScheduler {
                     Some(Details::TaskDeletion {
                         matched_tasks: _,
                         deleted_tasks,
-                        original_filters: _,
+                        original_filter: _,
                     }) => {
                         *deleted_tasks = Some(deleted_tasks_count);
                     }

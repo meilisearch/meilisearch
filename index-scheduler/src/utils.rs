@@ -457,17 +457,13 @@ impl IndexScheduler {
                             assert_ne!(status, Status::Succeeded);
                         }
                     }
-                    Details::TaskCancelation {
-                        matched_tasks,
-                        canceled_tasks,
-                        original_filters,
-                    } => {
+                    Details::TaskCancelation { matched_tasks, canceled_tasks, original_filter } => {
                         if let Some(canceled_tasks) = canceled_tasks {
                             assert_eq!(status, Status::Succeeded);
                             assert!(canceled_tasks <= matched_tasks);
                             match &kind {
                                 KindWithContent::TaskCancelation { query, tasks } => {
-                                    assert_eq!(query, &original_filters);
+                                    assert_eq!(query, &original_filter);
                                     assert_eq!(tasks.len(), matched_tasks);
                                 }
                                 _ => panic!(),
@@ -476,13 +472,13 @@ impl IndexScheduler {
                             assert_ne!(status, Status::Succeeded);
                         }
                     }
-                    Details::TaskDeletion { matched_tasks, deleted_tasks, original_filters } => {
+                    Details::TaskDeletion { matched_tasks, deleted_tasks, original_filter } => {
                         if let Some(deleted_tasks) = deleted_tasks {
                             assert_eq!(status, Status::Succeeded);
                             assert!(deleted_tasks <= matched_tasks);
                             match &kind {
                                 KindWithContent::TaskDeletion { query, tasks } => {
-                                    assert_eq!(query, &original_filters);
+                                    assert_eq!(query, &original_filter);
                                     assert_eq!(tasks.len(), matched_tasks);
                                 }
                                 _ => panic!(),
