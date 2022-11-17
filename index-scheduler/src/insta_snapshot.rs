@@ -184,16 +184,16 @@ fn snapshot_details(d: &Details) -> String {
         Details::TaskCancelation {
             matched_tasks,
             canceled_tasks,
-            original_filters,
+            original_filter,
         } => {
-            format!("{{ matched_tasks: {matched_tasks:?}, canceled_tasks: {canceled_tasks:?}, original_filters: {original_filters:?} }}")
+            format!("{{ matched_tasks: {matched_tasks:?}, canceled_tasks: {canceled_tasks:?}, original_filter: {original_filter:?} }}")
         }
         Details::TaskDeletion {
             matched_tasks,
             deleted_tasks,
-            original_filters,
+            original_filter,
         } => {
-            format!("{{ matched_tasks: {matched_tasks:?}, deleted_tasks: {deleted_tasks:?}, original_filters: {original_filters:?} }}")
+            format!("{{ matched_tasks: {matched_tasks:?}, deleted_tasks: {deleted_tasks:?}, original_filter: {original_filter:?} }}")
         },
         Details::Dump { dump_uid } => {
             format!("{{ dump_uid: {dump_uid:?} }}")

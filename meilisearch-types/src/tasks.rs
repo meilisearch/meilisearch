@@ -217,12 +217,12 @@ impl KindWithContent {
             KindWithContent::TaskCancelation { query, tasks } => Some(Details::TaskCancelation {
                 matched_tasks: tasks.len(),
                 canceled_tasks: None,
-                original_filters: query.clone(),
+                original_filter: query.clone(),
             }),
             KindWithContent::TaskDeletion { query, tasks } => Some(Details::TaskDeletion {
                 matched_tasks: tasks.len(),
                 deleted_tasks: None,
-                original_filters: query.clone(),
+                original_filter: query.clone(),
             }),
             KindWithContent::DumpCreation { .. } => None,
             KindWithContent::SnapshotCreation => None,
@@ -260,12 +260,12 @@ impl KindWithContent {
             KindWithContent::TaskCancelation { query, tasks } => Some(Details::TaskCancelation {
                 matched_tasks: tasks.len(),
                 canceled_tasks: Some(0),
-                original_filters: query.clone(),
+                original_filter: query.clone(),
             }),
             KindWithContent::TaskDeletion { query, tasks } => Some(Details::TaskDeletion {
                 matched_tasks: tasks.len(),
                 deleted_tasks: Some(0),
-                original_filters: query.clone(),
+                original_filter: query.clone(),
             }),
             KindWithContent::DumpCreation { .. } => None,
             KindWithContent::SnapshotCreation => None,
@@ -298,12 +298,12 @@ impl From<&KindWithContent> for Option<Details> {
             KindWithContent::TaskCancelation { query, tasks } => Some(Details::TaskCancelation {
                 matched_tasks: tasks.len(),
                 canceled_tasks: None,
-                original_filters: query.clone(),
+                original_filter: query.clone(),
             }),
             KindWithContent::TaskDeletion { query, tasks } => Some(Details::TaskDeletion {
                 matched_tasks: tasks.len(),
                 deleted_tasks: None,
-                original_filters: query.clone(),
+                original_filter: query.clone(),
             }),
             KindWithContent::DumpCreation { dump_uid, .. } => {
                 Some(Details::Dump { dump_uid: dump_uid.clone() })
@@ -468,8 +468,8 @@ pub enum Details {
     IndexInfo { primary_key: Option<String> },
     DocumentDeletion { matched_documents: usize, deleted_documents: Option<u64> },
     ClearAll { deleted_documents: Option<u64> },
-    TaskCancelation { matched_tasks: u64, canceled_tasks: Option<u64>, original_filters: String },
-    TaskDeletion { matched_tasks: u64, deleted_tasks: Option<u64>, original_filters: String },
+    TaskCancelation { matched_tasks: u64, canceled_tasks: Option<u64>, original_filter: String },
+    TaskDeletion { matched_tasks: u64, deleted_tasks: Option<u64>, original_filter: String },
     Dump { dump_uid: String },
     IndexSwap { swaps: Vec<IndexSwap> },
 }
@@ -557,11 +557,11 @@ mod tests {
         let details = Details::TaskDeletion {
             matched_tasks: 1,
             deleted_tasks: None,
-            original_filters: "hello".to_owned(),
+            original_filter: "hello".to_owned(),
         };
         let serialised = SerdeJson::<Details>::bytes_encode(&details).unwrap();
         let deserialised = SerdeJson::<Details>::bytes_decode(&serialised).unwrap();
-        meili_snap::snapshot!(format!("{:?}", details), @r###"TaskDeletion { matched_tasks: 1, deleted_tasks: None, original_filters: "hello" }"###);
-        meili_snap::snapshot!(format!("{:?}", deserialised), @r###"TaskDeletion { matched_tasks: 1, deleted_tasks: None, original_filters: "hello" }"###);
+        meili_snap::snapshot!(format!("{:?}", details), @r###"TaskDeletion { matched_tasks: 1, deleted_tasks: None, original_filter: "hello" }"###);
+        meili_snap::snapshot!(format!("{:?}", deserialised), @r###"TaskDeletion { matched_tasks: 1, deleted_tasks: None, original_filter: "hello" }"###);
     }
 }
