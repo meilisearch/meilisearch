@@ -12,7 +12,7 @@ use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
 };
 use crate::heed_codec::ByteSliceRefCodec;
-use crate::update::index_documents::{create_writer, writer_into_reader};
+use crate::update::index_documents::{create_writer, valid_lmdb_key, writer_into_reader};
 use crate::{CboRoaringBitmapCodec, FieldId, Index, Result};
 
 /// Algorithm to insert elememts into the `facet_id_(string/f64)_docids` databases
@@ -142,6 +142,9 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
             let mut database = self.db.iter_mut(wtxn)?.remap_types::<ByteSlice, ByteSlice>();
             let mut cursor = new_data.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
+                if !valid_lmdb_key(key) {
+                    continue;
+                }
                 buffer.clear();
                 // the group size for level 0
                 buffer.push(1);
@@ -155,6 +158,9 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
 
             let mut cursor = new_data.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
+                if !valid_lmdb_key(key) {
+                    continue;
+                }
                 // the value is a CboRoaringBitmap, but I still need to prepend the
                 // group size for level 0 (= 1) to it
                 buffer.clear();
