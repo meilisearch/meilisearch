@@ -575,7 +575,7 @@ fn total_memory_bytes() -> Option<u64> {
         let memory_kind = RefreshKind::new().with_memory();
         let mut system = System::new_with_specifics(memory_kind);
         system.refresh_memory();
-        Some(system.total_memory() * 1024) // KiB into bytes
+        Some(system.total_memory())
     } else {
         None
     }
