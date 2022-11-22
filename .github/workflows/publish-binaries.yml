@@ -154,7 +154,6 @@ jobs:
           echo '[target.aarch64-unknown-linux-gnu]' >> ~/.cargo/config
           echo 'linker = "aarch64-linux-gnu-gcc"' >> ~/.cargo/config
           echo 'JEMALLOC_SYS_WITH_LG_PAGE=16' >> $GITHUB_ENV
-          echo RUSTFLAGS="-Clink-arg=-fuse-ld=gold" >> $GITHUB_ENV
 
       - name: Cargo build
         uses: actions-rs/cargo@v1
