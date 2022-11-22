@@ -1251,10 +1251,7 @@ mod tests {
                 }
                 Err(RecvTimeoutError::Disconnected) => panic!("The scheduler crashed."),
             };
-            assert!(
-                b == false,
-                "Found the breakpoint handle in a bad state. Check your test suite"
-            );
+            assert!(!b, "Found the breakpoint handle in a bad state. Check your test suite");
 
             self.last_breakpoint = breakpoint_2;
 
