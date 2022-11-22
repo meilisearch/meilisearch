@@ -136,7 +136,12 @@ impl IndexMapper {
                 }
 
                 // Then we remove the content from disk.
-                if let Err(e) = fs::remove_dir_all(&index_path) {
+                // Retry once if the deletion failed,
+                // sometimes, mounted file systems may not remove some files:
+                // related to https://github.com/meilisearch/meilisearch/issues/1831.
+                if let Err(e) =
+                    fs::remove_dir_all(&index_path).or_else(|_| fs::remove_dir_all(&index_path))
+                {
                     error!(
                         "An error happened when deleting the index {} ({}): {}",
                         index_name, uuid, e
