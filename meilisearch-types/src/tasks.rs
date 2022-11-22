@@ -200,13 +200,12 @@ impl KindWithContent {
                     deleted_documents: None,
                 })
             }
-            KindWithContent::DocumentClear { .. } => {
+            KindWithContent::DocumentClear { .. } | KindWithContent::IndexDeletion { .. } => {
                 Some(Details::ClearAll { deleted_documents: None })
             }
             KindWithContent::SettingsUpdate { new_settings, .. } => {
                 Some(Details::SettingsUpdate { settings: new_settings.clone() })
             }
-            KindWithContent::IndexDeletion { .. } => None,
             KindWithContent::IndexCreation { primary_key, .. }
             | KindWithContent::IndexUpdate { primary_key, .. } => {
                 Some(Details::IndexInfo { primary_key: primary_key.clone() })
