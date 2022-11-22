@@ -8,7 +8,7 @@ source: index-scheduler/src/lib.rs
 ### All Tasks:
 0 {uid: 0, status: enqueued, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "index_a", primary_key: Some("id") }}
 1 {uid: 1, status: enqueued, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "index_b", primary_key: Some("id") }}
-2 {uid: 2, status: enqueued, kind: IndexDeletion { index_uid: "index_a" }}
+2 {uid: 2, status: enqueued, details: { deleted_documents: None }, kind: IndexDeletion { index_uid: "index_a" }}
 ----------------------------------------------------------------------
 ### Status:
 enqueued [0,1,2,]

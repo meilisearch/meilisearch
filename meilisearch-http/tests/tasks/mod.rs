@@ -654,6 +654,9 @@ async fn test_summarized_index_deletion() {
       "status": "failed",
       "type": "indexDeletion",
       "canceledBy": null,
+      "details": {
+        "deletedDocuments": 0
+      },
       "error": {
         "message": "Index `test` not found.",
         "code": "index_not_found",
