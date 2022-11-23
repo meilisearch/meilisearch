@@ -98,7 +98,7 @@ pub struct DetailsView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_filter: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub dump_uid: Option<String>,
+    pub dump_uid: Option<Option<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(flatten)]
     pub settings: Option<Box<Settings<Unchecked>>>,
