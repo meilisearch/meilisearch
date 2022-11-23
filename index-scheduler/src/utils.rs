@@ -487,10 +487,8 @@ impl IndexScheduler {
                             assert_ne!(status, Status::Succeeded);
                         }
                     }
-                    Details::Dump { dump_uid: d1 } => {
-                        assert!(
-                            matches!(&kind, KindWithContent::DumpCreation { dump_uid: d2, keys: _, instance_uid: _ } if &d1 == d2 )
-                        );
+                    Details::Dump { dump_uid: _ } => {
+                        assert_eq!(kind.as_kind(), Kind::DumpCreation);
                     }
                 }
             }

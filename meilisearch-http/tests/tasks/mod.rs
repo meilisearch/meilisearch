@@ -983,7 +983,7 @@ async fn test_summarized_dump_creation() {
     server.wait_task(0).await;
     let (task, _) = server.get_task(0).await;
     assert_json_snapshot!(task, 
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        { ".details.dumpUid" => "[dumpUid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
       "uid": 0,
@@ -991,6 +991,9 @@ async fn test_summarized_dump_creation() {
       "status": "succeeded",
       "type": "dumpCreation",
       "canceledBy": null,
+      "details": {
+        "dumpUid": "[dumpUid]"
+      },
       "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
