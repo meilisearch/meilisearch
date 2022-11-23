@@ -2684,7 +2684,7 @@ mod tests {
         handle.advance_till([Start]);
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_failing_to_commit");
         let failure_duration = before_failure.elapsed();
-        assert!(failure_duration.as_millis() > 1000);
+        assert!(failure_duration.as_millis() >= 1000);
 
         handle.advance_till([
             BatchCreated,
