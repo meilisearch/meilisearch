@@ -344,7 +344,7 @@ make_setting_route!(
                     "attribute_position": setting.as_ref().map(|rr| rr.iter().position(|s| s == "attribute")),
                     "sort_position": setting.as_ref().map(|rr| rr.iter().position(|s| s == "sort")),
                     "exactness_position": setting.as_ref().map(|rr| rr.iter().position(|s| s == "exactness")),
-                    "values": setting.as_ref().map(|rr| rr.iter().filter(|s| !s.contains(':')).collect::<Vec<_>>()),
+                    "values": setting.as_ref().map(|rr| rr.iter().filter(|s| !s.contains(':')).cloned().collect::<Vec<_>>().join(", ")),
                 }
             }),
             Some(req),
@@ -443,7 +443,7 @@ pub async fn update_all(
                 "attribute_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| s == "attribute")),
                 "sort_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| s == "sort")),
                 "exactness_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| s == "exactness")),
-                "values": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().filter(|s| !s.contains(':')).collect::<Vec<_>>()),
+                "values": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().filter(|s| !s.contains(':')).cloned().collect::<Vec<_>>().join(", ")),
             },
             "searchable_attributes": {
                 "total": new_settings.searchable_attributes.as_ref().set().map(|searchable| searchable.len()),
