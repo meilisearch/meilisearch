@@ -338,7 +338,13 @@ make_setting_route!(
             "RankingRules Updated".to_string(),
             json!({
                 "ranking_rules": {
-                    "sort_position": setting.as_ref().map(|sort| sort.iter().position(|s| s == "sort")),
+                    "words_position": setting.as_ref().map(|rr| rr.iter().position(|s| s == "words")),
+                    "typo_position": setting.as_ref().map(|rr| rr.iter().position(|s| s == "typo")),
+                    "proximity_position": setting.as_ref().map(|rr| rr.iter().position(|s| s == "proximity")),
+                    "attribute_position": setting.as_ref().map(|rr| rr.iter().position(|s| s == "attribute")),
+                    "sort_position": setting.as_ref().map(|rr| rr.iter().position(|s| s == "sort")),
+                    "exactness_position": setting.as_ref().map(|rr| rr.iter().position(|s| s == "exactness")),
+                    "values": setting.as_ref().map(|rr| rr.iter().filter(|s| !s.contains(':')).cloned().collect::<Vec<_>>().join(", ")),
                 }
             }),
             Some(req),
@@ -431,7 +437,13 @@ pub async fn update_all(
         "Settings Updated".to_string(),
         json!({
            "ranking_rules": {
-                "sort_position": new_settings.ranking_rules.as_ref().set().map(|sort| sort.iter().position(|s| s == "sort")),
+                "words_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| s == "words")),
+                "typo_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| s == "typo")),
+                "proximity_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| s == "proximity")),
+                "attribute_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| s == "attribute")),
+                "sort_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| s == "sort")),
+                "exactness_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| s == "exactness")),
+                "values": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().filter(|s| !s.contains(':')).cloned().collect::<Vec<_>>().join(", ")),
             },
             "searchable_attributes": {
                 "total": new_settings.searchable_attributes.as_ref().set().map(|searchable| searchable.len()),
