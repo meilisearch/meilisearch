@@ -1,0 +1,39 @@
+---
+source: dump/src/reader/compat/v3_to_v4.rs
+expression: products.settings().unwrap()
+---
+{
+  "displayedAttributes": [
+    "*"
+  ],
+  "searchableAttributes": [
+    "*"
+  ],
+  "filterableAttributes": [],
+  "sortableAttributes": [],
+  "rankingRules": [
+    "words",
+    "typo",
+    "proximity",
+    "attribute",
+    "sort",
+    "exactness"
+  ],
+  "stopWords": [],
+  "synonyms": {
+    "android": [
+      "phone",
+      "smartphone"
+    ],
+    "iphone": [
+      "phone",
+      "smartphone"
+    ],
+    "phone": [
+      "android",
+      "iphone",
+      "smartphone"
+    ]
+  },
+  "distinctAttribute": null
+}

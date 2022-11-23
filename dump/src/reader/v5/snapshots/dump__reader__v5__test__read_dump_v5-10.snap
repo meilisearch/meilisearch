@@ -1,0 +1,74 @@
+---
+source: dump/src/reader/v5/mod.rs
+expression: movies.settings().unwrap()
+---
+{
+  "displayedAttributes": "Reset",
+  "searchableAttributes": "Reset",
+  "filterableAttributes": {
+    "Set": [
+      "genres",
+      "id"
+    ]
+  },
+  "sortableAttributes": {
+    "Set": [
+      "release_date"
+    ]
+  },
+  "rankingRules": {
+    "Set": [
+      "words",
+      "typo",
+      "proximity",
+      "attribute",
+      "sort",
+      "exactness",
+      "release_date:asc"
+    ]
+  },
+  "stopWords": {
+    "Set": []
+  },
+  "synonyms": {
+    "Set": {}
+  },
+  "distinctAttribute": "Reset",
+  "typoTolerance": {
+    "Set": {
+      "enabled": {
+        "Set": true
+      },
+      "minWordSizeForTypos": {
+        "Set": {
+          "oneTypo": {
+            "Set": 5
+          },
+          "twoTypos": {
+            "Set": 9
+          }
+        }
+      },
+      "disableOnWords": {
+        "Set": []
+      },
+      "disableOnAttributes": {
+        "Set": []
+      }
+    }
+  },
+  "faceting": {
+    "Set": {
+      "maxValuesPerFacet": {
+        "Set": 100
+      }
+    }
+  },
+  "pagination": {
+    "Set": {
+      "maxTotalHits": {
+        "Set": 1000
+      }
+    }
+  }
+}
