@@ -119,11 +119,10 @@ impl CompatV5ToV6 {
                             allow_index_creation,
                             settings: Box::new(settings.into()),
                         },
-                        v5::tasks::TaskContent::Dump { uid } => v6::Kind::DumpCreation {
-                            dump_uid: uid,
-                            keys: keys.clone(),
-                            instance_uid,
-                        },
+                        v5::tasks::TaskContent::Dump { uid: _ } => {
+                            // in v6 we compute the dump_uid from the started_at processing time
+                            v6::Kind::DumpCreation { keys: keys.clone(), instance_uid }
+                        }
                     },
                     canceled_by: None,
                     details: task_view.details.map(|details| match details {
@@ -149,7 +148,9 @@ impl CompatV5ToV6 {
                         v5::Details::ClearAll { deleted_documents } => {
                             v6::Details::ClearAll { deleted_documents }
                         }
-                        v5::Details::Dump { dump_uid } => v6::Details::Dump { dump_uid },
+                        v5::Details::Dump { dump_uid } => {
+                            v6::Details::Dump { dump_uid: Some(dump_uid) }
+                        }
                     }),
                     error: task_view.error.map(|e| e.into()),
                     enqueued_at: task_view.enqueued_at,

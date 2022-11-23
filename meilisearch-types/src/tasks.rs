@@ -127,7 +127,6 @@ pub enum KindWithContent {
         tasks: RoaringBitmap,
     },
     DumpCreation {
-        dump_uid: String,
         keys: Vec<Key>,
         instance_uid: Option<InstanceUid>,
     },
@@ -223,7 +222,7 @@ impl KindWithContent {
                 deleted_tasks: None,
                 original_filter: query.clone(),
             }),
-            KindWithContent::DumpCreation { .. } => None,
+            KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
         }
     }
@@ -266,7 +265,7 @@ impl KindWithContent {
                 deleted_tasks: Some(0),
                 original_filter: query.clone(),
             }),
-            KindWithContent::DumpCreation { .. } => None,
+            KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
         }
     }
@@ -304,9 +303,7 @@ impl From<&KindWithContent> for Option<Details> {
                 deleted_tasks: None,
                 original_filter: query.clone(),
             }),
-            KindWithContent::DumpCreation { dump_uid, .. } => {
-                Some(Details::Dump { dump_uid: dump_uid.clone() })
-            }
+            KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
         }
     }
@@ -469,7 +466,7 @@ pub enum Details {
     ClearAll { deleted_documents: Option<u64> },
     TaskCancelation { matched_tasks: u64, canceled_tasks: Option<u64>, original_filter: String },
     TaskDeletion { matched_tasks: u64, deleted_tasks: Option<u64>, original_filter: String },
-    Dump { dump_uid: String },
+    Dump { dump_uid: Option<String> },
     IndexSwap { swaps: Vec<IndexSwap> },
 }
 

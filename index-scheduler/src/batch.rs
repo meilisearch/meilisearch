@@ -36,6 +36,7 @@ use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::{compression, Index, VERSION_FILE_NAME};
 use roaring::RoaringBitmap;
+use time::macros::format_description;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -680,11 +681,9 @@ impl IndexScheduler {
             }
             Batch::Dump(mut task) => {
                 let started_at = OffsetDateTime::now_utc();
-                let (keys, instance_uid, dump_uid) =
-                    if let KindWithContent::DumpCreation { keys, instance_uid, dump_uid } =
-                        &task.kind
-                    {
-                        (keys, instance_uid, dump_uid)
+                let (keys, instance_uid) =
+                    if let KindWithContent::DumpCreation { keys, instance_uid } = &task.kind {
+                        (keys, instance_uid)
                     } else {
                         unreachable!();
                     };
@@ -771,12 +770,17 @@ impl IndexScheduler {
                     index_dumper.settings(&settings)?;
                 }
 
+                let dump_uid = started_at.format(format_description!(
+                    "[year repr:full][month repr:numerical][day padding:zero]-[hour padding:zero][minute padding:zero][second padding:zero][subsecond digits:3]"
+                )).unwrap();
+
                 let path = self.dumps_path.join(format!("{}.dump", dump_uid));
                 let file = File::create(path)?;
                 dump.persist_to(BufWriter::new(file))?;
 
                 // if we reached this step we can tell the scheduler we succeeded to dump ourselves.
                 task.status = Status::Succeeded;
+                task.details = Some(Details::Dump { dump_uid: Some(dump_uid) });
                 Ok(vec![task])
             }
             Batch::IndexOperation { op, must_create_index } => {

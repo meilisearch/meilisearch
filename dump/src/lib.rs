@@ -87,7 +87,7 @@ pub struct TaskDump {
     pub finished_at: Option<OffsetDateTime>,
 }
 
-// A `Kind` specific version made for the dump. If modified you may break the dump.
+// A `Kind` specific version made for the dump. If modified you may break the dump.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum KindDump {
@@ -125,7 +125,6 @@ pub enum KindDump {
         tasks: RoaringBitmap,
     },
     DumpCreation {
-        dump_uid: String,
         keys: Vec<Key>,
         instance_uid: Option<InstanceUid>,
     },
@@ -188,8 +187,8 @@ impl From<KindWithContent> for KindDump {
             KindWithContent::TaskDeletion { query, tasks } => {
                 KindDump::TasksDeletion { query, tasks }
             }
-            KindWithContent::DumpCreation { dump_uid, keys, instance_uid } => {
-                KindDump::DumpCreation { dump_uid, keys, instance_uid }
+            KindWithContent::DumpCreation { keys, instance_uid } => {
+                KindDump::DumpCreation { keys, instance_uid }
             }
             KindWithContent::SnapshotCreation => KindDump::SnapshotCreation,
         }

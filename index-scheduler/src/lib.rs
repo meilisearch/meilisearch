@@ -826,8 +826,8 @@ impl IndexScheduler {
                 KindDump::TasksDeletion { query, tasks } => {
                     KindWithContent::TaskDeletion { query, tasks }
                 }
-                KindDump::DumpCreation { dump_uid, keys, instance_uid } => {
-                    KindWithContent::DumpCreation { dump_uid, keys, instance_uid }
+                KindDump::DumpCreation { keys, instance_uid } => {
+                    KindWithContent::DumpCreation { keys, instance_uid }
                 }
                 KindDump::SnapshotCreation => KindWithContent::SnapshotCreation,
             },
