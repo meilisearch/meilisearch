@@ -450,7 +450,7 @@ impl Search {
         let documents = index.documents(&txn, result.documents_ids)?;
         let mut jsons = Vec::new();
         for (_, obkv) in documents {
-            let json = milli::obkv_to_json(&displayed_fields, &fields_ids_map, obkv)?;
+            let json = milli::obkv_to_json(&displayed_fields, &fields_ids_map, &obkv)?;
             jsons.push(json);
         }
 
