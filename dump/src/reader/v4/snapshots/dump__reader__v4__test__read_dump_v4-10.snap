@@ -1,0 +1,40 @@
+---
+source: dump/src/reader/v4/mod.rs
+expression: movies.settings().unwrap()
+---
+{
+  "displayedAttributes": [
+    "*"
+  ],
+  "searchableAttributes": [
+    "*"
+  ],
+  "filterableAttributes": [
+    "genres",
+    "id"
+  ],
+  "sortableAttributes": [
+    "release_date"
+  ],
+  "rankingRules": [
+    "words",
+    "typo",
+    "proximity",
+    "attribute",
+    "sort",
+    "exactness",
+    "release_date:asc"
+  ],
+  "stopWords": [],
+  "synonyms": {},
+  "distinctAttribute": null,
+  "typoTolerance": {
+    "enabled": true,
+    "minWordSizeForTypos": {
+      "oneTypo": 5,
+      "twoTypos": 9
+    },
+    "disableOnWords": [],
+    "disableOnAttributes": []
+  }
+}

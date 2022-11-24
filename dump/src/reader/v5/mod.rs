@@ -261,7 +261,6 @@ pub(crate) mod test {
     use super::*;
 
     #[test]
-    #[ignore]
     fn read_dump_v5() {
         let dump = File::open("tests/assets/v5.dump").unwrap();
         let dir = TempDir::new().unwrap();
@@ -312,7 +311,7 @@ pub(crate) mod test {
         }
         "###);
 
-        meili_snap::snapshot_hash!(format!("{:#?}", products.settings()), @"b392b928dab63468318b2bdaad844c5a");
+        insta::assert_json_snapshot!(products.settings().unwrap());
         let documents = products.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 10);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"b01c8371aea4c7171af0d4d846a2bdca");
@@ -327,7 +326,7 @@ pub(crate) mod test {
         }
         "###);
 
-        meili_snap::snapshot_hash!(format!("{:#?}", movies.settings()), @"2f881248b7c3623e2ba2885dbf0b2c18");
+        insta::assert_json_snapshot!(movies.settings().unwrap());
         let documents = movies.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 200);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"e962baafd2fbae4cdd14e876053b0c5a");
@@ -342,7 +341,7 @@ pub(crate) mod test {
         }
         "###);
 
-        meili_snap::snapshot_hash!(format!("{:#?}", spells.settings()), @"ade154e63ab713de67919892917d3d9d");
+        insta::assert_json_snapshot!(spells.settings().unwrap());
         let documents = spells.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 10);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"235016433dd04262c7f2da01d1e808ce");

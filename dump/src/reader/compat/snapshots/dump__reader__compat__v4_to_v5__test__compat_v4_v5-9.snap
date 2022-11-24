@@ -1,0 +1,62 @@
+---
+source: dump/src/reader/compat/v4_to_v5.rs
+expression: movies.settings().unwrap()
+---
+{
+  "displayedAttributes": "Reset",
+  "searchableAttributes": "Reset",
+  "filterableAttributes": {
+    "Set": [
+      "genres",
+      "id"
+    ]
+  },
+  "sortableAttributes": {
+    "Set": [
+      "release_date"
+    ]
+  },
+  "rankingRules": {
+    "Set": [
+      "words",
+      "typo",
+      "proximity",
+      "attribute",
+      "sort",
+      "exactness",
+      "release_date:asc"
+    ]
+  },
+  "stopWords": {
+    "Set": []
+  },
+  "synonyms": {
+    "Set": {}
+  },
+  "distinctAttribute": "Reset",
+  "typoTolerance": {
+    "Set": {
+      "enabled": {
+        "Set": true
+      },
+      "minWordSizeForTypos": {
+        "Set": {
+          "oneTypo": {
+            "Set": 5
+          },
+          "twoTypos": {
+            "Set": 9
+          }
+        }
+      },
+      "disableOnWords": {
+        "Set": []
+      },
+      "disableOnAttributes": {
+        "Set": []
+      }
+    }
+  },
+  "faceting": "NotSet",
+  "pagination": "NotSet"
+}

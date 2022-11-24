@@ -1,0 +1,24 @@
+---
+source: dump/src/reader/compat/v2_to_v3.rs
+expression: movies.settings().unwrap()
+---
+{
+  "displayedAttributes": [
+    "*"
+  ],
+  "searchableAttributes": [
+    "*"
+  ],
+  "filterableAttributes": [],
+  "rankingRules": [
+    "words",
+    "typo",
+    "proximity",
+    "attribute",
+    "exactness",
+    "release_date:asc"
+  ],
+  "stopWords": [],
+  "synonyms": {},
+  "distinctAttribute": null
+}

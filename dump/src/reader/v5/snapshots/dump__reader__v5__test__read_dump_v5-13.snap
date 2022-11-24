@@ -1,0 +1,68 @@
+---
+source: dump/src/reader/v5/mod.rs
+expression: spells.settings().unwrap()
+---
+{
+  "displayedAttributes": "Reset",
+  "searchableAttributes": "Reset",
+  "filterableAttributes": {
+    "Set": []
+  },
+  "sortableAttributes": {
+    "Set": []
+  },
+  "rankingRules": {
+    "Set": [
+      "words",
+      "typo",
+      "proximity",
+      "attribute",
+      "sort",
+      "exactness"
+    ]
+  },
+  "stopWords": {
+    "Set": []
+  },
+  "synonyms": {
+    "Set": {}
+  },
+  "distinctAttribute": "Reset",
+  "typoTolerance": {
+    "Set": {
+      "enabled": {
+        "Set": true
+      },
+      "minWordSizeForTypos": {
+        "Set": {
+          "oneTypo": {
+            "Set": 5
+          },
+          "twoTypos": {
+            "Set": 9
+          }
+        }
+      },
+      "disableOnWords": {
+        "Set": []
+      },
+      "disableOnAttributes": {
+        "Set": []
+      }
+    }
+  },
+  "faceting": {
+    "Set": {
+      "maxValuesPerFacet": {
+        "Set": 100
+      }
+    }
+  },
+  "pagination": {
+    "Set": {
+      "maxTotalHits": {
+        "Set": 1000
+      }
+    }
+  }
+}

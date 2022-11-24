@@ -259,7 +259,6 @@ pub(crate) mod test {
     }
 
     #[test]
-    #[ignore]
     fn test_creating_dump() {
         let file = create_test_dump();
         let mut file = BufReader::new(file);
@@ -296,7 +295,7 @@ pub(crate) mod test {
         insta::assert_json_snapshot!(metadata, { ".dumpDate" => "[date]" }, @r###"
         {
           "dumpVersion": "V6",
-          "dbVersion": "0.29.0",
+          "dbVersion": "0.30.0",
           "dumpDate": "[date]"
         }
         "###);

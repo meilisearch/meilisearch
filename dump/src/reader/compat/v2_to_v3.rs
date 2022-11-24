@@ -381,7 +381,6 @@ pub(crate) mod test {
     use super::*;
 
     #[test]
-    #[ignore]
     fn compat_v2_v3() {
         let dump = File::open("tests/assets/v2.dump").unwrap();
         let dir = TempDir::new().unwrap();
@@ -427,7 +426,7 @@ pub(crate) mod test {
         }
         "###);
 
-        meili_snap::snapshot_hash!(format!("{:#?}", products.settings()), @"54b3d7a0d96de35427d867fa17164a99");
+        insta::assert_json_snapshot!(products.settings().unwrap());
         let documents = products.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 10);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"548284a84de510f71e88e6cdea495cf5");
@@ -442,7 +441,7 @@ pub(crate) mod test {
         }
         "###);
 
-        meili_snap::snapshot_hash!(format!("{:#?}", movies.settings()), @"ae7c5ade2243a553152dab2f354e9095");
+        insta::assert_json_snapshot!(movies.settings().unwrap());
         let documents = movies.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 110);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"d153b5a81d8b3cdcbe1dec270b574022");
@@ -457,7 +456,7 @@ pub(crate) mod test {
         }
         "###);
 
-        meili_snap::snapshot_hash!(format!("{:#?}", movies2.settings()), @"1be82b894556d23953af557b6a328a58");
+        insta::assert_json_snapshot!(movies2.settings().unwrap());
         let documents = movies2.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 0);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"d751713988987e9331980363e24189ce");
@@ -472,7 +471,7 @@ pub(crate) mod test {
         }
         "###);
 
-        meili_snap::snapshot_hash!(format!("{:#?}", spells.settings()), @"1be82b894556d23953af557b6a328a58");
+        insta::assert_json_snapshot!(spells.settings().unwrap());
         let documents = spells.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 10);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"235016433dd04262c7f2da01d1e808ce");

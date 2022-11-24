@@ -1,0 +1,54 @@
+---
+source: dump/src/reader/mod.rs
+expression: products.settings().unwrap()
+---
+{
+  "displayedAttributes": [
+    "*"
+  ],
+  "searchableAttributes": [
+    "*"
+  ],
+  "filterableAttributes": [],
+  "sortableAttributes": [],
+  "rankingRules": [
+    "words",
+    "typo",
+    "proximity",
+    "attribute",
+    "sort",
+    "exactness"
+  ],
+  "stopWords": [],
+  "synonyms": {
+    "android": [
+      "phone",
+      "smartphone"
+    ],
+    "iphone": [
+      "phone",
+      "smartphone"
+    ],
+    "phone": [
+      "android",
+      "iphone",
+      "smartphone"
+    ]
+  },
+  "distinctAttribute": null,
+  "typoTolerance": {
+    "enabled": true,
+    "minWordSizeForTypos": {
+      "oneTypo": 5,
+      "twoTypos": 9
+    },
+    "disableOnWords": [],
+    "disableOnAttributes": []
+  },
+  "faceting": {
+    "maxValuesPerFacet": 100
+  },
+  "pagination": {
+    "maxTotalHits": 1000
+  }
+}
