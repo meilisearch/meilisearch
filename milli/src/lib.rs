@@ -88,7 +88,7 @@ pub fn absolute_from_relative_position(field_id: FieldId, relative: RelativePosi
 pub fn obkv_to_json(
     displayed_fields: &[FieldId],
     fields_ids_map: &FieldsIdsMap,
-    obkv: &obkv::KvReaderU16,
+    obkv: obkv::KvReaderU16,
 ) -> Result<Object> {
     displayed_fields
         .iter()
@@ -106,7 +106,7 @@ pub fn obkv_to_json(
 }
 
 /// Transform every field of a raw obkv store into a JSON Object.
-pub fn all_obkv_to_json(obkv: &obkv::KvReaderU16, fields_ids_map: &FieldsIdsMap) -> Result<Object> {
+pub fn all_obkv_to_json(obkv: obkv::KvReaderU16, fields_ids_map: &FieldsIdsMap) -> Result<Object> {
     let all_keys = obkv.iter().map(|(k, _v)| k).collect::<Vec<_>>();
     obkv_to_json(all_keys.as_slice(), fields_ids_map, obkv)
 }
@@ -309,7 +309,7 @@ mod tests {
             "field2": 4321,
         });
         let expected = expected.as_object().unwrap();
-        let actual = all_obkv_to_json(&obkv, &fields_ids_map).unwrap();
+        let actual = all_obkv_to_json(obkv, &fields_ids_map).unwrap();
 
         assert_eq!(&actual, expected);
     }

@@ -920,7 +920,7 @@ mod tests {
         let fidmap = index.fields_ids_map(&rtxn).unwrap();
         for document in index.all_documents(&rtxn).unwrap() {
             let document = document.unwrap();
-            let json = crate::obkv_to_json(&fidmap.ids().collect::<Vec<_>>(), &fidmap, &document.1)
+            let json = crate::obkv_to_json(&fidmap.ids().collect::<Vec<_>>(), &fidmap, document.1)
                 .unwrap();
             println!("json: {:?}", json);
         }
