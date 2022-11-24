@@ -349,6 +349,16 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_searchable(&mut self) -> Result<bool> {
         match self.searchable_fields {
             Setting::Set(ref fields) => {
+                let did_change = self
+                    .index
+                    .searchable_fields(self.wtxn)?
+                    .map(|f| f.into_iter().map(String::from).collect::<Vec<_>>())
+                    .map(|old_fields| fields != &old_fields)
+                    .unwrap_or(true); // if old_fields was None before, it was changed
+                if !did_change {
+                    return Ok(false);
+                }
+
                 // every time the searchable attributes are updated, we need to update the
                 // ids for any settings that uses the facets. (distinct_fields, filterable_fields).
                 let old_fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
@@ -376,7 +386,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 Ok(true)
             }
             Setting::Reset => Ok(self.index.delete_all_searchable_fields(self.wtxn)?),
-            Setting::NotSet => return Ok(false),
+            Setting::NotSet => Ok(false),
         }
     }
 
