@@ -1434,12 +1434,13 @@ async fn error_access_api_key_routes_no_master_key_set() {
 
     server.use_api_key("MASTER_KEY");
 
-    let expected_response = json!({"message": "The provided API key is invalid.",
-        "code": "invalid_api_key",
+    let expected_response = json!({
+        "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
+        "code": "missing_master_key",
         "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+        "link": "https://docs.meilisearch.com/errors#missing_master_key"
     });
-    let expected_code = 403;
+    let expected_code = 401;
 
     let (response, code) = server.add_api_key(json!({})).await;
 
