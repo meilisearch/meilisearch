@@ -1395,14 +1395,14 @@ mod test {
     }
     unsafe impl GlobalAlloc for CountingAlloc {
         unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
-            self.allocated.fetch_add(layout.size() as i64, atomic::Ordering::SeqCst);
-            self.resident.fetch_add(layout.size() as i64, atomic::Ordering::SeqCst);
+            self.allocated.fetch_add(layout.size() as i64, atomic::Ordering::Relaxed);
+            self.resident.fetch_add(layout.size() as i64, atomic::Ordering::Relaxed);
 
             System.alloc(layout)
         }
 
         unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
-            self.resident.fetch_sub(layout.size() as i64, atomic::Ordering::SeqCst);
+            self.resident.fetch_sub(layout.size() as i64, atomic::Ordering::Relaxed);
             System.dealloc(ptr, layout)
         }
     }
