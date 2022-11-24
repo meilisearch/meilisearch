@@ -503,9 +503,9 @@ mod tests {
 
     fn matching_words() -> MatchingWords {
         let all = vec![
-            Rc::new(MatchingWord::new("split".to_string(), 0, false)),
-            Rc::new(MatchingWord::new("the".to_string(), 0, false)),
-            Rc::new(MatchingWord::new("world".to_string(), 1, true)),
+            Rc::new(MatchingWord::new("split".to_string(), 0, false).unwrap()),
+            Rc::new(MatchingWord::new("the".to_string(), 0, false).unwrap()),
+            Rc::new(MatchingWord::new("world".to_string(), 1, true).unwrap()),
         ];
         let matching_words = vec![
             (vec![all[0].clone()], vec![0]),
@@ -595,8 +595,8 @@ mod tests {
     #[test]
     fn highlight_unicode() {
         let all = vec![
-            Rc::new(MatchingWord::new("wessfali".to_string(), 1, true)),
-            Rc::new(MatchingWord::new("world".to_string(), 1, true)),
+            Rc::new(MatchingWord::new("wessfali".to_string(), 1, true).unwrap()),
+            Rc::new(MatchingWord::new("world".to_string(), 1, true).unwrap()),
         ];
         let matching_words = vec![(vec![all[0].clone()], vec![0]), (vec![all[1].clone()], vec![1])];
 
@@ -832,12 +832,12 @@ mod tests {
     #[test]
     fn partial_matches() {
         let all = vec![
-            Rc::new(MatchingWord::new("the".to_string(), 0, false)),
-            Rc::new(MatchingWord::new("t".to_string(), 0, false)),
-            Rc::new(MatchingWord::new("he".to_string(), 0, false)),
-            Rc::new(MatchingWord::new("door".to_string(), 0, false)),
-            Rc::new(MatchingWord::new("do".to_string(), 0, false)),
-            Rc::new(MatchingWord::new("or".to_string(), 0, false)),
+            Rc::new(MatchingWord::new("the".to_string(), 0, false).unwrap()),
+            Rc::new(MatchingWord::new("t".to_string(), 0, false).unwrap()),
+            Rc::new(MatchingWord::new("he".to_string(), 0, false).unwrap()),
+            Rc::new(MatchingWord::new("door".to_string(), 0, false).unwrap()),
+            Rc::new(MatchingWord::new("do".to_string(), 0, false).unwrap()),
+            Rc::new(MatchingWord::new("or".to_string(), 0, false).unwrap()),
         ];
         let matching_words = vec![
             (vec![all[0].clone()], vec![0]),

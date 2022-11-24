@@ -7,11 +7,11 @@ use charabia::{SeparatorKind, Token, TokenKind, TokenizerBuilder};
 use roaring::RoaringBitmap;
 use serde_json::Value;
 
-use super::helpers::{
-    concat_u32s_array, create_sorter, sorter_into_reader, GrenadParameters, MAX_WORD_LENGTH,
-};
+use super::helpers::{concat_u32s_array, create_sorter, sorter_into_reader, GrenadParameters};
 use crate::error::{InternalError, SerializationError};
-use crate::{absolute_from_relative_position, FieldId, Result, MAX_POSITION_PER_ATTRIBUTE};
+use crate::{
+    absolute_from_relative_position, FieldId, Result, MAX_POSITION_PER_ATTRIBUTE, MAX_WORD_LENGTH,
+};
 
 /// Extracts the word and positions where this word appear and
 /// prefixes it by the document id.

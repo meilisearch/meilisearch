@@ -8,6 +8,7 @@ use charabia::Token;
 use levenshtein_automata::{Distance, DFA};
 
 use crate::search::build_dfa;
+use crate::MAX_WORD_LENGTH;
 
 type IsPrefix = bool;
 
@@ -16,6 +17,17 @@ type IsPrefix = bool;
 #[derive(Default)]
 pub struct MatchingWords {
     inner: Vec<(Vec<Rc<MatchingWord>>, Vec<PrimitiveWordId>)>,
+}
+
+impl fmt::Debug for MatchingWords {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "[")?;
+        for (matching_words, primitive_word_id) in self.inner.iter() {
+            writeln!(f, "({matching_words:?}, {primitive_word_id:?})")?;
+        }
+        writeln!(f, "]")?;
+        Ok(())
+    }
 }
 
 impl MatchingWords {
@@ -93,10 +105,13 @@ impl PartialEq for MatchingWord {
 }
 
 impl MatchingWord {
-    pub fn new(word: String, typo: u8, prefix: IsPrefix) -> Self {
+    pub fn new(word: String, typo: u8, prefix: IsPrefix) -> Option<Self> {
+        if word.len() > MAX_WORD_LENGTH {
+            return None;
+        }
         let dfa = build_dfa(&word, typo, prefix);
 
-        Self { dfa, word, typo, prefix }
+        Some(Self { dfa, word, typo, prefix })
     }
 
     /// Returns the lenght in chars of the match in case of the token matches the term.
@@ -335,9 +350,9 @@ mod tests {
     #[test]
     fn matching_words() {
         let all = vec![
-            Rc::new(MatchingWord::new("split".to_string(), 1, true)),
-            Rc::new(MatchingWord::new("this".to_string(), 0, false)),
-            Rc::new(MatchingWord::new("world".to_string(), 1, true)),
+            Rc::new(MatchingWord::new("split".to_string(), 1, true).unwrap()),
+            Rc::new(MatchingWord::new("this".to_string(), 0, false).unwrap()),
+            Rc::new(MatchingWord::new("world".to_string(), 1, true).unwrap()),
         ];
         let matching_words = vec![
             (vec![all[0].clone()], vec![0]),

@@ -550,21 +550,20 @@ struct MatchingWordCache {
     map: HashMap<(String, u8, bool), Rc<MatchingWord>>,
 }
 impl MatchingWordCache {
-    fn insert(&mut self, word: String, typo: u8, prefix: bool) -> Rc<MatchingWord> {
-        // Toggle the (un)commented code to switch between cached and non-cached
-        // implementations.
-
-        // self.all.push(MatchingWord::new(word, typo, prefix));
-        // self.all.len() - 1
+    fn insert(&mut self, word: String, typo: u8, prefix: bool) -> Option<Rc<MatchingWord>> {
         match self.map.entry((word.clone(), typo, prefix)) {
-            Entry::Occupied(idx) => idx.get().clone(),
+            Entry::Occupied(idx) => Some(idx.get().clone()),
             Entry::Vacant(vacant) => {
-                let matching_word = Rc::new(MatchingWord::new(word, typo, prefix));
+                let matching_word = Rc::new(MatchingWord::new(word, typo, prefix)?);
                 self.all.push(matching_word.clone());
                 vacant.insert(matching_word.clone());
-                matching_word
+                Some(matching_word)
             }
         }
+        // To deactivate the cache, for testing purposes, use the following instead:
+        // let matching_word = Rc::new(MatchingWord::new(word, typo, prefix)?);
+        // self.all.push(matching_word.clone());
+        // Some(matching_word)
     }
 }
 
@@ -591,16 +590,19 @@ fn create_matching_words(
                     for synonym in synonyms {
                         let synonym = synonym
                             .into_iter()
-                            .map(|syn| matching_word_cache.insert(syn, 0, false))
+                            .flat_map(|syn| matching_word_cache.insert(syn, 0, false))
                             .collect();
                         matching_words.push((synonym, vec![id]));
                     }
                 }
 
                 if let Some((left, right)) = split_best_frequency(ctx, &word)? {
-                    let left = matching_word_cache.insert(left.to_string(), 0, false);
-                    let right = matching_word_cache.insert(right.to_string(), 0, false);
-                    matching_words.push((vec![left, right], vec![id]));
+                    if let Some(left) = matching_word_cache.insert(left.to_string(), 0, false) {
+                        if let Some(right) = matching_word_cache.insert(right.to_string(), 0, false)
+                        {
+                            matching_words.push((vec![left, right], vec![id]));
+                        }
+                    }
                 }
 
                 let (word_len_one_typo, word_len_two_typo) = ctx.min_word_len_for_typo()?;
@@ -614,7 +616,9 @@ fn create_matching_words(
                         matching_word_cache.insert(word, typo, prefix)
                     }
                 };
-                matching_words.push((vec![matching_word], vec![id]));
+                if let Some(matching_word) = matching_word {
+                    matching_words.push((vec![matching_word], vec![id]));
+                }
             }
             // create a CONSECUTIVE matchings words wrapping all word in the phrase
             PrimitiveQueryPart::Phrase(words) => {
@@ -623,7 +627,7 @@ fn create_matching_words(
                 let words = words
                     .into_iter()
                     .flatten()
-                    .map(|w| matching_word_cache.insert(w, 0, false))
+                    .flat_map(|w| matching_word_cache.insert(w, 0, false))
                     .collect();
                 matching_words.push((words, ids));
             }
@@ -681,7 +685,7 @@ fn create_matching_words(
                                 for synonym in synonyms {
                                     let synonym = synonym
                                         .into_iter()
-                                        .map(|syn| matching_word_cache.insert(syn, 0, false))
+                                        .flat_map(|syn| matching_word_cache.insert(syn, 0, false))
                                         .collect();
                                     matching_words.push((synonym, ids.clone()));
                                 }
@@ -704,7 +708,9 @@ fn create_matching_words(
                                     matching_word_cache.insert(word, typo, is_prefix)
                                 }
                             };
-                            matching_words.push((vec![matching_word], ids));
+                            if let Some(matching_word) = matching_word {
+                                matching_words.push((vec![matching_word], ids));
+                            }
                         }
                     }
 
@@ -1342,6 +1348,27 @@ mod test {
     }
 
     #[test]
+    fn test_dont_create_matching_word_for_long_words() {
+        let index = TempIndex::new();
+        let rtxn = index.read_txn().unwrap();
+        let query = "what a supercalifragilisticexpialidocioussupercalifragilisticexpialidocioussupercalifragilisticexpialidocioussupercalifragilisticexpialidocioussupercalifragilisticexpialidocioussupercalifragilisticexpialidocioussupercalifragilisticexpialidocioussupercalifragilisticexpialidocious house";
+        let mut builder = QueryTreeBuilder::new(&rtxn, &index).unwrap();
+        builder.words_limit(10);
+        let (_, _, matching_words) = builder.build(query.tokenize()).unwrap().unwrap();
+        insta::assert_snapshot!(format!("{matching_words:?}"), @r###"
+        [
+        ([MatchingWord { word: "house", typo: 1, prefix: true }], [3])
+        ([MatchingWord { word: "house", typo: 1, prefix: true }], [2])
+        ([MatchingWord { word: "whata", typo: 1, prefix: false }], [0, 1])
+        ([MatchingWord { word: "house", typo: 1, prefix: true }], [2])
+        ([MatchingWord { word: "house", typo: 1, prefix: true }], [1])
+        ([MatchingWord { word: "what", typo: 0, prefix: false }], [0])
+        ([MatchingWord { word: "a", typo: 0, prefix: false }], [1])
+        ]
+        "###);
+    }
+
+    #[test]
     fn disable_typo_on_word() {
         let query = "goodbye";
         let tokens = query.tokenize();
@@ -1380,9 +1407,8 @@ mod test {
         }
     }
 
-    // This test must be run
     #[test]
-    fn ten_words() {
+    fn memory_usage_of_ten_word_query() {
         let resident_before = ALLOC.resident.load(atomic::Ordering::SeqCst);
         let allocated_before = ALLOC.allocated.load(atomic::Ordering::SeqCst);
 
@@ -1395,12 +1421,20 @@ mod test {
         let resident_after = ALLOC.resident.load(atomic::Ordering::SeqCst);
         let allocated_after = ALLOC.allocated.load(atomic::Ordering::SeqCst);
 
-        insta::assert_snapshot!(format!("{}", resident_after - resident_before), @"4521710");
-        insta::assert_snapshot!(format!("{}", allocated_after - allocated_before), @"7259092");
+        // Weak check on the memory usage
+        // Don't keep more than 5MB. (Arguably 5MB is already too high)
+        assert!(resident_after - resident_before < 5_000_000);
+        // Don't allocate more than 10MB.
+        assert!(allocated_after - allocated_before < 10_000_000);
 
-        // Note, if the matching word cache is deactivated, the memory usage is:
-        // insta::assert_snapshot!(format!("{}", resident_after - resident_before), @"91311265");
-        // insta::assert_snapshot!(format!("{}", allocated_after - allocated_before), @"125948410");
+        // Use these snapshots to measure the exact memory usage.
+        // The values below were correct at the time I wrote them.
+        // insta::assert_snapshot!(format!("{}", resident_after - resident_before), @"4486950");
+        // insta::assert_snapshot!(format!("{}", allocated_after - allocated_before), @"7107502");
+
+        // Note, with the matching word cache deactivated, the memory usage was:
+        // insta::assert_snapshot!(format!("{}", resident_after - resident_before), @"91248697");
+        // insta::assert_snapshot!(format!("{}", allocated_after - allocated_before), @"125697588");
         // or about 20x more resident memory (90MB vs 4.5MB)
 
         // Use x

@@ -12,9 +12,8 @@ use serde_json::Value;
 use super::helpers::{create_sorter, keep_first, sorter_into_reader, GrenadParameters};
 use crate::error::InternalError;
 use crate::facet::value_encoding::f64_into_bytes;
-use crate::update::index_documents::helpers::MAX_FACET_VALUE_LENGTH;
 use crate::update::index_documents::{create_writer, writer_into_reader};
-use crate::{CboRoaringBitmapCodec, DocumentId, FieldId, Result, BEU32};
+use crate::{CboRoaringBitmapCodec, DocumentId, FieldId, Result, BEU32, MAX_FACET_VALUE_LENGTH};
 
 /// Extracts the facet values of each faceted field of each document.
 ///
