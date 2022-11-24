@@ -373,13 +373,11 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                     &new_fields_ids_map,
                 )?;
                 self.index.put_fields_ids_map(self.wtxn, &new_fields_ids_map)?;
+                Ok(true)
             }
-            Setting::Reset => {
-                self.index.delete_all_searchable_fields(self.wtxn)?;
-            }
+            Setting::Reset => Ok(self.index.delete_all_searchable_fields(self.wtxn)?),
             Setting::NotSet => return Ok(false),
         }
-        Ok(true)
     }
 
     fn update_stop_words(&mut self) -> Result<bool> {
