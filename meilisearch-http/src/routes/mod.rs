@@ -276,7 +276,7 @@ pub fn create_all_stats(
     )?;
     let processing_index = processing_task.first().and_then(|task| task.index_uid());
     for (name, index) in index_scheduler.indexes()? {
-        if !search_rules.is_index_authorized(&name) {
+        if !search_rules.is_index_authorized(&name.as_str().try_into()?) {
             continue;
         }
 

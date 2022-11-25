@@ -144,8 +144,10 @@ pub async fn search_with_url_query(
     let mut query: SearchQuery = params.into_inner().into();
 
     // Tenant token search_rules.
-    if let Some(search_rules) =
-        index_scheduler.filters().search_rules.get_index_search_rules(&index_uid)
+    if let Some(search_rules) = index_scheduler
+        .filters()
+        .search_rules
+        .get_index_search_rules(&index_uid.as_str().try_into()?)
     {
         add_search_rules(&mut query, search_rules);
     }
@@ -174,10 +176,12 @@ pub async fn search_with_post(
 ) -> Result<HttpResponse, ResponseError> {
     let mut query = params.into_inner();
     debug!("search called with params: {:?}", query);
-
+    let index_uid = index_uid.into_inner();
     // Tenant token search_rules.
-    if let Some(search_rules) =
-        index_scheduler.filters().search_rules.get_index_search_rules(&index_uid)
+    if let Some(search_rules) = index_scheduler
+        .filters()
+        .search_rules
+        .get_index_search_rules(&index_uid.as_str().try_into()?)
     {
         add_search_rules(&mut query, search_rules);
     }

@@ -1,14 +1,156 @@
+use serde::{Deserialize, Serialize};
+use std::cmp::Eq;
 use std::error::Error;
 use std::fmt;
+use std::hash::Hash;
+use std::ops::Deref;
 use std::str::FromStr;
+const PATTERN_IDENTIFIER: char = '*';
 
-use serde::{Deserialize, Serialize};
+#[derive(Debug, Clone, Eq)]
+pub enum IndexType {
+    Name(IndexUid),
+    Pattern(IndexPattern),
+}
+
+impl Hash for IndexType {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            Self::Name(x) => x.as_str().hash(state),
+            Self::Pattern(x) => x.original_pattern.hash(state),
+        }
+    }
+}
+
+impl PartialEq for IndexType {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Name(left), _) => other == left.as_str(),
+            (_, Self::Name(right)) => self == right.as_str(),
+            (Self::Pattern(left), Self::Pattern(right)) => left.deref() == right.deref(),
+        }
+    }
+}
+
+impl Deref for IndexType {
+    type Target = str;
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Name(x) => x.deref(),
+            Self::Pattern(x) => x.deref(),
+        }
+    }
+}
+
+impl From<IndexType> for String {
+    fn from(x: IndexType) -> Self {
+        match x {
+            IndexType::Name(y) => y.into_inner(),
+            IndexType::Pattern(y) => y.original_pattern,
+        }
+    }
+}
+
+impl PartialEq<str> for IndexType {
+    fn eq(&self, other: &str) -> bool {
+        match (self, other) {
+            (Self::Name(x), y) => x.0 == y,
+            (Self::Pattern(x), y) => y.starts_with(&x.prefix),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct IndexPattern {
+    prefix: String,
+    original_pattern: String,
+}
+
+impl IndexPattern {
+    fn from_pattern(pattern: String, original_pattern: String) -> Self {
+        Self { prefix: pattern, original_pattern }
+    }
+}
+
+impl Deref for IndexPattern {
+    type Target = str;
+    fn deref(&self) -> &Self::Target {
+        &self.original_pattern
+    }
+}
+
+#[derive(Debug)]
+pub struct IndexPatternError(String);
+
+impl fmt::Display for IndexPatternError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Pattern should end with {}. Received => {}", PATTERN_IDENTIFIER, self.0)
+    }
+}
+
+impl Error for IndexPatternError {}
+
+#[derive(Debug)]
+pub enum IndexTypeError {
+    Name(IndexUidFormatError),
+    Pattern(IndexPatternError),
+}
+
+impl Error for IndexTypeError {}
+
+impl ErrorCode for IndexTypeError {
+    fn error_code(&self) -> Code {
+        match self {
+            Self::Name(_) => Code::InvalidIndexUid,
+            Self::Pattern(_) => Code::InvalidIndexPattern,
+        }
+    }
+}
+
+impl fmt::Display for IndexTypeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Name(x) => x.fmt(f),
+            Self::Pattern(x) => x.fmt(f),
+        }
+    }
+}
+
+impl From<IndexUidFormatError> for IndexTypeError {
+    fn from(x: IndexUidFormatError) -> Self {
+        Self::Name(x)
+    }
+}
+
+impl From<IndexPatternError> for IndexTypeError {
+    fn from(x: IndexPatternError) -> Self {
+        Self::Pattern(x)
+    }
+}
+
+impl TryFrom<String> for IndexType {
+    type Error = IndexTypeError;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        if let Some(x) = value.strip_suffix(PATTERN_IDENTIFIER) {
+            Ok(Self::Pattern(IndexPattern::from_pattern(x.to_owned(), value)))
+        } else {
+            Ok(Self::Name(IndexUid::try_from(value)?))
+        }
+    }
+}
+
+impl FromStr for IndexType {
+    type Err = IndexTypeError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.to_owned().try_into()
+    }
+}
 
 use crate::error::{Code, ErrorCode};
 
 /// An index uid is composed of only ascii alphanumeric characters, - and _, between 1 and 400
 /// bytes long
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "test-traits", derive(proptest_derive::Arbitrary))]
 pub struct IndexUid(
     #[cfg_attr(feature = "test-traits", proptest(regex("[a-zA-Z0-9_-]{1,400}")))] String,
@@ -38,14 +180,14 @@ impl std::ops::Deref for IndexUid {
 }
 
 impl TryFrom<String> for IndexUid {
-    type Error = IndexUidFormatError;
+    type Error = IndexTypeError;
 
     fn try_from(uid: String) -> Result<Self, Self::Error> {
         if !uid.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
             || uid.is_empty()
             || uid.len() > 400
         {
-            Err(IndexUidFormatError { invalid_uid: uid })
+            Err(IndexTypeError::Name(IndexUidFormatError { invalid_uid: uid }))
         } else {
             Ok(IndexUid(uid))
         }
@@ -53,9 +195,9 @@ impl TryFrom<String> for IndexUid {
 }
 
 impl FromStr for IndexUid {
-    type Err = IndexUidFormatError;
+    type Err = IndexTypeError;
 
-    fn from_str(uid: &str) -> Result<IndexUid, IndexUidFormatError> {
+    fn from_str(uid: &str) -> Result<IndexUid, IndexTypeError> {
         uid.to_string().try_into()
     }
 }

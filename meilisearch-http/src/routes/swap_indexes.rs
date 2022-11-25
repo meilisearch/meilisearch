@@ -34,7 +34,9 @@ pub async fn swap_indexes(
                 return Err(MeilisearchHttpError::SwapIndexPayloadWrongLength(indexes).into());
             }
         };
-        if !search_rules.is_index_authorized(lhs) || !search_rules.is_index_authorized(rhs) {
+        if !search_rules.is_index_authorized(&lhs.as_str().try_into()?)
+            || !search_rules.is_index_authorized(&rhs.as_str().try_into()?)
+        {
             return Err(AuthenticationError::InvalidToken.into());
         }
         swaps.push(IndexSwap { indexes: (lhs.clone(), rhs.clone()) });

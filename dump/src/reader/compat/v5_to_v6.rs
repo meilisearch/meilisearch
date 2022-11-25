@@ -2,6 +2,12 @@ use super::v4_to_v5::{CompatIndexV4ToV5, CompatV4ToV5};
 use crate::reader::{v5, v6, Document, UpdateFile};
 use crate::Result;
 
+impl From<v5::meta::IndexUid> for v6::IndexType {
+    fn from(x: v5::meta::IndexUid) -> Self {
+        Self::Name(v6::IndexUid::new_unchecked(&x.0))
+    }
+}
+
 pub enum CompatV5ToV6 {
     V5(v5::V5Reader),
     Compat(CompatV4ToV5),
@@ -179,9 +185,7 @@ impl CompatV5ToV6 {
                     .into_iter()
                     .map(|index| match index {
                         v5::StarOr::Star => v6::StarOr::Star,
-                        v5::StarOr::Other(uid) => {
-                            v6::StarOr::Other(v6::IndexUid::new_unchecked(uid.as_str()))
-                        }
+                        v5::StarOr::Other(uid) => v6::StarOr::Other(uid.into()),
                     })
                     .collect(),
                 expires_at: key.expires_at,

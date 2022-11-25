@@ -5,6 +5,7 @@ pub mod index_uid;
 pub mod keys;
 pub mod settings;
 pub mod star_or;
+pub type StarIndexType = star_or::StarOr<index_uid::IndexType>;
 pub mod tasks;
 pub mod versioning;
 

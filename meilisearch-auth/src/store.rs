@@ -3,17 +3,16 @@ use std::cmp::Reverse;
 use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
 use std::fs::create_dir_all;
-use std::ops::Deref;
 use std::path::Path;
 use std::str;
 use std::sync::Arc;
 
 use hmac::{Hmac, Mac};
-use meilisearch_types::keys::KeyId;
 use meilisearch_types::milli;
 use meilisearch_types::milli::heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
 use meilisearch_types::milli::heed::{Database, Env, EnvOpenOptions, RwTxn};
-use meilisearch_types::star_or::StarOr;
+use meilisearch_types::StarIndexType;
+
 use sha2::Sha256;
 use time::OffsetDateTime;
 use uuid::fmt::Hyphenated;
@@ -27,11 +26,15 @@ const AUTH_DB_PATH: &str = "auth";
 const KEY_DB_NAME: &str = "api-keys";
 const KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME: &str = "keyid-action-index-expiration";
 
+pub type KeyId = Uuid;
+
+pub type IndexExpiry = (Vec<StarIndexType>, Option<OffsetDateTime>);
+
 #[derive(Clone)]
 pub struct HeedAuthStore {
     env: Arc<Env>,
     keys: Database<ByteSlice, SerdeJson<Key>>,
-    action_keyid_index_expiration: Database<KeyIdActionCodec, SerdeJson<Option<OffsetDateTime>>>,
+    action_keyid_index_expiration: Database<KeyIdActionCodec, SerdeJson<IndexExpiry>>,
     should_close_on_drop: bool,
 }
 
@@ -125,21 +128,8 @@ impl HeedAuthStore {
             }
         }
 
-        let no_index_restriction = key.indexes.contains(&StarOr::Star);
         for action in actions {
-            if no_index_restriction {
-                // If there is no index restriction we put None.
-                db.put(&mut wtxn, &(&uid, &action, None), &key.expires_at)?;
-            } else {
-                // else we create a key for each index.
-                for index in key.indexes.iter() {
-                    db.put(
-                        &mut wtxn,
-                        &(&uid, &action, Some(index.deref().as_bytes())),
-                        &key.expires_at,
-                    )?;
-                }
-            }
+            db.put(&mut wtxn, &(&uid, &action), &(key.indexes.clone(), key.expires_at))?;
         }
 
         wtxn.commit()?;
@@ -210,27 +200,18 @@ impl HeedAuthStore {
         &self,
         uid: Uuid,
         action: Action,
-        index: Option<&[u8]>,
+        index: Option<&str>,
     ) -> Result<Option<Option<OffsetDateTime>>> {
         let rtxn = self.env.read_txn()?;
-        let tuple = (&uid, &action, index);
-        Ok(self.action_keyid_index_expiration.get(&rtxn, &tuple)?)
-    }
+        let tuple = (&uid, &action);
 
-    pub fn prefix_first_expiration_date(
-        &self,
-        uid: Uuid,
-        action: Action,
-    ) -> Result<Option<Option<OffsetDateTime>>> {
-        let rtxn = self.env.read_txn()?;
-        let tuple = (&uid, &action, None);
         let exp = self
             .action_keyid_index_expiration
-            .prefix_iter(&rtxn, &tuple)?
-            .next()
-            .transpose()?
-            .map(|(_, expiration)| expiration);
-
+            .get(&rtxn, &tuple)?
+            .filter(|(index_types, _)| {
+                index.map_or(true, |index| index_types.iter().any(|x| x == index))
+            })
+            .map(|(_, exp)| exp);
         Ok(exp)
     }
 
@@ -253,33 +234,27 @@ impl HeedAuthStore {
 pub struct KeyIdActionCodec;
 
 impl<'a> milli::heed::BytesDecode<'a> for KeyIdActionCodec {
-    type DItem = (KeyId, Action, Option<&'a [u8]>);
+    type DItem = (KeyId, Action);
 
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
         let (key_id_bytes, action_bytes) = try_split_array_at(bytes)?;
-        let (action_bytes, index) = match try_split_array_at(action_bytes)? {
-            (action, []) => (action, None),
-            (action, index) => (action, Some(index)),
-        };
+        let action_single_byte: &[u8; 1] = action_bytes.try_into().ok()?;
         let key_id = Uuid::from_bytes(*key_id_bytes);
-        let action = Action::from_repr(u8::from_be_bytes(*action_bytes))?;
+        let action = Action::from_repr(u8::from_be_bytes(*action_single_byte))?;
 
-        Some((key_id, action, index))
+        Some((key_id, action))
     }
 }
 
 impl<'a> milli::heed::BytesEncode<'a> for KeyIdActionCodec {
-    type EItem = (&'a KeyId, &'a Action, Option<&'a [u8]>);
+    type EItem = (&'a KeyId, &'a Action);
 
-    fn bytes_encode((key_id, action, index): &Self::EItem) -> Option<Cow<[u8]>> {
+    fn bytes_encode((key_id, action): &Self::EItem) -> Option<Cow<[u8]>> {
         let mut bytes = Vec::new();
 
         bytes.extend_from_slice(key_id.as_bytes());
         let action_bytes = u8::to_be_bytes(action.repr());
         bytes.extend_from_slice(&action_bytes);
-        if let Some(index) = index {
-            bytes.extend_from_slice(index);
-        }
 
         Some(Cow::Owned(bytes))
     }

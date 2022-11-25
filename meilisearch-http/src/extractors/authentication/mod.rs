@@ -10,7 +10,6 @@ use futures::future::err;
 use futures::Future;
 use meilisearch_auth::{AuthController, AuthFilter};
 use meilisearch_types::error::{Code, ResponseError};
-
 pub struct GuardedData<P, D> {
     data: D,
     filters: AuthFilter,
@@ -123,8 +122,11 @@ pub trait Policy {
 }
 
 pub mod policies {
+    use std::str::FromStr;
+
     use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
     use meilisearch_auth::{AuthController, AuthFilter, SearchRules};
+    use meilisearch_types::StarIndexType;
     // reexport actions in policies in order to be used in routes configuration.
     pub use meilisearch_types::keys::{actions, Action};
     use serde::{Deserialize, Serialize};
@@ -215,8 +217,10 @@ pub mod policies {
 
                 // Check index access if an index restriction is provided.
                 if let Some(index) = index {
-                    if !data.claims.search_rules.is_index_authorized(index) {
-                        return None;
+                    if let Ok(x) = StarIndexType::from_str(index) {
+                        if !data.claims.search_rules.is_index_authorized(&x) {
+                            return None;
+                        }
                     }
                 }
 

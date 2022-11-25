@@ -72,7 +72,9 @@ pub async fn list_indexes(
     let indexes: Vec<_> = index_scheduler.indexes()?;
     let indexes = indexes
         .into_iter()
-        .filter(|(name, _)| search_rules.is_index_authorized(name))
+        .filter(|(name, _)| {
+            name.as_str().try_into().map_or(false, |x| search_rules.is_index_authorized(&x))
+        })
         .map(|(name, index)| IndexView::new(name, &index))
         .collect::<Result<Vec<_>, _>>()?;
 
@@ -98,7 +100,8 @@ pub async fn create_index(
     let IndexCreateRequest { primary_key, uid } = body.into_inner();
     let uid = IndexUid::try_from(uid)?.into_inner();
 
-    let allow_index_creation = index_scheduler.filters().search_rules.is_index_authorized(&uid);
+    let allow_index_creation =
+        index_scheduler.filters().search_rules.is_index_authorized(&uid.as_str().try_into()?);
     if allow_index_creation {
         analytics.publish(
             "Index Created".to_string(),

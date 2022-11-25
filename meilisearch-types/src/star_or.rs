@@ -1,4 +1,5 @@
 use std::fmt::{Display, Formatter};
+use std::hash::Hash;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::str::FromStr;
@@ -14,6 +15,15 @@ pub enum StarOr<T> {
     Other(T),
 }
 
+impl<T: Hash> Hash for StarOr<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            Self::Star => "*".hash(state),
+            Self::Other(x) => x.hash(state),
+        }
+    }
+}
+
 impl<T: FromStr> FromStr for StarOr<T> {
     type Err = T::Err;
 
@@ -23,6 +33,19 @@ impl<T: FromStr> FromStr for StarOr<T> {
         } else {
             T::from_str(s).map(StarOr::Other)
         }
+    }
+}
+
+impl<T: FromStr> TryFrom<String> for StarOr<T> {
+    type Error = T::Err;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::from_str(&value)
+    }
+}
+impl<T: FromStr> TryFrom<&str> for StarOr<T> {
+    type Error = T::Err;
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::from_str(value)
     }
 }
 
@@ -52,6 +75,15 @@ impl<T: PartialEq> PartialEq for StarOr<T> {
             (Self::Star, Self::Star) => true,
             (Self::Other(left), Self::Other(right)) if left.eq(right) => true,
             _ => false,
+        }
+    }
+}
+
+impl<T: PartialEq<str>> PartialEq<str> for StarOr<T> {
+    fn eq(&self, other: &str) -> bool {
+        match (self, other) {
+            (Self::Star, _) => true,
+            (Self::Other(x), y) => x == y,
         }
     }
 }
@@ -92,7 +124,7 @@ where
                 match v {
                     "*" => Ok(StarOr::Star),
                     v => {
-                        let other = FromStr::from_str(v).map_err(|e: T::Err| {
+                        let other = T::from_str(v).map_err(|e: T::Err| {
                             SE::custom(format!("Invalid `other` value: {}", e))
                         })?;
                         Ok(StarOr::Other(other))
