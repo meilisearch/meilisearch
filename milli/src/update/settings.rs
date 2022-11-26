@@ -349,12 +349,17 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_searchable(&mut self) -> Result<bool> {
         match self.searchable_fields {
             Setting::Set(ref fields) => {
-                let did_change = self
-                    .index
-                    .searchable_fields(self.wtxn)?
-                    .map(|f| f.into_iter().map(String::from).collect::<Vec<_>>())
-                    .map(|old_fields| fields != &old_fields)
-                    .unwrap_or(true); // if old_fields was None before, it was changed
+                // Check to see if the searchable fields changed before doing anything else
+                let old_fields = self.index.searchable_fields(self.wtxn)?;
+                let did_change = match old_fields {
+                    // If old_fields is Some, let's check to see if the fields actually changed
+                    Some(old_fields) => {
+                        let new_fields = fields.iter().map(String::as_str).collect::<Vec<_>>();
+                        new_fields != old_fields
+                    }
+                    // If old_fields is None, the fields have changed (because they are being set)
+                    None => true,
+                };
                 if !did_change {
                     return Ok(false);
                 }
