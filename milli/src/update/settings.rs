@@ -478,13 +478,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_exact_attributes(&mut self) -> Result<bool> {
         match self.exact_attributes {
             Setting::Set(ref attrs) => {
-                let old_attrs = self
-                    .index
-                    .exact_attributes(self.wtxn)?
-                    .iter()
-                    .cloned()
-                    .map(String::from)
-                    .collect::<HashSet<String>>();
+                let old_attrs = self.index.exact_attributes(self.wtxn)?;
+                let old_attrs = old_attrs.into_iter().map(String::from).collect::<HashSet<_>>();
 
                 if attrs != &old_attrs {
                     let attrs = attrs.iter().map(String::as_str).collect::<Vec<_>>();
