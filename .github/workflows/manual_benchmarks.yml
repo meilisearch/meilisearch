@@ -27,19 +27,19 @@ jobs:
       # Set variables
       - name: Set current branch name
         shell: bash
-        run: echo "##[set-output name=name;]$(echo ${GITHUB_REF#refs/heads/})"
+        run: echo "##[echo "name=name" >> $GITHUB_REF;]$(echo ${GITHUB_REF#refs/heads/})"
         id: current_branch
       - name: Set normalized current branch name # Replace `/` by `_` in branch name to avoid issues when pushing to S3
         shell: bash
-        run: echo "##[set-output name=name;]$(echo ${GITHUB_REF#refs/heads/} | tr '/' '_')"
+        run: echo "##[echo "name=name" >> $GITHUB_REF;]$(echo ${GITHUB_REF#refs/heads/} | tr '/' '_')"
         id: normalized_current_branch
       - name: Set shorter commit SHA
         shell: bash
-        run: echo "##[set-output name=short;]$(echo $GITHUB_SHA | cut -c1-8)"
+        run: echo "##[echo "name=short" >> $GITHUB_SHA;]$(echo $GITHUB_SHA | cut -c1-8)"
         id: commit_sha
       - name: Set file basename with format "dataset_branch_commitSHA"
         shell: bash
-        run: echo "##[set-output name=basename;]$(echo ${BENCH_NAME}_${{ steps.normalized_current_branch.outputs.name }}_${{ steps.commit_sha.outputs.short }})"
+        run: echo "##[echo "name=basename" >> $BENCH_NAME;]$(echo ${BENCH_NAME}_${{ steps.normalized_current_branch.outputs.name }}_${{ steps.commit_sha.outputs.short }})"
         id: file
 
       # Run benchmarks
