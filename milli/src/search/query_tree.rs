@@ -693,11 +693,13 @@ fn create_matching_words(
 
                             if let Some(synonyms) = ctx.synonyms(&words)? {
                                 for synonym in synonyms {
-                                    let synonym = synonym
+                                    if let Some(synonym) = synonym
                                         .into_iter()
-                                        .flat_map(|syn| matching_word_cache.insert(syn, 0, false))
-                                        .collect();
-                                    matching_words.push((synonym, ids.clone()));
+                                        .map(|syn| matching_word_cache.insert(syn, 0, false))
+                                        .collect()
+                                    {
+                                        matching_words.push((synonym, ids.clone()));
+                                    }
                                 }
                             }
                             let word = words.concat();
