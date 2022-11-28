@@ -560,8 +560,9 @@ impl Index {
     }
 
     pub(crate) fn delete_all_searchable_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.delete_searchable_fields(wtxn)?;
-        self.delete_user_defined_searchable_fields(wtxn)
+        let did_delete_searchable = self.delete_searchable_fields(wtxn)?;
+        let did_delete_user_defined = self.delete_user_defined_searchable_fields(wtxn)?;
+        Ok(did_delete_searchable || did_delete_user_defined)
     }
 
     /// Writes the searchable fields, when this list is specified, only these are indexed.
