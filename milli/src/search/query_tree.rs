@@ -866,9 +866,7 @@ pub fn maximum_proximity(operation: &Operation) -> usize {
 
 #[cfg(test)]
 mod test {
-    use std::alloc::{GlobalAlloc, System};
     use std::collections::HashMap;
-    use std::sync::atomic::{self, AtomicI64};
 
     use charabia::Tokenize;
     use maplit::hashmap;
@@ -1395,59 +1393,66 @@ mod test {
         ));
     }
 
-    #[global_allocator]
-    static ALLOC: CountingAlloc =
-        CountingAlloc { resident: AtomicI64::new(0), allocated: AtomicI64::new(0) };
+    // The memory usage test below is disabled because `cargo test` runs multiple tests in parallel,
+    // which invalidates the measurements of memory usage. Nevertheless, it is a useful test to run
+    // manually from time to time, so I kept it here, commented-out.
 
-    pub struct CountingAlloc {
-        pub resident: AtomicI64,
-        pub allocated: AtomicI64,
-    }
-    unsafe impl GlobalAlloc for CountingAlloc {
-        unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
-            self.allocated.fetch_add(layout.size() as i64, atomic::Ordering::Relaxed);
-            self.resident.fetch_add(layout.size() as i64, atomic::Ordering::Relaxed);
-
-            System.alloc(layout)
-        }
-
-        unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
-            self.resident.fetch_sub(layout.size() as i64, atomic::Ordering::Relaxed);
-            System.dealloc(ptr, layout)
-        }
-    }
-
-    #[test]
-    fn memory_usage_of_ten_word_query() {
-        let resident_before = ALLOC.resident.load(atomic::Ordering::SeqCst);
-        let allocated_before = ALLOC.allocated.load(atomic::Ordering::SeqCst);
-
-        let index = TempIndex::new();
-        let rtxn = index.read_txn().unwrap();
-        let query = "a beautiful summer house by the beach overlooking what seems";
-        let mut builder = QueryTreeBuilder::new(&rtxn, &index).unwrap();
-        builder.words_limit(10);
-        let x = builder.build(query.tokenize()).unwrap().unwrap();
-        let resident_after = ALLOC.resident.load(atomic::Ordering::SeqCst);
-        let allocated_after = ALLOC.allocated.load(atomic::Ordering::SeqCst);
-
-        // Weak check on the memory usage
-        // Don't keep more than 5MB. (Arguably 5MB is already too high)
-        assert!(resident_after - resident_before < 5_000_000);
-        // Don't allocate more than 10MB.
-        assert!(allocated_after - allocated_before < 10_000_000);
-
-        // Use these snapshots to measure the exact memory usage.
-        // The values below were correct at the time I wrote them.
-        // insta::assert_snapshot!(format!("{}", resident_after - resident_before), @"4486950");
-        // insta::assert_snapshot!(format!("{}", allocated_after - allocated_before), @"7107502");
-
-        // Note, with the matching word cache deactivated, the memory usage was:
-        // insta::assert_snapshot!(format!("{}", resident_after - resident_before), @"91248697");
-        // insta::assert_snapshot!(format!("{}", allocated_after - allocated_before), @"125697588");
-        // or about 20x more resident memory (90MB vs 4.5MB)
-
-        // Use x
-        let _x = x;
-    }
+    // use std::alloc::{GlobalAlloc, System};
+    // use std::sync::atomic::{self, AtomicI64};
+    //
+    // #[global_allocator]
+    // static ALLOC: CountingAlloc =
+    //     CountingAlloc { resident: AtomicI64::new(0), allocated: AtomicI64::new(0) };
+    //
+    // pub struct CountingAlloc {
+    //     pub resident: AtomicI64,
+    //     pub allocated: AtomicI64,
+    // }
+    // unsafe impl GlobalAlloc for CountingAlloc {
+    //     unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
+    //         self.allocated.fetch_add(layout.size() as i64, atomic::Ordering::Relaxed);
+    //         self.resident.fetch_add(layout.size() as i64, atomic::Ordering::Relaxed);
+    //
+    //         System.alloc(layout)
+    //     }
+    //
+    //     unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
+    //         self.resident.fetch_sub(layout.size() as i64, atomic::Ordering::Relaxed);
+    //         System.dealloc(ptr, layout)
+    //     }
+    // }
+    //
+    // #[test]
+    // fn memory_usage_of_ten_word_query() {
+    //     let resident_before = ALLOC.resident.load(atomic::Ordering::SeqCst);
+    //     let allocated_before = ALLOC.allocated.load(atomic::Ordering::SeqCst);
+    //
+    //     let index = TempIndex::new();
+    //     let rtxn = index.read_txn().unwrap();
+    //     let query = "a beautiful summer house by the beach overlooking what seems";
+    //     let mut builder = QueryTreeBuilder::new(&rtxn, &index).unwrap();
+    //     builder.words_limit(10);
+    //     let x = builder.build(query.tokenize()).unwrap().unwrap();
+    //     let resident_after = ALLOC.resident.load(atomic::Ordering::SeqCst);
+    //     let allocated_after = ALLOC.allocated.load(atomic::Ordering::SeqCst);
+    //
+    //     // Weak check on the memory usage
+    //     // Don't keep more than 5MB. (Arguably 5MB is already too high)
+    //     assert!(resident_after - resident_before < 5_000_000);
+    //     // Don't allocate more than 10MB.
+    //     assert!(allocated_after - allocated_before < 10_000_000);
+    //
+    //     // Use these snapshots to measure the exact memory usage.
+    //     // The values below were correct at the time I wrote them.
+    //     // insta::assert_snapshot!(format!("{}", resident_after - resident_before), @"4486950");
+    //     // insta::assert_snapshot!(format!("{}", allocated_after - allocated_before), @"7107502");
+    //
+    //     // Note, with the matching word cache deactivated, the memory usage was:
+    //     // insta::assert_snapshot!(format!("{}", resident_after - resident_before), @"91248697");
+    //     // insta::assert_snapshot!(format!("{}", allocated_after - allocated_before), @"125697588");
+    //     // or about 20x more resident memory (90MB vs 4.5MB)
+    //
+    //     // Use x
+    //     let _x = x;
+    // }
 }
