@@ -105,6 +105,12 @@ pub fn obkv_to_json(
         .collect()
 }
 
+/// Transform every field of a raw obkv store into a JSON Object.
+pub fn all_obkv_to_json(obkv: obkv::KvReaderU16, fields_ids_map: &FieldsIdsMap) -> Result<Object> {
+    let all_keys = obkv.iter().map(|(k, _v)| k).collect::<Vec<_>>();
+    obkv_to_json(all_keys.as_slice(), fields_ids_map, obkv)
+}
+
 /// Transform a JSON value into a string that can be indexed.
 pub fn json_to_string(value: &Value) -> Option<String> {
     fn inner(value: &Value, output: &mut String) -> bool {
@@ -284,5 +290,27 @@ mod tests {
         assert_eq!(0xFF0000FF, absolute_from_relative_position(0xFF00, 0x00FF));
         assert_eq!(0x12345678, absolute_from_relative_position(0x1234, 0x5678));
         assert_eq!(0xFFFFFFFF, absolute_from_relative_position(0xFFFF, 0xFFFF));
+    }
+
+    #[test]
+    fn test_all_obkv_to_json() {
+        let mut fields_ids_map = FieldsIdsMap::new();
+        let id1 = fields_ids_map.insert("field1").unwrap();
+        let id2 = fields_ids_map.insert("field2").unwrap();
+
+        let mut writer = obkv::KvWriterU16::memory();
+        writer.insert(id1, b"1234").unwrap();
+        writer.insert(id2, b"4321").unwrap();
+        let contents = writer.into_inner().unwrap();
+        let obkv = obkv::KvReaderU16::new(&contents);
+
+        let expected = json!({
+            "field1": 1234,
+            "field2": 4321,
+        });
+        let expected = expected.as_object().unwrap();
+        let actual = all_obkv_to_json(obkv, &fields_ids_map).unwrap();
+
+        assert_eq!(&actual, expected);
     }
 }
