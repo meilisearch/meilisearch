@@ -1145,8 +1145,8 @@ impl Index {
     }
 
     /// Clears the exact attributes from the store.
-    pub(crate) fn delete_exact_attributes(&self, txn: &mut RwTxn) -> Result<bool> {
-        Ok(self.main.delete::<_, Str>(txn, main_key::EXACT_ATTRIBUTES)?)
+    pub(crate) fn delete_exact_attributes(&self, txn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(txn, main_key::EXACT_ATTRIBUTES)
     }
 
     pub fn max_values_per_facet(&self, txn: &RoTxn) -> heed::Result<Option<usize>> {
