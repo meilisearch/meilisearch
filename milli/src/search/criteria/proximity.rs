@@ -592,4 +592,101 @@ fn resolve_plane_sweep_candidates(
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use std::io::Cursor;
+
+    use big_s::S;
+
+    use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
+    use crate::index::tests::TempIndex;
+    use crate::SearchResult;
+
+    fn documents_with_enough_different_words_for_prefixes(prefixes: &[&str]) -> Vec<crate::Object> {
+        let mut documents = Vec::new();
+        for prefix in prefixes {
+            for i in 0..500 {
+                documents.push(
+                    serde_json::json!({
+                        "text": format!("{prefix}{i:x}"),
+                    })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+                )
+            }
+        }
+        documents
+    }
+
+    #[test]
+    fn test_proximity_criterion_prefix_handling() {
+        let mut index = TempIndex::new();
+        index.index_documents_config.autogenerate_docids = true;
+
+        index
+            .update_settings(|settings| {
+                settings.set_primary_key(S("id"));
+                settings.set_criteria(vec![
+                    "words".to_owned(),
+                    "typo".to_owned(),
+                    "proximity".to_owned(),
+                ]);
+            })
+            .unwrap();
+
+        let mut documents = DocumentsBatchBuilder::new(Vec::new());
+
+        for doc in [
+            // 0
+            serde_json::json!({ "text": "zero is exactly the amount of configuration I want" }),
+            // 1
+            serde_json::json!({ "text": "zero bad configuration" }),
+            // 2
+            serde_json::json!({ "text": "zero configuration" }),
+            // 3
+            serde_json::json!({ "text": "zero config" }),
+            // 4
+            serde_json::json!({ "text": "zero conf" }),
+            // 5
+            serde_json::json!({ "text": "zero bad conf" }),
+        ] {
+            documents.append_json_object(doc.as_object().unwrap()).unwrap();
+        }
+        for doc in documents_with_enough_different_words_for_prefixes(&["conf"]) {
+            documents.append_json_object(&doc).unwrap();
+        }
+        let documents =
+            DocumentsBatchReader::from_reader(Cursor::new(documents.into_inner().unwrap()))
+                .unwrap();
+
+        index.add_documents(documents).unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+
+        let SearchResult { matching_words: _, candidates: _, documents_ids } =
+            index.search(&rtxn).query("zero c").execute().unwrap();
+        insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 3, 4, 1, 5, 0]");
+
+        let SearchResult { matching_words: _, candidates: _, documents_ids } =
+            index.search(&rtxn).query("zero co").execute().unwrap();
+        insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 3, 4, 1, 5, 0]");
+
+        let SearchResult { matching_words: _, candidates: _, documents_ids } =
+            index.search(&rtxn).query("zero con").execute().unwrap();
+        // Here searh results are degraded because `con` is in the prefix cache but it is too
+        // long to be stored in the prefix proximity databases, and we don't want to iterate over
+        // all of its word derivations
+        insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1, 2, 3, 4, 5]");
+
+        let SearchResult { matching_words: _, candidates: _, documents_ids } =
+            index.search(&rtxn).query("zero conf").execute().unwrap();
+        // Here search results are degraded as well, but we can still rank correctly documents
+        // that contain `conf` exactly, and not as a prefix.
+        insta::assert_snapshot!(format!("{documents_ids:?}"), @"[4, 5, 0, 1, 2, 3]");
+
+        let SearchResult { matching_words: _, candidates: _, documents_ids } =
+            index.search(&rtxn).query("zero config").execute().unwrap();
+        // `config` is not a common prefix, so the normal methods are used
+        insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 3, 1, 0, 4, 5]");
+    }
+}
