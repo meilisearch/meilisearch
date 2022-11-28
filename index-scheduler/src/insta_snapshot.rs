@@ -10,6 +10,8 @@ use crate::index_mapper::IndexMapper;
 use crate::{IndexScheduler, Kind, Status, BEI128};
 
 pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
+    scheduler.assert_internally_consistent();
+
     let IndexScheduler {
         autobatching_enabled,
         must_stop_processing: _,
@@ -20,6 +22,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         status,
         kind,
         index_tasks,
+        canceled_by,
         enqueued_at,
         started_at,
         finished_at,
@@ -62,6 +65,10 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
 
     snap.push_str("### Index Mapper:\n");
     snap.push_str(&snapshot_index_mapper(&rtxn, index_mapper));
+    snap.push_str("\n----------------------------------------------------------------------\n");
+
+    snap.push_str("### Canceled By:\n");
+    snap.push_str(&snapshot_canceled_by(&rtxn, *canceled_by));
     snap.push_str("\n----------------------------------------------------------------------\n");
 
     snap.push_str("### Enqueued At:\n");
@@ -170,7 +177,7 @@ fn snapshot_details(d: &Details) -> String {
             format!("{{ primary_key: {primary_key:?} }}")
         }
         Details::DocumentDeletion {
-            matched_documents: received_document_ids,
+            provided_ids: received_document_ids,
             deleted_documents,
         } => format!("{{ received_document_ids: {received_document_ids}, deleted_documents: {deleted_documents:?} }}"),
         Details::ClearAll { deleted_documents } => {
@@ -179,16 +186,16 @@ fn snapshot_details(d: &Details) -> String {
         Details::TaskCancelation {
             matched_tasks,
             canceled_tasks,
-            original_query,
+            original_filter,
         } => {
-            format!("{{ matched_tasks: {matched_tasks:?}, canceled_tasks: {canceled_tasks:?}, original_query: {original_query:?} }}")
+            format!("{{ matched_tasks: {matched_tasks:?}, canceled_tasks: {canceled_tasks:?}, original_filter: {original_filter:?} }}")
         }
         Details::TaskDeletion {
             matched_tasks,
             deleted_tasks,
-            original_query,
+            original_filter,
         } => {
-            format!("{{ matched_tasks: {matched_tasks:?}, deleted_tasks: {deleted_tasks:?}, original_query: {original_query:?} }}")
+            format!("{{ matched_tasks: {matched_tasks:?}, deleted_tasks: {deleted_tasks:?}, original_filter: {original_filter:?} }}")
         },
         Details::Dump { dump_uid } => {
             format!("{{ dump_uid: {dump_uid:?} }}")
@@ -231,7 +238,18 @@ pub fn snapshot_index_tasks(rtxn: &RoTxn, db: Database<Str, RoaringBitmapCodec>)
     }
     snap
 }
-
+pub fn snapshot_canceled_by(
+    rtxn: &RoTxn,
+    db: Database<OwnedType<BEU32>, RoaringBitmapCodec>,
+) -> String {
+    let mut snap = String::new();
+    let iter = db.iter(rtxn).unwrap();
+    for next in iter {
+        let (kind, task_ids) = next.unwrap();
+        writeln!(snap, "{kind} {}", snapshot_bitmap(&task_ids)).unwrap();
+    }
+    snap
+}
 pub fn snapshot_index_mapper(rtxn: &RoTxn, mapper: &IndexMapper) -> String {
     let names = mapper.indexes(rtxn).unwrap().into_iter().map(|(n, _)| n).collect::<Vec<_>>();
     format!("{names:?}")

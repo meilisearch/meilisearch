@@ -21,7 +21,7 @@ mod api_key;
 mod dump;
 pub mod indexes;
 mod swap_indexes;
-mod tasks;
+pub mod tasks;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::scope("/tasks").configure(tasks::configure))
@@ -271,7 +271,7 @@ pub fn create_all_stats(
     let mut indexes = BTreeMap::new();
     let mut database_size = 0;
     let processing_task = index_scheduler.get_tasks_from_authorized_indexes(
-        Query { status: Some(vec![Status::Processing]), limit: Some(1), ..Query::default() },
+        Query { statuses: Some(vec![Status::Processing]), limit: Some(1), ..Query::default() },
         search_rules.authorized_indexes(),
     )?;
     let processing_index = processing_task.first().and_then(|task| task.index_uid());
@@ -308,7 +308,11 @@ struct VersionResponse {
 
 async fn get_version(
     _index_scheduler: GuardedData<ActionPolicy<{ actions::VERSION }>, Data<IndexScheduler>>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> HttpResponse {
+    analytics.publish("Version Seen".to_string(), json!(null), Some(&req));
+
     let commit_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
     let commit_date = option_env!("VERGEN_GIT_COMMIT_TIMESTAMP").unwrap_or("unknown");
 
@@ -325,6 +329,11 @@ struct KeysResponse {
     public: Option<String>,
 }
 
-pub async fn get_health() -> Result<HttpResponse, ResponseError> {
+pub async fn get_health(
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    analytics.health_seen(&req);
+
     Ok(HttpResponse::Ok().json(serde_json::json!({ "status": "available" })))
 }

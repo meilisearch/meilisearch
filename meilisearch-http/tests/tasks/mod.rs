@@ -1,4 +1,4 @@
-use meili_snap::insta::assert_json_snapshot;
+use meili_snap::insta::{self, assert_json_snapshot};
 use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
@@ -67,37 +67,37 @@ async fn list_tasks_with_star_filters() {
     index
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
-    let (response, code) = index.service.get("/tasks?indexUid=test").await;
+    let (response, code) = index.service.get("/tasks?indexUids=test").await;
     assert_eq!(code, 200);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 
-    let (response, code) = index.service.get("/tasks?indexUid=*").await;
+    let (response, code) = index.service.get("/tasks?indexUids=*").await;
     assert_eq!(code, 200);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 
-    let (response, code) = index.service.get("/tasks?indexUid=*,pasteque").await;
+    let (response, code) = index.service.get("/tasks?indexUids=*,pasteque").await;
     assert_eq!(code, 200);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 
-    let (response, code) = index.service.get("/tasks?type=*").await;
+    let (response, code) = index.service.get("/tasks?types=*").await;
     assert_eq!(code, 200);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 
     let (response, code) =
-        index.service.get("/tasks?type=*,documentAdditionOrUpdate&status=*").await;
+        index.service.get("/tasks?types=*,documentAdditionOrUpdate&statuses=*").await;
     assert_eq!(code, 200, "{:?}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 
     let (response, code) = index
         .service
-        .get("/tasks?type=*,documentAdditionOrUpdate&status=*,failed&indexUid=test")
+        .get("/tasks?types=*,documentAdditionOrUpdate&statuses=*,failed&indexUids=test")
         .await;
     assert_eq!(code, 200, "{:?}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 
     let (response, code) = index
         .service
-        .get("/tasks?type=*,documentAdditionOrUpdate&status=*,failed&indexUid=test,*")
+        .get("/tasks?types=*,documentAdditionOrUpdate&statuses=*,failed&indexUids=test,*")
         .await;
     assert_eq!(code, 200, "{:?}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
@@ -173,6 +173,131 @@ async fn list_tasks_status_and_type_filtered() {
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 }
 
+#[actix_rt::test]
+async fn get_task_filter_error() {
+    let server = Server::new().await;
+
+    let (response, code) = server.tasks_filter(json!( { "lol": "pied" })).await;
+    assert_eq!(code, 400, "{}", response);
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Query deserialize error: unknown field `lol`",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "###);
+
+    let (response, code) = server.tasks_filter(json!( { "uids": "pied" })).await;
+    assert_eq!(code, 400, "{}", response);
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Task uid `pied` is invalid. It should only contain numeric characters.",
+      "code": "invalid_task_uids_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_task_uids_filter"
+    }
+    "###);
+
+    let (response, code) = server.tasks_filter(json!( { "from": "pied" })).await;
+    assert_eq!(code, 400, "{}", response);
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Query deserialize error: invalid digit found in string",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "###);
+
+    let (response, code) = server.tasks_filter(json!( { "beforeStartedAt": "pied" })).await;
+    assert_eq!(code, 400, "{}", response);
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Task `beforeStartedAt` `pied` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "code": "invalid_task_date_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_task_date_filter"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn delete_task_filter_error() {
+    let server = Server::new().await;
+
+    let (response, code) = server.delete_tasks(json!(null)).await;
+    assert_eq!(code, 400, "{}", response);
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Query parameters to filter the tasks to delete are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
+      "code": "missing_task_filters",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_task_filters"
+    }
+    "###);
+
+    let (response, code) = server.delete_tasks(json!({ "lol": "pied" })).await;
+    assert_eq!(code, 400, "{}", response);
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Query deserialize error: unknown field `lol`",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "###);
+
+    let (response, code) = server.delete_tasks(json!({ "uids": "pied" })).await;
+    assert_eq!(code, 400, "{}", response);
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Task uid `pied` is invalid. It should only contain numeric characters.",
+      "code": "invalid_task_uids_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_task_uids_filter"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn cancel_task_filter_error() {
+    let server = Server::new().await;
+
+    let (response, code) = server.cancel_tasks(json!(null)).await;
+    assert_eq!(code, 400, "{}", response);
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
+      "code": "missing_task_filters",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_task_filters"
+    }
+    "###);
+
+    let (response, code) = server.cancel_tasks(json!({ "lol": "pied" })).await;
+    assert_eq!(code, 400, "{}", response);
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Query deserialize error: unknown field `lol`",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "###);
+
+    let (response, code) = server.cancel_tasks(json!({ "uids": "pied" })).await;
+    assert_eq!(code, 400, "{}", response);
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Task uid `pied` is invalid. It should only contain numeric characters.",
+      "code": "invalid_task_uids_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_task_uids_filter"
+    }
+    "###);
+}
+
 macro_rules! assert_valid_summarized_task {
     ($response:expr, $task_type:literal, $index:literal) => {{
         assert_eq!($response.as_object().unwrap().len(), 5);
@@ -231,10 +356,12 @@ async fn test_summarized_document_addition_or_update() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
         "indexedDocuments": 1
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -253,10 +380,12 @@ async fn test_summarized_document_addition_or_update() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
         "indexedDocuments": 1
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -280,9 +409,10 @@ async fn test_summarized_delete_batch() {
       "indexUid": "test",
       "status": "failed",
       "type": "documentDeletion",
+      "canceledBy": null,
       "details": {
-        "matchedDocuments": 3,
-        "deletedDocuments": null
+        "providedIds": 3,
+        "deletedDocuments": 0
       },
       "error": {
         "message": "Index `test` not found.",
@@ -309,10 +439,12 @@ async fn test_summarized_delete_batch() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentDeletion",
+      "canceledBy": null,
       "details": {
-        "matchedDocuments": 1,
+        "providedIds": 1,
         "deletedDocuments": 0
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -336,9 +468,10 @@ async fn test_summarized_delete_document() {
       "indexUid": "test",
       "status": "failed",
       "type": "documentDeletion",
+      "canceledBy": null,
       "details": {
-        "matchedDocuments": 1,
-        "deletedDocuments": null
+        "providedIds": 1,
+        "deletedDocuments": 0
       },
       "error": {
         "message": "Index `test` not found.",
@@ -365,10 +498,12 @@ async fn test_summarized_delete_document() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "documentDeletion",
+      "canceledBy": null,
       "details": {
-        "matchedDocuments": 1,
+        "providedIds": 1,
         "deletedDocuments": 0
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -394,6 +529,7 @@ async fn test_summarized_settings_update() {
       "indexUid": "test",
       "status": "failed",
       "type": "settingsUpdate",
+      "canceledBy": null,
       "details": {
         "rankingRules": [
           "custom"
@@ -423,6 +559,7 @@ async fn test_summarized_settings_update() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "settingsUpdate",
+      "canceledBy": null,
       "details": {
         "displayedAttributes": [
           "doggos",
@@ -436,6 +573,7 @@ async fn test_summarized_settings_update() {
           "iq"
         ]
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -459,9 +597,11 @@ async fn test_summarized_index_creation() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "indexCreation",
+      "canceledBy": null,
       "details": {
         "primaryKey": null
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -480,6 +620,7 @@ async fn test_summarized_index_creation() {
       "indexUid": "test",
       "status": "failed",
       "type": "indexCreation",
+      "canceledBy": null,
       "details": {
         "primaryKey": "doggos"
       },
@@ -512,6 +653,10 @@ async fn test_summarized_index_deletion() {
       "indexUid": "test",
       "status": "failed",
       "type": "indexDeletion",
+      "canceledBy": null,
+      "details": {
+        "deletedDocuments": 0
+      },
       "error": {
         "message": "Index `test` not found.",
         "code": "index_not_found",
@@ -538,9 +683,11 @@ async fn test_summarized_index_deletion() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "indexDeletion",
+      "canceledBy": null,
       "details": {
         "deletedDocuments": 1
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -560,9 +707,11 @@ async fn test_summarized_index_deletion() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "indexDeletion",
+      "canceledBy": null,
       "details": {
         "deletedDocuments": 1
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -587,6 +736,7 @@ async fn test_summarized_index_update() {
       "indexUid": "test",
       "status": "failed",
       "type": "indexUpdate",
+      "canceledBy": null,
       "details": {
         "primaryKey": null
       },
@@ -614,6 +764,7 @@ async fn test_summarized_index_update() {
       "indexUid": "test",
       "status": "failed",
       "type": "indexUpdate",
+      "canceledBy": null,
       "details": {
         "primaryKey": "bones"
       },
@@ -644,9 +795,11 @@ async fn test_summarized_index_update() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "indexUpdate",
+      "canceledBy": null,
       "details": {
         "primaryKey": null
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -665,9 +818,11 @@ async fn test_summarized_index_update() {
       "indexUid": "test",
       "status": "succeeded",
       "type": "indexUpdate",
+      "canceledBy": null,
       "details": {
         "primaryKey": "bones"
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -694,6 +849,7 @@ async fn test_summarized_index_swap() {
       "indexUid": null,
       "status": "failed",
       "type": "indexSwap",
+      "canceledBy": null,
       "details": {
         "swaps": [
           {
@@ -734,6 +890,7 @@ async fn test_summarized_index_swap() {
       "indexUid": null,
       "status": "succeeded",
       "type": "indexSwap",
+      "canceledBy": null,
       "details": {
         "swaps": [
           {
@@ -744,6 +901,7 @@ async fn test_summarized_index_swap() {
           }
         ]
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -759,7 +917,7 @@ async fn test_summarized_task_cancelation() {
     // to avoid being flaky we're only going to cancel an already finished task :(
     index.create(None).await;
     index.wait_task(0).await;
-    server.cancel_task(json!({ "uid": [0] })).await;
+    server.cancel_tasks(json!({ "uids": [0] })).await;
     index.wait_task(1).await;
     let (task, _) = index.get_task(1).await;
     assert_json_snapshot!(task, 
@@ -770,11 +928,13 @@ async fn test_summarized_task_cancelation() {
       "indexUid": null,
       "status": "succeeded",
       "type": "taskCancelation",
+      "canceledBy": null,
       "details": {
         "matchedTasks": 1,
         "canceledTasks": 0,
-        "originalQuery": "uid=0"
+        "originalFilter": "?uids=0"
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -790,7 +950,7 @@ async fn test_summarized_task_deletion() {
     // to avoid being flaky we're only going to delete an already finished task :(
     index.create(None).await;
     index.wait_task(0).await;
-    server.delete_task(json!({ "uid": [0] })).await;
+    server.delete_tasks(json!({ "uids": [0] })).await;
     index.wait_task(1).await;
     let (task, _) = index.get_task(1).await;
     assert_json_snapshot!(task, 
@@ -801,11 +961,13 @@ async fn test_summarized_task_deletion() {
       "indexUid": null,
       "status": "succeeded",
       "type": "taskDeletion",
+      "canceledBy": null,
       "details": {
         "matchedTasks": 1,
         "deletedTasks": 1,
-        "originalQuery": "uid=0"
+        "originalFilter": "?uids=0"
       },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -821,13 +983,18 @@ async fn test_summarized_dump_creation() {
     server.wait_task(0).await;
     let (task, _) = server.get_task(0).await;
     assert_json_snapshot!(task, 
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        { ".details.dumpUid" => "[dumpUid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
       "uid": 0,
       "indexUid": null,
       "status": "succeeded",
       "type": "dumpCreation",
+      "canceledBy": null,
+      "details": {
+        "dumpUid": "[dumpUid]"
+      },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",

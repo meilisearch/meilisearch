@@ -15,6 +15,7 @@ use platform_dirs::AppDirs;
 use serde_json::Value;
 
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
+use crate::routes::tasks::TasksFilterQueryRaw;
 
 // if we are in debug mode OR the analytics feature is disabled
 // the `SegmentAnalytics` point to the mock instead of the real analytics
@@ -54,6 +55,13 @@ fn find_user_id(db_path: &Path) -> Option<InstanceUid> {
         .and_then(|uid| InstanceUid::from_str(&uid).ok())
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum DocumentDeletionKind {
+    PerDocumentId,
+    ClearAll,
+    PerBatch,
+}
+
 pub trait Analytics: Sync + Send {
     fn instance_uid(&self) -> Option<&InstanceUid>;
 
@@ -73,6 +81,10 @@ pub trait Analytics: Sync + Send {
         index_creation: bool,
         request: &HttpRequest,
     );
+
+    // this method should be called to aggregate a add documents request
+    fn delete_documents(&self, kind: DocumentDeletionKind, request: &HttpRequest);
+
     // this method should be called to batch a update documents request
     fn update_documents(
         &self,
@@ -80,4 +92,10 @@ pub trait Analytics: Sync + Send {
         index_creation: bool,
         request: &HttpRequest,
     );
+
+    // this method should be called to aggregate the get tasks requests.
+    fn get_tasks(&self, query: &TasksFilterQueryRaw, request: &HttpRequest);
+
+    // this method should be called to aggregate a add documents request
+    fn health_seen(&self, request: &HttpRequest);
 }

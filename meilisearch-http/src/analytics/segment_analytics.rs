@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 
 use actix_web::http::header::USER_AGENT;
 use actix_web::HttpRequest;
+use byte_unit::Byte;
 use http::header::CONTENT_TYPE;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::SearchRules;
@@ -14,6 +15,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use segment::message::{Identify, Track, User};
 use segment::{AutoBatcher, Batcher, HttpClient};
+use serde::Serialize;
 use serde_json::{json, Value};
 use sysinfo::{DiskExt, System, SystemExt};
 use time::OffsetDateTime;
@@ -21,10 +23,11 @@ use tokio::select;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use uuid::Uuid;
 
-use super::{config_user_id_path, MEILISEARCH_CONFIG_PATH};
+use super::{config_user_id_path, DocumentDeletionKind, MEILISEARCH_CONFIG_PATH};
 use crate::analytics::Analytics;
-use crate::option::default_http_addr;
+use crate::option::{default_http_addr, IndexerOpts, MaxMemory, MaxThreads, SchedulerConfig};
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
+use crate::routes::tasks::TasksFilterQueryRaw;
 use crate::routes::{create_all_stats, Stats};
 use crate::search::{
     SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
@@ -66,7 +69,10 @@ pub enum AnalyticsMsg {
     AggregateGetSearch(SearchAggregator),
     AggregatePostSearch(SearchAggregator),
     AggregateAddDocuments(DocumentsAggregator),
+    AggregateDeleteDocuments(DocumentsDeletionAggregator),
     AggregateUpdateDocuments(DocumentsAggregator),
+    AggregateTasks(TasksAggregator),
+    AggregateHealth(HealthAggregator),
 }
 
 pub struct SegmentAnalytics {
@@ -125,7 +131,10 @@ impl SegmentAnalytics {
             post_search_aggregator: SearchAggregator::default(),
             get_search_aggregator: SearchAggregator::default(),
             add_documents_aggregator: DocumentsAggregator::default(),
+            delete_documents_aggregator: DocumentsDeletionAggregator::default(),
             update_documents_aggregator: DocumentsAggregator::default(),
+            get_tasks_aggregator: TasksAggregator::default(),
+            health_aggregator: HealthAggregator::default(),
         });
         tokio::spawn(segment.run(index_scheduler.clone()));
 
@@ -171,6 +180,11 @@ impl super::Analytics for SegmentAnalytics {
         let _ = self.sender.try_send(AnalyticsMsg::AggregateAddDocuments(aggregate));
     }
 
+    fn delete_documents(&self, kind: DocumentDeletionKind, request: &HttpRequest) {
+        let aggregate = DocumentsDeletionAggregator::from_query(kind, request);
+        let _ = self.sender.try_send(AnalyticsMsg::AggregateDeleteDocuments(aggregate));
+    }
+
     fn update_documents(
         &self,
         documents_query: &UpdateDocumentsQuery,
@@ -179,6 +193,134 @@ impl super::Analytics for SegmentAnalytics {
     ) {
         let aggregate = DocumentsAggregator::from_query(documents_query, index_creation, request);
         let _ = self.sender.try_send(AnalyticsMsg::AggregateUpdateDocuments(aggregate));
+    }
+
+    fn get_tasks(&self, query: &TasksFilterQueryRaw, request: &HttpRequest) {
+        let aggregate = TasksAggregator::from_query(query, request);
+        let _ = self.sender.try_send(AnalyticsMsg::AggregateTasks(aggregate));
+    }
+
+    fn health_seen(&self, request: &HttpRequest) {
+        let aggregate = HealthAggregator::from_query(request);
+        let _ = self.sender.try_send(AnalyticsMsg::AggregateHealth(aggregate));
+    }
+}
+
+/// This structure represent the `infos` field we send in the analytics.
+/// It's quite close to the `Opt` structure except all sensitive informations
+/// have been simplified to a boolean.
+/// It's send as-is in amplitude thus you should never update a name of the
+/// struct without the approval of the PM.
+#[derive(Debug, Clone, Serialize)]
+struct Infos {
+    env: String,
+    db_path: bool,
+    import_dump: bool,
+    dumps_dir: bool,
+    ignore_missing_dump: bool,
+    ignore_dump_if_db_exists: bool,
+    import_snapshot: bool,
+    schedule_snapshot: bool,
+    snapshot_dir: bool,
+    snapshot_interval_sec: u64,
+    ignore_missing_snapshot: bool,
+    ignore_snapshot_if_db_exists: bool,
+    http_addr: bool,
+    max_index_size: Byte,
+    max_task_db_size: Byte,
+    http_payload_size_limit: Byte,
+    disable_auto_batching: bool,
+    log_level: String,
+    max_indexing_memory: MaxMemory,
+    max_indexing_threads: MaxThreads,
+    with_configuration_file: bool,
+    ssl_auth_path: bool,
+    ssl_cert_path: bool,
+    ssl_key_path: bool,
+    ssl_ocsp_path: bool,
+    ssl_require_auth: bool,
+    ssl_resumption: bool,
+    ssl_tickets: bool,
+}
+
+impl From<Opt> for Infos {
+    fn from(options: Opt) -> Self {
+        // We wants to decompose this whole struct by hand to be sure we don't forget
+        // to add analytics when we add a field in the Opt.
+        // Thus we must not insert `..` at the end.
+        let Opt {
+            db_path,
+            http_addr,
+            master_key: _,
+            env,
+            max_index_size,
+            max_task_db_size,
+            http_payload_size_limit,
+            ssl_cert_path,
+            ssl_key_path,
+            ssl_auth_path,
+            ssl_ocsp_path,
+            ssl_require_auth,
+            ssl_resumption,
+            ssl_tickets,
+            import_snapshot,
+            ignore_missing_snapshot,
+            ignore_snapshot_if_db_exists,
+            snapshot_dir,
+            schedule_snapshot,
+            snapshot_interval_sec,
+            import_dump,
+            ignore_missing_dump,
+            ignore_dump_if_db_exists,
+            dumps_dir,
+            log_level,
+            indexer_options,
+            scheduler_options,
+            config_file_path,
+            #[cfg(all(not(debug_assertions), feature = "analytics"))]
+                no_analytics: _,
+        } = options;
+
+        let SchedulerConfig { disable_auto_batching } = scheduler_options;
+        let IndexerOpts {
+            log_every_n: _,
+            max_nb_chunks: _,
+            max_indexing_memory,
+            max_indexing_threads,
+        } = indexer_options;
+
+        // We're going to override every sensible information.
+        // We consider information sensible if it contains a path, an address, or a key.
+        Self {
+            env,
+            db_path: db_path != PathBuf::from("./data.ms"),
+            import_dump: import_dump.is_some(),
+            dumps_dir: dumps_dir != PathBuf::from("dumps/"),
+            ignore_missing_dump,
+            ignore_dump_if_db_exists,
+            import_snapshot: import_snapshot.is_some(),
+            schedule_snapshot,
+            snapshot_dir: snapshot_dir != PathBuf::from("snapshots/"),
+            snapshot_interval_sec,
+            ignore_missing_snapshot,
+            ignore_snapshot_if_db_exists,
+            http_addr: http_addr != default_http_addr(),
+            max_index_size,
+            max_task_db_size,
+            http_payload_size_limit,
+            disable_auto_batching,
+            log_level,
+            max_indexing_memory,
+            max_indexing_threads,
+            with_configuration_file: config_file_path.is_some(),
+            ssl_auth_path: ssl_auth_path.is_some(),
+            ssl_cert_path: ssl_cert_path.is_some(),
+            ssl_key_path: ssl_key_path.is_some(),
+            ssl_ocsp_path: ssl_ocsp_path.is_some(),
+            ssl_require_auth,
+            ssl_resumption,
+            ssl_tickets,
+        }
     }
 }
 
@@ -190,7 +332,10 @@ pub struct Segment {
     get_search_aggregator: SearchAggregator,
     post_search_aggregator: SearchAggregator,
     add_documents_aggregator: DocumentsAggregator,
+    delete_documents_aggregator: DocumentsDeletionAggregator,
     update_documents_aggregator: DocumentsAggregator,
+    get_tasks_aggregator: TasksAggregator,
+    health_aggregator: HealthAggregator,
 }
 
 impl Segment {
@@ -212,31 +357,6 @@ impl Segment {
                     "server_provider": std::env::var("MEILI_SERVER_PROVIDER").ok(),
             })
         });
-        // The infos are all cli option except every option containing sensitive information.
-        // We consider an information as sensible if it contains a path, an address or a key.
-        let infos = {
-            // First we see if any sensitive fields were used.
-            let db_path = opt.db_path != PathBuf::from("./data.ms");
-            let import_dump = opt.import_dump.is_some();
-            let dumps_dir = opt.dumps_dir != PathBuf::from("dumps/");
-            let import_snapshot = opt.import_snapshot.is_some();
-            let snapshots_dir = opt.snapshot_dir != PathBuf::from("snapshots/");
-            let http_addr = opt.http_addr != default_http_addr();
-
-            let mut infos = serde_json::to_value(opt).unwrap();
-
-            // Then we overwrite all sensitive field with a boolean representing if
-            // the feature was used or not.
-            infos["db_path"] = json!(db_path);
-            infos["import_dump"] = json!(import_dump);
-            infos["dumps_dir"] = json!(dumps_dir);
-            infos["import_snapshot"] = json!(import_snapshot);
-            infos["snapshot_dir"] = json!(snapshots_dir);
-            infos["http_addr"] = json!(http_addr);
-
-            infos
-        };
-
         let number_of_documents =
             stats.indexes.values().map(|index| index.number_of_documents).collect::<Vec<u64>>();
 
@@ -248,7 +368,7 @@ impl Segment {
                 "indexes_number": stats.indexes.len(),
                 "documents_number": number_of_documents,
             },
-            "infos": infos,
+            "infos": Infos::from(opt.clone()),
         })
     }
 
@@ -269,7 +389,10 @@ impl Segment {
                         Some(AnalyticsMsg::AggregateGetSearch(agreg)) => self.get_search_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregatePostSearch(agreg)) => self.post_search_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregateAddDocuments(agreg)) => self.add_documents_aggregator.aggregate(agreg),
+                        Some(AnalyticsMsg::AggregateDeleteDocuments(agreg)) => self.delete_documents_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregateUpdateDocuments(agreg)) => self.update_documents_aggregator.aggregate(agreg),
+                        Some(AnalyticsMsg::AggregateTasks(agreg)) => self.get_tasks_aggregator.aggregate(agreg),
+                        Some(AnalyticsMsg::AggregateHealth(agreg)) => self.health_aggregator.aggregate(agreg),
                         None => (),
                     }
                 }
@@ -299,8 +422,14 @@ impl Segment {
             .into_event(&self.user, "Documents Searched POST");
         let add_documents = std::mem::take(&mut self.add_documents_aggregator)
             .into_event(&self.user, "Documents Added");
+        let delete_documents = std::mem::take(&mut self.delete_documents_aggregator)
+            .into_event(&self.user, "Documents Deleted");
         let update_documents = std::mem::take(&mut self.update_documents_aggregator)
             .into_event(&self.user, "Documents Updated");
+        let get_tasks =
+            std::mem::take(&mut self.get_tasks_aggregator).into_event(&self.user, "Tasks Seen");
+        let health =
+            std::mem::take(&mut self.health_aggregator).into_event(&self.user, "Health Seen");
 
         if let Some(get_search) = get_search {
             let _ = self.batcher.push(get_search).await;
@@ -311,8 +440,17 @@ impl Segment {
         if let Some(add_documents) = add_documents {
             let _ = self.batcher.push(add_documents).await;
         }
+        if let Some(delete_documents) = delete_documents {
+            let _ = self.batcher.push(delete_documents).await;
+        }
         if let Some(update_documents) = update_documents {
             let _ = self.batcher.push(update_documents).await;
+        }
+        if let Some(get_tasks) = get_tasks {
+            let _ = self.batcher.push(get_tasks).await;
+        }
+        if let Some(health) = health {
+            let _ = self.batcher.push(health).await;
         }
         let _ = self.batcher.flush().await;
     }
@@ -358,11 +496,18 @@ pub struct SearchAggregator {
     finite_pagination: usize,
 
     // formatting
+    max_attributes_to_retrieve: usize,
+    max_attributes_to_highlight: usize,
     highlight_pre_tag: bool,
     highlight_post_tag: bool,
+    max_attributes_to_crop: usize,
     crop_marker: bool,
     show_matches_position: bool,
     crop_length: bool,
+
+    // facets
+    facets_sum_of_terms: usize,
+    facets_total_number_of_facets: usize,
 }
 
 impl SearchAggregator {
@@ -443,16 +588,19 @@ impl SearchAggregator {
         for user_agent in other.user_agents.into_iter() {
             self.user_agents.insert(user_agent);
         }
+
         // request
         self.total_received = self.total_received.saturating_add(other.total_received);
         self.total_succeeded = self.total_succeeded.saturating_add(other.total_succeeded);
         self.time_spent.append(&mut other.time_spent);
+
         // sort
         self.sort_with_geo_point |= other.sort_with_geo_point;
         self.sort_sum_of_criteria_terms =
             self.sort_sum_of_criteria_terms.saturating_add(other.sort_sum_of_criteria_terms);
         self.sort_total_number_of_criteria =
             self.sort_total_number_of_criteria.saturating_add(other.sort_total_number_of_criteria);
+
         // filter
         self.filter_with_geo_radius |= other.filter_with_geo_radius;
         self.filter_sum_of_criteria_terms =
@@ -467,20 +615,34 @@ impl SearchAggregator {
         // q
         self.max_terms_number = self.max_terms_number.max(other.max_terms_number);
 
-        for (key, value) in other.matching_strategy.into_iter() {
-            let matching_strategy = self.matching_strategy.entry(key).or_insert(0);
-            *matching_strategy = matching_strategy.saturating_add(value);
-        }
         // pagination
         self.max_limit = self.max_limit.max(other.max_limit);
         self.max_offset = self.max_offset.max(other.max_offset);
         self.finite_pagination += other.finite_pagination;
 
+        // formatting
+        self.max_attributes_to_retrieve =
+            self.max_attributes_to_retrieve.max(other.max_attributes_to_retrieve);
+        self.max_attributes_to_highlight =
+            self.max_attributes_to_highlight.max(other.max_attributes_to_highlight);
         self.highlight_pre_tag |= other.highlight_pre_tag;
         self.highlight_post_tag |= other.highlight_post_tag;
+        self.max_attributes_to_crop = self.max_attributes_to_crop.max(other.max_attributes_to_crop);
         self.crop_marker |= other.crop_marker;
         self.show_matches_position |= other.show_matches_position;
         self.crop_length |= other.crop_length;
+
+        // facets
+        self.facets_sum_of_terms =
+            self.facets_sum_of_terms.saturating_add(other.facets_sum_of_terms);
+        self.facets_total_number_of_facets =
+            self.facets_total_number_of_facets.saturating_add(other.facets_total_number_of_facets);
+
+        // matching strategy
+        for (key, value) in other.matching_strategy.into_iter() {
+            let matching_strategy = self.matching_strategy.entry(key).or_insert(0);
+            *matching_strategy = matching_strategy.saturating_add(value);
+        }
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
@@ -513,20 +675,28 @@ impl SearchAggregator {
                 },
                 "q": {
                    "max_terms_number": self.max_terms_number,
-                   "most_used_matching_strategy": self.matching_strategy.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
                 },
                 "pagination": {
                    "max_limit": self.max_limit,
                    "max_offset": self.max_offset,
-                   "finite_pagination": self.finite_pagination > self.total_received / 2,
+                   "most_used_navigation": if self.finite_pagination > (self.total_received / 2) { "exhaustive" } else { "estimated" },
                 },
                 "formatting": {
+                    "max_attributes_to_retrieve": self.max_attributes_to_retrieve,
+                    "max_attributes_to_highlight": self.max_attributes_to_highlight,
                     "highlight_pre_tag": self.highlight_pre_tag,
                     "highlight_post_tag": self.highlight_post_tag,
+                    "max_attributes_to_crop": self.max_attributes_to_crop,
                     "crop_marker": self.crop_marker,
                     "show_matches_position": self.show_matches_position,
                     "crop_length": self.crop_length,
                 },
+                "facets": {
+                    "avg_facets_number": format!("{:.2}", self.facets_sum_of_terms as f64 / self.facets_total_number_of_facets as f64),
+                },
+                "matching_strategy": {
+                    "most_used_strategy": self.matching_strategy.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
+                }
             });
 
             Some(Track {
@@ -620,5 +790,202 @@ impl DocumentsAggregator {
                 ..Default::default()
             })
         }
+    }
+}
+
+#[derive(Default, Serialize)]
+pub struct DocumentsDeletionAggregator {
+    #[serde(skip)]
+    timestamp: Option<OffsetDateTime>,
+
+    // context
+    #[serde(rename = "user-agent")]
+    user_agents: HashSet<String>,
+
+    total_received: usize,
+    per_document_id: bool,
+    clear_all: bool,
+    per_batch: bool,
+}
+
+impl DocumentsDeletionAggregator {
+    pub fn from_query(kind: DocumentDeletionKind, request: &HttpRequest) -> Self {
+        let mut ret = Self::default();
+        ret.timestamp = Some(OffsetDateTime::now_utc());
+
+        ret.user_agents = extract_user_agents(request).into_iter().collect();
+        ret.total_received = 1;
+        match kind {
+            DocumentDeletionKind::PerDocumentId => ret.per_document_id = true,
+            DocumentDeletionKind::ClearAll => ret.clear_all = true,
+            DocumentDeletionKind::PerBatch => ret.per_batch = true,
+        }
+
+        ret
+    }
+
+    /// Aggregate one [DocumentsAggregator] into another.
+    pub fn aggregate(&mut self, other: Self) {
+        if self.timestamp.is_none() {
+            self.timestamp = other.timestamp;
+        }
+
+        // we can't create a union because there is no `into_union` method
+        for user_agent in other.user_agents {
+            self.user_agents.insert(user_agent);
+        }
+        self.total_received = self.total_received.saturating_add(other.total_received);
+        self.per_document_id |= other.per_document_id;
+        self.clear_all |= other.clear_all;
+        self.per_batch |= other.per_batch;
+    }
+
+    pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
+        // if we had no timestamp it means we never encountered any events and
+        // thus we don't need to send this event.
+        let timestamp = self.timestamp?;
+
+        Some(Track {
+            timestamp: Some(timestamp),
+            user: user.clone(),
+            event: event_name.to_string(),
+            properties: serde_json::to_value(self).ok()?,
+            ..Default::default()
+        })
+    }
+}
+
+#[derive(Default, Serialize)]
+pub struct TasksAggregator {
+    #[serde(skip)]
+    timestamp: Option<OffsetDateTime>,
+
+    // context
+    #[serde(rename = "user-agent")]
+    user_agents: HashSet<String>,
+
+    filtered_by_uid: bool,
+    filtered_by_index_uid: bool,
+    filtered_by_type: bool,
+    filtered_by_status: bool,
+    filtered_by_canceled_by: bool,
+    filtered_by_before_enqueued_at: bool,
+    filtered_by_after_enqueued_at: bool,
+    filtered_by_before_started_at: bool,
+    filtered_by_after_started_at: bool,
+    filtered_by_before_finished_at: bool,
+    filtered_by_after_finished_at: bool,
+    total_received: usize,
+}
+
+impl TasksAggregator {
+    pub fn from_query(query: &TasksFilterQueryRaw, request: &HttpRequest) -> Self {
+        Self {
+            timestamp: Some(OffsetDateTime::now_utc()),
+            user_agents: extract_user_agents(request).into_iter().collect(),
+            filtered_by_uid: query.common.uids.is_some(),
+            filtered_by_index_uid: query.common.index_uids.is_some(),
+            filtered_by_type: query.common.types.is_some(),
+            filtered_by_status: query.common.statuses.is_some(),
+            filtered_by_canceled_by: query.common.canceled_by.is_some(),
+            filtered_by_before_enqueued_at: query.dates.before_enqueued_at.is_some(),
+            filtered_by_after_enqueued_at: query.dates.after_enqueued_at.is_some(),
+            filtered_by_before_started_at: query.dates.before_started_at.is_some(),
+            filtered_by_after_started_at: query.dates.after_started_at.is_some(),
+            filtered_by_before_finished_at: query.dates.before_finished_at.is_some(),
+            filtered_by_after_finished_at: query.dates.after_finished_at.is_some(),
+            total_received: 1,
+        }
+    }
+
+    /// Aggregate one [DocumentsAggregator] into another.
+    pub fn aggregate(&mut self, other: Self) {
+        if self.timestamp.is_none() {
+            self.timestamp = other.timestamp;
+        }
+
+        // we can't create a union because there is no `into_union` method
+        for user_agent in other.user_agents {
+            self.user_agents.insert(user_agent);
+        }
+
+        self.filtered_by_uid |= other.filtered_by_uid;
+        self.filtered_by_index_uid |= other.filtered_by_index_uid;
+        self.filtered_by_type |= other.filtered_by_type;
+        self.filtered_by_status |= other.filtered_by_status;
+        self.filtered_by_canceled_by |= other.filtered_by_canceled_by;
+        self.filtered_by_before_enqueued_at |= other.filtered_by_before_enqueued_at;
+        self.filtered_by_after_enqueued_at |= other.filtered_by_after_enqueued_at;
+        self.filtered_by_before_started_at |= other.filtered_by_before_started_at;
+        self.filtered_by_after_started_at |= other.filtered_by_after_started_at;
+        self.filtered_by_before_finished_at |= other.filtered_by_before_finished_at;
+        self.filtered_by_after_finished_at |= other.filtered_by_after_finished_at;
+        self.filtered_by_after_finished_at |= other.filtered_by_after_finished_at;
+
+        self.total_received = self.total_received.saturating_add(other.total_received);
+    }
+
+    pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
+        // if we had no timestamp it means we never encountered any events and
+        // thus we don't need to send this event.
+        let timestamp = self.timestamp?;
+
+        Some(Track {
+            timestamp: Some(timestamp),
+            user: user.clone(),
+            event: event_name.to_string(),
+            properties: serde_json::to_value(self).ok()?,
+            ..Default::default()
+        })
+    }
+}
+
+#[derive(Default, Serialize)]
+pub struct HealthAggregator {
+    #[serde(skip)]
+    timestamp: Option<OffsetDateTime>,
+
+    // context
+    #[serde(rename = "user-agent")]
+    user_agents: HashSet<String>,
+
+    total_received: usize,
+}
+
+impl HealthAggregator {
+    pub fn from_query(request: &HttpRequest) -> Self {
+        let mut ret = Self::default();
+        ret.timestamp = Some(OffsetDateTime::now_utc());
+
+        ret.user_agents = extract_user_agents(request).into_iter().collect();
+        ret.total_received = 1;
+        ret
+    }
+
+    /// Aggregate one [DocumentsAggregator] into another.
+    pub fn aggregate(&mut self, other: Self) {
+        if self.timestamp.is_none() {
+            self.timestamp = other.timestamp;
+        }
+
+        // we can't create a union because there is no `into_union` method
+        for user_agent in other.user_agents {
+            self.user_agents.insert(user_agent);
+        }
+        self.total_received = self.total_received.saturating_add(other.total_received);
+    }
+
+    pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
+        // if we had no timestamp it means we never encountered any events and
+        // thus we don't need to send this event.
+        let timestamp = self.timestamp?;
+
+        Some(Track {
+            timestamp: Some(timestamp),
+            user: user.clone(),
+            event: event_name.to_string(),
+            properties: serde_json::to_value(self).ok()?,
+            ..Default::default()
+        })
     }
 }
