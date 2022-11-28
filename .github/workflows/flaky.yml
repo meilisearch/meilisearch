@@ -1,7 +1,8 @@
 name: Look for flaky tests
 on:
+  workflow_dispatch:
   schedule:
-    - cron: "0 12 * * FRI" # every friday at 12:00PM
+    - cron: "0 12 * * FRI" # Every Friday at 12:00PM
 
 jobs:
   flaky:

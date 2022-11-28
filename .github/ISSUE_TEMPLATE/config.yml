@@ -1,13 +1,13 @@
 contact_links:
+  - name: Support questions & other
+    url: https://github.com/meilisearch/meilisearch/discussions/new
+    about: For any other question, open a discussion in this repository
   - name: Language support request & feedback
     url: https://github.com/meilisearch/product/discussions/categories/feedback-feature-proposal?discussions_q=label%3Aproduct%3Acore%3Atokenizer+category%3A%22Feedback+%26+Feature+Proposal%22
     about:  The requests and feedback regarding Language support are not managed in this repository. Please upvote the related discussion in our dedicated product repository or open a new one if it doesn't exist.
-  - name: Feature request & feedback
+  - name: Any other feature request & feedback
     url: https://github.com/meilisearch/product/discussions/categories/feedback-feature-proposal
     about: The feature requests and feedback regarding the already existing features are not managed in this repository. Please open a discussion in our dedicated product repository
   - name: Documentation issue
     url: https://github.com/meilisearch/documentation/issues/new
     about: For documentation issues, open an issue or a PR in the documentation repository
-  - name: Support questions & other
-    url: https://github.com/meilisearch/meilisearch/discussions/new
-    about: For any other question, open a discussion in this repository

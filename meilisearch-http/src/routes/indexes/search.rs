@@ -1,19 +1,22 @@
+use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
+use index_scheduler::IndexScheduler;
 use log::debug;
 use meilisearch_auth::IndexSearchRules;
-use meilisearch_lib::index::{
-    MatchingStrategy, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
-    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
-};
-use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::ResponseError;
 use serde::Deserialize;
 use serde_cs::vec::CS;
 use serde_json::Value;
 
 use crate::analytics::{Analytics, SearchAggregator};
-use crate::extractors::authentication::{policies::*, GuardedData};
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::search::{
+    perform_search, MatchingStrategy, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
+    DEFAULT_SEARCH_OFFSET,
+};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -27,8 +30,12 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SearchQueryGet {
     q: Option<String>,
-    offset: Option<usize>,
-    limit: Option<usize>,
+    #[serde(default = "DEFAULT_SEARCH_OFFSET")]
+    offset: usize,
+    #[serde(default = "DEFAULT_SEARCH_LIMIT")]
+    limit: usize,
+    page: Option<usize>,
+    hits_per_page: Option<usize>,
     attributes_to_retrieve: Option<CS<String>>,
     attributes_to_crop: Option<CS<String>>,
     #[serde(default = "DEFAULT_CROP_LENGTH")]
@@ -62,15 +69,13 @@ impl From<SearchQueryGet> for SearchQuery {
         Self {
             q: other.q,
             offset: other.offset,
-            limit: other.limit.unwrap_or_else(DEFAULT_SEARCH_LIMIT),
-            attributes_to_retrieve: other
-                .attributes_to_retrieve
-                .map(|o| o.into_iter().collect()),
+            limit: other.limit,
+            page: other.page,
+            hits_per_page: other.hits_per_page,
+            attributes_to_retrieve: other.attributes_to_retrieve.map(|o| o.into_iter().collect()),
             attributes_to_crop: other.attributes_to_crop.map(|o| o.into_iter().collect()),
             crop_length: other.crop_length,
-            attributes_to_highlight: other
-                .attributes_to_highlight
-                .map(|o| o.into_iter().collect()),
+            attributes_to_highlight: other.attributes_to_highlight.map(|o| o.into_iter().collect()),
             filter,
             sort: other.sort.map(|attr| fix_sort_query_parameters(&attr)),
             show_matches_position: other.show_matches_position,
@@ -129,8 +134,8 @@ fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 }
 
 pub async fn search_with_url_query(
-    meilisearch: GuardedData<ActionPolicy<{ actions::SEARCH }>, MeiliSearch>,
-    path: web::Path<String>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
     params: web::Query<SearchQueryGet>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
@@ -138,19 +143,17 @@ pub async fn search_with_url_query(
     debug!("called with params: {:?}", params);
     let mut query: SearchQuery = params.into_inner().into();
 
-    let index_uid = path.into_inner();
     // Tenant token search_rules.
-    if let Some(search_rules) = meilisearch
-        .filters()
-        .search_rules
-        .get_index_search_rules(&index_uid)
+    if let Some(search_rules) =
+        index_scheduler.filters().search_rules.get_index_search_rules(&index_uid)
     {
         add_search_rules(&mut query, search_rules);
     }
 
     let mut aggregate = SearchAggregator::from_query(&query, &req);
 
-    let search_result = meilisearch.search(index_uid, query).await;
+    let index = index_scheduler.index(&index_uid)?;
+    let search_result = tokio::task::spawn_blocking(move || perform_search(&index, query)).await?;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
@@ -163,8 +166,8 @@ pub async fn search_with_url_query(
 }
 
 pub async fn search_with_post(
-    meilisearch: GuardedData<ActionPolicy<{ actions::SEARCH }>, MeiliSearch>,
-    path: web::Path<String>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
     params: web::Json<SearchQuery>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
@@ -172,19 +175,17 @@ pub async fn search_with_post(
     let mut query = params.into_inner();
     debug!("search called with params: {:?}", query);
 
-    let index_uid = path.into_inner();
     // Tenant token search_rules.
-    if let Some(search_rules) = meilisearch
-        .filters()
-        .search_rules
-        .get_index_search_rules(&index_uid)
+    if let Some(search_rules) =
+        index_scheduler.filters().search_rules.get_index_search_rules(&index_uid)
     {
         add_search_rules(&mut query, search_rules);
     }
 
     let mut aggregate = SearchAggregator::from_query(&query, &req);
 
-    let search_result = meilisearch.search(index_uid, query).await;
+    let index = index_scheduler.index(&index_uid)?;
+    let search_result = tokio::task::spawn_blocking(move || perform_search(&index, query)).await?;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
@@ -205,13 +206,7 @@ mod test {
         let sort = fix_sort_query_parameters("_geoPoint(12, 13):asc");
         assert_eq!(sort, vec!["_geoPoint(12,13):asc".to_string()]);
         let sort = fix_sort_query_parameters("doggo:asc,_geoPoint(12.45,13.56):desc");
-        assert_eq!(
-            sort,
-            vec![
-                "doggo:asc".to_string(),
-                "_geoPoint(12.45,13.56):desc".to_string(),
-            ]
-        );
+        assert_eq!(sort, vec!["doggo:asc".to_string(), "_geoPoint(12.45,13.56):desc".to_string(),]);
         let sort = fix_sort_query_parameters(
             "doggo:asc , _geoPoint(12.45, 13.56, 2590352):desc , catto:desc",
         );
@@ -225,12 +220,6 @@ mod test {
         );
         let sort = fix_sort_query_parameters("doggo:asc , _geoPoint(1, 2), catto:desc");
         // This is ugly but eh, I don't want to write a full parser just for this unused route
-        assert_eq!(
-            sort,
-            vec![
-                "doggo:asc".to_string(),
-                "_geoPoint(1,2),catto:desc".to_string(),
-            ]
-        );
+        assert_eq!(sort, vec!["doggo:asc".to_string(), "_geoPoint(1,2),catto:desc".to_string(),]);
     }
 }

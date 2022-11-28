@@ -1,16 +1,21 @@
-use std::{any::Any, sync::Arc};
+use std::any::Any;
+use std::sync::Arc;
 
 use actix_web::HttpRequest;
+use meilisearch_types::InstanceUid;
 use serde_json::Value;
 
-use crate::{routes::indexes::documents::UpdateDocumentsQuery, Opt};
+use super::{find_user_id, Analytics, DocumentDeletionKind};
+use crate::routes::indexes::documents::UpdateDocumentsQuery;
+use crate::routes::tasks::TasksFilterQueryRaw;
+use crate::Opt;
 
-use super::{find_user_id, Analytics};
-
-pub struct MockAnalytics;
+pub struct MockAnalytics {
+    instance_uid: Option<InstanceUid>,
+}
 
 #[derive(Default)]
-pub struct SearchAggregator {}
+pub struct SearchAggregator;
 
 #[allow(dead_code)]
 impl SearchAggregator {
@@ -23,13 +28,17 @@ impl SearchAggregator {
 
 impl MockAnalytics {
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(opt: &Opt) -> (Arc<dyn Analytics>, String) {
-        let user = find_user_id(&opt.db_path).unwrap_or_default();
-        (Arc::new(Self), user)
+    pub fn new(opt: &Opt) -> Arc<dyn Analytics> {
+        let instance_uid = find_user_id(&opt.db_path);
+        Arc::new(Self { instance_uid })
     }
 }
 
 impl Analytics for MockAnalytics {
+    fn instance_uid(&self) -> Option<&meilisearch_types::InstanceUid> {
+        self.instance_uid.as_ref()
+    }
+
     // These methods are noop and should be optimized out
     fn publish(&self, _event_name: String, _send: Value, _request: Option<&HttpRequest>) {}
     fn get_search(&self, _aggregate: super::SearchAggregator) {}
@@ -41,6 +50,7 @@ impl Analytics for MockAnalytics {
         _request: &HttpRequest,
     ) {
     }
+    fn delete_documents(&self, _kind: DocumentDeletionKind, _request: &HttpRequest) {}
     fn update_documents(
         &self,
         _documents_query: &UpdateDocumentsQuery,
@@ -48,4 +58,6 @@ impl Analytics for MockAnalytics {
         _request: &HttpRequest,
     ) {
     }
+    fn get_tasks(&self, _query: &TasksFilterQueryRaw, _request: &HttpRequest) {}
+    fn health_seen(&self, _request: &HttpRequest) {}
 }

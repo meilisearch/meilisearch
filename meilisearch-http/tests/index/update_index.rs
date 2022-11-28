@@ -1,6 +1,9 @@
-use crate::common::Server;
 use serde_json::json;
-use time::{format_description::well_known::Rfc3339, OffsetDateTime};
+use time::format_description::well_known::Rfc3339;
+use time::OffsetDateTime;
+
+use crate::common::encoder::Encoder;
+use crate::common::Server;
 
 #[actix_rt::test]
 async fn update_primary_key() {
@@ -32,6 +35,22 @@ async fn update_primary_key() {
 
     assert_eq!(response["primaryKey"], "primary");
     assert_eq!(response.as_object().unwrap().len(), 4);
+}
+
+#[actix_rt::test]
+async fn create_and_update_with_different_encoding() {
+    let server = Server::new().await;
+    let index = server.index_with_encoder("test", Encoder::Gzip);
+    let (_, code) = index.create(None).await;
+
+    assert_eq!(code, 202);
+
+    let index = server.index_with_encoder("test", Encoder::Brotli);
+    index.update(Some("primary")).await;
+
+    let response = index.wait_task(1).await;
+
+    assert_eq!(response["status"], "succeeded");
 }
 
 #[actix_rt::test]

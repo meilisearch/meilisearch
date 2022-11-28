@@ -1,6 +1,10 @@
 use actix_web as aweb;
 use aweb::error::{JsonPayloadError, QueryPayloadError};
+use meilisearch_types::document_formats::{DocumentFormatError, PayloadType};
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
+use meilisearch_types::index_uid::IndexUidFormatError;
+use serde_json::Value;
+use tokio::task::JoinError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum MeilisearchHttpError {
@@ -12,13 +16,57 @@ pub enum MeilisearchHttpError {
         .1.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
     )]
     InvalidContentType(String, Vec<String>),
+    #[error("Document `{0}` not found.")]
+    DocumentNotFound(String),
+    #[error("Invalid syntax for the filter parameter: `expected {}, found: {1}`.", .0.join(", "))]
+    InvalidExpression(&'static [&'static str], Value),
+    #[error("A {0} payload is missing.")]
+    MissingPayload(PayloadType),
+    #[error("The provided payload reached the size limit.")]
+    PayloadTooLarge,
+    #[error("Two indexes must be given for each swap. The list `{:?}` contains {} indexes.",
+        .0, .0.len()
+    )]
+    SwapIndexPayloadWrongLength(Vec<String>),
+    #[error(transparent)]
+    IndexUid(#[from] IndexUidFormatError),
+    #[error(transparent)]
+    SerdeJson(#[from] serde_json::Error),
+    #[error(transparent)]
+    HeedError(#[from] meilisearch_types::heed::Error),
+    #[error(transparent)]
+    IndexScheduler(#[from] index_scheduler::Error),
+    #[error(transparent)]
+    Milli(#[from] meilisearch_types::milli::Error),
+    #[error(transparent)]
+    Payload(#[from] PayloadError),
+    #[error(transparent)]
+    FileStore(#[from] file_store::Error),
+    #[error(transparent)]
+    DocumentFormat(#[from] DocumentFormatError),
+    #[error(transparent)]
+    Join(#[from] JoinError),
 }
 
 impl ErrorCode for MeilisearchHttpError {
     fn error_code(&self) -> Code {
         match self {
             MeilisearchHttpError::MissingContentType(_) => Code::MissingContentType,
+            MeilisearchHttpError::MissingPayload(_) => Code::MissingPayload,
             MeilisearchHttpError::InvalidContentType(_, _) => Code::InvalidContentType,
+            MeilisearchHttpError::DocumentNotFound(_) => Code::DocumentNotFound,
+            MeilisearchHttpError::InvalidExpression(_, _) => Code::Filter,
+            MeilisearchHttpError::PayloadTooLarge => Code::PayloadTooLarge,
+            MeilisearchHttpError::SwapIndexPayloadWrongLength(_) => Code::BadRequest,
+            MeilisearchHttpError::IndexUid(e) => e.error_code(),
+            MeilisearchHttpError::SerdeJson(_) => Code::Internal,
+            MeilisearchHttpError::HeedError(_) => Code::Internal,
+            MeilisearchHttpError::IndexScheduler(e) => e.error_code(),
+            MeilisearchHttpError::Milli(e) => e.error_code(),
+            MeilisearchHttpError::Payload(e) => e.error_code(),
+            MeilisearchHttpError::FileStore(_) => Code::Internal,
+            MeilisearchHttpError::DocumentFormat(e) => e.error_code(),
+            MeilisearchHttpError::Join(_) => Code::Internal,
         }
     }
 }
@@ -29,11 +77,19 @@ impl From<MeilisearchHttpError> for aweb::Error {
     }
 }
 
+impl From<aweb::error::PayloadError> for MeilisearchHttpError {
+    fn from(error: aweb::error::PayloadError) -> Self {
+        MeilisearchHttpError::Payload(PayloadError::Payload(error))
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum PayloadError {
-    #[error("{0}")]
+    #[error(transparent)]
+    Payload(aweb::error::PayloadError),
+    #[error(transparent)]
     Json(JsonPayloadError),
-    #[error("{0}")]
+    #[error(transparent)]
     Query(QueryPayloadError),
     #[error("The json payload provided is malformed. `{0}`.")]
     MalformedPayload(serde_json::error::Error),
@@ -44,6 +100,15 @@ pub enum PayloadError {
 impl ErrorCode for PayloadError {
     fn error_code(&self) -> Code {
         match self {
+            PayloadError::Payload(e) => match e {
+                aweb::error::PayloadError::Incomplete(_) => Code::Internal,
+                aweb::error::PayloadError::EncodingCorrupted => Code::Internal,
+                aweb::error::PayloadError::Overflow => Code::PayloadTooLarge,
+                aweb::error::PayloadError::UnknownLength => Code::Internal,
+                aweb::error::PayloadError::Http2Payload(_) => Code::Internal,
+                aweb::error::PayloadError::Io(_) => Code::Internal,
+                _ => todo!(),
+            },
             PayloadError::Json(err) => match err {
                 JsonPayloadError::Overflow { .. } => Code::PayloadTooLarge,
                 JsonPayloadError::ContentType => Code::UnsupportedMediaType,

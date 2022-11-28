@@ -1,17 +1,13 @@
 use std::future::{ready, Ready};
 
+use actix_web::dev::{self, Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::http::header;
-use actix_web::HttpResponse;
-use actix_web::{
-    dev::{self, Service, ServiceRequest, ServiceResponse, Transform},
-    Error,
-};
+use actix_web::{Error, HttpResponse};
 use futures_util::future::LocalBoxFuture;
 use meilisearch_auth::actions;
 use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::ResponseError;
-use prometheus::HistogramTimer;
-use prometheus::{Encoder, TextEncoder};
+use prometheus::{Encoder, HistogramTimer, TextEncoder};
 
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
@@ -33,15 +29,11 @@ pub async fn get_metrics(
 
     let encoder = TextEncoder::new();
     let mut buffer = vec![];
-    encoder
-        .encode(&prometheus::gather(), &mut buffer)
-        .expect("Failed to encode metrics");
+    encoder.encode(&prometheus::gather(), &mut buffer).expect("Failed to encode metrics");
 
     let response = String::from_utf8(buffer).expect("Failed to convert bytes to string");
 
-    Ok(HttpResponse::Ok()
-        .insert_header(header::ContentType(mime::TEXT_PLAIN))
-        .body(response))
+    Ok(HttpResponse::Ok().insert_header(header::ContentType(mime::TEXT_PLAIN)).body(response))
 }
 
 pub struct RouteMetrics;

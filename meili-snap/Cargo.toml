@@ -1,0 +1,9 @@
+[package]
+name = "meili-snap"
+version = "0.30.0"
+edition = "2021"
+
+[dependencies]
+insta = { version = "^1.19.1", features = ["json", "redactions"] }
+md5 = "0.7.0"
+once_cell = "1.15"

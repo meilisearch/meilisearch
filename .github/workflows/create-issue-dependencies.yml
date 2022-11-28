@@ -3,7 +3,7 @@ on:
   schedule:
     - cron: '0 0 1 */3 *'
   workflow_dispatch:
-  
+
 jobs:
   create-issue:
     runs-on: ubuntu-latest
@@ -12,12 +12,12 @@ jobs:
     - name: Create an issue
       uses: actions-ecosystem/action-create-issue@v1
       with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
+        github_token: ${{ secrets.MEILI_BOT_GH_PAT }}
         title: Upgrade dependencies
         body: |
           We need to update the dependencies of the Meilisearch repository, and, if possible, the dependencies of all the core-team repositories that Meilisearch depends on (milli, charabia, heed...).
 
-          ⚠️ This issue should only be done at the beginning of the sprint!     
+          ⚠️ This issue should only be done at the beginning of the sprint!
         labels: |
           dependencies
           maintenance

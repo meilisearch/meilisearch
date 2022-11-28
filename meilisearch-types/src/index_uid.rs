@@ -1,7 +1,10 @@
-use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
+
+use serde::{Deserialize, Serialize};
+
+use crate::error::{Code, ErrorCode};
 
 /// An index uid is composed of only ascii alphanumeric characters, - and _, between 1 and 400
 /// bytes long
@@ -38,9 +41,7 @@ impl TryFrom<String> for IndexUid {
     type Error = IndexUidFormatError;
 
     fn try_from(uid: String) -> Result<Self, Self::Error> {
-        if !uid
-            .chars()
-            .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
+        if !uid.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
             || uid.is_empty()
             || uid.len() > 400
         {
@@ -74,12 +75,18 @@ impl fmt::Display for IndexUidFormatError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "invalid index uid `{}`, the uid must be an integer \
-            or a string containing only alphanumeric characters \
-            a-z A-Z 0-9, hyphens - and underscores _.",
+            "`{}` is not a valid index uid. Index uid can be an \
+            integer or a string containing only alphanumeric \
+            characters, hyphens (-) and underscores (_).",
             self.invalid_uid,
         )
     }
 }
 
 impl Error for IndexUidFormatError {}
+
+impl ErrorCode for IndexUidFormatError {
+    fn error_code(&self) -> Code {
+        Code::InvalidIndexUid
+    }
+}

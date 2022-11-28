@@ -1,13 +1,15 @@
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use actix_web::error::PayloadError;
+use actix_http::encoding::Decoder as Decompress;
 use actix_web::{dev, web, FromRequest, HttpRequest};
 use futures::future::{ready, Ready};
 use futures::Stream;
 
+use crate::error::MeilisearchHttpError;
+
 pub struct Payload {
-    payload: dev::Payload,
+    payload: Decompress<dev::Payload>,
     limit: usize,
 }
 
@@ -28,7 +30,7 @@ impl Default for PayloadConfig {
 }
 
 impl FromRequest for Payload {
-    type Error = PayloadError;
+    type Error = MeilisearchHttpError;
 
     type Future = Ready<Result<Payload, Self::Error>>;
 
@@ -39,14 +41,14 @@ impl FromRequest for Payload {
             .map(|c| c.limit)
             .unwrap_or(PayloadConfig::default().limit);
         ready(Ok(Payload {
-            payload: payload.take(),
+            payload: Decompress::from_headers(payload.take(), req.headers()),
             limit,
         }))
     }
 }
 
 impl Stream for Payload {
-    type Item = Result<web::Bytes, PayloadError>;
+    type Item = Result<web::Bytes, MeilisearchHttpError>;
 
     #[inline]
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -57,11 +59,11 @@ impl Stream for Payload {
                         self.limit = new_limit;
                         Poll::Ready(Some(Ok(bytes)))
                     }
-                    None => Poll::Ready(Some(Err(PayloadError::Overflow))),
+                    None => Poll::Ready(Some(Err(MeilisearchHttpError::PayloadTooLarge))),
                 },
-                x => Poll::Ready(Some(x)),
+                x => Poll::Ready(Some(x.map_err(MeilisearchHttpError::from))),
             },
-            otherwise => otherwise,
+            otherwise => otherwise.map(|o| o.map(|o| o.map_err(MeilisearchHttpError::from))),
         }
     }
 }

@@ -1,58 +1,68 @@
-use log::debug;
-
+use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use meilisearch_lib::index::{Settings, Unchecked};
-use meilisearch_lib::index_controller::Update;
-use meilisearch_lib::MeiliSearch;
+use index_scheduler::IndexScheduler;
+use log::debug;
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::settings::{settings, Settings, Unchecked};
+use meilisearch_types::tasks::KindWithContent;
 use serde_json::json;
 
 use crate::analytics::Analytics;
-use crate::extractors::authentication::{policies::*, GuardedData};
-use crate::task::SummarizedTaskView;
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::GuardedData;
+use crate::routes::SummarizedTaskView;
 
 #[macro_export]
 macro_rules! make_setting_route {
     ($route:literal, $update_verb:ident, $type:ty, $attr:ident, $camelcase_attr:literal, $analytics_var:ident, $analytics:expr) => {
         pub mod $attr {
+            use actix_web::web::Data;
             use actix_web::{web, HttpRequest, HttpResponse, Resource};
+            use index_scheduler::IndexScheduler;
             use log::debug;
-
-            use meilisearch_lib::milli::update::Setting;
-            use meilisearch_lib::{index::Settings, index_controller::Update, MeiliSearch};
-
             use meilisearch_types::error::ResponseError;
+            use meilisearch_types::index_uid::IndexUid;
+            use meilisearch_types::milli::update::Setting;
+            use meilisearch_types::settings::{settings, Settings};
+            use meilisearch_types::tasks::KindWithContent;
             use $crate::analytics::Analytics;
-            use $crate::extractors::authentication::{policies::*, GuardedData};
+            use $crate::extractors::authentication::policies::*;
+            use $crate::extractors::authentication::GuardedData;
             use $crate::extractors::sequential_extractor::SeqHandler;
-            use $crate::task::SummarizedTaskView;
+            use $crate::routes::SummarizedTaskView;
 
             pub async fn delete(
-                meilisearch: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, MeiliSearch>,
+                index_scheduler: GuardedData<
+                    ActionPolicy<{ actions::SETTINGS_UPDATE }>,
+                    Data<IndexScheduler>,
+                >,
                 index_uid: web::Path<String>,
             ) -> Result<HttpResponse, ResponseError> {
-                let settings = Settings {
-                    $attr: Setting::Reset,
-                    ..Default::default()
-                };
+                let new_settings = Settings { $attr: Setting::Reset, ..Default::default() };
 
-                let allow_index_creation = meilisearch.filters().allow_index_creation;
-                let update = Update::Settings {
-                    settings,
+                let allow_index_creation = index_scheduler.filters().allow_index_creation;
+                let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
+                let task = KindWithContent::SettingsUpdate {
+                    index_uid,
+                    new_settings: Box::new(new_settings),
                     is_deletion: true,
                     allow_index_creation,
                 };
-                let task: SummarizedTaskView = meilisearch
-                    .register_update(index_uid.into_inner(), update)
-                    .await?
-                    .into();
+                let task: SummarizedTaskView =
+                    tokio::task::spawn_blocking(move || index_scheduler.register(task))
+                        .await??
+                        .into();
 
                 debug!("returns: {:?}", task);
                 Ok(HttpResponse::Accepted().json(task))
             }
 
             pub async fn update(
-                meilisearch: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, MeiliSearch>,
+                index_scheduler: GuardedData<
+                    ActionPolicy<{ actions::SETTINGS_UPDATE }>,
+                    Data<IndexScheduler>,
+                >,
                 index_uid: actix_web::web::Path<String>,
                 body: actix_web::web::Json<Option<$type>>,
                 req: HttpRequest,
@@ -62,7 +72,7 @@ macro_rules! make_setting_route {
 
                 $analytics(&body, &req);
 
-                let settings = Settings {
+                let new_settings = Settings {
                     $attr: match body {
                         Some(inner_body) => Setting::Set(inner_body),
                         None => Setting::Reset,
@@ -70,26 +80,34 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
 
-                let allow_index_creation = meilisearch.filters().allow_index_creation;
-                let update = Update::Settings {
-                    settings,
+                let allow_index_creation = index_scheduler.filters().allow_index_creation;
+                let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
+                let task = KindWithContent::SettingsUpdate {
+                    index_uid,
+                    new_settings: Box::new(new_settings),
                     is_deletion: false,
                     allow_index_creation,
                 };
-                let task: SummarizedTaskView = meilisearch
-                    .register_update(index_uid.into_inner(), update)
-                    .await?
-                    .into();
+                let task: SummarizedTaskView =
+                    tokio::task::spawn_blocking(move || index_scheduler.register(task))
+                        .await??
+                        .into();
 
                 debug!("returns: {:?}", task);
                 Ok(HttpResponse::Accepted().json(task))
             }
 
             pub async fn get(
-                meilisearch: GuardedData<ActionPolicy<{ actions::SETTINGS_GET }>, MeiliSearch>,
+                index_scheduler: GuardedData<
+                    ActionPolicy<{ actions::SETTINGS_GET }>,
+                    Data<IndexScheduler>,
+                >,
                 index_uid: actix_web::web::Path<String>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
-                let settings = meilisearch.settings(index_uid.into_inner()).await?;
+                let index = index_scheduler.index(&index_uid)?;
+                let rtxn = index.read_txn()?;
+                let settings = settings(&index, &rtxn)?;
+
                 debug!("returns: {:?}", settings);
                 let mut json = serde_json::json!(&settings);
                 let val = json[$camelcase_attr].take();
@@ -104,17 +122,6 @@ macro_rules! make_setting_route {
                     .route(web::delete().to(SeqHandler(delete)))
             }
         }
-    };
-    ($route:literal, $update_verb:ident, $type:ty, $attr:ident, $camelcase_attr:literal) => {
-        make_setting_route!(
-            $route,
-            $update_verb,
-            $type,
-            $attr,
-            $camelcase_attr,
-            _analytics,
-            |_, _| {}
-        );
     };
 }
 
@@ -169,17 +176,32 @@ make_setting_route!(
     put,
     Vec<String>,
     displayed_attributes,
-    "displayedAttributes"
+    "displayedAttributes",
+    analytics,
+    |displayed: &Option<Vec<String>>, req: &HttpRequest| {
+        use serde_json::json;
+
+        analytics.publish(
+            "DisplayedAttributes Updated".to_string(),
+            json!({
+                "displayed_attributes": {
+                    "total": displayed.as_ref().map(|displayed| displayed.len()),
+                    "with_wildcard": displayed.as_ref().map(|displayed| displayed.iter().any(|displayed| displayed == "*")),
+                },
+            }),
+            Some(req),
+        );
+    }
 );
 
 make_setting_route!(
     "/typo-tolerance",
     patch,
-    meilisearch_lib::index::updates::TypoSettings,
+    meilisearch_types::settings::TypoSettings,
     typo_tolerance,
     "typoTolerance",
     analytics,
-    |setting: &Option<meilisearch_lib::index::updates::TypoSettings>, req: &HttpRequest| {
+    |setting: &Option<meilisearch_types::settings::TypoSettings>, req: &HttpRequest| {
         use serde_json::json;
 
         analytics.publish(
@@ -229,6 +251,7 @@ make_setting_route!(
             json!({
                 "searchable_attributes": {
                     "total": setting.as_ref().map(|searchable| searchable.len()),
+                    "with_wildcard": setting.as_ref().map(|searchable| searchable.iter().any(|searchable| searchable == "*")),
                 },
             }),
             Some(req),
@@ -241,7 +264,21 @@ make_setting_route!(
     put,
     std::collections::BTreeSet<String>,
     stop_words,
-    "stopWords"
+    "stopWords",
+    analytics,
+    |stop_words: &Option<std::collections::BTreeSet<String>>, req: &HttpRequest| {
+        use serde_json::json;
+
+        analytics.publish(
+            "StopWords Updated".to_string(),
+            json!({
+                "stop_words": {
+                    "total": stop_words.as_ref().map(|stop_words| stop_words.len()),
+                },
+            }),
+            Some(req),
+        );
+    }
 );
 
 make_setting_route!(
@@ -249,7 +286,21 @@ make_setting_route!(
     put,
     std::collections::BTreeMap<String, Vec<String>>,
     synonyms,
-    "synonyms"
+    "synonyms",
+    analytics,
+    |synonyms: &Option<std::collections::BTreeMap<String, Vec<String>>>, req: &HttpRequest| {
+        use serde_json::json;
+
+        analytics.publish(
+            "Synonyms Updated".to_string(),
+            json!({
+                "synonyms": {
+                    "total": synonyms.as_ref().map(|synonyms| synonyms.len()),
+                },
+            }),
+            Some(req),
+        );
+    }
 );
 
 make_setting_route!(
@@ -257,7 +308,20 @@ make_setting_route!(
     put,
     String,
     distinct_attribute,
-    "distinctAttribute"
+    "distinctAttribute",
+    analytics,
+    |distinct: &Option<String>, req: &HttpRequest| {
+        use serde_json::json;
+        analytics.publish(
+            "DistinctAttribute Updated".to_string(),
+            json!({
+                "distinct_attribute": {
+                    "set": distinct.is_some(),
+                }
+            }),
+            Some(req),
+        );
+    }
 );
 
 make_setting_route!(
@@ -274,7 +338,13 @@ make_setting_route!(
             "RankingRules Updated".to_string(),
             json!({
                 "ranking_rules": {
-                    "sort_position": setting.as_ref().map(|sort| sort.iter().position(|s| s == "sort")),
+                    "words_position": setting.as_ref().map(|rr| rr.iter().position(|s| s == "words")),
+                    "typo_position": setting.as_ref().map(|rr| rr.iter().position(|s| s == "typo")),
+                    "proximity_position": setting.as_ref().map(|rr| rr.iter().position(|s| s == "proximity")),
+                    "attribute_position": setting.as_ref().map(|rr| rr.iter().position(|s| s == "attribute")),
+                    "sort_position": setting.as_ref().map(|rr| rr.iter().position(|s| s == "sort")),
+                    "exactness_position": setting.as_ref().map(|rr| rr.iter().position(|s| s == "exactness")),
+                    "values": setting.as_ref().map(|rr| rr.iter().filter(|s| !s.contains(':')).cloned().collect::<Vec<_>>().join(", ")),
                 }
             }),
             Some(req),
@@ -285,11 +355,11 @@ make_setting_route!(
 make_setting_route!(
     "/faceting",
     patch,
-    meilisearch_lib::index::updates::FacetingSettings,
+    meilisearch_types::settings::FacetingSettings,
     faceting,
     "faceting",
     analytics,
-    |setting: &Option<meilisearch_lib::index::updates::FacetingSettings>, req: &HttpRequest| {
+    |setting: &Option<meilisearch_types::settings::FacetingSettings>, req: &HttpRequest| {
         use serde_json::json;
 
         analytics.publish(
@@ -307,11 +377,11 @@ make_setting_route!(
 make_setting_route!(
     "/pagination",
     patch,
-    meilisearch_lib::index::updates::PaginationSettings,
+    meilisearch_types::settings::PaginationSettings,
     pagination,
     "pagination",
     analytics,
-    |setting: &Option<meilisearch_lib::index::updates::PaginationSettings>, req: &HttpRequest| {
+    |setting: &Option<meilisearch_types::settings::PaginationSettings>, req: &HttpRequest| {
         use serde_json::json;
 
         analytics.publish(
@@ -355,46 +425,60 @@ generate_configure!(
 );
 
 pub async fn update_all(
-    meilisearch: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     body: web::Json<Settings<Unchecked>>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let settings = body.into_inner();
+    let new_settings = body.into_inner();
 
     analytics.publish(
         "Settings Updated".to_string(),
         json!({
            "ranking_rules": {
-                "sort_position": settings.ranking_rules.as_ref().set().map(|sort| sort.iter().position(|s| s == "sort")),
+                "words_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| s == "words")),
+                "typo_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| s == "typo")),
+                "proximity_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| s == "proximity")),
+                "attribute_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| s == "attribute")),
+                "sort_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| s == "sort")),
+                "exactness_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| s == "exactness")),
+                "values": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().filter(|s| !s.contains(':')).cloned().collect::<Vec<_>>().join(", ")),
             },
             "searchable_attributes": {
-                "total": settings.searchable_attributes.as_ref().set().map(|searchable| searchable.len()),
+                "total": new_settings.searchable_attributes.as_ref().set().map(|searchable| searchable.len()),
+                "with_wildcard": new_settings.searchable_attributes.as_ref().set().map(|searchable| searchable.iter().any(|searchable| searchable == "*")),
+            },
+            "displayed_attributes": {
+                "total": new_settings.displayed_attributes.as_ref().set().map(|displayed| displayed.len()),
+                "with_wildcard": new_settings.displayed_attributes.as_ref().set().map(|displayed| displayed.iter().any(|displayed| displayed == "*")),
             },
            "sortable_attributes": {
-                "total": settings.sortable_attributes.as_ref().set().map(|sort| sort.len()),
-                "has_geo": settings.sortable_attributes.as_ref().set().map(|sort| sort.iter().any(|s| s == "_geo")),
+                "total": new_settings.sortable_attributes.as_ref().set().map(|sort| sort.len()),
+                "has_geo": new_settings.sortable_attributes.as_ref().set().map(|sort| sort.iter().any(|s| s == "_geo")),
             },
            "filterable_attributes": {
-                "total": settings.filterable_attributes.as_ref().set().map(|filter| filter.len()),
-                "has_geo": settings.filterable_attributes.as_ref().set().map(|filter| filter.iter().any(|s| s == "_geo")),
+                "total": new_settings.filterable_attributes.as_ref().set().map(|filter| filter.len()),
+                "has_geo": new_settings.filterable_attributes.as_ref().set().map(|filter| filter.iter().any(|s| s == "_geo")),
+            },
+            "distinct_attribute": {
+                "set": new_settings.distinct_attribute.as_ref().set().is_some()
             },
             "typo_tolerance": {
-                "enabled": settings.typo_tolerance
+                "enabled": new_settings.typo_tolerance
                     .as_ref()
                     .set()
                     .and_then(|s| s.enabled.as_ref().set())
                     .copied(),
-                "disable_on_attributes": settings.typo_tolerance
+                "disable_on_attributes": new_settings.typo_tolerance
                     .as_ref()
                     .set()
                     .and_then(|s| s.disable_on_attributes.as_ref().set().map(|m| !m.is_empty())),
-                "disable_on_words": settings.typo_tolerance
+                "disable_on_words": new_settings.typo_tolerance
                     .as_ref()
                     .set()
                     .and_then(|s| s.disable_on_words.as_ref().set().map(|m| !m.is_empty())),
-                "min_word_size_for_one_typo": settings.typo_tolerance
+                "min_word_size_for_one_typo": new_settings.typo_tolerance
                     .as_ref()
                     .set()
                     .and_then(|s| s.min_word_size_for_typos
@@ -402,7 +486,7 @@ pub async fn update_all(
                         .set()
                         .map(|s| s.one_typo.set()))
                     .flatten(),
-                "min_word_size_for_two_typos": settings.typo_tolerance
+                "min_word_size_for_two_typos": new_settings.typo_tolerance
                     .as_ref()
                     .set()
                     .and_then(|s| s.min_word_size_for_typos
@@ -412,61 +496,69 @@ pub async fn update_all(
                     .flatten(),
             },
             "faceting": {
-                "max_values_per_facet": settings.faceting
+                "max_values_per_facet": new_settings.faceting
                     .as_ref()
                     .set()
                     .and_then(|s| s.max_values_per_facet.as_ref().set()),
             },
             "pagination": {
-                "max_total_hits": settings.pagination
+                "max_total_hits": new_settings.pagination
                     .as_ref()
                     .set()
                     .and_then(|s| s.max_total_hits.as_ref().set()),
+            },
+            "stop_words": {
+                "total": new_settings.stop_words.as_ref().set().map(|stop_words| stop_words.len()),
+            },
+            "synonyms": {
+                "total": new_settings.synonyms.as_ref().set().map(|synonyms| synonyms.len()),
             },
         }),
         Some(&req),
     );
 
-    let allow_index_creation = meilisearch.filters().allow_index_creation;
-    let update = Update::Settings {
-        settings,
+    let allow_index_creation = index_scheduler.filters().allow_index_creation;
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
+    let task = KindWithContent::SettingsUpdate {
+        index_uid,
+        new_settings: Box::new(new_settings),
         is_deletion: false,
         allow_index_creation,
     };
-    let task: SummarizedTaskView = meilisearch
-        .register_update(index_uid.into_inner(), update)
-        .await?
-        .into();
+    let task: SummarizedTaskView =
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
 }
 
 pub async fn get_all(
-    data: GuardedData<ActionPolicy<{ actions::SETTINGS_GET }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let settings = data.settings(index_uid.into_inner()).await?;
-    debug!("returns: {:?}", settings);
-    Ok(HttpResponse::Ok().json(settings))
+    let index = index_scheduler.index(&index_uid)?;
+    let rtxn = index.read_txn()?;
+    let new_settings = settings(&index, &rtxn)?;
+    debug!("returns: {:?}", new_settings);
+    Ok(HttpResponse::Ok().json(new_settings))
 }
 
 pub async fn delete_all(
-    data: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let settings = Settings::cleared().into_unchecked();
+    let new_settings = Settings::cleared().into_unchecked();
 
-    let allow_index_creation = data.filters().allow_index_creation;
-    let update = Update::Settings {
-        settings,
+    let allow_index_creation = index_scheduler.filters().allow_index_creation;
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
+    let task = KindWithContent::SettingsUpdate {
+        index_uid,
+        new_settings: Box::new(new_settings),
         is_deletion: true,
         allow_index_creation,
     };
-    let task: SummarizedTaskView = data
-        .register_update(index_uid.into_inner(), update)
-        .await?
-        .into();
+    let task: SummarizedTaskView =
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))

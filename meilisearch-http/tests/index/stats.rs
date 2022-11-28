@@ -17,10 +17,7 @@ async fn stats() {
     assert_eq!(code, 200);
     assert_eq!(response["numberOfDocuments"], 0);
     assert!(response["isIndexing"] == false);
-    assert!(response["fieldDistribution"]
-        .as_object()
-        .unwrap()
-        .is_empty());
+    assert!(response["fieldDistribution"].as_object().unwrap().is_empty());
 
     let documents = json!([
         {

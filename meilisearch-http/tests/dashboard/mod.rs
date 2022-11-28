@@ -1,5 +1,6 @@
 use crate::common::Server;
 
+#[cfg(feature = "mini-dashboard")]
 #[actix_rt::test]
 async fn dashboard_assets_load() {
     let server = Server::new().await;

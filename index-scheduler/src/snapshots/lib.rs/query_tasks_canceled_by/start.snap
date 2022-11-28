@@ -1,0 +1,53 @@
+---
+source: index-scheduler/src/lib.rs
+---
+### Autobatching Enabled = true
+### Processing Tasks:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, status: succeeded, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
+1 {uid: 1, status: canceled, canceled_by: 3, details: { primary_key: Some("sheep") }, kind: IndexCreation { index_uid: "doggo", primary_key: Some("sheep") }}
+2 {uid: 2, status: canceled, canceled_by: 3, details: { swaps: [IndexSwap { indexes: ("catto", "doggo") }] }, kind: IndexSwap { swaps: [IndexSwap { indexes: ("catto", "doggo") }] }}
+3 {uid: 3, status: succeeded, details: { matched_tasks: 3, canceled_tasks: Some(0), original_filter: "test_query" }, kind: TaskCancelation { query: "test_query", tasks: RoaringBitmap<[0, 1, 2]> }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+succeeded [0,3,]
+canceled [1,2,]
+----------------------------------------------------------------------
+### Kind:
+"indexCreation" [0,1,]
+"indexSwap" [2,]
+"taskCancelation" [3,]
+----------------------------------------------------------------------
+### Index Tasks:
+catto [0,2,]
+doggo [1,2,]
+----------------------------------------------------------------------
+### Index Mapper:
+["catto"]
+----------------------------------------------------------------------
+### Canceled By:
+3 [1,2,]
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+[timestamp] [1,2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------
+

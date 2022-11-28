@@ -1,18 +1,20 @@
+use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
+use index_scheduler::IndexScheduler;
 use log::debug;
-use meilisearch_lib::index_controller::Update;
-use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::milli::{self, FieldDistribution, Index};
+use meilisearch_types::tasks::KindWithContent;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
 
+use super::{Pagination, SummarizedTaskView};
 use crate::analytics::Analytics;
-use crate::extractors::authentication::{policies::*, AuthenticationError, GuardedData};
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::task::SummarizedTaskView;
-
-use super::Pagination;
 
 pub mod documents;
 pub mod search;
@@ -39,19 +41,42 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexView {
+    pub uid: String,
+    #[serde(with = "time::serde::rfc3339")]
+    pub created_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    pub updated_at: OffsetDateTime,
+    pub primary_key: Option<String>,
+}
+
+impl IndexView {
+    fn new(uid: String, index: &Index) -> Result<IndexView, milli::Error> {
+        let rtxn = index.read_txn()?;
+        Ok(IndexView {
+            uid,
+            created_at: index.created_at(&rtxn)?,
+            updated_at: index.updated_at(&rtxn)?,
+            primary_key: index.primary_key(&rtxn)?.map(String::from),
+        })
+    }
+}
+
 pub async fn list_indexes(
-    data: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, Data<IndexScheduler>>,
     paginate: web::Query<Pagination>,
 ) -> Result<HttpResponse, ResponseError> {
-    let search_rules = &data.filters().search_rules;
-    let indexes: Vec<_> = data.list_indexes().await?;
-    let nb_indexes = indexes.len();
-    let iter = indexes
+    let search_rules = &index_scheduler.filters().search_rules;
+    let indexes: Vec<_> = index_scheduler.indexes()?;
+    let indexes = indexes
         .into_iter()
-        .filter(|i| search_rules.is_index_authorized(&i.uid));
-    let ret = paginate
-        .into_inner()
-        .auto_paginate_unsized(nb_indexes, iter);
+        .filter(|(name, _)| search_rules.is_index_authorized(name))
+        .map(|(name, index)| IndexView::new(name, &index))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let ret = paginate.auto_paginate_sized(indexes.into_iter());
 
     debug!("returns: {:?}", ret);
     Ok(HttpResponse::Ok().json(ret))
@@ -65,16 +90,15 @@ pub struct IndexCreateRequest {
 }
 
 pub async fn create_index(
-    meilisearch: GuardedData<ActionPolicy<{ actions::INDEXES_CREATE }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_CREATE }>, Data<IndexScheduler>>,
     body: web::Json<IndexCreateRequest>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let IndexCreateRequest {
-        primary_key, uid, ..
-    } = body.into_inner();
+    let IndexCreateRequest { primary_key, uid } = body.into_inner();
+    let uid = IndexUid::try_from(uid)?.into_inner();
 
-    let allow_index_creation = meilisearch.filters().search_rules.is_index_authorized(&uid);
+    let allow_index_creation = index_scheduler.filters().search_rules.is_index_authorized(&uid);
     if allow_index_creation {
         analytics.publish(
             "Index Created".to_string(),
@@ -82,8 +106,9 @@ pub async fn create_index(
             Some(&req),
         );
 
-        let update = Update::CreateIndex { primary_key };
-        let task: SummarizedTaskView = meilisearch.register_update(uid, update).await?.into();
+        let task = KindWithContent::IndexCreation { index_uid: uid, primary_key };
+        let task: SummarizedTaskView =
+            tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
         Ok(HttpResponse::Accepted().json(task))
     } else {
@@ -99,30 +124,20 @@ pub struct UpdateIndexRequest {
     primary_key: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UpdateIndexResponse {
-    name: String,
-    uid: String,
-    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
-    created_at: OffsetDateTime,
-    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
-    updated_at: OffsetDateTime,
-    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
-    primary_key: OffsetDateTime,
-}
-
 pub async fn get_index(
-    meilisearch: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, MeiliSearch>,
-    path: web::Path<String>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let meta = meilisearch.get_index(path.into_inner()).await?;
-    debug!("returns: {:?}", meta);
-    Ok(HttpResponse::Ok().json(meta))
+    let index = index_scheduler.index(&index_uid)?;
+    let index_view = IndexView::new(index_uid.into_inner(), &index)?;
+
+    debug!("returns: {:?}", index_view);
+
+    Ok(HttpResponse::Ok().json(index_view))
 }
 
 pub async fn update_index(
-    meilisearch: GuardedData<ActionPolicy<{ actions::INDEXES_UPDATE }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_UPDATE }>, Data<IndexScheduler>>,
     path: web::Path<String>,
     body: web::Json<UpdateIndexRequest>,
     req: HttpRequest,
@@ -136,43 +151,64 @@ pub async fn update_index(
         Some(&req),
     );
 
-    let update = Update::UpdateIndex {
+    let task = KindWithContent::IndexUpdate {
+        index_uid: path.into_inner(),
         primary_key: body.primary_key,
     };
 
-    let task: SummarizedTaskView = meilisearch
-        .register_update(path.into_inner(), update)
-        .await?
-        .into();
+    let task: SummarizedTaskView =
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
 }
 
 pub async fn delete_index(
-    meilisearch: GuardedData<ActionPolicy<{ actions::INDEXES_DELETE }>, MeiliSearch>,
-    path: web::Path<String>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_DELETE }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let uid = path.into_inner();
-    let update = Update::DeleteIndex;
-    let task: SummarizedTaskView = meilisearch.register_update(uid, update).await?.into();
+    let task = KindWithContent::IndexDeletion { index_uid: index_uid.into_inner() };
+    let task: SummarizedTaskView =
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
     Ok(HttpResponse::Accepted().json(task))
 }
 
 pub async fn get_index_stats(
-    meilisearch: GuardedData<ActionPolicy<{ actions::STATS_GET }>, MeiliSearch>,
-    path: web::Path<String>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    analytics.publish(
-        "Stats Seen".to_string(),
-        json!({ "per_index_uid": true }),
-        Some(&req),
-    );
-    let response = meilisearch.get_index_stats(path.into_inner()).await?;
+    analytics.publish("Stats Seen".to_string(), json!({ "per_index_uid": true }), Some(&req));
 
-    debug!("returns: {:?}", response);
-    Ok(HttpResponse::Ok().json(response))
+    let stats = IndexStats::new((*index_scheduler).clone(), index_uid.into_inner())?;
+
+    debug!("returns: {:?}", stats);
+    Ok(HttpResponse::Ok().json(stats))
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexStats {
+    pub number_of_documents: u64,
+    pub is_indexing: bool,
+    pub field_distribution: FieldDistribution,
+}
+
+impl IndexStats {
+    pub fn new(
+        index_scheduler: Data<IndexScheduler>,
+        index_uid: String,
+    ) -> Result<Self, ResponseError> {
+        // we check if there is currently a task processing associated with this index.
+        let is_processing = index_scheduler.is_index_processing(&index_uid)?;
+        let index = index_scheduler.index(&index_uid)?;
+        let rtxn = index.read_txn()?;
+        Ok(IndexStats {
+            number_of_documents: index.number_of_documents(&rtxn)?,
+            is_indexing: is_processing,
+            field_distribution: index.field_distribution(&rtxn)?,
+        })
+    }
 }

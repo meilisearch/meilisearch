@@ -1,4 +1,7 @@
 on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *' # Every day at 2:00am
   release:
     types: [published]
 
@@ -8,13 +11,14 @@ jobs:
   check-version:
     name: Check the version validity
     runs-on: ubuntu-latest
+    # No need to check the version for dry run (cron)
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       # Check if the tag has the v<nmumber>.<number>.<number> format.
       # If yes, it means we are publishing an official release.
       # If no, we are releasing a RC, so no need to check the version.
       - name: Check tag format
-        if: github.event_name != 'schedule'
+        if: github.event_name == 'release'
         id: check-tag-format
         run: |
           escaped_tag=$(printf "%q" ${{ github.ref_name }})
@@ -25,7 +29,7 @@ jobs:
             echo ::set-output name=stable::false
           fi
       - name: Check release validity
-        if: steps.check-tag-format.outputs.stable == 'true'
+        if: github.event_name == 'release' && steps.check-tag-format.outputs.stable == 'true'
         run: bash .github/scripts/check-release.sh
 
   publish:
@@ -54,13 +58,53 @@ jobs:
     - uses: actions/checkout@v3
     - name: Build
       run: cargo build --release --locked
+    # No need to upload binaries for dry run (cron)
     - name: Upload binaries to release
+      if: github.event_name == 'release'
       uses: svenstaro/upload-release-action@v1-release
       with:
-        repo_token: ${{ secrets.PUBLISH_TOKEN }}
+        repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
         file: target/release/${{ matrix.artifact_name }}
         asset_name: ${{ matrix.asset_name }}
         tag: ${{ github.ref }}
+
+  publish-macos-apple-silicon:
+    name: Publish binary for macOS silicon
+    runs-on: ${{ matrix.os }}
+    needs: check-version
+    continue-on-error: false
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            asset_name: meilisearch-macos-apple-silicon
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Installing Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          target: ${{ matrix.target }}
+          override: true
+      - name: Cargo build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --target ${{ matrix.target }}
+      - name: Upload the binary to release
+        # No need to upload binaries for dry run (cron)
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@v1-release
+        with:
+          repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
+          file: target/${{ matrix.target }}/release/meilisearch
+          asset_name: ${{ matrix.asset_name }}
+          tag: ${{ github.ref }}
 
   publish-aarch64:
     name: Publish binary for aarch64
@@ -110,7 +154,6 @@ jobs:
           echo '[target.aarch64-unknown-linux-gnu]' >> ~/.cargo/config
           echo 'linker = "aarch64-linux-gnu-gcc"' >> ~/.cargo/config
           echo 'JEMALLOC_SYS_WITH_LG_PAGE=16' >> $GITHUB_ENV
-          echo RUSTFLAGS="-Clink-arg=-fuse-ld=gold" >> $GITHUB_ENV
 
       - name: Cargo build
         uses: actions-rs/cargo@v1
@@ -123,9 +166,11 @@ jobs:
         run: ls -lR ./target
 
       - name: Upload the binary to release
+        # No need to upload binaries for dry run (cron)
+        if: github.event_name == 'release'
         uses: svenstaro/upload-release-action@v1-release
         with:
-          repo_token: ${{ secrets.PUBLISH_TOKEN }}
+          repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
           file: target/${{ matrix.target }}/release/meilisearch
           asset_name: ${{ matrix.asset_name }}
           tag: ${{ github.ref }}

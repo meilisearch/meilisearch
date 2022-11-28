@@ -1,10 +1,12 @@
-use crate::common::Server;
+use std::collections::{HashMap, HashSet};
+
 use ::time::format_description::well_known::Rfc3339;
 use maplit::{hashmap, hashset};
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
 use time::{Duration, OffsetDateTime};
+
+use crate::common::Server;
 
 pub static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'static str>>> =
     Lazy::new(|| {
@@ -16,6 +18,7 @@ pub static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'
             ("GET",     "/indexes/products/documents/0") =>                    hashset!{"documents.get", "documents.*", "*"},
             ("DELETE",  "/indexes/products/documents/0") =>                    hashset!{"documents.delete", "documents.*", "*"},
             ("GET",     "/tasks") =>                                           hashset!{"tasks.get", "tasks.*", "*"},
+            ("DELETE",  "/tasks") =>                                           hashset!{"tasks.delete", "tasks.*", "*"},
             ("GET",     "/tasks?indexUid=products") =>                         hashset!{"tasks.get", "tasks.*", "*"},
             ("GET",     "/tasks/0") =>                                         hashset!{"tasks.get", "tasks.*", "*"},
             ("PATCH",   "/indexes/products/") =>                               hashset!{"indexes.update", "indexes.*", "*"},
@@ -23,6 +26,7 @@ pub static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'
             ("DELETE",  "/indexes/products/") =>                               hashset!{"indexes.delete", "indexes.*", "*"},
             ("POST",    "/indexes") =>                                         hashset!{"indexes.create", "indexes.*", "*"},
             ("GET",     "/indexes") =>                                         hashset!{"indexes.get", "indexes.*", "*"},
+            ("POST",    "/swap-indexes") =>                                    hashset!{"indexes.swap", "indexes.*", "*"},
             ("GET",     "/indexes/products/settings") =>                       hashset!{"settings.get", "settings.*", "*"},
             ("GET",     "/indexes/products/settings/displayed-attributes") =>  hashset!{"settings.get", "settings.*", "*"},
             ("GET",     "/indexes/products/settings/distinct-attribute") =>    hashset!{"settings.get", "settings.*", "*"},
@@ -55,21 +59,14 @@ pub static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'
         };
 
         if cfg!(feature = "metrics") {
-            authorizations.insert(
-                ("GET", "/metrics"),
-                hashset! {"metrics.get", "metrics.*", "*"},
-            );
+            authorizations.insert(("GET", "/metrics"), hashset! {"metrics.get", "metrics.*", "*"});
         }
 
         authorizations
     });
 
 pub static ALL_ACTIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    AUTHORIZATIONS
-        .values()
-        .cloned()
-        .reduce(|l, r| l.union(&r).cloned().collect())
-        .unwrap()
+    AUTHORIZATIONS.values().cloned().reduce(|l, r| l.union(&r).cloned().collect()).unwrap()
 });
 
 static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
@@ -81,7 +78,6 @@ static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
 });
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn error_access_expired_key() {
     use std::{thread, time};
 
@@ -107,19 +103,12 @@ async fn error_access_expired_key() {
     for (method, route) in AUTHORIZATIONS.keys() {
         let (response, code) = server.dummy_request(method, route).await;
 
-        assert_eq!(
-            response,
-            INVALID_RESPONSE.clone(),
-            "on route: {:?} - {:?}",
-            method,
-            route
-        );
+        assert_eq!(response, INVALID_RESPONSE.clone(), "on route: {:?} - {:?}", method, route);
         assert_eq!(403, code, "{:?}", &response);
     }
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn error_access_unauthorized_index() {
     let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");
@@ -144,19 +133,12 @@ async fn error_access_unauthorized_index() {
     {
         let (response, code) = server.dummy_request(method, route).await;
 
-        assert_eq!(
-            response,
-            INVALID_RESPONSE.clone(),
-            "on route: {:?} - {:?}",
-            method,
-            route
-        );
+        assert_eq!(response, INVALID_RESPONSE.clone(), "on route: {:?} - {:?}", method, route);
         assert_eq!(403, code, "{:?}", &response);
     }
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn error_access_unauthorized_action() {
     let mut server = Server::new_auth().await;
 
@@ -178,19 +160,12 @@ async fn error_access_unauthorized_action() {
         server.use_api_key(key);
         let (response, code) = server.dummy_request(method, route).await;
 
-        assert_eq!(
-            response,
-            INVALID_RESPONSE.clone(),
-            "on route: {:?} - {:?}",
-            method,
-            route
-        );
+        assert_eq!(response, INVALID_RESPONSE.clone(), "on route: {:?} - {:?}", method, route);
         assert_eq!(403, code, "{:?}", &response);
     }
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn access_authorized_master_key() {
     let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");
@@ -199,19 +174,12 @@ async fn access_authorized_master_key() {
     for ((method, route), _) in AUTHORIZATIONS.iter() {
         let (response, code) = server.dummy_request(method, route).await;
 
-        assert_ne!(
-            response,
-            INVALID_RESPONSE.clone(),
-            "on route: {:?} - {:?}",
-            method,
-            route
-        );
+        assert_ne!(response, INVALID_RESPONSE.clone(), "on route: {:?} - {:?}", method, route);
         assert_ne!(code, 403);
     }
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn access_authorized_restricted_index() {
     let mut server = Server::new_auth().await;
     for ((method, route), actions) in AUTHORIZATIONS.iter() {
@@ -248,7 +216,6 @@ async fn access_authorized_restricted_index() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn access_authorized_no_index_restriction() {
     let mut server = Server::new_auth().await;
 
@@ -286,7 +253,6 @@ async fn access_authorized_no_index_restriction() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn access_authorized_stats_restricted_index() {
     let mut server = Server::new_auth().await;
     server.use_admin_key("MASTER_KEY").await;
@@ -299,7 +265,8 @@ async fn access_authorized_stats_restricted_index() {
     let index = server.index("products");
     let (response, code) = index.create(Some("product_id")).await;
     assert_eq!(202, code, "{:?}", &response);
-    index.wait_task(0).await;
+    let task_id = response["taskUid"].as_u64().unwrap();
+    index.wait_task(task_id).await;
 
     // create key with access on `products` index only.
     let content = json!({
@@ -326,7 +293,6 @@ async fn access_authorized_stats_restricted_index() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn access_authorized_stats_no_index_restriction() {
     let mut server = Server::new_auth().await;
     server.use_admin_key("MASTER_KEY").await;
@@ -339,7 +305,8 @@ async fn access_authorized_stats_no_index_restriction() {
     let index = server.index("products");
     let (response, code) = index.create(Some("product_id")).await;
     assert_eq!(202, code, "{:?}", &response);
-    index.wait_task(0).await;
+    let task_id = response["taskUid"].as_u64().unwrap();
+    index.wait_task(task_id).await;
 
     // create key with access on all indexes.
     let content = json!({
@@ -366,7 +333,6 @@ async fn access_authorized_stats_no_index_restriction() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn list_authorized_indexes_restricted_index() {
     let mut server = Server::new_auth().await;
     server.use_admin_key("MASTER_KEY").await;
@@ -379,7 +345,8 @@ async fn list_authorized_indexes_restricted_index() {
     let index = server.index("products");
     let (response, code) = index.create(Some("product_id")).await;
     assert_eq!(202, code, "{:?}", &response);
-    index.wait_task(0).await;
+    let task_id = response["taskUid"].as_u64().unwrap();
+    index.wait_task(task_id).await;
 
     // create key with access on `products` index only.
     let content = json!({
@@ -407,7 +374,6 @@ async fn list_authorized_indexes_restricted_index() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn list_authorized_indexes_no_index_restriction() {
     let mut server = Server::new_auth().await;
     server.use_admin_key("MASTER_KEY").await;
@@ -420,7 +386,8 @@ async fn list_authorized_indexes_no_index_restriction() {
     let index = server.index("products");
     let (response, code) = index.create(Some("product_id")).await;
     assert_eq!(202, code, "{:?}", &response);
-    index.wait_task(0).await;
+    let task_id = response["taskUid"].as_u64().unwrap();
+    index.wait_task(task_id).await;
 
     // create key with access on all indexes.
     let content = json!({
@@ -460,7 +427,8 @@ async fn list_authorized_tasks_restricted_index() {
     let index = server.index("products");
     let (response, code) = index.create(Some("product_id")).await;
     assert_eq!(202, code, "{:?}", &response);
-    index.wait_task(0).await;
+    let task_id = response["taskUid"].as_u64().unwrap();
+    index.wait_task(task_id).await;
 
     // create key with access on `products` index only.
     let content = json!({
@@ -500,7 +468,8 @@ async fn list_authorized_tasks_no_index_restriction() {
     let index = server.index("products");
     let (response, code) = index.create(Some("product_id")).await;
     assert_eq!(202, code, "{:?}", &response);
-    index.wait_task(0).await;
+    let task_id = response["taskUid"].as_u64().unwrap();
+    index.wait_task(task_id).await;
 
     // create key with access on all indexes.
     let content = json!({

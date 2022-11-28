@@ -1,7 +1,5 @@
-mod action;
 mod dump;
 pub mod error;
-mod key;
 mod store;
 
 use std::collections::{HashMap, HashSet};
@@ -9,18 +7,15 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
+use error::{AuthControllerError, Result};
+use meilisearch_types::keys::{Action, Key};
+use meilisearch_types::star_or::StarOr;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+pub use store::open_auth_store_env;
+use store::{generate_key_as_hexa, HeedAuthStore};
 use time::OffsetDateTime;
 use uuid::Uuid;
-
-pub use action::{actions, Action};
-use error::{AuthControllerError, Result};
-pub use key::Key;
-use meilisearch_types::star_or::StarOr;
-use store::generate_key_as_hexa;
-pub use store::open_auth_store_env;
-use store::HeedAuthStore;
 
 #[derive(Clone)]
 pub struct AuthController {
@@ -36,18 +31,13 @@ impl AuthController {
             generate_default_keys(&store)?;
         }
 
-        Ok(Self {
-            store: Arc::new(store),
-            master_key: master_key.clone(),
-        })
+        Ok(Self { store: Arc::new(store), master_key: master_key.clone() })
     }
 
     pub fn create_key(&self, value: Value) -> Result<Key> {
         let key = Key::create_from_value(value)?;
         match self.store.get_api_key(key.uid)? {
-            Some(_) => Err(AuthControllerError::ApiKeyAlreadyExists(
-                key.uid.to_string(),
-            )),
+            Some(_) => Err(AuthControllerError::ApiKeyAlreadyExists(key.uid.to_string())),
             None => self.store.put_api_key(key),
         }
     }
@@ -66,9 +56,9 @@ impl AuthController {
 
     pub fn get_optional_uid_from_encoded_key(&self, encoded_key: &[u8]) -> Result<Option<Uuid>> {
         match &self.master_key {
-            Some(master_key) => self
-                .store
-                .get_uid_from_encoded_key(encoded_key, master_key.as_bytes()),
+            Some(master_key) => {
+                self.store.get_uid_from_encoded_key(encoded_key, master_key.as_bytes())
+            }
             None => Ok(None),
         }
     }
@@ -134,9 +124,7 @@ impl AuthController {
     /// Generate a valid key from a key id using the current master key.
     /// Returns None if no master key has been set.
     pub fn generate_key(&self, uid: Uuid) -> Option<String> {
-        self.master_key
-            .as_ref()
-            .map(|master_key| generate_key_as_hexa(uid, master_key.as_bytes()))
+        self.master_key.as_ref().map(|master_key| generate_key_as_hexa(uid, master_key.as_bytes()))
     }
 
     /// Check if the provided key is authorized to make a specific action
@@ -154,8 +142,7 @@ impl AuthController {
             .or(match index {
                 // else check if the key has access to the requested index.
                 Some(index) => {
-                    self.store
-                        .get_expiration_date(uid, action, Some(index.as_bytes()))?
+                    self.store.get_expiration_date(uid, action, Some(index.as_bytes()))?
                 }
                 // or to any index if no index has been requested.
                 None => self.store.prefix_first_expiration_date(uid, action)?,
@@ -168,6 +155,17 @@ impl AuthController {
             None => Ok(false),
         }
     }
+
+    /// Delete all the keys in the DB.
+    pub fn raw_delete_all_keys(&mut self) -> Result<()> {
+        self.store.delete_all_keys()
+    }
+
+    /// Delete all the keys in the DB.
+    pub fn raw_insert_key(&mut self, key: Key) -> Result<()> {
+        self.store.put_api_key(key)?;
+        Ok(())
+    }
 }
 
 pub struct AuthFilter {
@@ -177,10 +175,7 @@ pub struct AuthFilter {
 
 impl Default for AuthFilter {
     fn default() -> Self {
-        Self {
-            search_rules: SearchRules::default(),
-            allow_index_creation: true,
-        }
+        Self { search_rules: SearchRules::default(), allow_index_creation: true }
     }
 }
 
@@ -215,10 +210,30 @@ impl SearchRules {
                     None
                 }
             }
-            Self::Map(map) => map
-                .get(index)
-                .or_else(|| map.get("*"))
-                .map(|isr| isr.clone().unwrap_or_default()),
+            Self::Map(map) => {
+                map.get(index).or_else(|| map.get("*")).map(|isr| isr.clone().unwrap_or_default())
+            }
+        }
+    }
+
+    /// Return the list of indexes such that `self.is_index_authorized(index) == true`,
+    /// or `None` if all indexes satisfy this condition.
+    pub fn authorized_indexes(&self) -> Option<Vec<String>> {
+        match self {
+            SearchRules::Set(set) => {
+                if set.contains("*") {
+                    None
+                } else {
+                    Some(set.iter().cloned().collect())
+                }
+            }
+            SearchRules::Map(map) => {
+                if map.contains_key("*") {
+                    None
+                } else {
+                    Some(map.keys().cloned().collect())
+                }
+            }
         }
     }
 }
