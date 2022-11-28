@@ -588,15 +588,21 @@ fn create_matching_words(
             PrimitiveQueryPart::Word(word, prefix) => {
                 if let Some(synonyms) = ctx.synonyms(&[word.as_str()])? {
                     for synonym in synonyms {
-                        let synonym = synonym
+                        // Require that all words of the synonym have a corresponding MatchingWord
+                        // before adding any of its words to the matching_words result.
+                        if let Some(synonym_matching_words) = synonym
                             .into_iter()
-                            .flat_map(|syn| matching_word_cache.insert(syn, 0, false))
-                            .collect();
-                        matching_words.push((synonym, vec![id]));
+                            .map(|word| matching_word_cache.insert(word, 0, false))
+                            .collect()
+                        {
+                            matching_words.push((synonym_matching_words, vec![id]));
+                        }
                     }
                 }
 
                 if let Some((left, right)) = split_best_frequency(ctx, &word)? {
+                    // Require that both left and right words have a corresponding MatchingWord
+                    // before adding them to the matching_words result
                     if let Some(left) = matching_word_cache.insert(left.to_string(), 0, false) {
                         if let Some(right) = matching_word_cache.insert(right.to_string(), 0, false)
                         {
@@ -624,12 +630,16 @@ fn create_matching_words(
             PrimitiveQueryPart::Phrase(words) => {
                 let ids: Vec<_> =
                     (0..words.len()).into_iter().map(|i| id + i as PrimitiveWordId).collect();
-                let words = words
+                // Require that all words of the phrase have a corresponding MatchingWord
+                // before adding any of them to the matching_words result
+                if let Some(phrase_matching_words) = words
                     .into_iter()
                     .flatten()
-                    .flat_map(|w| matching_word_cache.insert(w, 0, false))
-                    .collect();
-                matching_words.push((words, ids));
+                    .map(|w| matching_word_cache.insert(w, 0, false))
+                    .collect()
+                {
+                    matching_words.push((phrase_matching_words, ids));
+                }
             }
         }
 
