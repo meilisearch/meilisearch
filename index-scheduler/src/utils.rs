@@ -324,6 +324,11 @@ pub(crate) fn check_index_swap_validity(task: &Task) -> Result<()> {
     Ok(())
 }
 
+/// Clamp the provided value to be a multiple of system page size.
+pub fn clamp_to_page_size(size: usize) -> usize {
+    size / page_size::get() * page_size::get()
+}
+
 #[cfg(test)]
 impl IndexScheduler {
     /// Asserts that the index scheduler's content is internally consistent.

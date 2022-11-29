@@ -1625,7 +1625,7 @@ dependencies = [
  "libc",
  "lmdb-rkv-sys",
  "once_cell",
- "page_size",
+ "page_size 0.4.2",
  "synchronoise",
  "url",
  "zerocopy",
@@ -1783,6 +1783,7 @@ dependencies = [
  "meili-snap",
  "meilisearch-types",
  "nelson",
+ "page_size 0.5.0",
  "roaring",
  "serde",
  "serde_json",
@@ -2658,6 +2659,16 @@ name = "page_size"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eebde548fbbf1ea81a99b128872779c437752fb99f217c45245e1a61dcd9edcd"
+dependencies = [
+ "libc",
+ "winapi",
+]
+
+[[package]]
+name = "page_size"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b7663cbd190cfd818d08efa8497f6cd383076688c49a391ef7c0d03cd12b561"
 dependencies = [
  "libc",
  "winapi",
