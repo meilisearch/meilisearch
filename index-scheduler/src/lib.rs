@@ -54,7 +54,7 @@ use utils::{filter_out_references_to_newer_tasks, keep_tasks_within_datetimes, m
 use uuid::Uuid;
 
 use crate::index_mapper::IndexMapper;
-use crate::utils::check_index_swap_validity;
+use crate::utils::{check_index_swap_validity, clamp_to_page_size};
 
 pub(crate) type BEI128 =
     meilisearch_types::heed::zerocopy::I128<meilisearch_types::heed::byteorder::BE>;
@@ -361,7 +361,7 @@ impl IndexScheduler {
 
         let env = heed::EnvOpenOptions::new()
             .max_dbs(10)
-            .map_size(options.task_db_size)
+            .map_size(clamp_to_page_size(options.task_db_size))
             .open(options.tasks_path)?;
         let file_store = FileStore::new(&options.update_file_path)?;
 
