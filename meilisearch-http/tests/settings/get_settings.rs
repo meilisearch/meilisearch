@@ -182,7 +182,7 @@ async fn error_update_setting_unexisting_index_invalid_uid() {
     assert_eq!(code, 400);
 
     let expected = json!({
-        "message": "invalid index uid `test##!  `, the uid must be an integer or a string containing only alphanumeric characters a-z A-Z 0-9, hyphens - and underscores _.",
+        "message": "`test##!  ` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
         "code": "invalid_index_uid",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_index_uid"});

@@ -106,17 +106,17 @@ impl Index<'_> {
     }
 
     pub async fn list_tasks(&self) -> (Value, StatusCode) {
-        let url = format!("/tasks?indexUid={}", self.uid);
+        let url = format!("/tasks?indexUids={}", self.uid);
         self.service.get(url).await
     }
 
-    pub async fn filtered_tasks(&self, type_: &[&str], status: &[&str]) -> (Value, StatusCode) {
-        let mut url = format!("/tasks?indexUid={}", self.uid);
-        if !type_.is_empty() {
-            let _ = write!(url, "&type={}", type_.join(","));
+    pub async fn filtered_tasks(&self, types: &[&str], statuses: &[&str]) -> (Value, StatusCode) {
+        let mut url = format!("/tasks?indexUids={}", self.uid);
+        if !types.is_empty() {
+            let _ = write!(url, "&types={}", types.join(","));
         }
-        if !status.is_empty() {
-            let _ = write!(url, "&status={}", status.join(","));
+        if !statuses.is_empty() {
+            let _ = write!(url, "&statuses={}", statuses.join(","));
         }
         self.service.get(url).await
     }

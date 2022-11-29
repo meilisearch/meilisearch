@@ -75,9 +75,9 @@ impl fmt::Display for IndexUidFormatError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "invalid index uid `{}`, the uid must be an integer \
-            or a string containing only alphanumeric characters \
-            a-z A-Z 0-9, hyphens - and underscores _.",
+            "`{}` is not a valid index uid. Index uid can be an \
+            integer or a string containing only alphanumeric \
+            characters, hyphens (-) and underscores (_).",
             self.invalid_uid,
         )
     }

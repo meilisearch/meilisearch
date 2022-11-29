@@ -7,7 +7,7 @@ source: index-scheduler/src/lib.rs
 ----------------------------------------------------------------------
 ### All Tasks:
 0 {uid: 0, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
-1 {uid: 1, status: succeeded, details: { matched_tasks: 1, canceled_tasks: Some(0), original_query: "test_query" }, kind: TaskCancelation { query: "test_query", tasks: RoaringBitmap<[0]> }}
+1 {uid: 1, status: succeeded, details: { matched_tasks: 1, canceled_tasks: Some(0), original_filter: "test_query" }, kind: TaskCancelation { query: "test_query", tasks: RoaringBitmap<[0]> }}
 ----------------------------------------------------------------------
 ### Status:
 enqueued []
@@ -22,6 +22,10 @@ catto [0,]
 ----------------------------------------------------------------------
 ### Index Mapper:
 ["catto"]
+----------------------------------------------------------------------
+### Canceled By:
+1 []
+
 ----------------------------------------------------------------------
 ### Enqueued At:
 [timestamp] [0,]

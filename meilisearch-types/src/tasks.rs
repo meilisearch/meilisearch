@@ -127,7 +127,6 @@ pub enum KindWithContent {
         tasks: RoaringBitmap,
     },
     DumpCreation {
-        dump_uid: String,
         keys: Vec<Key>,
         instance_uid: Option<InstanceUid>,
     },
@@ -196,17 +195,16 @@ impl KindWithContent {
             }
             KindWithContent::DocumentDeletion { index_uid: _, documents_ids } => {
                 Some(Details::DocumentDeletion {
-                    matched_documents: documents_ids.len(),
+                    provided_ids: documents_ids.len(),
                     deleted_documents: None,
                 })
             }
-            KindWithContent::DocumentClear { .. } => {
+            KindWithContent::DocumentClear { .. } | KindWithContent::IndexDeletion { .. } => {
                 Some(Details::ClearAll { deleted_documents: None })
             }
             KindWithContent::SettingsUpdate { new_settings, .. } => {
                 Some(Details::SettingsUpdate { settings: new_settings.clone() })
             }
-            KindWithContent::IndexDeletion { .. } => None,
             KindWithContent::IndexCreation { primary_key, .. }
             | KindWithContent::IndexUpdate { primary_key, .. } => {
                 Some(Details::IndexInfo { primary_key: primary_key.clone() })
@@ -217,14 +215,14 @@ impl KindWithContent {
             KindWithContent::TaskCancelation { query, tasks } => Some(Details::TaskCancelation {
                 matched_tasks: tasks.len(),
                 canceled_tasks: None,
-                original_query: query.clone(),
+                original_filter: query.clone(),
             }),
             KindWithContent::TaskDeletion { query, tasks } => Some(Details::TaskDeletion {
                 matched_tasks: tasks.len(),
                 deleted_tasks: None,
-                original_query: query.clone(),
+                original_filter: query.clone(),
             }),
-            KindWithContent::DumpCreation { .. } => None,
+            KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
         }
     }
@@ -239,7 +237,7 @@ impl KindWithContent {
             }
             KindWithContent::DocumentDeletion { index_uid: _, documents_ids } => {
                 Some(Details::DocumentDeletion {
-                    matched_documents: documents_ids.len(),
+                    provided_ids: documents_ids.len(),
                     deleted_documents: Some(0),
                 })
             }
@@ -260,14 +258,14 @@ impl KindWithContent {
             KindWithContent::TaskCancelation { query, tasks } => Some(Details::TaskCancelation {
                 matched_tasks: tasks.len(),
                 canceled_tasks: Some(0),
-                original_query: query.clone(),
+                original_filter: query.clone(),
             }),
             KindWithContent::TaskDeletion { query, tasks } => Some(Details::TaskDeletion {
                 matched_tasks: tasks.len(),
                 deleted_tasks: Some(0),
-                original_query: query.clone(),
+                original_filter: query.clone(),
             }),
-            KindWithContent::DumpCreation { .. } => None,
+            KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
         }
     }
@@ -298,16 +296,14 @@ impl From<&KindWithContent> for Option<Details> {
             KindWithContent::TaskCancelation { query, tasks } => Some(Details::TaskCancelation {
                 matched_tasks: tasks.len(),
                 canceled_tasks: None,
-                original_query: query.clone(),
+                original_filter: query.clone(),
             }),
             KindWithContent::TaskDeletion { query, tasks } => Some(Details::TaskDeletion {
                 matched_tasks: tasks.len(),
                 deleted_tasks: None,
-                original_query: query.clone(),
+                original_filter: query.clone(),
             }),
-            KindWithContent::DumpCreation { dump_uid, .. } => {
-                Some(Details::Dump { dump_uid: dump_uid.clone() })
-            }
+            KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
         }
     }
@@ -398,7 +394,23 @@ impl Kind {
         }
     }
 }
-
+impl Display for Kind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Kind::DocumentAdditionOrUpdate => write!(f, "documentAdditionOrUpdate"),
+            Kind::DocumentDeletion => write!(f, "documentDeletion"),
+            Kind::SettingsUpdate => write!(f, "settingsUpdate"),
+            Kind::IndexCreation => write!(f, "indexCreation"),
+            Kind::IndexDeletion => write!(f, "indexDeletion"),
+            Kind::IndexUpdate => write!(f, "indexUpdate"),
+            Kind::IndexSwap => write!(f, "indexSwap"),
+            Kind::TaskCancelation => write!(f, "taskCancelation"),
+            Kind::TaskDeletion => write!(f, "taskDeletion"),
+            Kind::DumpCreation => write!(f, "dumpCreation"),
+            Kind::SnapshotCreation => write!(f, "snapshotCreation"),
+        }
+    }
+}
 impl FromStr for Kind {
     type Err = ResponseError;
 
@@ -450,12 +462,33 @@ pub enum Details {
     DocumentAdditionOrUpdate { received_documents: u64, indexed_documents: Option<u64> },
     SettingsUpdate { settings: Box<Settings<Unchecked>> },
     IndexInfo { primary_key: Option<String> },
-    DocumentDeletion { matched_documents: usize, deleted_documents: Option<u64> },
+    DocumentDeletion { provided_ids: usize, deleted_documents: Option<u64> },
     ClearAll { deleted_documents: Option<u64> },
-    TaskCancelation { matched_tasks: u64, canceled_tasks: Option<u64>, original_query: String },
-    TaskDeletion { matched_tasks: u64, deleted_tasks: Option<u64>, original_query: String },
-    Dump { dump_uid: String },
+    TaskCancelation { matched_tasks: u64, canceled_tasks: Option<u64>, original_filter: String },
+    TaskDeletion { matched_tasks: u64, deleted_tasks: Option<u64>, original_filter: String },
+    Dump { dump_uid: Option<String> },
     IndexSwap { swaps: Vec<IndexSwap> },
+}
+
+impl Details {
+    pub fn to_failed(&self) -> Self {
+        let mut details = self.clone();
+        match &mut details {
+            Self::DocumentAdditionOrUpdate { indexed_documents, .. } => {
+                *indexed_documents = Some(0)
+            }
+            Self::DocumentDeletion { deleted_documents, .. } => *deleted_documents = Some(0),
+            Self::ClearAll { deleted_documents } => *deleted_documents = Some(0),
+            Self::TaskCancelation { canceled_tasks, .. } => *canceled_tasks = Some(0),
+            Self::TaskDeletion { deleted_tasks, .. } => *deleted_tasks = Some(0),
+            Self::SettingsUpdate { .. }
+            | Self::IndexInfo { .. }
+            | Self::Dump { .. }
+            | Self::IndexSwap { .. } => (),
+        }
+
+        details
+    }
 }
 
 /// Serialize a `time::Duration` as a best effort ISO 8601 while waiting for
@@ -520,11 +553,11 @@ mod tests {
         let details = Details::TaskDeletion {
             matched_tasks: 1,
             deleted_tasks: None,
-            original_query: "hello".to_owned(),
+            original_filter: "hello".to_owned(),
         };
         let serialised = SerdeJson::<Details>::bytes_encode(&details).unwrap();
         let deserialised = SerdeJson::<Details>::bytes_decode(&serialised).unwrap();
-        meili_snap::snapshot!(format!("{:?}", details), @r###"TaskDeletion { matched_tasks: 1, deleted_tasks: None, original_query: "hello" }"###);
-        meili_snap::snapshot!(format!("{:?}", deserialised), @r###"TaskDeletion { matched_tasks: 1, deleted_tasks: None, original_query: "hello" }"###);
+        meili_snap::snapshot!(format!("{:?}", details), @r###"TaskDeletion { matched_tasks: 1, deleted_tasks: None, original_filter: "hello" }"###);
+        meili_snap::snapshot!(format!("{:?}", deserialised), @r###"TaskDeletion { matched_tasks: 1, deleted_tasks: None, original_filter: "hello" }"###);
     }
 }

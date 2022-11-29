@@ -1,11 +1,13 @@
 use actix_web::web::Data;
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::IndexScheduler;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use serde::Deserialize;
+use serde_json::json;
 
 use super::SummarizedTaskView;
+use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
@@ -23,7 +25,16 @@ pub struct SwapIndexesPayload {
 pub async fn swap_indexes(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_SWAP }>, Data<IndexScheduler>>,
     params: web::Json<Vec<SwapIndexesPayload>>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    analytics.publish(
+        "Indexes Swapped".to_string(),
+        json!({
+            "swap_operation_number": params.len(),
+        }),
+        Some(&req),
+    );
     let search_rules = &index_scheduler.filters().search_rules;
 
     let mut swaps = vec![];
