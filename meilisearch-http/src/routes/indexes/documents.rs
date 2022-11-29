@@ -1,13 +1,12 @@
-use std::io::{Cursor, ErrorKind};
-
+use std::io::{ErrorKind, BufWriter, Write};
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use bstr::ByteSlice;
 use futures::StreamExt;
 use index_scheduler::IndexScheduler;
-use log::debug;
-use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
+use log::{debug, error};
+use meilisearch_types::document_formats::{read_csv, PayloadType, read_json, read_ndjson};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
@@ -20,9 +19,10 @@ use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_cs::vec::CS;
 use serde_json::Value;
-
+use tempfile::NamedTempFile;
 use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
+use crate::error::PayloadError::ReceivePayloadErr;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::payload::Payload;
@@ -223,26 +223,51 @@ async fn document_addition(
 
     let (uuid, mut update_file) = index_scheduler.create_update_file()?;
 
-    // TODO: this can be slow, maybe we should spawn a thread? But the payload isn't Send+Sync :weary:
-    // push the entire stream into a `Vec`.
-    // If someone sends us a never ending stream we're going to block the thread.
-    // TODO: Maybe we should write it to a file to reduce the RAM consumption
-    // and then reread it to convert it to obkv?
-    let mut buffer = Vec::new();
+    let err: Result<SummarizedTaskView, MeilisearchHttpError> = Err(MeilisearchHttpError::Payload(ReceivePayloadErr));
+
+    let temp_file = match NamedTempFile::new() {
+        Ok(temp_file) => temp_file,
+        Err(e) => {
+            error!("create a temporary file error: {}", e);
+            return err;
+        },
+    };
+    debug!("temp file path: {:?}", temp_file.as_ref());
+    let buffer_file = match temp_file.reopen() {
+        Ok(buffer_file) => buffer_file,
+        Err(e) => {
+            error!("reopen payload temporary file error: {}", e);
+            return err;
+        }
+    };
+    let mut buffer = BufWriter::new(buffer_file);
+    let mut buffer_write_size:usize = 0;
     while let Some(bytes) = body.next().await {
-        buffer.extend_from_slice(&bytes?);
-    }
-    if buffer.is_empty() {
+        match buffer.write(&bytes?) {
+            Ok(size) => buffer_write_size = buffer_write_size + size,
+            Err(e) => {
+                error!("bufWriter write error: {}", e);
+                return err
+            }
+        }
+
+    };
+
+    if let Err(e) = buffer.flush() {
+        error!("bufWriter flush error: {}", e);
+        return err
+    };
+
+    if buffer_write_size == 0 {
         return Err(MeilisearchHttpError::MissingPayload(format));
     }
-    let reader = Cursor::new(buffer);
 
     let documents_count =
         tokio::task::spawn_blocking(move || -> Result<_, MeilisearchHttpError> {
             let documents_count = match format {
-                PayloadType::Json => read_json(reader, update_file.as_file_mut())?,
-                PayloadType::Csv => read_csv(reader, update_file.as_file_mut())?,
-                PayloadType::Ndjson => read_ndjson(reader, update_file.as_file_mut())?,
+                PayloadType::Json => read_json(temp_file.as_file(), update_file.as_file_mut())?,
+                PayloadType::Csv => read_csv(temp_file.as_file(), update_file.as_file_mut())?,
+                PayloadType::Ndjson => read_ndjson(temp_file.as_file(), update_file.as_file_mut())?,
             };
             // we NEED to persist the file here because we moved the `udpate_file` in another task.
             update_file.persist()?;

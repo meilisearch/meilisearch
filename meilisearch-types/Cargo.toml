@@ -23,6 +23,8 @@ thiserror = "1.0.30"
 time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 tokio = "1.0"
 uuid = { version = "1.1.2", features = ["serde", "v4"] }
+memmap = "0.7.0"
+log = "0.4.17"
 
 [dev-dependencies]
 insta = "1.19.1"

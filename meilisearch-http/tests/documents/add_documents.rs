@@ -436,7 +436,7 @@ async fn error_add_malformed_ndjson_documents() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The `ndjson` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 2 column 2`."#
+            r#"The `ndjson` payload provided is malformed. `Couldn't serialize document value: trailing characters at line 2 column 1`."#
         )
     );
     assert_eq!(response["code"], json!("malformed_payload"));
@@ -456,7 +456,7 @@ async fn error_add_malformed_ndjson_documents() {
     assert_eq!(status_code, 400);
     assert_eq!(
         response["message"],
-        json!("The `ndjson` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 2 column 2`.")
+        json!("The `ndjson` payload provided is malformed. `Couldn't serialize document value: trailing characters at line 2 column 1`.")
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));

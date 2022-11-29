@@ -95,6 +95,8 @@ pub enum PayloadError {
     MalformedPayload(serde_json::error::Error),
     #[error("A json payload is missing.")]
     MissingPayload,
+    #[error("Exception when accepting a playload to a temporary file")]
+    ReceivePayloadErr,
 }
 
 impl ErrorCode for PayloadError {
@@ -126,6 +128,7 @@ impl ErrorCode for PayloadError {
             },
             PayloadError::MissingPayload => Code::MissingPayload,
             PayloadError::MalformedPayload(_) => Code::MalformedPayload,
+            PayloadError::ReceivePayloadErr => Code::ReceivePayloadErr,
         }
     }
 }

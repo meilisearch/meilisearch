@@ -2376,7 +2376,9 @@ dependencies = [
  "flate2",
  "fst",
  "insta",
+ "log",
  "meili-snap",
+ "memmap",
  "milli",
  "proptest",
  "proptest-derive",
@@ -2395,6 +2397,16 @@ name = "memchr"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
+
+[[package]]
+name = "memmap"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6585fd95e7bb50d6cc31e20d4cf9afb4e2ba16c5846fc76793f11218da9c475b"
+dependencies = [
+ "libc",
+ "winapi",
+]
 
 [[package]]
 name = "memmap2"
