@@ -339,18 +339,18 @@ fn typos(word: String, authorize_typos: bool, config: TypoConfig) -> QueryKind {
 /// and create the list of operations for the query tree
 fn synonyms(ctx: &impl Context, word: &[&str]) -> heed::Result<Option<Vec<Operation>>> {
     let synonyms = ctx.synonyms(word)?;
-
     Ok(synonyms.map(|synonyms| {
         synonyms
             .into_iter()
             .map(|synonym| {
-                let words = synonym
-                    .into_iter()
-                    .map(|word| {
-                        Operation::Query(Query { prefix: false, kind: QueryKind::exact(word) })
+                if synonym.len() == 1 {
+                    Operation::Query(Query {
+                        prefix: false,
+                        kind: QueryKind::exact(synonym[0].clone()),
                     })
-                    .collect();
-                Operation::and(words)
+                } else {
+                    Operation::Phrase(synonym.into_iter().map(Some).collect())
+                }
             })
             .collect()
     }))
@@ -1058,15 +1058,31 @@ mod test {
           AND
             OR
               Exact { word: "hi" }
-              AND
-                Exact { word: "good" }
-                Exact { word: "morning" }
+              PHRASE [Some("good"), Some("morning")]
               Tolerant { word: "hello", max typo: 1 }
             OR
               Exact { word: "earth" }
               Exact { word: "nature" }
               Tolerant { word: "world", max typo: 1 }
           Tolerant { word: "helloworld", max typo: 1 }
+        "###);
+    }
+
+    #[test]
+    fn simple_synonyms() {
+        let query = "nyc";
+        let tokens = query.tokenize();
+
+        let (query_tree, _) = TestContext::default()
+            .build(TermsMatchingStrategy::Last, true, None, tokens)
+            .unwrap()
+            .unwrap();
+
+        insta::assert_debug_snapshot!(query_tree, @r###"
+        OR
+          PHRASE [Some("new"), Some("york")]
+          PHRASE [Some("new"), Some("york"), Some("city")]
+          PrefixExact { word: "nyc" }
         "###);
     }
 
@@ -1092,16 +1108,11 @@ mod test {
           AND
             OR
               Exact { word: "nyc" }
-              AND
-                Exact { word: "new" }
-                Exact { word: "york" }
-                Exact { word: "city" }
+              PHRASE [Some("new"), Some("york"), Some("city")]
               Tolerant { word: "newyork", max typo: 1 }
             Exact { word: "city" }
           Exact { word: "nyc" }
-          AND
-            Exact { word: "new" }
-            Exact { word: "york" }
+          PHRASE [Some("new"), Some("york")]
           Tolerant { word: "newyorkcity", max typo: 1 }
         "###);
     }
