@@ -1112,8 +1112,8 @@ mod tests {
                 indexes_path: tempdir.path().join("indexes"),
                 snapshots_path: tempdir.path().join("snapshots"),
                 dumps_path: tempdir.path().join("dumps"),
-                task_db_size: 1024 * 1024, // 1 MiB
-                index_size: 1024 * 1024,   // 1 MiB
+                task_db_size: 1000 * 1000, // 1 MB, we don't use MiB on purpose.
+                index_size: 1000 * 1000,   // 1 MB, we don't use MiB on purpose.
                 indexer_config: IndexerConfig::default(),
                 autobatching_enabled,
             };
