@@ -420,7 +420,8 @@ impl<'a> Filter<'a> {
                     let result = rtree
                         .nearest_neighbor_iter(&xyz_base_point)
                         .take_while(|point| {
-                            distance_between_two_points(&base_point, &point.data.1) < radius
+                            distance_between_two_points(&base_point, &point.data.1)
+                                <= radius + f64::EPSILON
                         })
                         .map(|point| point.data.0)
                         .collect();
@@ -457,10 +458,9 @@ mod tests {
     #[test]
     fn empty_db() {
         let index = TempIndex::new();
-        // Set the filterable fields to be the channel.
+        //Set the filterable fields to be the channel.
         index
             .update_settings(|settings| {
-                settings.set_searchable_fields(vec![S("PrIcE")]); // to keep the fields order
                 settings.set_filterable_fields(hashset! { S("PrIcE") });
             })
             .unwrap();
@@ -627,6 +627,53 @@ mod tests {
     }
 
     #[test]
+    fn zero_radius() {
+        let index = TempIndex::new();
+
+        index
+            .update_settings(|settings| {
+                settings.set_searchable_fields(vec![S("_geo")]);
+                settings.set_filterable_fields(hashset! { S("_geo") });
+            })
+            .unwrap();
+
+        index
+            .add_documents(documents!([
+              {
+                "id": 1,
+                "name": "Nàpiz' Milano",
+                "address": "Viale Vittorio Veneto, 30, 20124, Milan, Italy",
+                "type": "pizza",
+                "rating": 9,
+                "_geo": {
+                  "lat": 45.4777599,
+                  "lng": 9.1967508
+                }
+              },
+              {
+                "id": 2,
+                "name": "Artico Gelateria Tradizionale",
+                "address": "Via Dogana, 1, 20123 Milan, Italy",
+                "type": "ice cream",
+                "rating": 10,
+                "_geo": {
+                  "lat": 45.4632046,
+                  "lng": 9.1719421
+                }
+              },
+            ]))
+            .unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+
+        let mut search = crate::Search::new(&rtxn, &index);
+
+        search.filter(Filter::from_str("_geoRadius(45.4777599, 9.1967508, 0)").unwrap().unwrap());
+        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
+        assert_eq!(documents_ids, vec![0]);
+    }
+
+    #[test]
     fn geo_radius_error() {
         let index = TempIndex::new();
 
@@ -638,6 +685,7 @@ mod tests {
             .unwrap();
 
         let rtxn = index.read_txn().unwrap();
+
         // georadius have a bad latitude
         let filter = Filter::from_str("_geoRadius(-100, 150, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
