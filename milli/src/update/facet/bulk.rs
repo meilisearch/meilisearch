@@ -288,6 +288,8 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
                 for bitmap in sub_bitmaps {
                     combined_bitmap |= bitmap;
                 }
+                // The conversion of sub_bitmaps.len() to a u8 will always be correct
+                // since its length is bounded by max_group_size, which is a u8.
                 group_sizes.push(sub_bitmaps.len() as u8);
                 left_bounds.push(left_bound);
 
@@ -340,7 +342,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
             }
         }
         // if we inserted enough elements to reach the minimum level size, then we push the writer
-        if cur_writer_len as u8 >= self.min_level_size {
+        if cur_writer_len >= self.min_level_size as usize {
             sub_writers.push(writer_into_reader(cur_writer)?);
         } else {
             // otherwise, if there are still leftover elements, we give them to the level above
@@ -357,11 +359,15 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
 mod tests {
     use std::iter::once;
 
+    use big_s::S;
+    use maplit::hashset;
     use roaring::RoaringBitmap;
 
+    use crate::documents::documents_batch_reader_from_objects;
     use crate::heed_codec::facet::OrderedF64Codec;
-    use crate::milli_snap;
+    use crate::index::tests::TempIndex;
     use crate::update::facet::tests::FacetIndex;
+    use crate::{db_snap, milli_snap};
 
     #[test]
     fn insert() {
@@ -442,5 +448,47 @@ mod tests {
         test("small_group_large_min_level", 2, 128);
         test("large_group_small_min_level", 16, 2);
         test("odd_group_odd_min_level", 7, 3);
+    }
+
+    #[test]
+    fn bug_3165() {
+        // Indexing a number of facet values that falls within certains ranges (e.g. 22_540 qualifies)
+        // would lead to a facet DB which was missing some levels.
+        // That was because before writing a level into the database, we would
+        // check that its size was higher than the minimum level size using
+        // a lossy integer conversion: `level_size as u8 >= min_level_size`.
+        //
+        // This missing level in the facet DBs would make the incremental indexer
+        // (and other search algorithms) crash.
+        //
+        // https://github.com/meilisearch/meilisearch/issues/3165
+        let index = TempIndex::new_with_map_size(4096 * 1000 * 100);
+
+        index
+            .update_settings(|settings| {
+                settings.set_primary_key("id".to_owned());
+                settings.set_filterable_fields(hashset! { S("id") });
+            })
+            .unwrap();
+
+        let mut documents = vec![];
+        for i in 0..=22_540 {
+            documents.push(
+                serde_json::json! {
+                    {
+                        "id": i as u64,
+                    }
+                }
+                .as_object()
+                .unwrap()
+                .clone(),
+            );
+        }
+
+        let documents = documents_batch_reader_from_objects(documents);
+        index.add_documents(documents).unwrap();
+
+        db_snap!(index, facet_id_f64_docids, "initial", @"c34f499261f3510d862fa0283bbe843a");
+        db_snap!(index, number_faceted_documents_ids, "initial", @"01594fecbb316798ce3651d6730a4521");
     }
 }
