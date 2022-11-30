@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Display;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
@@ -171,6 +172,20 @@ impl FromStr for Criterion {
                     _text => Err(()),
                 }
             }
+        }
+    }
+}
+
+impl Display for Criterion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Criterion::Words => write!(f, "words"),
+            Criterion::Typo => write!(f, "typo"),
+            Criterion::Proximity => write!(f, "proximity"),
+            Criterion::Attribute => write!(f, "attribute"),
+            Criterion::Exactness => write!(f, "exactness"),
+            Criterion::Asc(field_name) => write!(f, "asc({})", field_name),
+            Criterion::Desc(field_name) => write!(f, "desc({})", field_name),
         }
     }
 }
