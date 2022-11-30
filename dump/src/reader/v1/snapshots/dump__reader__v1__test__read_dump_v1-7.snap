@@ -1,0 +1,28 @@
+---
+source: dump/src/reader/v1/mod.rs
+expression: movies.settings().unwrap()
+---
+{
+  "rankingRules": [
+    "typo",
+    "words",
+    "proximity",
+    "attribute",
+    "wordsPosition",
+    "exactness",
+    "asc(release_date)"
+  ],
+  "distinctAttribute": null,
+  "searchableAttributes": [
+    "*"
+  ],
+  "displayedAttributes": [
+    "*"
+  ],
+  "stopWords": [],
+  "synonyms": {},
+  "attributesForFaceting": [
+    "id",
+    "genres"
+  ]
+}
