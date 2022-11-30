@@ -9,11 +9,11 @@ use self::compat::v4_to_v5::CompatV4ToV5;
 use self::compat::v5_to_v6::{CompatIndexV5ToV6, CompatV5ToV6};
 use self::v5::V5Reader;
 use self::v6::{V6IndexReader, V6Reader};
-use crate::{Error, Result, Version};
+use crate::{Result, Version};
 
 mod compat;
 
-// pub(self) mod v1;
+pub(self) mod v1;
 pub(self) mod v2;
 pub(self) mod v3;
 pub(self) mod v4;
@@ -45,8 +45,9 @@ impl DumpReader {
         let MetadataVersion { dump_version } = serde_json::from_reader(&mut meta_file)?;
 
         match dump_version {
-            // Version::V1 => Ok(Box::new(v1::Reader::open(path)?)),
-            Version::V1 => Err(Error::DumpV1Unsupported),
+            Version::V1 => {
+                Ok(v1::V1Reader::open(path)?.to_v2().to_v3().to_v4().to_v5().to_v6().into())
+            }
             Version::V2 => Ok(v2::V2Reader::open(path)?.to_v3().to_v4().to_v5().to_v6().into()),
             Version::V3 => Ok(v3::V3Reader::open(path)?.to_v4().to_v5().to_v6().into()),
             Version::V4 => Ok(v4::V4Reader::open(path)?.to_v5().to_v6().into()),
