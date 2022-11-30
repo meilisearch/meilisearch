@@ -636,7 +636,7 @@ async fn error_document_add_create_index_bad_uid() {
     let (response, code) = index.add_documents(json!([{"id": 1}]), None).await;
 
     let expected_response = json!({
-        "message": "invalid index uid `883  fj!`, the uid must be an integer or a string containing only alphanumeric characters a-z A-Z 0-9, hyphens - and underscores _.",
+        "message": "`883  fj!` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
         "code": "invalid_index_uid",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_index_uid"

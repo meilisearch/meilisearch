@@ -398,11 +398,17 @@ impl IndexScheduler {
                     }
                     Details::DocumentAdditionOrUpdate { received_documents, indexed_documents } => {
                         assert_eq!(kind.as_kind(), Kind::DocumentAdditionOrUpdate);
-                        if let Some(indexed_documents) = indexed_documents {
-                            assert_eq!(status, Status::Succeeded);
-                            assert!(indexed_documents <= received_documents);
-                        } else {
-                            assert_ne!(status, Status::Succeeded);
+                        match indexed_documents {
+                            Some(0) => assert_ne!(status, Status::Enqueued),
+                            Some(indexed_documents) => {
+                                assert_eq!(status, Status::Succeeded);
+                                assert!(indexed_documents <= received_documents);
+                            }
+                            None => {
+                                assert_ne!(status, Status::Succeeded);
+                                assert_ne!(status, Status::Canceled);
+                                assert_ne!(status, Status::Failed);
+                            }
                         }
                     }
                     Details::SettingsUpdate { settings: _ } => {
@@ -421,7 +427,7 @@ impl IndexScheduler {
                         _ => panic!(),
                     },
                     Details::DocumentDeletion {
-                        matched_documents: received_document_ids,
+                        provided_ids: received_document_ids,
                         deleted_documents,
                     } => {
                         if let Some(deleted_documents) = deleted_documents {
@@ -451,13 +457,13 @@ impl IndexScheduler {
                             assert_ne!(status, Status::Succeeded);
                         }
                     }
-                    Details::TaskCancelation { matched_tasks, canceled_tasks, original_query } => {
+                    Details::TaskCancelation { matched_tasks, canceled_tasks, original_filter } => {
                         if let Some(canceled_tasks) = canceled_tasks {
                             assert_eq!(status, Status::Succeeded);
                             assert!(canceled_tasks <= matched_tasks);
                             match &kind {
                                 KindWithContent::TaskCancelation { query, tasks } => {
-                                    assert_eq!(query, &original_query);
+                                    assert_eq!(query, &original_filter);
                                     assert_eq!(tasks.len(), matched_tasks);
                                 }
                                 _ => panic!(),
@@ -466,13 +472,13 @@ impl IndexScheduler {
                             assert_ne!(status, Status::Succeeded);
                         }
                     }
-                    Details::TaskDeletion { matched_tasks, deleted_tasks, original_query } => {
+                    Details::TaskDeletion { matched_tasks, deleted_tasks, original_filter } => {
                         if let Some(deleted_tasks) = deleted_tasks {
                             assert_eq!(status, Status::Succeeded);
                             assert!(deleted_tasks <= matched_tasks);
                             match &kind {
                                 KindWithContent::TaskDeletion { query, tasks } => {
-                                    assert_eq!(query, &original_query);
+                                    assert_eq!(query, &original_filter);
                                     assert_eq!(tasks.len(), matched_tasks);
                                 }
                                 _ => panic!(),
@@ -481,10 +487,8 @@ impl IndexScheduler {
                             assert_ne!(status, Status::Succeeded);
                         }
                     }
-                    Details::Dump { dump_uid: d1 } => {
-                        assert!(
-                            matches!(&kind, KindWithContent::DumpCreation { dump_uid: d2, keys: _, instance_uid: _ } if &d1 == d2 )
-                        );
+                    Details::Dump { dump_uid: _ } => {
+                        assert_eq!(kind.as_kind(), Kind::DumpCreation);
                     }
                 }
             }

@@ -126,24 +126,27 @@ impl IndexMapper {
         let index_map = self.index_map.clone();
         let index_path = self.base_path.join(uuid.to_string());
         let index_name = name.to_string();
-        thread::spawn(move || {
-            // We first wait to be sure that the previously opened index is effectively closed.
-            // This can take a lot of time, this is why we do that in a seperate thread.
-            if let Some(closing_event) = closing_event {
-                closing_event.wait();
-            }
+        thread::Builder::new()
+            .name(String::from("index_deleter"))
+            .spawn(move || {
+                // We first wait to be sure that the previously opened index is effectively closed.
+                // This can take a lot of time, this is why we do that in a seperate thread.
+                if let Some(closing_event) = closing_event {
+                    closing_event.wait();
+                }
 
-            // Then we remove the content from disk.
-            if let Err(e) = fs::remove_dir_all(&index_path) {
-                error!(
-                    "An error happened when deleting the index {} ({}): {}",
-                    index_name, uuid, e
-                );
-            }
+                // Then we remove the content from disk.
+                if let Err(e) = fs::remove_dir_all(&index_path) {
+                    error!(
+                        "An error happened when deleting the index {} ({}): {}",
+                        index_name, uuid, e
+                    );
+                }
 
-            // Finally we remove the entry from the index map.
-            assert!(matches!(index_map.write().unwrap().remove(&uuid), Some(BeingDeleted)));
-        });
+                // Finally we remove the entry from the index map.
+                assert!(matches!(index_map.write().unwrap().remove(&uuid), Some(BeingDeleted)));
+            })
+            .unwrap();
 
         Ok(())
     }

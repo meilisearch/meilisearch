@@ -352,7 +352,7 @@ async fn error_add_api_key_invalid_parameters_indexes() {
     assert_eq!(400, code, "{:?}", &response);
 
     let expected_response = json!({
-        "message": r#"`{"name":"products"}` is not a valid index uid. It should be an array of string representing index names."#,
+        "message": r#"`indexes` field value `{"name":"products"}` is invalid. It should be an array of string representing index names."#,
         "code": "invalid_api_key_indexes",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_api_key_indexes"
@@ -377,7 +377,7 @@ async fn error_add_api_key_invalid_index_uids() {
     let (response, code) = server.add_api_key(content).await;
 
     let expected_response = json!({
-        "message": r#"`["invalid index # / \\name with spaces"]` is not a valid index uid. It should be an array of string representing index names."#,
+        "message": r#"`invalid index # / \name with spaces` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_)."#,
         "code": "invalid_api_key_indexes",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_api_key_indexes"
@@ -1434,12 +1434,13 @@ async fn error_access_api_key_routes_no_master_key_set() {
 
     server.use_api_key("MASTER_KEY");
 
-    let expected_response = json!({"message": "The provided API key is invalid.",
-        "code": "invalid_api_key",
+    let expected_response = json!({
+        "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
+        "code": "missing_master_key",
         "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+        "link": "https://docs.meilisearch.com/errors#missing_master_key"
     });
-    let expected_code = 403;
+    let expected_code = 401;
 
     let (response, code) = server.add_api_key(json!({})).await;
 

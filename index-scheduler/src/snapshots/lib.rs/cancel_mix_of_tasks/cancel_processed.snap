@@ -1,5 +1,6 @@
 ---
 source: index-scheduler/src/lib.rs
+assertion_line: 1859
 ---
 ### Autobatching Enabled = true
 ### Processing Tasks:
@@ -7,9 +8,9 @@ source: index-scheduler/src/lib.rs
 ----------------------------------------------------------------------
 ### All Tasks:
 0 {uid: 0, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
-1 {uid: 1, status: canceled, canceled_by: 3, details: { received_documents: 1, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "beavero", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 1, allow_index_creation: true }}
-2 {uid: 2, status: canceled, canceled_by: 3, details: { received_documents: 1, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "wolfo", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000002, documents_count: 1, allow_index_creation: true }}
-3 {uid: 3, status: succeeded, details: { matched_tasks: 3, canceled_tasks: Some(2), original_query: "test_query" }, kind: TaskCancelation { query: "test_query", tasks: RoaringBitmap<[0, 1, 2]> }}
+1 {uid: 1, status: canceled, canceled_by: 3, details: { received_documents: 1, indexed_documents: Some(0) }, kind: DocumentAdditionOrUpdate { index_uid: "beavero", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 1, allow_index_creation: true }}
+2 {uid: 2, status: canceled, canceled_by: 3, details: { received_documents: 1, indexed_documents: Some(0) }, kind: DocumentAdditionOrUpdate { index_uid: "wolfo", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000002, documents_count: 1, allow_index_creation: true }}
+3 {uid: 3, status: succeeded, details: { matched_tasks: 3, canceled_tasks: Some(2), original_filter: "test_query" }, kind: TaskCancelation { query: "test_query", tasks: RoaringBitmap<[0, 1, 2]> }}
 ----------------------------------------------------------------------
 ### Status:
 enqueued []
@@ -28,6 +29,10 @@ wolfo [2,]
 ### Index Mapper:
 ["beavero", "catto"]
 ----------------------------------------------------------------------
+### Canceled By:
+3 [1,2,]
+
+----------------------------------------------------------------------
 ### Enqueued At:
 [timestamp] [0,]
 [timestamp] [1,]
@@ -36,6 +41,7 @@ wolfo [2,]
 ----------------------------------------------------------------------
 ### Started At:
 [timestamp] [0,]
+[timestamp] [1,]
 [timestamp] [3,]
 ----------------------------------------------------------------------
 ### Finished At:
