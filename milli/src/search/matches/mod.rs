@@ -494,16 +494,23 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
 
 #[cfg(test)]
 mod tests {
+    use std::rc::Rc;
+
     use charabia::TokenizerBuilder;
 
     use super::*;
     use crate::search::matches::matching_words::MatchingWord;
 
     fn matching_words() -> MatchingWords {
+        let all = vec![
+            Rc::new(MatchingWord::new("split".to_string(), 0, false).unwrap()),
+            Rc::new(MatchingWord::new("the".to_string(), 0, false).unwrap()),
+            Rc::new(MatchingWord::new("world".to_string(), 1, true).unwrap()),
+        ];
         let matching_words = vec![
-            (vec![MatchingWord::new("split".to_string(), 0, false)], vec![0]),
-            (vec![MatchingWord::new("the".to_string(), 0, false)], vec![1]),
-            (vec![MatchingWord::new("world".to_string(), 1, true)], vec![2]),
+            (vec![all[0].clone()], vec![0]),
+            (vec![all[1].clone()], vec![1]),
+            (vec![all[2].clone()], vec![2]),
         ];
 
         MatchingWords::new(matching_words)
@@ -587,10 +594,11 @@ mod tests {
 
     #[test]
     fn highlight_unicode() {
-        let matching_words = vec![
-            (vec![MatchingWord::new("wessfali".to_string(), 1, true)], vec![0]),
-            (vec![MatchingWord::new("world".to_string(), 1, true)], vec![1]),
+        let all = vec![
+            Rc::new(MatchingWord::new("wessfali".to_string(), 1, true).unwrap()),
+            Rc::new(MatchingWord::new("world".to_string(), 1, true).unwrap()),
         ];
+        let matching_words = vec![(vec![all[0].clone()], vec![0]), (vec![all[1].clone()], vec![1])];
 
         let matching_words = MatchingWords::new(matching_words);
 
@@ -823,24 +831,20 @@ mod tests {
 
     #[test]
     fn partial_matches() {
+        let all = vec![
+            Rc::new(MatchingWord::new("the".to_string(), 0, false).unwrap()),
+            Rc::new(MatchingWord::new("t".to_string(), 0, false).unwrap()),
+            Rc::new(MatchingWord::new("he".to_string(), 0, false).unwrap()),
+            Rc::new(MatchingWord::new("door".to_string(), 0, false).unwrap()),
+            Rc::new(MatchingWord::new("do".to_string(), 0, false).unwrap()),
+            Rc::new(MatchingWord::new("or".to_string(), 0, false).unwrap()),
+        ];
         let matching_words = vec![
-            (vec![MatchingWord::new("the".to_string(), 0, false)], vec![0]),
-            (
-                vec![
-                    MatchingWord::new("t".to_string(), 0, false),
-                    MatchingWord::new("he".to_string(), 0, false),
-                ],
-                vec![0],
-            ),
-            (vec![MatchingWord::new("door".to_string(), 0, false)], vec![1]),
-            (
-                vec![
-                    MatchingWord::new("do".to_string(), 0, false),
-                    MatchingWord::new("or".to_string(), 0, false),
-                ],
-                vec![1],
-            ),
-            (vec![MatchingWord::new("do".to_string(), 0, false)], vec![2]),
+            (vec![all[0].clone()], vec![0]),
+            (vec![all[1].clone(), all[2].clone()], vec![0]),
+            (vec![all[3].clone()], vec![1]),
+            (vec![all[4].clone(), all[5].clone()], vec![1]),
+            (vec![all[4].clone()], vec![2]),
         ];
 
         let matching_words = MatchingWords::new(matching_words);

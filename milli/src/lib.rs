@@ -70,6 +70,21 @@ pub type SmallVec8<T> = smallvec::SmallVec<[T; 8]>;
 /// expressed in term of latitude and longitude.
 pub type GeoPoint = rstar::primitives::GeomWithData<[f64; 3], (DocumentId, [f64; 2])>;
 
+/// The maximum length a LMDB key can be.
+///
+/// Note that the actual allowed length is a little bit higher, but
+/// we keep a margin of safety.
+const MAX_LMDB_KEY_LENGTH: usize = 500;
+
+/// The maximum length a field value can be when inserted in an LMDB key.
+///
+/// This number is determined by the keys of the different facet databases
+/// and adding a margin of safety.
+pub const MAX_FACET_VALUE_LENGTH: usize = MAX_LMDB_KEY_LENGTH - 20;
+
+/// The maximum length a word can be
+pub const MAX_WORD_LENGTH: usize = MAX_LMDB_KEY_LENGTH / 2;
+
 pub const MAX_POSITION_PER_ATTRIBUTE: u32 = u16::MAX as u32 + 1;
 
 // Convert an absolute word position into a relative position.

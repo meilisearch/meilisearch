@@ -6,9 +6,8 @@ use heed::BytesEncode;
 use super::helpers::{create_sorter, sorter_into_reader, try_split_array_at, GrenadParameters};
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
 use crate::heed_codec::StrRefCodec;
-use crate::update::index_documents::helpers::MAX_FACET_VALUE_LENGTH;
 use crate::update::index_documents::merge_cbo_roaring_bitmaps;
-use crate::{FieldId, Result};
+use crate::{FieldId, Result, MAX_FACET_VALUE_LENGTH};
 
 /// Extracts the facet string and the documents ids where this facet string appear.
 ///

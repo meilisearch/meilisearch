@@ -1,5 +1,9 @@
 use std::borrow::Cow;
 use std::cmp::max;
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
+use std::hash::Hash;
+use std::rc::Rc;
 use std::{fmt, mem};
 
 use charabia::classifier::ClassifiedTokenIter;
@@ -540,6 +544,29 @@ fn create_query_tree(
     Ok(Operation::or(true, operation_children))
 }
 
+#[derive(Default, Debug)]
+struct MatchingWordCache {
+    all: Vec<Rc<MatchingWord>>,
+    map: HashMap<(String, u8, bool), Rc<MatchingWord>>,
+}
+impl MatchingWordCache {
+    fn insert(&mut self, word: String, typo: u8, prefix: bool) -> Option<Rc<MatchingWord>> {
+        match self.map.entry((word.clone(), typo, prefix)) {
+            Entry::Occupied(idx) => Some(idx.get().clone()),
+            Entry::Vacant(vacant) => {
+                let matching_word = Rc::new(MatchingWord::new(word, typo, prefix)?);
+                self.all.push(matching_word.clone());
+                vacant.insert(matching_word.clone());
+                Some(matching_word)
+            }
+        }
+        // To deactivate the cache, for testing purposes, use the following instead:
+        // let matching_word = Rc::new(MatchingWord::new(word, typo, prefix)?);
+        // self.all.push(matching_word.clone());
+        // Some(matching_word)
+    }
+}
+
 /// Main function that matchings words used for crop and highlight.
 fn create_matching_words(
     ctx: &impl Context,
@@ -551,7 +578,8 @@ fn create_matching_words(
         ctx: &impl Context,
         authorize_typos: bool,
         part: PrimitiveQueryPart,
-        matching_words: &mut Vec<(Vec<MatchingWord>, Vec<PrimitiveWordId>)>,
+        matching_words: &mut Vec<(Vec<Rc<MatchingWord>>, Vec<PrimitiveWordId>)>,
+        matching_word_cache: &mut MatchingWordCache,
         id: PrimitiveWordId,
     ) -> Result<()> {
         match part {
@@ -560,18 +588,27 @@ fn create_matching_words(
             PrimitiveQueryPart::Word(word, prefix) => {
                 if let Some(synonyms) = ctx.synonyms(&[word.as_str()])? {
                     for synonym in synonyms {
-                        let synonym = synonym
+                        // Require that all words of the synonym have a corresponding MatchingWord
+                        // before adding any of its words to the matching_words result.
+                        if let Some(synonym_matching_words) = synonym
                             .into_iter()
-                            .map(|syn| MatchingWord::new(syn, 0, false))
-                            .collect();
-                        matching_words.push((synonym, vec![id]));
+                            .map(|word| matching_word_cache.insert(word, 0, false))
+                            .collect()
+                        {
+                            matching_words.push((synonym_matching_words, vec![id]));
+                        }
                     }
                 }
 
                 if let Some((left, right)) = split_best_frequency(ctx, &word)? {
-                    let left = MatchingWord::new(left.to_string(), 0, false);
-                    let right = MatchingWord::new(right.to_string(), 0, false);
-                    matching_words.push((vec![left, right], vec![id]));
+                    // Require that both left and right words have a corresponding MatchingWord
+                    // before adding them to the matching_words result
+                    if let Some(left) = matching_word_cache.insert(left.to_string(), 0, false) {
+                        if let Some(right) = matching_word_cache.insert(right.to_string(), 0, false)
+                        {
+                            matching_words.push((vec![left, right], vec![id]));
+                        }
+                    }
                 }
 
                 let (word_len_one_typo, word_len_two_typo) = ctx.min_word_len_for_typo()?;
@@ -580,18 +617,29 @@ fn create_matching_words(
                     TypoConfig { max_typos: 2, word_len_one_typo, word_len_two_typo, exact_words };
 
                 let matching_word = match typos(word, authorize_typos, config) {
-                    QueryKind::Exact { word, .. } => MatchingWord::new(word, 0, prefix),
-                    QueryKind::Tolerant { typo, word } => MatchingWord::new(word, typo, prefix),
+                    QueryKind::Exact { word, .. } => matching_word_cache.insert(word, 0, prefix),
+                    QueryKind::Tolerant { typo, word } => {
+                        matching_word_cache.insert(word, typo, prefix)
+                    }
                 };
-                matching_words.push((vec![matching_word], vec![id]));
+                if let Some(matching_word) = matching_word {
+                    matching_words.push((vec![matching_word], vec![id]));
+                }
             }
             // create a CONSECUTIVE matchings words wrapping all word in the phrase
             PrimitiveQueryPart::Phrase(words) => {
                 let ids: Vec<_> =
                     (0..words.len()).into_iter().map(|i| id + i as PrimitiveWordId).collect();
-                let words =
-                    words.into_iter().flatten().map(|w| MatchingWord::new(w, 0, false)).collect();
-                matching_words.push((words, ids));
+                // Require that all words of the phrase have a corresponding MatchingWord
+                // before adding any of them to the matching_words result
+                if let Some(phrase_matching_words) = words
+                    .into_iter()
+                    .flatten()
+                    .map(|w| matching_word_cache.insert(w, 0, false))
+                    .collect()
+                {
+                    matching_words.push((phrase_matching_words, ids));
+                }
             }
         }
 
@@ -603,7 +651,8 @@ fn create_matching_words(
         ctx: &impl Context,
         authorize_typos: bool,
         query: &[PrimitiveQueryPart],
-        matching_words: &mut Vec<(Vec<MatchingWord>, Vec<PrimitiveWordId>)>,
+        matching_words: &mut Vec<(Vec<Rc<MatchingWord>>, Vec<PrimitiveWordId>)>,
+        matching_word_cache: &mut MatchingWordCache,
         mut id: PrimitiveWordId,
     ) -> Result<()> {
         const MAX_NGRAM: usize = 3;
@@ -621,6 +670,7 @@ fn create_matching_words(
                                 authorize_typos,
                                 part.clone(),
                                 matching_words,
+                                matching_word_cache,
                                 id,
                             )?;
                         }
@@ -643,11 +693,13 @@ fn create_matching_words(
 
                             if let Some(synonyms) = ctx.synonyms(&words)? {
                                 for synonym in synonyms {
-                                    let synonym = synonym
+                                    if let Some(synonym) = synonym
                                         .into_iter()
-                                        .map(|syn| MatchingWord::new(syn, 0, false))
-                                        .collect();
-                                    matching_words.push((synonym, ids.clone()));
+                                        .map(|syn| matching_word_cache.insert(syn, 0, false))
+                                        .collect()
+                                    {
+                                        matching_words.push((synonym, ids.clone()));
+                                    }
                                 }
                             }
                             let word = words.concat();
@@ -662,18 +714,27 @@ fn create_matching_words(
                             };
                             let matching_word = match typos(word, authorize_typos, config) {
                                 QueryKind::Exact { word, .. } => {
-                                    MatchingWord::new(word, 0, is_prefix)
+                                    matching_word_cache.insert(word, 0, is_prefix)
                                 }
                                 QueryKind::Tolerant { typo, word } => {
-                                    MatchingWord::new(word, typo, is_prefix)
+                                    matching_word_cache.insert(word, typo, is_prefix)
                                 }
                             };
-                            matching_words.push((vec![matching_word], ids));
+                            if let Some(matching_word) = matching_word {
+                                matching_words.push((vec![matching_word], ids));
+                            }
                         }
                     }
 
                     if !is_last {
-                        ngrams(ctx, authorize_typos, tail, matching_words, id + 1)?;
+                        ngrams(
+                            ctx,
+                            authorize_typos,
+                            tail,
+                            matching_words,
+                            matching_word_cache,
+                            id + 1,
+                        )?;
                     }
                 }
             }
@@ -683,8 +744,9 @@ fn create_matching_words(
         Ok(())
     }
 
+    let mut matching_word_cache = MatchingWordCache::default();
     let mut matching_words = Vec::new();
-    ngrams(ctx, authorize_typos, query, &mut matching_words, 0)?;
+    ngrams(ctx, authorize_typos, query, &mut matching_words, &mut matching_word_cache, 0)?;
     Ok(MatchingWords::new(matching_words))
 }
 
@@ -814,6 +876,7 @@ mod test {
     use rand::{Rng, SeedableRng};
 
     use super::*;
+    use crate::index::tests::TempIndex;
     use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
 
     #[derive(Debug)]
@@ -1295,6 +1358,27 @@ mod test {
     }
 
     #[test]
+    fn test_dont_create_matching_word_for_long_words() {
+        let index = TempIndex::new();
+        let rtxn = index.read_txn().unwrap();
+        let query = "what a supercalifragilisticexpialidocioussupercalifragilisticexpialidocioussupercalifragilisticexpialidocioussupercalifragilisticexpialidocioussupercalifragilisticexpialidocioussupercalifragilisticexpialidocioussupercalifragilisticexpialidocioussupercalifragilisticexpialidocious house";
+        let mut builder = QueryTreeBuilder::new(&rtxn, &index).unwrap();
+        builder.words_limit(10);
+        let (_, _, matching_words) = builder.build(query.tokenize()).unwrap().unwrap();
+        insta::assert_snapshot!(format!("{matching_words:?}"), @r###"
+        [
+        ([MatchingWord { word: "house", typo: 1, prefix: true }], [3])
+        ([MatchingWord { word: "house", typo: 1, prefix: true }], [2])
+        ([MatchingWord { word: "whata", typo: 1, prefix: false }], [0, 1])
+        ([MatchingWord { word: "house", typo: 1, prefix: true }], [2])
+        ([MatchingWord { word: "house", typo: 1, prefix: true }], [1])
+        ([MatchingWord { word: "what", typo: 0, prefix: false }], [0])
+        ([MatchingWord { word: "a", typo: 0, prefix: false }], [1])
+        ]
+        "###);
+    }
+
+    #[test]
     fn disable_typo_on_word() {
         let query = "goodbye";
         let tokens = query.tokenize();
@@ -1310,4 +1394,67 @@ mod test {
             Operation::Query(Query { prefix: true, kind: QueryKind::Exact { .. } })
         ));
     }
+
+    // The memory usage test below is disabled because `cargo test` runs multiple tests in parallel,
+    // which invalidates the measurements of memory usage. Nevertheless, it is a useful test to run
+    // manually from time to time, so I kept it here, commented-out.
+
+    // use std::alloc::{GlobalAlloc, System};
+    // use std::sync::atomic::{self, AtomicI64};
+    //
+    // #[global_allocator]
+    // static ALLOC: CountingAlloc =
+    //     CountingAlloc { resident: AtomicI64::new(0), allocated: AtomicI64::new(0) };
+    //
+    // pub struct CountingAlloc {
+    //     pub resident: AtomicI64,
+    //     pub allocated: AtomicI64,
+    // }
+    // unsafe impl GlobalAlloc for CountingAlloc {
+    //     unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
+    //         self.allocated.fetch_add(layout.size() as i64, atomic::Ordering::Relaxed);
+    //         self.resident.fetch_add(layout.size() as i64, atomic::Ordering::Relaxed);
+    //
+    //         System.alloc(layout)
+    //     }
+    //
+    //     unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
+    //         self.resident.fetch_sub(layout.size() as i64, atomic::Ordering::Relaxed);
+    //         System.dealloc(ptr, layout)
+    //     }
+    // }
+    //
+    // #[test]
+    // fn memory_usage_of_ten_word_query() {
+    //     let resident_before = ALLOC.resident.load(atomic::Ordering::SeqCst);
+    //     let allocated_before = ALLOC.allocated.load(atomic::Ordering::SeqCst);
+    //
+    //     let index = TempIndex::new();
+    //     let rtxn = index.read_txn().unwrap();
+    //     let query = "a beautiful summer house by the beach overlooking what seems";
+    //     let mut builder = QueryTreeBuilder::new(&rtxn, &index).unwrap();
+    //     builder.words_limit(10);
+    //     let x = builder.build(query.tokenize()).unwrap().unwrap();
+    //     let resident_after = ALLOC.resident.load(atomic::Ordering::SeqCst);
+    //     let allocated_after = ALLOC.allocated.load(atomic::Ordering::SeqCst);
+    //
+    //     // Weak check on the memory usage
+    //     // Don't keep more than 5MB. (Arguably 5MB is already too high)
+    //     assert!(resident_after - resident_before < 5_000_000);
+    //     // Don't allocate more than 10MB.
+    //     assert!(allocated_after - allocated_before < 10_000_000);
+    //
+    //     // Use these snapshots to measure the exact memory usage.
+    //     // The values below were correct at the time I wrote them.
+    //     // insta::assert_snapshot!(format!("{}", resident_after - resident_before), @"4486950");
+    //     // insta::assert_snapshot!(format!("{}", allocated_after - allocated_before), @"7107502");
+    //
+    //     // Note, with the matching word cache deactivated, the memory usage was:
+    //     // insta::assert_snapshot!(format!("{}", resident_after - resident_before), @"91248697");
+    //     // insta::assert_snapshot!(format!("{}", allocated_after - allocated_before), @"125697588");
+    //     // or about 20x more resident memory (90MB vs 4.5MB)
+    //
+    //     // Use x
+    //     let _x = x;
+    // }
 }
