@@ -1,5 +1,8 @@
 #!/bin/sh
 
+# This script works with a GitHub token to increase your request limit (for example, if using this script in a CI).
+# To make it work, fill the GITHUB_PAT environment variable with your GitHub token.
+
 # GLOBALS
 
 # Colors
@@ -17,8 +20,8 @@ GITHUB_REL='https://github.com/meilisearch/meilisearch/releases/download/'
 
 # FUNCTIONS
 
-# Create GITHUB_PAT environment variable once you acquired the token to start using it.
-# Returns the tag of the latest stable release (in terms of semver and not of release date).
+# Gets the version of the latest stable version of Meilisearch by setting the $latest variable.
+# Returns 0 in case of success, 1 otherwise.
 get_latest() {
     # temp_file is needed because the grep would start before the download is over
     temp_file=$(mktemp -q /tmp/$PNAME.XXXXXXXXX)
@@ -71,9 +74,9 @@ get_archi() {
         archi='amd64'
         ;;
     'arm64')
-        # MacOS M1
+        # macOS M1/M2
         if [ $os = 'macos' ]; then
-            archi='amd64'
+            archi='apple-silicon'
         else
             archi='aarch64'
         fi
