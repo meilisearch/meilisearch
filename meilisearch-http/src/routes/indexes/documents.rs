@@ -1,4 +1,11 @@
-use std::io::{ErrorKind, BufWriter, Write};
+use crate::analytics::{Analytics, DocumentDeletionKind};
+use crate::error::MeilisearchHttpError;
+use crate::error::PayloadError::ReceivePayloadErr;
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::GuardedData;
+use crate::extractors::payload::Payload;
+use crate::extractors::sequential_extractor::SeqHandler;
+use crate::routes::{fold_star_or, PaginationView, SummarizedTaskView};
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
@@ -6,7 +13,7 @@ use bstr::ByteSlice;
 use futures::StreamExt;
 use index_scheduler::IndexScheduler;
 use log::{debug, error};
-use meilisearch_types::document_formats::{read_csv, PayloadType, read_json, read_ndjson};
+use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
@@ -19,15 +26,8 @@ use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_cs::vec::CS;
 use serde_json::Value;
+use std::io::{BufWriter, ErrorKind, Write};
 use tempfile::NamedTempFile;
-use crate::analytics::{Analytics, DocumentDeletionKind};
-use crate::error::MeilisearchHttpError;
-use crate::error::PayloadError::ReceivePayloadErr;
-use crate::extractors::authentication::policies::*;
-use crate::extractors::authentication::GuardedData;
-use crate::extractors::payload::Payload;
-use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::{fold_star_or, PaginationView, SummarizedTaskView};
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]
@@ -227,14 +227,15 @@ async fn document_addition(
 
     let (uuid, mut update_file) = index_scheduler.create_update_file()?;
 
-    let err: Result<SummarizedTaskView, MeilisearchHttpError> = Err(MeilisearchHttpError::Payload(ReceivePayloadErr));
+    let err: Result<SummarizedTaskView, MeilisearchHttpError> =
+        Err(MeilisearchHttpError::Payload(ReceivePayloadErr));
 
     let temp_file = match NamedTempFile::new() {
         Ok(temp_file) => temp_file,
         Err(e) => {
             error!("create a temporary file error: {}", e);
             return err;
-        },
+        }
     };
     debug!("temp file path: {:?}", temp_file.as_ref());
     let buffer_file = match temp_file.reopen() {
@@ -245,21 +246,20 @@ async fn document_addition(
         }
     };
     let mut buffer = BufWriter::new(buffer_file);
-    let mut buffer_write_size:usize = 0;
+    let mut buffer_write_size: usize = 0;
     while let Some(bytes) = body.next().await {
         match buffer.write(&bytes?) {
-            Ok(size) => buffer_write_size = buffer_write_size + size,
+            Ok(size) => buffer_write_size += size,
             Err(e) => {
                 error!("bufWriter write error: {}", e);
-                return err
+                return err;
             }
         }
-
-    };
+    }
 
     if let Err(e) = buffer.flush() {
         error!("bufWriter flush error: {}", e);
-        return err
+        return err;
     };
 
     if buffer_write_size == 0 {

@@ -1,18 +1,18 @@
-use std::borrow::Borrow;
-use std::fmt::{self, Debug, Display};
-use std::fs::File;
-use std::io::{self, Seek, Write};
-use std::marker::PhantomData;
+use crate::error::{Code, ErrorCode};
+use crate::internal_error;
 use either::Either;
 use log::debug;
 use memmap::MmapOptions;
 use milli::documents::{DocumentsBatchBuilder, Error};
 use milli::Object;
-use serde::de::{Visitor, SeqAccess};
+use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use serde_json::error::Category;
-use crate::error::{Code, ErrorCode};
-use crate::internal_error;
+use std::borrow::Borrow;
+use std::fmt::{self, Debug, Display};
+use std::fs::File;
+use std::io::{self, Seek, Write};
+use std::marker::PhantomData;
 
 type Result<T> = std::result::Result<T, DocumentFormatError>;
 
@@ -104,7 +104,7 @@ internal_error!(DocumentFormatError: io::Error);
 /// Reads CSV from input and write an obkv batch to writer.
 pub fn read_csv(file: &File, writer: impl Write + Seek) -> Result<usize> {
     let mut builder = DocumentsBatchBuilder::new(writer);
-    let mmap = unsafe { MmapOptions::new().map(file).unwrap()};
+    let mmap = unsafe { MmapOptions::new().map(file).unwrap() };
     let csv = csv::Reader::from_reader(mmap.as_ref());
     builder.append_csv(csv).map_err(|e| (PayloadType::Csv, e))?;
 
@@ -125,15 +125,16 @@ pub fn read_ndjson(file: &File, writer: impl Write + Seek) -> Result<usize> {
 }
 
 /// Reads JSON from temporary file  and write an obkv batch to writer.
-fn read_json_inner(file: &File, writer: impl Write + Seek, payload_type: PayloadType) -> Result<usize> {
+fn read_json_inner(
+    file: &File,
+    writer: impl Write + Seek,
+    payload_type: PayloadType,
+) -> Result<usize> {
     let mut builder = DocumentsBatchBuilder::new(writer);
-    let mmap = unsafe { MmapOptions::new().map(file).unwrap()};
+    let mmap = unsafe { MmapOptions::new().map(file).unwrap() };
     let mut deserializer = serde_json::Deserializer::from_slice(&mmap);
 
-    match array_each(&mut deserializer, |obj: Object | {
-        builder
-            .append_json_object(&obj)
-    }) {
+    match array_each(&mut deserializer, |obj: Object| builder.append_json_object(&obj)) {
         Ok(Ok(count)) => debug!("serde json array size: {}", count),
         Ok(Err(e)) => return Err(DocumentFormatError::Internal(Box::new(e))),
         Err(_e) => {
@@ -145,8 +146,9 @@ fn read_json_inner(file: &File, writer: impl Write + Seek, payload_type: Payload
                 inner: Either<Vec<Object>, Object>,
             }
 
-            let content: ArrayOrSingleObject =
-            serde_json::from_reader(file).map_err(Error::Json).map_err(|e| (payload_type, e))?;
+            let content: ArrayOrSingleObject = serde_json::from_reader(file)
+                .map_err(Error::Json)
+                .map_err(|e| (payload_type, e))?;
 
             for object in content.inner.map_right(|o| vec![o]).into_inner() {
                 builder
@@ -154,7 +156,7 @@ fn read_json_inner(file: &File, writer: impl Write + Seek, payload_type: Payload
                     .map_err(Into::into)
                     .map_err(DocumentFormatError::Internal)?;
             }
-        } 
+        }
     }
 
     let count = builder.documents_count();
@@ -186,14 +188,17 @@ where
             formatter.write_str("a nonempty sequence")
         }
 
-        fn visit_seq<A>(mut self, mut seq: A) -> std::result::Result<io::Result<u64>, <A as SeqAccess<'de>>::Error>
+        fn visit_seq<A>(
+            mut self,
+            mut seq: A,
+        ) -> std::result::Result<io::Result<u64>, <A as SeqAccess<'de>>::Error>
         where
             A: SeqAccess<'de>,
         {
             let mut max: u64 = 0;
             while let Some(value) = seq.next_element::<T>()? {
                 match self.0(value) {
-                    Ok(()) =>  max = max + 1,
+                    Ok(()) => max += 1,
                     Err(e) => return Ok(Err(e)),
                 };
             }

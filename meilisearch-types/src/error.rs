@@ -324,9 +324,10 @@ impl Code {
             DuplicateIndexFound => {
                 ErrCode::invalid("duplicate_index_found", StatusCode::BAD_REQUEST)
             }
-            ReceivePayloadErr => {
-                ErrCode::internal("receive_payload_internal_exceptions", StatusCode::INTERNAL_SERVER_ERROR)
-            }
+            ReceivePayloadErr => ErrCode::internal(
+                "receive_payload_internal_exceptions",
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
         }
     }
 
