@@ -436,6 +436,8 @@ impl FacetsUpdateIncrementalInner {
                 level: highest_level + 1,
                 left_bound: first_key.unwrap().left_bound,
             };
+            // Note: nbr_leftover_elements can be casted to a u8 since it is bounded by `max_group_size`
+            // when it is created above.
             let value = FacetGroupValue { size: nbr_leftover_elements as u8, bitmap: values };
             to_add.push((key.into_owned(), value));
         }
