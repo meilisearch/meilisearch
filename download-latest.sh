@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # This script can optionally use a GitHub token to increase your request limit (for example, if using this script in a CI).
-# To make it work, fill the GITHUB_PAT environment variable with your GitHub token.
+# To use a GitHub token, pass it through the GITHUB_PAT environment variable.
 
 # GLOBALS
 
