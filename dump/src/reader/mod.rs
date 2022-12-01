@@ -529,4 +529,81 @@ pub(crate) mod test {
         assert_eq!(documents.len(), 10);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"235016433dd04262c7f2da01d1e808ce");
     }
+
+    #[test]
+    fn import_dump_v1() {
+        let dump = File::open("tests/assets/v1.dump").unwrap();
+        let mut dump = DumpReader::open(dump).unwrap();
+
+        // top level infos
+        assert_eq!(dump.date(), None);
+        assert_eq!(dump.instance_uid().unwrap(), None);
+
+        // tasks
+        let tasks = dump.tasks().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"b3e3652bfc10a76670be157d2507d761");
+        assert_eq!(update_files.len(), 9);
+        assert!(update_files[..].iter().all(|u| u.is_none())); // no update file in dump v1
+
+        // keys
+        let keys = dump.keys().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        meili_snap::snapshot!(meili_snap::json_string!(keys), @"[]");
+        meili_snap::snapshot_hash!(meili_snap::json_string!(keys), @"d751713988987e9331980363e24189ce");
+
+        // indexes
+        let mut indexes = dump.indexes().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        // the index are not ordered in any way by default
+        indexes.sort_by_key(|index| index.metadata().uid.to_string());
+
+        let mut products = indexes.pop().unwrap();
+        let mut movies = indexes.pop().unwrap();
+        let mut spells = indexes.pop().unwrap();
+        assert!(indexes.is_empty());
+
+        // products
+        insta::assert_json_snapshot!(products.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        {
+          "uid": "products",
+          "primaryKey": "sku",
+          "createdAt": "[now]",
+          "updatedAt": "[now]"
+        }
+        "###);
+
+        insta::assert_json_snapshot!(products.settings().unwrap());
+        let documents = products.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        assert_eq!(documents.len(), 10);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"b01c8371aea4c7171af0d4d846a2bdca");
+
+        // movies
+        insta::assert_json_snapshot!(movies.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        {
+          "uid": "movies",
+          "primaryKey": "id",
+          "createdAt": "[now]",
+          "updatedAt": "[now]"
+        }
+        "###);
+
+        insta::assert_json_snapshot!(movies.settings().unwrap());
+        let documents = movies.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        assert_eq!(documents.len(), 10);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"b63dbed5bbc059f3e32bc471ae699bf5");
+
+        // spells
+        insta::assert_json_snapshot!(spells.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        {
+          "uid": "dnd_spells",
+          "primaryKey": "index",
+          "createdAt": "[now]",
+          "updatedAt": "[now]"
+        }
+        "###);
+
+        insta::assert_json_snapshot!(spells.settings().unwrap());
+        let documents = spells.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        assert_eq!(documents.len(), 10);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"aa24c0cfc733d66c396237ad44263bed");
+    }
 }
