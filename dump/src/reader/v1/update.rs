@@ -1,53 +1,7 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use time::OffsetDateTime;
 
 use super::settings::SettingsUpdate;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Update {
-    data: UpdateData,
-    #[serde(with = "time::serde::rfc3339")]
-    enqueued_at: OffsetDateTime,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum UpdateData {
-    ClearAll,
-    Customs(Vec<u8>),
-    // (primary key, documents)
-    DocumentsAddition {
-        primary_key: Option<String>,
-        documents: Vec<serde_json::Map<String, Value>>,
-    },
-    DocumentsPartial {
-        primary_key: Option<String>,
-        documents: Vec<serde_json::Map<String, Value>>,
-    },
-    DocumentsDeletion(Vec<String>),
-    Settings(Box<SettingsUpdate>),
-}
-
-impl UpdateData {
-    pub fn update_type(&self) -> UpdateType {
-        match self {
-            UpdateData::ClearAll => UpdateType::ClearAll,
-            UpdateData::Customs(_) => UpdateType::Customs,
-            UpdateData::DocumentsAddition { documents, .. } => UpdateType::DocumentsAddition {
-                number: documents.len(),
-            },
-            UpdateData::DocumentsPartial { documents, .. } => UpdateType::DocumentsPartial {
-                number: documents.len(),
-            },
-            UpdateData::DocumentsDeletion(deletion) => UpdateType::DocumentsDeletion {
-                number: deletion.len(),
-            },
-            UpdateData::Settings(update) => UpdateType::Settings {
-                settings: update.clone(),
-            },
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "name")]

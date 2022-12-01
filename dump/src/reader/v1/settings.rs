@@ -1,6 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::result::Result as StdResult;
+use std::str::FromStr;
 
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
 
 #[derive(Default, Clone, Serialize, Deserialize, Debug)]
@@ -51,6 +54,34 @@ pub enum RankingRule {
     Exactness,
     Asc(String),
     Desc(String),
+}
+
+static ASC_DESC_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r#"(asc|desc)\(([\w_-]+)\)"#).unwrap());
+
+impl FromStr for RankingRule {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "typo" => Self::Typo,
+            "words" => Self::Words,
+            "proximity" => Self::Proximity,
+            "attribute" => Self::Attribute,
+            "wordsPosition" => Self::WordsPosition,
+            "exactness" => Self::Exactness,
+            text => {
+                let caps = ASC_DESC_REGEX.captures(text).ok_or(())?;
+                let order = caps.get(1).unwrap().as_str();
+                let field_name = caps.get(2).unwrap().as_str();
+                match order {
+                    "asc" => Self::Asc(field_name.to_string()),
+                    "desc" => Self::Desc(field_name.to_string()),
+                    _ => return Err(()),
+                }
+            }
+        })
+    }
 }
 
 // Any value that is present is considered Some value, including null.
