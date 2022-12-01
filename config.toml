@@ -56,7 +56,7 @@ disable_auto_batching = false
 ### DUMPS ###
 #############
 
-dumps_dir = "dumps/"
+dump_dir = "dumps/"
 # Sets the directory where Meilisearch will create dump files.
 # https://docs.meilisearch.com/learn/configuration/instance_options.html#dumps-destination
 
