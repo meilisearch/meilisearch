@@ -1133,6 +1133,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "filter-parser"
+version = "0.33.6"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.6#0998f6b3becacb8c88fe9cad0dc5b17b7fb287da"
+dependencies = [
+ "nom",
+ "nom_locate",
+]
+
+[[package]]
 name = "firestorm"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1152,6 +1161,14 @@ dependencies = [
 name = "flatten-serde-json"
 version = "0.33.4"
 source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.5#4fc6331cb6526c07f3137584564cfe3493fb25bd"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "flatten-serde-json"
+version = "0.33.6"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.6#0998f6b3becacb8c88fe9cad0dc5b17b7fb287da"
 dependencies = [
  "serde_json",
 ]
@@ -1674,6 +1691,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "json-depth-checker"
+version = "0.33.6"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.6#0998f6b3becacb8c88fe9cad0dc5b17b7fb287da"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "jsonwebtoken"
 version = "8.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2009,12 +2034,12 @@ checksum = "3e2e65a1a2e43cfcb47a895c4c8b10d1f4a61097f9f254f183aee60cad9c651d"
 
 [[package]]
 name = "meilisearch-auth"
-version = "0.29.2"
+version = "0.29.3"
 dependencies = [
  "enum-iterator 0.7.0",
  "hmac",
  "meilisearch-types",
- "milli",
+ "milli 0.33.4",
  "rand",
  "serde",
  "serde_json",
@@ -2026,7 +2051,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-http"
-version = "0.29.2"
+version = "0.29.3"
 dependencies = [
  "actix-cors",
  "actix-rt",
@@ -2101,7 +2126,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-lib"
-version = "0.29.2"
+version = "0.29.3"
 dependencies = [
  "actix-rt",
  "actix-web",
@@ -2128,7 +2153,7 @@ dependencies = [
  "log",
  "meilisearch-auth",
  "meilisearch-types",
- "milli",
+ "milli 0.33.6",
  "mime",
  "mockall",
  "nelson",
@@ -2164,7 +2189,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-types"
-version = "0.29.2"
+version = "0.29.3"
 dependencies = [
  "actix-web",
  "proptest",
@@ -2211,15 +2236,60 @@ dependencies = [
  "crossbeam-channel",
  "csv",
  "either",
- "filter-parser",
- "flatten-serde-json",
+ "filter-parser 0.33.4",
+ "flatten-serde-json 0.33.4",
  "fst",
  "fxhash",
  "geoutils",
  "grenad",
  "heed",
  "itertools",
- "json-depth-checker",
+ "json-depth-checker 0.33.4",
+ "levenshtein_automata",
+ "log",
+ "logging_timer",
+ "memmap2",
+ "obkv",
+ "once_cell",
+ "ordered-float",
+ "rayon",
+ "roaring",
+ "rstar",
+ "serde",
+ "serde_json",
+ "slice-group-by",
+ "smallstr",
+ "smallvec",
+ "smartstring",
+ "tempfile",
+ "thiserror",
+ "time 0.3.14",
+ "uuid",
+]
+
+[[package]]
+name = "milli"
+version = "0.33.6"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.33.6#0998f6b3becacb8c88fe9cad0dc5b17b7fb287da"
+dependencies = [
+ "bimap",
+ "bincode",
+ "bstr",
+ "byteorder",
+ "charabia",
+ "concat-arrays",
+ "crossbeam-channel",
+ "csv",
+ "either",
+ "filter-parser 0.33.6",
+ "flatten-serde-json 0.33.6",
+ "fst",
+ "fxhash",
+ "geoutils",
+ "grenad",
+ "heed",
+ "itertools",
+ "json-depth-checker 0.33.6",
  "levenshtein_automata",
  "log",
  "logging_timer",
@@ -2534,7 +2604,7 @@ checksum = "478c572c3d73181ff3c2539045f6eb99e5491218eae919370993b890cdbdd98e"
 
 [[package]]
 name = "permissive-json-pointer"
-version = "0.29.2"
+version = "0.29.3"
 dependencies = [
  "big_s",
  "serde_json",
