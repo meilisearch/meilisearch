@@ -42,7 +42,7 @@ jobs:
     needs: check-version
     steps:
       - name: Create PR to Homebrew
-        uses: mislav/bump-homebrew-formula-action@v1
+        uses: mislav/bump-homebrew-formula-action@v2
         with:
           formula-name: meilisearch
         env:
