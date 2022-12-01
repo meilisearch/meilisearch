@@ -1,4 +1,4 @@
-name: Publish deb pkg to GitHub release & APT repository & Homebrew
+name: Publish to APT repository & Homebrew
 
 on:
   release:
@@ -38,7 +38,7 @@ jobs:
 
   homebrew:
     name: Bump Homebrew formula
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     needs: check-version
     steps:
       - name: Create PR to Homebrew
