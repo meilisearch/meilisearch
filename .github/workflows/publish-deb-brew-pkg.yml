@@ -27,7 +27,7 @@ jobs:
     - name: Build deb package
       run: cargo deb -p meilisearch-http -o target/debian/meilisearch.deb
     - name: Upload debian pkg to release
-      uses: svenstaro/upload-release-action@v1-release
+      uses: svenstaro/upload-release-action@2.3.0
       with:
         repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
         file: target/debian/meilisearch.deb
