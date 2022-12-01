@@ -560,8 +560,9 @@ impl Index {
     }
 
     pub(crate) fn delete_all_searchable_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.delete_searchable_fields(wtxn)?;
-        self.delete_user_defined_searchable_fields(wtxn)
+        let did_delete_searchable = self.delete_searchable_fields(wtxn)?;
+        let did_delete_user_defined = self.delete_user_defined_searchable_fields(wtxn)?;
+        Ok(did_delete_searchable || did_delete_user_defined)
     }
 
     /// Writes the searchable fields, when this list is specified, only these are indexed.
@@ -1145,9 +1146,8 @@ impl Index {
     }
 
     /// Clears the exact attributes from the store.
-    pub(crate) fn delete_exact_attributes(&self, txn: &mut RwTxn) -> Result<()> {
-        self.main.delete::<_, Str>(txn, main_key::EXACT_ATTRIBUTES)?;
-        Ok(())
+    pub(crate) fn delete_exact_attributes(&self, txn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(txn, main_key::EXACT_ATTRIBUTES)
     }
 
     pub fn max_values_per_facet(&self, txn: &RoTxn) -> heed::Result<Option<usize>> {

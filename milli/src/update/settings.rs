@@ -349,6 +349,21 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_searchable(&mut self) -> Result<bool> {
         match self.searchable_fields {
             Setting::Set(ref fields) => {
+                // Check to see if the searchable fields changed before doing anything else
+                let old_fields = self.index.searchable_fields(self.wtxn)?;
+                let did_change = match old_fields {
+                    // If old_fields is Some, let's check to see if the fields actually changed
+                    Some(old_fields) => {
+                        let new_fields = fields.iter().map(String::as_str).collect::<Vec<_>>();
+                        new_fields != old_fields
+                    }
+                    // If old_fields is None, the fields have changed (because they are being set)
+                    None => true,
+                };
+                if !did_change {
+                    return Ok(false);
+                }
+
                 // every time the searchable attributes are updated, we need to update the
                 // ids for any settings that uses the facets. (distinct_fields, filterable_fields).
                 let old_fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
@@ -373,13 +388,11 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                     &new_fields_ids_map,
                 )?;
                 self.index.put_fields_ids_map(self.wtxn, &new_fields_ids_map)?;
+                Ok(true)
             }
-            Setting::Reset => {
-                self.index.delete_all_searchable_fields(self.wtxn)?;
-            }
-            Setting::NotSet => return Ok(false),
+            Setting::Reset => Ok(self.index.delete_all_searchable_fields(self.wtxn)?),
+            Setting::NotSet => Ok(false),
         }
-        Ok(true)
     }
 
     fn update_stop_words(&mut self) -> Result<bool> {
@@ -465,14 +478,18 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     fn update_exact_attributes(&mut self) -> Result<bool> {
         match self.exact_attributes {
             Setting::Set(ref attrs) => {
-                let attrs = attrs.iter().map(String::as_str).collect::<Vec<_>>();
-                self.index.put_exact_attributes(self.wtxn, &attrs)?;
-                Ok(true)
+                let old_attrs = self.index.exact_attributes(self.wtxn)?;
+                let old_attrs = old_attrs.into_iter().map(String::from).collect::<HashSet<_>>();
+
+                if attrs != &old_attrs {
+                    let attrs = attrs.iter().map(String::as_str).collect::<Vec<_>>();
+                    self.index.put_exact_attributes(self.wtxn, &attrs)?;
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
             }
-            Setting::Reset => {
-                self.index.delete_exact_attributes(self.wtxn)?;
-                Ok(true)
-            }
+            Setting::Reset => Ok(self.index.delete_exact_attributes(self.wtxn)?),
             Setting::NotSet => Ok(false),
         }
     }
