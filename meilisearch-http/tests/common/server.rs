@@ -184,7 +184,7 @@ impl Server {
 pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
     Opt {
         db_path: dir.as_ref().join("db"),
-        dumps_dir: dir.as_ref().join("dump"),
+        dump_dir: dir.as_ref().join("dump"),
         env: "development".to_owned(),
         #[cfg(all(not(debug_assertions), feature = "analytics"))]
         no_analytics: true,

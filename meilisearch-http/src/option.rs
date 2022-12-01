@@ -47,7 +47,7 @@ const MEILI_SNAPSHOT_INTERVAL_SEC: &str = "MEILI_SNAPSHOT_INTERVAL_SEC";
 const MEILI_IMPORT_DUMP: &str = "MEILI_IMPORT_DUMP";
 const MEILI_IGNORE_MISSING_DUMP: &str = "MEILI_IGNORE_MISSING_DUMP";
 const MEILI_IGNORE_DUMP_IF_DB_EXISTS: &str = "MEILI_IGNORE_DUMP_IF_DB_EXISTS";
-const MEILI_DUMPS_DIR: &str = "MEILI_DUMPS_DIR";
+const MEILI_DUMP_DIR: &str = "MEILI_DUMP_DIR";
 const MEILI_LOG_LEVEL: &str = "MEILI_LOG_LEVEL";
 #[cfg(feature = "metrics")]
 const MEILI_ENABLE_METRICS_ROUTE: &str = "MEILI_ENABLE_METRICS_ROUTE";
@@ -61,7 +61,7 @@ const DEFAULT_MAX_TASK_DB_SIZE: &str = "100 GiB";
 const DEFAULT_HTTP_PAYLOAD_SIZE_LIMIT: &str = "100 MB";
 const DEFAULT_SNAPSHOT_DIR: &str = "snapshots/";
 const DEFAULT_SNAPSHOT_INTERVAL_SEC: u64 = 86400;
-const DEFAULT_DUMPS_DIR: &str = "dumps/";
+const DEFAULT_DUMP_DIR: &str = "dumps/";
 const DEFAULT_LOG_LEVEL: &str = "INFO";
 
 const MEILI_MAX_INDEXING_MEMORY: &str = "MEILI_MAX_INDEXING_MEMORY";
@@ -219,9 +219,9 @@ pub struct Opt {
     pub ignore_dump_if_db_exists: bool,
 
     /// Sets the directory where Meilisearch will create dump files.
-    #[clap(long, env = MEILI_DUMPS_DIR, default_value_os_t = default_dumps_dir())]
-    #[serde(default = "default_dumps_dir")]
-    pub dumps_dir: PathBuf,
+    #[clap(long, env = MEILI_DUMP_DIR, default_value_os_t = default_dump_dir())]
+    #[serde(default = "default_dump_dir")]
+    pub dump_dir: PathBuf,
 
     /// Defines how much detail should be present in Meilisearch's logs.
     ///
@@ -320,7 +320,7 @@ impl Opt {
             snapshot_dir,
             schedule_snapshot,
             snapshot_interval_sec,
-            dumps_dir,
+            dump_dir,
             log_level,
             indexer_options,
             scheduler_options,
@@ -373,7 +373,7 @@ impl Opt {
             MEILI_SNAPSHOT_INTERVAL_SEC,
             snapshot_interval_sec.to_string(),
         );
-        export_to_env_if_not_present(MEILI_DUMPS_DIR, dumps_dir);
+        export_to_env_if_not_present(MEILI_DUMP_DIR, dump_dir);
         export_to_env_if_not_present(MEILI_LOG_LEVEL, log_level);
         #[cfg(feature = "metrics")]
         {
@@ -708,8 +708,8 @@ fn default_snapshot_interval_sec() -> u64 {
     DEFAULT_SNAPSHOT_INTERVAL_SEC
 }
 
-fn default_dumps_dir() -> PathBuf {
-    PathBuf::from(DEFAULT_DUMPS_DIR)
+fn default_dump_dir() -> PathBuf {
+    PathBuf::from(DEFAULT_DUMP_DIR)
 }
 
 fn default_log_level() -> String {
