@@ -1,0 +1,19 @@
+# Create or update a latest git tag when releasing a stable vesrsin of Meilisearch
+name: Update latest git tag
+on:
+  workflow_dispatch:
+  release:
+    types: [released]
+
+jobs:
+  update-latest-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: rickstaa/action-create-tag@v1
+        with:
+          tag: "latest"
+          message: "Latest stable release of Meilisearch"
+          # Move the tag if `latest` already exists
+          force_push_tag: true
+          github_token: ${{ secrets.MEILI_BOT_GH_PAT }}
