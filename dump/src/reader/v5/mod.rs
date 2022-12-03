@@ -208,7 +208,7 @@ impl V5IndexReader {
         for line in tasks.lines() {
             let task: Task = serde_json::from_str(&line?)?;
 
-            if task.index_uid().unwrap_or_default().to_string() == name {
+            if *task.index_uid().unwrap_or_default().to_string() == name {
                 if updated_at.is_none() {
                     updated_at = task.updated_at()
                 }
