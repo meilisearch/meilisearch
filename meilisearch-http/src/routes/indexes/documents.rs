@@ -26,8 +26,10 @@ use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_cs::vec::CS;
 use serde_json::Value;
-use std::io::{BufWriter, ErrorKind, Write};
+use std::io::ErrorKind;
 use tempfile::NamedTempFile;
+use tokio::fs::File;
+use tokio::io::{AsyncWriteExt, BufWriter};
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]
@@ -227,14 +229,11 @@ async fn document_addition(
 
     let (uuid, mut update_file) = index_scheduler.create_update_file()?;
 
-    let err: Result<SummarizedTaskView, MeilisearchHttpError> =
-        Err(MeilisearchHttpError::Payload(ReceivePayloadErr));
-
     let temp_file = match NamedTempFile::new() {
         Ok(temp_file) => temp_file,
         Err(e) => {
             error!("create a temporary file error: {}", e);
-            return err;
+            return Err(MeilisearchHttpError::Payload(ReceivePayloadErr));
         }
     };
     debug!("temp file path: {:?}", temp_file.as_ref());
@@ -242,24 +241,24 @@ async fn document_addition(
         Ok(buffer_file) => buffer_file,
         Err(e) => {
             error!("reopen payload temporary file error: {}", e);
-            return err;
+            return Err(MeilisearchHttpError::Payload(ReceivePayloadErr));
         }
     };
-    let mut buffer = BufWriter::new(buffer_file);
+    let mut buffer = BufWriter::new(File::from_std(buffer_file));
     let mut buffer_write_size: usize = 0;
     while let Some(bytes) = body.next().await {
-        match buffer.write(&bytes?) {
+        match buffer.write(&bytes?).await {
             Ok(size) => buffer_write_size += size,
             Err(e) => {
                 error!("bufWriter write error: {}", e);
-                return err;
+                return Err(MeilisearchHttpError::Payload(ReceivePayloadErr));
             }
         }
     }
 
-    if let Err(e) = buffer.flush() {
+    if let Err(e) = buffer.flush().await {
         error!("bufWriter flush error: {}", e);
-        return err;
+        return Err(MeilisearchHttpError::Payload(ReceivePayloadErr));
     };
 
     if buffer_write_size == 0 {

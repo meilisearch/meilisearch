@@ -128,7 +128,7 @@ impl ErrorCode for PayloadError {
             },
             PayloadError::MissingPayload => Code::MissingPayload,
             PayloadError::MalformedPayload(_) => Code::MalformedPayload,
-            PayloadError::ReceivePayloadErr => Code::ReceivePayloadErr,
+            PayloadError::ReceivePayloadErr => Code::Internal,
         }
     }
 }

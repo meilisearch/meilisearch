@@ -1,8 +1,7 @@
 use crate::error::{Code, ErrorCode};
 use crate::internal_error;
 use either::Either;
-use log::debug;
-use memmap::MmapOptions;
+use memmap2::MmapOptions;
 use milli::documents::{DocumentsBatchBuilder, Error};
 use milli::Object;
 use serde::de::{SeqAccess, Visitor};
@@ -104,7 +103,7 @@ internal_error!(DocumentFormatError: io::Error);
 /// Reads CSV from input and write an obkv batch to writer.
 pub fn read_csv(file: &File, writer: impl Write + Seek) -> Result<usize> {
     let mut builder = DocumentsBatchBuilder::new(writer);
-    let mmap = unsafe { MmapOptions::new().map(file).unwrap() };
+    let mmap = unsafe { MmapOptions::new().map(file)? };
     let csv = csv::Reader::from_reader(mmap.as_ref());
     builder.append_csv(csv).map_err(|e| (PayloadType::Csv, e))?;
 
@@ -131,14 +130,21 @@ fn read_json_inner(
     payload_type: PayloadType,
 ) -> Result<usize> {
     let mut builder = DocumentsBatchBuilder::new(writer);
-    let mmap = unsafe { MmapOptions::new().map(file).unwrap() };
+    let mmap = unsafe { MmapOptions::new().map(file)? };
     let mut deserializer = serde_json::Deserializer::from_slice(&mmap);
 
     match array_each(&mut deserializer, |obj: Object| builder.append_json_object(&obj)) {
-        Ok(Ok(count)) => debug!("serde json array size: {}", count),
+        // The json data has been successfully deserialised and does not need to be processed again.
+        // the data has been successfully transferred to the "update_file" during the deserialisation process.
+        // count ==0 means an empty array
+        Ok(Ok(count)) => {
+            if count == 0 {
+                return Ok(count as usize);
+            }
+        }
         Ok(Err(e)) => return Err(DocumentFormatError::Internal(Box::new(e))),
+        // Prefer deserialization as a json array. Failure to do deserialisation using the traditional method.
         Err(_e) => {
-            debug!("deserialize single json");
             #[derive(Deserialize, Debug)]
             #[serde(transparent)]
             struct ArrayOrSingleObject {
@@ -166,6 +172,8 @@ fn read_json_inner(
 }
 
 /**
+ * The actual handling of the deserialization process in the serde avoids storing the deserialized object in memory.
+ * Reference:
  * https://serde.rs/stream-array.html
  * https://github.com/serde-rs/json/issues/160
  */
