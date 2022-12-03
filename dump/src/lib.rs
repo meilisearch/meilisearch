@@ -23,7 +23,7 @@ const CURRENT_DUMP_VERSION: Version = Version::V6;
 
 type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Metadata {
     pub dump_version: Version,
@@ -32,7 +32,7 @@ pub struct Metadata {
     pub dump_date: OffsetDateTime,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexMetadata {
     pub uid: String,
@@ -43,7 +43,7 @@ pub struct IndexMetadata {
     pub updated_at: OffsetDateTime,
 }
 
-#[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 pub enum Version {
     V1,
     V2,

@@ -1,0 +1,24 @@
+---
+source: dump/src/reader/v1/mod.rs
+expression: dnd_spells.settings().unwrap()
+---
+{
+  "rankingRules": [
+    "typo",
+    "words",
+    "proximity",
+    "attribute",
+    "wordsPosition",
+    "exactness"
+  ],
+  "distinctAttribute": null,
+  "searchableAttributes": [
+    "*"
+  ],
+  "displayedAttributes": [
+    "*"
+  ],
+  "stopWords": [],
+  "synonyms": {},
+  "attributesForFaceting": []
+}

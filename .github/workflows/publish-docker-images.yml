@@ -3,8 +3,12 @@ on:
   schedule:
     - cron: '0 4 * * *' # Every day at 4:00am
   push:
-    tags:
-      - '*'
+    # Will run for every tag pushed except `latest`
+    # When the `latest` git tag is created with this [CI](../latest-git-tag.yml)
+    # we don't need to create a Docker `latest` image again.
+    # The `latest` Docker image push is already done in this CI when releasing a stable version of Meilisearch.
+    tags-ignore:
+      - latest
 
 name: Publish tagged images to Docker Hub
 
