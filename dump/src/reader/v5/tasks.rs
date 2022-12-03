@@ -140,6 +140,13 @@ impl Task {
             TaskContent::Dump { .. } => None,
         }
     }
+
+    pub fn processed_at(&self) -> Option<OffsetDateTime> {
+        match self.events.last() {
+            Some(TaskEvent::Succeeded { result: _, timestamp }) => Some(*timestamp),
+            _ => None,
+        }
+    }
 }
 
 impl IndexUid {
