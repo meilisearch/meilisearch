@@ -56,7 +56,6 @@ pub type Checked = settings::Checked;
 pub type Unchecked = settings::Unchecked;
 
 pub type Task = tasks::Task;
-pub type TaskEvent = tasks::TaskEvent;
 pub type Key = keys::Key;
 
 // ===== Other types to clarify the code of the compat module
