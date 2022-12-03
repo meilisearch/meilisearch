@@ -1193,7 +1193,7 @@ mod tests {
     ) -> std::result::Result<usize, DocumentFormatError> {
         let temp_file = NamedTempFile::new().unwrap();
         let mut buffer = BufWriter::new(temp_file.reopen().unwrap());
-        buffer.write(bytes).unwrap();
+        buffer.write_all(bytes).unwrap();
         buffer.flush().unwrap();
         meilisearch_types::document_formats::read_json(temp_file.as_file(), write)
     }

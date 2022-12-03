@@ -29,7 +29,7 @@ use serde_json::Value;
 use std::io::ErrorKind;
 use tempfile::NamedTempFile;
 use tokio::fs::File;
-use tokio::io::{AsyncWriteExt, BufWriter};
+use tokio::io::AsyncWriteExt;
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]
@@ -244,16 +244,22 @@ async fn document_addition(
             return Err(MeilisearchHttpError::Payload(ReceivePayloadErr));
         }
     };
-    let mut buffer = BufWriter::new(File::from_std(buffer_file));
+    let mut buffer = File::from_std(buffer_file);
     let mut buffer_write_size: usize = 0;
     while let Some(bytes) = body.next().await {
-        match buffer.write(&bytes?).await {
-            Ok(size) => buffer_write_size += size,
+        let byte = &bytes?;
+
+        if byte.is_empty() && buffer_write_size == 0 {
+            return Err(MeilisearchHttpError::MissingPayload(format));
+        }
+
+        match buffer.write_all(byte).await {
+            Ok(()) => buffer_write_size += 1,
             Err(e) => {
                 error!("bufWriter write error: {}", e);
                 return Err(MeilisearchHttpError::Payload(ReceivePayloadErr));
             }
-        }
+        };
     }
 
     if let Err(e) = buffer.flush().await {
