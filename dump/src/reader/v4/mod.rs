@@ -101,7 +101,7 @@ impl V4Reader {
                 index.uid.clone(),
                 &self.dump.path().join("indexes").join(index.index_meta.uuid.to_string()),
                 &index.index_meta,
-                BufReader::new(self.tasks.get_ref().try_clone().unwrap()),
+                BufReader::new(File::open(dump.path().join("updates").join("data.jsonl")).unwrap()),
             )
         }))
     }
