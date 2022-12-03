@@ -142,7 +142,7 @@ impl V5Reader {
             V5IndexReader::new(
                 index.uid.clone(),
                 &self.dump.path().join("indexes").join(index.index_meta.uuid.to_string()),
-                BufReader::new(self.tasks.get_ref().try_clone().unwrap()),
+                BufReader::new(File::open(&self.dump.path().join("updates").join("data.jsonl")).unwrap()),
             )
         }))
     }
