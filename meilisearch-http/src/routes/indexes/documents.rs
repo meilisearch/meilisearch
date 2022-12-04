@@ -263,6 +263,11 @@ async fn document_addition(
         };
     }
 
+    if let Err(e) = buffer.flush().await {	
+        error!("bufWriter flush error: {}", e);	
+        return Err(MeilisearchHttpError::Payload(ReceivePayloadErr));	
+    };
+
     if buffer_write_size == 0 {
         return Err(MeilisearchHttpError::MissingPayload(format));
     }
