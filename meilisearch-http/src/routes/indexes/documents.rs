@@ -1,11 +1,3 @@
-use crate::analytics::{Analytics, DocumentDeletionKind};
-use crate::error::MeilisearchHttpError;
-use crate::error::PayloadError::ReceivePayloadErr;
-use crate::extractors::authentication::policies::*;
-use crate::extractors::authentication::GuardedData;
-use crate::extractors::payload::Payload;
-use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::{fold_star_or, PaginationView, SummarizedTaskView};
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
@@ -30,6 +22,15 @@ use std::io::ErrorKind;
 use tempfile::NamedTempFile;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
+
+use crate::analytics::{Analytics, DocumentDeletionKind};
+use crate::error::MeilisearchHttpError;
+use crate::error::PayloadError::ReceivePayloadErr;
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::GuardedData;
+use crate::extractors::payload::Payload;
+use crate::extractors::sequential_extractor::SeqHandler;
+use crate::routes::{fold_star_or, PaginationView, SummarizedTaskView};
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]
@@ -261,11 +262,6 @@ async fn document_addition(
             }
         };
     }
-
-    if let Err(e) = buffer.flush().await {
-        error!("bufWriter flush error: {}", e);
-        return Err(MeilisearchHttpError::Payload(ReceivePayloadErr));
-    };
 
     if buffer_write_size == 0 {
         return Err(MeilisearchHttpError::MissingPayload(format));
