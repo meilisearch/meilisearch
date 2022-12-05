@@ -88,6 +88,7 @@ pub struct IndexDocumentsConfig {
     pub words_positions_level_group_size: Option<NonZeroU32>,
     pub words_positions_min_level_size: Option<NonZeroU32>,
     pub update_method: IndexDocumentsMethod,
+    pub disable_soft_deletion: bool,
     pub autogenerate_docids: bool,
 }
 
@@ -331,6 +332,7 @@ where
         // able to simply insert all the documents even if they already exist in the database.
         if !replaced_documents_ids.is_empty() {
             let mut deletion_builder = update::DeleteDocuments::new(self.wtxn, self.index)?;
+            deletion_builder.disable_soft_deletion(self.config.disable_soft_deletion);
             debug!("documents to delete {:?}", replaced_documents_ids);
             deletion_builder.delete_documents(&replaced_documents_ids);
             let deleted_documents_count = deletion_builder.execute()?;
@@ -906,6 +908,8 @@ mod tests {
           { "id": 42,   "title": "The Hitchhiker's Guide to the Galaxy",   "author": "Douglas Adams", "_geo": { "lat": 35, "lng": 23 } }
         ])).unwrap();
 
+        db_snap!(index, word_docids, "initial");
+
         index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         index
@@ -927,6 +931,9 @@ mod tests {
         assert_eq!(count, 6);
         let count = index.all_documents(&rtxn).unwrap().count();
         assert_eq!(count, 6);
+
+        db_snap!(index, word_docids, "updated");
+        db_snap!(index, soft_deleted_documents_ids, "updated", @"[0, 1, 4, ]");
 
         drop(rtxn);
     }

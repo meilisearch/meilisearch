@@ -648,7 +648,7 @@ mod tests {
     use crate::heed_codec::facet::OrderedF64Codec;
     use crate::heed_codec::StrRefCodec;
     use crate::milli_snap;
-    use crate::update::facet::tests::FacetIndex;
+    use crate::update::facet::test_helpers::FacetIndex;
 
     #[test]
     fn append() {
@@ -1053,7 +1053,7 @@ mod fuzz {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::update::facet::tests::FacetIndex;
+    use crate::update::facet::test_helpers::FacetIndex;
     #[derive(Default)]
     pub struct TrivialDatabase<T> {
         pub elements: BTreeMap<u16, BTreeMap<T, RoaringBitmap>>,

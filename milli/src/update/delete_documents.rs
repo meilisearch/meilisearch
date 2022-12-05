@@ -26,7 +26,6 @@ pub struct DeleteDocuments<'t, 'u, 'i> {
     index: &'i Index,
     external_documents_ids: ExternalDocumentsIds<'static>,
     to_delete_docids: RoaringBitmap,
-    #[cfg(test)]
     disable_soft_deletion: bool,
 }
 
@@ -48,12 +47,10 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             index,
             external_documents_ids,
             to_delete_docids: RoaringBitmap::new(),
-            #[cfg(test)]
             disable_soft_deletion: false,
         })
     }
 
-    #[cfg(test)]
     pub fn disable_soft_deletion(&mut self, disable: bool) {
         self.disable_soft_deletion = disable;
     }
@@ -156,17 +153,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         //   We run the deletion.
         // - With 100Go of disk and 50Go used including 15Go of soft-deleted documents
         //   We run the deletion.
-        let disable_soft_deletion = {
-            #[cfg(not(test))]
-            {
-                false
-            }
-            #[cfg(test)]
-            {
-                self.disable_soft_deletion
-            }
-        };
-        if !disable_soft_deletion
+
+        if !self.disable_soft_deletion
             && percentage_available > 10
             && percentage_used_by_soft_deleted_documents < 10
         {

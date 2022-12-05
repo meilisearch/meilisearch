@@ -162,7 +162,7 @@ impl<'i> FacetsUpdate<'i> {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
+pub(crate) mod test_helpers {
     use std::cell::Cell;
     use std::fmt::Display;
     use std::iter::FromIterator;
@@ -182,6 +182,23 @@ pub(crate) mod tests {
     use crate::snapshot_tests::display_bitmap;
     use crate::update::FacetsUpdateIncrementalInner;
     use crate::CboRoaringBitmapCodec;
+
+    /// Utility function to generate a string whose position in a lexicographically
+    /// ordered list is `i`.
+    pub fn ordered_string(mut i: usize) -> String {
+        // The first string is empty
+        if i == 0 {
+            return String::new();
+        }
+        // The others are 5 char long, each between 'a' and 'z'
+        let mut s = String::new();
+        for _ in 0..5 {
+            let (digit, next) = (i % 26, i / 26);
+            s.insert(0, char::from_u32('a' as u32 + digit as u32).unwrap());
+            i = next;
+        }
+        s
+    }
 
     /// A dummy index that only contains the facet database, used for testing
     pub struct FacetIndex<BoundCodec>
@@ -438,6 +455,98 @@ pub(crate) mod tests {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use big_s::S;
+    use maplit::hashset;
+
+    use crate::db_snap;
+    use crate::documents::documents_batch_reader_from_objects;
+    use crate::index::tests::TempIndex;
+
+    #[test]
+    fn replace_all_identical_soft_deletion_then_hard_deletion() {
+        let mut index = TempIndex::new_with_map_size(4096 * 1000 * 100);
+
+        index
+            .update_settings(|settings| {
+                settings.set_primary_key("id".to_owned());
+                settings.set_filterable_fields(hashset! { S("size") });
+            })
+            .unwrap();
+
+        let mut documents = vec![];
+        for i in 0..1000 {
+            documents.push(
+                serde_json::json! {
+                    {
+                        "id": i,
+                        "size": i % 250,
+                    }
+                }
+                .as_object()
+                .unwrap()
+                .clone(),
+            );
+        }
+
+        let documents = documents_batch_reader_from_objects(documents);
+        index.add_documents(documents).unwrap();
+
+        db_snap!(index, facet_id_f64_docids, "initial", @"777e0e221d778764b472c512617eeb3b");
+        db_snap!(index, number_faceted_documents_ids, "initial", @"bd916ef32b05fd5c3c4c518708f431a9");
+        db_snap!(index, soft_deleted_documents_ids, "initial", @"[]");
+
+        let mut documents = vec![];
+        for i in 0..999 {
+            documents.push(
+                serde_json::json! {
+                    {
+                        "id": i,
+                        "size": i % 250,
+                        "other": 0,
+                    }
+                }
+                .as_object()
+                .unwrap()
+                .clone(),
+            );
+        }
+
+        let documents = documents_batch_reader_from_objects(documents);
+        index.add_documents(documents).unwrap();
+
+        db_snap!(index, facet_id_f64_docids, "replaced_1_soft", @"abba175d7bed727d0efadaef85a4388f");
+        db_snap!(index, number_faceted_documents_ids, "replaced_1_soft", @"de76488bd05ad94c6452d725acf1bd06");
+        db_snap!(index, soft_deleted_documents_ids, "replaced_1_soft", @"6c975deb900f286d2f6456d2d5c3a123");
+
+        // Then replace the last document while disabling soft_deletion
+        index.index_documents_config.disable_soft_deletion = true;
+        let mut documents = vec![];
+        for i in 999..1000 {
+            documents.push(
+                serde_json::json! {
+                    {
+                        "id": i,
+                        "size": i % 250,
+                        "other": 0,
+                    }
+                }
+                .as_object()
+                .unwrap()
+                .clone(),
+            );
+        }
+
+        let documents = documents_batch_reader_from_objects(documents);
+        index.add_documents(documents).unwrap();
+
+        db_snap!(index, facet_id_f64_docids, "replaced_2_hard", @"029e27a46d09c574ae949aa4289b45e6");
+        db_snap!(index, number_faceted_documents_ids, "replaced_2_hard", @"60b19824f136affe6b240a7200779028");
+        db_snap!(index, soft_deleted_documents_ids, "replaced_2_hard", @"[]");
+    }
+}
+
 #[allow(unused)]
 #[cfg(test)]
 mod comparison_bench {
@@ -446,7 +555,7 @@ mod comparison_bench {
     use rand::Rng;
     use roaring::RoaringBitmap;
 
-    use super::tests::FacetIndex;
+    use super::test_helpers::FacetIndex;
     use crate::heed_codec::facet::OrderedF64Codec;
 
     // This is a simple test to get an intuition on the relative speed

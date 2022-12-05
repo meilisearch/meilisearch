@@ -365,8 +365,9 @@ mod tests {
 
     use crate::documents::documents_batch_reader_from_objects;
     use crate::heed_codec::facet::OrderedF64Codec;
+    use crate::heed_codec::StrRefCodec;
     use crate::index::tests::TempIndex;
-    use crate::update::facet::tests::FacetIndex;
+    use crate::update::facet::test_helpers::{ordered_string, FacetIndex};
     use crate::{db_snap, milli_snap};
 
     #[test]
@@ -490,5 +491,38 @@ mod tests {
 
         db_snap!(index, facet_id_f64_docids, "initial", @"c34f499261f3510d862fa0283bbe843a");
         db_snap!(index, number_faceted_documents_ids, "initial", @"01594fecbb316798ce3651d6730a4521");
+    }
+
+    #[test]
+    fn insert_string() {
+        let test = |name: &str, group_size: u8, min_level_size: u8| {
+            let index = FacetIndex::<StrRefCodec>::new(group_size, 0 /*NA*/, min_level_size);
+
+            let strings = (0..1_000).map(|i| ordered_string(i as usize)).collect::<Vec<_>>();
+            let mut elements = Vec::<((u16, &str), RoaringBitmap)>::new();
+            for i in 0..1_000u32 {
+                // field id = 0, left_bound = i, docids = [i]
+                elements.push(((0, &strings[i as usize]), once(i).collect()));
+            }
+            for i in 0..100u32 {
+                // field id = 1, left_bound = i, docids = [i]
+                elements.push(((1, &strings[i as usize]), once(i).collect()));
+            }
+            let mut wtxn = index.env.write_txn().unwrap();
+            index.bulk_insert(&mut wtxn, &[0, 1], elements.iter());
+
+            index.verify_structure_validity(&wtxn, 0);
+            index.verify_structure_validity(&wtxn, 1);
+
+            wtxn.commit().unwrap();
+
+            milli_snap!(format!("{index}"), name);
+        };
+
+        test("default", 4, 5);
+        test("small_group_small_min_level", 2, 2);
+        test("small_group_large_min_level", 2, 128);
+        test("large_group_small_min_level", 16, 2);
+        test("odd_group_odd_min_level", 7, 3);
     }
 }

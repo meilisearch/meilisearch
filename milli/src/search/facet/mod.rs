@@ -89,7 +89,8 @@ pub(crate) mod tests {
     use roaring::RoaringBitmap;
 
     use crate::heed_codec::facet::OrderedF64Codec;
-    use crate::update::facet::tests::FacetIndex;
+    use crate::heed_codec::StrRefCodec;
+    use crate::update::facet::test_helpers::FacetIndex;
 
     pub fn get_simple_index() -> FacetIndex<OrderedF64Codec> {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
@@ -142,6 +143,45 @@ pub(crate) mod tests {
                 bitmap.insert(key);
                 bitmap.insert(key + 100);
                 index.insert(&mut txn, fid, &(key as f64), &bitmap);
+            }
+        }
+        txn.commit().unwrap();
+        index
+    }
+    pub fn get_simple_string_index_with_multiple_field_ids() -> FacetIndex<StrRefCodec> {
+        let index = FacetIndex::<StrRefCodec>::new(4, 8, 5);
+        let mut txn = index.env.write_txn().unwrap();
+        for fid in 0..2 {
+            for i in 0..256u16 {
+                let mut bitmap = RoaringBitmap::new();
+                bitmap.insert(i as u32);
+                if i % 2 == 0 {
+                    index.insert(&mut txn, fid, &format!("{i}").as_str(), &bitmap);
+                } else {
+                    index.insert(&mut txn, fid, &"", &bitmap);
+                }
+            }
+        }
+        txn.commit().unwrap();
+        index
+    }
+    pub fn get_random_looking_string_index_with_multiple_field_ids() -> FacetIndex<StrRefCodec> {
+        let index = FacetIndex::<StrRefCodec>::new(4, 8, 5);
+        let mut txn = index.env.write_txn().unwrap();
+
+        let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
+        let keys =
+            std::iter::from_fn(|| Some(rng.gen_range(0..256))).take(128).collect::<Vec<u32>>();
+        for fid in 0..2 {
+            for (_i, &key) in keys.iter().enumerate() {
+                let mut bitmap = RoaringBitmap::new();
+                bitmap.insert(key);
+                bitmap.insert(key + 100);
+                if key % 2 == 0 {
+                    index.insert(&mut txn, fid, &format!("{key}").as_str(), &bitmap);
+                } else {
+                    index.insert(&mut txn, fid, &"", &bitmap);
+                }
             }
         }
         txn.commit().unwrap();

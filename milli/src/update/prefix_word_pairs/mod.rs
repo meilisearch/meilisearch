@@ -156,30 +156,40 @@ pub fn write_into_lmdb_database_without_merging(
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
+    use std::iter::FromIterator;
+
+    use roaring::RoaringBitmap;
 
     use crate::db_snap;
     use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
     use crate::index::tests::TempIndex;
+    use crate::update::{DeleteDocuments, IndexDocumentsMethod};
 
-    fn documents_with_enough_different_words_for_prefixes(prefixes: &[&str]) -> Vec<crate::Object> {
+    fn documents_with_enough_different_words_for_prefixes(
+        prefixes: &[&str],
+        start_id: usize,
+    ) -> Vec<crate::Object> {
         let mut documents = Vec::new();
+        let mut id = start_id;
         for prefix in prefixes {
             for i in 0..50 {
                 documents.push(
                     serde_json::json!({
+                        "id": id,
                         "text": format!("{prefix}{i:x}"),
                     })
                     .as_object()
                     .unwrap()
                     .clone(),
-                )
+                );
+                id += 1;
             }
         }
         documents
     }
 
     #[test]
-    fn test_update() {
+    fn add_new_documents() {
         let mut index = TempIndex::new();
         index.index_documents_config.words_prefix_threshold = Some(50);
         index.index_documents_config.autogenerate_docids = true;
@@ -198,10 +208,11 @@ mod tests {
             DocumentsBatchReader::from_reader(Cursor::new(builder.into_inner().unwrap())).unwrap()
         };
 
-        let mut documents = documents_with_enough_different_words_for_prefixes(&["a", "be"]);
+        let mut documents = documents_with_enough_different_words_for_prefixes(&["a", "be"], 0);
         // now we add some documents where the text should populate the word_prefix_pair_proximity_docids database
         documents.push(
             serde_json::json!({
+                "id": "9000",
                 "text": "At an amazing and beautiful house"
             })
             .as_object()
@@ -210,6 +221,7 @@ mod tests {
         );
         documents.push(
             serde_json::json!({
+                "id": "9001",
                 "text": "The bell rings at 5 am"
             })
             .as_object()
@@ -221,10 +233,12 @@ mod tests {
         index.add_documents(documents).unwrap();
 
         db_snap!(index, word_prefix_pair_proximity_docids, "initial");
+        db_snap!(index, prefix_word_pair_proximity_docids, "initial");
 
-        let mut documents = documents_with_enough_different_words_for_prefixes(&["am", "an"]);
+        let mut documents = documents_with_enough_different_words_for_prefixes(&["am", "an"], 100);
         documents.push(
             serde_json::json!({
+                "id": "9002",
                 "text": "At an extraordinary house"
             })
             .as_object()
@@ -239,7 +253,7 @@ mod tests {
         db_snap!(index, prefix_word_pair_proximity_docids, "update");
     }
     #[test]
-    fn test_batch_bug_3043() {
+    fn batch_bug_3043() {
         // https://github.com/meilisearch/meilisearch/issues/3043
         let mut index = TempIndex::new();
         index.index_documents_config.words_prefix_threshold = Some(50);
@@ -259,7 +273,7 @@ mod tests {
             DocumentsBatchReader::from_reader(Cursor::new(builder.into_inner().unwrap())).unwrap()
         };
 
-        let mut documents = documents_with_enough_different_words_for_prefixes(&["y"]);
+        let mut documents = documents_with_enough_different_words_for_prefixes(&["y"], 0);
         // now we add some documents where the text should populate the word_prefix_pair_proximity_docids database
         documents.push(
             serde_json::json!({
@@ -284,5 +298,292 @@ mod tests {
         db_snap!(index, word_pair_proximity_docids);
         db_snap!(index, word_prefix_pair_proximity_docids);
         db_snap!(index, prefix_word_pair_proximity_docids);
+    }
+
+    #[test]
+    fn hard_delete_and_reupdate() {
+        let mut index = TempIndex::new();
+        index.index_documents_config.words_prefix_threshold = Some(50);
+
+        index
+            .update_settings(|settings| {
+                settings.set_primary_key("id".to_owned());
+                settings.set_searchable_fields(vec!["text".to_owned()]);
+            })
+            .unwrap();
+
+        let batch_reader_from_documents = |documents| {
+            let mut builder = DocumentsBatchBuilder::new(Vec::new());
+            for object in documents {
+                builder.append_json_object(&object).unwrap();
+            }
+            DocumentsBatchReader::from_reader(Cursor::new(builder.into_inner().unwrap())).unwrap()
+        };
+
+        let mut documents = documents_with_enough_different_words_for_prefixes(&["a"], 0);
+        // now we add some documents where the text should populate the word_prefix_pair_proximity_docids database
+        documents.push(
+            serde_json::json!({
+                "id": 9000,
+                "text": "At an amazing and beautiful house"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        );
+        documents.push(
+            serde_json::json!({
+                "id": 9001,
+                "text": "The bell rings at 5 am"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        );
+
+        let documents = batch_reader_from_documents(documents);
+        index.add_documents(documents).unwrap();
+
+        db_snap!(index, documents_ids, "initial");
+        db_snap!(index, word_docids, "initial");
+        db_snap!(index, word_prefix_pair_proximity_docids, "initial");
+        db_snap!(index, prefix_word_pair_proximity_docids, "initial");
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
+        delete.disable_soft_deletion(true);
+        delete.delete_documents(&RoaringBitmap::from_iter([50]));
+        delete.execute().unwrap();
+        wtxn.commit().unwrap();
+
+        db_snap!(index, documents_ids, "first_delete");
+        db_snap!(index, word_docids, "first_delete");
+        db_snap!(index, word_prefix_pair_proximity_docids, "first_delete");
+        db_snap!(index, prefix_word_pair_proximity_docids, "first_delete");
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
+        delete.disable_soft_deletion(true);
+        delete.delete_documents(&RoaringBitmap::from_iter(0..50));
+        delete.execute().unwrap();
+        wtxn.commit().unwrap();
+
+        db_snap!(index, documents_ids, "second_delete");
+        db_snap!(index, word_docids, "second_delete");
+        db_snap!(index, word_prefix_pair_proximity_docids, "second_delete");
+        db_snap!(index, prefix_word_pair_proximity_docids, "second_delete");
+
+        let documents = documents_with_enough_different_words_for_prefixes(&["b"], 1000);
+        // now we add some documents where the text should populate the word_prefix_pair_proximity_docids database
+
+        index.add_documents(batch_reader_from_documents(documents)).unwrap();
+
+        db_snap!(index, documents_ids, "reupdate");
+        db_snap!(index, word_docids, "reupdate");
+        db_snap!(index, word_prefix_pair_proximity_docids, "reupdate");
+        db_snap!(index, prefix_word_pair_proximity_docids, "reupdate");
+    }
+
+    #[test]
+    fn soft_delete_and_reupdate() {
+        let mut index = TempIndex::new();
+        index.index_documents_config.words_prefix_threshold = Some(50);
+
+        index
+            .update_settings(|settings| {
+                settings.set_primary_key("id".to_owned());
+                settings.set_searchable_fields(vec!["text".to_owned()]);
+            })
+            .unwrap();
+
+        let batch_reader_from_documents = |documents| {
+            let mut builder = DocumentsBatchBuilder::new(Vec::new());
+            for object in documents {
+                builder.append_json_object(&object).unwrap();
+            }
+            DocumentsBatchReader::from_reader(Cursor::new(builder.into_inner().unwrap())).unwrap()
+        };
+
+        let mut documents = documents_with_enough_different_words_for_prefixes(&["a"], 0);
+        // now we add some documents where the text should populate the word_prefix_pair_proximity_docids database
+        documents.push(
+            serde_json::json!({
+                "id": 9000,
+                "text": "At an amazing and beautiful house"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        );
+        documents.push(
+            serde_json::json!({
+                "id": 9001,
+                "text": "The bell rings at 5 am"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        );
+
+        let documents = batch_reader_from_documents(documents);
+        index.add_documents(documents).unwrap();
+
+        db_snap!(index, documents_ids, "initial");
+        db_snap!(index, word_docids, "initial");
+        db_snap!(index, word_prefix_pair_proximity_docids, "initial");
+        db_snap!(index, prefix_word_pair_proximity_docids, "initial");
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
+        delete.delete_documents(&RoaringBitmap::from_iter([50]));
+        delete.execute().unwrap();
+        wtxn.commit().unwrap();
+
+        db_snap!(index, documents_ids, "first_delete");
+        db_snap!(index, word_docids, "first_delete");
+        db_snap!(index, word_prefix_pair_proximity_docids, "first_delete");
+        db_snap!(index, prefix_word_pair_proximity_docids, "first_delete");
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
+        delete.delete_documents(&RoaringBitmap::from_iter(0..50));
+        delete.execute().unwrap();
+        wtxn.commit().unwrap();
+
+        db_snap!(index, documents_ids, "second_delete");
+        db_snap!(index, word_docids, "second_delete");
+        db_snap!(index, word_prefix_pair_proximity_docids, "second_delete");
+        db_snap!(index, prefix_word_pair_proximity_docids, "second_delete");
+
+        let documents = documents_with_enough_different_words_for_prefixes(&["b"], 1000);
+        // now we add some documents where the text should populate the word_prefix_pair_proximity_docids database
+
+        index.add_documents(batch_reader_from_documents(documents)).unwrap();
+
+        db_snap!(index, documents_ids, "reupdate");
+        db_snap!(index, word_docids, "reupdate");
+        db_snap!(index, word_prefix_pair_proximity_docids, "reupdate");
+        db_snap!(index, prefix_word_pair_proximity_docids, "reupdate");
+    }
+
+    #[test]
+    fn replace_soft_deletion() {
+        let mut index = TempIndex::new();
+        index.index_documents_config.words_prefix_threshold = Some(50);
+        index.index_documents_config.update_method = IndexDocumentsMethod::ReplaceDocuments;
+
+        index
+            .update_settings(|settings| {
+                settings.set_primary_key("id".to_owned());
+                settings.set_searchable_fields(vec!["text".to_owned()]);
+            })
+            .unwrap();
+
+        let batch_reader_from_documents = |documents| {
+            let mut builder = DocumentsBatchBuilder::new(Vec::new());
+            for object in documents {
+                builder.append_json_object(&object).unwrap();
+            }
+            DocumentsBatchReader::from_reader(Cursor::new(builder.into_inner().unwrap())).unwrap()
+        };
+
+        let mut documents = documents_with_enough_different_words_for_prefixes(&["a"], 0);
+        // now we add some documents where the text should populate the word_prefix_pair_proximity_docids database
+        documents.push(
+            serde_json::json!({
+                "id": 9000,
+                "text": "At an amazing house"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        );
+        documents.push(
+            serde_json::json!({
+                "id": 9001,
+                "text": "The bell rings"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        );
+
+        let documents = batch_reader_from_documents(documents);
+        index.add_documents(documents).unwrap();
+
+        db_snap!(index, documents_ids, "initial");
+        db_snap!(index, word_docids, "initial");
+        db_snap!(index, word_prefix_pair_proximity_docids, "initial");
+        db_snap!(index, prefix_word_pair_proximity_docids, "initial");
+
+        let documents = documents_with_enough_different_words_for_prefixes(&["b"], 0);
+        index.add_documents(batch_reader_from_documents(documents)).unwrap();
+
+        db_snap!(index, documents_ids, "replaced");
+        db_snap!(index, word_docids, "replaced");
+        db_snap!(index, word_prefix_pair_proximity_docids, "replaced");
+        db_snap!(index, prefix_word_pair_proximity_docids, "replaced");
+        db_snap!(index, soft_deleted_documents_ids, "replaced", @"[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, ]");
+    }
+
+    #[test]
+    fn replace_hard_deletion() {
+        let mut index = TempIndex::new();
+        index.index_documents_config.words_prefix_threshold = Some(50);
+        index.index_documents_config.disable_soft_deletion = true;
+        index.index_documents_config.update_method = IndexDocumentsMethod::ReplaceDocuments;
+
+        index
+            .update_settings(|settings| {
+                settings.set_primary_key("id".to_owned());
+                settings.set_searchable_fields(vec!["text".to_owned()]);
+            })
+            .unwrap();
+
+        let batch_reader_from_documents = |documents| {
+            let mut builder = DocumentsBatchBuilder::new(Vec::new());
+            for object in documents {
+                builder.append_json_object(&object).unwrap();
+            }
+            DocumentsBatchReader::from_reader(Cursor::new(builder.into_inner().unwrap())).unwrap()
+        };
+
+        let mut documents = documents_with_enough_different_words_for_prefixes(&["a"], 0);
+        // now we add some documents where the text should populate the word_prefix_pair_proximity_docids database
+        documents.push(
+            serde_json::json!({
+                "id": 9000,
+                "text": "At an amazing house"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        );
+        documents.push(
+            serde_json::json!({
+                "id": 9001,
+                "text": "The bell rings"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        );
+
+        let documents = batch_reader_from_documents(documents);
+        index.add_documents(documents).unwrap();
+
+        db_snap!(index, documents_ids, "initial");
+        db_snap!(index, word_docids, "initial");
+        db_snap!(index, word_prefix_pair_proximity_docids, "initial");
+        db_snap!(index, prefix_word_pair_proximity_docids, "initial");
+
+        let documents = documents_with_enough_different_words_for_prefixes(&["b"], 0);
+        index.add_documents(batch_reader_from_documents(documents)).unwrap();
+
+        db_snap!(index, documents_ids, "replaced");
+        db_snap!(index, word_docids, "replaced");
+        db_snap!(index, word_prefix_pair_proximity_docids, "replaced");
+        db_snap!(index, prefix_word_pair_proximity_docids, "replaced");
+        db_snap!(index, soft_deleted_documents_ids, "replaced", @"[]");
     }
 }
