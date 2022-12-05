@@ -1,15 +1,14 @@
-use std::{
-    fs::{self, File},
-    io::{BufRead, BufReader},
-    path::{Path, PathBuf},
-};
+use std::fs::{self, File};
+use std::io::{BufRead, BufReader};
+use std::path::{Path, PathBuf};
 
+use serde::Deserialize;
 use tempfile::TempDir;
 use time::OffsetDateTime;
 
-use super::{compat::v1_to_v2::CompatV1ToV2, Document};
+use super::compat::v1_to_v2::CompatV1ToV2;
+use super::Document;
 use crate::{IndexMetadata, Result, Version};
-use serde::Deserialize;
 
 pub mod settings;
 pub mod update;
@@ -204,12 +203,12 @@ pub(crate) mod test {
         assert!(indexes.is_empty());
 
         // products
-        insta::assert_json_snapshot!(products.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(products.metadata(), @r###"
         {
           "uid": "products",
           "primaryKey": "sku",
-          "createdAt": "[now]",
-          "updatedAt": "[now]"
+          "createdAt": "2022-10-02T13:23:39.976870431Z",
+          "updatedAt": "2022-10-02T13:27:54.353262482Z"
         }
         "###);
 
@@ -223,12 +222,12 @@ pub(crate) mod test {
         meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"91de507f206ad21964584021932ba7a7");
 
         // movies
-        insta::assert_json_snapshot!(movies.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(movies.metadata(), @r###"
         {
           "uid": "movies",
           "primaryKey": "id",
-          "createdAt": "[now]",
-          "updatedAt": "[now]"
+          "createdAt": "2022-10-02T13:15:29.477512777Z",
+          "updatedAt": "2022-10-02T13:21:12.671204856Z"
         }
         "###);
 
@@ -242,12 +241,12 @@ pub(crate) mod test {
         meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"55eef4de2bef7e84c5ce0bee47488f56");
 
         // spells
-        insta::assert_json_snapshot!(dnd_spells.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(dnd_spells.metadata(), @r###"
         {
           "uid": "dnd_spells",
           "primaryKey": "index",
-          "createdAt": "[now]",
-          "updatedAt": "[now]"
+          "createdAt": "2022-10-02T13:38:26.358882984Z",
+          "updatedAt": "2022-10-02T13:38:26.385609433Z"
         }
         "###);
 
