@@ -14,7 +14,7 @@ name: Publish tagged images to Docker Hub
 
 jobs:
   docker:
-    runs-on: docker
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
 
