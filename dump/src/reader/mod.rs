@@ -562,12 +562,12 @@ pub(crate) mod test {
         assert!(indexes.is_empty());
 
         // products
-        insta::assert_json_snapshot!(products.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(products.metadata(), @r###"
         {
           "uid": "products",
           "primaryKey": "sku",
-          "createdAt": "[now]",
-          "updatedAt": "[now]"
+          "createdAt": "2022-10-02T13:23:39.976870431Z",
+          "updatedAt": "2022-10-02T13:27:54.353262482Z"
         }
         "###);
 
@@ -577,12 +577,12 @@ pub(crate) mod test {
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"b01c8371aea4c7171af0d4d846a2bdca");
 
         // movies
-        insta::assert_json_snapshot!(movies.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(movies.metadata(), @r###"
         {
           "uid": "movies",
           "primaryKey": "id",
-          "createdAt": "[now]",
-          "updatedAt": "[now]"
+          "createdAt": "2022-10-02T13:15:29.477512777Z",
+          "updatedAt": "2022-10-02T13:21:12.671204856Z"
         }
         "###);
 
@@ -592,12 +592,12 @@ pub(crate) mod test {
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"b63dbed5bbc059f3e32bc471ae699bf5");
 
         // spells
-        insta::assert_json_snapshot!(spells.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(spells.metadata(), @r###"
         {
           "uid": "dnd_spells",
           "primaryKey": "index",
-          "createdAt": "[now]",
-          "updatedAt": "[now]"
+          "createdAt": "2022-10-02T13:38:26.358882984Z",
+          "updatedAt": "2022-10-02T13:38:26.385609433Z"
         }
         "###);
 
