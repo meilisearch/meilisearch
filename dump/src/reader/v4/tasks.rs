@@ -111,13 +111,6 @@ impl Task {
         }
     }
 
-    pub fn updated_at(&self) -> Option<OffsetDateTime> {
-        match self.events.last() {
-            Some(TaskEvent::Created(ts)) => Some(*ts),
-            _ => None,
-        }
-    }
-
     pub fn created_at(&self) -> Option<OffsetDateTime> {
         match &self.content {
             TaskContent::IndexCreation { primary_key: _ } => match self.events.first() {

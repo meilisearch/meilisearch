@@ -167,17 +167,16 @@ impl V4IndexReader {
             let task: Task = serde_json::from_str(&line?)?;
 
             if task.index_uid.to_string() == name {
+                // The first task to match our index_uid that succeeded (ie. processed_at returns Some)
+                // is our `last_updated_at`.
                 if updated_at.is_none() {
-                    updated_at = task.updated_at()
+                    updated_at = task.processed_at()
                 }
 
-                if created_at.is_none() {
-                    created_at = task.created_at()
-                }
-
+                // Once we reach the `creation_task_id` we can stop iterating on the task queue and
+                // this task represent our `created_at`.
                 if task.id as usize == index_metadata.creation_task_id {
-                    created_at = task.processed_at();
-
+                    created_at = task.created_at();
                     break;
                 }
             }
@@ -290,12 +289,12 @@ pub(crate) mod test {
         assert!(indexes.is_empty());
 
         // products
-        insta::assert_json_snapshot!(products.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(products.metadata(), @r###"
         {
           "uid": "products",
           "primaryKey": "sku",
-          "createdAt": "[now]",
-          "updatedAt": "[now]"
+          "createdAt": "2022-10-06T12:53:39.360187055Z",
+          "updatedAt": "2022-10-06T12:53:40.603035979Z"
         }
         "###);
 
@@ -305,12 +304,12 @@ pub(crate) mod test {
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"b01c8371aea4c7171af0d4d846a2bdca");
 
         // movies
-        insta::assert_json_snapshot!(movies.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(movies.metadata(), @r###"
         {
           "uid": "movies",
           "primaryKey": "id",
-          "createdAt": "[now]",
-          "updatedAt": "[now]"
+          "createdAt": "2022-10-06T12:53:38.710611568Z",
+          "updatedAt": "2022-10-06T12:53:49.785862546Z"
         }
         "###);
 
@@ -320,12 +319,12 @@ pub(crate) mod test {
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"786022a66ecb992c8a2a60fee070a5ab");
 
         // spells
-        insta::assert_json_snapshot!(spells.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(spells.metadata(), @r###"
         {
           "uid": "dnd_spells",
           "primaryKey": "index",
-          "createdAt": "[now]",
-          "updatedAt": "[now]"
+          "createdAt": "2022-10-06T12:53:40.831649057Z",
+          "updatedAt": "2022-10-06T12:53:41.116036186Z"
         }
         "###);
 
