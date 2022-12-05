@@ -125,12 +125,20 @@ mod tests {
     use crate::heed_codec::ByteSliceRefCodec;
     use crate::milli_snap;
     use crate::search::facet::facet_sort_descending::descending_facet_sort;
-    use crate::search::facet::tests::{get_random_looking_index, get_simple_index};
+    use crate::search::facet::tests::{
+        get_random_looking_index, get_random_looking_string_index_with_multiple_field_ids,
+        get_simple_index, get_simple_index_with_multiple_field_ids,
+        get_simple_string_index_with_multiple_field_ids,
+    };
     use crate::snapshot_tests::display_bitmap;
 
     #[test]
     fn filter_sort_descending() {
-        let indexes = [get_simple_index(), get_random_looking_index()];
+        let indexes = [
+            get_simple_index(),
+            get_random_looking_index(),
+            get_simple_index_with_multiple_field_ids(),
+        ];
         for (i, index) in indexes.iter().enumerate() {
             let txn = index.env.read_txn().unwrap();
             let candidates = (200..=300).into_iter().collect::<RoaringBitmap>();
@@ -143,6 +151,91 @@ mod tests {
                 results.push('\n');
             }
             milli_snap!(results, i);
+
+            txn.commit().unwrap();
+        }
+    }
+
+    #[test]
+    fn filter_sort_descending_multiple_field_ids() {
+        let indexes = [
+            get_simple_string_index_with_multiple_field_ids(),
+            get_random_looking_string_index_with_multiple_field_ids(),
+        ];
+        for (i, index) in indexes.iter().enumerate() {
+            let txn = index.env.read_txn().unwrap();
+            let candidates = (200..=300).into_iter().collect::<RoaringBitmap>();
+            let mut results = String::new();
+            let db = index.content.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>();
+            let iter = descending_facet_sort(&txn, db, 0, candidates.clone()).unwrap();
+            for el in iter {
+                let docids = el.unwrap();
+                results.push_str(&display_bitmap(&docids));
+                results.push('\n');
+            }
+            milli_snap!(results, format!("{i}-0"));
+
+            let mut results = String::new();
+
+            let iter = descending_facet_sort(&txn, db, 1, candidates).unwrap();
+            for el in iter {
+                let docids = el.unwrap();
+                results.push_str(&display_bitmap(&docids));
+                results.push('\n');
+            }
+            milli_snap!(results, format!("{i}-1"));
+
+            txn.commit().unwrap();
+        }
+    }
+    #[test]
+    fn filter_sort_ascending_with_no_candidates() {
+        let indexes = [
+            get_simple_string_index_with_multiple_field_ids(),
+            get_random_looking_string_index_with_multiple_field_ids(),
+        ];
+        for (_i, index) in indexes.iter().enumerate() {
+            let txn = index.env.read_txn().unwrap();
+            let candidates = RoaringBitmap::new();
+            let mut results = String::new();
+            let iter = descending_facet_sort(&txn, index.content, 0, candidates.clone()).unwrap();
+            for el in iter {
+                let docids = el.unwrap();
+                results.push_str(&display_bitmap(&docids));
+                results.push('\n');
+            }
+            assert!(results.is_empty());
+
+            let mut results = String::new();
+            let iter = descending_facet_sort(&txn, index.content, 1, candidates).unwrap();
+            for el in iter {
+                let docids = el.unwrap();
+                results.push_str(&display_bitmap(&docids));
+                results.push('\n');
+            }
+            assert!(results.is_empty());
+
+            txn.commit().unwrap();
+        }
+    }
+
+    #[test]
+    fn filter_sort_ascending_with_inexisting_field_id() {
+        let indexes = [
+            get_simple_string_index_with_multiple_field_ids(),
+            get_random_looking_string_index_with_multiple_field_ids(),
+        ];
+        for (_i, index) in indexes.iter().enumerate() {
+            let txn = index.env.read_txn().unwrap();
+            let candidates = RoaringBitmap::new();
+            let mut results = String::new();
+            let iter = descending_facet_sort(&txn, index.content, 3, candidates.clone()).unwrap();
+            for el in iter {
+                let docids = el.unwrap();
+                results.push_str(&display_bitmap(&docids));
+                results.push('\n');
+            }
+            assert!(results.is_empty());
 
             txn.commit().unwrap();
         }

@@ -114,11 +114,14 @@ mod tests {
 
     use big_s::S;
     use maplit::hashset;
+    use rand::seq::SliceRandom;
+    use rand::SeedableRng;
     use roaring::RoaringBitmap;
 
     use crate::db_snap;
     use crate::documents::documents_batch_reader_from_objects;
     use crate::index::tests::TempIndex;
+    use crate::update::facet::test_helpers::ordered_string;
     use crate::update::DeleteDocuments;
 
     #[test]
@@ -156,8 +159,8 @@ mod tests {
         let documents = documents_batch_reader_from_objects(documents);
         index.add_documents(documents).unwrap();
 
-        db_snap!(index, facet_id_f64_docids, 1);
-        db_snap!(index, number_faceted_documents_ids, 1);
+        db_snap!(index, facet_id_f64_docids, 1, @"550cd138d6fe31ccdd42cd5392fbd576");
+        db_snap!(index, number_faceted_documents_ids, 1, @"9a0ea88e7c9dcf6dc0ef0b601736ffcf");
 
         let mut wtxn = index.env.write_txn().unwrap();
 
@@ -174,8 +177,126 @@ mod tests {
         wtxn.commit().unwrap();
 
         db_snap!(index, soft_deleted_documents_ids, @"[]");
-        db_snap!(index, facet_id_f64_docids, 2);
-        db_snap!(index, number_faceted_documents_ids, 2);
+        db_snap!(index, facet_id_f64_docids, 2, @"d4d5f14e7f1e1f09b86821a0b6defcc6");
+        db_snap!(index, number_faceted_documents_ids, 2, @"3570e0ac0fdb21be9ebe433f59264b56");
+    }
+
+    // Same test as above but working with string values for the facets
+    #[test]
+    fn delete_mixed_incremental_and_bulk_string() {
+        // The point of this test is to create an index populated with documents
+        // containing different filterable attributes. Then, we delete a bunch of documents
+        // such that a mix of the incremental and bulk indexer is used (depending on the field id)
+        let index = TempIndex::new_with_map_size(4096 * 1000 * 100);
+
+        index
+            .update_settings(|settings| {
+                settings.set_filterable_fields(
+                    hashset! { S("id"), S("label"), S("timestamp"), S("colour") },
+                );
+            })
+            .unwrap();
+
+        let mut documents = vec![];
+        for i in 0..1000 {
+            documents.push(
+                serde_json::json! {
+                    {
+                        "id": i,
+                        "label": ordered_string(i / 10),
+                        "colour": ordered_string(i / 100),
+                        "timestamp": ordered_string(i / 2),
+                    }
+                }
+                .as_object()
+                .unwrap()
+                .clone(),
+            );
+        }
+
+        let documents = documents_batch_reader_from_objects(documents);
+        index.add_documents(documents).unwrap();
+
+        // Note that empty strings are not stored in the facet db due to commit 4860fd452965 (comment written on 29 Nov 2022)
+        db_snap!(index, facet_id_string_docids, 1, @"5fd1bd0724c65a6dc1aafb6db93c7503");
+        db_snap!(index, string_faceted_documents_ids, 1, @"54bc15494fa81d93339f43c08fd9d8f5");
+
+        let mut wtxn = index.env.write_txn().unwrap();
+
+        let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
+        builder.disable_soft_deletion(true);
+        builder.delete_documents(&RoaringBitmap::from_iter(0..100));
+        // by deleting the first 100 documents, we expect that:
+        // - the "id" part of the DB will be updated in bulk, since #affected_facet_value = 100 which is > database_len / 150 (= 13)
+        // - the "label" part will be updated incrementally, since #affected_facet_value = 10 which is < 13
+        // - the "colour" part will also be updated incrementally, since #affected_values = 1 which is < 13
+        // - the "timestamp" part will be updated in bulk, since #affected_values = 50 which is > 13
+        // This has to be verified manually by inserting breakpoint/adding print statements to the code when running the test
+        builder.execute().unwrap();
+        wtxn.commit().unwrap();
+
+        db_snap!(index, soft_deleted_documents_ids, @"[]");
+        db_snap!(index, facet_id_string_docids, 2, @"7f9c00b29e04d58c1821202a5dda0ebc");
+        db_snap!(index, string_faceted_documents_ids, 2, @"504152afa5c94fd4e515dcdfa4c7161f");
+    }
+
+    #[test]
+    fn delete_almost_all_incrementally_string() {
+        let index = TempIndex::new_with_map_size(4096 * 1000 * 100);
+
+        index
+            .update_settings(|settings| {
+                settings.set_filterable_fields(
+                    hashset! { S("id"), S("label"), S("timestamp"), S("colour") },
+                );
+            })
+            .unwrap();
+
+        let mut documents = vec![];
+        for i in 0..1000 {
+            documents.push(
+                serde_json::json! {
+                    {
+                        "id": i,
+                        "label": ordered_string(i / 10),
+                        "colour": ordered_string(i / 100),
+                        "timestamp": ordered_string(i / 2),
+                    }
+                }
+                .as_object()
+                .unwrap()
+                .clone(),
+            );
+        }
+
+        let documents = documents_batch_reader_from_objects(documents);
+        index.add_documents(documents).unwrap();
+
+        // Note that empty strings are not stored in the facet db due to commit 4860fd452965 (comment written on 29 Nov 2022)
+        db_snap!(index, facet_id_string_docids, 1, @"5fd1bd0724c65a6dc1aafb6db93c7503");
+        db_snap!(index, string_faceted_documents_ids, 1, @"54bc15494fa81d93339f43c08fd9d8f5");
+
+        let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
+
+        let mut docids_to_delete = (0..1000).collect::<Vec<_>>();
+        docids_to_delete.shuffle(&mut rng);
+        for docid in docids_to_delete.into_iter().take(990) {
+            let mut wtxn = index.env.write_txn().unwrap();
+            let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
+            builder.disable_soft_deletion(true);
+            builder.delete_documents(&RoaringBitmap::from_iter([docid]));
+            builder.execute().unwrap();
+            wtxn.commit().unwrap();
+        }
+
+        db_snap!(index, soft_deleted_documents_ids, @"[]");
+        db_snap!(index, facet_id_string_docids, 2, @"ece56086e76d50e661fb2b58475b9f7d");
+        db_snap!(index, string_faceted_documents_ids, 2, @r###"
+        0   []
+        1   [11, 20, 73, 292, 324, 358, 381, 493, 839, 852, ]
+        2   [292, 324, 358, 381, 493, 839, 852, ]
+        3   [11, 20, 73, 292, 324, 358, 381, 493, 839, 852, ]
+        "###);
     }
 }
 
@@ -188,7 +309,7 @@ mod comparison_bench {
     use roaring::RoaringBitmap;
 
     use crate::heed_codec::facet::OrderedF64Codec;
-    use crate::update::facet::tests::FacetIndex;
+    use crate::update::facet::test_helpers::FacetIndex;
 
     // This is a simple test to get an intuition on the relative speed
     // of the incremental vs. bulk indexer.
