@@ -366,8 +366,9 @@ mod tests {
     use crate::documents::documents_batch_reader_from_objects;
     use crate::heed_codec::facet::OrderedF64Codec;
     use crate::heed_codec::StrRefCodec;
-    use crate::milli_snap;
+    use crate::index::tests::TempIndex;
     use crate::update::facet::test_helpers::{ordered_string, FacetIndex};
+    use crate::{db_snap, milli_snap};
 
     #[test]
     fn insert() {
@@ -491,7 +492,6 @@ mod tests {
         db_snap!(index, facet_id_f64_docids, "initial", @"c34f499261f3510d862fa0283bbe843a");
         db_snap!(index, number_faceted_documents_ids, "initial", @"01594fecbb316798ce3651d6730a4521");
     }
-
 
     #[test]
     fn insert_string() {

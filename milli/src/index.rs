@@ -1190,8 +1190,10 @@ pub(crate) mod tests {
     use crate::documents::DocumentsBatchReader;
     use crate::error::{Error, InternalError};
     use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
-    use crate::update::{self, IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
-    use crate::{db_snap, Index};
+    use crate::update::{
+        self, DeleteDocuments, IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings,
+    };
+    use crate::{db_snap, obkv_to_json, Index};
 
     pub(crate) struct TempIndex {
         pub inner: Index,
@@ -1476,5 +1478,546 @@ pub(crate) mod tests {
 
         let user_defined = index.user_defined_searchable_fields(&rtxn).unwrap().unwrap();
         assert_eq!(user_defined, &["doggo", "name"]);
+    }
+
+    #[test]
+    fn replace_documents_external_ids_and_soft_deletion_check() {
+        use big_s::S;
+        use maplit::hashset;
+
+        let mut index = TempIndex::new();
+
+        index
+            .update_settings(|settings| {
+                settings.set_primary_key("id".to_owned());
+                settings.set_filterable_fields(hashset! { S("doggo") });
+            })
+            .unwrap();
+
+        let mut docs = vec![];
+        for i in 0..4 {
+            docs.push(serde_json::json!(
+                { "id": i, "doggo": i }
+            ));
+        }
+        index.add_documents(documents!(docs)).unwrap();
+
+        db_snap!(index, documents_ids, @"[0, 1, 2, 3, ]");
+        db_snap!(index, external_documents_ids, 1, @r###"
+        soft:
+        hard:
+        0                        0
+        1                        1
+        2                        2
+        3                        3
+        "###);
+        db_snap!(index, soft_deleted_documents_ids, 1, @"[]");
+        db_snap!(index, facet_id_f64_docids, 1, @r###"
+        1   0  0      1  [0, ]
+        1   0  1      1  [1, ]
+        1   0  2      1  [2, ]
+        1   0  3      1  [3, ]
+        "###);
+
+        let mut docs = vec![];
+        for i in 0..3 {
+            docs.push(serde_json::json!(
+                { "id": i, "doggo": i + 1 }
+            ));
+        }
+        index.add_documents(documents!(docs)).unwrap();
+
+        db_snap!(index, documents_ids, @"[3, 4, 5, 6, ]");
+        db_snap!(index, external_documents_ids, 2, @r###"
+        soft:
+        hard:
+        0                        4
+        1                        5
+        2                        6
+        3                        3
+        "###);
+        db_snap!(index, soft_deleted_documents_ids, 2, @"[0, 1, 2, ]");
+        db_snap!(index, facet_id_f64_docids, 2, @r###"
+        1   0  0      1  [0, ]
+        1   0  1      1  [1, 4, ]
+        1   0  2      1  [2, 5, ]
+        1   0  3      1  [3, 6, ]
+        "###);
+
+        index.index_documents_config.disable_soft_deletion = false;
+        index
+            .add_documents(documents!([{ "id": 3, "doggo": 4 }, { "id": 3, "doggo": 5 },{ "id": 3, "doggo": 4 }]))
+            .unwrap();
+
+        db_snap!(index, documents_ids, @"[4, 5, 6, 7, ]");
+        db_snap!(index, external_documents_ids, 3, @r###"
+        soft:
+        3                        7
+        hard:
+        0                        4
+        1                        5
+        2                        6
+        3                        3
+        "###);
+        db_snap!(index, soft_deleted_documents_ids, 3, @"[0, 1, 2, 3, ]");
+        db_snap!(index, facet_id_f64_docids, 3, @r###"
+        1   0  0      1  [0, ]
+        1   0  1      1  [1, 4, ]
+        1   0  2      1  [2, 5, ]
+        1   0  3      1  [3, 6, ]
+        1   0  4      1  [7, ]
+        "###);
+
+        index.index_documents_config.disable_soft_deletion = false;
+        index
+            .update_settings(|settings| {
+                settings.set_distinct_field("id".to_owned());
+            })
+            .unwrap();
+
+        db_snap!(index, documents_ids, @"[4, 5, 6, 7, ]");
+        db_snap!(index, external_documents_ids, 3, @r###"
+            soft:
+            3                        7
+            hard:
+            0                        4
+            1                        5
+            2                        6
+            3                        3
+            "###);
+        db_snap!(index, soft_deleted_documents_ids, 3, @"[]");
+        db_snap!(index, facet_id_f64_docids, 3, @r###"
+        0   0  0      1  [4, ]
+        0   0  1      1  [5, ]
+        0   0  2      1  [6, ]
+        0   0  3      1  [7, ]
+        1   0  1      1  [4, ]
+        1   0  2      1  [5, ]
+        1   0  3      1  [6, ]
+        1   0  4      1  [7, ]
+        "###);
+
+        index.index_documents_config.disable_soft_deletion = true;
+        index.add_documents(documents!([{ "id": 3, "doggo": 4 }])).unwrap();
+        db_snap!(index, external_documents_ids, 3, @r###"
+        soft:
+        3                        7
+        hard:
+        0                        4
+        1                        5
+        2                        6
+        3                        3
+        "###);
+        db_snap!(index, soft_deleted_documents_ids, 3, @"[]");
+        db_snap!(index, facet_id_f64_docids, 3, @r###"
+        0   0  0      1  [4, ]
+        0   0  1      1  [5, ]
+        0   0  2      1  [6, ]
+        0   0  3      1  [7, ]
+        1   0  1      1  [4, ]
+        1   0  2      1  [5, ]
+        1   0  3      1  [6, ]
+        1   0  4      1  [7, ]
+        "###);
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
+        let docid = delete.delete_external_id("3").unwrap();
+        insta::assert_snapshot!(format!("{docid}"), @"7");
+        delete.execute().unwrap();
+        wtxn.commit().unwrap();
+
+        db_snap!(index, documents_ids, @"[4, 5, 6, ]");
+        db_snap!(index, external_documents_ids, 4, @r###"
+        soft:
+        3                        7
+        hard:
+        0                        4
+        1                        5
+        2                        6
+        3                        3
+        "###);
+
+        db_snap!(index, soft_deleted_documents_ids, 4, @"[7, ]");
+        db_snap!(index, facet_id_f64_docids, 4, @r###"
+        0   0  0      1  [4, ]
+        0   0  1      1  [5, ]
+        0   0  2      1  [6, ]
+        0   0  3      1  [7, ]
+        1   0  1      1  [4, ]
+        1   0  2      1  [5, ]
+        1   0  3      1  [6, ]
+        1   0  4      1  [7, ]
+        "###);
+
+        index.index_documents_config.disable_soft_deletion = false;
+        index.add_documents(documents!([{ "id": 3, "doggo": 4 }])).unwrap();
+
+        db_snap!(index, external_documents_ids, 4, @r###"
+        soft:
+        3                        0
+        hard:
+        0                        4
+        1                        5
+        2                        6
+        3                        3
+        "###);
+
+        db_snap!(index, soft_deleted_documents_ids, 4, @"[7, ]");
+        db_snap!(index, facet_id_f64_docids, 4, @r###"
+        0   0  0      1  [4, ]
+        0   0  1      1  [5, ]
+        0   0  2      1  [6, ]
+        0   0  3      1  [0, 7, ]
+        1   0  1      1  [4, ]
+        1   0  2      1  [5, ]
+        1   0  3      1  [6, ]
+        1   0  4      1  [0, 7, ]
+        "###);
+
+        index.index_documents_config.disable_soft_deletion = false;
+        index.add_documents(documents!([{ "id": 3, "doggo": 5 }])).unwrap();
+
+        db_snap!(index, external_documents_ids, 4, @r###"
+        soft:
+        3                        1
+        hard:
+        0                        4
+        1                        5
+        2                        6
+        3                        3
+        "###);
+
+        db_snap!(index, soft_deleted_documents_ids, 4, @"[0, 7, ]");
+        db_snap!(index, facet_id_f64_docids, 4, @r###"
+        0   0  0      1  [4, ]
+        0   0  1      1  [5, ]
+        0   0  2      1  [6, ]
+        0   0  3      1  [0, 1, 7, ]
+        1   0  1      1  [4, ]
+        1   0  2      1  [5, ]
+        1   0  3      1  [6, ]
+        1   0  4      1  [0, 7, ]
+        1   0  5      1  [1, ]
+        "###);
+
+        index.index_documents_config.disable_soft_deletion = false;
+        index.add_documents(documents!([{ "id": 3, "doggo": 5, "id": 2, "doggo": 4 }])).unwrap();
+        db_snap!(index, external_documents_ids, 4, @r###"
+        soft:
+        hard:
+        0                        4
+        1                        5
+        2                        2
+        3                        1
+        "###);
+
+        db_snap!(index, soft_deleted_documents_ids, 4, @"[0, 6, 7, ]");
+        db_snap!(index, facet_id_f64_docids, 4, @r###"
+        0   0  0      1  [4, ]
+        0   0  1      1  [5, ]
+        0   0  2      1  [2, 6, ]
+        0   0  3      1  [0, 1, 7, ]
+        1   0  1      1  [4, ]
+        1   0  2      1  [5, ]
+        1   0  3      1  [6, ]
+        1   0  4      1  [0, 2, 7, ]
+        1   0  5      1  [1, ]
+        "###);
+
+        index.index_documents_config.disable_soft_deletion = false;
+        index
+            .add_documents(documents!([{ "id": 4, "doggo": 5 }, { "id": 3, "doggo": 5 }]))
+            .unwrap();
+
+        db_snap!(index, external_documents_ids, 4, @r###"
+        soft:
+        4                        3
+        hard:
+        0                        4
+        1                        5
+        2                        2
+        3                        1
+        "###);
+
+        db_snap!(index, soft_deleted_documents_ids, 4, @"[0, 6, 7, ]");
+        db_snap!(index, facet_id_f64_docids, 4, @r###"
+        0   0  0      1  [4, ]
+        0   0  1      1  [5, ]
+        0   0  2      1  [2, 6, ]
+        0   0  3      1  [0, 1, 7, ]
+        0   0  4      1  [3, ]
+        1   0  1      1  [4, ]
+        1   0  2      1  [5, ]
+        1   0  3      1  [6, ]
+        1   0  4      1  [0, 2, 7, ]
+        1   0  5      1  [1, 3, ]
+        "###);
+    }
+
+    #[test]
+    fn replace_documents_in_batches_external_ids_and_soft_deletion_check() {
+        use big_s::S;
+        use maplit::hashset;
+
+        let mut index = TempIndex::new();
+
+        index
+            .update_settings(|settings| {
+                settings.set_primary_key("id".to_owned());
+                settings.set_filterable_fields(hashset! { S("doggo") });
+            })
+            .unwrap();
+
+        let add_documents = |index: &TempIndex, docs: Vec<Vec<serde_json::Value>>| {
+            let mut wtxn = index.write_txn().unwrap();
+            let mut builder = IndexDocuments::new(
+                &mut wtxn,
+                index,
+                &index.indexer_config,
+                index.index_documents_config.clone(),
+                |_| (),
+                || false,
+            )
+            .unwrap();
+            for docs in docs {
+                (builder, _) = builder.add_documents(documents!(docs)).unwrap();
+            }
+            builder.execute().unwrap();
+            wtxn.commit().unwrap();
+        };
+        // First Batch
+        {
+            let mut docs1 = vec![];
+            for i in 0..4 {
+                docs1.push(serde_json::json!(
+                    { "id": i, "doggo": i }
+                ));
+            }
+            add_documents(&index, vec![docs1]);
+
+            db_snap!(index, documents_ids, @"[0, 1, 2, 3, ]");
+            db_snap!(index, external_documents_ids, 1, @r###"
+            soft:
+            hard:
+            0                        0
+            1                        1
+            2                        2
+            3                        3
+            "###);
+            db_snap!(index, soft_deleted_documents_ids, 1, @"[]");
+            db_snap!(index, facet_id_f64_docids, 1, @r###"
+            1   0  0      1  [0, ]
+            1   0  1      1  [1, ]
+            1   0  2      1  [2, ]
+            1   0  3      1  [3, ]
+            "###);
+        }
+        // Second Batch: replace the documents with soft-deletion
+        {
+            index.index_documents_config.disable_soft_deletion = false;
+            let mut docs1 = vec![];
+            for i in 0..3 {
+                docs1.push(serde_json::json!(
+                    { "id": i, "doggo": i+1 }
+                ));
+            }
+            let mut docs2 = vec![];
+            for i in 0..3 {
+                docs2.push(serde_json::json!(
+                    { "id": i, "doggo": i }
+                ));
+            }
+            add_documents(&index, vec![docs1, docs2]);
+
+            db_snap!(index, documents_ids, @"[3, 4, 5, 6, ]");
+            db_snap!(index, external_documents_ids, 1, @r###"
+            soft:
+            hard:
+            0                        4
+            1                        5
+            2                        6
+            3                        3
+            "###);
+            db_snap!(index, soft_deleted_documents_ids, 1, @"[0, 1, 2, ]");
+            db_snap!(index, facet_id_f64_docids, 1, @r###"
+            1   0  0      1  [0, 4, ]
+            1   0  1      1  [1, 5, ]
+            1   0  2      1  [2, 6, ]
+            1   0  3      1  [3, ]
+            "###);
+        }
+        let rtxn = index.read_txn().unwrap();
+        let (_docid, obkv) = index.documents(&rtxn, [3]).unwrap()[0];
+        let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
+        insta::assert_debug_snapshot!(json, @r###"
+        {
+            "id": Number(3),
+            "doggo": Number(3),
+        }
+        "###);
+        let (_docid, obkv) = index.documents(&rtxn, [4]).unwrap()[0];
+
+        let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
+        insta::assert_debug_snapshot!(json, @r###"
+        {
+            "id": Number(0),
+            "doggo": Number(0),
+        }
+        "###);
+        let (_docid, obkv) = index.documents(&rtxn, [5]).unwrap()[0];
+        let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
+        insta::assert_debug_snapshot!(json, @r###"
+        {
+            "id": Number(1),
+            "doggo": Number(1),
+        }
+        "###);
+        let (_docid, obkv) = index.documents(&rtxn, [6]).unwrap()[0];
+        let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
+        insta::assert_debug_snapshot!(json, @r###"
+        {
+            "id": Number(2),
+            "doggo": Number(2),
+        }
+        "###);
+        drop(rtxn);
+        // Third Batch: replace the documents with soft-deletion again
+        {
+            index.index_documents_config.disable_soft_deletion = false;
+            let mut docs1 = vec![];
+            for i in 0..3 {
+                docs1.push(serde_json::json!(
+                    { "id": i, "doggo": i+1 }
+                ));
+            }
+            let mut docs2 = vec![];
+            for i in 0..4 {
+                docs2.push(serde_json::json!(
+                    { "id": i, "doggo": i }
+                ));
+            }
+            add_documents(&index, vec![docs1, docs2]);
+
+            db_snap!(index, documents_ids, @"[3, 7, 8, 9, ]");
+            db_snap!(index, external_documents_ids, 1, @r###"
+            soft:
+            hard:
+            0                        7
+            1                        8
+            2                        9
+            3                        3
+            "###);
+            db_snap!(index, soft_deleted_documents_ids, 1, @"[0, 1, 2, 4, 5, 6, ]");
+            db_snap!(index, facet_id_f64_docids, 1, @r###"
+            1   0  0      1  [0, 4, 7, ]
+            1   0  1      1  [1, 5, 8, ]
+            1   0  2      1  [2, 6, 9, ]
+            1   0  3      1  [3, ]
+            "###);
+        }
+        let rtxn = index.read_txn().unwrap();
+        let (_docid, obkv) = index.documents(&rtxn, [3]).unwrap()[0];
+        let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
+        insta::assert_debug_snapshot!(json, @r###"
+        {
+            "id": Number(3),
+            "doggo": Number(3),
+        }
+        "###);
+        let (_docid, obkv) = index.documents(&rtxn, [7]).unwrap()[0];
+        let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
+        insta::assert_debug_snapshot!(json, @r###"
+        {
+            "id": Number(0),
+            "doggo": Number(0),
+        }
+        "###);
+        let (_docid, obkv) = index.documents(&rtxn, [8]).unwrap()[0];
+        let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
+        insta::assert_debug_snapshot!(json, @r###"
+        {
+            "id": Number(1),
+            "doggo": Number(1),
+        }
+        "###);
+        let (_docid, obkv) = index.documents(&rtxn, [9]).unwrap()[0];
+        let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
+        insta::assert_debug_snapshot!(json, @r###"
+        {
+            "id": Number(2),
+            "doggo": Number(2),
+        }
+        "###);
+        drop(rtxn);
+
+        // Fourth Batch: replace the documents without soft-deletion
+        {
+            index.index_documents_config.disable_soft_deletion = true;
+            let mut docs1 = vec![];
+            for i in 0..3 {
+                docs1.push(serde_json::json!(
+                    { "id": i, "doggo": i+2 }
+                ));
+            }
+            let mut docs2 = vec![];
+            for i in 0..1 {
+                docs2.push(serde_json::json!(
+                    { "id": i, "doggo": i }
+                ));
+            }
+            add_documents(&index, vec![docs1, docs2]);
+
+            db_snap!(index, documents_ids, @"[3, 10, 11, 12, ]");
+            db_snap!(index, external_documents_ids, 1, @r###"
+            soft:
+            hard:
+            0                        10
+            1                        11
+            2                        12
+            3                        3
+            "###);
+            db_snap!(index, soft_deleted_documents_ids, 1, @"[]");
+            db_snap!(index, facet_id_f64_docids, 1, @r###"
+            1   0  0      1  [10, ]
+            1   0  3      1  [3, 11, ]
+            1   0  4      1  [12, ]
+            "###);
+
+            let rtxn = index.read_txn().unwrap();
+            let (_docid, obkv) = index.documents(&rtxn, [3]).unwrap()[0];
+            let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
+            insta::assert_debug_snapshot!(json, @r###"
+            {
+                "id": Number(3),
+                "doggo": Number(3),
+            }
+            "###);
+            let (_docid, obkv) = index.documents(&rtxn, [10]).unwrap()[0];
+            let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
+            insta::assert_debug_snapshot!(json, @r###"
+            {
+                "id": Number(0),
+                "doggo": Number(0),
+            }
+            "###);
+            let (_docid, obkv) = index.documents(&rtxn, [11]).unwrap()[0];
+            let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
+            insta::assert_debug_snapshot!(json, @r###"
+            {
+                "id": Number(1),
+                "doggo": Number(3),
+            }
+            "###);
+            let (_docid, obkv) = index.documents(&rtxn, [12]).unwrap()[0];
+            let json = obkv_to_json(&[0, 1], &index.fields_ids_map(&rtxn).unwrap(), obkv).unwrap();
+            insta::assert_debug_snapshot!(json, @r###"
+            {
+                "id": Number(2),
+                "doggo": Number(4),
+            }
+            "###);
+            drop(rtxn);
+        }
     }
 }

@@ -66,9 +66,6 @@ impl<'t, 'u, 'i> PrefixWordPairsProximityDocids<'t, 'u, 'i> {
         common_prefix_fst_words: &[&'a [String]],
         del_prefix_fst_words: &HashSet<Vec<u8>>,
     ) -> Result<()> {
-        println!("{new_prefix_fst_words:?}");
-        println!("{common_prefix_fst_words:?}");
-        println!("{del_prefix_fst_words:?}");
         index_word_prefix_database(
             self.wtxn,
             self.index.word_pair_proximity_docids,
