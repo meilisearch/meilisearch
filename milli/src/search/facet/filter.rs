@@ -632,7 +632,6 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_searchable_fields(vec![S("_geo")]);
                 settings.set_filterable_fields(hashset! { S("_geo") });
             })
             .unwrap();
