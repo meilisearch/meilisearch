@@ -119,5 +119,5 @@ japanese = ["meilisearch-types/japanese"]
 thai = ["meilisearch-types/thai"]
 
 [package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.3/build.zip"
-sha1 = "fb893012023cc33090c549e0eaf10adff335cf6f"
+assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.4/build.zip"
+sha1 = "b53c2edb51d4ce1984d5586333b91c4ad3a1b4e4"
