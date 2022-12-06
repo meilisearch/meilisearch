@@ -1101,7 +1101,7 @@ dependencies = [
 
 [[package]]
 name = "dump"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "anyhow",
  "big_s",
@@ -1310,7 +1310,7 @@ dependencies = [
 
 [[package]]
 name = "file-store"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "faux",
  "tempfile",
@@ -1767,7 +1767,7 @@ dependencies = [
 
 [[package]]
 name = "index-scheduler"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "anyhow",
  "big_s",
@@ -2257,7 +2257,7 @@ checksum = "490cc448043f947bae3cbee9c203358d62dbee0db12107a74be5c30ccfd09771"
 
 [[package]]
 name = "meili-snap"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "insta",
  "md5",
@@ -2266,7 +2266,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-auth"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "enum-iterator",
  "hmac",
@@ -2283,7 +2283,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-http"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "actix-cors",
  "actix-http",
@@ -2366,7 +2366,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-types"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -2747,7 +2747,7 @@ checksum = "478c572c3d73181ff3c2539045f6eb99e5491218eae919370993b890cdbdd98e"
 
 [[package]]
 name = "permissive-json-pointer"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "big_s",
  "serde_json",
