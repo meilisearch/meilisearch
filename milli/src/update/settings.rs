@@ -726,15 +726,14 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
 #[cfg(test)]
 mod tests {
-    use big_s::S;
-    use heed::types::ByteSlice;
-    use maplit::{btreeset, hashmap, hashset};
-
     use super::*;
     use crate::error::Error;
     use crate::index::tests::TempIndex;
-    use crate::update::DeleteDocuments;
+    use crate::update::{ClearDocuments, DeleteDocuments};
     use crate::{Criterion, Filter, SearchResult};
+    use big_s::S;
+    use heed::types::ByteSlice;
+    use maplit::{btreeset, hashmap, hashset};
 
     #[test]
     fn set_and_reset_searchable_fields() {
