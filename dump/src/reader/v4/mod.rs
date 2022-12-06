@@ -182,11 +182,13 @@ impl V4IndexReader {
             }
         }
 
+        let current_time = OffsetDateTime::now_utc();
+
         let metadata = IndexMetadata {
             uid: name,
             primary_key: meta.primary_key,
-            created_at: created_at.unwrap_or_else(OffsetDateTime::now_utc),
-            updated_at: updated_at.unwrap_or_else(OffsetDateTime::now_utc),
+            created_at: created_at.unwrap_or(current_time),
+            updated_at: updated_at.unwrap_or(current_time),
         };
 
         let ret = V4IndexReader {
