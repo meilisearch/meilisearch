@@ -31,6 +31,8 @@ Remember that there are many ways to contribute other than writing code: writing
 
 ## Development Workflow
 
+We're using rust stable for the tests and clippy but rust nightly for the formatting of the code.
+
 ### Test
 
 ```bash
@@ -54,6 +56,28 @@ printf "id,name,age\n1,hello,32\n2,kiki,24\n" | http POST 127.0.0.1:9700/documen
 Don't forget to specify the `id` of the documents. Also, note that it supports JSON and JSON
 streaming: you can send them to the engine by using the `content-type:application/json` and
 `content-type:application/x-ndjson` headers respectively.
+
+### Format
+
+For your first run you'll need to run this command:
+
+```bash
+touch benchmarks/benches/datasets_paths.rs
+```
+
+Then you can format your code BUT you need to do it with rust-fmt.
+
+```bash
+cargo +nightly fmt --all
+```
+
+### Clippy
+
+```bash
+cargo clippy
+```
+
+
 
 ## Git Guidelines
 
