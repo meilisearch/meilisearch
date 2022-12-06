@@ -121,7 +121,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Auth
             update_file_path: opt.db_path.join("update_files"),
             indexes_path: opt.db_path.join("indexes"),
             snapshots_path: opt.snapshot_dir.clone(),
-            dumps_path: opt.dumps_dir.clone(),
+            dumps_path: opt.dump_dir.clone(),
             task_db_size: opt.max_task_db_size.get_bytes() as usize,
             index_size: opt.max_index_size.get_bytes() as usize,
             indexer_config: (&opt.indexer_options).try_into()?,
