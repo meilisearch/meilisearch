@@ -174,7 +174,7 @@ impl V4IndexReader {
                 }
 
                 // Once we reach the `creation_task_id` we can stop iterating on the task queue and
-                // this task represent our `created_at`.
+                // this task represents our `created_at`.
                 if task.id as usize == index_metadata.creation_task_id {
                     created_at = task.created_at();
                     break;
