@@ -17,7 +17,7 @@ use super::{IndexDocumentsMethod, IndexerConfig};
 use crate::documents::{DocumentsBatchIndex, EnrichedDocument, EnrichedDocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
 use crate::index::db_name;
-use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
+use crate::update::{AvailableDocumentsIds, ClearDocuments, UpdateIndexingStep};
 use crate::{
     ExternalDocumentsIds, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldsIdsMap, Index,
     Result, BEU32,
@@ -546,12 +546,13 @@ impl<'a, 'i> Transform<'a, 'i> {
         })
     }
 
-    /// Returns a `TransformOutput` with a file that contains the documents of the index
-    /// with the attributes reordered accordingly to the `FieldsIdsMap` given as argument.
+    /// Clear all databases. Returns a `TransformOutput` with a file that contains the documents
+    /// of the index with the attributes reordered accordingly to the `FieldsIdsMap` given as argument.
+    ///
     // TODO this can be done in parallel by using the rayon `ThreadPool`.
-    pub fn remap_index_documents(
+    pub fn prepare_for_documents_reindexing(
         self,
-        wtxn: &mut heed::RwTxn,
+        wtxn: &mut heed::RwTxn<'i, '_>,
         old_fields_ids_map: FieldsIdsMap,
         mut new_fields_ids_map: FieldsIdsMap,
     ) -> Result<TransformOutput> {
@@ -559,7 +560,14 @@ impl<'a, 'i> Transform<'a, 'i> {
         let primary_key =
             self.index.primary_key(wtxn)?.ok_or(UserError::MissingPrimaryKey)?.to_string();
         let field_distribution = self.index.field_distribution(wtxn)?;
-        let external_documents_ids = self.index.external_documents_ids(wtxn)?;
+
+        // Delete the soft deleted document ids from the maps inside the external_document_ids structure
+        let new_external_documents_ids = {
+            let mut external_documents_ids = self.index.external_documents_ids(wtxn)?;
+            external_documents_ids.delete_soft_deleted_documents_ids_from_fsts()?;
+            external_documents_ids
+        };
+
         let documents_ids = self.index.documents_ids(wtxn)?;
         let documents_count = documents_ids.len() as usize;
 
@@ -638,17 +646,25 @@ impl<'a, 'i> Transform<'a, 'i> {
         let mut flattened_documents = flattened_writer.into_inner()?;
         flattened_documents.seek(SeekFrom::Start(0))?;
 
-        Ok(TransformOutput {
+        let output = TransformOutput {
             primary_key,
             fields_ids_map: new_fields_ids_map,
             field_distribution,
-            external_documents_ids: external_documents_ids.into_static(),
+            external_documents_ids: new_external_documents_ids.into_static(),
             new_documents_ids: documents_ids,
             replaced_documents_ids: RoaringBitmap::default(),
             documents_count,
             original_documents,
             flattened_documents,
-        })
+        };
+
+        let new_facets = output.compute_real_facets(wtxn, self.index)?;
+        self.index.put_faceted_fields(wtxn, &new_facets)?;
+
+        // We clear the full database (words-fst, documents ids and documents content).
+        ClearDocuments::new(wtxn, self.index).execute()?;
+
+        Ok(output)
     }
 }
 
