@@ -115,6 +115,13 @@ impl<'a> From<Span<'a>> for Token<'a> {
     }
 }
 
+/// Allow [Token] to be constructed from &[str]
+impl<'a> From<&'a str> for Token<'a> {
+    fn from(s: &'a str) -> Self {
+        Token::from(Span::new_extra(s, s))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FilterCondition<'a> {
     Not(Box<Self>),
@@ -663,6 +670,13 @@ pub mod tests {
         let filter = FilterCondition::parse("account_ids=1 OR account_ids=2 AND account_ids=3 OR account_ids=4 AND account_ids=5 OR account_ids=6").unwrap().unwrap();
         assert!(filter.token_at_depth(2).is_some());
         assert!(filter.token_at_depth(3).is_none());
+    }
+
+    #[test]
+    fn token_from_str() {
+        let s = "test string that should not be parsed";
+        let token: Token = s.into();
+        assert_eq!(token.value(), s);
     }
 }
 

@@ -22,7 +22,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::convert::{TryFrom, TryInto};
 use std::hash::BuildHasherDefault;
 
-pub use filter_parser::{Condition, FilterCondition};
+pub use filter_parser::{Condition, FilterCondition, Span, Token};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
 use serde_json::Value;
