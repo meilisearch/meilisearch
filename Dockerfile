@@ -1,5 +1,5 @@
 # Compile
-FROM    rust:alpine3.17 AS compiler
+FROM    rust:alpine3.16 AS compiler
 
 RUN     apk add -q --update-cache --no-cache build-base openssl-dev
 
@@ -19,7 +19,7 @@ RUN     set -eux; \
         cargo build --release
 
 # Run
-FROM    alpine:3.17
+FROM    alpine:3.16
 
 ENV     MEILI_HTTP_ADDR 0.0.0.0:7700
 ENV     MEILI_SERVER_PROVIDER docker
