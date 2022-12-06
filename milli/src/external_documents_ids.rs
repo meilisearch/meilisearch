@@ -71,6 +71,30 @@ impl<'a> ExternalDocumentsIds<'a> {
         self.merge_soft_into_hard()
     }
 
+    /// Rebuild the internal FSTs in the ExternalDocumentsIds structure such that they
+    /// don't contain any soft deleted document id.
+    pub fn delete_soft_deleted_documents_ids_from_fsts(&mut self) -> fst::Result<()> {
+        let mut new_hard_builder = fst::MapBuilder::memory();
+
+        let union_op = self.hard.op().add(&self.soft).r#union();
+        let mut iter = union_op.into_stream();
+        while let Some((external_id, docids)) = iter.next() {
+            // prefer selecting the ids from soft, always
+            let id = indexed_last_value(docids).unwrap();
+            if id != DELETED_ID && !self.soft_deleted_docids.contains(id as u32) {
+                new_hard_builder.insert(external_id, id)?;
+            }
+        }
+        drop(iter);
+
+        // Delete soft map completely
+        self.soft = fst::Map::default().map_data(Cow::Owned)?;
+        // We save the new map as the new hard map.
+        self.hard = new_hard_builder.into_map().map_data(Cow::Owned)?;
+
+        Ok(())
+    }
+
     pub fn insert_ids<A: AsRef<[u8]>>(&mut self, other: &fst::Map<A>) -> fst::Result<()> {
         let union_op = self.soft.op().add(other).r#union();
 

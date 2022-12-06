@@ -12,7 +12,7 @@ use crate::criterion::Criterion;
 use crate::error::UserError;
 use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
 use crate::update::index_documents::IndexDocumentsMethod;
-use crate::update::{ClearDocuments, IndexDocuments, UpdateIndexingStep};
+use crate::update::{IndexDocuments, UpdateIndexingStep};
 use crate::{FieldsIdsMap, Index, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -291,15 +291,12 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             false,
         )?;
 
-        // We remap the documents fields based on the new `FieldsIdsMap`.
-        let output =
-            transform.remap_index_documents(self.wtxn, old_fields_ids_map, fields_ids_map)?;
-
-        let new_facets = output.compute_real_facets(self.wtxn, self.index)?;
-        self.index.put_faceted_fields(self.wtxn, &new_facets)?;
-
-        // We clear the full database (words-fst, documents ids and documents content).
-        ClearDocuments::new(self.wtxn, self.index).execute()?;
+        // We clear the databases and remap the documents fields based on the new `FieldsIdsMap`.
+        let output = transform.prepare_for_documents_reindexing(
+            self.wtxn,
+            old_fields_ids_map,
+            fields_ids_map,
+        )?;
 
         // We index the generated `TransformOutput` which must contain
         // all the documents with fields in the newly defined searchable order.
