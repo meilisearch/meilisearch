@@ -39,6 +39,14 @@ jobs:
         if: github.event_name != 'schedule' && steps.check-tag-format.outputs.stable == 'true'
         run: bash .github/scripts/check-release.sh
 
+      - name: Set build-args for Docker buildx
+        id: build-metadata
+        run: |
+          # Extract commit date
+          commit_date=$(git show -s --format=%cd --date=iso-strict ${{ github.sha }})
+
+          echo "date=$commit_date" >> $GITHUB_OUTPUT
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
 
@@ -72,6 +80,9 @@ jobs:
           push: ${{ github.event_name != 'schedule' }}
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+            COMMIT_DATE=${{ steps.build-metadata.outputs.date }}
 
       # /!\ Don't touch this without checking with Cloud team
       - name: Send CI information to Cloud team
