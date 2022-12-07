@@ -611,7 +611,8 @@ mod tests {
         ];
         for (i, index) in indexes.iter().enumerate() {
             let txn = index.env.read_txn().unwrap();
-            let mut results = String::new();
+            let mut results_0 = String::new();
+            let mut results_1 = String::new();
             for i in 0..=255 {
                 let i = i as f64;
                 let start = Bound::Included(i);
@@ -627,9 +628,23 @@ mod tests {
                 )
                 .unwrap();
                 #[allow(clippy::format_push_string)]
-                results.push_str(&format!("{i}: {}\n", display_bitmap(&docids)));
+                results_0.push_str(&format!("{i}: {}\n", display_bitmap(&docids)));
+
+                let mut docids = RoaringBitmap::new();
+                find_docids_of_facet_within_bounds::<OrderedF64Codec>(
+                    &txn,
+                    index.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
+                    1,
+                    &start,
+                    &end,
+                    &mut docids,
+                )
+                .unwrap();
+                #[allow(clippy::format_push_string)]
+                results_1.push_str(&format!("{i}: {}\n", display_bitmap(&docids)));
             }
-            milli_snap!(results, format!("exact_{i}"));
+            milli_snap!(results_0, format!("field_id_0_exact_{i}"));
+            milli_snap!(results_1, format!("field_id_1_exact_{i}"));
 
             drop(txn);
         }
