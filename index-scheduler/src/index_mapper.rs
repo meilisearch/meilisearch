@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use self::IndexStatus::{Available, BeingDeleted};
 use crate::uuid_codec::UuidCodec;
-use crate::{Error, Result};
+use crate::{clamp_to_page_size, Error, Result};
 
 const INDEX_MAPPING: &str = "index-mapping";
 
@@ -68,7 +68,7 @@ impl IndexMapper {
     /// The path *must* exists or an error will be thrown.
     fn create_or_open_index(&self, path: &Path) -> Result<Index> {
         let mut options = EnvOpenOptions::new();
-        options.map_size(self.index_size);
+        options.map_size(clamp_to_page_size(self.index_size));
         options.max_readers(1024);
         Ok(Index::new(options, path)?)
     }

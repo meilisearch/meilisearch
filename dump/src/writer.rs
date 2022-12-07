@@ -292,10 +292,10 @@ pub(crate) mod test {
         // ==== checking the top level infos
         let metadata = fs::read_to_string(dump_path.join("metadata.json")).unwrap();
         let metadata: Metadata = serde_json::from_str(&metadata).unwrap();
-        insta::assert_json_snapshot!(metadata, { ".dumpDate" => "[date]" }, @r###"
+        insta::assert_json_snapshot!(metadata, { ".dumpDate" => "[date]", ".dbVersion" => "[version]" }, @r###"
         {
           "dumpVersion": "V6",
-          "dbVersion": "0.30.0",
+          "dbVersion": "[version]",
           "dumpDate": "[date]"
         }
         "###);
