@@ -4,7 +4,7 @@ use roaring::RoaringBitmap;
 use rstar::RTree;
 
 use super::{Criterion, CriterionParameters, CriterionResult};
-use crate::search::criteria::{resolve_query_tree, CriteriaBuilder};
+use crate::search::criteria::{resolve_query_tree, CriteriaBuilder, InitialCandidates};
 use crate::{lat_lng_to_xyz, GeoPoint, Index, Result};
 
 pub struct Geo<'t> {
@@ -14,7 +14,7 @@ pub struct Geo<'t> {
     parent: Box<dyn Criterion + 't>,
     candidates: Box<dyn Iterator<Item = RoaringBitmap>>,
     allowed_candidates: RoaringBitmap,
-    bucket_candidates: RoaringBitmap,
+    initial_candidates: InitialCandidates,
     rtree: Option<RTree<GeoPoint>>,
     point: [f64; 2],
 }
@@ -47,7 +47,7 @@ impl<'t> Geo<'t> {
     ) -> Result<Self> {
         let candidates = Box::new(iter::empty());
         let allowed_candidates = index.geo_faceted_documents_ids(rtxn)?;
-        let bucket_candidates = RoaringBitmap::new();
+        let initial_candidates = InitialCandidates::Estimated(RoaringBitmap::new());
         let rtree = index.geo_rtree(rtxn)?;
 
         Ok(Self {
@@ -57,7 +57,7 @@ impl<'t> Geo<'t> {
             parent,
             candidates,
             allowed_candidates,
-            bucket_candidates,
+            initial_candidates,
             rtree,
             point,
         })
@@ -77,7 +77,7 @@ impl Criterion for Geo<'_> {
                         query_tree: None,
                         candidates: Some(candidates),
                         filtered_candidates: None,
-                        bucket_candidates: Some(self.bucket_candidates.clone()),
+                        initial_candidates: Some(self.initial_candidates.clone()),
                     }));
                 }
                 None => match self.parent.next(params)? {
@@ -85,7 +85,7 @@ impl Criterion for Geo<'_> {
                         query_tree,
                         candidates,
                         filtered_candidates,
-                        bucket_candidates,
+                        initial_candidates,
                     }) => {
                         let mut candidates = match (&query_tree, candidates) {
                             (_, Some(candidates)) => candidates,
@@ -100,9 +100,11 @@ impl Criterion for Geo<'_> {
                             candidates &= filtered_candidates;
                         }
 
-                        match bucket_candidates {
-                            Some(bucket_candidates) => self.bucket_candidates |= bucket_candidates,
-                            None => self.bucket_candidates |= &candidates,
+                        match initial_candidates {
+                            Some(initial_candidates) => {
+                                self.initial_candidates |= initial_candidates
+                            }
+                            None => self.initial_candidates.map_inplace(|c| c | &candidates),
                         }
 
                         if candidates.is_empty() {

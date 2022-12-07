@@ -7,7 +7,7 @@ use std::mem::take;
 use roaring::RoaringBitmap;
 
 use super::{resolve_query_tree, Context, Criterion, CriterionParameters, CriterionResult};
-use crate::search::criteria::Query;
+use crate::search::criteria::{InitialCandidates, Query};
 use crate::search::query_tree::{Operation, QueryKind};
 use crate::search::{build_dfa, word_derivations, WordDerivationsCache};
 use crate::Result;
@@ -26,7 +26,7 @@ type FlattenedQueryTree = Vec<Vec<Vec<Query>>>;
 pub struct Attribute<'t> {
     ctx: &'t dyn Context<'t>,
     state: Option<(Operation, FlattenedQueryTree, RoaringBitmap)>,
-    bucket_candidates: RoaringBitmap,
+    initial_candidates: InitialCandidates,
     parent: Box<dyn Criterion + 't>,
     linear_buckets: Option<btree_map::IntoIter<u64, RoaringBitmap>>,
     set_buckets: Option<BinaryHeap<Branch<'t>>>,
@@ -37,7 +37,7 @@ impl<'t> Attribute<'t> {
         Attribute {
             ctx,
             state: None,
-            bucket_candidates: RoaringBitmap::new(),
+            initial_candidates: InitialCandidates::Estimated(RoaringBitmap::new()),
             parent,
             linear_buckets: None,
             set_buckets: None,
@@ -60,7 +60,7 @@ impl<'t> Criterion for Attribute<'t> {
                         query_tree: Some(query_tree),
                         candidates: Some(RoaringBitmap::new()),
                         filtered_candidates: None,
-                        bucket_candidates: Some(take(&mut self.bucket_candidates)),
+                        initial_candidates: Some(self.initial_candidates.take()),
                     }));
                 }
                 Some((query_tree, flattened_query_tree, mut allowed_candidates)) => {
@@ -84,7 +84,7 @@ impl<'t> Criterion for Attribute<'t> {
                                     query_tree: Some(query_tree),
                                     candidates: Some(RoaringBitmap::new()),
                                     filtered_candidates: None,
-                                    bucket_candidates: Some(take(&mut self.bucket_candidates)),
+                                    initial_candidates: Some(self.initial_candidates.take()),
                                 }));
                             }
                         }
@@ -109,7 +109,7 @@ impl<'t> Criterion for Attribute<'t> {
                                     query_tree: Some(query_tree),
                                     candidates: Some(RoaringBitmap::new()),
                                     filtered_candidates: None,
-                                    bucket_candidates: Some(take(&mut self.bucket_candidates)),
+                                    initial_candidates: Some(self.initial_candidates.take()),
                                 }));
                             }
                         }
@@ -124,7 +124,7 @@ impl<'t> Criterion for Attribute<'t> {
                         query_tree: Some(query_tree),
                         candidates: Some(found_candidates),
                         filtered_candidates: None,
-                        bucket_candidates: Some(take(&mut self.bucket_candidates)),
+                        initial_candidates: Some(self.initial_candidates.take()),
                     }));
                 }
                 None => match self.parent.next(params)? {
@@ -132,7 +132,7 @@ impl<'t> Criterion for Attribute<'t> {
                         query_tree: Some(query_tree),
                         candidates,
                         filtered_candidates,
-                        bucket_candidates,
+                        initial_candidates,
                     }) => {
                         let mut candidates = match candidates {
                             Some(candidates) => candidates,
@@ -148,9 +148,11 @@ impl<'t> Criterion for Attribute<'t> {
 
                         let flattened_query_tree = flatten_query_tree(&query_tree);
 
-                        match bucket_candidates {
-                            Some(bucket_candidates) => self.bucket_candidates |= bucket_candidates,
-                            None => self.bucket_candidates |= &candidates,
+                        match initial_candidates {
+                            Some(initial_candidates) => {
+                                self.initial_candidates |= initial_candidates
+                            }
+                            None => self.initial_candidates.map_inplace(|c| c | &candidates),
                         }
 
                         self.state = Some((query_tree, flattened_query_tree, candidates));
@@ -160,13 +162,13 @@ impl<'t> Criterion for Attribute<'t> {
                         query_tree: None,
                         candidates,
                         filtered_candidates,
-                        bucket_candidates,
+                        initial_candidates,
                     }) => {
                         return Ok(Some(CriterionResult {
                             query_tree: None,
                             candidates,
                             filtered_candidates,
-                            bucket_candidates,
+                            initial_candidates,
                         }));
                     }
                     None => return Ok(None),

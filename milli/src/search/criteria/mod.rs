@@ -1,5 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::mem::take;
+use std::ops::{BitOr, BitOrAssign};
 
 use roaring::RoaringBitmap;
 
@@ -41,7 +43,7 @@ pub struct CriterionResult {
     /// The candidates, coming from facet filters, that this criterion is allowed to return subsets of.
     filtered_candidates: Option<RoaringBitmap>,
     /// Candidates that comes from the current bucket of the initial criterion.
-    bucket_candidates: Option<RoaringBitmap>,
+    initial_candidates: Option<InitialCandidates>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -62,6 +64,71 @@ enum Candidates {
 impl Default for Candidates {
     fn default() -> Self {
         Self::Forbidden(RoaringBitmap::new())
+    }
+}
+
+/// Either a set of candidates that defines the estimated set of candidates
+/// that could be returned,
+/// or the Exhaustive set of candidates that will be returned if all possible results are fetched.
+#[derive(Debug, Clone, PartialEq)]
+pub enum InitialCandidates {
+    Estimated(RoaringBitmap),
+    Exhaustive(RoaringBitmap),
+}
+
+impl InitialCandidates {
+    fn take(&mut self) -> Self {
+        match self {
+            Self::Estimated(c) => Self::Estimated(take(c)),
+            Self::Exhaustive(c) => Self::Exhaustive(take(c)),
+        }
+    }
+
+    /// modify the containing roaring bitmap inplace if the set isn't already Exhaustive.
+    pub fn map_inplace<F>(&mut self, f: F)
+    where
+        F: FnOnce(RoaringBitmap) -> RoaringBitmap,
+    {
+        if let Self::Estimated(c) = self {
+            *c = f(take(c))
+        }
+    }
+
+    pub fn into_inner(self) -> RoaringBitmap {
+        match self {
+            Self::Estimated(c) => c,
+            Self::Exhaustive(c) => c,
+        }
+    }
+}
+
+impl BitOrAssign for InitialCandidates {
+    /// Make an union between the containing roaring bitmaps if the set isn't already Exhaustive.
+    /// In the case of rhs is Exhaustive and not self, then rhs replaces self.
+    fn bitor_assign(&mut self, rhs: Self) {
+        if let Self::Estimated(c) = self {
+            *self = match rhs {
+                Self::Estimated(rhs) => Self::Estimated(rhs | &*c),
+                Self::Exhaustive(rhs) => Self::Exhaustive(rhs),
+            }
+        }
+    }
+}
+
+impl BitOr for InitialCandidates {
+    type Output = Self;
+
+    /// Make an union between the containing roaring bitmaps if the set isn't already Exhaustive.
+    /// In the case of rhs is Exhaustive and not self, then rhs replaces self.
+    fn bitor(self, rhs: Self) -> Self::Output {
+        if let Self::Estimated(c) = self {
+            match rhs {
+                Self::Estimated(rhs) => Self::Estimated(rhs | c),
+                Self::Exhaustive(rhs) => Self::Exhaustive(rhs),
+            }
+        } else {
+            self.clone()
+        }
     }
 }
 

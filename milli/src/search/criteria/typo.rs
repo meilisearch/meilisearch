@@ -9,7 +9,7 @@ use super::{
     query_docids, resolve_query_tree, Candidates, Context, Criterion, CriterionParameters,
     CriterionResult,
 };
-use crate::search::criteria::resolve_phrase;
+use crate::search::criteria::{resolve_phrase, InitialCandidates};
 use crate::search::query_tree::{maximum_typo, Operation, Query, QueryKind};
 use crate::search::{word_derivations, WordDerivationsCache};
 use crate::Result;
@@ -22,7 +22,7 @@ pub struct Typo<'t> {
     /// (max_typos, query_tree, candidates)
     state: Option<(u8, Operation, Candidates)>,
     typos: u8,
-    bucket_candidates: Option<RoaringBitmap>,
+    initial_candidates: Option<InitialCandidates>,
     parent: Box<dyn Criterion + 't>,
     candidates_cache: HashMap<(Operation, u8), RoaringBitmap>,
 }
@@ -33,7 +33,7 @@ impl<'t> Typo<'t> {
             ctx,
             state: None,
             typos: 0,
-            bucket_candidates: None,
+            initial_candidates: None,
             parent,
             candidates_cache: HashMap::new(),
         }
@@ -120,9 +120,9 @@ impl<'t> Criterion for Typo<'t> {
                         }
                     }
 
-                    let bucket_candidates = match self.bucket_candidates.as_mut() {
-                        Some(bucket_candidates) => take(bucket_candidates),
-                        None => candidates.clone(),
+                    let initial_candidates = match self.initial_candidates.as_mut() {
+                        Some(initial_candidates) => initial_candidates.take(),
+                        None => InitialCandidates::Estimated(candidates.clone()),
                     };
 
                     self.typos += 1;
@@ -131,7 +131,7 @@ impl<'t> Criterion for Typo<'t> {
                         query_tree: Some(new_query_tree),
                         candidates: Some(candidates),
                         filtered_candidates: None,
-                        bucket_candidates: Some(bucket_candidates),
+                        initial_candidates: Some(initial_candidates),
                     }));
                 }
                 None => match self.parent.next(params)? {
@@ -139,14 +139,9 @@ impl<'t> Criterion for Typo<'t> {
                         query_tree: Some(query_tree),
                         candidates,
                         filtered_candidates,
-                        bucket_candidates,
+                        initial_candidates,
                     }) => {
-                        self.bucket_candidates =
-                            match (self.bucket_candidates.take(), bucket_candidates) {
-                                (Some(self_bc), Some(parent_bc)) => Some(self_bc | parent_bc),
-                                (self_bc, parent_bc) => self_bc.or(parent_bc),
-                            };
-
+                        self.initial_candidates = initial_candidates;
                         let candidates = match candidates.or(filtered_candidates) {
                             Some(candidates) => {
                                 Candidates::Allowed(candidates - params.excluded_candidates)
@@ -162,13 +157,13 @@ impl<'t> Criterion for Typo<'t> {
                         query_tree: None,
                         candidates,
                         filtered_candidates,
-                        bucket_candidates,
+                        initial_candidates,
                     }) => {
                         return Ok(Some(CriterionResult {
                             query_tree: None,
                             candidates,
                             filtered_candidates,
-                            bucket_candidates,
+                            initial_candidates,
                         }));
                     }
                     None => return Ok(None),
@@ -356,7 +351,7 @@ mod test {
 
         let result = display_criteria(criteria, criterion_parameters);
         insta::assert_snapshot!(result, @r###"
-        CriterionResult { query_tree: None, candidates: None, filtered_candidates: None, bucket_candidates: None }
+        CriterionResult { query_tree: None, candidates: None, filtered_candidates: None, initial_candidates: None }
 
         "###);
     }
@@ -399,7 +394,7 @@ mod test {
             Exact { word: "split" }
             Exact { word: "this" }
             Exact { word: "world" }
-        ), candidates: Some(RoaringBitmap<[]>), filtered_candidates: None, bucket_candidates: Some(RoaringBitmap<[]>) }
+        ), candidates: Some(RoaringBitmap<[]>), filtered_candidates: None, initial_candidates: Some(Estimated(RoaringBitmap<[]>)) }
 
         CriterionResult { query_tree: Some(OR
           AND
@@ -408,7 +403,7 @@ mod test {
             OR
               Exact { word: "word" }
               Exact { word: "world" }
-        ), candidates: Some(RoaringBitmap<[]>), filtered_candidates: None, bucket_candidates: Some(RoaringBitmap<[]>) }
+        ), candidates: Some(RoaringBitmap<[]>), filtered_candidates: None, initial_candidates: Some(Estimated(RoaringBitmap<[]>)) }
 
         "###);
     }
@@ -434,7 +429,7 @@ mod test {
 
         let result = display_criteria(criteria, criterion_parameters);
         insta::assert_snapshot!(result, @r###"
-        CriterionResult { query_tree: None, candidates: None, filtered_candidates: Some(RoaringBitmap<8000 values between 986424 and 4294786076>), bucket_candidates: None }
+        CriterionResult { query_tree: None, candidates: None, filtered_candidates: Some(RoaringBitmap<8000 values between 986424 and 4294786076>), initial_candidates: None }
 
         "###);
     }
@@ -482,7 +477,7 @@ mod test {
             Exact { word: "split" }
             Exact { word: "this" }
             Exact { word: "world" }
-        ), candidates: Some(RoaringBitmap<[]>), filtered_candidates: None, bucket_candidates: Some(RoaringBitmap<[]>) }
+        ), candidates: Some(RoaringBitmap<[]>), filtered_candidates: None, initial_candidates: Some(Estimated(RoaringBitmap<[]>)) }
 
         CriterionResult { query_tree: Some(OR
           AND
@@ -491,7 +486,7 @@ mod test {
             OR
               Exact { word: "word" }
               Exact { word: "world" }
-        ), candidates: Some(RoaringBitmap<[]>), filtered_candidates: None, bucket_candidates: Some(RoaringBitmap<[]>) }
+        ), candidates: Some(RoaringBitmap<[]>), filtered_candidates: None, initial_candidates: Some(Estimated(RoaringBitmap<[]>)) }
 
         "###);
     }

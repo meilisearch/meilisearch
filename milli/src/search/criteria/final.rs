@@ -2,6 +2,7 @@ use log::debug;
 use roaring::RoaringBitmap;
 
 use super::{resolve_query_tree, Context, Criterion, CriterionParameters, CriterionResult};
+use crate::search::criteria::InitialCandidates;
 use crate::search::query_tree::Operation;
 use crate::search::WordDerivationsCache;
 use crate::Result;
@@ -14,7 +15,7 @@ pub struct FinalResult {
     /// The candidates of the current bucket of the last criterion.
     pub candidates: RoaringBitmap,
     /// Candidates that comes from the current bucket of the initial criterion.
-    pub bucket_candidates: RoaringBitmap,
+    pub initial_candidates: InitialCandidates,
 }
 
 pub struct Final<'t> {
@@ -49,7 +50,7 @@ impl<'t> Final<'t> {
                 query_tree,
                 candidates,
                 filtered_candidates,
-                bucket_candidates,
+                initial_candidates,
             }) => {
                 let mut candidates = match (candidates, query_tree.as_ref()) {
                     (Some(candidates), _) => candidates,
@@ -63,11 +64,12 @@ impl<'t> Final<'t> {
                     candidates &= filtered_candidates;
                 }
 
-                let bucket_candidates = bucket_candidates.unwrap_or_else(|| candidates.clone());
+                let initial_candidates = initial_candidates
+                    .unwrap_or_else(|| InitialCandidates::Estimated(candidates.clone()));
 
                 self.returned_candidates |= &candidates;
 
-                Ok(Some(FinalResult { query_tree, candidates, bucket_candidates }))
+                Ok(Some(FinalResult { query_tree, candidates, initial_candidates }))
             }
             None => Ok(None),
         }

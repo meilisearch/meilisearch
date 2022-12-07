@@ -1,9 +1,8 @@
-use std::mem::take;
-
 use log::debug;
 use roaring::RoaringBitmap;
 
 use super::{resolve_query_tree, Context, Criterion, CriterionParameters, CriterionResult};
+use crate::search::criteria::InitialCandidates;
 use crate::search::query_tree::Operation;
 use crate::Result;
 
@@ -11,7 +10,7 @@ pub struct Words<'t> {
     ctx: &'t dyn Context<'t>,
     query_trees: Vec<Operation>,
     candidates: Option<RoaringBitmap>,
-    bucket_candidates: Option<RoaringBitmap>,
+    initial_candidates: Option<InitialCandidates>,
     filtered_candidates: Option<RoaringBitmap>,
     parent: Box<dyn Criterion + 't>,
 }
@@ -22,7 +21,7 @@ impl<'t> Words<'t> {
             ctx,
             query_trees: Vec::default(),
             candidates: None,
-            bucket_candidates: None,
+            initial_candidates: None,
             parent,
             filtered_candidates: None,
         }
@@ -53,13 +52,13 @@ impl<'t> Criterion for Words<'t> {
                         None => None,
                     };
 
-                    let bucket_candidates = self.bucket_candidates.as_mut().map(take);
+                    let initial_candidates = self.initial_candidates.clone();
 
                     return Ok(Some(CriterionResult {
                         query_tree: Some(query_tree),
                         candidates,
                         filtered_candidates: self.filtered_candidates.clone(),
-                        bucket_candidates,
+                        initial_candidates,
                     }));
                 }
                 None => match self.parent.next(params)? {
@@ -67,14 +66,14 @@ impl<'t> Criterion for Words<'t> {
                         query_tree: Some(query_tree),
                         candidates,
                         filtered_candidates,
-                        bucket_candidates,
+                        initial_candidates,
                     }) => {
                         self.query_trees = explode_query_tree(query_tree);
                         self.candidates = candidates;
                         self.filtered_candidates = filtered_candidates;
 
-                        self.bucket_candidates =
-                            match (self.bucket_candidates.take(), bucket_candidates) {
+                        self.initial_candidates =
+                            match (self.initial_candidates.take(), initial_candidates) {
                                 (Some(self_bc), Some(parent_bc)) => Some(self_bc | parent_bc),
                                 (self_bc, parent_bc) => self_bc.or(parent_bc),
                             };
@@ -83,13 +82,13 @@ impl<'t> Criterion for Words<'t> {
                         query_tree: None,
                         candidates,
                         filtered_candidates,
-                        bucket_candidates,
+                        initial_candidates,
                     }) => {
                         return Ok(Some(CriterionResult {
                             query_tree: None,
                             candidates,
                             filtered_candidates,
-                            bucket_candidates,
+                            initial_candidates,
                         }));
                     }
                     None => return Ok(None),

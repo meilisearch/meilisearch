@@ -1,6 +1,5 @@
 use std::collections::btree_map::{self, BTreeMap};
 use std::collections::hash_map::HashMap;
-use std::mem::take;
 
 use log::debug;
 use roaring::RoaringBitmap;
@@ -10,6 +9,7 @@ use super::{
     query_docids, query_pair_proximity_docids, resolve_phrase, resolve_query_tree, Context,
     Criterion, CriterionParameters, CriterionResult,
 };
+use crate::search::criteria::InitialCandidates;
 use crate::search::query_tree::{maximum_proximity, Operation, Query, QueryKind};
 use crate::search::{build_dfa, WordDerivationsCache};
 use crate::{Position, Result};
@@ -29,7 +29,7 @@ pub struct Proximity<'t> {
     /// (max_proximity, query_tree, allowed_candidates)
     state: Option<(u8, Operation, RoaringBitmap)>,
     proximity: u8,
-    bucket_candidates: RoaringBitmap,
+    initial_candidates: InitialCandidates,
     parent: Box<dyn Criterion + 't>,
     candidates_cache: Cache,
     plane_sweep_cache: Option<btree_map::IntoIter<u8, RoaringBitmap>>,
@@ -41,7 +41,7 @@ impl<'t> Proximity<'t> {
             ctx,
             state: None,
             proximity: 0,
-            bucket_candidates: RoaringBitmap::new(),
+            initial_candidates: InitialCandidates::Estimated(RoaringBitmap::new()),
             parent,
             candidates_cache: Cache::new(),
             plane_sweep_cache: None,
@@ -115,7 +115,7 @@ impl<'t> Criterion for Proximity<'t> {
                         query_tree: Some(query_tree.clone()),
                         candidates: Some(new_candidates),
                         filtered_candidates: None,
-                        bucket_candidates: Some(take(&mut self.bucket_candidates)),
+                        initial_candidates: Some(self.initial_candidates.take()),
                     }));
                 }
                 None => match self.parent.next(params)? {
@@ -123,7 +123,7 @@ impl<'t> Criterion for Proximity<'t> {
                         query_tree: Some(query_tree),
                         candidates,
                         filtered_candidates,
-                        bucket_candidates,
+                        initial_candidates,
                     }) => {
                         let mut candidates = match candidates {
                             Some(candidates) => candidates,
@@ -137,9 +137,11 @@ impl<'t> Criterion for Proximity<'t> {
                             candidates &= filtered_candidates;
                         }
 
-                        match bucket_candidates {
-                            Some(bucket_candidates) => self.bucket_candidates |= bucket_candidates,
-                            None => self.bucket_candidates |= &candidates,
+                        match initial_candidates {
+                            Some(initial_candidates) => {
+                                self.initial_candidates |= initial_candidates
+                            }
+                            None => self.initial_candidates.map_inplace(|c| c | &candidates),
                         }
 
                         let maximum_proximity = maximum_proximity(&query_tree);
@@ -151,13 +153,13 @@ impl<'t> Criterion for Proximity<'t> {
                         query_tree: None,
                         candidates,
                         filtered_candidates,
-                        bucket_candidates,
+                        initial_candidates,
                     }) => {
                         return Ok(Some(CriterionResult {
                             query_tree: None,
                             candidates,
                             filtered_candidates,
-                            bucket_candidates,
+                            initial_candidates,
                         }));
                     }
                     None => return Ok(None),
