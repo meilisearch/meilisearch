@@ -31,7 +31,7 @@ Remember that there are many ways to contribute other than writing code: writing
 
 ## Development Workflow
 
-We're using rust stable for the tests and clippy but rust nightly for the formatting of the code.
+We're using a stable version of Rust for the tests and Clippy but the nightly version of Rust for the formatting of the code.
 
 ### Test
 
