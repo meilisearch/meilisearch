@@ -4,7 +4,6 @@ use std::ops::Bound::{self, Excluded, Included};
 
 use either::Either;
 pub use filter_parser::{Condition, Error as FPError, FilterCondition, Span, Token};
-use heed::types::DecodeIgnore;
 use roaring::RoaringBitmap;
 
 use super::facet_range_search;
@@ -200,20 +199,10 @@ impl<'a> Filter<'a> {
                     .unwrap_or_default();
                 let number = val.parse_finite_float().ok();
                 let number_docids = match number {
-                    Some(n) => {
-                        let n = Included(n);
-                        let mut output = RoaringBitmap::new();
-                        Self::explore_facet_number_levels(
-                            rtxn,
-                            numbers_db,
-                            field_id,
-                            0,
-                            n,
-                            n,
-                            &mut output,
-                        )?;
-                        output
-                    }
+                    Some(n) => numbers_db
+                        .get(rtxn, &FacetGroupKey { field_id, level: 0, left_bound: n })?
+                        .map(|v| v.bitmap)
+                        .unwrap_or_default(),
                     None => RoaringBitmap::new(),
                 };
                 return Ok(string_docids | number_docids);
@@ -226,40 +215,9 @@ impl<'a> Filter<'a> {
             }
         };
 
-        // Ask for the biggest value that can exist for this specific field, if it exists
-        // that's fine if it don't, the value just before will be returned instead.
-        let biggest_level = numbers_db
-            .remap_data_type::<DecodeIgnore>()
-            .get_lower_than_or_equal_to(
-                rtxn,
-                &FacetGroupKey { field_id, level: u8::MAX, left_bound: f64::MAX },
-            )?
-            .and_then(
-                |(FacetGroupKey { field_id: id, level, .. }, _)| {
-                    if id == field_id {
-                        Some(level)
-                    } else {
-                        None
-                    }
-                },
-            );
-
-        match biggest_level {
-            Some(level) => {
-                let mut output = RoaringBitmap::new();
-                Self::explore_facet_number_levels(
-                    rtxn,
-                    numbers_db,
-                    field_id,
-                    level,
-                    left,
-                    right,
-                    &mut output,
-                )?;
-                Ok(output)
-            }
-            None => Ok(RoaringBitmap::new()),
-        }
+        let mut output = RoaringBitmap::new();
+        Self::explore_facet_number_levels(rtxn, numbers_db, field_id, left, right, &mut output)?;
+        Ok(output)
     }
 
     /// Aggregates the documents ids that are part of the specified range automatically
@@ -268,18 +226,11 @@ impl<'a> Filter<'a> {
         rtxn: &heed::RoTxn,
         db: heed::Database<FacetGroupKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>,
         field_id: FieldId,
-        level: u8,
         left: Bound<f64>,
         right: Bound<f64>,
         output: &mut RoaringBitmap,
     ) -> Result<()> {
         match (left, right) {
-            // If the request is an exact value we must go directly to the deepest level.
-            (Included(l), Included(r)) if l == r && level > 0 => {
-                return Self::explore_facet_number_levels(
-                    rtxn, db, field_id, 0, left, right, output,
-                );
-            }
             // lower TO upper when lower > upper must return no result
             (Included(l), Included(r)) if l > r => return Ok(()),
             (Included(l), Excluded(r)) if l >= r => return Ok(()),
