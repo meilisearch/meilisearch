@@ -239,8 +239,8 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
         // element from the previous key or its successors
         let should_stop = {
             match self.right {
-                Bound::Included(right) => right <= previous_key.left_bound,
-                Bound::Excluded(right) => right < previous_key.left_bound,
+                Bound::Included(right) => right < previous_key.left_bound,
+                Bound::Excluded(right) => right <= previous_key.left_bound,
                 Bound::Unbounded => false,
             }
         };
