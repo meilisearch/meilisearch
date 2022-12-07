@@ -66,6 +66,15 @@ touch benchmarks/benches/datasets_paths.rs
 ```
 
 Then you can format your code BUT you need to do it with rust-fmt.
+If you have not installed the rust nightly version yet here is how to do it:
+
+```bash
+rustup toolchain install nightly
+```
+
+You can read more about it here: https://rust-lang.github.io/rustup/concepts/channels.html
+
+And finally, to format your code you can run:
 
 ```bash
 cargo +nightly fmt --all
