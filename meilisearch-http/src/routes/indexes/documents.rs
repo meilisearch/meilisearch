@@ -4,7 +4,7 @@ use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use bstr::ByteSlice;
 use futures::StreamExt;
 use index_scheduler::IndexScheduler;
-use log::{debug, error};
+use log::debug;
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
@@ -233,19 +233,17 @@ async fn document_addition(
     let temp_file = match NamedTempFile::new() {
         Ok(temp_file) => temp_file,
         Err(e) => {
-            error!("create a temporary file error: {}", e);
-            return Err(MeilisearchHttpError::Payload(ReceivePayloadErr));
+            return Err(MeilisearchHttpError::Payload(ReceivePayloadErr(Box::new(e))));
         }
     };
-    debug!("temp file path: {:?}", temp_file.as_ref());
-    let buffer_file = match temp_file.reopen() {
-        Ok(buffer_file) => buffer_file,
+    
+    let mut buffer = match File::create(&temp_file.as_ref()).await {
+        Ok(buffer) => buffer,
         Err(e) => {
-            error!("reopen payload temporary file error: {}", e);
-            return Err(MeilisearchHttpError::Payload(ReceivePayloadErr));
+            return Err(MeilisearchHttpError::Payload(ReceivePayloadErr(Box::new(e))));
         }
     };
-    let mut buffer = File::from_std(buffer_file);
+
     let mut buffer_write_size: usize = 0;
     while let Some(bytes) = body.next().await {
         let byte = &bytes?;
@@ -257,16 +255,14 @@ async fn document_addition(
         match buffer.write_all(byte).await {
             Ok(()) => buffer_write_size += 1,
             Err(e) => {
-                error!("bufWriter write error: {}", e);
-                return Err(MeilisearchHttpError::Payload(ReceivePayloadErr));
+                return Err(MeilisearchHttpError::Payload(ReceivePayloadErr(Box::new(e))));
             }
         };
     }
 
     if let Err(e) = buffer.flush().await {
-        error!("bufWriter flush error: {}", e);
-        return Err(MeilisearchHttpError::Payload(ReceivePayloadErr));
-    };
+        return Err(MeilisearchHttpError::Payload(ReceivePayloadErr(Box::new(e))));
+    }
 
     if buffer_write_size == 0 {
         return Err(MeilisearchHttpError::MissingPayload(format));
