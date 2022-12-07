@@ -39,7 +39,7 @@ const ANALYTICS_HEADER: &str = "X-Meilisearch-Client";
 
 /// Write the instance-uid in the `data.ms` and in `~/.config/MeiliSearch/path-to-db-instance-uid`. Ignore the errors.
 fn write_user_id(db_path: &Path, user_id: &InstanceUid) {
-    let _ = fs::write(db_path.join("instance-uid"), user_id.as_bytes());
+    let _ = fs::write(db_path.join("instance-uid"), user_id.to_string());
     if let Some((meilisearch_config_path, user_id_path)) =
         MEILISEARCH_CONFIG_PATH.as_ref().zip(config_user_id_path(db_path))
     {
