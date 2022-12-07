@@ -236,7 +236,7 @@ async fn document_addition(
             return Err(MeilisearchHttpError::Payload(ReceivePayloadErr(Box::new(e))));
         }
     };
-    
+
     let mut buffer = match File::create(&temp_file.as_ref()).await {
         Ok(buffer) => buffer,
         Err(e) => {
