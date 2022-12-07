@@ -1,4 +1,4 @@
-# Create or update a latest git tag when releasing a stable vesrsin of Meilisearch
+# Create or update a latest git tag when releasing a stable version of Meilisearch
 name: Update latest git tag
 on:
   workflow_dispatch:
@@ -6,6 +6,15 @@ on:
     types: [released]
 
 jobs:
+  check-version:
+    name: Check the version validity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Check release validity
+        if: github.event_name == 'release'
+        run: bash .github/scripts/check-release.sh
+
   update-latest-tag:
     runs-on: ubuntu-latest
     steps:
