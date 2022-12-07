@@ -2156,7 +2156,7 @@ checksum = "d4d2456c373231a208ad294c33dc5bff30051eafd954cd4caae83a712b12854d"
 [[package]]
 name = "lmdb-rkv-sys"
 version = "0.15.1"
-source = "git+https://github.com/meilisearch/lmdb-rs#5592bf5a812905cf0c633404ef8f8f4057112c65"
+source = "git+https://github.com/meilisearch/lmdb-rs#0144fb2bac524cdc2897d7750681ed3fff2dc3ac"
 dependencies = [
  "cc",
  "libc",
