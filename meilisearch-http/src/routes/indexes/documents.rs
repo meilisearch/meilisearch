@@ -19,9 +19,9 @@ use serde::Deserialize;
 use serde_cs::vec::CS;
 use serde_json::Value;
 use std::io::ErrorKind;
-use tempfile::NamedTempFile;
+use tempfile::tempfile;
 use tokio::fs::File;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 
 use crate::analytics::{Analytics, DocumentDeletionKind};
 use crate::error::MeilisearchHttpError;
@@ -230,19 +230,14 @@ async fn document_addition(
 
     let (uuid, mut update_file) = index_scheduler.create_update_file()?;
 
-    let temp_file = match NamedTempFile::new() {
+    let temp_file = match tempfile() {
         Ok(temp_file) => temp_file,
         Err(e) => {
             return Err(MeilisearchHttpError::Payload(ReceivePayloadErr(Box::new(e))));
         }
     };
 
-    let mut buffer = match File::create(&temp_file.as_ref()).await {
-        Ok(buffer) => buffer,
-        Err(e) => {
-            return Err(MeilisearchHttpError::Payload(ReceivePayloadErr(Box::new(e))));
-        }
-    };
+    let mut buffer = File::from_std(temp_file);
 
     let mut buffer_write_size: usize = 0;
     while let Some(bytes) = body.next().await {
@@ -268,12 +263,18 @@ async fn document_addition(
         return Err(MeilisearchHttpError::MissingPayload(format));
     }
 
+    if let Err(e) = buffer.seek(std::io::SeekFrom::Start(0)).await {
+        return Err(MeilisearchHttpError::Payload(ReceivePayloadErr(Box::new(e))));
+    };
+
+    let read_file = buffer.into_std().await;
+
     let documents_count =
         tokio::task::spawn_blocking(move || -> Result<_, MeilisearchHttpError> {
             let documents_count = match format {
-                PayloadType::Json => read_json(temp_file.as_file(), update_file.as_file_mut())?,
-                PayloadType::Csv => read_csv(temp_file.as_file(), update_file.as_file_mut())?,
-                PayloadType::Ndjson => read_ndjson(temp_file.as_file(), update_file.as_file_mut())?,
+                PayloadType::Json => read_json(&read_file, update_file.as_file_mut())?,
+                PayloadType::Csv => read_csv(&read_file, update_file.as_file_mut())?,
+                PayloadType::Ndjson => read_ndjson(&read_file, update_file.as_file_mut())?,
             };
             // we NEED to persist the file here because we moved the `udpate_file` in another task.
             update_file.persist()?;
