@@ -1101,7 +1101,7 @@ dependencies = [
 
 [[package]]
 name = "dump"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "anyhow",
  "big_s",
@@ -1310,7 +1310,7 @@ dependencies = [
 
 [[package]]
 name = "file-store"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "faux",
  "tempfile",
@@ -1332,8 +1332,8 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "0.37.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.0#57c9f03e514436a2cca799b2a28cd89247682be0"
+version = "0.37.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.1#e1b2113cd9a467410841a254286e5e25961af43e"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1351,8 +1351,8 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "0.37.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.0#57c9f03e514436a2cca799b2a28cd89247682be0"
+version = "0.37.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.1#e1b2113cd9a467410841a254286e5e25961af43e"
 dependencies = [
  "serde_json",
 ]
@@ -1625,7 +1625,7 @@ dependencies = [
  "libc",
  "lmdb-rkv-sys",
  "once_cell",
- "page_size",
+ "page_size 0.4.2",
  "synchronoise",
  "url",
  "zerocopy",
@@ -1767,7 +1767,7 @@ dependencies = [
 
 [[package]]
 name = "index-scheduler"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "anyhow",
  "big_s",
@@ -1783,6 +1783,7 @@ dependencies = [
  "meili-snap",
  "meilisearch-types",
  "nelson",
+ "page_size 0.5.0",
  "roaring",
  "serde",
  "serde_json",
@@ -1897,8 +1898,8 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "0.37.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.0#57c9f03e514436a2cca799b2a28cd89247682be0"
+version = "0.37.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.1#e1b2113cd9a467410841a254286e5e25961af43e"
 dependencies = [
  "serde_json",
 ]
@@ -2257,7 +2258,7 @@ checksum = "490cc448043f947bae3cbee9c203358d62dbee0db12107a74be5c30ccfd09771"
 
 [[package]]
 name = "meili-snap"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "insta",
  "md5",
@@ -2266,7 +2267,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-auth"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "enum-iterator",
  "hmac",
@@ -2283,7 +2284,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-http"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "actix-cors",
  "actix-http",
@@ -2366,7 +2367,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-types"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -2416,8 +2417,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.37.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.0#57c9f03e514436a2cca799b2a28cd89247682be0"
+version = "0.37.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.1#e1b2113cd9a467410841a254286e5e25961af43e"
 dependencies = [
  "bimap",
  "bincode",
@@ -2664,6 +2665,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "page_size"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b7663cbd190cfd818d08efa8497f6cd383076688c49a391ef7c0d03cd12b561"
+dependencies = [
+ "libc",
+ "winapi",
+]
+
+[[package]]
 name = "parking_lot"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2747,7 +2758,7 @@ checksum = "478c572c3d73181ff3c2539045f6eb99e5491218eae919370993b890cdbdd98e"
 
 [[package]]
 name = "permissive-json-pointer"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "big_s",
  "serde_json",

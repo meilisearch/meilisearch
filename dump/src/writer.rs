@@ -295,7 +295,7 @@ pub(crate) mod test {
         insta::assert_json_snapshot!(metadata, { ".dumpDate" => "[date]" }, @r###"
         {
           "dumpVersion": "V6",
-          "dbVersion": "0.30.0",
+          "dbVersion": "0.30.1",
           "dumpDate": "[date]"
         }
         "###);
