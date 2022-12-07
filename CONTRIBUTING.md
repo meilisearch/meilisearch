@@ -76,9 +76,6 @@ cargo +nightly fmt --all
 ```bash
 cargo clippy
 ```
-
-
-
 ## Git Guidelines
 
 ### Git Branches
