@@ -31,6 +31,8 @@ Remember that there are many ways to contribute other than writing code: writing
 
 ## Development Workflow
 
+We're using a stable version of Rust for the tests and Clippy but the nightly version of Rust for the formatting of the code.
+
 ### Test
 
 ```bash
@@ -55,6 +57,34 @@ Don't forget to specify the `id` of the documents. Also, note that it supports J
 streaming: you can send them to the engine by using the `content-type:application/json` and
 `content-type:application/x-ndjson` headers respectively.
 
+### Format
+
+For your first run you'll need to run this command:
+
+```bash
+touch benchmarks/benches/datasets_paths.rs
+```
+
+Then you can format your code BUT you need to do it with rust-fmt.
+If you have not installed the rust nightly version yet here is how to do it:
+
+```bash
+rustup toolchain install nightly
+```
+
+You can read more about it here: https://rust-lang.github.io/rustup/concepts/channels.html
+
+And finally, to format your code you can run:
+
+```bash
+cargo +nightly fmt --all
+```
+
+### Clippy
+
+```bash
+cargo clippy
+```
 ## Git Guidelines
 
 ### Git Branches
