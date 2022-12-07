@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use meilisearch_http::Opt;
+use meilisearch::Opt;
 use tokio::time::sleep;
 
 use crate::common::server::default_settings;

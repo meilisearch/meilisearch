@@ -734,7 +734,7 @@ mod test {
     #[ignore]
     fn test_meilli_config_file_path_valid() {
         temp_env::with_vars(
-            vec![("MEILI_CONFIG_FILE_PATH", Some("../config.toml"))], // Relative path in meilisearch_http package
+            vec![("MEILI_CONFIG_FILE_PATH", Some("../config.toml"))], // Relative path in meilisearch package
             || {
                 assert!(Opt::try_build().is_ok());
             },

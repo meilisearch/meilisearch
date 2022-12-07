@@ -7,8 +7,8 @@ use actix_web::web::Data;
 use actix_web::HttpServer;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
-use meilisearch_http::analytics::Analytics;
-use meilisearch_http::{analytics, create_app, setup_meilisearch, Opt};
+use meilisearch::analytics::Analytics;
+use meilisearch::{analytics, create_app, setup_meilisearch, Opt};
 
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;

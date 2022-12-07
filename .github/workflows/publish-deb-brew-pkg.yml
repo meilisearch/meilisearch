@@ -25,7 +25,7 @@ jobs:
       run: cargo install cargo-deb
     - uses: actions/checkout@v3
     - name: Build deb package
-      run: cargo deb -p meilisearch-http -o target/debian/meilisearch.deb
+      run: cargo deb -p meilisearch -o target/debian/meilisearch.deb
     - name: Upload debian pkg to release
       uses: svenstaro/upload-release-action@2.3.0
       with:
