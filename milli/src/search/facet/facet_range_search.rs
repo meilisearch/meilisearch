@@ -171,6 +171,8 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
             }
 
             // should we stop?
+            // We should if the the search range doesn't include any
+            // element from the previous key or its successors
             let should_stop = {
                 match self.right {
                     Bound::Included(right) => right < previous_key.left_bound,
@@ -233,6 +235,8 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
         }
 
         // should we stop?
+        // We should if the the search range doesn't include any
+        // element from the previous key or its successors
         let should_stop = {
             match self.right {
                 Bound::Included(right) => right <= previous_key.left_bound,
@@ -321,8 +325,27 @@ mod tests {
     #[test]
     fn random_looking_index_snap() {
         let index = get_random_looking_index();
-        milli_snap!(format!("{index}"));
+        milli_snap!(format!("{index}"), @"3256c76a7c1b768a013e78d5fa6e9ff9");
     }
+
+    #[test]
+    fn random_looking_index_with_multiple_field_ids_snap() {
+        let index = get_random_looking_index_with_multiple_field_ids();
+        milli_snap!(format!("{index}"), @"c3e5fe06a8f1c404ed4935b32c90a89b");
+    }
+
+    #[test]
+    fn simple_index_snap() {
+        let index = get_simple_index();
+        milli_snap!(format!("{index}"), @"5dbfa134cc44abeb3ab6242fc182e48e");
+    }
+
+    #[test]
+    fn simple_index_with_multiple_field_ids_snap() {
+        let index = get_simple_index_with_multiple_field_ids();
+        milli_snap!(format!("{index}"), @"a4893298218f682bc76357f46777448c");
+    }
+
     #[test]
     fn filter_range_increasing() {
         let indexes = [
@@ -349,7 +372,7 @@ mod tests {
                 )
                 .unwrap();
                 #[allow(clippy::format_push_string)]
-                results.push_str(&format!("{}\n", display_bitmap(&docids)));
+                results.push_str(&format!("0 <= . <= {i} : {}\n", display_bitmap(&docids)));
             }
             milli_snap!(results, format!("included_{i}"));
             let mut results = String::new();
@@ -368,7 +391,7 @@ mod tests {
                 )
                 .unwrap();
                 #[allow(clippy::format_push_string)]
-                results.push_str(&format!("{}\n", display_bitmap(&docids)));
+                results.push_str(&format!("0 < . < {i} : {}\n", display_bitmap(&docids)));
             }
             milli_snap!(results, format!("excluded_{i}"));
             txn.commit().unwrap();
@@ -401,7 +424,7 @@ mod tests {
                     &mut docids,
                 )
                 .unwrap();
-                results.push_str(&format!("{}\n", display_bitmap(&docids)));
+                results.push_str(&format!("{i} <= . <= 255 : {}\n", display_bitmap(&docids)));
             }
 
             milli_snap!(results, format!("included_{i}"));
@@ -422,7 +445,7 @@ mod tests {
                     &mut docids,
                 )
                 .unwrap();
-                results.push_str(&format!("{}\n", display_bitmap(&docids)));
+                results.push_str(&format!("{i} < . < 255 : {}\n", display_bitmap(&docids)));
             }
 
             milli_snap!(results, format!("excluded_{i}"));
@@ -457,7 +480,11 @@ mod tests {
                     &mut docids,
                 )
                 .unwrap();
-                results.push_str(&format!("{}\n", display_bitmap(&docids)));
+                results.push_str(&format!(
+                    "{i} <= . <= {r} : {docids}\n",
+                    r = 255. - i,
+                    docids = display_bitmap(&docids)
+                ));
             }
 
             milli_snap!(results, format!("included_{i}"));
@@ -478,12 +505,133 @@ mod tests {
                     &mut docids,
                 )
                 .unwrap();
-                results.push_str(&format!("{}\n", display_bitmap(&docids)));
+                results.push_str(&format!(
+                    "{i} <  . < {r} {docids}\n",
+                    r = 255. - i,
+                    docids = display_bitmap(&docids)
+                ));
             }
 
             milli_snap!(results, format!("excluded_{i}"));
 
             txn.commit().unwrap();
+        }
+    }
+
+    #[test]
+    fn filter_range_unbounded() {
+        let indexes = [
+            get_simple_index(),
+            get_random_looking_index(),
+            get_simple_index_with_multiple_field_ids(),
+            get_random_looking_index_with_multiple_field_ids(),
+        ];
+        for (i, index) in indexes.iter().enumerate() {
+            let txn = index.env.read_txn().unwrap();
+            let mut results = String::new();
+            for i in 0..=255 {
+                let i = i as f64;
+                let start = Bound::Included(i);
+                let end = Bound::Unbounded;
+                let mut docids = RoaringBitmap::new();
+                find_docids_of_facet_within_bounds::<OrderedF64Codec>(
+                    &txn,
+                    index.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
+                    0,
+                    &start,
+                    &end,
+                    &mut docids,
+                )
+                .unwrap();
+                #[allow(clippy::format_push_string)]
+                results.push_str(&format!(">= {i}: {}\n", display_bitmap(&docids)));
+            }
+            milli_snap!(results, format!("start_from_included_{i}"));
+            let mut results = String::new();
+            for i in 0..=255 {
+                let i = i as f64;
+                let start = Bound::Unbounded;
+                let end = Bound::Included(i);
+                let mut docids = RoaringBitmap::new();
+                find_docids_of_facet_within_bounds::<OrderedF64Codec>(
+                    &txn,
+                    index.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
+                    0,
+                    &start,
+                    &end,
+                    &mut docids,
+                )
+                .unwrap();
+                #[allow(clippy::format_push_string)]
+                results.push_str(&format!("<= {i}: {}\n", display_bitmap(&docids)));
+            }
+            milli_snap!(results, format!("end_at_included_{i}"));
+
+            let mut docids = RoaringBitmap::new();
+            find_docids_of_facet_within_bounds::<OrderedF64Codec>(
+                &txn,
+                index.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
+                0,
+                &Bound::Unbounded,
+                &Bound::Unbounded,
+                &mut docids,
+            )
+            .unwrap();
+            milli_snap!(
+                &format!("all field_id 0: {}\n", display_bitmap(&docids)),
+                format!("unbounded_field_id_0_{i}")
+            );
+
+            let mut docids = RoaringBitmap::new();
+            find_docids_of_facet_within_bounds::<OrderedF64Codec>(
+                &txn,
+                index.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
+                1,
+                &Bound::Unbounded,
+                &Bound::Unbounded,
+                &mut docids,
+            )
+            .unwrap();
+            milli_snap!(
+                &format!("all field_id 1:  {}\n", display_bitmap(&docids)),
+                format!("unbounded_field_id_1_{i}")
+            );
+
+            drop(txn);
+        }
+    }
+
+    #[test]
+    fn filter_range_exact() {
+        let indexes = [
+            get_simple_index(),
+            get_random_looking_index(),
+            get_simple_index_with_multiple_field_ids(),
+            get_random_looking_index_with_multiple_field_ids(),
+        ];
+        for (i, index) in indexes.iter().enumerate() {
+            let txn = index.env.read_txn().unwrap();
+            let mut results = String::new();
+            for i in 0..=255 {
+                let i = i as f64;
+                let start = Bound::Included(i);
+                let end = Bound::Included(i);
+                let mut docids = RoaringBitmap::new();
+                find_docids_of_facet_within_bounds::<OrderedF64Codec>(
+                    &txn,
+                    index.content.remap_key_type::<FacetGroupKeyCodec<OrderedF64Codec>>(),
+                    0,
+                    &start,
+                    &end,
+                    &mut docids,
+                )
+                .unwrap();
+                #[allow(clippy::format_push_string)]
+                results.push_str(&format!("{i}: {}\n", display_bitmap(&docids)));
+            }
+            milli_snap!(results, format!("exact_{i}"));
+
+            drop(txn);
         }
     }
 }
