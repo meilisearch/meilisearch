@@ -590,3 +590,6 @@ fn resolve_plane_sweep_candidates(
 
     Ok(candidates)
 }
+
+#[cfg(test)]
+mod tests {}

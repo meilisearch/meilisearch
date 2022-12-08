@@ -14,6 +14,9 @@ mod word_prefix;
 pub use prefix_word::index_prefix_word_database;
 pub use word_prefix::index_word_prefix_database;
 
+pub const MAX_PROXIMITY_FOR_PREFIX_PROXIMITY_DB: u8 = 4;
+pub const MAX_LENGTH_FOR_PREFIX_PROXIMITY_DB: usize = 2;
+
 pub struct PrefixWordPairsProximityDocids<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
     index: &'i Index,
@@ -32,30 +35,11 @@ impl<'t, 'u, 'i> PrefixWordPairsProximityDocids<'t, 'u, 'i> {
         Self {
             wtxn,
             index,
-            max_proximity: 4,
-            max_prefix_length: 2,
+            max_proximity: MAX_PROXIMITY_FOR_PREFIX_PROXIMITY_DB,
+            max_prefix_length: MAX_LENGTH_FOR_PREFIX_PROXIMITY_DB,
             chunk_compression_type,
             chunk_compression_level,
         }
-    }
-    /// Set the maximum proximity required to make a prefix be part of the words prefixes
-    /// database. If two words are too far from the threshold the associated documents will
-    /// not be part of the prefix database.
-    ///
-    /// Default value is 4. This value must be lower or equal than 7 and will be clamped
-    /// to this bound otherwise.
-    pub fn max_proximity(&mut self, value: u8) -> &mut Self {
-        self.max_proximity = value.max(7);
-        self
-    }
-    /// Set the maximum length the prefix of a word pair is allowed to have to be part of the words
-    /// prefixes database. If the prefix length is higher than the threshold, the associated documents
-    /// will not be part of the prefix database.
-    ///
-    /// Default value is 2.
-    pub fn max_prefix_length(&mut self, value: usize) -> &mut Self {
-        self.max_prefix_length = value;
-        self
     }
 
     #[logging_timer::time("WordPrefixPairProximityDocids::{}")]

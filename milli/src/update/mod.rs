@@ -7,7 +7,10 @@ pub use self::index_documents::{
     DocumentAdditionResult, DocumentId, IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod,
 };
 pub use self::indexer_config::IndexerConfig;
-pub use self::prefix_word_pairs::PrefixWordPairsProximityDocids;
+pub use self::prefix_word_pairs::{
+    PrefixWordPairsProximityDocids, MAX_LENGTH_FOR_PREFIX_PROXIMITY_DB,
+    MAX_PROXIMITY_FOR_PREFIX_PROXIMITY_DB,
+};
 pub use self::settings::{Setting, Settings};
 pub use self::update_step::UpdateIndexingStep;
 pub use self::word_prefix_docids::WordPrefixDocids;
