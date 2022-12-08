@@ -23,6 +23,7 @@ pub use self::matches::{
 use self::query_tree::QueryTreeBuilder;
 use crate::error::UserError;
 use crate::search::criteria::r#final::{Final, FinalResult};
+use crate::search::criteria::InitialCandidates;
 use crate::{AscDesc, Criterion, DocumentId, Index, Member, Result};
 
 // Building these factories is not free.
@@ -235,11 +236,11 @@ impl<'a> Search<'a> {
         mut criteria: Final,
     ) -> Result<SearchResult> {
         let mut offset = self.offset;
-        let mut initial_candidates = RoaringBitmap::new();
+        let mut initial_candidates = InitialCandidates::Estimated(RoaringBitmap::new());
         let mut excluded_candidates = self.index.soft_deleted_documents_ids(self.rtxn)?;
         let mut documents_ids = Vec::new();
 
-        while let Some(FinalResult { candidates, bucket_candidates, .. }) =
+        while let Some(FinalResult { candidates, initial_candidates: ic, .. }) =
             criteria.next(&excluded_candidates)?
         {
             debug!("Number of candidates found {}", candidates.len());
@@ -247,7 +248,7 @@ impl<'a> Search<'a> {
             let excluded = take(&mut excluded_candidates);
             let mut candidates = distinct.distinct(candidates, excluded);
 
-            initial_candidates |= bucket_candidates;
+            initial_candidates |= ic;
 
             if offset != 0 {
                 let discarded = candidates.by_ref().take(offset).count();
@@ -265,9 +266,11 @@ impl<'a> Search<'a> {
             }
         }
 
+        initial_candidates.map_inplace(|c| c - excluded_candidates);
+
         Ok(SearchResult {
             matching_words,
-            candidates: initial_candidates - excluded_candidates,
+            candidates: initial_candidates.into_inner(),
             documents_ids,
         })
     }

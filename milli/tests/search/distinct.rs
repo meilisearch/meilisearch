@@ -8,7 +8,7 @@ use Criterion::*;
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
 
 macro_rules! test_distinct {
-    ($func:ident, $distinct:ident, $criteria:expr, $n_res:expr) => {
+    ($func:ident, $distinct:ident, $exhaustive:ident, $limit:expr, $criteria:expr, $n_res:expr) => {
         #[test]
         fn $func() {
             let criteria = $criteria;
@@ -26,7 +26,8 @@ macro_rules! test_distinct {
 
             let mut search = Search::new(&rtxn, &index);
             search.query(search::TEST_QUERY);
-            search.limit(EXTERNAL_DOCUMENTS_IDS.len());
+            search.limit($limit);
+            search.exhaustive_number_hits($exhaustive);
             search.authorize_typos(true);
             search.terms_matching_strategy(TermsMatchingStrategy::default());
 
@@ -46,6 +47,7 @@ macro_rules! test_distinct {
                             Some(d.id)
                         }
                     })
+                    .take($limit)
                     .collect();
 
             let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
@@ -55,24 +57,115 @@ macro_rules! test_distinct {
 }
 
 test_distinct!(
+    exhaustive_distinct_string_default_criteria,
+    tag,
+    true,
+    1,
+    vec![Words, Typo, Proximity, Attribute, Exactness],
+    3
+);
+test_distinct!(
+    exhaustive_distinct_number_default_criteria,
+    asc_desc_rank,
+    true,
+    1,
+    vec![Words, Typo, Proximity, Attribute, Exactness],
+    7
+);
+
+test_distinct!(
     distinct_string_default_criteria,
     tag,
+    false,
+    EXTERNAL_DOCUMENTS_IDS.len(),
     vec![Words, Typo, Proximity, Attribute, Exactness],
     3
 );
 test_distinct!(
     distinct_number_default_criteria,
     asc_desc_rank,
+    false,
+    EXTERNAL_DOCUMENTS_IDS.len(),
     vec![Words, Typo, Proximity, Attribute, Exactness],
     7
 );
-test_distinct!(distinct_string_criterion_words, tag, vec![Words], 3);
-test_distinct!(distinct_number_criterion_words, asc_desc_rank, vec![Words], 7);
-test_distinct!(distinct_string_criterion_words_typo, tag, vec![Words, Typo], 3);
-test_distinct!(distinct_number_criterion_words_typo, asc_desc_rank, vec![Words, Typo], 7);
-test_distinct!(distinct_string_criterion_words_proximity, tag, vec![Words, Proximity], 3);
-test_distinct!(distinct_number_criterion_words_proximity, asc_desc_rank, vec![Words, Proximity], 7);
-test_distinct!(distinct_string_criterion_words_attribute, tag, vec![Words, Attribute], 3);
-test_distinct!(distinct_number_criterion_words_attribute, asc_desc_rank, vec![Words, Attribute], 7);
-test_distinct!(distinct_string_criterion_words_exactness, tag, vec![Words, Exactness], 3);
-test_distinct!(distinct_number_criterion_words_exactness, asc_desc_rank, vec![Words, Exactness], 7);
+test_distinct!(
+    distinct_string_criterion_words,
+    tag,
+    false,
+    EXTERNAL_DOCUMENTS_IDS.len(),
+    vec![Words],
+    3
+);
+test_distinct!(
+    distinct_number_criterion_words,
+    asc_desc_rank,
+    false,
+    EXTERNAL_DOCUMENTS_IDS.len(),
+    vec![Words],
+    7
+);
+test_distinct!(
+    distinct_string_criterion_words_typo,
+    tag,
+    false,
+    EXTERNAL_DOCUMENTS_IDS.len(),
+    vec![Words, Typo],
+    3
+);
+test_distinct!(
+    distinct_number_criterion_words_typo,
+    asc_desc_rank,
+    false,
+    EXTERNAL_DOCUMENTS_IDS.len(),
+    vec![Words, Typo],
+    7
+);
+test_distinct!(
+    distinct_string_criterion_words_proximity,
+    tag,
+    false,
+    EXTERNAL_DOCUMENTS_IDS.len(),
+    vec![Words, Proximity],
+    3
+);
+test_distinct!(
+    distinct_number_criterion_words_proximity,
+    asc_desc_rank,
+    false,
+    EXTERNAL_DOCUMENTS_IDS.len(),
+    vec![Words, Proximity],
+    7
+);
+test_distinct!(
+    distinct_string_criterion_words_attribute,
+    tag,
+    false,
+    EXTERNAL_DOCUMENTS_IDS.len(),
+    vec![Words, Attribute],
+    3
+);
+test_distinct!(
+    distinct_number_criterion_words_attribute,
+    asc_desc_rank,
+    false,
+    EXTERNAL_DOCUMENTS_IDS.len(),
+    vec![Words, Attribute],
+    7
+);
+test_distinct!(
+    distinct_string_criterion_words_exactness,
+    tag,
+    false,
+    EXTERNAL_DOCUMENTS_IDS.len(),
+    vec![Words, Exactness],
+    3
+);
+test_distinct!(
+    distinct_number_criterion_words_exactness,
+    asc_desc_rank,
+    false,
+    EXTERNAL_DOCUMENTS_IDS.len(),
+    vec![Words, Exactness],
+    7
+);

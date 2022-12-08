@@ -9,7 +9,7 @@ use super::{Criterion, CriterionParameters, CriterionResult};
 use crate::facet::FacetType;
 use crate::heed_codec::facet::FacetGroupKeyCodec;
 use crate::heed_codec::ByteSliceRefCodec;
-use crate::search::criteria::{resolve_query_tree, CriteriaBuilder};
+use crate::search::criteria::{resolve_query_tree, CriteriaBuilder, InitialCandidates};
 use crate::search::facet::{ascending_facet_sort, descending_facet_sort};
 use crate::search::query_tree::Operation;
 use crate::{FieldId, Index, Result};
@@ -27,7 +27,7 @@ pub struct AscDesc<'t> {
     query_tree: Option<Operation>,
     candidates: Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>,
     allowed_candidates: RoaringBitmap,
-    bucket_candidates: RoaringBitmap,
+    initial_candidates: InitialCandidates,
     faceted_candidates: RoaringBitmap,
     parent: Box<dyn Criterion + 't>,
 }
@@ -81,7 +81,7 @@ impl<'t> AscDesc<'t> {
             candidates: Box::new(std::iter::empty()),
             allowed_candidates: RoaringBitmap::new(),
             faceted_candidates,
-            bucket_candidates: RoaringBitmap::new(),
+            initial_candidates: InitialCandidates::Estimated(RoaringBitmap::new()),
             parent,
         })
     }
@@ -106,7 +106,7 @@ impl<'t> Criterion for AscDesc<'t> {
                         query_tree: self.query_tree.clone(),
                         candidates: Some(take(&mut self.allowed_candidates)),
                         filtered_candidates: None,
-                        bucket_candidates: Some(take(&mut self.bucket_candidates)),
+                        initial_candidates: Some(self.initial_candidates.take()),
                     }));
                 }
                 None => match self.parent.next(params)? {
@@ -114,7 +114,7 @@ impl<'t> Criterion for AscDesc<'t> {
                         query_tree,
                         candidates,
                         filtered_candidates,
-                        bucket_candidates,
+                        initial_candidates,
                     }) => {
                         self.query_tree = query_tree;
                         let mut candidates = match (&self.query_tree, candidates) {
@@ -130,9 +130,11 @@ impl<'t> Criterion for AscDesc<'t> {
                             candidates &= filtered_candidates;
                         }
 
-                        match bucket_candidates {
-                            Some(bucket_candidates) => self.bucket_candidates |= bucket_candidates,
-                            None => self.bucket_candidates |= &candidates,
+                        match initial_candidates {
+                            Some(initial_candidates) => {
+                                self.initial_candidates |= initial_candidates
+                            }
+                            None => self.initial_candidates.map_inplace(|c| c | &candidates),
                         }
 
                         if candidates.is_empty() {
@@ -160,7 +162,7 @@ impl<'t> Criterion for AscDesc<'t> {
                         query_tree: self.query_tree.clone(),
                         candidates: Some(candidates),
                         filtered_candidates: None,
-                        bucket_candidates: Some(take(&mut self.bucket_candidates)),
+                        initial_candidates: Some(self.initial_candidates.take()),
                     }));
                 }
             }

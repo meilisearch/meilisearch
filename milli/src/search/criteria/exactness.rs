@@ -8,6 +8,7 @@ use roaring::RoaringBitmap;
 
 use crate::search::criteria::{
     resolve_phrase, resolve_query_tree, Context, Criterion, CriterionParameters, CriterionResult,
+    InitialCandidates,
 };
 use crate::search::query_tree::{Operation, PrimitiveQueryPart};
 use crate::{absolute_from_relative_position, FieldId, Result};
@@ -16,7 +17,7 @@ pub struct Exactness<'t> {
     ctx: &'t dyn Context<'t>,
     query_tree: Option<Operation>,
     state: Option<State>,
-    bucket_candidates: RoaringBitmap,
+    initial_candidates: InitialCandidates,
     parent: Box<dyn Criterion + 't>,
     query: Vec<ExactQueryPart>,
 }
@@ -36,7 +37,7 @@ impl<'t> Exactness<'t> {
             ctx,
             query_tree: None,
             state: None,
-            bucket_candidates: RoaringBitmap::new(),
+            initial_candidates: InitialCandidates::Estimated(RoaringBitmap::new()),
             parent,
             query,
         })
@@ -68,7 +69,7 @@ impl<'t> Criterion for Exactness<'t> {
                         query_tree: self.query_tree.clone(),
                         candidates: Some(candidates),
                         filtered_candidates: None,
-                        bucket_candidates: Some(take(&mut self.bucket_candidates)),
+                        initial_candidates: Some(self.initial_candidates.take()),
                     }));
                 }
                 None => match self.parent.next(params)? {
@@ -76,7 +77,7 @@ impl<'t> Criterion for Exactness<'t> {
                         query_tree: Some(query_tree),
                         candidates,
                         filtered_candidates,
-                        bucket_candidates,
+                        initial_candidates,
                     }) => {
                         let mut candidates = match candidates {
                             Some(candidates) => candidates,
@@ -90,9 +91,11 @@ impl<'t> Criterion for Exactness<'t> {
                             candidates &= filtered_candidates;
                         }
 
-                        match bucket_candidates {
-                            Some(bucket_candidates) => self.bucket_candidates |= bucket_candidates,
-                            None => self.bucket_candidates |= &candidates,
+                        match initial_candidates {
+                            Some(initial_candidates) => {
+                                self.initial_candidates |= initial_candidates
+                            }
+                            None => self.initial_candidates.map_inplace(|c| c | &candidates),
                         }
 
                         self.state = Some(State::new(candidates));
@@ -102,13 +105,13 @@ impl<'t> Criterion for Exactness<'t> {
                         query_tree: None,
                         candidates,
                         filtered_candidates,
-                        bucket_candidates,
+                        initial_candidates,
                     }) => {
                         return Ok(Some(CriterionResult {
                             query_tree: None,
                             candidates,
                             filtered_candidates,
-                            bucket_candidates,
+                            initial_candidates,
                         }));
                     }
                     None => return Ok(None),
