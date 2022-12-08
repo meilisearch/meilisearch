@@ -61,7 +61,7 @@ You may also want to check out [Meilisearch 101](https://docs.meilisearch.com/le
 
 ## ☁️ Meilisearch cloud
 
-Join the closed beta for Meilisearch cloud by filling out [this form](https://meilisearch.typeform.com/to/VI2cI2rv).
+Let us manage your infrastructure so you can focus on integrating a great search experience. Try [Meilisearch Cloud](https://meilisearch.com/pricing) today.
 
 ## 🧰 SDKs & integration tools
 
