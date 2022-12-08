@@ -1,6 +1,6 @@
 mod data;
 
-use meilisearch_http::Opt;
+use meilisearch::Opt;
 use serde_json::json;
 
 use self::data::GetDump;

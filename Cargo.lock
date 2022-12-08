@@ -2266,25 +2266,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "meilisearch-auth"
-version = "1.0.0"
-dependencies = [
- "enum-iterator",
- "hmac",
- "meilisearch-types",
- "rand",
- "roaring",
- "serde",
- "serde_json",
- "sha2",
- "thiserror",
- "time",
- "uuid 1.2.1",
-]
-
-[[package]]
-name = "meilisearch-http"
-version = "1.0.0"
+name = "meilisearch"
+version = "0.30.1"
 dependencies = [
  "actix-cors",
  "actix-http",
@@ -2363,6 +2346,23 @@ dependencies = [
  "walkdir",
  "yaup",
  "zip",
+]
+
+[[package]]
+name = "meilisearch-auth"
+version = "1.0.0"
+dependencies = [
+ "enum-iterator",
+ "hmac",
+ "meilisearch-types",
+ "rand",
+ "roaring",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "time",
+ "uuid 1.2.1",
 ]
 
 [[package]]
