@@ -5,8 +5,8 @@ use actix_web::http::StatusCode;
 use actix_web::test;
 use actix_web::test::TestRequest;
 use index_scheduler::IndexScheduler;
-use meilisearch_auth::AuthController;
 use meilisearch::{analytics, create_app, Opt};
+use meilisearch_auth::AuthController;
 use serde_json::Value;
 
 use crate::common::encoder::Encoder;
