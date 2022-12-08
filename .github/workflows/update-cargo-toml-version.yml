@@ -45,3 +45,4 @@ jobs:
             --body '⚠️ This PR is automatically generated. Check the new version is the expected one before merging.' \
             --label 'skip changelog' \
             --milestone $NEW_VERSION
+            --base $NEW_BRANCH
