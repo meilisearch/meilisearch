@@ -3,7 +3,7 @@ name: Update latest git tag
 on:
   workflow_dispatch:
   release:
-    types: [released]
+    types: [published]
 
 jobs:
   check-version:
