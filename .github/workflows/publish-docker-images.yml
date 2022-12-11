@@ -26,15 +26,20 @@ jobs:
       # - a `vX.Y` (without patch version) Docker tag
       # - a `latest` Docker tag
       # For any other tag pushed, this is not considered stable.
-      - name: Define if stable release
+      - name: Define if stable and latest release
         id: check-tag-format
+        env:
+          # To avoid request limit with the .github/scripts/is-latest-release.sh script
+          GITHUB_PATH: ${{ secrets.MEILI_BOT_GH_PAT }}
         run: |
           escaped_tag=$(printf "%q" ${{ github.ref_name }})
+          echo "latest=false" >> $GITHUB_OUTPUT
 
           if [[ ${{ github.event_name }} != 'push' ]]; then
             echo "stable=false" >> $GITHUB_OUTPUT
           elif [[ $escaped_tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "stable=true" >> $GITHUB_OUTPUT
+            echo "latest=$(sh .github/scripts/is-latest-release.sh)" >> $GITHUB_OUTPUT
           else
             echo "stable=false" >> $GITHUB_OUTPUT
           fi
@@ -76,7 +81,7 @@ jobs:
             type=ref,event=tag
             type=raw,value=nightly,enable=${{ github.event_name != 'push' }}
             type=semver,pattern=v{{major}}.{{minor}},enable=${{ steps.check-tag-format.outputs.stable == 'true' }}
-            type=raw,value=latest,enable=${{ steps.check-tag-format.outputs.stable == 'true' }}
+            type=raw,value=latest,enable=${{ steps.check-tag-format.outputs.stable == 'true' && steps.check-tag-format.outputs.latest == 'true' }}
 
       - name: Build and push
         uses: docker/build-push-action@v3
