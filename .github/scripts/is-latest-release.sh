@@ -3,7 +3,7 @@
 # Used in our CIs to publish the latest Docker image.
 
 # Checks if the current tag ($GITHUB_REF) corresponds to the latest release tag on GitHub
-# Returns "true" or "false" (as a string) as a string.
+# Returns "true" or "false" (as a string).
 
 GITHUB_API='https://api.github.com/repos/meilisearch/meilisearch/releases'
 PNAME='meilisearch'
