@@ -1,5 +1,3 @@
-use crate::error::{Code, ErrorCode};
-use crate::internal_error;
 use either::Either;
 use memmap2::MmapOptions;
 use milli::documents::{DocumentsBatchBuilder, Error};
@@ -12,6 +10,9 @@ use std::fmt::{self, Debug, Display};
 use std::fs::File;
 use std::io::{self, Seek, Write};
 use std::marker::PhantomData;
+
+use crate::error::{Code, ErrorCode};
+use crate::internal_error;
 
 type Result<T> = std::result::Result<T, DocumentFormatError>;
 
