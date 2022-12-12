@@ -1,7 +1,5 @@
 ---
 on:
-  schedule:
-    - cron: '0 4 * * *' # Every day at 4:00am
   push:
     # Will run for every tag pushed except `latest`
     # When the `latest` git tag is created with this [CI](../latest-git-tag.yml)
@@ -9,6 +7,10 @@ on:
     # The `latest` Docker image push is already done in this CI when releasing a stable version of Meilisearch.
     tags-ignore:
       - latest
+  # Both `schedule` and `workflow_dispatch` build the nightly tag
+  schedule:
+    - cron: '0 23 * * *' # Every day at 11:00pm
+  workflow_dispatch:
 
 name: Publish tagged images to Docker Hub
 
@@ -18,25 +20,33 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      # Check if the tag has the v<nmumber>.<number>.<number> format. If yes, it means we are publishing an official release.
+      # If we are running a cron or manual job ('schedule' or 'workflow_dispatch' event), it means we are publishing the `nightly` tag, so not considered stable.
+      # If we have pushed a tag, and the tag has the v<nmumber>.<number>.<number> format, it means we are publishing an official release, so considered stable.
       # In this situation, we need to set `output.stable` to create/update the following tags (additionally to the `vX.Y.Z` Docker tag):
       # - a `vX.Y` (without patch version) Docker tag
       # - a `latest` Docker tag
-      - name: Check tag format
-        if: github.event_name != 'schedule'
+      # For any other tag pushed, this is not considered stable.
+      - name: Define if stable and latest release
         id: check-tag-format
+        env:
+          # To avoid request limit with the .github/scripts/is-latest-release.sh script
+          GITHUB_PATH: ${{ secrets.MEILI_BOT_GH_PAT }}
         run: |
           escaped_tag=$(printf "%q" ${{ github.ref_name }})
+          echo "latest=false" >> $GITHUB_OUTPUT
 
-          if [[ $escaped_tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if [[ ${{ github.event_name }} != 'push' ]]; then
+            echo "stable=false" >> $GITHUB_OUTPUT
+          elif [[ $escaped_tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "stable=true" >> $GITHUB_OUTPUT
+            echo "latest=$(sh .github/scripts/is-latest-release.sh)" >> $GITHUB_OUTPUT
           else
             echo "stable=false" >> $GITHUB_OUTPUT
           fi
 
-      # Check only the validity of the tag for official releases (not for pre-releases or other tags)
+      # Check only the validity of the tag for stable releases (not for pre-releases or other tags)
       - name: Check release validity
-        if: github.event_name != 'schedule' && steps.check-tag-format.outputs.stable == 'true'
+        if: steps.check-tag-format.outputs.stable == 'true'
         run: bash .github/scripts/check-release.sh
 
       - name: Set build-args for Docker buildx
@@ -54,7 +64,6 @@ jobs:
         uses: docker/setup-buildx-action@v2
 
       - name: Login to Docker Hub
-        if: github.event_name != 'schedule'
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -65,19 +74,18 @@ jobs:
         uses: docker/metadata-action@v4
         with:
           images: getmeili/meilisearch
-          # The latest and `vX.Y` tags are only pushed for the official Meilisearch releases
-          # See https://github.com/docker/metadata-action#latest-tag
+          # Prevent `latest` to be updated for each new tag pushed.
+          # We need latest and `vX.Y` tags to only be pushed for the stable Meilisearch releases.
           flavor: latest=false
           tags: |
             type=ref,event=tag
+            type=raw,value=nightly,enable=${{ github.event_name != 'push' }}
             type=semver,pattern=v{{major}}.{{minor}},enable=${{ steps.check-tag-format.outputs.stable == 'true' }}
-            type=raw,value=latest,enable=${{ steps.check-tag-format.outputs.stable == 'true' }}
+            type=raw,value=latest,enable=${{ steps.check-tag-format.outputs.stable == 'true' && steps.check-tag-format.outputs.latest == 'true' }}
 
       - name: Build and push
         uses: docker/build-push-action@v3
         with:
-          # We do not push tags for the cron jobs, this is only for test purposes
-          push: ${{ github.event_name != 'schedule' }}
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           build-args: |
@@ -86,7 +94,8 @@ jobs:
 
       # /!\ Don't touch this without checking with Cloud team
       - name: Send CI information to Cloud team
-        if: github.event_name != 'schedule'
+        # Do not send if nightly build (i.e. 'schedule' or 'workflow_dispatch' event)
+        if: github.event_name == 'push'
         uses: peter-evans/repository-dispatch@v2
         with:
           token: ${{ secrets.MEILI_BOT_GH_PAT }}
