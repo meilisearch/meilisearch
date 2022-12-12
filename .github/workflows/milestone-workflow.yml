@@ -31,8 +31,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       is-patch: ${{ steps.check-patch.outputs.is-patch }}
-    env:
-      MILESTONE_VERSION: ${{ github.event.milestone.title }}
     steps:
       - uses: actions/checkout@v3
       - name: Check if this release is a patch release only

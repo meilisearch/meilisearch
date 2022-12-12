@@ -3,12 +3,8 @@ authors = ["Quentin de Quelen <quentin@dequelen.me>", "Clément Renault <clement
 description = "Meilisearch HTTP server"
 edition = "2021"
 license = "MIT"
-name = "meilisearch-http"
-version = "0.30.1"
-
-[[bin]]
 name = "meilisearch"
-path = "src/main.rs"
+version = "0.30.1"
 
 [dependencies]
 actix-cors = "0.6.3"

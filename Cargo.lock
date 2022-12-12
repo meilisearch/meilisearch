@@ -1101,7 +1101,7 @@ dependencies = [
 
 [[package]]
 name = "dump"
-version = "0.30.1"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "big_s",
@@ -1310,7 +1310,7 @@ dependencies = [
 
 [[package]]
 name = "file-store"
-version = "0.30.1"
+version = "1.0.0"
 dependencies = [
  "faux",
  "tempfile",
@@ -1332,8 +1332,8 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "0.37.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.1#e1b2113cd9a467410841a254286e5e25961af43e"
+version = "0.37.2"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.2#1582b96119fedad39c726a6d4aeda0f53e868a3b"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1351,8 +1351,8 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "0.37.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.1#e1b2113cd9a467410841a254286e5e25961af43e"
+version = "0.37.2"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.2#1582b96119fedad39c726a6d4aeda0f53e868a3b"
 dependencies = [
  "serde_json",
 ]
@@ -1767,7 +1767,7 @@ dependencies = [
 
 [[package]]
 name = "index-scheduler"
-version = "0.30.1"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "big_s",
@@ -1898,8 +1898,8 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "0.37.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.1#e1b2113cd9a467410841a254286e5e25961af43e"
+version = "0.37.2"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.2#1582b96119fedad39c726a6d4aeda0f53e868a3b"
 dependencies = [
  "serde_json",
 ]
@@ -2156,7 +2156,7 @@ checksum = "d4d2456c373231a208ad294c33dc5bff30051eafd954cd4caae83a712b12854d"
 [[package]]
 name = "lmdb-rkv-sys"
 version = "0.15.1"
-source = "git+https://github.com/meilisearch/lmdb-rs#5592bf5a812905cf0c633404ef8f8f4057112c65"
+source = "git+https://github.com/meilisearch/lmdb-rs#0144fb2bac524cdc2897d7750681ed3fff2dc3ac"
 dependencies = [
  "cc",
  "libc",
@@ -2258,7 +2258,7 @@ checksum = "490cc448043f947bae3cbee9c203358d62dbee0db12107a74be5c30ccfd09771"
 
 [[package]]
 name = "meili-snap"
-version = "0.30.1"
+version = "1.0.0"
 dependencies = [
  "insta",
  "md5",
@@ -2266,24 +2266,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "meilisearch-auth"
-version = "0.30.1"
-dependencies = [
- "enum-iterator",
- "hmac",
- "meilisearch-types",
- "rand",
- "roaring",
- "serde",
- "serde_json",
- "sha2",
- "thiserror",
- "time",
- "uuid 1.2.1",
-]
-
-[[package]]
-name = "meilisearch-http"
+name = "meilisearch"
 version = "0.30.1"
 dependencies = [
  "actix-cors",
@@ -2366,8 +2349,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "meilisearch-auth"
+version = "1.0.0"
+dependencies = [
+ "enum-iterator",
+ "hmac",
+ "meilisearch-types",
+ "rand",
+ "roaring",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "time",
+ "uuid 1.2.1",
+]
+
+[[package]]
 name = "meilisearch-types"
-version = "0.30.1"
+version = "1.0.0"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -2418,8 +2418,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.37.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.1#e1b2113cd9a467410841a254286e5e25961af43e"
+version = "0.37.2"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.2#1582b96119fedad39c726a6d4aeda0f53e868a3b"
 dependencies = [
  "bimap",
  "bincode",
@@ -2759,7 +2759,7 @@ checksum = "478c572c3d73181ff3c2539045f6eb99e5491218eae919370993b890cdbdd98e"
 
 [[package]]
 name = "permissive-json-pointer"
-version = "0.30.1"
+version = "1.0.0"
 dependencies = [
  "big_s",
  "serde_json",

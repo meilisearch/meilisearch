@@ -10,9 +10,9 @@ pub use server::{default_settings, Server};
 #[macro_export]
 macro_rules! test_post_get_search {
     ($server:expr, $query:expr, |$response:ident, $status_code:ident | $block:expr) => {
-        let post_query: meilisearch_http::routes::search::SearchQueryPost =
+        let post_query: meilisearch::routes::search::SearchQueryPost =
             serde_json::from_str(&$query.clone().to_string()).unwrap();
-        let get_query: meilisearch_http::routes::search::SearchQuery = post_query.into();
+        let get_query: meilisearch::routes::search::SearchQuery = post_query.into();
         let get_query = ::serde_url_params::to_string(&get_query).unwrap();
         let ($response, $status_code) = $server.search_get(&get_query).await;
         let _ = ::std::panic::catch_unwind(|| $block)
