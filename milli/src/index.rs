@@ -2166,17 +2166,25 @@ pub(crate) mod tests {
         db_snap!(index, external_documents_ids, 2, @r###"
         soft:
         hard:
-        3                        0
         4                        3
         5                        2
         "###);
         db_snap!(index, soft_deleted_documents_ids, 2, @"[]");
 
-        // boom
         index
             .add_documents(documents!([
                 { "primary_key": "3" },
             ]))
             .unwrap();
+
+        db_snap!(index, documents_ids, @"[0, 2, 3, ]");
+        db_snap!(index, external_documents_ids, 2, @r###"
+        soft:
+        hard:
+        3                        0
+        4                        3
+        5                        2
+        "###);
+        db_snap!(index, soft_deleted_documents_ids, 2, @"[]");
     }
 }
