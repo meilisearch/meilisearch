@@ -13,7 +13,7 @@ use milli::update::UpdateIndexingStep::{
     ComputeIdsAndMergeDocuments, IndexDocuments, MergeDataIntoFinalDatabase, RemapDocumentAddition,
 };
 use milli::update::{self, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig};
-use milli::{heed, Index, Object};
+use milli::{heed, CriterionImplementationStrategy, Index, Object};
 use structopt::StructOpt;
 
 #[global_allocator]
@@ -441,7 +441,7 @@ impl Search {
         if let Some(limit) = limit {
             search.limit(*limit);
         }
-
+        search.criterion_implementation_strategy(CriterionImplementationStrategy::OnlyIterative);
         let result = search.execute()?;
 
         let fields_ids_map = index.fields_ids_map(&txn)?;

@@ -12,6 +12,7 @@ use crate::heed_codec::ByteSliceRefCodec;
 use crate::search::criteria::{resolve_query_tree, CriteriaBuilder, InitialCandidates};
 use crate::search::facet::{ascending_facet_sort, descending_facet_sort};
 use crate::search::query_tree::Operation;
+use crate::search::CriterionImplementationStrategy;
 use crate::{FieldId, Index, Result};
 
 /// Threshold on the number of candidates that will make
@@ -29,6 +30,7 @@ pub struct AscDesc<'t> {
     allowed_candidates: RoaringBitmap,
     initial_candidates: InitialCandidates,
     faceted_candidates: RoaringBitmap,
+    implementation_strategy: CriterionImplementationStrategy,
     parent: Box<dyn Criterion + 't>,
 }
 
@@ -38,8 +40,9 @@ impl<'t> AscDesc<'t> {
         rtxn: &'t heed::RoTxn,
         parent: Box<dyn Criterion + 't>,
         field_name: String,
+        implementation_strategy: CriterionImplementationStrategy,
     ) -> Result<Self> {
-        Self::new(index, rtxn, parent, field_name, true)
+        Self::new(index, rtxn, parent, field_name, true, implementation_strategy)
     }
 
     pub fn desc(
@@ -47,8 +50,9 @@ impl<'t> AscDesc<'t> {
         rtxn: &'t heed::RoTxn,
         parent: Box<dyn Criterion + 't>,
         field_name: String,
+        implementation_strategy: CriterionImplementationStrategy,
     ) -> Result<Self> {
-        Self::new(index, rtxn, parent, field_name, false)
+        Self::new(index, rtxn, parent, field_name, false, implementation_strategy)
     }
 
     fn new(
@@ -57,6 +61,7 @@ impl<'t> AscDesc<'t> {
         parent: Box<dyn Criterion + 't>,
         field_name: String,
         is_ascending: bool,
+        implementation_strategy: CriterionImplementationStrategy,
     ) -> Result<Self> {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         let field_id = fields_ids_map.id(&field_name);
@@ -82,6 +87,7 @@ impl<'t> AscDesc<'t> {
             allowed_candidates: RoaringBitmap::new(),
             faceted_candidates,
             initial_candidates: InitialCandidates::Estimated(RoaringBitmap::new()),
+            implementation_strategy,
             parent,
         })
     }
@@ -149,6 +155,7 @@ impl<'t> Criterion for AscDesc<'t> {
                                 field_id,
                                 self.is_ascending,
                                 candidates & &self.faceted_candidates,
+                                self.implementation_strategy,
                             )?,
                             None => Box::new(std::iter::empty()),
                         };
@@ -170,6 +177,51 @@ impl<'t> Criterion for AscDesc<'t> {
     }
 }
 
+fn facet_ordered_iterative<'t>(
+    index: &'t Index,
+    rtxn: &'t heed::RoTxn,
+    field_id: FieldId,
+    is_ascending: bool,
+    candidates: RoaringBitmap,
+) -> Result<Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>> {
+    let number_iter = iterative_facet_number_ordered_iter(
+        index,
+        rtxn,
+        field_id,
+        is_ascending,
+        candidates.clone(),
+    )?;
+    let string_iter =
+        iterative_facet_string_ordered_iter(index, rtxn, field_id, is_ascending, candidates)?;
+    Ok(Box::new(number_iter.chain(string_iter).map(Ok)) as Box<dyn Iterator<Item = _>>)
+}
+
+fn facet_ordered_set_based<'t>(
+    index: &'t Index,
+    rtxn: &'t heed::RoTxn,
+    field_id: FieldId,
+    is_ascending: bool,
+    candidates: RoaringBitmap,
+) -> Result<Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>> {
+    let make_iter = if is_ascending { ascending_facet_sort } else { descending_facet_sort };
+
+    let number_iter = make_iter(
+        rtxn,
+        index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
+        field_id,
+        candidates.clone(),
+    )?;
+
+    let string_iter = make_iter(
+        rtxn,
+        index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
+        field_id,
+        candidates,
+    )?;
+
+    Ok(Box::new(number_iter.chain(string_iter)))
+}
+
 /// Returns an iterator over groups of the given candidates in ascending or descending order.
 ///
 /// It will either use an iterative or a recursive method on the whole facet database depending
@@ -180,36 +232,22 @@ fn facet_ordered<'t>(
     field_id: FieldId,
     is_ascending: bool,
     candidates: RoaringBitmap,
+    implementation_strategy: CriterionImplementationStrategy,
 ) -> Result<Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>> {
-    if candidates.len() <= CANDIDATES_THRESHOLD {
-        let number_iter = iterative_facet_number_ordered_iter(
-            index,
-            rtxn,
-            field_id,
-            is_ascending,
-            candidates.clone(),
-        )?;
-        let string_iter =
-            iterative_facet_string_ordered_iter(index, rtxn, field_id, is_ascending, candidates)?;
-        Ok(Box::new(number_iter.chain(string_iter).map(Ok)) as Box<dyn Iterator<Item = _>>)
-    } else {
-        let make_iter = if is_ascending { ascending_facet_sort } else { descending_facet_sort };
-
-        let number_iter = make_iter(
-            rtxn,
-            index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
-            field_id,
-            candidates.clone(),
-        )?;
-
-        let string_iter = make_iter(
-            rtxn,
-            index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
-            field_id,
-            candidates,
-        )?;
-
-        Ok(Box::new(number_iter.chain(string_iter)))
+    match implementation_strategy {
+        CriterionImplementationStrategy::OnlyIterative => {
+            facet_ordered_iterative(index, rtxn, field_id, is_ascending, candidates)
+        }
+        CriterionImplementationStrategy::OnlySetBased => {
+            facet_ordered_set_based(index, rtxn, field_id, is_ascending, candidates)
+        }
+        CriterionImplementationStrategy::Dynamic => {
+            if candidates.len() <= CANDIDATES_THRESHOLD {
+                facet_ordered_iterative(index, rtxn, field_id, is_ascending, candidates)
+            } else {
+                facet_ordered_set_based(index, rtxn, field_id, is_ascending, candidates)
+            }
+        }
     }
 }
 
