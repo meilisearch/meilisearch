@@ -1,6 +1,6 @@
 [package]
 name = "meilisearch-types"
-version = "0.30.1"
+version = "1.0.0"
 authors = ["marin <postma.marin@protonmail.com>"]
 edition = "2021"
 

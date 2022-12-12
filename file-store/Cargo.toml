@@ -1,6 +1,6 @@
 [package]
 name = "file-store"
-version = "0.30.1"
+version = "1.0.0"
 edition = "2021"
 
 [dependencies]
