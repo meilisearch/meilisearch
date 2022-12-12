@@ -141,7 +141,12 @@ impl<'t> Criterion for Typo<'t> {
                         filtered_candidates,
                         initial_candidates,
                     }) => {
-                        self.initial_candidates = initial_candidates;
+                        self.initial_candidates =
+                            match (self.initial_candidates.take(), initial_candidates) {
+                                (Some(self_bc), Some(parent_bc)) => Some(self_bc | parent_bc),
+                                (self_bc, parent_bc) => self_bc.or(parent_bc),
+                            };
+
                         let candidates = match candidates.or(filtered_candidates) {
                             Some(candidates) => {
                                 Candidates::Allowed(candidates - params.excluded_candidates)
