@@ -4,10 +4,8 @@ use std::fs::File;
 use std::io::{self, Seek, Write};
 use std::marker::PhantomData;
 
-use either::Either;
 use memmap2::MmapOptions;
 use milli::documents::{DocumentsBatchBuilder, Error};
-use milli::Object;
 use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use serde_json::error::Category;
@@ -125,7 +123,7 @@ pub fn read_ndjson(file: &File, writer: impl Write + Seek) -> Result<usize> {
     read_json_inner(file, writer, PayloadType::Ndjson)
 }
 
-/// Reads JSON from temporary file  and write an obkv batch to writer.
+/// Reads JSON from temporary file and write an obkv batch to writer.
 fn read_json_inner(
     file: &File,
     writer: impl Write + Seek,
@@ -135,35 +133,26 @@ fn read_json_inner(
     let mmap = unsafe { MmapOptions::new().map(file)? };
     let mut deserializer = serde_json::Deserializer::from_slice(&mmap);
 
-    match array_each(&mut deserializer, |obj: Object| builder.append_json_object(&obj)) {
-        // The json data has been successfully deserialised and does not need to be processed again.
-        // the data has been successfully transferred to the "update_file" during the deserialisation process.
-        // count ==0 means an empty array
+    match array_each(&mut deserializer, |obj| builder.append_json_object(&obj)) {
+        // The json data has been deserialized and does not need to be processed again.
+        // The data has been transferred to the writer during the deserialization process.
         Ok(Ok(count)) => {
             if count == 0 {
                 return Ok(count as usize);
             }
         }
         Ok(Err(e)) => return Err(DocumentFormatError::Internal(Box::new(e))),
-        // Prefer deserialization as a json array. Failure to do deserialisation using the traditional method.
-        Err(_e) => {
-            #[derive(Deserialize, Debug)]
-            #[serde(transparent)]
-            struct ArrayOrSingleObject {
-                #[serde(with = "either::serde_untagged")]
-                inner: Either<Vec<Object>, Object>,
-            }
-
-            let content: ArrayOrSingleObject = serde_json::from_reader(file)
+        Err(_) => {
+            // If we cannot deserialize the content as an array of object then
+            // we try to deserialize it as a single JSON object.
+            let object = serde_json::from_reader(file)
                 .map_err(Error::Json)
                 .map_err(|e| (payload_type, e))?;
 
-            for object in content.inner.map_right(|o| vec![o]).into_inner() {
-                builder
-                    .append_json_object(&object)
-                    .map_err(Into::into)
-                    .map_err(DocumentFormatError::Internal)?;
-            }
+            builder
+                .append_json_object(&object)
+                .map_err(Into::into)
+                .map_err(DocumentFormatError::Internal)?;
         }
     }
 
@@ -173,12 +162,12 @@ fn read_json_inner(
     Ok(count as usize)
 }
 
-/**
- * The actual handling of the deserialization process in the serde avoids storing the deserialized object in memory.
- * Reference:
- * https://serde.rs/stream-array.html
- * https://github.com/serde-rs/json/issues/160
- */
+/// The actual handling of the deserialization process in serde
+/// avoids storing the deserialized object in memory.
+///
+/// ## References
+/// <https://serde.rs/stream-array.html>
+/// <https://github.com/serde-rs/json/issues/160>
 fn array_each<'de, D, T, F>(deserializer: D, f: F) -> std::result::Result<io::Result<u64>, D::Error>
 where
     D: Deserializer<'de>,
