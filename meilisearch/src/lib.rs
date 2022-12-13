@@ -132,10 +132,10 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Auth
                 "database already exists at {:?}, try to delete it or rename it",
                 opt.db_path.canonicalize().unwrap_or_else(|_| opt.db_path.to_owned())
             )
-        // the snapshot doesn't exists and we can't ignore it => throw an error
+        // the snapshot doesn't exist and we can't ignore it => throw an error
         } else if !snapshot_path_exists && !opt.ignore_missing_snapshot {
             bail!("snapshot doesn't exist at {}", snapshot_path.display())
-        // the snapshot and the db exists, and we can ignore the snapshot because of the ignore_snapshot_if_db_exists flag
+        // the snapshot and the db exist, and we can ignore the snapshot because of the ignore_snapshot_if_db_exists flag
         } else {
             start_or_import_existing_database(opt, empty_db)?
         }
@@ -158,10 +158,11 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Auth
                 "database already exists at {:?}, try to delete it or rename it",
                 opt.db_path.canonicalize().unwrap_or_else(|_| opt.db_path.to_owned())
             )
-        // the dump doesn't exists and we can't ignore it => throw an error
+        // the dump doesn't exist and we can't ignore it => throw an error
         } else if !src_path_exists && !opt.ignore_missing_dump {
             bail!("dump doesn't exist at {:?}", path)
-        // the dump and the db exists and we can ignore the dump because of the ignore_dump_if_db_exists flag
+        // the dump and the db exist and we can ignore the dump because of the ignore_dump_if_db_exists flag
+        // or, the dump is missing but we can ignore that because of the ignore_missing_dump flag
         } else {
             start_or_import_existing_database(opt, empty_db)?
         }
