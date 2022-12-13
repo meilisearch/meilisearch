@@ -136,11 +136,7 @@ fn read_json_inner(
     match array_each(&mut deserializer, |obj| builder.append_json_object(&obj)) {
         // The json data has been deserialized and does not need to be processed again.
         // The data has been transferred to the writer during the deserialization process.
-        Ok(Ok(count)) => {
-            if count == 0 {
-                return Ok(count as usize);
-            }
-        }
+        Ok(Ok(_)) => (),
         Ok(Err(e)) => return Err(DocumentFormatError::Internal(Box::new(e))),
         Err(_) => {
             // If we cannot deserialize the content as an array of object then
