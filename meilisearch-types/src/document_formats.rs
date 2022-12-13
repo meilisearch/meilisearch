@@ -4,8 +4,10 @@ use std::fs::File;
 use std::io::{self, Seek, Write};
 use std::marker::PhantomData;
 
+use either::Either;
 use memmap2::MmapOptions;
 use milli::documents::{DocumentsBatchBuilder, Error};
+use milli::Object;
 use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use serde_json::error::Category;
@@ -123,7 +125,7 @@ pub fn read_ndjson(file: &File, writer: impl Write + Seek) -> Result<u64> {
     read_json_inner(file, writer, PayloadType::Ndjson)
 }
 
-/// Reads JSON from temporary file and write an obkv batch to writer.
+/// Reads JSON from temporary file  and write an obkv batch to writer.
 fn read_json_inner(
     file: &File,
     writer: impl Write + Seek,
@@ -138,17 +140,26 @@ fn read_json_inner(
         // The data has been transferred to the writer during the deserialization process.
         Ok(Ok(_)) => (),
         Ok(Err(e)) => return Err(DocumentFormatError::Internal(Box::new(e))),
-        Err(_) => {
-            // If we cannot deserialize the content as an array of object then
-            // we try to deserialize it as a single JSON object.
-            let object = serde_json::from_reader(file)
+        Err(_e) => {
+            // If we cannot deserialize the content as an array of object then we try
+            // to deserialize it with the original method to keep correct error messages.
+            #[derive(Deserialize, Debug)]
+            #[serde(transparent)]
+            struct ArrayOrSingleObject {
+                #[serde(with = "either::serde_untagged")]
+                inner: Either<Vec<Object>, Object>,
+            }
+
+            let content: ArrayOrSingleObject = serde_json::from_reader(file)
                 .map_err(Error::Json)
                 .map_err(|e| (payload_type, e))?;
 
-            builder
-                .append_json_object(&object)
-                .map_err(Into::into)
-                .map_err(DocumentFormatError::Internal)?;
+            for object in content.inner.map_right(|o| vec![o]).into_inner() {
+                builder
+                    .append_json_object(&object)
+                    .map_err(Into::into)
+                    .map_err(DocumentFormatError::Internal)?;
+            }
         }
     }
 
