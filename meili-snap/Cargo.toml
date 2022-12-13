@@ -1,6 +1,6 @@
 [package]
 name = "meili-snap"
-version = "0.30.2"
+version = "0.30.3"
 edition = "2021"
 
 [dependencies]
