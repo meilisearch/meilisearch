@@ -1,6 +1,6 @@
 [package]
 name = "index-scheduler"
-version = "0.30.2"
+version = "0.30.3"
 edition = "2021"
 
 [dependencies]
