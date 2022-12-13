@@ -29,10 +29,22 @@ pub struct DeleteDocuments<'t, 'u, 'i> {
     disable_soft_deletion: bool,
 }
 
+/// Result of a [`DeleteDocuments`] operation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DocumentDeletionResult {
     pub deleted_documents: u64,
     pub remaining_documents: u64,
+}
+
+/// Result of a [`DeleteDocuments`] operation, used for internal purposes.
+///
+/// It is a superset of the [`DocumentDeletionResult`] structure, giving
+/// additional information about the algorithm used to delete the documents.
+#[derive(Debug)]
+pub(crate) struct DetailedDocumentDeletionResult {
+    pub deleted_documents: u64,
+    pub remaining_documents: u64,
+    pub soft_deletion_used: bool,
 }
 
 impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
@@ -68,8 +80,16 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         self.delete_document(docid);
         Some(docid)
     }
+    pub fn execute(self) -> Result<DocumentDeletionResult> {
+        let DetailedDocumentDeletionResult {
+            deleted_documents,
+            remaining_documents,
+            soft_deletion_used: _,
+        } = self.execute_inner()?;
 
-    pub fn execute(mut self) -> Result<DocumentDeletionResult> {
+        Ok(DocumentDeletionResult { deleted_documents, remaining_documents })
+    }
+    pub(crate) fn execute_inner(mut self) -> Result<DetailedDocumentDeletionResult> {
         self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
         // We retrieve the current documents ids that are in the database.
@@ -83,7 +103,11 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             if !soft_deleted_docids.is_empty() {
                 ClearDocuments::new(self.wtxn, self.index).execute()?;
             }
-            return Ok(DocumentDeletionResult { deleted_documents: 0, remaining_documents: 0 });
+            return Ok(DetailedDocumentDeletionResult {
+                deleted_documents: 0,
+                remaining_documents: 0,
+                soft_deletion_used: false,
+            });
         }
 
         // We remove the documents ids that we want to delete
@@ -95,9 +119,10 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         // to delete is exactly the number of documents in the database.
         if current_documents_ids_len == self.to_delete_docids.len() {
             let remaining_documents = ClearDocuments::new(self.wtxn, self.index).execute()?;
-            return Ok(DocumentDeletionResult {
+            return Ok(DetailedDocumentDeletionResult {
                 deleted_documents: current_documents_ids_len,
                 remaining_documents,
+                soft_deletion_used: false,
             });
         }
 
@@ -159,9 +184,10 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             && percentage_used_by_soft_deleted_documents < 10
         {
             self.index.put_soft_deleted_documents_ids(self.wtxn, &soft_deleted_docids)?;
-            return Ok(DocumentDeletionResult {
+            return Ok(DetailedDocumentDeletionResult {
                 deleted_documents: self.to_delete_docids.len(),
                 remaining_documents: documents_ids.len(),
+                soft_deletion_used: true,
             });
         }
 
@@ -488,9 +514,10 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             &self.to_delete_docids,
         )?;
 
-        Ok(DocumentDeletionResult {
+        Ok(DetailedDocumentDeletionResult {
             deleted_documents: self.to_delete_docids.len(),
             remaining_documents: documents_ids.len(),
+            soft_deletion_used: false,
         })
     }
 }

@@ -2111,4 +2111,80 @@ pub(crate) mod tests {
         "###);
         db_snap!(index, soft_deleted_documents_ids, 6, @"[]");
     }
+
+    #[test]
+    fn bug_3021_third() {
+        // https://github.com/meilisearch/meilisearch/issues/3021
+        let mut index = TempIndex::new();
+        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
+
+        index
+            .update_settings(|settings| {
+                settings.set_primary_key("primary_key".to_owned());
+            })
+            .unwrap();
+
+        index
+            .add_documents(documents!([
+                { "primary_key": 3 },
+                { "primary_key": 4 },
+                { "primary_key": 5 }
+            ]))
+            .unwrap();
+
+        db_snap!(index, documents_ids, @"[0, 1, 2, ]");
+        db_snap!(index, external_documents_ids, 1, @r###"
+        soft:
+        hard:
+        3                        0
+        4                        1
+        5                        2
+        "###);
+        db_snap!(index, soft_deleted_documents_ids, 1, @"[]");
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
+        delete.delete_external_id("3");
+        delete.execute().unwrap();
+        wtxn.commit().unwrap();
+
+        db_snap!(index, documents_ids, @"[1, 2, ]");
+        db_snap!(index, external_documents_ids, 2, @r###"
+        soft:
+        hard:
+        3                        0
+        4                        1
+        5                        2
+        "###);
+        db_snap!(index, soft_deleted_documents_ids, 2, @"[0, ]");
+
+        index.index_documents_config.disable_soft_deletion = true;
+
+        index.add_documents(documents!([{ "primary_key": "4", "a": 2 }])).unwrap();
+
+        db_snap!(index, documents_ids, @"[2, 3, ]");
+        db_snap!(index, external_documents_ids, 2, @r###"
+        soft:
+        hard:
+        4                        3
+        5                        2
+        "###);
+        db_snap!(index, soft_deleted_documents_ids, 2, @"[]");
+
+        index
+            .add_documents(documents!([
+                { "primary_key": "3" },
+            ]))
+            .unwrap();
+
+        db_snap!(index, documents_ids, @"[0, 2, 3, ]");
+        db_snap!(index, external_documents_ids, 2, @r###"
+        soft:
+        hard:
+        3                        0
+        4                        3
+        5                        2
+        "###);
+        db_snap!(index, soft_deleted_documents_ids, 2, @"[]");
+    }
 }

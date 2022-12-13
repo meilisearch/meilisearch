@@ -210,7 +210,7 @@ where
             primary_key,
             fields_ids_map,
             field_distribution,
-            external_documents_ids,
+            mut external_documents_ids,
             new_documents_ids,
             replaced_documents_ids,
             documents_count,
@@ -335,8 +335,11 @@ where
             deletion_builder.disable_soft_deletion(self.config.disable_soft_deletion);
             debug!("documents to delete {:?}", replaced_documents_ids);
             deletion_builder.delete_documents(&replaced_documents_ids);
-            let deleted_documents_count = deletion_builder.execute()?;
-            debug!("{} documents actually deleted", deleted_documents_count.deleted_documents);
+            let deleted_documents_result = deletion_builder.execute_inner()?;
+            debug!("{} documents actually deleted", deleted_documents_result.deleted_documents);
+            if !deleted_documents_result.soft_deletion_used {
+                external_documents_ids.delete_soft_deleted_documents_ids_from_fsts()?;
+            }
         }
 
         let index_documents_ids = self.index.documents_ids(self.wtxn)?;
