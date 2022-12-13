@@ -72,6 +72,14 @@ test_distinct!(
     vec![Words, Typo, Proximity, Attribute, Exactness],
     7
 );
+test_distinct!(
+    exhaustive_distinct_number_weird_order_criteria,
+    asc_desc_rank,
+    true,
+    0,
+    vec![Desc(S("attribute_rank")), Desc(S("exactness_rank")), Exactness, Typo],
+    7
+);
 
 test_distinct!(
     distinct_string_default_criteria,
