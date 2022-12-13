@@ -3,8 +3,8 @@ name: Milestone's workflow
 # /!\ No git flow are handled here
 
 # For each Milestone created (not opened!), and if the release is NOT a patch release (only the patch changed)
-# - the roadmap issue is created, see https://github.com/meilisearch/core-team/blob/main/issue-templates/roadmap-issue.md
-# - the changelog issue is created, see https://github.com/meilisearch/core-team/blob/main/issue-templates/changelog-issue.md
+# - the roadmap issue is created, see https://github.com/meilisearch/engine-team/blob/main/issue-templates/roadmap-issue.md
+# - the changelog issue is created, see https://github.com/meilisearch/engine-team/blob/main/issue-templates/changelog-issue.md
 
 # For each Milestone closed
 # - the `release_version` label is created
@@ -59,7 +59,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Download the issue template
-        run: curl -s https://raw.githubusercontent.com/meilisearch/core-team/main/issue-templates/roadmap-issue.md > $ISSUE_TEMPLATE
+        run: curl -s https://raw.githubusercontent.com/meilisearch/engine-team/main/issue-templates/roadmap-issue.md > $ISSUE_TEMPLATE
       - name: Replace all empty occurrences in the templates
         run: |
           # Replace all <<version>> occurrences
@@ -92,7 +92,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Download the issue template
-        run: curl -s https://raw.githubusercontent.com/meilisearch/core-team/main/issue-templates/changelog-issue.md > $ISSUE_TEMPLATE
+        run: curl -s https://raw.githubusercontent.com/meilisearch/engine-team/main/issue-templates/changelog-issue.md > $ISSUE_TEMPLATE
       - name: Replace all empty occurrences in the templates
         run: |
           # Replace all <<version>> occurrences
