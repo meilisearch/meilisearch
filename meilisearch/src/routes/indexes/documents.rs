@@ -26,7 +26,7 @@ use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
 
 use crate::analytics::{Analytics, DocumentDeletionKind};
 use crate::error::MeilisearchHttpError;
-use crate::error::PayloadError::ReceivePayloadErr;
+use crate::error::PayloadError::ReceivePayload;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::payload::Payload;
@@ -232,33 +232,29 @@ async fn document_addition(
     let (uuid, mut update_file) = index_scheduler.create_update_file()?;
 
     let temp_file = match tempfile() {
-        Ok(temp_file) => temp_file,
-        Err(e) => {
-            return Err(MeilisearchHttpError::Payload(ReceivePayloadErr(Box::new(e))));
-        }
+        Ok(file) => file,
+        Err(e) => return Err(MeilisearchHttpError::Payload(ReceivePayload(Box::new(e)))),
     };
 
     let async_file = File::from_std(temp_file);
     let mut buffer = BufWriter::new(async_file);
 
     let mut buffer_write_size: usize = 0;
-    while let Some(bytes) = body.next().await {
-        let byte = &bytes?;
+    while let Some(result) = body.next().await {
+        let byte = result?;
 
         if byte.is_empty() && buffer_write_size == 0 {
             return Err(MeilisearchHttpError::MissingPayload(format));
         }
 
-        match buffer.write_all(byte).await {
+        match buffer.write_all(&byte).await {
             Ok(()) => buffer_write_size += 1,
-            Err(e) => {
-                return Err(MeilisearchHttpError::Payload(ReceivePayloadErr(Box::new(e))));
-            }
-        };
+            Err(e) => return Err(MeilisearchHttpError::Payload(ReceivePayload(Box::new(e)))),
+        }
     }
 
     if let Err(e) = buffer.flush().await {
-        return Err(MeilisearchHttpError::Payload(ReceivePayloadErr(Box::new(e))));
+        return Err(MeilisearchHttpError::Payload(ReceivePayload(Box::new(e))));
     }
 
     if buffer_write_size == 0 {
@@ -266,26 +262,24 @@ async fn document_addition(
     }
 
     if let Err(e) = buffer.seek(std::io::SeekFrom::Start(0)).await {
-        return Err(MeilisearchHttpError::Payload(ReceivePayloadErr(Box::new(e))));
-    };
+        return Err(MeilisearchHttpError::Payload(ReceivePayload(Box::new(e))));
+    }
 
     let read_file = buffer.into_inner().into_std().await;
-
-    let documents_count =
-        tokio::task::spawn_blocking(move || -> Result<_, MeilisearchHttpError> {
-            let documents_count = match format {
-                PayloadType::Json => read_json(&read_file, update_file.as_file_mut())?,
-                PayloadType::Csv => read_csv(&read_file, update_file.as_file_mut())?,
-                PayloadType::Ndjson => read_ndjson(&read_file, update_file.as_file_mut())?,
-            };
-            // we NEED to persist the file here because we moved the `udpate_file` in another task.
-            update_file.persist()?;
-            Ok(documents_count)
-        })
-        .await;
+    let documents_count = tokio::task::spawn_blocking(move || {
+        let documents_count = match format {
+            PayloadType::Json => read_json(&read_file, update_file.as_file_mut())?,
+            PayloadType::Csv => read_csv(&read_file, update_file.as_file_mut())?,
+            PayloadType::Ndjson => read_ndjson(&read_file, update_file.as_file_mut())?,
+        };
+        // we NEED to persist the file here because we moved the `udpate_file` in another task.
+        update_file.persist()?;
+        Ok(documents_count)
+    })
+    .await;
 
     let documents_count = match documents_count {
-        Ok(Ok(documents_count)) => documents_count as u64,
+        Ok(Ok(documents_count)) => documents_count,
         // in this case the file has not possibly be persisted.
         Ok(Err(e)) => return Err(e),
         Err(e) => {

@@ -103,7 +103,7 @@ impl ErrorCode for DocumentFormatError {
 internal_error!(DocumentFormatError: io::Error);
 
 /// Reads CSV from input and write an obkv batch to writer.
-pub fn read_csv(file: &File, writer: impl Write + Seek) -> Result<usize> {
+pub fn read_csv(file: &File, writer: impl Write + Seek) -> Result<u64> {
     let mut builder = DocumentsBatchBuilder::new(writer);
     let mmap = unsafe { MmapOptions::new().map(file)? };
     let csv = csv::Reader::from_reader(mmap.as_ref());
@@ -112,16 +112,16 @@ pub fn read_csv(file: &File, writer: impl Write + Seek) -> Result<usize> {
     let count = builder.documents_count();
     let _ = builder.into_inner().map_err(Into::into).map_err(DocumentFormatError::Internal)?;
 
-    Ok(count as usize)
+    Ok(count as u64)
 }
 
 /// Reads JSON from temporary file  and write an obkv batch to writer.
-pub fn read_json(file: &File, writer: impl Write + Seek) -> Result<usize> {
+pub fn read_json(file: &File, writer: impl Write + Seek) -> Result<u64> {
     read_json_inner(file, writer, PayloadType::Json)
 }
 
 /// Reads JSON from temporary file  and write an obkv batch to writer.
-pub fn read_ndjson(file: &File, writer: impl Write + Seek) -> Result<usize> {
+pub fn read_ndjson(file: &File, writer: impl Write + Seek) -> Result<u64> {
     read_json_inner(file, writer, PayloadType::Ndjson)
 }
 
@@ -130,23 +130,19 @@ fn read_json_inner(
     file: &File,
     writer: impl Write + Seek,
     payload_type: PayloadType,
-) -> Result<usize> {
+) -> Result<u64> {
     let mut builder = DocumentsBatchBuilder::new(writer);
     let mmap = unsafe { MmapOptions::new().map(file)? };
     let mut deserializer = serde_json::Deserializer::from_slice(&mmap);
 
-    match array_each(&mut deserializer, |obj: Object| builder.append_json_object(&obj)) {
-        // The json data has been successfully deserialised and does not need to be processed again.
-        // the data has been successfully transferred to the "update_file" during the deserialisation process.
-        // count ==0 means an empty array
-        Ok(Ok(count)) => {
-            if count == 0 {
-                return Ok(count as usize);
-            }
-        }
+    match array_each(&mut deserializer, |obj| builder.append_json_object(&obj)) {
+        // The json data has been deserialized and does not need to be processed again.
+        // The data has been transferred to the writer during the deserialization process.
+        Ok(Ok(_)) => (),
         Ok(Err(e)) => return Err(DocumentFormatError::Internal(Box::new(e))),
-        // Prefer deserialization as a json array. Failure to do deserialisation using the traditional method.
         Err(_e) => {
+            // If we cannot deserialize the content as an array of object then we try
+            // to deserialize it with the original method to keep correct error messages.
             #[derive(Deserialize, Debug)]
             #[serde(transparent)]
             struct ArrayOrSingleObject {
@@ -170,15 +166,15 @@ fn read_json_inner(
     let count = builder.documents_count();
     let _ = builder.into_inner().map_err(Into::into).map_err(DocumentFormatError::Internal)?;
 
-    Ok(count as usize)
+    Ok(count as u64)
 }
 
-/**
- * The actual handling of the deserialization process in the serde avoids storing the deserialized object in memory.
- * Reference:
- * https://serde.rs/stream-array.html
- * https://github.com/serde-rs/json/issues/160
- */
+/// The actual handling of the deserialization process in serde
+/// avoids storing the deserialized object in memory.
+///
+/// ## References
+/// <https://serde.rs/stream-array.html>
+/// <https://github.com/serde-rs/json/issues/160>
 fn array_each<'de, D, T, F>(deserializer: D, f: F) -> std::result::Result<io::Result<u64>, D::Error>
 where
     D: Deserializer<'de>,
