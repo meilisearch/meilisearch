@@ -170,7 +170,9 @@ impl<'a> FilterCondition<'a> {
 }
 
 /// remove OPTIONAL whitespaces before AND after the provided parser.
-fn ws<'a, O>(inner: impl FnMut(Span<'a>) -> IResult<O>) -> impl FnMut(Span<'a>) -> IResult<O> {
+fn ws<'a, O>(
+    inner: impl FnMut(Span<'a>) -> IResult<'a, O>,
+) -> impl FnMut(Span<'a>) -> IResult<'a, O> {
     delimited(multispace0, inner, multispace0)
 }
 
