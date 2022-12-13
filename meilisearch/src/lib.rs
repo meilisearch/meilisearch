@@ -120,7 +120,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Auth
         // the db is empty and the snapshot exists, import it
         if empty_db && snapshot_path_exists {
             match compression::from_tar_gz(snapshot_path, &opt.db_path) {
-                Ok(()) => start_new_database(opt, OnFailure::RemoveDb)?,
+                Ok(()) => open_or_create_database_unchecked(opt, OnFailure::RemoveDb)?,
                 Err(e) => {
                     std::fs::remove_dir_all(&opt.db_path)?;
                     return Err(e);
@@ -137,14 +137,14 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Auth
             bail!("snapshot doesn't exist at {}", snapshot_path.display())
         // the snapshot and the db exist, and we can ignore the snapshot because of the ignore_snapshot_if_db_exists flag
         } else {
-            start_or_import_existing_database(opt, empty_db)?
+            open_or_create_database(opt, empty_db)?
         }
     } else if let Some(ref path) = opt.import_dump {
         let src_path_exists = path.exists();
         // the db is empty and the dump exists, import it
         if empty_db && src_path_exists {
             let (mut index_scheduler, mut auth_controller) =
-                start_new_database(opt, OnFailure::RemoveDb)?;
+                open_or_create_database_unchecked(opt, OnFailure::RemoveDb)?;
             match import_dump(&opt.db_path, path, &mut index_scheduler, &mut auth_controller) {
                 Ok(()) => (index_scheduler, auth_controller),
                 Err(e) => {
@@ -164,10 +164,10 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Auth
         // the dump and the db exist and we can ignore the dump because of the ignore_dump_if_db_exists flag
         // or, the dump is missing but we can ignore that because of the ignore_missing_dump flag
         } else {
-            start_or_import_existing_database(opt, empty_db)?
+            open_or_create_database(opt, empty_db)?
         }
     } else {
-        start_or_import_existing_database(opt, empty_db)?
+        open_or_create_database(opt, empty_db)?
     };
 
     // We create a loop in a thread that registers snapshotCreation tasks
@@ -189,7 +189,8 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Auth
     Ok((index_scheduler, auth_controller))
 }
 
-fn start_new_database(
+/// Try to start the IndexScheduler and AuthController without checking the VERSION file or anything.
+fn open_or_create_database_unchecked(
     opt: &Opt,
     on_failure: OnFailure,
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
@@ -227,7 +228,8 @@ fn start_new_database(
     }
 }
 
-fn start_or_import_existing_database(
+/// Ensure you're in a valid state and open the IndexScheduler + AuthController for you.
+fn open_or_create_database(
     opt: &Opt,
     empty_db: bool,
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
@@ -235,7 +237,7 @@ fn start_or_import_existing_database(
         check_version_file(&opt.db_path)?;
     }
 
-    start_new_database(opt, OnFailure::KeepDb)
+    open_or_create_database_unchecked(opt, OnFailure::KeepDb)
 }
 
 fn import_dump(
