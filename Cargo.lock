@@ -2378,6 +2378,7 @@ dependencies = [
  "fst",
  "insta",
  "meili-snap",
+ "memmap2",
  "milli",
  "proptest",
  "proptest-derive",
