@@ -9,7 +9,7 @@
   <a href="https://blog.meilisearch.com">Blog</a> |
   <a href="https://docs.meilisearch.com">Documentation</a> |
   <a href="https://docs.meilisearch.com/faq/">FAQ</a> |
-  <a href="https://slack.meilisearch.com">Slack</a>
+  <a href="https://discord.meilisearch.com">Discord</a>
 </h4>
 
 <p align="center">
