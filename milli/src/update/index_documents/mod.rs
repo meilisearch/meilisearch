@@ -337,7 +337,7 @@ where
             deletion_builder.delete_documents(&replaced_documents_ids);
             let deleted_documents_result = deletion_builder.execute_inner()?;
             debug!("{} documents actually deleted", deleted_documents_result.deleted_documents);
-            if !deleted_documents_result.used_soft_deletion {
+            if !deleted_documents_result.soft_deletion_used {
                 external_documents_ids.delete_soft_deleted_documents_ids_from_fsts()?;
             }
         }

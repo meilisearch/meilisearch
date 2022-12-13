@@ -29,16 +29,22 @@ pub struct DeleteDocuments<'t, 'u, 'i> {
     disable_soft_deletion: bool,
 }
 
+/// Result of a [`DeleteDocuments`] operation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DocumentDeletionResult {
     pub deleted_documents: u64,
     pub remaining_documents: u64,
 }
+
+/// Result of a [`DeleteDocuments`] operation, used for internal purposes.
+///
+/// It is a superset of the [`DocumentDeletionResult`] structure, giving
+/// additional information about the algorithm used to delete the documents.
 #[derive(Debug)]
-pub struct DetailedDocumentDeletionResult {
+pub(crate) struct DetailedDocumentDeletionResult {
     pub deleted_documents: u64,
     pub remaining_documents: u64,
-    pub used_soft_deletion: bool,
+    pub soft_deletion_used: bool,
 }
 
 impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
@@ -78,7 +84,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         let DetailedDocumentDeletionResult {
             deleted_documents,
             remaining_documents,
-            used_soft_deletion: _,
+            soft_deletion_used: _,
         } = self.execute_inner()?;
 
         Ok(DocumentDeletionResult { deleted_documents, remaining_documents })
@@ -100,7 +106,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             return Ok(DetailedDocumentDeletionResult {
                 deleted_documents: 0,
                 remaining_documents: 0,
-                used_soft_deletion: false,
+                soft_deletion_used: false,
             });
         }
 
@@ -116,7 +122,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             return Ok(DetailedDocumentDeletionResult {
                 deleted_documents: current_documents_ids_len,
                 remaining_documents,
-                used_soft_deletion: false,
+                soft_deletion_used: false,
             });
         }
 
@@ -181,7 +187,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             return Ok(DetailedDocumentDeletionResult {
                 deleted_documents: self.to_delete_docids.len(),
                 remaining_documents: documents_ids.len(),
-                used_soft_deletion: true,
+                soft_deletion_used: true,
             });
         }
 
@@ -511,7 +517,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         Ok(DetailedDocumentDeletionResult {
             deleted_documents: self.to_delete_docids.len(),
             remaining_documents: documents_ids.len(),
-            used_soft_deletion: false,
+            soft_deletion_used: false,
         })
     }
 }
