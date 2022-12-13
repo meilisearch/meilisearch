@@ -95,8 +95,8 @@ pub enum PayloadError {
     MalformedPayload(serde_json::error::Error),
     #[error("A json payload is missing.")]
     MissingPayload,
-    #[error("Error while writing the playload to disk: `{0}`.")]
-    ReceivePayloadErr(Box<dyn std::error::Error + Send + Sync + 'static>),
+    #[error("Error while receiving the playload. `{0}`.")]
+    ReceivePayload(Box<dyn std::error::Error + Send + Sync + 'static>),
 }
 
 impl ErrorCode for PayloadError {
@@ -128,7 +128,7 @@ impl ErrorCode for PayloadError {
             },
             PayloadError::MissingPayload => Code::MissingPayload,
             PayloadError::MalformedPayload(_) => Code::MalformedPayload,
-            PayloadError::ReceivePayloadErr(_) => Code::Internal,
+            PayloadError::ReceivePayload(_) => Code::Internal,
         }
     }
 }
