@@ -143,8 +143,8 @@ impl<'t> Criterion for Typo<'t> {
                     }) => {
                         self.initial_candidates =
                             match (self.initial_candidates.take(), initial_candidates) {
-                                (Some(self_bc), Some(parent_bc)) => Some(self_bc | parent_bc),
-                                (self_bc, parent_bc) => self_bc.or(parent_bc),
+                                (Some(self_ic), Some(parent_ic)) => Some(self_ic | parent_ic),
+                                (self_ic, parent_ic) => self_ic.or(parent_ic),
                             };
 
                         let candidates = match candidates.or(filtered_candidates) {
