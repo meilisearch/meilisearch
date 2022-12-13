@@ -108,75 +108,43 @@ pub fn create_app(
     .wrap(middleware::NormalizePath::new(middleware::TrailingSlash::Trim))
 }
 
-// TODO: TAMO: Finish setting up things
+enum OnFailure {
+    RemoveDb,
+    KeepDb,
+}
+
 pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, AuthController)> {
-    // we don't want to create anything in the data.ms yet, thus we
-    // wrap our two builders in a closure that'll be executed later.
-    let auth_controller_builder = || AuthController::new(&opt.db_path, &opt.master_key);
-    let index_scheduler_builder = || {
-        IndexScheduler::new(IndexSchedulerOptions {
-            version_file_path: opt.db_path.join(VERSION_FILE_NAME),
-            auth_path: opt.db_path.join("auth"),
-            tasks_path: opt.db_path.join("tasks"),
-            update_file_path: opt.db_path.join("update_files"),
-            indexes_path: opt.db_path.join("indexes"),
-            snapshots_path: opt.snapshot_dir.clone(),
-            dumps_path: opt.dumps_dir.clone(),
-            task_db_size: opt.max_task_db_size.get_bytes() as usize,
-            index_size: opt.max_index_size.get_bytes() as usize,
-            indexer_config: (&opt.indexer_options).try_into()?,
-            autobatching_enabled: !opt.scheduler_options.disable_auto_batching,
-        })
-    };
-
-    enum OnFailure {
-        RemoveDb,
-        KeepDb,
-    }
-
-    let meilisearch_builder = |on_failure: OnFailure| -> anyhow::Result<_> {
-        // if anything wrong happens we delete the `data.ms` entirely.
-        match (
-            index_scheduler_builder().map_err(anyhow::Error::from),
-            auth_controller_builder().map_err(anyhow::Error::from),
-            create_version_file(&opt.db_path).map_err(anyhow::Error::from),
-        ) {
-            (Ok(i), Ok(a), Ok(())) => Ok((i, a)),
-            (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => {
-                if matches!(on_failure, OnFailure::RemoveDb) {
-                    std::fs::remove_dir_all(&opt.db_path)?;
-                }
-                Err(e)
-            }
-        }
-    };
-
     let empty_db = is_empty_db(&opt.db_path);
     let (index_scheduler, auth_controller) = if let Some(ref snapshot_path) = opt.import_snapshot {
         let snapshot_path_exists = snapshot_path.exists();
+        // the db is empty and the snapshot exists, import it
         if empty_db && snapshot_path_exists {
             match compression::from_tar_gz(snapshot_path, &opt.db_path) {
-                Ok(()) => meilisearch_builder(OnFailure::RemoveDb)?,
+                Ok(()) => start_new_database(opt, OnFailure::RemoveDb)?,
                 Err(e) => {
                     std::fs::remove_dir_all(&opt.db_path)?;
                     return Err(e);
                 }
             }
+        // the db already exists and we should not ignore the snapshot => throw an error
         } else if !empty_db && !opt.ignore_snapshot_if_db_exists {
             bail!(
                 "database already exists at {:?}, try to delete it or rename it",
                 opt.db_path.canonicalize().unwrap_or_else(|_| opt.db_path.to_owned())
             )
+        // the snapshot doesn't exists and we can't ignore it => throw an error
         } else if !snapshot_path_exists && !opt.ignore_missing_snapshot {
             bail!("snapshot doesn't exist at {}", snapshot_path.display())
+        // the snapshot and the db exists, and we can ignore the snapshot because of the ignore_snapshot_if_db_exists flag
         } else {
-            meilisearch_builder(OnFailure::RemoveDb)?
+            start_or_import_existing_database(opt, empty_db)?
         }
     } else if let Some(ref path) = opt.import_dump {
         let src_path_exists = path.exists();
+        // the db is empty and the dump exists, import it
         if empty_db && src_path_exists {
             let (mut index_scheduler, mut auth_controller) =
-                meilisearch_builder(OnFailure::RemoveDb)?;
+                start_new_database(opt, OnFailure::RemoveDb)?;
             match import_dump(&opt.db_path, path, &mut index_scheduler, &mut auth_controller) {
                 Ok(()) => (index_scheduler, auth_controller),
                 Err(e) => {
@@ -184,29 +152,21 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Auth
                     return Err(e);
                 }
             }
+        // the db already exists and we should not ignore the dump option => throw an error
         } else if !empty_db && !opt.ignore_dump_if_db_exists {
             bail!(
                 "database already exists at {:?}, try to delete it or rename it",
                 opt.db_path.canonicalize().unwrap_or_else(|_| opt.db_path.to_owned())
             )
+        // the dump doesn't exists and we can't ignore it => throw an error
         } else if !src_path_exists && !opt.ignore_missing_dump {
             bail!("dump doesn't exist at {:?}", path)
+        // the dump and the db exists and we can ignore the dump because of the ignore_dump_if_db_exists flag
         } else {
-            let (mut index_scheduler, mut auth_controller) =
-                meilisearch_builder(OnFailure::RemoveDb)?;
-            match import_dump(&opt.db_path, path, &mut index_scheduler, &mut auth_controller) {
-                Ok(()) => (index_scheduler, auth_controller),
-                Err(e) => {
-                    std::fs::remove_dir_all(&opt.db_path)?;
-                    return Err(e);
-                }
-            }
+            start_or_import_existing_database(opt, empty_db)?
         }
     } else {
-        if !empty_db {
-            check_version_file(&opt.db_path)?;
-        }
-        meilisearch_builder(OnFailure::KeepDb)?
+        start_or_import_existing_database(opt, empty_db)?
     };
 
     // We create a loop in a thread that registers snapshotCreation tasks
@@ -226,6 +186,55 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Auth
     }
 
     Ok((index_scheduler, auth_controller))
+}
+
+fn start_new_database(
+    opt: &Opt,
+    on_failure: OnFailure,
+) -> anyhow::Result<(IndexScheduler, AuthController)> {
+    // we don't want to create anything in the data.ms yet, thus we
+    // wrap our two builders in a closure that'll be executed later.
+    let auth_controller = AuthController::new(&opt.db_path, &opt.master_key);
+    let index_scheduler_builder = || -> anyhow::Result<_> {
+        Ok(IndexScheduler::new(IndexSchedulerOptions {
+            version_file_path: opt.db_path.join(VERSION_FILE_NAME),
+            auth_path: opt.db_path.join("auth"),
+            tasks_path: opt.db_path.join("tasks"),
+            update_file_path: opt.db_path.join("update_files"),
+            indexes_path: opt.db_path.join("indexes"),
+            snapshots_path: opt.snapshot_dir.clone(),
+            dumps_path: opt.dumps_dir.clone(),
+            task_db_size: opt.max_task_db_size.get_bytes() as usize,
+            index_size: opt.max_index_size.get_bytes() as usize,
+            indexer_config: (&opt.indexer_options).try_into()?,
+            autobatching_enabled: !opt.scheduler_options.disable_auto_batching,
+        })?)
+    };
+
+    match (
+        index_scheduler_builder(),
+        auth_controller.map_err(anyhow::Error::from),
+        create_version_file(&opt.db_path).map_err(anyhow::Error::from),
+    ) {
+        (Ok(i), Ok(a), Ok(())) => Ok((i, a)),
+        (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => {
+            if matches!(on_failure, OnFailure::RemoveDb) {
+                std::fs::remove_dir_all(&opt.db_path)?;
+            }
+            Err(e)
+        }
+    }
+}
+
+fn start_or_import_existing_database(
+    opt: &Opt,
+    empty_db: bool,
+) -> anyhow::Result<(IndexScheduler, AuthController)> {
+    if !empty_db {
+        check_version_file(&opt.db_path)?;
+    }
+
+    start_new_database(opt, OnFailure::KeepDb)
 }
 
 fn import_dump(
