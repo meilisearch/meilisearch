@@ -21,7 +21,7 @@ use serde_json::Value;
 use std::io::ErrorKind;
 use tempfile::tempfile;
 use tokio::fs::File;
-use tokio::io::{AsyncSeekExt, AsyncWriteExt};
+use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
 
 use crate::analytics::{Analytics, DocumentDeletionKind};
 use crate::error::MeilisearchHttpError;
@@ -237,7 +237,8 @@ async fn document_addition(
         }
     };
 
-    let mut buffer = File::from_std(temp_file);
+    let async_file = File::from_std(temp_file);
+    let mut buffer = BufWriter::new(async_file);
 
     let mut buffer_write_size: usize = 0;
     while let Some(bytes) = body.next().await {
@@ -267,7 +268,7 @@ async fn document_addition(
         return Err(MeilisearchHttpError::Payload(ReceivePayloadErr(Box::new(e))));
     };
 
-    let read_file = buffer.into_std().await;
+    let read_file = buffer.into_inner().into_std().await;
 
     let documents_count =
         tokio::task::spawn_blocking(move || -> Result<_, MeilisearchHttpError> {
