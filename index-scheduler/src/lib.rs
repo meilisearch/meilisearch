@@ -1190,7 +1190,7 @@ mod tests {
     pub fn read_json(
         bytes: &[u8],
         write: impl Write + Seek,
-    ) -> std::result::Result<usize, DocumentFormatError> {
+    ) -> std::result::Result<u64, DocumentFormatError> {
         let temp_file = NamedTempFile::new().unwrap();
         let mut buffer = BufWriter::new(temp_file.reopen().unwrap());
         buffer.write_all(bytes).unwrap();

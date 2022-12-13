@@ -101,7 +101,7 @@ impl ErrorCode for DocumentFormatError {
 internal_error!(DocumentFormatError: io::Error);
 
 /// Reads CSV from input and write an obkv batch to writer.
-pub fn read_csv(file: &File, writer: impl Write + Seek) -> Result<usize> {
+pub fn read_csv(file: &File, writer: impl Write + Seek) -> Result<u64> {
     let mut builder = DocumentsBatchBuilder::new(writer);
     let mmap = unsafe { MmapOptions::new().map(file)? };
     let csv = csv::Reader::from_reader(mmap.as_ref());
@@ -110,16 +110,16 @@ pub fn read_csv(file: &File, writer: impl Write + Seek) -> Result<usize> {
     let count = builder.documents_count();
     let _ = builder.into_inner().map_err(Into::into).map_err(DocumentFormatError::Internal)?;
 
-    Ok(count as usize)
+    Ok(count as u64)
 }
 
 /// Reads JSON from temporary file  and write an obkv batch to writer.
-pub fn read_json(file: &File, writer: impl Write + Seek) -> Result<usize> {
+pub fn read_json(file: &File, writer: impl Write + Seek) -> Result<u64> {
     read_json_inner(file, writer, PayloadType::Json)
 }
 
 /// Reads JSON from temporary file  and write an obkv batch to writer.
-pub fn read_ndjson(file: &File, writer: impl Write + Seek) -> Result<usize> {
+pub fn read_ndjson(file: &File, writer: impl Write + Seek) -> Result<u64> {
     read_json_inner(file, writer, PayloadType::Ndjson)
 }
 
@@ -128,7 +128,7 @@ fn read_json_inner(
     file: &File,
     writer: impl Write + Seek,
     payload_type: PayloadType,
-) -> Result<usize> {
+) -> Result<u64> {
     let mut builder = DocumentsBatchBuilder::new(writer);
     let mmap = unsafe { MmapOptions::new().map(file)? };
     let mut deserializer = serde_json::Deserializer::from_slice(&mmap);
@@ -155,7 +155,7 @@ fn read_json_inner(
     let count = builder.documents_count();
     let _ = builder.into_inner().map_err(Into::into).map_err(DocumentFormatError::Internal)?;
 
-    Ok(count as usize)
+    Ok(count as u64)
 }
 
 /// The actual handling of the deserialization process in serde
