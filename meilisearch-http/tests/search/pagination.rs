@@ -111,3 +111,56 @@ async fn hits_per_page_0_should_not_return_any_result() {
         })
         .await;
 }
+
+#[actix_rt::test]
+async fn ensure_placeholder_search_hit_count_valid() {
+    let server = Server::new().await;
+    let index = server.index("basic");
+
+    let documents = json!([
+        {
+            "title": "Shazam!",
+            "id": "287947",
+            "distinct": 1,
+        },
+        {
+            "title": "Captain Marvel",
+            "id": "299537",
+            "distinct": 4,
+        },
+        {
+            "title": "Escape Room",
+            "id": "522681",
+            "distinct": 2,
+        },
+        {
+            "title": "How to Train Your Dragon: The Hidden World",
+            "id": "166428",
+            "distinct": 3,
+        },
+        {
+            "title": "Glass",
+            "id": "450465",
+            "distinct": 3,
+        }
+    ]);
+    index.add_documents(documents, None).await;
+    index.wait_task(0).await;
+
+    let (_response, _code) = index
+        .update_settings(
+            json!({ "rankingRules": ["distinct:asc"], "distinctAttribute": "distinct"}),
+        )
+        .await;
+    index.wait_task(1).await;
+
+    for page in 0..=4 {
+        index
+            .search(json!({"page": page, "hitsPerPage": 1}), |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                assert_eq!(response["totalHits"], 4);
+                assert_eq!(response["totalPages"], 4);
+            })
+            .await;
+    }
+}
