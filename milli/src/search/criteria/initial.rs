@@ -39,19 +39,24 @@ impl<D: Distinct> Criterion for Initial<'_, D> {
         self.answer
             .take()
             .map(|mut answer| {
-                if self.exhaustive_number_hits && answer.query_tree.is_some() {
+                if self.exhaustive_number_hits {
                     // resolve the whole query tree to retrieve an exhaustive list of documents matching the query.
-                    // then remove the potential soft deleted documents.
-                    let mut candidates = resolve_query_tree(
-                        self.ctx,
-                        answer.query_tree.as_ref().unwrap(),
-                        params.wdcache,
-                    )? - params.excluded_candidates;
+                    let candidates = answer
+                        .query_tree
+                        .as_ref()
+                        .map(|query_tree| resolve_query_tree(self.ctx, query_tree, params.wdcache))
+                        .transpose()?;
 
-                    // Apply the filters on the documents retrieved with the query tree.
-                    if let Some(ref filtered_candidates) = answer.filtered_candidates {
-                        candidates &= filtered_candidates;
-                    }
+                    // then intersect the candidates with the potential filtered candidates.
+                    let mut candidates = match (candidates, answer.filtered_candidates.take()) {
+                        (Some(candidates), Some(filtered)) => candidates & filtered,
+                        (Some(candidates), None) => candidates,
+                        (None, Some(filtered)) => filtered,
+                        (None, None) => self.ctx.documents_ids()?,
+                    };
+
+                    // then remove the potential soft deleted documents.
+                    candidates -= params.excluded_candidates;
 
                     // because the initial_candidates should be an exhaustive count of the matching documents,
                     // we precompute the distinct attributes.
