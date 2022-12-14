@@ -1332,8 +1332,8 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "0.37.2"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.2#1582b96119fedad39c726a6d4aeda0f53e868a3b"
+version = "0.37.3"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.3#2101e3c6d592f6ce6cc25b6e4585f3a8a6246457"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1351,8 +1351,8 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "0.37.2"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.2#1582b96119fedad39c726a6d4aeda0f53e868a3b"
+version = "0.37.3"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.3#2101e3c6d592f6ce6cc25b6e4585f3a8a6246457"
 dependencies = [
  "serde_json",
 ]
@@ -1898,8 +1898,8 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "0.37.2"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.2#1582b96119fedad39c726a6d4aeda0f53e868a3b"
+version = "0.37.3"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.3#2101e3c6d592f6ce6cc25b6e4585f3a8a6246457"
 dependencies = [
  "serde_json",
 ]
@@ -2156,7 +2156,7 @@ checksum = "d4d2456c373231a208ad294c33dc5bff30051eafd954cd4caae83a712b12854d"
 [[package]]
 name = "lmdb-rkv-sys"
 version = "0.15.1"
-source = "git+https://github.com/meilisearch/lmdb-rs#5592bf5a812905cf0c633404ef8f8f4057112c65"
+source = "git+https://github.com/meilisearch/lmdb-rs#0144fb2bac524cdc2897d7750681ed3fff2dc3ac"
 dependencies = [
  "cc",
  "libc",
@@ -2417,8 +2417,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.37.2"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.2#1582b96119fedad39c726a6d4aeda0f53e868a3b"
+version = "0.37.3"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.3#2101e3c6d592f6ce6cc25b6e4585f3a8a6246457"
 dependencies = [
  "bimap",
  "bincode",
