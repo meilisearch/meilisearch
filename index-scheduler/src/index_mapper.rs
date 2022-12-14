@@ -66,15 +66,30 @@ impl IndexMapper {
 
     /// Create or open an index in the specified path.
     /// The path *must* exists or an error will be thrown.
-    fn create_or_open_index(&self, path: &Path) -> Result<Index> {
+    fn create_or_open_index(&self, path: &Path, created: Option<time::OffsetDateTime>, updated: Option<time::OffsetDateTime>) -> Result<Index> {
         let mut options = EnvOpenOptions::new();
         options.map_size(clamp_to_page_size(self.index_size));
         options.max_readers(1024);
-        Ok(Index::new(options, path)?)
+
+        let created_at;
+        if created == None {
+            created_at = time::OffsetDateTime::now_utc();
+        } else {
+            created_at = created.unwrap(); 
+        }
+
+        let updated_at;
+        if updated == None {
+            updated_at = time::OffsetDateTime::now_utc();
+        } else {
+            updated_at = updated.unwrap();
+        }
+
+        Ok(Index::new_with_creation_dates(options, path, created_at, updated_at)?)
     }
 
     /// Get or create the index.
-    pub fn create_index(&self, mut wtxn: RwTxn, name: &str) -> Result<Index> {
+    pub fn create_index(&self, mut wtxn: RwTxn, name: &str, created_at: Option<time::OffsetDateTime>, updated_at: Option<time::OffsetDateTime>) -> Result<Index> {
         match self.index(&wtxn, name) {
             Ok(index) => {
                 wtxn.commit()?;
@@ -86,7 +101,10 @@ impl IndexMapper {
 
                 let index_path = self.base_path.join(uuid.to_string());
                 fs::create_dir_all(&index_path)?;
-                let index = self.create_or_open_index(&index_path)?;
+
+                //let created_at = Some(time::OffsetDateTime::now_utc());
+                //let updated_at = Some(time::OffsetDateTime::now_utc());
+                let index = self.create_or_open_index(&index_path, created_at, updated_at)?;
 
                 wtxn.commit()?;
                 // TODO: it would be better to lazily create the index. But we need an Index::open function for milli.
@@ -179,7 +197,10 @@ impl IndexMapper {
                 match index_map.entry(uuid) {
                     Entry::Vacant(entry) => {
                         let index_path = self.base_path.join(uuid.to_string());
-                        let index = self.create_or_open_index(&index_path)?;
+
+                        let created_at = Some(time::OffsetDateTime::now_utc());
+                        let updated_at = Some(time::OffsetDateTime::now_utc());
+                        let index = self.create_or_open_index(&index_path, created_at, updated_at)?;
                         entry.insert(Available(index.clone()));
                         index
                     }
