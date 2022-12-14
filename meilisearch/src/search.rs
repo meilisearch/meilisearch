@@ -1,9 +1,16 @@
 use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
-use std::str::FromStr;
+use std::convert::Infallible;
+use std::fmt;
+use std::num::ParseIntError;
+use std::str::{FromStr, ParseBoolError};
 use std::time::Instant;
 
+use deserr::{
+    DeserializeError, DeserializeFromValue, ErrorKind, IntoValue, MergeWithError, ValuePointerRef,
+};
 use either::Either;
+use meilisearch_types::error::{unwrap_any, Code, ErrorCode};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::TokenizerBuilder;
@@ -26,34 +33,33 @@ pub const DEFAULT_CROP_MARKER: fn() -> String = || "…".to_string();
 pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Debug, Clone, Default, PartialEq, DeserializeFromValue)]
+#[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQuery {
     pub q: Option<String>,
-    #[serde(default = "DEFAULT_SEARCH_OFFSET")]
+    #[deserr(default = DEFAULT_SEARCH_OFFSET())]
     pub offset: usize,
-    #[serde(default = "DEFAULT_SEARCH_LIMIT")]
+    #[deserr(default = DEFAULT_SEARCH_LIMIT())]
     pub limit: usize,
     pub page: Option<usize>,
     pub hits_per_page: Option<usize>,
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
     pub attributes_to_crop: Option<Vec<String>>,
-    #[serde(default = "DEFAULT_CROP_LENGTH")]
+    #[deserr(default = DEFAULT_CROP_LENGTH())]
     pub crop_length: usize,
     pub attributes_to_highlight: Option<HashSet<String>>,
-    // Default to false
-    #[serde(default = "Default::default")]
+    #[deserr(default)]
     pub show_matches_position: bool,
     pub filter: Option<Value>,
     pub sort: Option<Vec<String>>,
     pub facets: Option<Vec<String>>,
-    #[serde(default = "DEFAULT_HIGHLIGHT_PRE_TAG")]
+    #[deserr(default = DEFAULT_HIGHLIGHT_PRE_TAG())]
     pub highlight_pre_tag: String,
-    #[serde(default = "DEFAULT_HIGHLIGHT_POST_TAG")]
+    #[deserr(default = DEFAULT_HIGHLIGHT_POST_TAG())]
     pub highlight_post_tag: String,
-    #[serde(default = "DEFAULT_CROP_MARKER")]
+    #[deserr(default = DEFAULT_CROP_MARKER())]
     pub crop_marker: String,
-    #[serde(default)]
+    #[deserr(default)]
     pub matching_strategy: MatchingStrategy,
 }
 
@@ -63,7 +69,8 @@ impl SearchQuery {
     }
 }
 
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq, DeserializeFromValue)]
+#[deserr(rename_all = camelCase)]
 #[serde(rename_all = "camelCase")]
 pub enum MatchingStrategy {
     /// Remove query words from last to first
@@ -84,6 +91,96 @@ impl From<MatchingStrategy> for TermsMatchingStrategy {
             MatchingStrategy::Last => Self::Last,
             MatchingStrategy::All => Self::All,
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct SearchDeserError {
+    error: String,
+    code: Code,
+}
+
+impl std::fmt::Display for SearchDeserError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.error)
+    }
+}
+
+impl std::error::Error for SearchDeserError {}
+impl ErrorCode for SearchDeserError {
+    fn error_code(&self) -> Code {
+        self.code
+    }
+}
+
+impl MergeWithError<SearchDeserError> for SearchDeserError {
+    fn merge(
+        _self_: Option<Self>,
+        other: SearchDeserError,
+        _merge_location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        Err(other)
+    }
+}
+
+impl DeserializeError for SearchDeserError {
+    fn error<V: IntoValue>(
+        _self_: Option<Self>,
+        error: ErrorKind<V>,
+        location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        let error = unwrap_any(deserr::serde_json::JsonError::error(None, error, location)).0;
+
+        let code = match location.last_field() {
+            Some("q") => Code::InvalidSearchQ,
+            Some("offset") => Code::InvalidSearchOffset,
+            Some("limit") => Code::InvalidSearchLimit,
+            Some("page") => Code::InvalidSearchPage,
+            Some("hitsPerPage") => Code::InvalidSearchHitsPerPage,
+            Some("attributesToRetrieve") => Code::InvalidSearchAttributesToRetrieve,
+            Some("attributesToCrop") => Code::InvalidSearchAttributesToCrop,
+            Some("cropLength") => Code::InvalidSearchCropLength,
+            Some("attributesToHighlight") => Code::InvalidSearchAttributesToHighlight,
+            Some("showMatchesPosition") => Code::InvalidSearchShowMatchesPosition,
+            Some("filter") => Code::InvalidSearchFilter,
+            Some("sort") => Code::InvalidSearchSort,
+            Some("facets") => Code::InvalidSearchFacets,
+            Some("highlightPreTag") => Code::InvalidSearchHighlightPreTag,
+            Some("highlightPostTag") => Code::InvalidSearchHighlightPostTag,
+            Some("cropMarker") => Code::InvalidSearchCropMarker,
+            Some("matchingStrategy") => Code::InvalidSearchMatchingStrategy,
+            _ => Code::BadRequest,
+        };
+
+        Err(SearchDeserError { error, code })
+    }
+}
+
+impl MergeWithError<ParseBoolError> for SearchDeserError {
+    fn merge(
+        _self_: Option<Self>,
+        other: ParseBoolError,
+        merge_location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        SearchDeserError::error::<Infallible>(
+            None,
+            ErrorKind::Unexpected { msg: other.to_string() },
+            merge_location,
+        )
+    }
+}
+
+impl MergeWithError<ParseIntError> for SearchDeserError {
+    fn merge(
+        _self_: Option<Self>,
+        other: ParseIntError,
+        merge_location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        SearchDeserError::error::<Infallible>(
+            None,
+            ErrorKind::Unexpected { msg: other.to_string() },
+            merge_location,
+        )
     }
 }
 

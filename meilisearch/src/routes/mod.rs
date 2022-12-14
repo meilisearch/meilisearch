@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
+use std::str::FromStr;
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
+use deserr::DeserializeFromValue;
 use index_scheduler::{IndexScheduler, Query};
 use log::debug;
 use meilisearch_types::error::ResponseError;
@@ -49,6 +51,13 @@ where
         .collect()
 }
 
+pub fn from_string_to_option<T, E>(input: &str) -> Result<Option<T>, E>
+where
+    T: FromStr<Err = E>,
+{
+    Ok(Some(input.parse()?))
+}
+
 const PAGINATION_DEFAULT_LIMIT: fn() -> usize = || 20;
 
 #[derive(Debug, Serialize)]
@@ -75,12 +84,15 @@ impl From<Task> for SummarizedTaskView {
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(DeserializeFromValue, Deserialize, Debug, Clone, Copy)]
+#[deserr(rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Pagination {
     #[serde(default)]
+    #[deserr(default, from(&String) = FromStr::from_str -> std::num::ParseIntError)]
     pub offset: usize,
     #[serde(default = "PAGINATION_DEFAULT_LIMIT")]
+    #[deserr(default = PAGINATION_DEFAULT_LIMIT(), from(&String) = FromStr::from_str -> std::num::ParseIntError)]
     pub limit: usize,
 }
 

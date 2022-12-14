@@ -1,9 +1,47 @@
+use std::fmt::Display;
+
 use meilisearch_types::error::{Code, ErrorCode};
 use meilisearch_types::tasks::{Kind, Status};
 use meilisearch_types::{heed, milli};
 use thiserror::Error;
 
 use crate::TaskId;
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum DateField {
+    BeforeEnqueuedAt,
+    AfterEnqueuedAt,
+    BeforeStartedAt,
+    AfterStartedAt,
+    BeforeFinishedAt,
+    AfterFinishedAt,
+}
+
+impl Display for DateField {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DateField::BeforeEnqueuedAt => write!(f, "beforeEnqueuedAt"),
+            DateField::AfterEnqueuedAt => write!(f, "afterEnqueuedAt"),
+            DateField::BeforeStartedAt => write!(f, "beforeStartedAt"),
+            DateField::AfterStartedAt => write!(f, "afterStartedAt"),
+            DateField::BeforeFinishedAt => write!(f, "beforeFinishedAt"),
+            DateField::AfterFinishedAt => write!(f, "afterFinishedAt"),
+        }
+    }
+}
+
+impl From<DateField> for Code {
+    fn from(date: DateField) -> Self {
+        match date {
+            DateField::BeforeEnqueuedAt => Code::InvalidTaskBeforeEnqueuedAt,
+            DateField::AfterEnqueuedAt => Code::InvalidTaskAfterEnqueuedAt,
+            DateField::BeforeStartedAt => Code::InvalidTaskBeforeStartedAt,
+            DateField::AfterStartedAt => Code::InvalidTaskAfterStartedAt,
+            DateField::BeforeFinishedAt => Code::InvalidTaskBeforeFinishedAt,
+            DateField::AfterFinishedAt => Code::InvalidTaskAfterFinishedAt,
+        }
+    }
+}
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Error, Debug)]
@@ -31,7 +69,7 @@ pub enum Error {
     #[error(
         "Task `{field}` `{date}` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format."
     )]
-    InvalidTaskDate { field: String, date: String },
+    InvalidTaskDate { field: DateField, date: String },
     #[error("Task uid `{task_uid}` is invalid. It should only contain numeric characters.")]
     InvalidTaskUids { task_uid: String },
     #[error(
@@ -102,11 +140,11 @@ impl ErrorCode for Error {
             Error::IndexAlreadyExists(_) => Code::IndexAlreadyExists,
             Error::SwapDuplicateIndexesFound(_) => Code::DuplicateIndexFound,
             Error::SwapDuplicateIndexFound(_) => Code::DuplicateIndexFound,
-            Error::InvalidTaskDate { .. } => Code::InvalidTaskDateFilter,
-            Error::InvalidTaskUids { .. } => Code::InvalidTaskUidsFilter,
-            Error::InvalidTaskStatuses { .. } => Code::InvalidTaskStatusesFilter,
-            Error::InvalidTaskTypes { .. } => Code::InvalidTaskTypesFilter,
-            Error::InvalidTaskCanceledBy { .. } => Code::InvalidTaskCanceledByFilter,
+            Error::InvalidTaskDate { field, .. } => (*field).into(),
+            Error::InvalidTaskUids { .. } => Code::InvalidTaskUids,
+            Error::InvalidTaskStatuses { .. } => Code::InvalidTaskStatuses,
+            Error::InvalidTaskTypes { .. } => Code::InvalidTaskTypes,
+            Error::InvalidTaskCanceledBy { .. } => Code::InvalidTaskCanceledBy,
             Error::InvalidIndexUid { .. } => Code::InvalidIndexUid,
             Error::TaskNotFound(_) => Code::TaskNotFound,
             Error::TaskDeletionWithEmptyQuery => Code::TaskDeletionWithEmptyQuery,

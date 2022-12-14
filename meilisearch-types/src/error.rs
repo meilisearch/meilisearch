@@ -119,9 +119,13 @@ pub enum Code {
     // index related error
     CreateIndex,
     IndexAlreadyExists,
+    InvalidIndexPrimaryKey,
     IndexNotFound,
     InvalidIndexUid,
+    MissingIndexUid,
     InvalidMinWordLengthForTypo,
+    InvalidIndexLimit,
+    InvalidIndexOffset,
 
     DuplicateIndexFound,
 
@@ -138,6 +142,55 @@ pub enum Code {
     Filter,
     Sort,
 
+    // Invalid swap-indexes
+    InvalidSwapIndexes,
+
+    // Invalid settings update request
+    InvalidSettingsDisplayedAttributes,
+    InvalidSettingsSearchableAttributes,
+    InvalidSettingsFilterableAttributes,
+    InvalidSettingsSortableAttributes,
+    InvalidSettingsRankingRules,
+    InvalidSettingsStopWords,
+    InvalidSettingsSynonyms,
+    InvalidSettingsDistinctAttribute,
+    InvalidSettingsTypoTolerance,
+    InvalidSettingsFaceting,
+    InvalidSettingsPagination,
+
+    // Invalid search request
+    InvalidSearchQ,
+    InvalidSearchOffset,
+    InvalidSearchLimit,
+    InvalidSearchPage,
+    InvalidSearchHitsPerPage,
+    InvalidSearchAttributesToRetrieve,
+    InvalidSearchAttributesToCrop,
+    InvalidSearchCropLength,
+    InvalidSearchAttributesToHighlight,
+    InvalidSearchShowMatchesPosition,
+    InvalidSearchFilter,
+    InvalidSearchSort,
+    InvalidSearchFacets,
+    InvalidSearchHighlightPreTag,
+    InvalidSearchHighlightPostTag,
+    InvalidSearchCropMarker,
+    InvalidSearchMatchingStrategy,
+
+    // Related to the tasks
+    InvalidTaskUids,
+    InvalidTaskTypes,
+    InvalidTaskStatuses,
+    InvalidTaskCanceledBy,
+    InvalidTaskLimit,
+    InvalidTaskFrom,
+    InvalidTaskBeforeEnqueuedAt,
+    InvalidTaskAfterEnqueuedAt,
+    InvalidTaskBeforeStartedAt,
+    InvalidTaskAfterStartedAt,
+    InvalidTaskBeforeFinishedAt,
+    InvalidTaskAfterFinishedAt,
+
     BadParameter,
     BadRequest,
     DatabaseSizeLimitReached,
@@ -150,11 +203,6 @@ pub enum Code {
     MissingAuthorizationHeader,
     MissingMasterKey,
     DumpNotFound,
-    InvalidTaskDateFilter,
-    InvalidTaskStatusesFilter,
-    InvalidTaskTypesFilter,
-    InvalidTaskCanceledByFilter,
-    InvalidTaskUidsFilter,
     TaskNotFound,
     TaskDeletionWithEmptyQuery,
     TaskCancelationWithEmptyQuery,
@@ -209,6 +257,12 @@ impl Code {
             // thrown when requesting an unexisting index
             IndexNotFound => ErrCode::invalid("index_not_found", StatusCode::NOT_FOUND),
             InvalidIndexUid => ErrCode::invalid("invalid_index_uid", StatusCode::BAD_REQUEST),
+            MissingIndexUid => ErrCode::invalid("missing_index_uid", StatusCode::BAD_REQUEST),
+            InvalidIndexPrimaryKey => {
+                ErrCode::invalid("invalid_index_primary_key", StatusCode::BAD_REQUEST)
+            }
+            InvalidIndexLimit => ErrCode::invalid("invalid_index_limit", StatusCode::BAD_REQUEST),
+            InvalidIndexOffset => ErrCode::invalid("invalid_index_offset", StatusCode::BAD_REQUEST),
 
             // invalid state error
             InvalidState => ErrCode::internal("invalid_state", StatusCode::INTERNAL_SERVER_ERROR),
@@ -258,21 +312,6 @@ impl Code {
             }
             MissingMasterKey => {
                 ErrCode::authentication("missing_master_key", StatusCode::UNAUTHORIZED)
-            }
-            InvalidTaskDateFilter => {
-                ErrCode::invalid("invalid_task_date_filter", StatusCode::BAD_REQUEST)
-            }
-            InvalidTaskUidsFilter => {
-                ErrCode::invalid("invalid_task_uids_filter", StatusCode::BAD_REQUEST)
-            }
-            InvalidTaskStatusesFilter => {
-                ErrCode::invalid("invalid_task_statuses_filter", StatusCode::BAD_REQUEST)
-            }
-            InvalidTaskTypesFilter => {
-                ErrCode::invalid("invalid_task_types_filter", StatusCode::BAD_REQUEST)
-            }
-            InvalidTaskCanceledByFilter => {
-                ErrCode::invalid("invalid_task_canceled_by_filter", StatusCode::BAD_REQUEST)
             }
             TaskNotFound => ErrCode::invalid("task_not_found", StatusCode::NOT_FOUND),
             TaskDeletionWithEmptyQuery => {
@@ -335,6 +374,116 @@ impl Code {
             }
             DuplicateIndexFound => {
                 ErrCode::invalid("duplicate_index_found", StatusCode::BAD_REQUEST)
+            }
+
+            InvalidSwapIndexes => ErrCode::invalid("invalid_swap_indexes", StatusCode::BAD_REQUEST),
+
+            InvalidSettingsDisplayedAttributes => {
+                ErrCode::invalid("invalid_settings_displayed_attributes", StatusCode::BAD_REQUEST)
+            }
+            InvalidSettingsSearchableAttributes => {
+                ErrCode::invalid("invalid_settings_searchable_attributes", StatusCode::BAD_REQUEST)
+            }
+            InvalidSettingsFilterableAttributes => {
+                ErrCode::invalid("invalid_settings_filterable_attributes", StatusCode::BAD_REQUEST)
+            }
+            InvalidSettingsSortableAttributes => {
+                ErrCode::invalid("invalid_settings_sortable_attributes", StatusCode::BAD_REQUEST)
+            }
+            InvalidSettingsRankingRules => {
+                ErrCode::invalid("invalid_settings_ranking_rules", StatusCode::BAD_REQUEST)
+            }
+            InvalidSettingsStopWords => {
+                ErrCode::invalid("invalid_settings_stop_words", StatusCode::BAD_REQUEST)
+            }
+            InvalidSettingsSynonyms => {
+                ErrCode::invalid("invalid_settings_synonyms", StatusCode::BAD_REQUEST)
+            }
+            InvalidSettingsDistinctAttribute => {
+                ErrCode::invalid("invalid_settings_distinct_attribute", StatusCode::BAD_REQUEST)
+            }
+            InvalidSettingsTypoTolerance => {
+                ErrCode::invalid("invalid_settings_typo_tolerance", StatusCode::BAD_REQUEST)
+            }
+            InvalidSettingsFaceting => {
+                ErrCode::invalid("invalid_settings_faceting", StatusCode::BAD_REQUEST)
+            }
+            InvalidSettingsPagination => {
+                ErrCode::invalid("invalid_settings_pagination", StatusCode::BAD_REQUEST)
+            }
+
+            InvalidSearchQ => ErrCode::invalid("invalid_search_q", StatusCode::BAD_REQUEST),
+            InvalidSearchOffset => {
+                ErrCode::invalid("invalid_search_offset", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchLimit => ErrCode::invalid("invalid_search_limit", StatusCode::BAD_REQUEST),
+            InvalidSearchPage => ErrCode::invalid("invalid_search_page", StatusCode::BAD_REQUEST),
+            InvalidSearchHitsPerPage => {
+                ErrCode::invalid("invalid_search_hits_per_page", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchAttributesToRetrieve => {
+                ErrCode::invalid("invalid_search_attributes_to_retrieve", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchAttributesToCrop => {
+                ErrCode::invalid("invalid_search_attributes_to_crop", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchCropLength => {
+                ErrCode::invalid("invalid_search_crop_length", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchAttributesToHighlight => {
+                ErrCode::invalid("invalid_search_attributes_to_highlight", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchShowMatchesPosition => {
+                ErrCode::invalid("invalid_search_show_matches_position", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchFilter => {
+                ErrCode::invalid("invalid_search_filter", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchSort => ErrCode::invalid("invalid_search_sort", StatusCode::BAD_REQUEST),
+            InvalidSearchFacets => {
+                ErrCode::invalid("invalid_search_facets", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchHighlightPreTag => {
+                ErrCode::invalid("invalid_search_highlight_pre_tag", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchHighlightPostTag => {
+                ErrCode::invalid("invalid_search_highlight_post_tag", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchCropMarker => {
+                ErrCode::invalid("invalid_search_crop_marker", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchMatchingStrategy => {
+                ErrCode::invalid("invalid_search_matching_strategy", StatusCode::BAD_REQUEST)
+            }
+
+            // Related to the tasks
+            InvalidTaskUids => ErrCode::invalid("invalid_task_uids", StatusCode::BAD_REQUEST),
+            InvalidTaskTypes => ErrCode::invalid("invalid_task_types", StatusCode::BAD_REQUEST),
+            InvalidTaskStatuses => {
+                ErrCode::invalid("invalid_task_statuses", StatusCode::BAD_REQUEST)
+            }
+            InvalidTaskCanceledBy => {
+                ErrCode::invalid("invalid_task_canceled_by", StatusCode::BAD_REQUEST)
+            }
+            InvalidTaskLimit => ErrCode::invalid("invalid_task_limit", StatusCode::BAD_REQUEST),
+            InvalidTaskFrom => ErrCode::invalid("invalid_task_from", StatusCode::BAD_REQUEST),
+            InvalidTaskBeforeEnqueuedAt => {
+                ErrCode::invalid("invalid_task_before_enqueued_at", StatusCode::BAD_REQUEST)
+            }
+            InvalidTaskAfterEnqueuedAt => {
+                ErrCode::invalid("invalid_task_after_enqueued_at", StatusCode::BAD_REQUEST)
+            }
+            InvalidTaskBeforeStartedAt => {
+                ErrCode::invalid("invalid_task_before_started_at", StatusCode::BAD_REQUEST)
+            }
+            InvalidTaskAfterStartedAt => {
+                ErrCode::invalid("invalid_task_after_started_at", StatusCode::BAD_REQUEST)
+            }
+            InvalidTaskBeforeFinishedAt => {
+                ErrCode::invalid("invalid_task_before_finished_at", StatusCode::BAD_REQUEST)
+            }
+            InvalidTaskAfterFinishedAt => {
+                ErrCode::invalid("invalid_task_after_finished_at", StatusCode::BAD_REQUEST)
             }
         }
     }
@@ -473,6 +622,13 @@ impl ErrorCode for io::Error {
             Some(28) => Code::NoSpaceLeftOnDevice,
             _ => Code::Internal,
         }
+    }
+}
+
+pub fn unwrap_any<T>(any: Result<T, T>) -> T {
+    match any {
+        Ok(any) => any,
+        Err(any) => any,
     }
 }
 

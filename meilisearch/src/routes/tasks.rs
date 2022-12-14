@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
+use index_scheduler::error::DateField;
 use index_scheduler::{IndexScheduler, Query, TaskId};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
@@ -168,6 +169,7 @@ pub struct TaskCommonQueryRaw {
     pub statuses: Option<CS<StarOr<String>>>,
     pub index_uids: Option<CS<StarOr<String>>>,
 }
+
 impl TaskCommonQueryRaw {
     fn validate(self) -> Result<TaskCommonQuery, ResponseError> {
         let Self { uids, canceled_by, types, statuses, index_uids } = self;
@@ -290,37 +292,37 @@ impl TaskDateQueryRaw {
 
         for (field_name, string_value, before_or_after, dest) in [
             (
-                "afterEnqueuedAt",
+                DateField::AfterEnqueuedAt,
                 after_enqueued_at,
                 DeserializeDateOption::After,
                 &mut query.after_enqueued_at,
             ),
             (
-                "beforeEnqueuedAt",
+                DateField::BeforeEnqueuedAt,
                 before_enqueued_at,
                 DeserializeDateOption::Before,
                 &mut query.before_enqueued_at,
             ),
             (
-                "afterStartedAt",
+                DateField::AfterStartedAt,
                 after_started_at,
                 DeserializeDateOption::After,
                 &mut query.after_started_at,
             ),
             (
-                "beforeStartedAt",
+                DateField::BeforeStartedAt,
                 before_started_at,
                 DeserializeDateOption::Before,
                 &mut query.before_started_at,
             ),
             (
-                "afterFinishedAt",
+                DateField::AfterFinishedAt,
                 after_finished_at,
                 DeserializeDateOption::After,
                 &mut query.after_finished_at,
             ),
             (
-                "beforeFinishedAt",
+                DateField::BeforeFinishedAt,
                 before_finished_at,
                 DeserializeDateOption::Before,
                 &mut query.before_finished_at,
@@ -690,6 +692,7 @@ async fn get_task(
 }
 
 pub(crate) mod date_deserializer {
+    use index_scheduler::error::DateField;
     use meilisearch_types::error::ResponseError;
     use time::format_description::well_known::Rfc3339;
     use time::macros::format_description;
@@ -701,7 +704,7 @@ pub(crate) mod date_deserializer {
     }
 
     pub fn deserialize_date(
-        field_name: &str,
+        field_name: DateField,
         value: &str,
         option: DeserializeDateOption,
     ) -> std::result::Result<OffsetDateTime, ResponseError> {
@@ -727,7 +730,7 @@ pub(crate) mod date_deserializer {
             }
         } else {
             Err(index_scheduler::Error::InvalidTaskDate {
-                field: field_name.to_string(),
+                field: field_name,
                 date: value.to_string(),
             }
             .into())

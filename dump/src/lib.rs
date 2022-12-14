@@ -249,17 +249,17 @@ pub(crate) mod test {
 
     pub fn create_test_settings() -> Settings<Checked> {
         let settings = Settings {
-            displayed_attributes: Setting::Set(vec![S("race"), S("name")]),
-            searchable_attributes: Setting::Set(vec![S("name"), S("race")]),
-            filterable_attributes: Setting::Set(btreeset! { S("race"), S("age") }),
-            sortable_attributes: Setting::Set(btreeset! { S("age") }),
-            ranking_rules: Setting::NotSet,
-            stop_words: Setting::NotSet,
-            synonyms: Setting::NotSet,
-            distinct_attribute: Setting::NotSet,
-            typo_tolerance: Setting::NotSet,
-            faceting: Setting::NotSet,
-            pagination: Setting::NotSet,
+            displayed_attributes: Setting::Set(vec![S("race"), S("name")]).into(),
+            searchable_attributes: Setting::Set(vec![S("name"), S("race")]).into(),
+            filterable_attributes: Setting::Set(btreeset! { S("race"), S("age") }).into(),
+            sortable_attributes: Setting::Set(btreeset! { S("age") }).into(),
+            ranking_rules: Setting::NotSet.into(),
+            stop_words: Setting::NotSet.into(),
+            synonyms: Setting::NotSet.into(),
+            distinct_attribute: Setting::NotSet.into(),
+            typo_tolerance: Setting::NotSet.into(),
+            faceting: Setting::NotSet.into(),
+            pagination: Setting::NotSet.into(),
             _kind: std::marker::PhantomData,
         };
         settings.check()

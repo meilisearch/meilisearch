@@ -37,25 +37,105 @@ async fn search_unexisting_parameter() {
 }
 
 #[actix_rt::test]
-async fn search_invalid_highlight_and_crop_tags() {
+async fn search_invalid_crop_marker() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let fields = &["cropMarker", "highlightPreTag", "highlightPostTag"];
+    // object
+    let response = index.search_post(json!({"cropMarker":  { "marker": "<crop>" }})).await;
+    meili_snap::snapshot!(format!("{:#?}", response), @r###"
+    (
+        Object {
+            "message": String("invalid type: Map `{\"marker\":\"<crop>\"}`, expected a String at `.cropMarker`."),
+            "code": String("invalid_search_crop_marker"),
+            "type": String("invalid_request"),
+            "link": String("https://docs.meilisearch.com/errors#invalid_search_crop_marker"),
+        },
+        400,
+    )
+    "###);
 
-    for field in fields {
-        // object
-        let (response, code) =
-            index.search_post(json!({field.to_string(): {"marker": "<crop>"}})).await;
-        assert_eq!(code, 400, "field {} passing object: {}", &field, response);
-        assert_eq!(response["code"], "bad_request");
+    // array
+    let response = index.search_post(json!({"cropMarker": ["marker", "<crop>"]})).await;
+    meili_snap::snapshot!(format!("{:#?}", response), @r###"
+    (
+        Object {
+            "message": String("invalid type: Sequence `[\"marker\",\"<crop>\"]`, expected a String at `.cropMarker`."),
+            "code": String("invalid_search_crop_marker"),
+            "type": String("invalid_request"),
+            "link": String("https://docs.meilisearch.com/errors#invalid_search_crop_marker"),
+        },
+        400,
+    )
+    "###);
+}
 
-        // array
-        let (response, code) =
-            index.search_post(json!({field.to_string(): ["marker", "<crop>"]})).await;
-        assert_eq!(code, 400, "field {} passing array: {}", &field, response);
-        assert_eq!(response["code"], "bad_request");
-    }
+#[actix_rt::test]
+async fn search_invalid_highlight_pre_tag() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    // object
+    let response = index.search_post(json!({"highlightPreTag":  { "marker": "<em>" }})).await;
+    meili_snap::snapshot!(format!("{:#?}", response), @r###"
+    (
+        Object {
+            "message": String("invalid type: Map `{\"marker\":\"<em>\"}`, expected a String at `.highlightPreTag`."),
+            "code": String("invalid_search_highlight_pre_tag"),
+            "type": String("invalid_request"),
+            "link": String("https://docs.meilisearch.com/errors#invalid_search_highlight_pre_tag"),
+        },
+        400,
+    )
+    "###);
+
+    // array
+    let response = index.search_post(json!({"highlightPreTag": ["marker", "<em>"]})).await;
+    meili_snap::snapshot!(format!("{:#?}", response), @r###"
+    (
+        Object {
+            "message": String("invalid type: Sequence `[\"marker\",\"<em>\"]`, expected a String at `.highlightPreTag`."),
+            "code": String("invalid_search_highlight_pre_tag"),
+            "type": String("invalid_request"),
+            "link": String("https://docs.meilisearch.com/errors#invalid_search_highlight_pre_tag"),
+        },
+        400,
+    )
+    "###);
+}
+
+#[actix_rt::test]
+async fn search_invalid_highlight_post_tag() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    // object
+    let response = index.search_post(json!({"highlightPostTag":  { "marker": "</em>" }})).await;
+    meili_snap::snapshot!(format!("{:#?}", response), @r###"
+    (
+        Object {
+            "message": String("invalid type: Map `{\"marker\":\"</em>\"}`, expected a String at `.highlightPostTag`."),
+            "code": String("invalid_search_highlight_post_tag"),
+            "type": String("invalid_request"),
+            "link": String("https://docs.meilisearch.com/errors#invalid_search_highlight_post_tag"),
+        },
+        400,
+    )
+    "###);
+
+    // array
+    let response = index.search_post(json!({"highlightPostTag": ["marker", "</em>"]})).await;
+    meili_snap::snapshot!(format!("{:#?}", response), @r###"
+    (
+        Object {
+            "message": String("invalid type: Sequence `[\"marker\",\"</em>\"]`, expected a String at `.highlightPostTag`."),
+            "code": String("invalid_search_highlight_post_tag"),
+            "type": String("invalid_request"),
+            "link": String("https://docs.meilisearch.com/errors#invalid_search_highlight_post_tag"),
+        },
+        400,
+    )
+    "###);
 }
 
 #[actix_rt::test]

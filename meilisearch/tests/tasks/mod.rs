@@ -193,9 +193,9 @@ async fn get_task_filter_error() {
     insta::assert_json_snapshot!(response, @r###"
     {
       "message": "Task uid `pied` is invalid. It should only contain numeric characters.",
-      "code": "invalid_task_uids_filter",
+      "code": "invalid_task_uids",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-task-uids-filter"
+      "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
     }
     "###);
 
@@ -215,9 +215,9 @@ async fn get_task_filter_error() {
     insta::assert_json_snapshot!(response, @r###"
     {
       "message": "Task `beforeStartedAt` `pied` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
-      "code": "invalid_task_date_filter",
+      "code": "invalid_task_before_started_at",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-task-date-filter"
+      "link": "https://docs.meilisearch.com/errors#invalid-task-before-started-at"
     }
     "###);
 }
@@ -253,9 +253,9 @@ async fn delete_task_filter_error() {
     insta::assert_json_snapshot!(response, @r###"
     {
       "message": "Task uid `pied` is invalid. It should only contain numeric characters.",
-      "code": "invalid_task_uids_filter",
+      "code": "invalid_task_uids",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-task-uids-filter"
+      "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
     }
     "###);
 }
@@ -291,9 +291,9 @@ async fn cancel_task_filter_error() {
     insta::assert_json_snapshot!(response, @r###"
     {
       "message": "Task uid `pied` is invalid. It should only contain numeric characters.",
-      "code": "invalid_task_uids_filter",
+      "code": "invalid_task_uids",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-task-uids-filter"
+      "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
     }
     "###);
 }
