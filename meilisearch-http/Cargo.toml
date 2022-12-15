@@ -4,7 +4,7 @@ description = "Meilisearch HTTP server"
 edition = "2021"
 license = "MIT"
 name = "meilisearch-http"
-version = "0.30.3"
+version = "0.30.4"
 
 [[bin]]
 name = "meilisearch"
