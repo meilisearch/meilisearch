@@ -187,8 +187,7 @@ impl IndexMapper {
                     Entry::Vacant(entry) => {
                         let index_path = self.base_path.join(uuid.to_string());
 
-                        let date = Some(( time::OffsetDateTime::now_utc(), time::OffsetDateTime::now_utc() ));
-                        let index = self.create_or_open_index(&index_path, date)?;
+                        let index = self.create_or_open_index(&index_path, None)?;
                         entry.insert(Available(index.clone()));
                         index
                     }
