@@ -71,9 +71,12 @@ impl IndexMapper {
         options.map_size(clamp_to_page_size(self.index_size));
         options.max_readers(1024);
         
-        let (created, updated) = date.unwrap();
-
-        Ok(Index::new_with_creation_dates(options, path, created, updated)?)
+        if date == None {
+            Ok(Index::new(options, path)?)
+        } else {
+            let (created, updated) = date.unwrap();
+            Ok(Index::new_with_creation_dates(options, path, created, updated)?)
+        }
     }
 
     /// Get or create the index.
