@@ -58,17 +58,36 @@ pub fn enrich_documents_batch<R: Read + Seek>(
             }
         },
         None => {
-            let guessed = documents_batch_index
+            let mut guesses: Vec<(u16, &str)> = documents_batch_index
                 .iter()
-                .filter(|(_, name)| name.to_lowercase().contains(DEFAULT_PRIMARY_KEY))
-                .min_by_key(|(fid, _)| *fid);
-            match guessed {
-                Some((id, name)) => PrimaryKey::flat(name.as_str(), *id),
-                None if autogenerate_docids => PrimaryKey::flat(
+                .filter(|(_, name)| name.to_lowercase().ends_with(DEFAULT_PRIMARY_KEY))
+                .map(|(field_id, name)| (*field_id, name.as_str()))
+                .collect();
+
+            // sort the keys in a deterministic, obvious way, so that fields are always in the same order.
+            guesses.sort_by(|(_, left_name), (_, right_name)| {
+                // shortest name first
+                left_name.len().cmp(&right_name.len()).then_with(
+                    // then alphabetical order
+                    || left_name.cmp(right_name),
+                )
+            });
+
+            match guesses.as_slice() {
+                [] if autogenerate_docids => PrimaryKey::flat(
                     DEFAULT_PRIMARY_KEY,
                     documents_batch_index.insert(DEFAULT_PRIMARY_KEY),
                 ),
-                None => return Ok(Err(UserError::MissingPrimaryKey)),
+                [] => return Ok(Err(UserError::NoPrimaryKeyCandidateFound)),
+                [(field_id, name)] => PrimaryKey::flat(name, *field_id),
+                multiple => {
+                    return Ok(Err(UserError::MultiplePrimaryKeyCandidatesFound {
+                        candidates: multiple
+                            .iter()
+                            .map(|(_, candidate)| candidate.to_string())
+                            .collect(),
+                    }));
+                }
             }
         }
     };
