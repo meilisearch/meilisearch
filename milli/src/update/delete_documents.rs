@@ -186,33 +186,39 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
         soft_deleted_docids |= &self.to_delete_docids;
 
-        // if we have less documents to delete than the threshold we simply save them in
-        // the `soft_deleted_documents_ids` bitmap and early exit.
-        let size_used = self.index.used_size()?;
-        let map_size = self.index.env.map_size()? as u64;
-        let nb_documents = self.index.number_of_documents(self.wtxn)?;
-        let nb_soft_deleted = soft_deleted_docids.len();
+        // decide for a hard or soft deletion depending on the strategy
+        let soft_deletion = match self.strategy {
+            DeletionStrategy::Dynamic => {
+                // if we have less documents to delete than the threshold we simply save them in
+                // the `soft_deleted_documents_ids` bitmap and early exit.
+                let size_used = self.index.used_size()?;
+                let map_size = self.index.env.map_size()? as u64;
+                let nb_documents = self.index.number_of_documents(self.wtxn)?;
+                let nb_soft_deleted = soft_deleted_docids.len();
 
-        let percentage_available = 100 - (size_used * 100 / map_size);
-        let estimated_document_size = size_used / (nb_documents + nb_soft_deleted);
-        let estimated_size_used_by_soft_deleted = estimated_document_size * nb_soft_deleted;
-        let percentage_used_by_soft_deleted_documents =
-            estimated_size_used_by_soft_deleted * 100 / map_size;
+                let percentage_available = 100 - (size_used * 100 / map_size);
+                let estimated_document_size = size_used / (nb_documents + nb_soft_deleted);
+                let estimated_size_used_by_soft_deleted = estimated_document_size * nb_soft_deleted;
+                let percentage_used_by_soft_deleted_documents =
+                    estimated_size_used_by_soft_deleted * 100 / map_size;
 
-        // if we have more than 10% of disk space available and the soft deleted
-        // documents uses less than 10% of the total space available,
-        // we skip the deletion. Eg.
-        // - With 100Go of disk and 20Go used including 5Go of soft-deleted documents
-        //   We don’t delete anything.
-        // - With 100Go of disk and 95Go used including 1mo of soft-deleted documents
-        //   We run the deletion.
-        // - With 100Go of disk and 50Go used including 15Go of soft-deleted documents
-        //   We run the deletion.
+                // if we have more than 10% of disk space available and the soft deleted
+                // documents uses less than 10% of the total space available,
+                // we skip the deletion. Eg.
+                // - With 100Go of disk and 20Go used including 5Go of soft-deleted documents
+                //   We don’t delete anything.
+                // - With 100Go of disk and 95Go used including 1mo of soft-deleted documents
+                //   We run the deletion.
+                // - With 100Go of disk and 50Go used including 15Go of soft-deleted documents
+                //   We run the deletion.
+                percentage_available > 10 && percentage_used_by_soft_deleted_documents < 10
+            }
+            DeletionStrategy::AlwaysSoft => true,
+            DeletionStrategy::AlwaysHard => false,
+        };
 
-        if !self.disable_soft_deletion
-            && percentage_available > 10
-            && percentage_used_by_soft_deleted_documents < 10
-        {
+        if soft_deletion {
+            // Keep the soft-deleted in the DB
             self.index.put_soft_deleted_documents_ids(self.wtxn, &soft_deleted_docids)?;
             return Ok(DetailedDocumentDeletionResult {
                 deleted_documents: self.to_delete_docids.len(),
