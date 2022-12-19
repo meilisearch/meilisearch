@@ -1,6 +1,6 @@
 [package]
 name = "milli"
-version = "0.37.0"
+version = "0.38.0"
 authors = ["Kerollmops <clement@meilisearch.com>"]
 edition = "2018"
 
