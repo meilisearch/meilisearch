@@ -18,7 +18,7 @@ impl AuthController {
         let keys_file_path = dst.as_ref().join(KEYS_PATH);
 
         let keys = store.list_api_keys()?;
-        let mut keys_file = File::create(&keys_file_path)?;
+        let mut keys_file = File::create(keys_file_path)?;
         for key in keys {
             serde_json::to_writer(&mut keys_file, &key)?;
             keys_file.write_all(b"\n")?;
