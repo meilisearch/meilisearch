@@ -22,7 +22,7 @@ jobs:
       image: ubuntu:18.04
     steps:
     - uses: actions/checkout@v3
-    - name: Install rustup
+    - name: Install needed dependencies
       run: |
         apt-get update && apt-get install -y curl
         apt-get install build-essential -y
@@ -73,7 +73,7 @@ jobs:
       image: ubuntu:18.04
     steps:
       - uses: actions/checkout@v3
-      - name: Install rustup
+      - name: Install needed dependencies
         run: |
           apt-get update && apt-get install -y curl
           apt-get install build-essential -y
