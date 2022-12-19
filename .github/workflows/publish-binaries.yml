@@ -97,7 +97,6 @@ jobs:
     name: Publish binary for macOS silicon
     runs-on: ${{ matrix.os }}
     needs: check-version
-    continue-on-error: false
     strategy:
       fail-fast: false
       matrix:
@@ -134,7 +133,6 @@ jobs:
     name: Publish binary for aarch64
     runs-on: ${{ matrix.os }}
     needs: check-version
-    continue-on-error: false
     strategy:
       fail-fast: false
       matrix:
