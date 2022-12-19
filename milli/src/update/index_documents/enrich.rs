@@ -21,6 +21,10 @@ const DEFAULT_PRIMARY_KEY: &str = "id";
 ///  - all the documents id exist and are extracted,
 ///  - the validity of them but also,
 ///  - the validity of the `_geo` field depending on the settings.
+///
+/// # Panics
+///
+/// - if reader.is_empty(), this function may panic in some cases
 pub fn enrich_documents_batch<R: Read + Seek>(
     rtxn: &heed::RoTxn,
     index: &Index,
@@ -49,7 +53,7 @@ pub fn enrich_documents_batch<R: Read + Seek>(
                         primary_key: primary_key.to_string(),
                         document: obkv_to_object(&first_document, &documents_batch_index)?,
                     })),
-                    None => Ok(Err(UserError::MissingPrimaryKey)),
+                    None => unreachable!("Called with reader.is_empty()"),
                 };
             }
         },
