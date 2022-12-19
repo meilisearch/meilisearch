@@ -26,7 +26,7 @@ pub struct DeleteDocuments<'t, 'u, 'i> {
     index: &'i Index,
     external_documents_ids: ExternalDocumentsIds<'static>,
     to_delete_docids: RoaringBitmap,
-    disable_soft_deletion: bool,
+    strategy: DeletionStrategy,
 }
 
 /// Result of a [`DeleteDocuments`] operation.
@@ -34,6 +34,36 @@ pub struct DeleteDocuments<'t, 'u, 'i> {
 pub struct DocumentDeletionResult {
     pub deleted_documents: u64,
     pub remaining_documents: u64,
+}
+
+/// Strategy for deleting documents.
+///
+/// - Soft-deleted documents are simply marked as deleted without being actually removed from DB.
+/// - Hard-deleted documents are definitely suppressed from the DB.
+///
+/// Soft-deleted documents trade disk space for runtime performance.
+///
+/// Note that any of these variants can be used at any given moment for any indexation in a database.
+/// For instance, you can use an [`AlwaysSoft`] followed by an [`AlwaysHard`] option without issue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum DeletionStrategy {
+    #[default]
+    /// Definitely suppress documents according to the number of size of soft-deleted documents
+    Dynamic,
+    /// Never definitely suppress documents
+    AlwaysSoft,
+    /// Always definitely suppress documents
+    AlwaysHard,
+}
+
+impl std::fmt::Display for DeletionStrategy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DeletionStrategy::Dynamic => write!(f, "dynamic"),
+            DeletionStrategy::AlwaysSoft => write!(f, "always_soft"),
+            DeletionStrategy::AlwaysHard => write!(f, "always_hard"),
+        }
+    }
 }
 
 /// Result of a [`DeleteDocuments`] operation, used for internal purposes.
@@ -59,12 +89,12 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             index,
             external_documents_ids,
             to_delete_docids: RoaringBitmap::new(),
-            disable_soft_deletion: false,
+            strategy: Default::default(),
         })
     }
 
-    pub fn disable_soft_deletion(&mut self, disable: bool) {
-        self.disable_soft_deletion = disable;
+    pub fn strategy(&mut self, strategy: DeletionStrategy) {
+        self.strategy = strategy;
     }
 
     pub fn delete_document(&mut self, docid: u32) {

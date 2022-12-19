@@ -35,8 +35,8 @@ use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
-    self, IndexerConfig, PrefixWordPairsProximityDocids, UpdateIndexingStep, WordPrefixDocids,
-    WordPrefixPositionDocids, WordsPrefixesFst,
+    self, DeletionStrategy, IndexerConfig, PrefixWordPairsProximityDocids, UpdateIndexingStep,
+    WordPrefixDocids, WordPrefixPositionDocids, WordsPrefixesFst,
 };
 use crate::{Index, Result, RoaringBitmapCodec};
 
@@ -88,7 +88,7 @@ pub struct IndexDocumentsConfig {
     pub words_positions_level_group_size: Option<NonZeroU32>,
     pub words_positions_min_level_size: Option<NonZeroU32>,
     pub update_method: IndexDocumentsMethod,
-    pub disable_soft_deletion: bool,
+    pub deletion_strategy: DeletionStrategy,
     pub autogenerate_docids: bool,
 }
 
@@ -332,7 +332,7 @@ where
         // able to simply insert all the documents even if they already exist in the database.
         if !replaced_documents_ids.is_empty() {
             let mut deletion_builder = update::DeleteDocuments::new(self.wtxn, self.index)?;
-            deletion_builder.disable_soft_deletion(self.config.disable_soft_deletion);
+            deletion_builder.strategy(self.config.deletion_strategy);
             debug!("documents to delete {:?}", replaced_documents_ids);
             deletion_builder.delete_documents(&replaced_documents_ids);
             let deleted_documents_result = deletion_builder.execute_inner()?;
