@@ -463,10 +463,13 @@ mod tests {
     use crate::db_snap;
     use crate::documents::documents_batch_reader_from_objects;
     use crate::index::tests::TempIndex;
+    use crate::update::DeletionStrategy;
 
     #[test]
     fn replace_all_identical_soft_deletion_then_hard_deletion() {
         let mut index = TempIndex::new_with_map_size(4096 * 1000 * 100);
+
+        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysSoft;
 
         index
             .update_settings(|settings| {
@@ -521,7 +524,7 @@ mod tests {
         db_snap!(index, soft_deleted_documents_ids, "replaced_1_soft", @"6c975deb900f286d2f6456d2d5c3a123");
 
         // Then replace the last document while disabling soft_deletion
-        index.index_documents_config.disable_soft_deletion = true;
+        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysHard;
         let mut documents = vec![];
         for i in 999..1000 {
             documents.push(

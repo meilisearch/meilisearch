@@ -685,7 +685,7 @@ mod tests {
         wtxn: &mut RwTxn<'t, '_>,
         index: &'t Index,
         external_ids: &[&str],
-        disable_soft_deletion: bool,
+        strategy: DeletionStrategy,
     ) -> Vec<u32> {
         let external_document_ids = index.external_documents_ids(wtxn).unwrap();
         let ids_to_delete: Vec<u32> = external_ids
@@ -695,14 +695,14 @@ mod tests {
 
         // Delete some documents.
         let mut builder = DeleteDocuments::new(wtxn, index).unwrap();
-        builder.disable_soft_deletion(disable_soft_deletion);
+        builder.strategy(strategy);
         external_ids.iter().for_each(|id| drop(builder.delete_external_id(id)));
         builder.execute().unwrap();
 
         ids_to_delete
     }
 
-    fn delete_documents_with_numbers_as_primary_key_(disable_soft_deletion: bool) {
+    fn delete_documents_with_numbers_as_primary_key_(deletion_strategy: DeletionStrategy) {
         let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
@@ -722,17 +722,17 @@ mod tests {
         builder.delete_document(0);
         builder.delete_document(1);
         builder.delete_document(2);
-        builder.disable_soft_deletion(disable_soft_deletion);
+        builder.strategy(deletion_strategy);
         builder.execute().unwrap();
 
         wtxn.commit().unwrap();
 
         // All these snapshots should be empty since the database was cleared
-        db_snap!(index, documents_ids, disable_soft_deletion);
-        db_snap!(index, word_docids, disable_soft_deletion);
-        db_snap!(index, word_pair_proximity_docids, disable_soft_deletion);
-        db_snap!(index, facet_id_exists_docids, disable_soft_deletion);
-        db_snap!(index, soft_deleted_documents_ids, disable_soft_deletion);
+        db_snap!(index, documents_ids, deletion_strategy);
+        db_snap!(index, word_docids, deletion_strategy);
+        db_snap!(index, word_pair_proximity_docids, deletion_strategy);
+        db_snap!(index, facet_id_exists_docids, deletion_strategy);
+        db_snap!(index, soft_deleted_documents_ids, deletion_strategy);
 
         let rtxn = index.read_txn().unwrap();
 
@@ -741,11 +741,11 @@ mod tests {
 
     #[test]
     fn delete_documents_with_numbers_as_primary_key() {
-        delete_documents_with_numbers_as_primary_key_(true);
-        delete_documents_with_numbers_as_primary_key_(false);
+        delete_documents_with_numbers_as_primary_key_(DeletionStrategy::AlwaysHard);
+        delete_documents_with_numbers_as_primary_key_(DeletionStrategy::AlwaysSoft);
     }
 
-    fn delete_documents_with_strange_primary_key_(disable_soft_deletion: bool) {
+    fn delete_documents_with_strange_primary_key_(strategy: DeletionStrategy) {
         let index = TempIndex::new();
 
         index
@@ -771,24 +771,24 @@ mod tests {
         let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
         builder.delete_external_id("0");
         builder.delete_external_id("1");
-        builder.disable_soft_deletion(disable_soft_deletion);
+        builder.strategy(strategy);
         builder.execute().unwrap();
         wtxn.commit().unwrap();
 
-        db_snap!(index, documents_ids, disable_soft_deletion);
-        db_snap!(index, word_docids, disable_soft_deletion);
-        db_snap!(index, word_pair_proximity_docids, disable_soft_deletion);
-        db_snap!(index, soft_deleted_documents_ids, disable_soft_deletion);
+        db_snap!(index, documents_ids, strategy);
+        db_snap!(index, word_docids, strategy);
+        db_snap!(index, word_pair_proximity_docids, strategy);
+        db_snap!(index, soft_deleted_documents_ids, strategy);
     }
 
     #[test]
     fn delete_documents_with_strange_primary_key() {
-        delete_documents_with_strange_primary_key_(true);
-        delete_documents_with_strange_primary_key_(false);
+        delete_documents_with_strange_primary_key_(DeletionStrategy::AlwaysHard);
+        delete_documents_with_strange_primary_key_(DeletionStrategy::AlwaysSoft);
     }
 
     fn filtered_placeholder_search_should_not_return_deleted_documents_(
-        disable_soft_deletion: bool,
+        deletion_strategy: DeletionStrategy,
     ) {
         let index = TempIndex::new();
 
@@ -832,7 +832,7 @@ mod tests {
             )
             .unwrap();
 
-        delete_documents(&mut wtxn, &index, &["1_4", "1_70", "1_72"], disable_soft_deletion);
+        delete_documents(&mut wtxn, &index, &["1_4", "1_70", "1_72"], deletion_strategy);
 
         // Placeholder search with filter
         let filter = Filter::from_str("label = sign").unwrap().unwrap();
@@ -841,21 +841,27 @@ mod tests {
 
         wtxn.commit().unwrap();
 
-        db_snap!(index, soft_deleted_documents_ids, disable_soft_deletion);
-        db_snap!(index, word_docids, disable_soft_deletion);
-        db_snap!(index, facet_id_f64_docids, disable_soft_deletion);
-        db_snap!(index, word_pair_proximity_docids, disable_soft_deletion);
-        db_snap!(index, facet_id_exists_docids, disable_soft_deletion);
-        db_snap!(index, facet_id_string_docids, disable_soft_deletion);
+        db_snap!(index, soft_deleted_documents_ids, deletion_strategy);
+        db_snap!(index, word_docids, deletion_strategy);
+        db_snap!(index, facet_id_f64_docids, deletion_strategy);
+        db_snap!(index, word_pair_proximity_docids, deletion_strategy);
+        db_snap!(index, facet_id_exists_docids, deletion_strategy);
+        db_snap!(index, facet_id_string_docids, deletion_strategy);
     }
 
     #[test]
     fn filtered_placeholder_search_should_not_return_deleted_documents() {
-        filtered_placeholder_search_should_not_return_deleted_documents_(true);
-        filtered_placeholder_search_should_not_return_deleted_documents_(false);
+        filtered_placeholder_search_should_not_return_deleted_documents_(
+            DeletionStrategy::AlwaysHard,
+        );
+        filtered_placeholder_search_should_not_return_deleted_documents_(
+            DeletionStrategy::AlwaysSoft,
+        );
     }
 
-    fn placeholder_search_should_not_return_deleted_documents_(disable_soft_deletion: bool) {
+    fn placeholder_search_should_not_return_deleted_documents_(
+        deletion_strategy: DeletionStrategy,
+    ) {
         let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
@@ -896,8 +902,7 @@ mod tests {
             )
             .unwrap();
 
-        let deleted_internal_ids =
-            delete_documents(&mut wtxn, &index, &["1_4"], disable_soft_deletion);
+        let deleted_internal_ids = delete_documents(&mut wtxn, &index, &["1_4"], deletion_strategy);
 
         // Placeholder search
         let results = index.search(&wtxn).execute().unwrap();
@@ -915,11 +920,11 @@ mod tests {
 
     #[test]
     fn placeholder_search_should_not_return_deleted_documents() {
-        placeholder_search_should_not_return_deleted_documents_(true);
-        placeholder_search_should_not_return_deleted_documents_(false);
+        placeholder_search_should_not_return_deleted_documents_(DeletionStrategy::AlwaysHard);
+        placeholder_search_should_not_return_deleted_documents_(DeletionStrategy::AlwaysSoft);
     }
 
-    fn search_should_not_return_deleted_documents_(disable_soft_deletion: bool) {
+    fn search_should_not_return_deleted_documents_(deletion_strategy: DeletionStrategy) {
         let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
@@ -961,7 +966,7 @@ mod tests {
             .unwrap();
 
         let deleted_internal_ids =
-            delete_documents(&mut wtxn, &index, &["1_7", "1_52"], disable_soft_deletion);
+            delete_documents(&mut wtxn, &index, &["1_7", "1_52"], deletion_strategy);
 
         // search for abstract
         let results = index.search(&wtxn).query("abstract").execute().unwrap();
@@ -976,17 +981,17 @@ mod tests {
 
         wtxn.commit().unwrap();
 
-        db_snap!(index, soft_deleted_documents_ids, disable_soft_deletion);
+        db_snap!(index, soft_deleted_documents_ids, deletion_strategy);
     }
 
     #[test]
     fn search_should_not_return_deleted_documents() {
-        search_should_not_return_deleted_documents_(true);
-        search_should_not_return_deleted_documents_(false);
+        search_should_not_return_deleted_documents_(DeletionStrategy::AlwaysHard);
+        search_should_not_return_deleted_documents_(DeletionStrategy::AlwaysSoft);
     }
 
     fn geo_filtered_placeholder_search_should_not_return_deleted_documents_(
-        disable_soft_deletion: bool,
+        deletion_strategy: DeletionStrategy,
     ) {
         let index = TempIndex::new();
 
@@ -1024,7 +1029,7 @@ mod tests {
 
         let external_ids_to_delete = ["5", "6", "7", "12", "17", "19"];
         let deleted_internal_ids =
-            delete_documents(&mut wtxn, &index, &external_ids_to_delete, disable_soft_deletion);
+            delete_documents(&mut wtxn, &index, &external_ids_to_delete, deletion_strategy);
 
         // Placeholder search with geo filter
         let filter = Filter::from_str("_geoRadius(50.6924, 3.1763, 20000)").unwrap().unwrap();
@@ -1040,18 +1045,22 @@ mod tests {
 
         wtxn.commit().unwrap();
 
-        db_snap!(index, soft_deleted_documents_ids, disable_soft_deletion);
-        db_snap!(index, facet_id_f64_docids, disable_soft_deletion);
-        db_snap!(index, facet_id_string_docids, disable_soft_deletion);
+        db_snap!(index, soft_deleted_documents_ids, deletion_strategy);
+        db_snap!(index, facet_id_f64_docids, deletion_strategy);
+        db_snap!(index, facet_id_string_docids, deletion_strategy);
     }
 
     #[test]
     fn geo_filtered_placeholder_search_should_not_return_deleted_documents() {
-        geo_filtered_placeholder_search_should_not_return_deleted_documents_(true);
-        geo_filtered_placeholder_search_should_not_return_deleted_documents_(false);
+        geo_filtered_placeholder_search_should_not_return_deleted_documents_(
+            DeletionStrategy::AlwaysHard,
+        );
+        geo_filtered_placeholder_search_should_not_return_deleted_documents_(
+            DeletionStrategy::AlwaysSoft,
+        );
     }
 
-    fn get_documents_should_not_return_deleted_documents_(disable_soft_deletion: bool) {
+    fn get_documents_should_not_return_deleted_documents_(deletion_strategy: DeletionStrategy) {
         let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
@@ -1094,7 +1103,7 @@ mod tests {
 
         let deleted_external_ids = ["1_7", "1_52"];
         let deleted_internal_ids =
-            delete_documents(&mut wtxn, &index, &deleted_external_ids, disable_soft_deletion);
+            delete_documents(&mut wtxn, &index, &deleted_external_ids, deletion_strategy);
 
         // list all documents
         let results = index.all_documents(&wtxn).unwrap();
@@ -1125,16 +1134,16 @@ mod tests {
 
         wtxn.commit().unwrap();
 
-        db_snap!(index, soft_deleted_documents_ids, disable_soft_deletion);
+        db_snap!(index, soft_deleted_documents_ids, deletion_strategy);
     }
 
     #[test]
     fn get_documents_should_not_return_deleted_documents() {
-        get_documents_should_not_return_deleted_documents_(true);
-        get_documents_should_not_return_deleted_documents_(false);
+        get_documents_should_not_return_deleted_documents_(DeletionStrategy::AlwaysHard);
+        get_documents_should_not_return_deleted_documents_(DeletionStrategy::AlwaysSoft);
     }
 
-    fn stats_should_not_return_deleted_documents_(disable_soft_deletion: bool) {
+    fn stats_should_not_return_deleted_documents_(deletion_strategy: DeletionStrategy) {
         let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
@@ -1168,7 +1177,7 @@ mod tests {
             { "docid": "1_69", "label": ["geometry"]}
         ])).unwrap();
 
-        delete_documents(&mut wtxn, &index, &["1_7", "1_52"], disable_soft_deletion);
+        delete_documents(&mut wtxn, &index, &["1_7", "1_52"], deletion_strategy);
 
         // count internal documents
         let results = index.number_of_documents(&wtxn).unwrap();
@@ -1182,12 +1191,12 @@ mod tests {
 
         wtxn.commit().unwrap();
 
-        db_snap!(index, soft_deleted_documents_ids, disable_soft_deletion);
+        db_snap!(index, soft_deleted_documents_ids, deletion_strategy);
     }
 
     #[test]
     fn stats_should_not_return_deleted_documents() {
-        stats_should_not_return_deleted_documents_(true);
-        stats_should_not_return_deleted_documents_(false);
+        stats_should_not_return_deleted_documents_(DeletionStrategy::AlwaysHard);
+        stats_should_not_return_deleted_documents_(DeletionStrategy::AlwaysSoft);
     }
 }

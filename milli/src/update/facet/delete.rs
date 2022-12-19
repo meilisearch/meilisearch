@@ -122,7 +122,7 @@ mod tests {
     use crate::documents::documents_batch_reader_from_objects;
     use crate::index::tests::TempIndex;
     use crate::update::facet::test_helpers::ordered_string;
-    use crate::update::DeleteDocuments;
+    use crate::update::{DeleteDocuments, DeletionStrategy};
 
     #[test]
     fn delete_mixed_incremental_and_bulk() {
@@ -165,7 +165,7 @@ mod tests {
         let mut wtxn = index.env.write_txn().unwrap();
 
         let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        builder.disable_soft_deletion(true);
+        builder.strategy(DeletionStrategy::AlwaysHard);
         builder.delete_documents(&RoaringBitmap::from_iter(0..100));
         // by deleting the first 100 documents, we expect that:
         // - the "id" part of the DB will be updated in bulk, since #affected_facet_value = 100 which is > database_len / 150 (= 13)
@@ -224,7 +224,7 @@ mod tests {
         let mut wtxn = index.env.write_txn().unwrap();
 
         let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        builder.disable_soft_deletion(true);
+        builder.strategy(DeletionStrategy::AlwaysHard);
         builder.delete_documents(&RoaringBitmap::from_iter(0..100));
         // by deleting the first 100 documents, we expect that:
         // - the "id" part of the DB will be updated in bulk, since #affected_facet_value = 100 which is > database_len / 150 (= 13)
@@ -283,7 +283,7 @@ mod tests {
         for docid in docids_to_delete.into_iter().take(990) {
             let mut wtxn = index.env.write_txn().unwrap();
             let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-            builder.disable_soft_deletion(true);
+            builder.strategy(DeletionStrategy::AlwaysHard);
             builder.delete_documents(&RoaringBitmap::from_iter([docid]));
             builder.execute().unwrap();
             wtxn.commit().unwrap();

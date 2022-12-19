@@ -1192,8 +1192,8 @@ pub(crate) mod tests {
     use crate::error::{Error, InternalError};
     use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
     use crate::update::{
-        self, DeleteDocuments, IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod,
-        IndexerConfig, Settings,
+        self, DeleteDocuments, DeletionStrategy, IndexDocuments, IndexDocumentsConfig,
+        IndexDocumentsMethod, IndexerConfig, Settings,
     };
     use crate::{db_snap, obkv_to_json, Index};
 
@@ -1281,6 +1281,17 @@ pub(crate) mod tests {
             update(&mut builder);
             builder.execute(drop, || false)?;
             Ok(())
+        }
+
+        pub fn delete_document(&self, external_document_id: &str) {
+            let mut wtxn = self.write_txn().unwrap();
+
+            let mut delete = DeleteDocuments::new(&mut wtxn, &self).unwrap();
+            delete.strategy(self.index_documents_config.deletion_strategy);
+
+            delete.delete_external_id(external_document_id);
+            delete.execute().unwrap();
+            wtxn.commit().unwrap();
         }
     }
 
@@ -1487,7 +1498,9 @@ pub(crate) mod tests {
         use big_s::S;
         use maplit::hashset;
 
-        let index = TempIndex::new();
+        let mut index = TempIndex::new();
+        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysSoft;
+        let index = index;
 
         index
             .update_settings(|settings| {
@@ -1657,7 +1670,8 @@ pub(crate) mod tests {
         }
         // Second Batch: replace the documents with soft-deletion
         {
-            index.index_documents_config.disable_soft_deletion = false;
+            index.index_documents_config.deletion_strategy =
+                crate::update::DeletionStrategy::AlwaysSoft;
             let mut docs1 = vec![];
             for i in 0..3 {
                 docs1.push(serde_json::json!(
@@ -1726,7 +1740,7 @@ pub(crate) mod tests {
         drop(rtxn);
         // Third Batch: replace the documents with soft-deletion again
         {
-            index.index_documents_config.disable_soft_deletion = false;
+            index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysSoft;
             let mut docs1 = vec![];
             for i in 0..3 {
                 docs1.push(serde_json::json!(
@@ -1795,7 +1809,7 @@ pub(crate) mod tests {
 
         // Fourth Batch: replace the documents without soft-deletion
         {
-            index.index_documents_config.disable_soft_deletion = true;
+            index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysHard;
             let mut docs1 = vec![];
             for i in 0..3 {
                 docs1.push(serde_json::json!(
@@ -1867,6 +1881,7 @@ pub(crate) mod tests {
     fn bug_3021_first() {
         // https://github.com/meilisearch/meilisearch/issues/3021
         let mut index = TempIndex::new();
+        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysSoft;
         index.index_documents_config.update_method = IndexDocumentsMethod::ReplaceDocuments;
 
         index
@@ -1891,11 +1906,7 @@ pub(crate) mod tests {
         "###);
         db_snap!(index, soft_deleted_documents_ids, 1, @"[]");
 
-        let mut wtxn = index.write_txn().unwrap();
-        let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        delete.delete_external_id("34");
-        delete.execute().unwrap();
-        wtxn.commit().unwrap();
+        index.delete_document("34");
 
         db_snap!(index, documents_ids, @"[0, ]");
         db_snap!(index, external_documents_ids, 2, @r###"
@@ -1936,11 +1947,7 @@ pub(crate) mod tests {
         db_snap!(index, soft_deleted_documents_ids, 4, @"[]");
 
         // We do the test again, but deleting the document with id 0 instead of id 1 now
-        let mut wtxn = index.write_txn().unwrap();
-        let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        delete.delete_external_id("38");
-        delete.execute().unwrap();
-        wtxn.commit().unwrap();
+        index.delete_document("38");
 
         db_snap!(index, documents_ids, @"[1, ]");
         db_snap!(index, external_documents_ids, 5, @r###"
@@ -1987,6 +1994,7 @@ pub(crate) mod tests {
     fn bug_3021_second() {
         // https://github.com/meilisearch/meilisearch/issues/3021
         let mut index = TempIndex::new();
+        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysSoft;
         index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         index
@@ -2011,11 +2019,7 @@ pub(crate) mod tests {
         "###);
         db_snap!(index, soft_deleted_documents_ids, 1, @"[]");
 
-        let mut wtxn = index.write_txn().unwrap();
-        let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        delete.delete_external_id("34");
-        delete.execute().unwrap();
-        wtxn.commit().unwrap();
+        index.delete_document("34");
 
         db_snap!(index, documents_ids, @"[0, ]");
         db_snap!(index, external_documents_ids, 2, @r###"
@@ -2116,6 +2120,7 @@ pub(crate) mod tests {
     fn bug_3021_third() {
         // https://github.com/meilisearch/meilisearch/issues/3021
         let mut index = TempIndex::new();
+        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysSoft;
         index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         index
@@ -2142,11 +2147,7 @@ pub(crate) mod tests {
         "###);
         db_snap!(index, soft_deleted_documents_ids, 1, @"[]");
 
-        let mut wtxn = index.write_txn().unwrap();
-        let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        delete.delete_external_id("3");
-        delete.execute().unwrap();
-        wtxn.commit().unwrap();
+        index.delete_document("3");
 
         db_snap!(index, documents_ids, @"[1, 2, ]");
         db_snap!(index, external_documents_ids, 2, @r###"
@@ -2158,7 +2159,7 @@ pub(crate) mod tests {
         "###);
         db_snap!(index, soft_deleted_documents_ids, 2, @"[0, ]");
 
-        index.index_documents_config.disable_soft_deletion = true;
+        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysHard;
 
         index.add_documents(documents!([{ "primary_key": "4", "a": 2 }])).unwrap();
 
