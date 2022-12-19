@@ -48,7 +48,7 @@ pub struct DocumentDeletionResult {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum DeletionStrategy {
     #[default]
-    /// Definitely suppress documents according to the number of size of soft-deleted documents
+    /// Definitely suppress documents according to the number or size of soft-deleted documents
     Dynamic,
     /// Never definitely suppress documents
     AlwaysSoft,
