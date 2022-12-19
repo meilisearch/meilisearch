@@ -1,6 +1,6 @@
 pub use self::available_documents_ids::AvailableDocumentsIds;
 pub use self::clear_documents::ClearDocuments;
-pub use self::delete_documents::{DeleteDocuments, DocumentDeletionResult};
+pub use self::delete_documents::{DeleteDocuments, DeletionStrategy, DocumentDeletionResult};
 pub use self::facet::bulk::FacetsUpdateBulk;
 pub use self::facet::incremental::FacetsUpdateIncrementalInner;
 pub use self::index_documents::{
