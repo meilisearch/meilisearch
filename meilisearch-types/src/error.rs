@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, io};
 
 use actix_web::http::StatusCode;
 use actix_web::{self as aweb, HttpResponseBuilder};
@@ -113,6 +113,11 @@ impl fmt::Display for ErrorType {
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum Code {
+    // error related to your setup
+    IoError,
+    NoSpaceLeftOnDevice,
+    TooManyOpenFiles,
+
     // index related error
     CreateIndex,
     IndexAlreadyExists,
@@ -145,7 +150,6 @@ pub enum Code {
     InvalidToken,
     MissingAuthorizationHeader,
     MissingMasterKey,
-    NoSpaceLeftOnDevice,
     DumpNotFound,
     InvalidTaskDateFilter,
     InvalidTaskStatusesFilter,
@@ -188,6 +192,15 @@ impl Code {
         use Code::*;
 
         match self {
+            // related to the setup
+            IoError => ErrCode::invalid("io_error", StatusCode::UNPROCESSABLE_ENTITY),
+            TooManyOpenFiles => {
+                ErrCode::invalid("too_many_open_files", StatusCode::UNPROCESSABLE_ENTITY)
+            }
+            NoSpaceLeftOnDevice => {
+                ErrCode::invalid("no_space_left_on_device", StatusCode::UNPROCESSABLE_ENTITY)
+            }
+
             // index related errors
             // create index is thrown on internal error while creating an index.
             CreateIndex => {
@@ -266,9 +279,6 @@ impl Code {
                 ErrCode::invalid("missing_task_filters", StatusCode::BAD_REQUEST)
             }
             DumpNotFound => ErrCode::invalid("dump_not_found", StatusCode::NOT_FOUND),
-            NoSpaceLeftOnDevice => {
-                ErrCode::internal("no_space_left_on_device", StatusCode::INTERNAL_SERVER_ERROR)
-            }
             PayloadTooLarge => ErrCode::invalid("payload_too_large", StatusCode::PAYLOAD_TOO_LARGE),
             RetrieveDocument => {
                 ErrCode::internal("unretrievable_document", StatusCode::BAD_REQUEST)
@@ -380,7 +390,7 @@ impl ErrorCode for milli::Error {
 
         match self {
             Error::InternalError(_) => Code::Internal,
-            Error::IoError(_) => Code::Internal,
+            Error::IoError(e) => e.error_code(),
             Error::UserError(ref error) => {
                 match error {
                     // TODO: wait for spec for new error codes.
@@ -415,18 +425,45 @@ impl ErrorCode for milli::Error {
     }
 }
 
+impl ErrorCode for file_store::Error {
+    fn error_code(&self) -> Code {
+        match self {
+            Self::IoError(e) => e.error_code(),
+            Self::PersistError(e) => e.error_code(),
+        }
+    }
+}
+
+impl ErrorCode for tempfile::PersistError {
+    fn error_code(&self) -> Code {
+        self.error.error_code()
+    }
+}
+
 impl ErrorCode for HeedError {
     fn error_code(&self) -> Code {
         match self {
             HeedError::Mdb(MdbError::MapFull) => Code::DatabaseSizeLimitReached,
             HeedError::Mdb(MdbError::Invalid) => Code::InvalidStore,
-            HeedError::Io(_)
-            | HeedError::Mdb(_)
+            HeedError::Io(e) => e.error_code(),
+            HeedError::Mdb(_)
             | HeedError::Encoding
             | HeedError::Decoding
             | HeedError::InvalidDatabaseTyping
             | HeedError::DatabaseClosing
             | HeedError::BadOpenOptions => Code::Internal,
+        }
+    }
+}
+
+impl ErrorCode for io::Error {
+    fn error_code(&self) -> Code {
+        match self.raw_os_error() {
+            Some(5) => Code::IoError,
+            Some(24) => Code::TooManyOpenFiles,
+            Some(28) => Code::NoSpaceLeftOnDevice,
+            e => todo!("missed something asshole {:?}", e),
+            // e => Code::Internal,
         }
     }
 }

@@ -13,7 +13,6 @@ use serde::{Deserialize, Deserializer};
 use serde_json::error::Category;
 
 use crate::error::{Code, ErrorCode};
-use crate::internal_error;
 
 type Result<T> = std::result::Result<T, DocumentFormatError>;
 
@@ -36,6 +35,7 @@ impl fmt::Display for PayloadType {
 
 #[derive(Debug)]
 pub enum DocumentFormatError {
+    Io(io::Error),
     Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
     MalformedPayload(Error, PayloadType),
 }
@@ -43,6 +43,7 @@ pub enum DocumentFormatError {
 impl Display for DocumentFormatError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Io(e) => write!(f, "{e}"),
             Self::Internal(e) => write!(f, "An internal error has occurred: `{}`.", e),
             Self::MalformedPayload(me, b) => match me.borrow() {
                 Error::Json(se) => {
@@ -91,16 +92,21 @@ impl From<(PayloadType, Error)> for DocumentFormatError {
     }
 }
 
+impl From<io::Error> for DocumentFormatError {
+    fn from(error: io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+
 impl ErrorCode for DocumentFormatError {
     fn error_code(&self) -> Code {
         match self {
+            DocumentFormatError::Io(e) => e.error_code(),
             DocumentFormatError::Internal(_) => Code::Internal,
             DocumentFormatError::MalformedPayload(_, _) => Code::MalformedPayload,
         }
     }
 }
-
-internal_error!(DocumentFormatError: io::Error);
 
 /// Reads CSV from input and write an obkv batch to writer.
 pub fn read_csv(file: &File, writer: impl Write + Seek) -> Result<u64> {
