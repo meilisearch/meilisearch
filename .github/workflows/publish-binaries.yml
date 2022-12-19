@@ -37,6 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: check-version
     container:
+      # Use ubuntu-18.04 to compile with glibc 2.27
       image: ubuntu:18.04
     steps:
     - uses: actions/checkout@v3

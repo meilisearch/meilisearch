@@ -19,6 +19,7 @@ jobs:
     name: Tests on ubuntu-18.04
     runs-on: ubuntu-latest
     container:
+      # Use ubuntu-18.04 to compile with glibc 2.27, which are the production expectations
       image: ubuntu:18.04
     steps:
     - uses: actions/checkout@v3
@@ -70,6 +71,7 @@ jobs:
     name: Run tests in debug
     runs-on: ubuntu-latest
     container:
+      # Use ubuntu-18.04 to compile with glibc 2.27, which are the production expectations
       image: ubuntu:18.04
     steps:
       - uses: actions/checkout@v3
