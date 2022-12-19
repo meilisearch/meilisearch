@@ -66,11 +66,15 @@ impl IndexMapper {
 
     /// Create or open an index in the specified path.
     /// The path *must* exists or an error will be thrown.
-    fn create_or_open_index(&self, path: &Path, date: Option<(time::OffsetDateTime, time::OffsetDateTime)>) -> Result<Index> {
+    fn create_or_open_index(
+        &self,
+        path: &Path,
+        date: Option<(time::OffsetDateTime, time::OffsetDateTime)>,
+    ) -> Result<Index> {
         let mut options = EnvOpenOptions::new();
         options.map_size(clamp_to_page_size(self.index_size));
         options.max_readers(1024);
-        
+
         if date == None {
             Ok(Index::new(options, path)?)
         } else {
@@ -80,7 +84,12 @@ impl IndexMapper {
     }
 
     /// Get or create the index.
-    pub fn create_index(&self, mut wtxn: RwTxn, name: &str, date: Option<(time::OffsetDateTime, time::OffsetDateTime)>) -> Result<Index> {
+    pub fn create_index(
+        &self,
+        mut wtxn: RwTxn,
+        name: &str,
+        date: Option<(time::OffsetDateTime, time::OffsetDateTime)>,
+    ) -> Result<Index> {
         match self.index(&wtxn, name) {
             Ok(index) => {
                 wtxn.commit()?;
