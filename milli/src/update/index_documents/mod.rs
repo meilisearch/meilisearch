@@ -1821,6 +1821,56 @@ mod tests {
     }
 
     #[test]
+    fn primary_key_inference() {
+        let index = TempIndex::new();
+
+        let doc_no_id = documents! {[{
+            "title": "asdsad",
+            "state": "automated",
+            "priority": "normal",
+            "branch_id_number": 0
+        }]};
+        assert!(matches!(
+            index.add_documents(doc_no_id),
+            Err(Error::UserError(UserError::NoPrimaryKeyCandidateFound))
+        ));
+
+        let doc_multiple_ids = documents! {[{
+            "id": 228143,
+            "title": "something",
+            "state": "automated",
+            "priority": "normal",
+            "public_uid": "39c6499b",
+            "project_id": 78207,
+            "branch_id_number": 0
+        }]};
+
+        let Err(Error::UserError(UserError::MultiplePrimaryKeyCandidatesFound {
+            candidates
+        })) =
+            index.add_documents(doc_multiple_ids) else { panic!("Expected Error::UserError(MultiplePrimaryKeyCandidatesFound)") };
+
+        assert_eq!(candidates, vec![S("id"), S("project_id"), S("public_uid"),]);
+
+        let doc_inferable = documents! {[{
+            "video": "test.mp4",
+            "id": 228143,
+            "title": "something",
+            "state": "automated",
+            "priority": "normal",
+            "public_uid_": "39c6499b",
+            "project_id_": 78207,
+            "branch_id_number": 0
+        }]};
+
+        index.add_documents(doc_inferable).unwrap();
+
+        let txn = index.read_txn().unwrap();
+
+        assert_eq!(index.primary_key(&txn).unwrap().unwrap(), "id");
+    }
+
+    #[test]
     fn long_words_must_be_skipped() {
         let index = TempIndex::new();
 
