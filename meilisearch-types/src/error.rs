@@ -462,8 +462,7 @@ impl ErrorCode for io::Error {
             Some(5) => Code::IoError,
             Some(24) => Code::TooManyOpenFiles,
             Some(28) => Code::NoSpaceLeftOnDevice,
-            e => todo!("missed something asshole {:?}", e),
-            // e => Code::Internal,
+            _ => Code::Internal,
         }
     }
 }

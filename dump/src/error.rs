@@ -19,9 +19,9 @@ pub enum Error {
 impl ErrorCode for Error {
     fn error_code(&self) -> Code {
         match self {
-            // Are these three really Internal errors?
-            // TODO look at that later.
-            Error::Io(_) => Code::Internal,
+            Error::Io(e) => e.error_code(),
+
+            // These error come from an internal mis
             Error::Serde(_) => Code::Internal,
             Error::Uuid(_) => Code::Internal,
 
