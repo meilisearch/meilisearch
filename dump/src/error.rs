@@ -19,9 +19,10 @@ pub enum Error {
 impl ErrorCode for Error {
     fn error_code(&self) -> Code {
         match self {
-            // Are these three really Internal errors?
-            // TODO look at that later.
-            Error::Io(_) => Code::Internal,
+            Error::Io(e) => e.error_code(),
+
+            // These errors either happen when creating a dump and don't need any error code,
+            // or come from an internal bad deserialization.
             Error::Serde(_) => Code::Internal,
             Error::Uuid(_) => Code::Internal,
 
