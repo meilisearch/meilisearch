@@ -50,7 +50,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        os: [macos-12, windows-2022]
     steps:
     - uses: actions/checkout@v3
     - name: Cache dependencies

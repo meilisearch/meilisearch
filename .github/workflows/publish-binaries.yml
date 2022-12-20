@@ -68,12 +68,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        os: [macos-12, windows-2022]
         include:
-          - os: macos-latest
+          - os: macos-12
             artifact_name: meilisearch
             asset_name: meilisearch-macos-amd64
-          - os: windows-latest
+          - os: windows-2022
             artifact_name: meilisearch.exe
             asset_name: meilisearch-windows-amd64.exe
     steps:
@@ -102,7 +102,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
+          - os: macos-12
             target: aarch64-apple-darwin
             asset_name: meilisearch-macos-apple-silicon
     steps:
