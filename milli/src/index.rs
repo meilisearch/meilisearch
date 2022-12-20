@@ -1181,6 +1181,7 @@ impl Index {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use std::collections::HashSet;
     use std::ops::Deref;
 
     use big_s::S;
@@ -1195,7 +1196,7 @@ pub(crate) mod tests {
         self, DeleteDocuments, DeletionStrategy, IndexDocuments, IndexDocumentsConfig,
         IndexDocumentsMethod, IndexerConfig, Settings,
     };
-    use crate::{db_snap, obkv_to_json, Index};
+    use crate::{db_snap, obkv_to_json, Index, Search, SearchResult};
 
     pub(crate) struct TempIndex {
         pub inner: Index,
@@ -2187,5 +2188,98 @@ pub(crate) mod tests {
         5                        2
         "###);
         db_snap!(index, soft_deleted_documents_ids, 2, @"[]");
+    }
+
+    #[test]
+    fn bug_3021_fourth() {
+        // https://github.com/meilisearch/meilisearch/issues/3021
+        let mut index = TempIndex::new();
+        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
+        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysSoft;
+
+        index
+            .update_settings(|settings| {
+                settings.set_primary_key("primary_key".to_owned());
+            })
+            .unwrap();
+
+        index
+            .add_documents(documents!([
+                { "primary_key": 11 },
+                { "primary_key": 4 },
+            ]))
+            .unwrap();
+
+        db_snap!(index, documents_ids, @"[0, 1, ]");
+        db_snap!(index, external_documents_ids, @r###"
+        soft:
+        hard:
+        11                       0
+        4                        1
+        "###);
+        db_snap!(index, soft_deleted_documents_ids, @"[]");
+
+        index
+            .add_documents(documents!([
+                { "primary_key": 4, "a": 0 },
+                { "primary_key": 1 },
+            ]))
+            .unwrap();
+
+        db_snap!(index, documents_ids, @"[0, 2, 3, ]");
+        db_snap!(index, external_documents_ids, @r###"
+        soft:
+        hard:
+        1                        3
+        11                       0
+        4                        2
+        "###);
+        db_snap!(index, soft_deleted_documents_ids, @"[1, ]");
+
+        let mut wtxn = index.write_txn().unwrap();
+        let mut delete = DeleteDocuments::new(&mut wtxn, &index).unwrap();
+        delete.strategy(DeletionStrategy::AlwaysHard);
+        delete.execute().unwrap();
+        wtxn.commit().unwrap();
+
+        db_snap!(index, documents_ids, @"[0, 2, 3, ]");
+        db_snap!(index, external_documents_ids, @r###"
+        soft:
+        hard:
+        1                        3
+        11                       0
+        4                        2
+        "###);
+        db_snap!(index, soft_deleted_documents_ids, @"[]");
+
+        index
+            .add_documents(documents!([
+                { "primary_key": 4, "a": 1 },
+                { "primary_key": 1, "a": 0 },
+            ]))
+            .unwrap();
+
+        db_snap!(index, documents_ids, @"[0, 1, 4, ]");
+        db_snap!(index, external_documents_ids, @r###"
+        soft:
+        hard:
+        1                        4
+        11                       0
+        4                        1
+        "###);
+        db_snap!(index, soft_deleted_documents_ids, @"[2, 3, ]");
+
+        let rtxn = index.read_txn().unwrap();
+        let search = Search::new(&rtxn, &index);
+        let SearchResult { matching_words: _, candidates: _, mut documents_ids } =
+            search.execute().unwrap();
+        let primary_key_id = index.fields_ids_map(&rtxn).unwrap().id("primary_key").unwrap();
+        documents_ids.sort_unstable();
+        let docs = index.documents(&rtxn, documents_ids).unwrap();
+        let mut all_ids = HashSet::new();
+        for (_docid, obkv) in docs {
+            let id = obkv.get(primary_key_id).unwrap();
+            assert!(all_ids.insert(id));
+        }
     }
 }
