@@ -6,16 +6,14 @@ use heed::types::{ByteSlice, DecodeIgnore, Str};
 use heed::Database;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use time::OffsetDateTime;
 
 use super::facet::delete::FacetsDelete;
 use super::ClearDocuments;
-use crate::error::{InternalError, UserError};
+use crate::error::InternalError;
 use crate::facet::FacetType;
 use crate::heed_codec::facet::FieldDocIdFacetCodec;
 use crate::heed_codec::CboRoaringBitmapCodec;
-use crate::index::{db_name, main_key};
 use crate::{
     ExternalDocumentsIds, FieldId, FieldIdMapMissingEntry, Index, Result, RoaringBitmapCodec,
     SmallString32, BEU32,
@@ -186,6 +184,10 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
         soft_deleted_docids |= &self.to_delete_docids;
 
+        // We always soft-delete the documents, even if they will be permanently
+        // deleted immediately after.
+        self.index.put_soft_deleted_documents_ids(self.wtxn, &soft_deleted_docids)?;
+
         // decide for a hard or soft deletion depending on the strategy
         let soft_deletion = match self.strategy {
             DeletionStrategy::Dynamic => {
@@ -214,7 +216,6 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
         if soft_deletion {
             // Keep the soft-deleted in the DB
-            self.index.put_soft_deleted_documents_ids(self.wtxn, &soft_deleted_docids)?;
             return Ok(DetailedDocumentDeletionResult {
                 deleted_documents: self.to_delete_docids.len(),
                 remaining_documents: documents_ids.len(),
@@ -222,23 +223,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             });
         }
 
-        // Erase soft-deleted from DB
         self.to_delete_docids = soft_deleted_docids;
-        // and we can reset the soft deleted bitmap
-        self.index.put_soft_deleted_documents_ids(self.wtxn, &RoaringBitmap::new())?;
-
-        let primary_key =
-            self.index.primary_key(self.wtxn)?.ok_or(InternalError::DatabaseMissingEntry {
-                db_name: db_name::MAIN,
-                key: Some(main_key::PRIMARY_KEY_KEY),
-            })?;
-
-        // Since we already checked if the DB was empty, if we can't find the primary key, then
-        // something is wrong, and we must return an error.
-        let id_field = match fields_ids_map.id(primary_key) {
-            Some(field) => field,
-            None => return Err(UserError::MissingPrimaryKey.into()),
-        };
 
         let Index {
             env: _env,
@@ -262,33 +247,14 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             documents,
         } = self.index;
 
-        // Retrieve the words and the external documents ids contained in the documents.
+        // Retrieve the words contained in the documents.
         let mut words = Vec::new();
-        let mut external_ids = Vec::new();
         for docid in &self.to_delete_docids {
-            // We create an iterator to be able to get the content and delete the document
-            // content itself. It's faster to acquire a cursor to get and delete,
-            // as we avoid traversing the LMDB B-Tree two times but only once.
-            let key = BEU32::new(docid);
-            let mut iter = documents.range_mut(self.wtxn, &(key..=key))?;
-            if let Some((_key, obkv)) = iter.next().transpose()? {
-                if let Some(content) = obkv.get(id_field) {
-                    let external_id = match serde_json::from_slice(content).unwrap() {
-                        Value::String(string) => SmallString32::from(string.as_str()),
-                        Value::Number(number) => SmallString32::from(number.to_string()),
-                        document_id => {
-                            return Err(UserError::InvalidDocumentId { document_id }.into())
-                        }
-                    };
-                    external_ids.push(external_id);
-                }
-                // safety: we don't keep references from inside the LMDB database.
-                unsafe { iter.del_current()? };
-            }
-            drop(iter);
+            documents.delete(self.wtxn, &BEU32::new(docid))?;
 
-            // We iterate through the words positions of the document id,
-            // retrieve the word and delete the positions.
+            // We iterate through the words positions of the document id, retrieve the word and delete the positions.
+            // We create an iterator to be able to get the content and delete the key-value itself.
+            // It's faster to acquire a cursor to get and delete, as we avoid traversing the LMDB B-Tree two times but only once.
             let mut iter = docid_word_positions.prefix_iter_mut(self.wtxn, &(docid, ""))?;
             while let Some(result) = iter.next() {
                 let ((_docid, word), _positions) = result?;
@@ -298,17 +264,12 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                 unsafe { iter.del_current()? };
             }
         }
-
-        // We create the FST map of the external ids that we must delete.
-        external_ids.sort_unstable();
-        let external_ids_to_delete = fst::Set::from_iter(external_ids)?;
-
         // We acquire the current external documents ids map...
+        // Note that its soft-deleted document ids field will be equal to the `to_delete_docids`
         let mut new_external_documents_ids = self.index.external_documents_ids(self.wtxn)?;
-        // ...and remove the to-delete external ids.
-        new_external_documents_ids.delete_ids(external_ids_to_delete)?;
-
-        // We write the new external ids into the main database.
+        // We then remove the soft-deleted docids from it
+        new_external_documents_ids.delete_soft_deleted_documents_ids_from_fsts()?;
+        // and write it back to the main database.
         let new_external_documents_ids = new_external_documents_ids.into_static();
         self.index.put_external_documents_ids(self.wtxn, &new_external_documents_ids)?;
 
@@ -544,6 +505,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             facet_id_exists_docids,
             &self.to_delete_docids,
         )?;
+
+        self.index.put_soft_deleted_documents_ids(self.wtxn, &RoaringBitmap::new())?;
 
         Ok(DetailedDocumentDeletionResult {
             deleted_documents: self.to_delete_docids.len(),
@@ -1125,14 +1088,16 @@ mod tests {
                 id
             );
         }
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
 
         // get internal docids from deleted external document ids
-        let results = index.external_documents_ids(&wtxn).unwrap();
+        let results = index.external_documents_ids(&rtxn).unwrap();
         for id in deleted_external_ids {
             assert!(results.get(id).is_none(), "The document {} was supposed to be deleted", id);
         }
-
-        wtxn.commit().unwrap();
+        drop(rtxn);
 
         db_snap!(index, soft_deleted_documents_ids, deletion_strategy);
     }

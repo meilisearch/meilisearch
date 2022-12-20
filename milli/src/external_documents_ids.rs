@@ -47,30 +47,6 @@ impl<'a> ExternalDocumentsIds<'a> {
         }
     }
 
-    pub fn delete_ids<A: AsRef<[u8]>>(&mut self, other: fst::Set<A>) -> fst::Result<()> {
-        let other = fst::Map::from(other.into_fst());
-        let union_op = self.soft.op().add(&other).r#union();
-
-        let mut iter = union_op.into_stream();
-        let mut new_soft_builder = fst::MapBuilder::memory();
-        while let Some((external_id, docids)) = iter.next() {
-            if docids.iter().any(|v| v.index == 1) {
-                // If the `other` set returns a value here it means
-                // that it must be marked as deleted.
-                new_soft_builder.insert(external_id, DELETED_ID)?;
-            } else {
-                let value = docids.iter().find(|v| v.index == 0).unwrap().value;
-                new_soft_builder.insert(external_id, value)?;
-            }
-        }
-
-        drop(iter);
-
-        // We save this new map as the new soft map.
-        self.soft = new_soft_builder.into_map().map_data(Cow::Owned)?;
-        self.merge_soft_into_hard()
-    }
-
     /// Rebuild the internal FSTs in the ExternalDocumentsIds structure such that they
     /// don't contain any soft deleted document id.
     pub fn delete_soft_deleted_documents_ids_from_fsts(&mut self) -> fst::Result<()> {
@@ -172,77 +148,4 @@ impl Default for ExternalDocumentsIds<'static> {
 /// Returns the value of the `IndexedValue` with the highest _index_.
 fn indexed_last_value(indexed_values: &[IndexedValue]) -> Option<u64> {
     indexed_values.iter().copied().max_by_key(|iv| iv.index).map(|iv| iv.value)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn simple_insert_delete_ids() {
-        let mut external_documents_ids = ExternalDocumentsIds::default();
-
-        let new_ids = fst::Map::from_iter(vec![("a", 1), ("b", 2), ("c", 3), ("d", 4)]).unwrap();
-        external_documents_ids.insert_ids(&new_ids).unwrap();
-
-        assert_eq!(external_documents_ids.get("a"), Some(1));
-        assert_eq!(external_documents_ids.get("b"), Some(2));
-        assert_eq!(external_documents_ids.get("c"), Some(3));
-        assert_eq!(external_documents_ids.get("d"), Some(4));
-
-        let new_ids = fst::Map::from_iter(vec![("e", 5), ("f", 6), ("g", 7)]).unwrap();
-        external_documents_ids.insert_ids(&new_ids).unwrap();
-
-        assert_eq!(external_documents_ids.get("a"), Some(1));
-        assert_eq!(external_documents_ids.get("b"), Some(2));
-        assert_eq!(external_documents_ids.get("c"), Some(3));
-        assert_eq!(external_documents_ids.get("d"), Some(4));
-        assert_eq!(external_documents_ids.get("e"), Some(5));
-        assert_eq!(external_documents_ids.get("f"), Some(6));
-        assert_eq!(external_documents_ids.get("g"), Some(7));
-
-        let del_ids = fst::Set::from_iter(vec!["a", "c", "f"]).unwrap();
-        external_documents_ids.delete_ids(del_ids).unwrap();
-
-        assert_eq!(external_documents_ids.get("a"), None);
-        assert_eq!(external_documents_ids.get("b"), Some(2));
-        assert_eq!(external_documents_ids.get("c"), None);
-        assert_eq!(external_documents_ids.get("d"), Some(4));
-        assert_eq!(external_documents_ids.get("e"), Some(5));
-        assert_eq!(external_documents_ids.get("f"), None);
-        assert_eq!(external_documents_ids.get("g"), Some(7));
-
-        let new_ids = fst::Map::from_iter(vec![("a", 5), ("b", 6), ("h", 8)]).unwrap();
-        external_documents_ids.insert_ids(&new_ids).unwrap();
-
-        assert_eq!(external_documents_ids.get("a"), Some(5));
-        assert_eq!(external_documents_ids.get("b"), Some(6));
-        assert_eq!(external_documents_ids.get("c"), None);
-        assert_eq!(external_documents_ids.get("d"), Some(4));
-        assert_eq!(external_documents_ids.get("e"), Some(5));
-        assert_eq!(external_documents_ids.get("f"), None);
-        assert_eq!(external_documents_ids.get("g"), Some(7));
-        assert_eq!(external_documents_ids.get("h"), Some(8));
-    }
-
-    #[test]
-    fn strange_delete_insert_ids() {
-        let mut external_documents_ids = ExternalDocumentsIds::default();
-
-        let new_ids =
-            fst::Map::from_iter(vec![("1", 0), ("123", 1), ("30", 2), ("456", 3)]).unwrap();
-        external_documents_ids.insert_ids(&new_ids).unwrap();
-        assert_eq!(external_documents_ids.get("1"), Some(0));
-        assert_eq!(external_documents_ids.get("123"), Some(1));
-        assert_eq!(external_documents_ids.get("30"), Some(2));
-        assert_eq!(external_documents_ids.get("456"), Some(3));
-
-        let deleted_ids = fst::Set::from_iter(vec!["30"]).unwrap();
-        external_documents_ids.delete_ids(deleted_ids).unwrap();
-        assert_eq!(external_documents_ids.get("30"), None);
-
-        let new_ids = fst::Map::from_iter(vec![("30", 2)]).unwrap();
-        external_documents_ids.insert_ids(&new_ids).unwrap();
-        assert_eq!(external_documents_ids.get("30"), Some(2));
-    }
 }
