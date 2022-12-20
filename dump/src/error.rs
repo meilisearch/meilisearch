@@ -21,7 +21,7 @@ impl ErrorCode for Error {
         match self {
             Error::Io(e) => e.error_code(),
 
-            // These errors either happens when creating a dump and don't need any error code.
+            // These errors either happen when creating a dump and don't need any error code,
             // These error come from a internal bad deserialization.
             Error::Serde(_) => Code::Internal,
             Error::Uuid(_) => Code::Internal,
