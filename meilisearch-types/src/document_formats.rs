@@ -36,7 +36,6 @@ impl fmt::Display for PayloadType {
 #[derive(Debug)]
 pub enum DocumentFormatError {
     Io(io::Error),
-    Internal(Box<dyn std::error::Error + Send + Sync + 'static>),
     MalformedPayload(Error, PayloadType),
 }
 
@@ -44,7 +43,6 @@ impl Display for DocumentFormatError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Io(e) => write!(f, "{e}"),
-            Self::Internal(e) => write!(f, "An internal error has occurred: `{}`.", e),
             Self::MalformedPayload(me, b) => match me.borrow() {
                 Error::Json(se) => {
                     let mut message = match se.classify() {
@@ -86,7 +84,7 @@ impl std::error::Error for DocumentFormatError {}
 impl From<(PayloadType, Error)> for DocumentFormatError {
     fn from((ty, error): (PayloadType, Error)) -> Self {
         match error {
-            Error::Io(e) => Self::Internal(Box::new(e)),
+            Error::Io(e) => Self::Io(e),
             e => Self::MalformedPayload(e, ty),
         }
     }
@@ -102,7 +100,6 @@ impl ErrorCode for DocumentFormatError {
     fn error_code(&self) -> Code {
         match self {
             DocumentFormatError::Io(e) => e.error_code(),
-            DocumentFormatError::Internal(_) => Code::Internal,
             DocumentFormatError::MalformedPayload(_, _) => Code::MalformedPayload,
         }
     }
@@ -116,7 +113,7 @@ pub fn read_csv(file: &File, writer: impl Write + Seek) -> Result<u64> {
     builder.append_csv(csv).map_err(|e| (PayloadType::Csv, e))?;
 
     let count = builder.documents_count();
-    let _ = builder.into_inner().map_err(Into::into).map_err(DocumentFormatError::Internal)?;
+    let _ = builder.into_inner().map_err(DocumentFormatError::Io)?;
 
     Ok(count as u64)
 }
@@ -145,7 +142,7 @@ fn read_json_inner(
         // The json data has been deserialized and does not need to be processed again.
         // The data has been transferred to the writer during the deserialization process.
         Ok(Ok(_)) => (),
-        Ok(Err(e)) => return Err(DocumentFormatError::Internal(Box::new(e))),
+        Ok(Err(e)) => return Err(DocumentFormatError::Io(e)),
         Err(_e) => {
             // If we cannot deserialize the content as an array of object then we try
             // to deserialize it with the original method to keep correct error messages.
@@ -161,16 +158,13 @@ fn read_json_inner(
                 .map_err(|e| (payload_type, e))?;
 
             for object in content.inner.map_right(|o| vec![o]).into_inner() {
-                builder
-                    .append_json_object(&object)
-                    .map_err(Into::into)
-                    .map_err(DocumentFormatError::Internal)?;
+                builder.append_json_object(&object).map_err(DocumentFormatError::Io)?;
             }
         }
     }
 
     let count = builder.documents_count();
-    let _ = builder.into_inner().map_err(Into::into).map_err(DocumentFormatError::Internal)?;
+    let _ = builder.into_inner().map_err(DocumentFormatError::Io)?;
 
     Ok(count as u64)
 }
