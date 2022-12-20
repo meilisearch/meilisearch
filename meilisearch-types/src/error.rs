@@ -23,7 +23,10 @@ pub struct ResponseError {
 }
 
 impl ResponseError {
-    pub fn from_msg(message: String, code: Code) -> Self {
+    pub fn from_msg(mut message: String, code: Code) -> Self {
+        if code == Code::IoError {
+            message.push_str(". This error generally happens when you have no space left on device or when your database doesn't have read or write right.");
+        }
         Self {
             code: code.http(),
             message,
@@ -47,13 +50,7 @@ where
     T: ErrorCode,
 {
     fn from(other: T) -> Self {
-        Self {
-            code: other.http_status(),
-            message: other.to_string(),
-            error_code: other.error_name(),
-            error_type: other.error_type(),
-            error_link: other.error_url(),
-        }
+        Self::from_msg(other.to_string(), other.error_code())
     }
 }
 
@@ -111,7 +108,7 @@ impl fmt::Display for ErrorType {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Code {
     // error related to your setup
     IoError,
