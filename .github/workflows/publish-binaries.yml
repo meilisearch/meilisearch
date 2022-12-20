@@ -32,30 +32,56 @@ jobs:
         if: github.event_name == 'release' && steps.check-tag-format.outputs.stable == 'true'
         run: bash .github/scripts/check-release.sh
 
-  publish:
+  publish-linux:
+    name: Publish binary for Linux
+    runs-on: ubuntu-latest
+    needs: check-version
+    container:
+      # Use ubuntu-18.04 to compile with glibc 2.27
+      image: ubuntu:18.04
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install needed dependencies
+      run: |
+        apt-get update && apt-get install -y curl
+        apt-get install build-essential -y
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+    - name: Build
+      run: cargo build --release --locked
+    # No need to upload binaries for dry run (cron)
+    - name: Upload binaries to release
+      if: github.event_name == 'release'
+      uses: svenstaro/upload-release-action@2.3.0
+      with:
+        repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
+        file: target/release/meilisearch
+        asset_name: meilisearch-linux-amd64
+        tag: ${{ github.ref }}
+
+  publish-macos-windows:
     name: Publish binary for ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     needs: check-version
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-18.04, macos-latest, windows-latest]
+        os: [macos-latest, windows-latest]
         include:
-          - os: ubuntu-18.04
-            artifact_name: meilisearch
-            asset_name: meilisearch-linux-amd64
           - os: macos-latest
             artifact_name: meilisearch
             asset_name: meilisearch-macos-amd64
           - os: windows-latest
             artifact_name: meilisearch.exe
             asset_name: meilisearch-windows-amd64.exe
-
     steps:
-    - uses: hecrj/setup-rust-action@master
-      with:
-        rust-version: stable
     - uses: actions/checkout@v3
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
     - name: Build
       run: cargo build --release --locked
     # No need to upload binaries for dry run (cron)
@@ -72,7 +98,6 @@ jobs:
     name: Publish binary for macOS silicon
     runs-on: ${{ matrix.os }}
     needs: check-version
-    continue-on-error: false
     strategy:
       fail-fast: false
       matrix:
@@ -80,7 +105,6 @@ jobs:
           - os: macos-latest
             target: aarch64-apple-darwin
             asset_name: meilisearch-macos-apple-silicon
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -110,7 +134,6 @@ jobs:
     name: Publish binary for aarch64
     runs-on: ${{ matrix.os }}
     needs: check-version
-    continue-on-error: false
     strategy:
       fail-fast: false
       matrix:
@@ -121,11 +144,9 @@ jobs:
             linker: gcc-aarch64-linux-gnu
             use-cross: true
             asset_name: meilisearch-linux-aarch64
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-
       - name: Installing Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
@@ -133,16 +154,13 @@ jobs:
           profile: minimal
           target: ${{ matrix.target }}
           override: true
-
       - name: APT update
         run: |
           sudo apt update
-
       - name: Install target specific tools
         if: matrix.use-cross
         run: |
           sudo apt-get install -y ${{ matrix.linker }}
-
       - name: Configure target aarch64 GNU
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         ## Environment variable is not passed using env:
@@ -154,17 +172,14 @@ jobs:
           echo '[target.aarch64-unknown-linux-gnu]' >> ~/.cargo/config
           echo 'linker = "aarch64-linux-gnu-gcc"' >> ~/.cargo/config
           echo 'JEMALLOC_SYS_WITH_LG_PAGE=16' >> $GITHUB_ENV
-
       - name: Cargo build
         uses: actions-rs/cargo@v1
         with:
           command: build
           use-cross: ${{ matrix.use-cross }}
           args: --release --target ${{ matrix.target }}
-
       - name: List target output files
         run: ls -lR ./target
-
       - name: Upload the binary to release
         # No need to upload binaries for dry run (cron)
         if: github.event_name == 'release'
