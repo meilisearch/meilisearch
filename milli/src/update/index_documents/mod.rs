@@ -1658,6 +1658,12 @@ mod tests {
             "branch_id_number": 0
         }]};
 
+        {
+            let mut wtxn = index.write_txn().unwrap();
+            index.put_primary_key(&mut wtxn, "id").unwrap();
+            wtxn.commit().unwrap();
+        }
+
         index.add_documents(doc1).unwrap();
         index.add_documents(doc2).unwrap();
 
