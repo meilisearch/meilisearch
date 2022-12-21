@@ -2304,6 +2304,7 @@ dependencies = [
  "http",
  "index-scheduler",
  "indexmap",
+ "insta",
  "itertools",
  "jsonwebtoken",
  "lazy_static",
