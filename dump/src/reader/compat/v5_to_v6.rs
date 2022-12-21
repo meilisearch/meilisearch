@@ -260,7 +260,7 @@ impl From<v5::ResponseError> for v6::ResponseError {
             "invalid_index_uid" => v6::Code::InvalidIndexUid,
             "invalid_min_word_length_for_typo" => v6::Code::InvalidMinWordLengthForTypo,
             "invalid_state" => v6::Code::InvalidState,
-            "primary_key_inference_failed" => v6::Code::MissingPrimaryKey,
+            "primary_key_inference_failed" => v6::Code::NoPrimaryKeyCandidateFound,
             "index_primary_key_already_exists" => v6::Code::PrimaryKeyAlreadyPresent,
             "max_fields_limit_exceeded" => v6::Code::MaxFieldsLimitExceeded,
             "missing_document_id" => v6::Code::MissingDocumentId,
