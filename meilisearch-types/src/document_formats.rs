@@ -156,7 +156,7 @@ pub fn read_ndjson(file: &File, writer: impl Write + Seek) -> Result<u64> {
     let mut builder = DocumentsBatchBuilder::new(writer);
     let mmap = unsafe { MmapOptions::new().map(file)? };
 
-    for result in serde_json::Deserializer::from_reader(mmap.as_ref()).into_iter() {
+    for result in serde_json::Deserializer::from_slice(&mmap).into_iter() {
         let object = result.map_err(Error::Json).map_err(|e| (PayloadType::Ndjson, e))?;
         builder.append_json_object(&object).map_err(Into::into).map_err(DocumentFormatError::Io)?;
     }

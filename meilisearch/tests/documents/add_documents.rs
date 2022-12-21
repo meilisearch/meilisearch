@@ -741,7 +741,7 @@ async fn add_larger_dataset() {
     // x-ndjson add large test
     let server = Server::new().await;
     let index = server.index("test");
-    let update_id = index.load_test_set().await;
+    let update_id = index.load_test_set_ndjson().await;
     let (response, code) = index.get_task(update_id).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "succeeded");
