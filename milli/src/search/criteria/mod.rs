@@ -370,6 +370,7 @@ impl<'t> CriteriaBuilder<'t> {
         Ok(Self { rtxn, index, words_fst, words_prefixes_fst })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn build<D: 't + Distinct>(
         &'t self,
         query_tree: Option<Operation>,
