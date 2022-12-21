@@ -25,7 +25,7 @@ impl DumpWriter {
         if let Some(instance_uuid) = instance_uuid {
             fs::write(
                 dir.path().join("instance_uid.uuid"),
-                &instance_uuid.as_hyphenated().to_string(),
+                instance_uuid.as_hyphenated().to_string(),
             )?;
         }
 
@@ -36,7 +36,7 @@ impl DumpWriter {
         };
         fs::write(dir.path().join("metadata.json"), serde_json::to_string(&metadata)?)?;
 
-        std::fs::create_dir(&dir.path().join("indexes"))?;
+        std::fs::create_dir(dir.path().join("indexes"))?;
 
         Ok(DumpWriter { dir })
     }
