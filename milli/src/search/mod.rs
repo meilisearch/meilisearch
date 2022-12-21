@@ -49,6 +49,7 @@ pub struct Search<'a> {
     authorize_typos: bool,
     words_limit: usize,
     exhaustive_number_hits: bool,
+    criterion_implementation_strategy: CriterionImplementationStrategy,
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
 }
@@ -65,6 +66,7 @@ impl<'a> Search<'a> {
             authorize_typos: true,
             exhaustive_number_hits: false,
             words_limit: 10,
+            criterion_implementation_strategy: CriterionImplementationStrategy::default(),
             rtxn,
             index,
         }
@@ -114,6 +116,14 @@ impl<'a> Search<'a> {
     /// this will increase the search time but allows finite pagination.
     pub fn exhaustive_number_hits(&mut self, exhaustive_number_hits: bool) -> &mut Search<'a> {
         self.exhaustive_number_hits = exhaustive_number_hits;
+        self
+    }
+
+    pub fn criterion_implementation_strategy(
+        &mut self,
+        strategy: CriterionImplementationStrategy,
+    ) -> &mut Search<'a> {
+        self.criterion_implementation_strategy = strategy;
         self
     }
 
@@ -204,6 +214,7 @@ impl<'a> Search<'a> {
                     self.sort_criteria.clone(),
                     self.exhaustive_number_hits,
                     None,
+                    self.criterion_implementation_strategy,
                 )?;
                 self.perform_sort(NoopDistinct, matching_words.unwrap_or_default(), criteria)
             }
@@ -220,6 +231,7 @@ impl<'a> Search<'a> {
                             self.sort_criteria.clone(),
                             self.exhaustive_number_hits,
                             Some(distinct.clone()),
+                            self.criterion_implementation_strategy,
                         )?;
                         self.perform_sort(distinct, matching_words.unwrap_or_default(), criteria)
                     }
@@ -288,6 +300,7 @@ impl fmt::Debug for Search<'_> {
             authorize_typos,
             words_limit,
             exhaustive_number_hits,
+            criterion_implementation_strategy,
             rtxn: _,
             index: _,
         } = self;
@@ -300,6 +313,7 @@ impl fmt::Debug for Search<'_> {
             .field("terms_matching_strategy", terms_matching_strategy)
             .field("authorize_typos", authorize_typos)
             .field("exhaustive_number_hits", exhaustive_number_hits)
+            .field("criterion_implementation_strategy", criterion_implementation_strategy)
             .field("words_limit", words_limit)
             .finish()
     }
@@ -311,6 +325,14 @@ pub struct SearchResult {
     pub candidates: RoaringBitmap,
     // TODO those documents ids should be associated with their criteria scores.
     pub documents_ids: Vec<DocumentId>,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub enum CriterionImplementationStrategy {
+    OnlyIterative,
+    OnlySetBased,
+    #[default]
+    Dynamic,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

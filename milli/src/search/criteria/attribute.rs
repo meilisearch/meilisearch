@@ -9,7 +9,9 @@ use roaring::RoaringBitmap;
 use super::{resolve_query_tree, Context, Criterion, CriterionParameters, CriterionResult};
 use crate::search::criteria::{InitialCandidates, Query};
 use crate::search::query_tree::{Operation, QueryKind};
-use crate::search::{build_dfa, word_derivations, WordDerivationsCache};
+use crate::search::{
+    build_dfa, word_derivations, CriterionImplementationStrategy, WordDerivationsCache,
+};
 use crate::Result;
 
 /// To be able to divide integers by the number of words in the query
@@ -30,10 +32,15 @@ pub struct Attribute<'t> {
     parent: Box<dyn Criterion + 't>,
     linear_buckets: Option<btree_map::IntoIter<u64, RoaringBitmap>>,
     set_buckets: Option<BinaryHeap<Branch<'t>>>,
+    implementation_strategy: CriterionImplementationStrategy,
 }
 
 impl<'t> Attribute<'t> {
-    pub fn new(ctx: &'t dyn Context<'t>, parent: Box<dyn Criterion + 't>) -> Self {
+    pub fn new(
+        ctx: &'t dyn Context<'t>,
+        parent: Box<dyn Criterion + 't>,
+        implementation_strategy: CriterionImplementationStrategy,
+    ) -> Self {
         Attribute {
             ctx,
             state: None,
@@ -41,6 +48,7 @@ impl<'t> Attribute<'t> {
             parent,
             linear_buckets: None,
             set_buckets: None,
+            implementation_strategy,
         }
     }
 }
@@ -64,7 +72,15 @@ impl<'t> Criterion for Attribute<'t> {
                     }));
                 }
                 Some((query_tree, flattened_query_tree, mut allowed_candidates)) => {
-                    let found_candidates = if allowed_candidates.len() < CANDIDATES_THRESHOLD {
+                    let found_candidates = if matches!(
+                        self.implementation_strategy,
+                        CriterionImplementationStrategy::OnlyIterative
+                    ) || (matches!(
+                        self.implementation_strategy,
+                        CriterionImplementationStrategy::Dynamic
+                    ) && allowed_candidates.len()
+                        < CANDIDATES_THRESHOLD)
+                    {
                         let linear_buckets = match self.linear_buckets.as_mut() {
                             Some(linear_buckets) => linear_buckets,
                             None => {

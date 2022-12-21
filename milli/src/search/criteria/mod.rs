@@ -14,6 +14,7 @@ use self::r#final::Final;
 use self::typo::Typo;
 use self::words::Words;
 use super::query_tree::{Operation, PrimitiveQueryPart, Query, QueryKind};
+use super::CriterionImplementationStrategy;
 use crate::search::criteria::geo::Geo;
 use crate::search::{word_derivations, Distinct, WordDerivationsCache};
 use crate::{AscDesc as AscDescName, DocumentId, FieldId, Index, Member, Result};
@@ -369,6 +370,7 @@ impl<'t> CriteriaBuilder<'t> {
         Ok(Self { rtxn, index, words_fst, words_prefixes_fst })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn build<D: 't + Distinct>(
         &'t self,
         query_tree: Option<Operation>,
@@ -377,6 +379,7 @@ impl<'t> CriteriaBuilder<'t> {
         sort_criteria: Option<Vec<AscDescName>>,
         exhaustive_number_hits: bool,
         distinct: Option<D>,
+        implementation_strategy: CriterionImplementationStrategy,
     ) -> Result<Final<'t>> {
         use crate::criterion::Criterion as Name;
 
@@ -402,12 +405,14 @@ impl<'t> CriteriaBuilder<'t> {
                                     self.rtxn,
                                     criterion,
                                     field.to_string(),
+                                    implementation_strategy,
                                 )?),
                                 AscDescName::Desc(Member::Field(field)) => Box::new(AscDesc::desc(
                                     self.index,
                                     self.rtxn,
                                     criterion,
                                     field.to_string(),
+                                    implementation_strategy,
                                 )?),
                                 AscDescName::Asc(Member::Geo(point)) => {
                                     Box::new(Geo::asc(self.index, self.rtxn, criterion, *point)?)
@@ -421,15 +426,27 @@ impl<'t> CriteriaBuilder<'t> {
                     }
                     None => criterion,
                 },
-                Name::Proximity => Box::new(Proximity::new(self, criterion)),
-                Name::Attribute => Box::new(Attribute::new(self, criterion)),
+                Name::Proximity => {
+                    Box::new(Proximity::new(self, criterion, implementation_strategy))
+                }
+                Name::Attribute => {
+                    Box::new(Attribute::new(self, criterion, implementation_strategy))
+                }
                 Name::Exactness => Box::new(Exactness::new(self, criterion, &primitive_query)?),
-                Name::Asc(field) => {
-                    Box::new(AscDesc::asc(self.index, self.rtxn, criterion, field)?)
-                }
-                Name::Desc(field) => {
-                    Box::new(AscDesc::desc(self.index, self.rtxn, criterion, field)?)
-                }
+                Name::Asc(field) => Box::new(AscDesc::asc(
+                    self.index,
+                    self.rtxn,
+                    criterion,
+                    field,
+                    implementation_strategy,
+                )?),
+                Name::Desc(field) => Box::new(AscDesc::desc(
+                    self.index,
+                    self.rtxn,
+                    criterion,
+                    field,
+                    implementation_strategy,
+                )?),
             };
         }
 

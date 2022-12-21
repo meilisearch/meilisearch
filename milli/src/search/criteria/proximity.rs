@@ -11,7 +11,7 @@ use super::{
 };
 use crate::search::criteria::InitialCandidates;
 use crate::search::query_tree::{maximum_proximity, Operation, Query, QueryKind};
-use crate::search::{build_dfa, WordDerivationsCache};
+use crate::search::{build_dfa, CriterionImplementationStrategy, WordDerivationsCache};
 use crate::{Position, Result};
 
 type Cache = HashMap<(Operation, u8), Vec<(Query, Query, RoaringBitmap)>>;
@@ -33,10 +33,15 @@ pub struct Proximity<'t> {
     parent: Box<dyn Criterion + 't>,
     candidates_cache: Cache,
     plane_sweep_cache: Option<btree_map::IntoIter<u8, RoaringBitmap>>,
+    implementation_strategy: CriterionImplementationStrategy,
 }
 
 impl<'t> Proximity<'t> {
-    pub fn new(ctx: &'t dyn Context<'t>, parent: Box<dyn Criterion + 't>) -> Self {
+    pub fn new(
+        ctx: &'t dyn Context<'t>,
+        parent: Box<dyn Criterion + 't>,
+        implementation_strategy: CriterionImplementationStrategy,
+    ) -> Self {
         Proximity {
             ctx,
             state: None,
@@ -45,6 +50,7 @@ impl<'t> Proximity<'t> {
             parent,
             candidates_cache: Cache::new(),
             plane_sweep_cache: None,
+            implementation_strategy,
         }
     }
 }
@@ -72,8 +78,15 @@ impl<'t> Criterion for Proximity<'t> {
                     self.state = None; // reset state
                 }
                 Some((_, query_tree, allowed_candidates)) => {
-                    let mut new_candidates = if allowed_candidates.len() <= CANDIDATES_THRESHOLD
-                        && self.proximity > PROXIMITY_THRESHOLD
+                    let mut new_candidates = if matches!(
+                        self.implementation_strategy,
+                        CriterionImplementationStrategy::OnlyIterative
+                    ) || (matches!(
+                        self.implementation_strategy,
+                        CriterionImplementationStrategy::Dynamic
+                    ) && allowed_candidates.len()
+                        <= CANDIDATES_THRESHOLD
+                        && self.proximity > PROXIMITY_THRESHOLD)
                     {
                         if let Some(cache) = self.plane_sweep_cache.as_mut() {
                             match cache.next() {

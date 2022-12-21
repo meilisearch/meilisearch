@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt::Display;
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Cursor, Read, Write};
 use std::path::PathBuf;
@@ -13,7 +14,7 @@ use milli::update::UpdateIndexingStep::{
     ComputeIdsAndMergeDocuments, IndexDocuments, MergeDataIntoFinalDatabase, RemapDocumentAddition,
 };
 use milli::update::{self, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig};
-use milli::{heed, Index, Object};
+use milli::{heed, CriterionImplementationStrategy, Index, Object};
 use structopt::StructOpt;
 
 #[global_allocator]
@@ -349,6 +350,29 @@ fn documents_from_csv(reader: impl Read) -> Result<Vec<u8>> {
     documents.into_inner().map_err(Into::into)
 }
 
+#[derive(Debug, Clone, Copy)]
+struct SearchStrategyOption(CriterionImplementationStrategy);
+impl FromStr for SearchStrategyOption {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "dynamic" => Ok(SearchStrategyOption(CriterionImplementationStrategy::Dynamic)),
+            "set" => Ok(SearchStrategyOption(CriterionImplementationStrategy::OnlySetBased)),
+            "iterative" => Ok(SearchStrategyOption(CriterionImplementationStrategy::OnlyIterative)),
+            _ => Err("could not parse {s} as a criterion implementation strategy, available options are `dynamic`, `set`, and `iterative`".to_owned()),
+        }
+    }
+}
+impl Display for SearchStrategyOption {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            CriterionImplementationStrategy::OnlyIterative => Display::fmt("iterative", f),
+            CriterionImplementationStrategy::OnlySetBased => Display::fmt("set", f),
+            CriterionImplementationStrategy::Dynamic => Display::fmt("dynamic", f),
+        }
+    }
+}
+
 #[derive(Debug, StructOpt)]
 struct Search {
     query: Option<String>,
@@ -360,6 +384,8 @@ struct Search {
     limit: Option<usize>,
     #[structopt(short, long, conflicts_with = "query")]
     interactive: bool,
+    #[structopt(short, long)]
+    strategy: Option<SearchStrategyOption>,
 }
 
 impl Performer for Search {
@@ -379,6 +405,7 @@ impl Performer for Search {
                             &self.filter,
                             &self.offset,
                             &self.limit,
+                            &self.strategy,
                         )?;
 
                         let time = now.elapsed();
@@ -386,6 +413,7 @@ impl Performer for Search {
                         let hits = serde_json::to_string_pretty(&jsons)?;
 
                         println!("{}", hits);
+
                         eprintln!("found {} results in {:.02?}", jsons.len(), time);
                     }
                     _ => break,
@@ -399,6 +427,7 @@ impl Performer for Search {
                 &self.filter,
                 &self.offset,
                 &self.limit,
+                &self.strategy,
             )?;
 
             let time = now.elapsed();
@@ -420,6 +449,7 @@ impl Search {
         filter: &Option<String>,
         offset: &Option<usize>,
         limit: &Option<usize>,
+        strategy: &Option<SearchStrategyOption>,
     ) -> Result<Vec<Object>> {
         let txn = index.read_txn()?;
         let mut search = index.search(&txn);
@@ -440,6 +470,9 @@ impl Search {
 
         if let Some(limit) = limit {
             search.limit(*limit);
+        }
+        if let Some(strategy) = strategy {
+            search.criterion_implementation_strategy(strategy.0);
         }
 
         let result = search.execute()?;
