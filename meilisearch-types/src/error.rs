@@ -108,7 +108,7 @@ impl fmt::Display for ErrorType {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Code {
     // error related to your setup
     IoError,
