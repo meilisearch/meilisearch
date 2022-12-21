@@ -39,11 +39,12 @@ impl Service {
         &self,
         url: impl AsRef<str>,
         body: impl AsRef<str>,
+        header: (&str, &str),
     ) -> (Value, StatusCode) {
         let req = test::TestRequest::post()
             .uri(url.as_ref())
             .set_payload(body.as_ref().to_string())
-            .insert_header(("content-type", "application/json"));
+            .insert_header(header);
         self.request(req).await
     }
 
