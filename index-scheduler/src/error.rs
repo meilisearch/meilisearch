@@ -114,17 +114,17 @@ impl ErrorCode for Error {
             Error::Dump(e) => e.error_code(),
             Error::Milli(e) => e.error_code(),
             Error::ProcessBatchPanicked => Code::Internal,
-            // TODO: TAMO: are all these errors really internal?
-            Error::Heed(_) => Code::Internal,
-            Error::FileStore(_) => Code::Internal,
-            Error::IoError(_) => Code::Internal,
-            Error::Persist(_) => Code::Internal,
+            Error::Heed(e) => e.error_code(),
+            Error::HeedTransaction(e) => e.error_code(),
+            Error::FileStore(e) => e.error_code(),
+            Error::IoError(e) => e.error_code(),
+            Error::Persist(e) => e.error_code(),
+            // Irrecoverable errors
             Error::Anyhow(_) => Code::Internal,
             Error::CorruptedTaskQueue => Code::Internal,
             Error::CorruptedDump => Code::Internal,
             Error::TaskDatabaseUpdate(_) => Code::Internal,
             Error::CreateBatch(_) => Code::Internal,
-            Error::HeedTransaction(_) => Code::Internal,
         }
     }
 }

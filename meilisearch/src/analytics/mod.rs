@@ -51,7 +51,7 @@ fn config_user_id_path(db_path: &Path) -> Option<PathBuf> {
 fn find_user_id(db_path: &Path) -> Option<InstanceUid> {
     fs::read_to_string(db_path.join("instance-uid"))
         .ok()
-        .or_else(|| fs::read_to_string(&config_user_id_path(db_path)?).ok())
+        .or_else(|| fs::read_to_string(config_user_id_path(db_path)?).ok())
         .and_then(|uid| InstanceUid::from_str(&uid).ok())
 }
 

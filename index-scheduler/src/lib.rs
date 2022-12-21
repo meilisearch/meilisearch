@@ -1220,7 +1220,7 @@ mod tests {
         );
 
         let (_uuid, mut file) = index_scheduler.create_update_file_with_uuid(file_uuid).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap() as u64;
+        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
         (file, documents_count)
     }
 
@@ -1600,7 +1600,7 @@ mod tests {
         }"#;
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap() as u64;
+        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(KindWithContent::DocumentAdditionOrUpdate {
@@ -1637,7 +1637,7 @@ mod tests {
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap() as u64;
+        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(KindWithContent::DocumentAdditionOrUpdate {
@@ -1804,7 +1804,7 @@ mod tests {
         }"#;
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap() as u64;
+        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(KindWithContent::DocumentAdditionOrUpdate {
@@ -1962,7 +1962,7 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap() as u64;
+            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(KindWithContent::DocumentAdditionOrUpdate {
@@ -2009,7 +2009,7 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap() as u64;
+            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(KindWithContent::DocumentAdditionOrUpdate {
@@ -2058,7 +2058,7 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap() as u64;
+            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(KindWithContent::DocumentAdditionOrUpdate {
@@ -2108,7 +2108,7 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap() as u64;
+            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(KindWithContent::DocumentAdditionOrUpdate {
@@ -2159,7 +2159,7 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap() as u64;
+            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(KindWithContent::DocumentAdditionOrUpdate {
@@ -2606,7 +2606,7 @@ mod tests {
         }"#;
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap() as u64;
+        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(KindWithContent::DocumentAdditionOrUpdate {
@@ -2644,7 +2644,7 @@ mod tests {
         }"#;
 
         let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
-        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap() as u64;
+        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(KindWithContent::DocumentAdditionOrUpdate {
@@ -2700,7 +2700,7 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap() as u64;
+            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(KindWithContent::DocumentAdditionOrUpdate {
@@ -2748,7 +2748,7 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap() as u64;
+            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(KindWithContent::DocumentAdditionOrUpdate {
@@ -2802,7 +2802,7 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap() as u64;
+            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(KindWithContent::DocumentAdditionOrUpdate {
@@ -2861,7 +2861,7 @@ mod tests {
             );
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap() as u64;
+            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(KindWithContent::DocumentAdditionOrUpdate {
@@ -2925,7 +2925,7 @@ mod tests {
             let allow_index_creation = i % 2 != 0;
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap() as u64;
+            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(KindWithContent::DocumentAdditionOrUpdate {
@@ -2978,7 +2978,7 @@ mod tests {
             let allow_index_creation = i % 2 != 0;
 
             let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
-            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap() as u64;
+            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
             file.persist().unwrap();
             index_scheduler
                 .register(KindWithContent::DocumentAdditionOrUpdate {

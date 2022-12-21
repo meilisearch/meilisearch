@@ -29,7 +29,7 @@ pub fn default_snapshot_settings_for_test<'a>(
     let test_name = test_name.strip_suffix("::{{closure}}").unwrap_or(test_name);
     let test_name = test_name.rsplit("::").next().unwrap().to_owned();
 
-    let path = Path::new("snapshots").join(filename).join(&test_name);
+    let path = Path::new("snapshots").join(filename).join(test_name);
     settings.set_snapshot_path(path.clone());
     let snap_name = if let Some(name) = name {
         Cow::Borrowed(name)

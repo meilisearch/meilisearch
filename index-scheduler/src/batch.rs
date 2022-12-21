@@ -666,7 +666,7 @@ impl IndexScheduler {
                 let snapshot_path = self.snapshots_path.join(format!("{}.snapshot", db_name));
                 let temp_snapshot_file = tempfile::NamedTempFile::new_in(&self.snapshots_path)?;
                 compression::to_tar_gz(temp_snapshot_dir.path(), temp_snapshot_file.path())?;
-                let file = temp_snapshot_file.persist(&snapshot_path)?;
+                let file = temp_snapshot_file.persist(snapshot_path)?;
 
                 // 5.3 Change the permission to make the snapshot readonly
                 let mut permissions = file.metadata()?.permissions();

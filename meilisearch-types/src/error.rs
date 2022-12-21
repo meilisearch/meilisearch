@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, io};
 
 use actix_web::http::StatusCode;
 use actix_web::{self as aweb, HttpResponseBuilder};
@@ -23,7 +23,10 @@ pub struct ResponseError {
 }
 
 impl ResponseError {
-    pub fn from_msg(message: String, code: Code) -> Self {
+    pub fn from_msg(mut message: String, code: Code) -> Self {
+        if code == Code::IoError {
+            message.push_str(". This error generally happens when you have no space left on device or when your database doesn't have read or write right.");
+        }
         Self {
             code: code.http(),
             message,
@@ -47,13 +50,7 @@ where
     T: ErrorCode,
 {
     fn from(other: T) -> Self {
-        Self {
-            code: other.http_status(),
-            message: other.to_string(),
-            error_code: other.error_name(),
-            error_type: other.error_type(),
-            error_link: other.error_url(),
-        }
+        Self::from_msg(other.to_string(), other.error_code())
     }
 }
 
@@ -111,8 +108,13 @@ impl fmt::Display for ErrorType {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Code {
+    // error related to your setup
+    IoError,
+    NoSpaceLeftOnDevice,
+    TooManyOpenFiles,
+
     // index related error
     CreateIndex,
     IndexAlreadyExists,
@@ -145,7 +147,6 @@ pub enum Code {
     InvalidToken,
     MissingAuthorizationHeader,
     MissingMasterKey,
-    NoSpaceLeftOnDevice,
     DumpNotFound,
     InvalidTaskDateFilter,
     InvalidTaskStatusesFilter,
@@ -188,6 +189,15 @@ impl Code {
         use Code::*;
 
         match self {
+            // related to the setup
+            IoError => ErrCode::invalid("io_error", StatusCode::UNPROCESSABLE_ENTITY),
+            TooManyOpenFiles => {
+                ErrCode::invalid("too_many_open_files", StatusCode::UNPROCESSABLE_ENTITY)
+            }
+            NoSpaceLeftOnDevice => {
+                ErrCode::invalid("no_space_left_on_device", StatusCode::UNPROCESSABLE_ENTITY)
+            }
+
             // index related errors
             // create index is thrown on internal error while creating an index.
             CreateIndex => {
@@ -266,9 +276,6 @@ impl Code {
                 ErrCode::invalid("missing_task_filters", StatusCode::BAD_REQUEST)
             }
             DumpNotFound => ErrCode::invalid("dump_not_found", StatusCode::NOT_FOUND),
-            NoSpaceLeftOnDevice => {
-                ErrCode::internal("no_space_left_on_device", StatusCode::INTERNAL_SERVER_ERROR)
-            }
             PayloadTooLarge => ErrCode::invalid("payload_too_large", StatusCode::PAYLOAD_TOO_LARGE),
             RetrieveDocument => {
                 ErrCode::internal("unretrievable_document", StatusCode::BAD_REQUEST)
@@ -380,7 +387,7 @@ impl ErrorCode for milli::Error {
 
         match self {
             Error::InternalError(_) => Code::Internal,
-            Error::IoError(_) => Code::Internal,
+            Error::IoError(e) => e.error_code(),
             Error::UserError(ref error) => {
                 match error {
                     // TODO: wait for spec for new error codes.
@@ -415,18 +422,44 @@ impl ErrorCode for milli::Error {
     }
 }
 
+impl ErrorCode for file_store::Error {
+    fn error_code(&self) -> Code {
+        match self {
+            Self::IoError(e) => e.error_code(),
+            Self::PersistError(e) => e.error_code(),
+        }
+    }
+}
+
+impl ErrorCode for tempfile::PersistError {
+    fn error_code(&self) -> Code {
+        self.error.error_code()
+    }
+}
+
 impl ErrorCode for HeedError {
     fn error_code(&self) -> Code {
         match self {
             HeedError::Mdb(MdbError::MapFull) => Code::DatabaseSizeLimitReached,
             HeedError::Mdb(MdbError::Invalid) => Code::InvalidStore,
-            HeedError::Io(_)
-            | HeedError::Mdb(_)
+            HeedError::Io(e) => e.error_code(),
+            HeedError::Mdb(_)
             | HeedError::Encoding
             | HeedError::Decoding
             | HeedError::InvalidDatabaseTyping
             | HeedError::DatabaseClosing
             | HeedError::BadOpenOptions => Code::Internal,
+        }
+    }
+}
+
+impl ErrorCode for io::Error {
+    fn error_code(&self) -> Code {
+        match self.raw_os_error() {
+            Some(5) => Code::IoError,
+            Some(24) => Code::TooManyOpenFiles,
+            Some(28) => Code::NoSpaceLeftOnDevice,
+            _ => Code::Internal,
         }
     }
 }

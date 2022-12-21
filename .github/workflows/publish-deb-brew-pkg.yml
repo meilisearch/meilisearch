@@ -15,12 +15,20 @@ jobs:
 
   debian:
     name: Publish debian packagge
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     needs: check-version
+    container:
+      # Use ubuntu-18.04 to compile with glibc 2.27
+      image: ubuntu:18.04
     steps:
-    - uses: hecrj/setup-rust-action@master
+    - name: Install needed dependencies
+      run: |
+        apt-get update && apt-get install -y curl
+        apt-get install build-essential -y
+    - uses: actions-rs/toolchain@v1
       with:
-        rust-version: stable
+        toolchain: stable
+        override: true
     - name: Install cargo-deb
       run: cargo install cargo-deb
     - uses: actions/checkout@v3

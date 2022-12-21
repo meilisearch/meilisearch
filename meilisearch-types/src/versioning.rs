@@ -19,7 +19,7 @@ pub fn create_version_file(db_path: &Path) -> io::Result<()> {
 pub fn check_version_file(db_path: &Path) -> anyhow::Result<()> {
     let version_path = db_path.join(VERSION_FILE_NAME);
 
-    match fs::read_to_string(&version_path) {
+    match fs::read_to_string(version_path) {
         Ok(version) => {
             let version_components = version.split('.').collect::<Vec<_>>();
             let (major, minor, patch) = match &version_components[..] {
