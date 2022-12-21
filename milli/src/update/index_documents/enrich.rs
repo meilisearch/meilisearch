@@ -79,7 +79,10 @@ pub fn enrich_documents_batch<R: Read + Seek>(
                     documents_batch_index.insert(DEFAULT_PRIMARY_KEY),
                 ),
                 [] => return Ok(Err(UserError::NoPrimaryKeyCandidateFound)),
-                [(field_id, name)] => PrimaryKey::flat(name, *field_id),
+                [(field_id, name)] => {
+                    log::info!("Primary key was not specified in index. Inferred to '{name}'");
+                    PrimaryKey::flat(name, *field_id)
+                }
                 multiple => {
                     return Ok(Err(UserError::MultiplePrimaryKeyCandidatesFound {
                         candidates: multiple
