@@ -865,9 +865,12 @@ impl IndexScheduler {
     }
 
     /// Create a new index without any associated task.
-    pub fn create_raw_index(&self, name: &str) -> Result<Index> {
+    pub fn create_raw_index(
+        &self,
+        name: &str,
+        date: Option<(time::OffsetDateTime, time::OffsetDateTime)>,
+    ) -> Result<Index> {
         let wtxn = self.env.write_txn()?;
-        let date = Some((time::OffsetDateTime::now_utc(), time::OffsetDateTime::now_utc()));
         let index = self.index_mapper.create_index(wtxn, name, date)?;
 
         Ok(index)
