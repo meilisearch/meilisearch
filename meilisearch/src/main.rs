@@ -7,7 +7,6 @@ use actix_web::web::Data;
 use actix_web::HttpServer;
 use index_scheduler::IndexScheduler;
 use meilisearch::analytics::Analytics;
-use meilisearch::option::LogLevel;
 use meilisearch::{analytics, create_app, setup_meilisearch, Opt};
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
 
@@ -18,10 +17,6 @@ static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 fn setup(opt: &Opt) -> anyhow::Result<()> {
     let mut log_builder = env_logger::Builder::new();
     log_builder.parse_filters(&opt.log_level.to_string());
-    if matches!(opt.log_level, LogLevel::Info) {
-        // if we are in info we only allow the warn log_level for milli
-        log_builder.filter_module("milli", log::LevelFilter::Warn);
-    }
 
     log_builder.init();
 
