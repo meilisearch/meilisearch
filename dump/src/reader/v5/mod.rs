@@ -210,15 +210,11 @@ impl V5IndexReader {
 
             if *task.index_uid().unwrap_or_default().to_string() == name {
                 if updated_at.is_none() {
-                    updated_at = task.updated_at()
-                }
-
-                if created_at.is_none() {
-                    created_at = task.created_at()
+                    updated_at = task.processed_at()
                 }
 
                 if task.id as usize == index_metadata.creation_task_id {
-                    created_at = task.processed_at();
+                    created_at = task.created_at();
 
                     break;
                 }

@@ -179,13 +179,6 @@ impl Task {
             _ => None,
         }
     }
-
-    pub fn updated_at(&self) -> Option<OffsetDateTime> {
-        match self.events.last() {
-            Some(TaskEvent::Created(ts)) => Some(*ts),
-            _ => None,
-        }
-    }
 }
 
 impl IndexUid {
