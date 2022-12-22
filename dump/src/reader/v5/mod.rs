@@ -143,7 +143,7 @@ impl V5Reader {
                 &self.dump.path().join("indexes").join(index.index_meta.uuid.to_string()),
                 &index.index_meta,
                 BufReader::new(
-                    File::open(&self.dump.path().join("updates").join("data.jsonl")).unwrap(),
+                    File::open(self.dump.path().join("updates").join("data.jsonl")).unwrap(),
                 ),
             )
         }))
