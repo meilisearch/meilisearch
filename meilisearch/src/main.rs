@@ -8,7 +8,7 @@ use actix_web::HttpServer;
 use index_scheduler::IndexScheduler;
 use meilisearch::analytics::Analytics;
 use meilisearch::{analytics, create_app, setup_meilisearch, Opt};
-use meilisearch_auth::AuthController;
+use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
 
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -33,16 +33,32 @@ async fn main() -> anyhow::Result<()> {
 
     setup(&opt)?;
 
-    match opt.env.as_ref() {
-        "production" => {
-            if opt.master_key.is_none() {
-                anyhow::bail!(
-                    "In production mode, the environment variable MEILI_MASTER_KEY is mandatory"
-                )
-            }
+
+    match (opt.env.as_ref(), &opt.master_key) {
+        ("production", Some(master_key)) if master_key.len() < MASTER_KEY_MIN_SIZE => {
+            anyhow::bail!(
+                "In production mode, the Master Key must be of at least {MASTER_KEY_MIN_SIZE} characters, but the provided key is only {} characters long
+
+We generated a secure Master Key for you (you can safely copy this token):
+
+>> export MEILI_MASTER_KEY={} <<",
+                master_key.len(),
+                generate_master_key(),
+            )
         }
-        "development" => (),
-        _ => unreachable!(),
+        ("production", None) => {
+            anyhow::bail!(
+                "In production mode, the environment variable MEILI_MASTER_KEY is mandatory
+
+We generated a secure Master Key for you (you can safely copy this token):
+
+>> export MEILI_MASTER_KEY={} <<
+",
+                generate_master_key()
+            )
+        }
+        // No error; continue
+        _ => (),
     }
 
     let (index_scheduler, auth_controller) = setup_meilisearch(&opt)?;
@@ -151,11 +167,28 @@ Anonymous telemetry:\t\"Enabled\""
 
     eprintln!();
 
-    if opt.master_key.is_some() {
-        eprintln!("A Master Key has been set. Requests to Meilisearch won't be authorized unless you provide an authentication key.");
-    } else {
-        eprintln!("No master key found; The server will accept unidentified requests. \
-            If you need some protection in development mode, please export a key: export MEILI_MASTER_KEY=xxx");
+    match (opt.env.as_ref(), &opt.master_key) {
+        ("production", Some(_)) => {
+            eprintln!("A Master Key has been set. Requests to Meilisearch won't be authorized unless you provide an authentication key.");
+        }
+        ("development", Some(master_key)) => {
+            eprintln!("A Master Key has been set. Requests to Meilisearch won't be authorized unless you provide an authentication key.");
+
+            if master_key.len() < MASTER_KEY_MIN_SIZE {
+                eprintln!();
+                log::warn!(
+                    "The provided Master Key is too short (< {MASTER_KEY_MIN_SIZE} characters)"
+                );
+                eprintln!("A Master Key of at least {MASTER_KEY_MIN_SIZE} characters will be required when switching to the production environment.");
+            }
+        }
+        ("development", None) => {
+            log::warn!("No master key found; The server will accept unidentified requests");
+            eprintln!("If you need some protection in development mode, please export a key:\n\nexport MEILI_MASTER_KEY={}", generate_master_key());
+            eprintln!("\nA Master Key of at least {MASTER_KEY_MIN_SIZE} characters will be required when switching to the production environment.");
+        }
+        // unreachable because Opt::try_build above would have failed already if any other value had been produced
+        _ => unreachable!(),
     }
 
     eprintln!();
