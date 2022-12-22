@@ -9,6 +9,7 @@ use meilisearch_types::heed::types::Str;
 use meilisearch_types::heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn};
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::Index;
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 use self::IndexStatus::{Available, BeingDeleted};
@@ -69,7 +70,7 @@ impl IndexMapper {
     fn create_or_open_index(
         &self,
         path: &Path,
-        date: Option<(time::OffsetDateTime, time::OffsetDateTime)>,
+        date: Option<(OffsetDateTime, OffsetDateTime)>,
     ) -> Result<Index> {
         let mut options = EnvOpenOptions::new();
         options.map_size(clamp_to_page_size(self.index_size));
@@ -87,7 +88,7 @@ impl IndexMapper {
         &self,
         mut wtxn: RwTxn,
         name: &str,
-        date: Option<(time::OffsetDateTime, time::OffsetDateTime)>,
+        date: Option<(OffsetDateTime, OffsetDateTime)>,
     ) -> Result<Index> {
         match self.index(&wtxn, name) {
             Ok(index) => {
