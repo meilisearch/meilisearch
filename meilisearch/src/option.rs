@@ -230,6 +230,13 @@ pub struct Opt {
     #[serde(default = "default_log_level")]
     pub log_level: String,
 
+    /// Generates a string of characters that can be used as a Master Key and exits.
+    ///
+    /// Pass the generated Master Key using the `--master-key` argument or the   `MEILI_MASTER_KEY` environment variable in a subsequent Meilisearch invocation.
+    #[clap(long)]
+    #[serde(default)]
+    pub generate_master_key: bool,
+
     /// Enables Prometheus metrics and /metrics route.
     #[cfg(feature = "metrics")]
     #[clap(long, env = MEILI_ENABLE_METRICS_ROUTE)]
@@ -328,6 +335,7 @@ impl Opt {
             ignore_missing_snapshot: _,
             ignore_snapshot_if_db_exists: _,
             import_dump: _,
+            generate_master_key: _,
             ignore_missing_dump: _,
             ignore_dump_if_db_exists: _,
             config_file_path: _,

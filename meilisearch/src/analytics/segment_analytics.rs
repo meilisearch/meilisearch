@@ -277,6 +277,7 @@ impl From<Opt> for Infos {
             indexer_options,
             scheduler_options,
             config_file_path,
+            generate_master_key: _,
             #[cfg(all(not(debug_assertions), feature = "analytics"))]
                 no_analytics: _,
         } = options;

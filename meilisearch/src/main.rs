@@ -33,6 +33,10 @@ async fn main() -> anyhow::Result<()> {
 
     setup(&opt)?;
 
+    if opt.generate_master_key {
+        println!("{}", generate_master_key());
+        return Ok(());
+    }
 
     match (opt.env.as_ref(), &opt.master_key) {
         ("production", Some(master_key)) if master_key.len() < MASTER_KEY_MIN_SIZE => {
@@ -180,6 +184,7 @@ Anonymous telemetry:\t\"Enabled\""
                     "The provided Master Key is too short (< {MASTER_KEY_MIN_SIZE} characters)"
                 );
                 eprintln!("A Master Key of at least {MASTER_KEY_MIN_SIZE} characters will be required when switching to the production environment.");
+                eprintln!("Restart Meilisearch with the `--generate-master-key` flag to generate a secure Master Key you can use");
             }
         }
         ("development", None) => {
