@@ -268,3 +268,19 @@ fn generate_default_keys(store: &HeedAuthStore) -> Result<()> {
 
     Ok(())
 }
+
+pub const MASTER_KEY_MIN_SIZE: usize = 16;
+const MASTER_KEY_GEN_SIZE: usize = 32;
+
+pub fn generate_master_key() -> String {
+    use rand::rngs::OsRng;
+    use rand::RngCore;
+
+    let mut csprng = OsRng;
+    let mut buf = vec![0; MASTER_KEY_GEN_SIZE];
+    csprng.fill_bytes(&mut buf);
+
+    // let's encode the random bytes to base64 to make them human-readable and not too long.
+    // We're using the URL_SAFE alphabet that will produce keys without =, / or other unusual characters.
+    base64::encode_config(buf, base64::URL_SAFE_NO_PAD)
+}
