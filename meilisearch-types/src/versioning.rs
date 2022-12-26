@@ -53,8 +53,8 @@ pub enum VersionFileError {
     #[error("Version file is corrupted and thus Meilisearch is unable to determine the version of the database.")]
     MalformedVersionFile,
     #[error(
-        "Expected Meilisearch engine version: {major}.{minor}.{patch}, current engine version: {}.
-        To update Meilisearch please follow our guide on https://docs.meilisearch.com/learn/advanced/updating.html.",
+        "Your database version ({major}.{minor}.{patch}) is incompatible with your current engine version ({}).\n\
+        To migrate data between Meilisearch versions, please follow our guide on https://docs.meilisearch.com/learn/advanced/updating.html.",
         env!("CARGO_PKG_VERSION").to_string()
     )]
     VersionMismatch { major: String, minor: String, patch: String },
