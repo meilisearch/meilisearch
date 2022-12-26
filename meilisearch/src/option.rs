@@ -29,8 +29,6 @@ const MEILI_MASTER_KEY: &str = "MEILI_MASTER_KEY";
 const MEILI_ENV: &str = "MEILI_ENV";
 #[cfg(all(not(debug_assertions), feature = "analytics"))]
 const MEILI_NO_ANALYTICS: &str = "MEILI_NO_ANALYTICS";
-const MEILI_MAX_INDEX_SIZE: &str = "MEILI_MAX_INDEX_SIZE";
-const MEILI_MAX_TASK_DB_SIZE: &str = "MEILI_MAX_TASK_DB_SIZE";
 const MEILI_HTTP_PAYLOAD_SIZE_LIMIT: &str = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT";
 const MEILI_SSL_CERT_PATH: &str = "MEILI_SSL_CERT_PATH";
 const MEILI_SSL_KEY_PATH: &str = "MEILI_SSL_KEY_PATH";
@@ -57,8 +55,6 @@ const DEFAULT_CONFIG_FILE_PATH: &str = "./config.toml";
 const DEFAULT_DB_PATH: &str = "./data.ms";
 const DEFAULT_HTTP_ADDR: &str = "localhost:7700";
 const DEFAULT_ENV: &str = "development";
-const DEFAULT_MAX_INDEX_SIZE: &str = "100 GiB";
-const DEFAULT_MAX_TASK_DB_SIZE: &str = "100 GiB";
 const DEFAULT_HTTP_PAYLOAD_SIZE_LIMIT: &str = "100 MB";
 const DEFAULT_SNAPSHOT_DIR: &str = "snapshots/";
 const DEFAULT_SNAPSHOT_INTERVAL_SEC: u64 = 86400;
@@ -68,6 +64,13 @@ const DEFAULT_DUMP_DIR: &str = "dumps/";
 const MEILI_MAX_INDEXING_MEMORY: &str = "MEILI_MAX_INDEXING_MEMORY";
 const MEILI_MAX_INDEXING_THREADS: &str = "MEILI_MAX_INDEXING_THREADS";
 const DEFAULT_LOG_EVERY_N: usize = 100000;
+
+// Each environment (index and task-db) is taking space in the virtual address space
+//
+// The size of the virtual address sapce is limited by OS. About 100TB for Linux, about 10TB for Windows.
+// This means that the number of indexes is limited to about 200 for Linux, and about 20 for Windows.
+pub const INDEX_SIZE: u64 = 536_870_912_000; // 500 GiB
+pub const TASK_DB_SIZE: u64 = 10_737_418_240; // 10 GiB
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
@@ -157,14 +160,14 @@ pub struct Opt {
     pub no_analytics: bool,
 
     /// Sets the maximum size of the index. Value must be given in bytes or explicitly stating a base unit (for instance: 107374182400, '107.7Gb', or '107374 Mb').
-    #[clap(long, env = MEILI_MAX_INDEX_SIZE, default_value_t = default_max_index_size())]
-    #[serde(default = "default_max_index_size")]
+    #[clap(skip = default_max_index_size())]
+    #[serde(skip, default = "default_max_index_size")]
     pub max_index_size: Byte,
 
     /// Sets the maximum size of the task database. Value must be given in bytes or explicitly stating a
     /// base unit (for instance: 107374182400, '107.7Gb', or '107374 Mb').
-    #[clap(long, env = MEILI_MAX_TASK_DB_SIZE, default_value_t = default_max_task_db_size())]
-    #[serde(default = "default_max_task_db_size")]
+    #[clap(skip = default_max_task_db_size())]
+    #[serde(skip, default = "default_max_task_db_size")]
     pub max_task_db_size: Byte,
 
     /// Sets the maximum size of accepted payloads. Value must be given in bytes or explicitly stating a
@@ -361,8 +364,8 @@ impl Opt {
             http_addr,
             master_key,
             env,
-            max_index_size,
-            max_task_db_size,
+            max_index_size: _,
+            max_task_db_size: _,
             http_payload_size_limit,
             ssl_cert_path,
             ssl_key_path,
@@ -399,8 +402,6 @@ impl Opt {
         {
             export_to_env_if_not_present(MEILI_NO_ANALYTICS, no_analytics.to_string());
         }
-        export_to_env_if_not_present(MEILI_MAX_INDEX_SIZE, max_index_size.to_string());
-        export_to_env_if_not_present(MEILI_MAX_TASK_DB_SIZE, max_task_db_size.to_string());
         export_to_env_if_not_present(
             MEILI_HTTP_PAYLOAD_SIZE_LIMIT,
             http_payload_size_limit.to_string(),
@@ -724,11 +725,11 @@ fn default_env() -> String {
 }
 
 fn default_max_index_size() -> Byte {
-    Byte::from_str(DEFAULT_MAX_INDEX_SIZE).unwrap()
+    Byte::from_bytes(INDEX_SIZE)
 }
 
 fn default_max_task_db_size() -> Byte {
-    Byte::from_str(DEFAULT_MAX_TASK_DB_SIZE).unwrap()
+    Byte::from_bytes(TASK_DB_SIZE)
 }
 
 fn default_http_payload_size_limit() -> Byte {

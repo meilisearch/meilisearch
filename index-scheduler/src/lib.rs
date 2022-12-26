@@ -227,9 +227,9 @@ pub struct IndexSchedulerOptions {
     pub snapshots_path: PathBuf,
     /// The path to the folder containing the dumps.
     pub dumps_path: PathBuf,
-    /// The maximum size, in bytes, of each meilisearch index.
+    /// The maximum size, in bytes, of the task index.
     pub task_db_size: usize,
-    /// The maximum size, in bytes, of the tasks index.
+    /// The maximum size, in bytes, of each meilisearch index.
     pub index_size: usize,
     /// Configuration used during indexing for each meilisearch index.
     pub indexer_config: IndexerConfig,
