@@ -41,6 +41,7 @@ use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::versioning::{check_version_file, create_version_file};
 use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
 pub use option::Opt;
+use option::ScheduleSnapshot;
 
 use crate::error::MeilisearchHttpError;
 
@@ -169,8 +170,8 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Auth
 
     // We create a loop in a thread that registers snapshotCreation tasks
     let index_scheduler = Arc::new(index_scheduler);
-    if opt.schedule_snapshot {
-        let snapshot_delay = Duration::from_secs(opt.snapshot_interval_sec);
+    if let ScheduleSnapshot::Enabled(snapshot_delay) = opt.schedule_snapshot {
+        let snapshot_delay = Duration::from_secs(snapshot_delay);
         let index_scheduler = index_scheduler.clone();
         thread::Builder::new()
             .name(String::from("register-snapshot-tasks"))
