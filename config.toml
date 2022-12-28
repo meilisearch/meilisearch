@@ -73,6 +73,69 @@ ignore_dump_if_db_exists = false
 # https://docs.meilisearch.com/learn/configuration/instance_options.html#ignore-dump-if-db-exists
 
 
+#####################
+### RATE LIMITING ###
+#####################
+
+rate_limiting_disable_all = false
+# Prevents a Meilisearch instance from performing any rate limiting.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#rate-limiting-disable-all
+
+rate_limiting_disable_global = false
+# Prevents a Meilisearch instance from performing rate limiting global to all queries.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#rate-limiting-disable-global
+
+rate_limiting_global_pool = 100000
+# The maximum pool of search requests that can be performed before they are rejected.
+#
+# The pool starts full at the provided value, then each search request diminishes the pool by 1.
+# When the pool is empty the search request is rejected.
+# The pool is replenished by 1 depending on the cooldown period.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#rate-limiting-global-pool
+
+rate_limiting_global_cooldown_ns = 50000
+# The amount of time, in nanoseconds, before the pool of available search requests is replenished by 1 again.
+#
+# The maximum number of available search requests is given by `rate_limiting_global_pool`.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#rate-limiting-global-cooldown-ns
+
+rate_limiting_disable_ip = false
+# Prevents a Meilisearch instance from performing rate limiting per IP address.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#rate-limiting-disable-ip
+
+rate_limiting_ip_pool = 200
+# The maximum pool of search requests that can be performed from a specific IP before they are rejected.
+#
+# The pool starts full at the provided value, then each search request from the same IP address diminishes the pool by 1.
+# When the pool is empty the search request is rejected.
+# The pool is replenished by 1 depending on the cooldown period.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#rate-limiting-ip-pool
+
+rate_limiting_ip_cooldown_ns = 50000000
+# The amount of time, in nanoseconds, before the pool of available search requests for a specific IP address is replenished by 1 again.
+#
+# The maximum number of available search requests for a specific IP address is given by `rate_limiting_ip_pool`.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#rate-limiting-ip-cooldown-ns
+
+rate_limiting_disable_api_key = false
+# Prevents a Meilisearch instance from performing rate limiting per API key.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#rate-limiting-disable-api-key
+
+rate_limiting_api_key_pool = 10000
+# The maximum pool of search requests that can be performed using a specific API key before they are rejected.
+#
+# The pool starts full at the provided value, then each search request using the same API key diminishes the pool by 1.
+# When the pool is empty the search request is rejected.
+# The pool is replenished by 1 depending on the cooldown period.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#rate-limiting-api-key-pool
+
+rate_limiting_api_key_cooldown_ns = 500000
+# The amount of time, in nanoseconds, before the pool of available search requests using a specific API key is replenished by 1 again.
+#
+# The maximum number of available search requests using a specific API key is given by `rate_limiting_api_key_pool`.
+# https://docs.meilisearch.com/learn/configuration/instance_options.html#rate-limiting-api-key-cooldown-ns
+
+
 #################
 ### SNAPSHOTS ###
 #################

@@ -8,7 +8,7 @@ use actix_web::dev::ServiceResponse;
 use actix_web::http::StatusCode;
 use byte_unit::{Byte, ByteUnit};
 use clap::Parser;
-use meilisearch::option::{IndexerOpts, MaxMemory, Opt};
+use meilisearch::option::{IndexerOpts, MaxMemory, Opt, RateLimiterConfig};
 use meilisearch::{analytics, create_app, setup_meilisearch};
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
@@ -192,6 +192,10 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
         max_task_db_size: Byte::from_unit(1.0, ByteUnit::GiB).unwrap(),
         http_payload_size_limit: Byte::from_unit(10.0, ByteUnit::MiB).unwrap(),
         snapshot_dir: ".".into(),
+        rate_limiter_options: RateLimiterConfig {
+            rate_limiting_disable_all: true,
+            ..Parser::parse_from(None as Option<&str>)
+        },
         indexer_options: IndexerOpts {
             // memory has to be unlimited because several meilisearch are running in test context.
             max_indexing_memory: MaxMemory::unlimited(),
