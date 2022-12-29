@@ -16,6 +16,7 @@ use self::indexes::IndexStats;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
+use crate::RateLimiters;
 
 mod api_key;
 mod dump;
@@ -23,14 +24,14 @@ pub mod indexes;
 mod swap_indexes;
 pub mod tasks;
 
-pub fn configure(cfg: &mut web::ServiceConfig) {
+pub fn configure(cfg: &mut web::ServiceConfig, rate_limiters: RateLimiters) {
     cfg.service(web::scope("/tasks").configure(tasks::configure))
         .service(web::resource("/health").route(web::get().to(get_health)))
         .service(web::scope("/keys").configure(api_key::configure))
         .service(web::scope("/dumps").configure(dump::configure))
         .service(web::resource("/stats").route(web::get().to(get_stats)))
         .service(web::resource("/version").route(web::get().to(get_version)))
-        .service(web::scope("/indexes").configure(indexes::configure))
+        .service(web::scope("/indexes").configure(|cfg| indexes::configure(cfg, rate_limiters)))
         .service(web::scope("/swap-indexes").configure(swap_indexes::configure));
 }
 

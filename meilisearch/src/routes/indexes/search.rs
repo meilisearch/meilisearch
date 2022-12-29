@@ -17,10 +17,14 @@ use crate::search::{
     DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
     DEFAULT_SEARCH_OFFSET,
 };
+use crate::RateLimiters;
 
-pub fn configure(cfg: &mut web::ServiceConfig) {
+pub fn configure(cfg: &mut web::ServiceConfig, rate_limiters: RateLimiters) {
     cfg.service(
         web::resource("")
+            .wrap(rate_limiters.global.into_middleware())
+            .wrap(rate_limiters.ip.into_middleware())
+            .wrap(rate_limiters.api_key.into_middleware())
             .route(web::get().to(SeqHandler(search_with_url_query)))
             .route(web::post().to(SeqHandler(search_with_post))),
     );
