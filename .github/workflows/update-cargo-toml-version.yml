@@ -24,7 +24,7 @@ jobs:
           toolchain: stable
           override: true
       - name: Install critcmp
-        uses: taiki-e/install-action@v1
+        uses: taiki-e/install-action@v2
         with:
           tool: sd
       - name: Update all Cargo.toml files
