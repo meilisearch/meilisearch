@@ -191,7 +191,7 @@ fn resolve_state(
                             attribute_start_with_docids(ctx, id, query)?;
                         attribute_candidates_array.push(attribute_allowed_docids);
 
-                        candidates |= intersection_of(attribute_candidates_array.iter().collect());
+                        candidates |= MultiOps::intersection(attribute_candidates_array);
                     }
                 }
 
@@ -208,7 +208,7 @@ fn resolve_state(
             let attributes_ids = ctx.searchable_fields_ids()?;
             for id in attributes_ids {
                 let attribute_candidates_array = attribute_start_with_docids(ctx, id, query)?;
-                candidates |= intersection_of(attribute_candidates_array.iter().collect());
+                candidates |= MultiOps::intersection(attribute_candidates_array);
             }
 
             // only keep allowed candidates
@@ -287,12 +287,6 @@ fn attribute_start_with_docids(
     }
 
     Ok(attribute_candidates_array)
-}
-
-#[inline(never)]
-fn intersection_of(mut rbs: Vec<&RoaringBitmap>) -> RoaringBitmap {
-    rbs.sort_unstable_by_key(|rb| rb.len());
-    roaring::MultiOps::intersection(rbs.into_iter())
 }
 
 #[derive(Debug, Clone)]
@@ -440,8 +434,7 @@ fn compute_combinations(
 fn create_non_disjoint_combinations(bitmaps: Vec<RoaringBitmap>) -> Vec<RoaringBitmap> {
     let nbr_parts = bitmaps.len();
     if nbr_parts == 1 {
-        let flattened_base_level = MultiOps::union(bitmaps.into_iter());
-        return vec![flattened_base_level];
+        return bitmaps;
     }
     let mut flattened_levels = vec![];
     let mut last_level: BTreeMap<usize, RoaringBitmap> =
@@ -466,12 +459,12 @@ fn create_non_disjoint_combinations(bitmaps: Vec<RoaringBitmap>) -> Vec<RoaringB
             }
         }
         // Now flatten the last level to save memory
-        let flattened_last_level = MultiOps::union(last_level.values());
+        let flattened_last_level = MultiOps::union(last_level.into_values());
         flattened_levels.push(flattened_last_level);
         last_level = new_level;
     }
     // Flatten the last level
-    let flattened_last_level = MultiOps::union(last_level.values());
+    let flattened_last_level = MultiOps::union(last_level.into_values());
     flattened_levels.push(flattened_last_level);
     flattened_levels
 }
@@ -480,27 +473,17 @@ fn create_non_disjoint_combinations(bitmaps: Vec<RoaringBitmap>) -> Vec<RoaringB
 /// such that `Xi` contains all the elements that are contained in **exactly** `i+1` bitmaps among `b0,b1,...,bn`.
 ///
 /// The returned vector is guaranteed to be of length `n`. It is equal to `vec![X0, X1, ..., Xn]`.
-///
-/// ## Implementation
-/// 1. We first create `Y0,Y1,...Yn` such that `Yi` contains all the elements that are contained in
-/// **at least** `i+1` bitmaps among `b0,b1,...,bn`. This is done using `create_non_disjoint_combinations`.
-///
-/// 2. We create a set of "forbidden" elements, `Fn`, which is initialised to the empty set.
-///
-/// 3. We compute:
-///     - `Xn = Yn - Fn`
-///     - `Fn-1 = Fn | Xn`
 fn create_disjoint_combinations(parts_candidates_array: Vec<RoaringBitmap>) -> Vec<RoaringBitmap> {
     let non_disjoint_combinations = create_non_disjoint_combinations(parts_candidates_array);
-
     let mut disjoint_combinations = vec![];
-    let mut forbidden = RoaringBitmap::new();
-    for mut combination in non_disjoint_combinations.into_iter().rev() {
-        combination -= &forbidden;
-        forbidden |= &combination;
+    let mut combinations = non_disjoint_combinations.into_iter().peekable();
+    while let Some(mut combination) = combinations.next() {
+        if let Some(forbidden) = combinations.peek() {
+            combination -= forbidden;
+        }
         disjoint_combinations.push(combination)
     }
-    disjoint_combinations.reverse();
+
     disjoint_combinations
 }
 
