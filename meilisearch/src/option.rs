@@ -49,6 +49,7 @@ const MEILI_IGNORE_MISSING_DUMP: &str = "MEILI_IGNORE_MISSING_DUMP";
 const MEILI_IGNORE_DUMP_IF_DB_EXISTS: &str = "MEILI_IGNORE_DUMP_IF_DB_EXISTS";
 const MEILI_DUMP_DIR: &str = "MEILI_DUMP_DIR";
 const MEILI_LOG_LEVEL: &str = "MEILI_LOG_LEVEL";
+const MEILI_GENERATE_MASTER_KEY: &str = "MEILI_GENERATE_MASTER_KEY";
 #[cfg(feature = "metrics")]
 const MEILI_ENABLE_METRICS_ROUTE: &str = "MEILI_ENABLE_METRICS_ROUTE";
 
@@ -230,10 +231,10 @@ pub struct Opt {
     #[serde(default = "default_log_level")]
     pub log_level: String,
 
-    /// Generates a string of characters that can be used as a Master Key and exits.
+    /// Generates a string of characters that can be used as a master key and exits.
     ///
-    /// Pass the generated Master Key using the `--master-key` argument or the   `MEILI_MASTER_KEY` environment variable in a subsequent Meilisearch invocation.
-    #[clap(long)]
+    /// Pass the generated master key using the `--master-key` argument or the `MEILI_MASTER_KEY` environment variable in a subsequent Meilisearch invocation.
+    #[clap(long, env = MEILI_GENERATE_MASTER_KEY)]
     #[serde(default)]
     pub generate_master_key: bool,
 
