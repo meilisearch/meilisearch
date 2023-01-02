@@ -3,6 +3,7 @@ use std::{fmt, io};
 use actix_web::http::StatusCode;
 use actix_web::{self as aweb, HttpResponseBuilder};
 use aweb::rt::task::JoinError;
+use convert_case::Casing;
 use milli::heed::{Error as HeedError, MdbError};
 use serde::{Deserialize, Serialize};
 
@@ -355,7 +356,10 @@ impl Code {
 
     /// return the doc url associated with the error
     fn url(&self) -> String {
-        format!("https://docs.meilisearch.com/errors#{}", self.name())
+        format!(
+            "https://docs.meilisearch.com/errors#{}",
+            self.name().to_case(convert_case::Case::Kebab)
+        )
     }
 }
 

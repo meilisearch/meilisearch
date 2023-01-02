@@ -193,7 +193,7 @@ async fn error_add_documents_test_bad_content_types() {
     );
     assert_eq!(response["code"], "invalid_content_type");
     assert_eq!(response["type"], "invalid_request");
-    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#invalid_content_type");
+    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#invalid-content-type");
 
     // put
     let req = test::TestRequest::put()
@@ -214,7 +214,7 @@ async fn error_add_documents_test_bad_content_types() {
     );
     assert_eq!(response["code"], "invalid_content_type");
     assert_eq!(response["type"], "invalid_request");
-    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#invalid_content_type");
+    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#invalid-content-type");
 }
 
 /// missing content-type must be refused
@@ -248,7 +248,7 @@ async fn error_add_documents_test_no_content_type() {
     );
     assert_eq!(response["code"], "missing_content_type");
     assert_eq!(response["type"], "invalid_request");
-    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#missing_content_type");
+    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#missing-content-type");
 
     // put
     let req = test::TestRequest::put()
@@ -268,7 +268,7 @@ async fn error_add_documents_test_no_content_type() {
     );
     assert_eq!(response["code"], "missing_content_type");
     assert_eq!(response["type"], "invalid_request");
-    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#missing_content_type");
+    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#missing-content-type");
 }
 
 #[actix_rt::test]
@@ -297,7 +297,7 @@ async fn error_add_malformed_csv_documents() {
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed-payload"));
 
     // put
     let req = test::TestRequest::put()
@@ -318,7 +318,7 @@ async fn error_add_malformed_csv_documents() {
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed-payload"));
 }
 
 #[actix_rt::test]
@@ -347,7 +347,7 @@ async fn error_add_malformed_json_documents() {
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed-payload"));
 
     // put
     let req = test::TestRequest::put()
@@ -368,7 +368,7 @@ async fn error_add_malformed_json_documents() {
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed-payload"));
 
     // truncate
 
@@ -393,7 +393,7 @@ async fn error_add_malformed_json_documents() {
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed-payload"));
 
     // add one more char to the long string to test if the truncating works.
     let document = format!("\"{}m\"", long);
@@ -412,7 +412,7 @@ async fn error_add_malformed_json_documents() {
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed-payload"));
 }
 
 #[actix_rt::test]
@@ -441,7 +441,7 @@ async fn error_add_malformed_ndjson_documents() {
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed-payload"));
 
     // put
     let req = test::TestRequest::put()
@@ -460,7 +460,7 @@ async fn error_add_malformed_ndjson_documents() {
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed-payload"));
 }
 
 #[actix_rt::test]
@@ -484,7 +484,7 @@ async fn error_add_missing_payload_csv_documents() {
     assert_eq!(response["message"], json!(r#"A csv payload is missing."#));
     assert_eq!(response["code"], json!("missing_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing_payload"));
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing-payload"));
 
     // put
     let req = test::TestRequest::put()
@@ -500,7 +500,7 @@ async fn error_add_missing_payload_csv_documents() {
     assert_eq!(response["message"], json!(r#"A csv payload is missing."#));
     assert_eq!(response["code"], json!("missing_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing_payload"));
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing-payload"));
 }
 
 #[actix_rt::test]
@@ -524,7 +524,7 @@ async fn error_add_missing_payload_json_documents() {
     assert_eq!(response["message"], json!(r#"A json payload is missing."#));
     assert_eq!(response["code"], json!("missing_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing_payload"));
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing-payload"));
 
     // put
     let req = test::TestRequest::put()
@@ -540,7 +540,7 @@ async fn error_add_missing_payload_json_documents() {
     assert_eq!(response["message"], json!(r#"A json payload is missing."#));
     assert_eq!(response["code"], json!("missing_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing_payload"));
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing-payload"));
 }
 
 #[actix_rt::test]
@@ -564,7 +564,7 @@ async fn error_add_missing_payload_ndjson_documents() {
     assert_eq!(response["message"], json!(r#"A ndjson payload is missing."#));
     assert_eq!(response["code"], json!("missing_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing_payload"));
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing-payload"));
 
     // put
     let req = test::TestRequest::put()
@@ -580,7 +580,7 @@ async fn error_add_missing_payload_ndjson_documents() {
     assert_eq!(response["message"], json!(r#"A ndjson payload is missing."#));
     assert_eq!(response["code"], json!("missing_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing_payload"));
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing-payload"));
 }
 
 #[actix_rt::test]
@@ -639,7 +639,7 @@ async fn error_document_add_create_index_bad_uid() {
         "message": "`883  fj!` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
         "code": "invalid_index_uid",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
+        "link": "https://docs.meilisearch.com/errors#invalid-index-uid"
     });
 
     assert_eq!(code, 400);
@@ -765,7 +765,7 @@ async fn error_add_documents_bad_document_id() {
     assert_eq!(response["error"]["type"], json!("invalid_request"));
     assert_eq!(
         response["error"]["link"],
-        json!("https://docs.meilisearch.com/errors#invalid_document_id")
+        json!("https://docs.meilisearch.com/errors#invalid-document-id")
     );
 }
 
@@ -793,7 +793,7 @@ async fn error_add_documents_missing_document_id() {
     assert_eq!(response["error"]["type"], json!("invalid_request"));
     assert_eq!(
         response["error"]["link"],
-        json!("https://docs.meilisearch.com/errors#missing_document_id")
+        json!("https://docs.meilisearch.com/errors#missing-document-id")
     );
 }
 
@@ -827,7 +827,7 @@ async fn error_document_field_limit_reached() {
         "message": "A document cannot contain more than 65,535 fields.",
         "code": "document_fields_limit_reached",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#document_fields_limit_reached"
+        "link": "https://docs.meilisearch.com/errors#document-fields-limit-reached"
     });
 
     assert_eq!(response["error"], expected_error);
@@ -873,7 +873,7 @@ async fn error_add_documents_payload_size() {
         "message": "The provided payload reached the size limit.",
         "code": "payload_too_large",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#payload_too_large"
+        "link": "https://docs.meilisearch.com/errors#payload-too-large"
     });
 
     assert_eq!(response, expected_response);
@@ -913,7 +913,7 @@ async fn error_primary_key_inference() {
         "message": "The primary key inference process failed because the engine did not find any field ending with `id` in its name. Please specify the primary key manually using the `primaryKey` query parameter.",
         "code": "index_primary_key_no_candidate_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_primary_key_no_candidate_found"
+        "link": "https://docs.meilisearch.com/errors#index-primary-key-no-candidate-found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -953,7 +953,7 @@ async fn error_primary_key_inference() {
         "message": "The primary key inference process failed because the engine found 3 fields ending with `id` in their name, such as 'id' and 'object_id'. Please specify the primary key manually using the `primaryKey` query parameter.",
         "code": "index_primary_key_multiple_candidates_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_primary_key_multiple_candidates_found"
+        "link": "https://docs.meilisearch.com/errors#index-primary-key-multiple-candidates-found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",

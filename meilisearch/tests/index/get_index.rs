@@ -34,7 +34,7 @@ async fn error_get_unexisting_index() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_not_found"
+        "link": "https://docs.meilisearch.com/errors#index-not-found"
     });
 
     assert_eq!(response, expected_response);
@@ -190,7 +190,7 @@ async fn get_invalid_index_uid() {
         "message": "Index `this is not a valid index name` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_not_found"
+        "link": "https://docs.meilisearch.com/errors#index-not-found"
             })
     );
 }
