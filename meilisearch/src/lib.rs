@@ -289,7 +289,9 @@ fn import_dump(
         let mut index_reader = index_reader?;
         let metadata = index_reader.metadata();
         log::info!("Importing index `{}`.", metadata.uid);
-        let index = index_scheduler.create_raw_index(&metadata.uid)?;
+
+        let date = Some((metadata.created_at, metadata.updated_at));
+        let index = index_scheduler.create_raw_index(&metadata.uid, date)?;
 
         let mut wtxn = index.write_txn()?;
 

@@ -693,7 +693,7 @@ impl IndexScheduler {
 
         let mut task = Task {
             uid: self.next_task_id(&wtxn)?,
-            enqueued_at: time::OffsetDateTime::now_utc(),
+            enqueued_at: OffsetDateTime::now_utc(),
             started_at: None,
             finished_at: None,
             error: None,
@@ -865,10 +865,13 @@ impl IndexScheduler {
     }
 
     /// Create a new index without any associated task.
-    pub fn create_raw_index(&self, name: &str) -> Result<Index> {
+    pub fn create_raw_index(
+        &self,
+        name: &str,
+        date: Option<(OffsetDateTime, OffsetDateTime)>,
+    ) -> Result<Index> {
         let wtxn = self.env.write_txn()?;
-        let index = self.index_mapper.create_index(wtxn, name)?;
-
+        let index = self.index_mapper.create_index(wtxn, name, date)?;
         Ok(index)
     }
 
