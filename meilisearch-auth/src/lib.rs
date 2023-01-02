@@ -276,6 +276,7 @@ pub fn generate_master_key() -> String {
     use rand::rngs::OsRng;
     use rand::RngCore;
 
+    // We need to use a cryptographically-secure source of randomness. That's why we're using the OsRng; https://crates.io/crates/getrandom
     let mut csprng = OsRng;
     let mut buf = vec![0; MASTER_KEY_GEN_SIZE];
     csprng.fill_bytes(&mut buf);
