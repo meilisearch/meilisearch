@@ -16,7 +16,7 @@ use super::helpers::{create_sorter, create_writer, keep_latest_obkv, merge_obkvs
 use super::{IndexDocumentsMethod, IndexerConfig};
 use crate::documents::{DocumentsBatchIndex, EnrichedDocument, EnrichedDocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
-use crate::index::db_name;
+use crate::index::{db_name, main_key};
 use crate::update::{AvailableDocumentsIds, ClearDocuments, UpdateIndexingStep};
 use crate::{
     ExternalDocumentsIds, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldsIdsMap, Index,
@@ -459,7 +459,10 @@ impl<'a, 'i> Transform<'a, 'i> {
         let primary_key = self
             .index
             .primary_key(wtxn)?
-            .ok_or(Error::UserError(UserError::MissingPrimaryKey))?
+            .ok_or(Error::InternalError(InternalError::DatabaseMissingEntry {
+                db_name: db_name::MAIN,
+                key: Some(main_key::PRIMARY_KEY_KEY),
+            }))?
             .to_string();
 
         let mut external_documents_ids = self.index.external_documents_ids(wtxn)?;
@@ -557,8 +560,14 @@ impl<'a, 'i> Transform<'a, 'i> {
         mut new_fields_ids_map: FieldsIdsMap,
     ) -> Result<TransformOutput> {
         // There already has been a document addition, the primary key should be set by now.
-        let primary_key =
-            self.index.primary_key(wtxn)?.ok_or(UserError::MissingPrimaryKey)?.to_string();
+        let primary_key = self
+            .index
+            .primary_key(wtxn)?
+            .ok_or(InternalError::DatabaseMissingEntry {
+                db_name: db_name::MAIN,
+                key: Some(main_key::PRIMARY_KEY_KEY),
+            })?
+            .to_string();
         let field_distribution = self.index.field_distribution(wtxn)?;
 
         // Delete the soft deleted document ids from the maps inside the external_document_ids structure
