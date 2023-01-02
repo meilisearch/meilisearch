@@ -41,7 +41,7 @@ async fn main() -> anyhow::Result<()> {
     match (opt.env.as_ref(), &opt.master_key) {
         ("production", Some(master_key)) if master_key.len() < MASTER_KEY_MIN_SIZE => {
             anyhow::bail!(
-                "In production mode, the Master Key must be of at least {MASTER_KEY_MIN_SIZE} characters, but the provided key is only {} characters long
+                "In production mode, the master key must be of at least {MASTER_KEY_MIN_SIZE} characters, but the provided key is only {} characters long
 
 We generated a secure Master Key for you (you can safely copy this token):
 
@@ -52,7 +52,7 @@ We generated a secure Master Key for you (you can safely copy this token):
         }
         ("production", None) => {
             anyhow::bail!(
-                "In production mode, the environment variable MEILI_MASTER_KEY is mandatory
+                "In production mode, you must provide a master key to secure your instance. It can be specified via the MEILI_MASTER_KEY environment variable or the --master-key launch option.
 
 We generated a secure Master Key for you (you can safely copy this token):
 
