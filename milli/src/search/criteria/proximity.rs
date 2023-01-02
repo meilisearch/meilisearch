@@ -599,7 +599,7 @@ mod tests {
 
     use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
     use crate::index::tests::TempIndex;
-    use crate::SearchResult;
+    use crate::{CriterionImplementationStrategy, SearchResult};
 
     fn documents_with_enough_different_words_for_prefixes(prefixes: &[&str]) -> Vec<crate::Object> {
         let mut documents = Vec::new();
@@ -663,29 +663,49 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
 
-        let SearchResult { matching_words: _, candidates: _, documents_ids } =
-            index.search(&rtxn).query("zero c").execute().unwrap();
+        let SearchResult { matching_words: _, candidates: _, documents_ids } = index
+            .search(&rtxn)
+            .query("zero c")
+            .criterion_implementation_strategy(CriterionImplementationStrategy::OnlySetBased)
+            .execute()
+            .unwrap();
         insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 3, 4, 1, 5, 0]");
 
-        let SearchResult { matching_words: _, candidates: _, documents_ids } =
-            index.search(&rtxn).query("zero co").execute().unwrap();
+        let SearchResult { matching_words: _, candidates: _, documents_ids } = index
+            .search(&rtxn)
+            .query("zero co")
+            .criterion_implementation_strategy(CriterionImplementationStrategy::OnlySetBased)
+            .execute()
+            .unwrap();
         insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 3, 4, 1, 5, 0]");
 
-        let SearchResult { matching_words: _, candidates: _, documents_ids } =
-            index.search(&rtxn).query("zero con").execute().unwrap();
+        let SearchResult { matching_words: _, candidates: _, documents_ids } = index
+            .search(&rtxn)
+            .query("zero con")
+            .criterion_implementation_strategy(CriterionImplementationStrategy::OnlySetBased)
+            .execute()
+            .unwrap();
         // Here searh results are degraded because `con` is in the prefix cache but it is too
         // long to be stored in the prefix proximity databases, and we don't want to iterate over
         // all of its word derivations
         insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1, 2, 3, 4, 5]");
 
-        let SearchResult { matching_words: _, candidates: _, documents_ids } =
-            index.search(&rtxn).query("zero conf").execute().unwrap();
+        let SearchResult { matching_words: _, candidates: _, documents_ids } = index
+            .search(&rtxn)
+            .criterion_implementation_strategy(CriterionImplementationStrategy::OnlySetBased)
+            .query("zero conf")
+            .execute()
+            .unwrap();
         // Here search results are degraded as well, but we can still rank correctly documents
         // that contain `conf` exactly, and not as a prefix.
         insta::assert_snapshot!(format!("{documents_ids:?}"), @"[4, 5, 0, 1, 2, 3]");
 
-        let SearchResult { matching_words: _, candidates: _, documents_ids } =
-            index.search(&rtxn).query("zero config").execute().unwrap();
+        let SearchResult { matching_words: _, candidates: _, documents_ids } = index
+            .search(&rtxn)
+            .criterion_implementation_strategy(CriterionImplementationStrategy::OnlySetBased)
+            .query("zero config")
+            .execute()
+            .unwrap();
         // `config` is not a common prefix, so the normal methods are used
         insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 3, 1, 0, 4, 5]");
     }
