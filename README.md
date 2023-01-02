@@ -101,3 +101,6 @@ Meilisearch is a search engine created by [Meili](https://www.welcometothejungle
 - For everything else, please check [this page listing some of the other places where you can find us](https://docs.meilisearch.com/learn/what_is_meilisearch/contact.html)
 
 Thank you for your support!
+
+[![Unzip.dev](https://img.shields.io/badge/Featured%20on-Unzip.dev-fa2367)](https://unzip.dev/0x002-search-as-a-service/#tools-players-%F0%9F%9B%A0%EF%B8%8F)
+
