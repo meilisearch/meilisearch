@@ -43,7 +43,7 @@ async fn main() -> anyhow::Result<()> {
             anyhow::bail!(
                 "In production mode, the master key must be of at least {MASTER_KEY_MIN_SIZE} characters, but the provided key is only {} characters long
 
-We generated a secure Master Key for you (you can safely copy this token):
+We generated a secure master key for you (you can safely copy this token):
 
 >> export MEILI_MASTER_KEY={} <<",
                 master_key.len(),
@@ -54,7 +54,7 @@ We generated a secure Master Key for you (you can safely copy this token):
             anyhow::bail!(
                 "In production mode, you must provide a master key to secure your instance. It can be specified via the MEILI_MASTER_KEY environment variable or the --master-key launch option.
 
-We generated a secure Master Key for you (you can safely copy this token):
+We generated a secure master key for you (you can safely copy this token):
 
 >> export MEILI_MASTER_KEY={} <<
 ",
@@ -173,24 +173,24 @@ Anonymous telemetry:\t\"Enabled\""
 
     match (opt.env.as_ref(), &opt.master_key) {
         ("production", Some(_)) => {
-            eprintln!("A Master Key has been set. Requests to Meilisearch won't be authorized unless you provide an authentication key.");
+            eprintln!("A master key has been set. Requests to Meilisearch won't be authorized unless you provide an authentication key.");
         }
         ("development", Some(master_key)) => {
-            eprintln!("A Master Key has been set. Requests to Meilisearch won't be authorized unless you provide an authentication key.");
+            eprintln!("A master key has been set. Requests to Meilisearch won't be authorized unless you provide an authentication key.");
 
             if master_key.len() < MASTER_KEY_MIN_SIZE {
                 eprintln!();
                 log::warn!(
-                    "The provided Master Key is too short (< {MASTER_KEY_MIN_SIZE} characters)"
+                    "The provided master key is too short (< {MASTER_KEY_MIN_SIZE} characters)"
                 );
-                eprintln!("A Master Key of at least {MASTER_KEY_MIN_SIZE} characters will be required when switching to the production environment.");
-                eprintln!("Restart Meilisearch with the `--generate-master-key` flag to generate a secure Master Key you can use");
+                eprintln!("A master key of at least {MASTER_KEY_MIN_SIZE} characters will be required when switching to the production environment.");
+                eprintln!("Restart Meilisearch with the `--generate-master-key` flag to generate a secure master key you can use");
             }
         }
         ("development", None) => {
             log::warn!("No master key found; The server will accept unidentified requests");
             eprintln!("If you need some protection in development mode, please export a key:\n\nexport MEILI_MASTER_KEY={}", generate_master_key());
-            eprintln!("\nA Master Key of at least {MASTER_KEY_MIN_SIZE} characters will be required when switching to the production environment.");
+            eprintln!("\nA master key of at least {MASTER_KEY_MIN_SIZE} characters will be required when switching to the production environment.");
         }
         // unreachable because Opt::try_build above would have failed already if any other value had been produced
         _ => unreachable!(),
