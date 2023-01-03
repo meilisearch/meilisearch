@@ -41,7 +41,7 @@ async fn main() -> anyhow::Result<()> {
     match (opt.env.as_ref(), &opt.master_key) {
         ("production", Some(master_key)) if master_key.len() < MASTER_KEY_MIN_SIZE => {
             anyhow::bail!(
-                "In production mode, the master key must be of at least {MASTER_KEY_MIN_SIZE} characters, but the provided key is only {} characters long
+                "In production mode, the master key must be of at least {MASTER_KEY_MIN_SIZE} bytes, but the provided key is only {} bytes long
 
 We generated a secure master key for you (you can safely copy this token):
 
@@ -180,17 +180,15 @@ Anonymous telemetry:\t\"Enabled\""
 
             if master_key.len() < MASTER_KEY_MIN_SIZE {
                 eprintln!();
-                log::warn!(
-                    "The provided master key is too short (< {MASTER_KEY_MIN_SIZE} characters)"
-                );
-                eprintln!("A master key of at least {MASTER_KEY_MIN_SIZE} characters will be required when switching to the production environment.");
+                log::warn!("The provided master key is too short (< {MASTER_KEY_MIN_SIZE} bytes)");
+                eprintln!("A master key of at least {MASTER_KEY_MIN_SIZE} bytes will be required when switching to the production environment.");
                 eprintln!("Restart Meilisearch with the `--generate-master-key` flag to generate a secure master key you can use");
             }
         }
         ("development", None) => {
             log::warn!("No master key found; The server will accept unidentified requests");
             eprintln!("If you need some protection in development mode, please export a key:\n\nexport MEILI_MASTER_KEY={}", generate_master_key());
-            eprintln!("\nA master key of at least {MASTER_KEY_MIN_SIZE} characters will be required when switching to the production environment.");
+            eprintln!("\nA master key of at least {MASTER_KEY_MIN_SIZE} bytes will be required when switching to the production environment.");
         }
         // unreachable because Opt::try_build above would have failed already if any other value had been produced
         _ => unreachable!(),
