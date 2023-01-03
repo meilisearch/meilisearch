@@ -50,7 +50,7 @@ jobs:
 
       # Generate critcmp files
       - name: Install critcmp
-        uses: taiki-e/install-action@v1
+        uses: taiki-e/install-action@v2
         with:
           tool: critcmp
       - name: Export cripcmp file
