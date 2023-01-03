@@ -50,6 +50,22 @@ const MEILI_IGNORE_DUMP_IF_DB_EXISTS: &str = "MEILI_IGNORE_DUMP_IF_DB_EXISTS";
 const MEILI_DUMP_DIR: &str = "MEILI_DUMP_DIR";
 const MEILI_LOG_LEVEL: &str = "MEILI_LOG_LEVEL";
 const MEILI_GENERATE_MASTER_KEY: &str = "MEILI_GENERATE_MASTER_KEY";
+
+// rate limiting
+
+const MEILI_RATE_LIMITING_DISABLE_ALL: &str = "MEILI_RATE_LIMITING_DISABLE_ALL";
+const MEILI_RATE_LIMITING_DISABLE_GLOBAL: &str = "MEILI_RATE_LIMITING_DISABLE_GLOBAL";
+const MEILI_RATE_LIMITING_DISABLE_IP: &str = "MEILI_RATE_LIMITING_DISABLE_IP";
+const MEILI_RATE_LIMITING_DISABLE_API_KEY: &str = "MEILI_RATE_LIMITING_DISABLE_API_KEY";
+
+const MEILI_RATE_LIMITING_GLOBAL_POOL: &str = "MEILI_RATE_LIMITING_GLOBAL_POOL";
+const MEILI_RATE_LIMITING_IP_POOL: &str = "MEILI_RATE_LIMITING_IP_POOL";
+const MEILI_RATE_LIMITING_API_KEY_POOL: &str = "MEILI_RATE_LIMITING_API_KEY_POOL";
+
+const MEILI_RATE_LIMITING_GLOBAL_COOLDOWN_NS: &str = "MEILI_RATE_LIMITING_GLOBAL_COOLDOWN_NS";
+const MEILI_RATE_LIMITING_IP_COOLDOWN_NS: &str = "MEILI_RATE_LIMITING_IP_COOLDOWN_NS";
+const MEILI_RATE_LIMITING_API_KEY_COOLDOWN_NS: &str = "MEILI_RATE_LIMITING_API_KEY_COOLDOWN_NS";
+
 #[cfg(feature = "metrics")]
 const MEILI_ENABLE_METRICS_ROUTE: &str = "MEILI_ENABLE_METRICS_ROUTE";
 
@@ -69,6 +85,15 @@ const MEILI_MAX_INDEXING_MEMORY: &str = "MEILI_MAX_INDEXING_MEMORY";
 const MEILI_MAX_INDEXING_THREADS: &str = "MEILI_MAX_INDEXING_THREADS";
 const DISABLE_AUTO_BATCHING: &str = "DISABLE_AUTO_BATCHING";
 const DEFAULT_LOG_EVERY_N: usize = 100000;
+
+const DEFAULT_GLOBAL_RATE_LIMITING_POOL: u32 = 100_000;
+const DEFAULT_GLOBAL_RATE_LIMITING_COOLDOWN_NS: u64 = 50_000; // pool replenishes in 5s
+
+const DEFAULT_IP_RATE_LIMITING_POOL: u32 = 200;
+const DEFAULT_IP_RATE_LIMITING_COOLDOWN_NS: u64 = 50_000_000; // pool replenishes in 10s
+
+const DEFAULT_API_KEY_RATE_LIMITING_POOL: u32 = 10_000;
+const DEFAULT_API_KEY_RATE_LIMITING_COOLDOWN_NS: u64 = 500_000; // pool replenishes in 10s
 
 #[derive(Debug, Clone, Parser, Deserialize)]
 #[clap(version, next_display_order = None)]
@@ -252,6 +277,10 @@ pub struct Opt {
     #[clap(flatten)]
     pub scheduler_options: SchedulerConfig,
 
+    #[serde(flatten)]
+    #[clap(flatten)]
+    pub rate_limiter_options: RateLimiterConfig,
+
     /// Set the path to a configuration file that should be used to setup the engine.
     /// Format must be TOML.
     #[clap(long)]
@@ -340,6 +369,7 @@ impl Opt {
             ignore_missing_dump: _,
             ignore_dump_if_db_exists: _,
             config_file_path: _,
+            rate_limiter_options,
             #[cfg(all(not(debug_assertions), feature = "analytics"))]
             no_analytics,
             #[cfg(feature = "metrics")]
@@ -393,6 +423,7 @@ impl Opt {
         }
         indexer_options.export_to_env();
         scheduler_options.export_to_env();
+        rate_limiter_options.export_to_env();
     }
 
     pub fn get_ssl_config(&self) -> anyhow::Result<Option<rustls::ServerConfig>> {
@@ -534,6 +565,142 @@ impl Default for IndexerOpts {
             max_indexing_memory: MaxMemory::default(),
             max_indexing_threads: MaxThreads::default(),
         }
+    }
+}
+
+/// Options related to the configuration of the rate limiters.
+#[derive(Debug, Clone, Parser, Default, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct RateLimiterConfig {
+    /// When provided, completely disables all rate limiting.
+    #[clap(long, env = MEILI_RATE_LIMITING_DISABLE_ALL)]
+    #[serde(default)]
+    pub rate_limiting_disable_all: bool,
+
+    /// When provided, disables the global rate limiting that applies to all search requests.
+    ///
+    /// Disabling the global rate limiting does not disable IP-based and API-key-based rate limitings.
+    /// To disable all rate limiting regardless of the origin use `--rate-limiting-disable-all`.
+    #[clap(long, env = MEILI_RATE_LIMITING_DISABLE_GLOBAL)]
+    #[serde(default)]
+    pub rate_limiting_disable_global: bool,
+    /// The maximum pool of search requests that can be performed before they are rejected.
+    ///
+    /// The pool starts full at the provided value, then each search request diminishes the pool by 1.
+    /// When the pool is empty the search request is rejected.
+    /// The pool is replenished by 1 depending on the cooldown period.
+    #[clap(long, env = MEILI_RATE_LIMITING_GLOBAL_POOL, default_value_t = default_rate_limiting_global_pool())]
+    #[serde(default = "default_rate_limiting_global_pool")]
+    pub rate_limiting_global_pool: u32,
+    /// The amount of time, in nanoseconds, before the pool of available search requests is replenished by 1 again.
+    ///
+    /// The maximum number of available search requests is given by `--rate-limiting-global-pool`.
+    #[clap(long, env = MEILI_RATE_LIMITING_GLOBAL_COOLDOWN_NS, default_value_t = default_rate_limiting_global_cooldown_ns())]
+    #[serde(default = "default_rate_limiting_global_cooldown_ns")]
+    pub rate_limiting_global_cooldown_ns: u64,
+
+    /// When provided, disables the rate limiting that applies to all search requests originating with a specific IP address.
+    ///
+    /// Disabling the IP rate limiting does not disable the rate limiting that applies to all requests ("global") nor the API-key-based rate limiting.
+    /// To disable all rate limiting regardless of the origin use `--rate-limiting-disable-all`.
+    #[clap(long, env = MEILI_RATE_LIMITING_DISABLE_IP)]
+    #[serde(default)]
+    pub rate_limiting_disable_ip: bool,
+    /// The maximum pool of search requests that can be performed from a specific IP before they are rejected.
+    ///
+    /// The pool starts full at the provided value, then each search request from the same IP address diminishes the pool by 1.
+    /// When the pool is empty the search request is rejected.
+    /// The pool is replenished by 1 depending on the cooldown period.
+    #[clap(long, env = MEILI_RATE_LIMITING_IP_POOL, default_value_t = default_rate_limiting_ip_pool())]
+    #[serde(default = "default_rate_limiting_ip_pool")]
+    pub rate_limiting_ip_pool: u32,
+    /// The amount of time, in nanoseconds, before the pool of available search requests for a specific IP address is replenished by 1 again.
+    ///
+    /// The maximum number of available search requests for a specific IP address is given by `--rate-limiting-ip-pool`.
+    #[clap(long, env = MEILI_RATE_LIMITING_IP_COOLDOWN_NS, default_value_t = default_rate_limiting_ip_cooldown_ns())]
+    #[serde(default = "default_rate_limiting_ip_cooldown_ns")]
+    pub rate_limiting_ip_cooldown_ns: u64,
+
+    /// When provided, disables the rate limiting that applies to all search requests originating with a specific API key.
+    ///
+    /// Disabling the API key limiting does not disable the rate limiting that applies to all requests ("global") nor the IP-based rate limiting.
+    /// To disable all rate limiting regardless of the origin use `--rate-limiting-disable-all`.
+    #[clap(long, env = MEILI_RATE_LIMITING_DISABLE_API_KEY)]
+    #[serde(default)]
+    pub rate_limiting_disable_api_key: bool,
+    /// The maximum pool of search requests that can be performed using a specific API key before they are rejected.
+    ///
+    /// The pool starts full at the provided value, then each search request using the same API key diminishes the pool by 1.
+    /// When the pool is empty the search request is rejected.
+    /// The pool is replenished by 1 depending on the cooldown period.
+    #[clap(long, env = MEILI_RATE_LIMITING_API_KEY_POOL, default_value_t = default_rate_limiting_api_key_pool())]
+    #[serde(default = "default_rate_limiting_api_key_pool")]
+    pub rate_limiting_api_key_pool: u32,
+    /// The amount of time, in nanoseconds, before the pool of available search requests using a specific API key is replenished by 1 again.
+    ///
+    /// The maximum number of available search requests using a specific API key is given by `--rate-limiting-api-key-pool`.
+    #[clap(long, env = MEILI_RATE_LIMITING_API_KEY_COOLDOWN_NS, default_value_t = default_rate_limiting_api_key_cooldown_ns())]
+    #[serde(default = "default_rate_limiting_api_key_cooldown_ns")]
+    pub rate_limiting_api_key_cooldown_ns: u64,
+}
+
+impl RateLimiterConfig {
+    /// Exports the values to their corresponding env vars if they are not set.
+    pub fn export_to_env(self) {
+        let RateLimiterConfig {
+            rate_limiting_disable_all: disable_rate_limiting,
+            rate_limiting_disable_global: disable_global_rate_limiting,
+            rate_limiting_global_pool: global_rate_limiting_pool,
+            rate_limiting_global_cooldown_ns: global_rate_limiting_cooldown_ns,
+            rate_limiting_disable_ip: disable_ip_rate_limiting,
+            rate_limiting_ip_pool: ip_rate_limiting_pool,
+            rate_limiting_ip_cooldown_ns: ip_rate_limiting_cooldown_ns,
+            rate_limiting_disable_api_key: disable_api_key_rate_limiting,
+            rate_limiting_api_key_pool: api_key_rate_limiting_pool,
+            rate_limiting_api_key_cooldown_ns: api_key_rate_limiting_cooldown_ns,
+        } = self;
+        export_to_env_if_not_present(
+            MEILI_RATE_LIMITING_DISABLE_ALL,
+            disable_rate_limiting.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_RATE_LIMITING_DISABLE_GLOBAL,
+            disable_global_rate_limiting.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_RATE_LIMITING_DISABLE_IP,
+            disable_ip_rate_limiting.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_RATE_LIMITING_DISABLE_API_KEY,
+            disable_api_key_rate_limiting.to_string(),
+        );
+
+        export_to_env_if_not_present(
+            MEILI_RATE_LIMITING_GLOBAL_POOL,
+            global_rate_limiting_pool.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_RATE_LIMITING_IP_POOL,
+            ip_rate_limiting_pool.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_RATE_LIMITING_API_KEY_POOL,
+            api_key_rate_limiting_pool.to_string(),
+        );
+
+        export_to_env_if_not_present(
+            MEILI_RATE_LIMITING_GLOBAL_COOLDOWN_NS,
+            global_rate_limiting_cooldown_ns.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_RATE_LIMITING_IP_COOLDOWN_NS,
+            ip_rate_limiting_cooldown_ns.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_RATE_LIMITING_API_KEY_COOLDOWN_NS,
+            api_key_rate_limiting_cooldown_ns.to_string(),
+        );
     }
 }
 
@@ -727,6 +894,30 @@ fn default_log_level() -> String {
 
 fn default_log_every_n() -> usize {
     DEFAULT_LOG_EVERY_N
+}
+
+fn default_rate_limiting_global_pool() -> u32 {
+    DEFAULT_GLOBAL_RATE_LIMITING_POOL
+}
+
+fn default_rate_limiting_ip_pool() -> u32 {
+    DEFAULT_IP_RATE_LIMITING_POOL
+}
+
+fn default_rate_limiting_api_key_pool() -> u32 {
+    DEFAULT_API_KEY_RATE_LIMITING_POOL
+}
+
+fn default_rate_limiting_global_cooldown_ns() -> u64 {
+    DEFAULT_GLOBAL_RATE_LIMITING_COOLDOWN_NS
+}
+
+fn default_rate_limiting_ip_cooldown_ns() -> u64 {
+    DEFAULT_IP_RATE_LIMITING_COOLDOWN_NS
+}
+
+fn default_rate_limiting_api_key_cooldown_ns() -> u64 {
+    DEFAULT_API_KEY_RATE_LIMITING_COOLDOWN_NS
 }
 
 #[cfg(test)]

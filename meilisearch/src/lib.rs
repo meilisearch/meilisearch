@@ -22,9 +22,13 @@ use std::thread;
 use std::time::Duration;
 
 use actix_cors::Cors;
+use actix_governor::{
+    GlobalKeyExtractor, Governor, GovernorConfigBuilder, KeyExtractor, PeerIpKeyExtractor,
+};
 use actix_http::body::MessageBody;
 use actix_web::dev::{ServiceFactory, ServiceResponse};
 use actix_web::error::JsonPayloadError;
+use actix_web::middleware::Condition;
 use actix_web::web::Data;
 use actix_web::{middleware, web, HttpRequest};
 use analytics::Analytics;
@@ -42,6 +46,7 @@ use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::versioning::{check_version_file, create_version_file};
 use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
 pub use option::Opt;
+use option::RateLimiterConfig;
 
 use crate::error::MeilisearchHttpError;
 
@@ -78,6 +83,7 @@ pub fn create_app(
         InitError = (),
     >,
 > {
+    let rate_limiters = configure_rate_limiters(&opt.rate_limiter_options);
     let app = actix_web::App::new()
         .configure(|s| {
             configure_data(
@@ -88,7 +94,7 @@ pub fn create_app(
                 analytics.clone(),
             )
         })
-        .configure(routes::configure)
+        .configure(|cfg| routes::configure(cfg, rate_limiters))
         .configure(|s| dashboard(s, enable_dashboard));
     #[cfg(feature = "metrics")]
     let app = app.configure(|s| configure_metrics_route(s, opt.enable_metrics_route));
@@ -384,6 +390,123 @@ pub fn configure_data(
         .app_data(
             web::QueryConfig::default().error_handler(|err, _req| PayloadError::from(err).into()),
         );
+}
+
+/// Helper struct to implement rate-limiting depending on the API key.
+#[derive(Clone, Copy)]
+pub struct ApiKeyExtractor;
+
+impl KeyExtractor for ApiKeyExtractor {
+    /// `Some(api_key)` for requests containing an API key, `None` otherwise
+    type Key = Option<String>;
+
+    /// Error indicating that the request header could not be converted to a `String` representation.
+    type KeyExtractionError = actix_http::header::ToStrError;
+
+    /// Extracts an API key from a request header, if one is present.
+    ///
+    /// Returns Ok(None) if there is no authorization header.
+    ///
+    /// # Errors
+    ///
+    /// - `Self::KeyExtractionError`: if an authorization header is present, but not representable as a `String` (e.g. non-UTF8)
+    fn extract(
+        &self,
+        req: &actix_web::dev::ServiceRequest,
+    ) -> Result<Self::Key, Self::KeyExtractionError> {
+        let key = req.headers().get("Authorization").map(|token| token.to_str()).transpose()?;
+        Ok(key.and_then(|token| token.strip_prefix("Bearer ")).map(|key| key.trim().to_owned()))
+    }
+}
+
+/// Encapsulates a conditionally enabled rate-limiter.
+///
+/// This struct can be turned into an Actix middleware using [`Self::into_middleware`],
+/// allowing to add it to some routes.
+pub struct RateLimiter<K: KeyExtractor> {
+    enabled: bool,
+    governor: Governor<K>,
+}
+
+/// The available rate limiters.
+pub struct RateLimiters {
+    /// Limits globally regardless of the origin of the query.
+    pub global: RateLimiter<GlobalKeyExtractor>,
+    /// Limits depending on the IP address of origin.
+    pub ip: RateLimiter<PeerIpKeyExtractor>,
+    /// Limits depending on the API Key in the Authorization header.
+    pub api_key: RateLimiter<ApiKeyExtractor>,
+}
+
+impl<K: KeyExtractor> RateLimiter<K> {
+    fn disabled(key_extractor: K) -> Self {
+        let governor = Governor::new(
+            &GovernorConfigBuilder::default()
+                .methods(vec![])
+                .key_extractor(key_extractor)
+                .finish()
+                .unwrap(),
+        );
+        Self { enabled: false, governor }
+    }
+
+    fn enabled(key_extractor: K, pool_size: u32, cooldown_ns: u64) -> Self {
+        let governor = Governor::new(
+            &GovernorConfigBuilder::default()
+                .key_extractor(key_extractor)
+                .burst_size(pool_size)
+                .per_nanosecond(cooldown_ns)
+                .use_headers()
+                .finish()
+                .unwrap(),
+        );
+        Self { enabled: true, governor }
+    }
+
+    /// Turns this into a middleware that is enabled only if the rate limiter was enabled.
+    pub fn into_middleware(self) -> Condition<Governor<K>> {
+        Condition::new(self.enabled, self.governor)
+    }
+}
+
+fn configure_rate_limiters(rate_limiter_options: &RateLimiterConfig) -> RateLimiters {
+    if rate_limiter_options.rate_limiting_disable_all {
+        return RateLimiters {
+            global: RateLimiter::disabled(GlobalKeyExtractor),
+            ip: RateLimiter::disabled(PeerIpKeyExtractor),
+            api_key: RateLimiter::disabled(ApiKeyExtractor),
+        };
+    }
+    let global = if rate_limiter_options.rate_limiting_disable_global {
+        RateLimiter::disabled(GlobalKeyExtractor)
+    } else {
+        RateLimiter::enabled(
+            GlobalKeyExtractor,
+            rate_limiter_options.rate_limiting_global_pool,
+            rate_limiter_options.rate_limiting_global_cooldown_ns,
+        )
+    };
+
+    let ip = if rate_limiter_options.rate_limiting_disable_ip {
+        RateLimiter::disabled(PeerIpKeyExtractor)
+    } else {
+        RateLimiter::enabled(
+            PeerIpKeyExtractor,
+            rate_limiter_options.rate_limiting_ip_pool,
+            rate_limiter_options.rate_limiting_ip_cooldown_ns,
+        )
+    };
+
+    let api_key = if rate_limiter_options.rate_limiting_disable_api_key {
+        RateLimiter::disabled(ApiKeyExtractor)
+    } else {
+        RateLimiter::enabled(
+            ApiKeyExtractor,
+            rate_limiter_options.rate_limiting_api_key_pool,
+            rate_limiter_options.rate_limiting_api_key_cooldown_ns,
+        )
+    };
+    RateLimiters { global, ip, api_key }
 }
 
 #[cfg(feature = "mini-dashboard")]

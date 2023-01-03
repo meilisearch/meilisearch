@@ -25,7 +25,9 @@ use uuid::Uuid;
 
 use super::{config_user_id_path, DocumentDeletionKind, MEILISEARCH_CONFIG_PATH};
 use crate::analytics::Analytics;
-use crate::option::{default_http_addr, IndexerOpts, MaxMemory, MaxThreads, SchedulerConfig};
+use crate::option::{
+    default_http_addr, IndexerOpts, MaxMemory, MaxThreads, RateLimiterConfig, SchedulerConfig,
+};
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
 use crate::routes::tasks::TasksFilterQueryRaw;
 use crate::routes::{create_all_stats, Stats};
@@ -241,6 +243,16 @@ struct Infos {
     ssl_require_auth: bool,
     ssl_resumption: bool,
     ssl_tickets: bool,
+    rate_limiting_disable_all: bool,
+    rate_limiting_disable_global: bool,
+    rate_limiting_global_pool: u32,
+    rate_limiting_global_cooldown_ns: u64,
+    rate_limiting_disable_ip: bool,
+    rate_limiting_ip_pool: u32,
+    rate_limiting_ip_cooldown_ns: u64,
+    rate_limiting_disable_api_key: bool,
+    rate_limiting_api_key_pool: u32,
+    rate_limiting_api_key_cooldown_ns: u64,
 }
 
 impl From<Opt> for Infos {
@@ -278,6 +290,7 @@ impl From<Opt> for Infos {
             scheduler_options,
             config_file_path,
             generate_master_key: _,
+            rate_limiter_options,
             #[cfg(all(not(debug_assertions), feature = "analytics"))]
                 no_analytics: _,
         } = options;
@@ -289,6 +302,18 @@ impl From<Opt> for Infos {
             max_indexing_memory,
             max_indexing_threads,
         } = indexer_options;
+        let RateLimiterConfig {
+            rate_limiting_disable_all,
+            rate_limiting_disable_global,
+            rate_limiting_global_pool,
+            rate_limiting_global_cooldown_ns,
+            rate_limiting_disable_ip,
+            rate_limiting_ip_pool,
+            rate_limiting_ip_cooldown_ns,
+            rate_limiting_disable_api_key,
+            rate_limiting_api_key_pool,
+            rate_limiting_api_key_cooldown_ns,
+        } = rate_limiter_options;
 
         // We're going to override every sensible information.
         // We consider information sensible if it contains a path, an address, or a key.
@@ -321,6 +346,16 @@ impl From<Opt> for Infos {
             ssl_require_auth,
             ssl_resumption,
             ssl_tickets,
+            rate_limiting_disable_all,
+            rate_limiting_disable_global,
+            rate_limiting_global_pool,
+            rate_limiting_global_cooldown_ns,
+            rate_limiting_disable_ip,
+            rate_limiting_ip_pool,
+            rate_limiting_ip_cooldown_ns,
+            rate_limiting_disable_api_key,
+            rate_limiting_api_key_pool,
+            rate_limiting_api_key_cooldown_ns,
         }
     }
 }

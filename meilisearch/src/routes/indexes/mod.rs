@@ -15,12 +15,13 @@ use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::RateLimiters;
 
 pub mod documents;
 pub mod search;
 pub mod settings;
 
-pub fn configure(cfg: &mut web::ServiceConfig) {
+pub fn configure(cfg: &mut web::ServiceConfig, rate_limiters: RateLimiters) {
     cfg.service(
         web::resource("")
             .route(web::get().to(list_indexes))
@@ -36,7 +37,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             )
             .service(web::resource("/stats").route(web::get().to(SeqHandler(get_index_stats))))
             .service(web::scope("/documents").configure(documents::configure))
-            .service(web::scope("/search").configure(search::configure))
+            .service(web::scope("/search").configure(|cfg| search::configure(cfg, rate_limiters)))
             .service(web::scope("/settings").configure(settings::configure)),
     );
 }

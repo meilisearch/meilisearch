@@ -8,6 +8,7 @@ version = "0.30.1"
 
 [dependencies]
 actix-cors = "0.6.3"
+actix-governor = "0.3.2"
 actix-http = { version = "3.2.2", default-features = false, features = ["compress-brotli", "compress-gzip", "rustls"] }
 actix-web = { version = "4.2.1", default-features = false, features = ["macros", "compress-brotli", "compress-gzip", "cookies", "rustls"] }
 actix-web-static-files = { git = "https://github.com/kilork/actix-web-static-files.git", rev = "2d3b6160", optional = true }
@@ -98,17 +99,7 @@ zip = { version = "0.6.2", optional = true }
 default = ["analytics", "meilisearch-types/default", "mini-dashboard"]
 metrics = ["prometheus"]
 analytics = ["segment"]
-mini-dashboard = [
-    "actix-web-static-files",
-    "static-files",
-    "anyhow",
-    "cargo_toml",
-    "hex",
-    "reqwest",
-    "sha-1",
-    "tempfile",
-    "zip",
-]
+mini-dashboard = ["actix-web-static-files", "static-files", "anyhow", "cargo_toml", "hex", "reqwest", "sha-1", "tempfile", "zip"]
 chinese = ["meilisearch-types/chinese"]
 hebrew = ["meilisearch-types/hebrew"]
 japanese = ["meilisearch-types/japanese"]
