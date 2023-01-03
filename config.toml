@@ -47,11 +47,6 @@ max_task_db_size = "100 GiB"
 # Sets the maximum number of threads Meilisearch can use during indexing.
 # https://docs.meilisearch.com/learn/configuration/instance_options.html#max-indexing-threads
 
-disable_auto_batching = false
-# Deactivates auto-batching when provided.
-# https://docs.meilisearch.com/learn/configuration/instance_options.html#disable-auto-batching
-
-
 #############
 ### DUMPS ###
 #############
