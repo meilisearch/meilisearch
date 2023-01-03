@@ -28,7 +28,7 @@ http_payload_size_limit = "100 MB"
 
 log_level = "INFO"
 # Defines how much detail should be present in Meilisearch's logs.
-# Meilisearch currently supports five log levels, listed in order of increasing verbosity: `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE`
+# Meilisearch currently supports six log levels, listed in order of increasing verbosity:  `OFF`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE`
 # https://docs.meilisearch.com/learn/configuration/instance_options.html#log-level
 
 max_index_size = "100 GiB"

@@ -306,7 +306,7 @@ impl From<Opt> for Infos {
             max_index_size,
             max_task_db_size,
             http_payload_size_limit,
-            log_level,
+            log_level: log_level.to_string(),
             max_indexing_memory,
             max_indexing_threads,
             with_configuration_file: config_file_path.is_some(),
