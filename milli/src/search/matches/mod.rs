@@ -14,14 +14,14 @@ const DEFAULT_HIGHLIGHT_SUFFIX: &str = "</em>";
 /// Structure used to build a Matcher allowing to customize formating tags.
 pub struct MatcherBuilder<'a, A> {
     matching_words: MatchingWords,
-    tokenizer: Tokenizer<'a, A>,
+    tokenizer: Tokenizer<'a, 'a, A>,
     crop_marker: Option<String>,
     highlight_prefix: Option<String>,
     highlight_suffix: Option<String>,
 }
 
 impl<'a, A> MatcherBuilder<'a, A> {
-    pub fn new(matching_words: MatchingWords, tokenizer: Tokenizer<'a, A>) -> Self {
+    pub fn new(matching_words: MatchingWords, tokenizer: Tokenizer<'a, 'a, A>) -> Self {
         Self {
             matching_words,
             tokenizer,
@@ -106,7 +106,7 @@ pub struct MatchBounds {
 pub struct Matcher<'t, 'm, A> {
     text: &'t str,
     matching_words: &'m MatchingWords,
-    tokenizer: &'m Tokenizer<'m, A>,
+    tokenizer: &'m Tokenizer<'m, 'm, A>,
     crop_marker: &'m str,
     highlight_prefix: &'m str,
     highlight_suffix: &'m str,

@@ -6,7 +6,7 @@ use std::hash::Hash;
 use std::rc::Rc;
 use std::{fmt, mem};
 
-use charabia::classifier::ClassifiedTokenIter;
+use charabia::normalizer::NormalizedTokenIter;
 use charabia::{SeparatorKind, TokenKind};
 use roaring::RoaringBitmap;
 use slice_group_by::GroupBy;
@@ -270,7 +270,7 @@ impl<'a> QueryTreeBuilder<'a> {
     ///   (the criterion `typo` will be ignored)
     pub fn build<A: AsRef<[u8]>>(
         &self,
-        query: ClassifiedTokenIter<A>,
+        query: NormalizedTokenIter<A>,
     ) -> Result<Option<(Operation, PrimitiveQuery, MatchingWords)>> {
         let primitive_query = create_primitive_query(query, self.words_limit);
         if !primitive_query.is_empty() {
@@ -778,7 +778,7 @@ impl PrimitiveQueryPart {
 /// Create primitive query from tokenized query string,
 /// the primitive query is an intermediate state to build the query tree.
 fn create_primitive_query<A>(
-    query: ClassifiedTokenIter<A>,
+    query: NormalizedTokenIter<A>,
     words_limit: Option<usize>,
 ) -> PrimitiveQuery
 where
@@ -892,7 +892,7 @@ mod test {
             terms_matching_strategy: TermsMatchingStrategy,
             authorize_typos: bool,
             words_limit: Option<usize>,
-            query: ClassifiedTokenIter<A>,
+            query: NormalizedTokenIter<A>,
         ) -> Result<Option<(Operation, PrimitiveQuery)>> {
             let primitive_query = create_primitive_query(query, words_limit);
             if !primitive_query.is_empty() {

@@ -1575,11 +1575,11 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         // Only the first document should match.
-        let count = index.word_docids.get(&rtxn, "化妆包").unwrap().unwrap().len();
+        let count = index.word_docids.get(&rtxn, "huàzhuāngbāo").unwrap().unwrap().len();
         assert_eq!(count, 1);
 
         // Only the second document should match.
-        let count = index.word_docids.get(&rtxn, "包").unwrap().unwrap().len();
+        let count = index.word_docids.get(&rtxn, "bāo").unwrap().unwrap().len();
         assert_eq!(count, 1);
 
         let mut search = crate::Search::new(&rtxn, &index);
