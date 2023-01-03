@@ -25,7 +25,7 @@ use uuid::Uuid;
 
 use super::{config_user_id_path, DocumentDeletionKind, MEILISEARCH_CONFIG_PATH};
 use crate::analytics::Analytics;
-use crate::option::{default_http_addr, IndexerOpts, MaxMemory, MaxThreads, SchedulerConfig};
+use crate::option::{default_http_addr, IndexerOpts, MaxMemory, MaxThreads};
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
 use crate::routes::tasks::TasksFilterQueryRaw;
 use crate::routes::{create_all_stats, Stats};
@@ -229,7 +229,6 @@ struct Infos {
     max_index_size: Byte,
     max_task_db_size: Byte,
     http_payload_size_limit: Byte,
-    disable_auto_batching: bool,
     log_level: String,
     max_indexing_memory: MaxMemory,
     max_indexing_threads: MaxThreads,
@@ -275,13 +274,11 @@ impl From<Opt> for Infos {
             dump_dir,
             log_level,
             indexer_options,
-            scheduler_options,
             config_file_path,
             #[cfg(all(not(debug_assertions), feature = "analytics"))]
                 no_analytics: _,
         } = options;
 
-        let SchedulerConfig { disable_auto_batching } = scheduler_options;
         let IndexerOpts {
             log_every_n: _,
             max_nb_chunks: _,
@@ -308,7 +305,6 @@ impl From<Opt> for Infos {
             max_index_size,
             max_task_db_size,
             http_payload_size_limit,
-            disable_auto_batching,
             log_level,
             max_indexing_memory,
             max_indexing_threads,

@@ -66,7 +66,6 @@ const DEFAULT_LOG_LEVEL: &str = "INFO";
 
 const MEILI_MAX_INDEXING_MEMORY: &str = "MEILI_MAX_INDEXING_MEMORY";
 const MEILI_MAX_INDEXING_THREADS: &str = "MEILI_MAX_INDEXING_THREADS";
-const DISABLE_AUTO_BATCHING: &str = "DISABLE_AUTO_BATCHING";
 const DEFAULT_LOG_EVERY_N: usize = 100000;
 
 #[derive(Debug, Clone, Parser, Deserialize)]
@@ -240,10 +239,6 @@ pub struct Opt {
     #[clap(flatten)]
     pub indexer_options: IndexerOpts,
 
-    #[serde(flatten)]
-    #[clap(flatten)]
-    pub scheduler_options: SchedulerConfig,
-
     /// Set the path to a configuration file that should be used to setup the engine.
     /// Format must be TOML.
     #[clap(long)]
@@ -323,7 +318,6 @@ impl Opt {
             dump_dir,
             log_level,
             indexer_options,
-            scheduler_options,
             import_snapshot: _,
             ignore_missing_snapshot: _,
             ignore_snapshot_if_db_exists: _,
@@ -383,7 +377,6 @@ impl Opt {
             );
         }
         indexer_options.export_to_env();
-        scheduler_options.export_to_env();
     }
 
     pub fn get_ssl_config(&self) -> anyhow::Result<Option<rustls::ServerConfig>> {
@@ -478,22 +471,6 @@ impl IndexerOpts {
             MEILI_MAX_INDEXING_THREADS,
             max_indexing_threads.0.to_string(),
         );
-    }
-}
-
-#[derive(Debug, Clone, Parser, Default, Deserialize)]
-#[serde(rename_all = "snake_case", deny_unknown_fields)]
-pub struct SchedulerConfig {
-    /// Deactivates auto-batching when provided.
-    #[clap(long, env = DISABLE_AUTO_BATCHING)]
-    #[serde(default)]
-    pub disable_auto_batching: bool,
-}
-
-impl SchedulerConfig {
-    pub fn export_to_env(self) {
-        let SchedulerConfig { disable_auto_batching } = self;
-        export_to_env_if_not_present(DISABLE_AUTO_BATCHING, disable_auto_batching.to_string());
     }
 }
 

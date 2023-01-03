@@ -16,7 +16,6 @@ pub mod route_metrics;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -44,8 +43,6 @@ use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
 pub use option::Opt;
 
 use crate::error::MeilisearchHttpError;
-
-pub static AUTOBATCHING_ENABLED: AtomicBool = AtomicBool::new(false);
 
 /// Check if a db is empty. It does not provide any information on the
 /// validity of the data in it.
@@ -209,7 +206,7 @@ fn open_or_create_database_unchecked(
             task_db_size: opt.max_task_db_size.get_bytes() as usize,
             index_size: opt.max_index_size.get_bytes() as usize,
             indexer_config: (&opt.indexer_options).try_into()?,
-            autobatching_enabled: !opt.scheduler_options.disable_auto_batching,
+            autobatching_enabled: true,
         })?)
     };
 
