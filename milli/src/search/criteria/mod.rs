@@ -17,6 +17,7 @@ use super::query_tree::{Operation, PrimitiveQueryPart, Query, QueryKind};
 use super::CriterionImplementationStrategy;
 use crate::search::criteria::geo::Geo;
 use crate::search::{word_derivations, Distinct, WordDerivationsCache};
+use crate::update::{MAX_LENGTH_FOR_PREFIX_PROXIMITY_DB, MAX_PROXIMITY_FOR_PREFIX_PROXIMITY_DB};
 use crate::{AscDesc as AscDescName, DocumentId, FieldId, Index, Member, Result};
 
 mod asc_desc;
@@ -653,14 +654,30 @@ fn query_pair_proximity_docids(
     match (&left.kind, &right.kind) {
         (QueryKind::Exact { word: left, .. }, QueryKind::Exact { word: right, .. }) => {
             if prefix {
-                match word_prefix_pair_overall_proximity_docids(
-                    ctx,
-                    left.as_str(),
-                    right.as_str(),
-                    proximity,
-                )? {
-                    Some(docids) => Ok(docids),
-                    None => {
+                // There are three distinct cases which we need to distinguish regarding the prefix `right`:
+                //
+                // 1. `right` is not in any prefix cache because it is not the prefix of many words
+                //     (and thus, it doesn't have many word derivations)
+                // 2. `right` is in the prefix cache but cannot be found in the "word prefix pair proximity" databases either
+                //     because it is too long or because the given proximity is too high.
+                // 3. `right` is in the prefix cache and can be found in the "word prefix pair proximity" databases
+                //
+                // The three cases are handled as follows:
+                // 1. We manually retrieve all the word derivations of `right` and check the `word_pair_proximity`
+                //    database for each of them.
+                // 2. It would be too expensive to apply the same strategy as (1), therefore, we "disable" the
+                //    proximity ranking rule for the prefixes of the right word. This is done as follows:
+                //    1. Only find the documents where left is in proximity to the exact (ie non-prefix) right word
+                //    2. Otherwise, assume that their proximity in all the documents in which they coexist is >= 8
+                //
+                // 3. Query the prefix proximity databases.
+                match (
+                    ctx.in_prefix_cache(right),
+                    right.len() <= MAX_LENGTH_FOR_PREFIX_PROXIMITY_DB
+                        && proximity <= MAX_PROXIMITY_FOR_PREFIX_PROXIMITY_DB,
+                ) {
+                    // Case 1: not in prefix cache
+                    (false, _) => {
                         let r_words = word_derivations(right, true, 0, ctx.words_fst(), wdcache)?;
                         all_word_pair_overall_proximity_docids(
                             ctx,
@@ -669,40 +686,91 @@ fn query_pair_proximity_docids(
                             proximity,
                         )
                     }
+                    // Case 2: in prefix cache but either the prefix length or the proximity makes it impossible to
+                    // query the prefix proximity databases.
+                    (true, false) => {
+                        // To "save" the relevancy a little bit, we still find the documents where the
+                        // exact (i.e. non-prefix) right word is in the given proximity to the left word.
+                        Ok(word_pair_overall_proximity_docids(
+                            ctx,
+                            left.as_str(),
+                            right.as_str(),
+                            proximity,
+                        )?
+                        .unwrap_or_default())
+                    }
+                    // Case 3: in prefix cache, short enough, and proximity is low enough
+                    (true, true) => Ok(word_prefix_pair_overall_proximity_docids(
+                        ctx,
+                        left.as_str(),
+                        right.as_str(),
+                        proximity,
+                    )?
+                    .unwrap_or_default()),
                 }
             } else {
-                Ok(ctx
-                    .word_pair_proximity_docids(left.as_str(), right.as_str(), proximity)?
-                    .unwrap_or_default())
+                Ok(word_pair_overall_proximity_docids(
+                    ctx,
+                    left.as_str(),
+                    right.as_str(),
+                    proximity,
+                )?
+                .unwrap_or_default())
             }
         }
         (QueryKind::Tolerant { typo, word: left }, QueryKind::Exact { word: right, .. }) => {
             let l_words =
                 word_derivations(left, false, *typo, ctx.words_fst(), wdcache)?.to_owned();
             if prefix {
-                let mut docids = RoaringBitmap::new();
-                for (left, _) in l_words {
-                    let current_docids = match word_prefix_pair_overall_proximity_docids(
-                        ctx,
-                        left.as_str(),
-                        right.as_str(),
-                        proximity,
-                    )? {
-                        Some(docids) => Ok(docids),
-                        None => {
-                            let r_words =
-                                word_derivations(right, true, 0, ctx.words_fst(), wdcache)?;
-                            all_word_pair_overall_proximity_docids(
+                // The logic here is almost identical to the one in the previous match branch.
+                // The difference is that we fetch the docids for each derivation of the left word.
+                match (
+                    ctx.in_prefix_cache(right),
+                    right.len() <= MAX_LENGTH_FOR_PREFIX_PROXIMITY_DB
+                        && proximity <= MAX_PROXIMITY_FOR_PREFIX_PROXIMITY_DB,
+                ) {
+                    // Case 1: not in prefix cache
+                    (false, _) => {
+                        let mut docids = RoaringBitmap::new();
+                        let r_words = word_derivations(right, true, 0, ctx.words_fst(), wdcache)?;
+                        for (left, _) in l_words {
+                            docids |= all_word_pair_overall_proximity_docids(
                                 ctx,
                                 &[(left, 0)],
                                 r_words,
                                 proximity,
-                            )
+                            )?;
                         }
-                    }?;
-                    docids |= current_docids;
+                        Ok(docids)
+                    }
+                    // Case 2: in prefix cache but either the prefix length or the proximity makes it impossible to
+                    // query the prefix proximity databases.
+                    (true, false) => {
+                        // To "save" the relevancy a little bit, we still find the documents where the
+                        // exact (i.e. non-prefix) right word is in proximity to any derivation of the left word.
+                        let mut candidates = RoaringBitmap::new();
+                        for (left, _) in l_words {
+                            candidates |= ctx
+                                .word_pair_proximity_docids(&left, right, proximity)?
+                                .unwrap_or_default();
+                        }
+                        Ok(candidates)
+                    }
+                    // Case 3: in prefix cache, short enough, and proximity is low enough
+                    (true, true) => {
+                        let mut docids = RoaringBitmap::new();
+                        for (left, _) in l_words {
+                            docids |= word_prefix_pair_overall_proximity_docids(
+                                ctx,
+                                left.as_str(),
+                                right.as_str(),
+                                proximity,
+                            )?
+                            .unwrap_or_default();
+                        }
+                        Ok(docids)
+                    }
                 }
-                Ok(docids)
             } else {
                 all_word_pair_overall_proximity_docids(ctx, &l_words, &[(right, 0)], proximity)
             }
