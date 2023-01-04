@@ -73,16 +73,14 @@ ignore_dump_if_db_exists = false
 #################
 
 schedule_snapshot = false
-# Activates scheduled snapshots when provided.
+# Enables scheduled snapshots when true, disable when false (the default).
+# If the value is given as an integer, then enables the scheduled snapshot with the passed value as the interval
+# between each snapshot, in seconds.
 # https://docs.meilisearch.com/learn/configuration/instance_options.html#schedule-snapshot-creation
 
 snapshot_dir = "snapshots/"
 # Sets the directory where Meilisearch will store snapshots.
 # https://docs.meilisearch.com/learn/configuration/instance_options.html#snapshot-destination
-
-snapshot_interval_sec = 86400
-# Defines the interval between each snapshot. Value must be given in seconds.
-# https://docs.meilisearch.com/learn/configuration/instance_options.html#snapshot-interval
 
 # import_snapshot = "./path/to/my/snapshot"
 # Launches Meilisearch after importing a previously-generated snapshot at the given filepath.

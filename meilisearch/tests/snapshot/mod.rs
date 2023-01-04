@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use meilisearch::option::ScheduleSnapshot;
 use meilisearch::Opt;
 use tokio::time::sleep;
 
@@ -36,8 +37,7 @@ async fn perform_snapshot() {
 
     let options = Opt {
         snapshot_dir: snapshot_dir.path().to_owned(),
-        snapshot_interval_sec: 1,
-        schedule_snapshot: true,
+        schedule_snapshot: ScheduleSnapshot::Enabled(1),
         ..default_settings(temp.path())
     };
 

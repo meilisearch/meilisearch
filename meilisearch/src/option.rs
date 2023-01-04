@@ -44,7 +44,6 @@ const MEILI_IGNORE_MISSING_SNAPSHOT: &str = "MEILI_IGNORE_MISSING_SNAPSHOT";
 const MEILI_IGNORE_SNAPSHOT_IF_DB_EXISTS: &str = "MEILI_IGNORE_SNAPSHOT_IF_DB_EXISTS";
 const MEILI_SNAPSHOT_DIR: &str = "MEILI_SNAPSHOT_DIR";
 const MEILI_SCHEDULE_SNAPSHOT: &str = "MEILI_SCHEDULE_SNAPSHOT";
-const MEILI_SNAPSHOT_INTERVAL_SEC: &str = "MEILI_SNAPSHOT_INTERVAL_SEC";
 const MEILI_IMPORT_DUMP: &str = "MEILI_IMPORT_DUMP";
 const MEILI_IGNORE_MISSING_DUMP: &str = "MEILI_IGNORE_MISSING_DUMP";
 const MEILI_IGNORE_DUMP_IF_DB_EXISTS: &str = "MEILI_IGNORE_DUMP_IF_DB_EXISTS";
@@ -63,6 +62,7 @@ const DEFAULT_MAX_TASK_DB_SIZE: &str = "100 GiB";
 const DEFAULT_HTTP_PAYLOAD_SIZE_LIMIT: &str = "100 MB";
 const DEFAULT_SNAPSHOT_DIR: &str = "snapshots/";
 const DEFAULT_SNAPSHOT_INTERVAL_SEC: u64 = 86400;
+const DEFAULT_SNAPSHOT_INTERVAL_SEC_STR: &str = "86400";
 const DEFAULT_DUMP_DIR: &str = "dumps/";
 
 const MEILI_MAX_INDEXING_MEMORY: &str = "MEILI_MAX_INDEXING_MEMORY";
@@ -241,14 +241,11 @@ pub struct Opt {
     pub snapshot_dir: PathBuf,
 
     /// Activates scheduled snapshots when provided. Snapshots are disabled by default.
-    #[clap(long, env = MEILI_SCHEDULE_SNAPSHOT)]
-    #[serde(default)]
-    pub schedule_snapshot: bool,
-
-    /// Defines the interval between each snapshot. Value must be given in seconds.
-    #[clap(long, env = MEILI_SNAPSHOT_INTERVAL_SEC, default_value_t = default_snapshot_interval_sec())]
-    #[serde(default = "default_snapshot_interval_sec")]
-    pub snapshot_interval_sec: u64,
+    ///
+    /// When provided with a value, defines the interval between each snapshot, in seconds.
+    #[clap(long,env = MEILI_SCHEDULE_SNAPSHOT, num_args(0..=1), value_parser=parse_schedule_snapshot, default_value_t, default_missing_value=default_snapshot_interval_sec(),  value_name = "SNAPSHOT_INTERVAL_SEC")]
+    #[serde(default, deserialize_with = "schedule_snapshot_deserialize")]
+    pub schedule_snapshot: ScheduleSnapshot,
 
     /// Imports the dump file located at the specified path. Path must point to a `.dump` file.
     /// If a database already exists, Meilisearch will throw an error and abort launch.
@@ -376,7 +373,6 @@ impl Opt {
             ssl_tickets,
             snapshot_dir,
             schedule_snapshot,
-            snapshot_interval_sec,
             dump_dir,
             log_level,
             indexer_options,
@@ -425,11 +421,10 @@ impl Opt {
         export_to_env_if_not_present(MEILI_SSL_RESUMPTION, ssl_resumption.to_string());
         export_to_env_if_not_present(MEILI_SSL_TICKETS, ssl_tickets.to_string());
         export_to_env_if_not_present(MEILI_SNAPSHOT_DIR, snapshot_dir);
-        export_to_env_if_not_present(MEILI_SCHEDULE_SNAPSHOT, schedule_snapshot.to_string());
-        export_to_env_if_not_present(
-            MEILI_SNAPSHOT_INTERVAL_SEC,
-            snapshot_interval_sec.to_string(),
-        );
+        if let Some(snapshot_interval) = schedule_snapshot_to_env(schedule_snapshot) {
+            export_to_env_if_not_present(MEILI_SCHEDULE_SNAPSHOT, snapshot_interval)
+        }
+
         export_to_env_if_not_present(MEILI_DUMP_DIR, dump_dir);
         export_to_env_if_not_present(MEILI_LOG_LEVEL, log_level.to_string());
         #[cfg(feature = "metrics")]
@@ -744,8 +739,8 @@ fn default_snapshot_dir() -> PathBuf {
     PathBuf::from(DEFAULT_SNAPSHOT_DIR)
 }
 
-fn default_snapshot_interval_sec() -> u64 {
-    DEFAULT_SNAPSHOT_INTERVAL_SEC
+fn default_snapshot_interval_sec() -> &'static str {
+    DEFAULT_SNAPSHOT_INTERVAL_SEC_STR
 }
 
 fn default_dump_dir() -> PathBuf {
@@ -754,6 +749,102 @@ fn default_dump_dir() -> PathBuf {
 
 fn default_log_every_n() -> usize {
     DEFAULT_LOG_EVERY_N
+}
+
+/// Indicates if a snapshot was scheduled, and if yes with which interval.
+#[derive(Debug, Default, Copy, Clone, Deserialize, Serialize)]
+pub enum ScheduleSnapshot {
+    /// Scheduled snapshots are disabled.
+    #[default]
+    Disabled,
+    /// Snapshots are scheduled at the specified interval, in seconds.
+    Enabled(u64),
+}
+
+impl Display for ScheduleSnapshot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ScheduleSnapshot::Disabled => write!(f, ""),
+            ScheduleSnapshot::Enabled(value) => write!(f, "{}", value),
+        }
+    }
+}
+
+impl FromStr for ScheduleSnapshot {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "" => ScheduleSnapshot::Disabled,
+            s => ScheduleSnapshot::Enabled(s.parse()?),
+        })
+    }
+}
+
+fn parse_schedule_snapshot(s: &str) -> Result<ScheduleSnapshot, ParseIntError> {
+    Ok(if s.is_empty() { ScheduleSnapshot::Disabled } else { ScheduleSnapshot::from_str(s)? })
+}
+
+fn schedule_snapshot_to_env(schedule_snapshot: ScheduleSnapshot) -> Option<String> {
+    match schedule_snapshot {
+        ScheduleSnapshot::Enabled(snapshot_delay) => Some(snapshot_delay.to_string()),
+        _ => None,
+    }
+}
+
+fn schedule_snapshot_deserialize<'de, D>(deserializer: D) -> Result<ScheduleSnapshot, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct BoolOrInt;
+
+    impl<'de> serde::de::Visitor<'de> for BoolOrInt {
+        type Value = ScheduleSnapshot;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("integer or boolean")
+        }
+
+        fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(if value {
+                ScheduleSnapshot::Enabled(DEFAULT_SNAPSHOT_INTERVAL_SEC)
+            } else {
+                ScheduleSnapshot::Disabled
+            })
+        }
+
+        fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(ScheduleSnapshot::Enabled(v as u64))
+        }
+
+        fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(ScheduleSnapshot::Enabled(v))
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(ScheduleSnapshot::Disabled)
+        }
+
+        fn visit_unit<E>(self) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(ScheduleSnapshot::Disabled)
+        }
+    }
+    deserializer.deserialize_any(BoolOrInt)
 }
 
 #[cfg(test)]

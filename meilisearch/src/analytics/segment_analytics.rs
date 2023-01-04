@@ -25,7 +25,7 @@ use uuid::Uuid;
 
 use super::{config_user_id_path, DocumentDeletionKind, MEILISEARCH_CONFIG_PATH};
 use crate::analytics::Analytics;
-use crate::option::{default_http_addr, IndexerOpts, MaxMemory, MaxThreads};
+use crate::option::{default_http_addr, IndexerOpts, MaxMemory, MaxThreads, ScheduleSnapshot};
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
 use crate::routes::tasks::TasksFilterQueryRaw;
 use crate::routes::{create_all_stats, Stats};
@@ -220,9 +220,8 @@ struct Infos {
     ignore_missing_dump: bool,
     ignore_dump_if_db_exists: bool,
     import_snapshot: bool,
-    schedule_snapshot: bool,
+    schedule_snapshot: Option<u64>,
     snapshot_dir: bool,
-    snapshot_interval_sec: u64,
     ignore_missing_snapshot: bool,
     ignore_snapshot_if_db_exists: bool,
     http_addr: bool,
@@ -267,7 +266,6 @@ impl From<Opt> for Infos {
             ignore_snapshot_if_db_exists,
             snapshot_dir,
             schedule_snapshot,
-            snapshot_interval_sec,
             import_dump,
             ignore_missing_dump,
             ignore_dump_if_db_exists,
@@ -279,6 +277,11 @@ impl From<Opt> for Infos {
             #[cfg(all(not(debug_assertions), feature = "analytics"))]
                 no_analytics: _,
         } = options;
+
+        let schedule_snapshot = match schedule_snapshot {
+            ScheduleSnapshot::Disabled => None,
+            ScheduleSnapshot::Enabled(interval) => Some(interval),
+        };
 
         let IndexerOpts {
             log_every_n: _,
@@ -299,7 +302,6 @@ impl From<Opt> for Infos {
             import_snapshot: import_snapshot.is_some(),
             schedule_snapshot,
             snapshot_dir: snapshot_dir != PathBuf::from("snapshots/"),
-            snapshot_interval_sec,
             ignore_missing_snapshot,
             ignore_snapshot_if_db_exists,
             http_addr: http_addr != default_http_addr(),
