@@ -1,6 +1,7 @@
 use std::convert::TryFrom;
 use std::env::VarError;
 use std::ffi::OsStr;
+use std::fmt::Display;
 use std::io::{BufReader, Read};
 use std::num::ParseIntError;
 use std::ops::Deref;
@@ -63,11 +64,64 @@ const DEFAULT_HTTP_PAYLOAD_SIZE_LIMIT: &str = "100 MB";
 const DEFAULT_SNAPSHOT_DIR: &str = "snapshots/";
 const DEFAULT_SNAPSHOT_INTERVAL_SEC: u64 = 86400;
 const DEFAULT_DUMP_DIR: &str = "dumps/";
-const DEFAULT_LOG_LEVEL: &str = "INFO";
 
 const MEILI_MAX_INDEXING_MEMORY: &str = "MEILI_MAX_INDEXING_MEMORY";
 const MEILI_MAX_INDEXING_THREADS: &str = "MEILI_MAX_INDEXING_THREADS";
 const DEFAULT_LOG_EVERY_N: usize = 100000;
+
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum LogLevel {
+    Off,
+    Error,
+    Warn,
+    #[default]
+    Info,
+    Debug,
+    Trace,
+}
+
+#[derive(Debug)]
+pub struct LogLevelError {
+    pub given_log_level: String,
+}
+impl Display for LogLevelError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(
+            f,
+            "Log level '{}' is invalid. Accepted values are 'OFF', 'ERROR', 'WARN', 'INFO', 'DEBUG', and 'TRACE'.",
+            self.given_log_level
+        )
+    }
+}
+impl Display for LogLevel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LogLevel::Off => Display::fmt("OFF", f),
+            LogLevel::Error => Display::fmt("ERROR", f),
+            LogLevel::Warn => Display::fmt("WARN", f),
+            LogLevel::Info => Display::fmt("INFO", f),
+            LogLevel::Debug => Display::fmt("DEBUG", f),
+            LogLevel::Trace => Display::fmt("TRACE", f),
+        }
+    }
+}
+impl std::error::Error for LogLevelError {}
+impl FromStr for LogLevel {
+    type Err = LogLevelError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_lowercase().as_str() {
+            "off" => Ok(LogLevel::Off),
+            "error" => Ok(LogLevel::Error),
+            "warn" => Ok(LogLevel::Warn),
+            "info" => Ok(LogLevel::Info),
+            "debug" => Ok(LogLevel::Debug),
+            "trace" => Ok(LogLevel::Trace),
+            _ => Err(LogLevelError { given_log_level: s.to_owned() }),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Parser, Deserialize)]
 #[clap(version, next_display_order = None)]
@@ -225,10 +279,10 @@ pub struct Opt {
 
     /// Defines how much detail should be present in Meilisearch's logs.
     ///
-    /// Meilisearch currently supports five log levels, listed in order of increasing verbosity: ERROR, WARN, INFO, DEBUG, TRACE.
-    #[clap(long, env = MEILI_LOG_LEVEL, default_value_t = default_log_level())]
-    #[serde(default = "default_log_level")]
-    pub log_level: String,
+    /// Meilisearch currently supports six log levels, listed in order of increasing verbosity: OFF, ERROR, WARN, INFO, DEBUG, TRACE.
+    #[clap(long, env = MEILI_LOG_LEVEL, default_value_t)]
+    #[serde(default)]
+    pub log_level: LogLevel,
 
     /// Generates a string of characters that can be used as a master key and exits.
     ///
@@ -377,7 +431,7 @@ impl Opt {
             snapshot_interval_sec.to_string(),
         );
         export_to_env_if_not_present(MEILI_DUMP_DIR, dump_dir);
-        export_to_env_if_not_present(MEILI_LOG_LEVEL, log_level);
+        export_to_env_if_not_present(MEILI_LOG_LEVEL, log_level.to_string());
         #[cfg(feature = "metrics")]
         {
             export_to_env_if_not_present(
@@ -696,10 +750,6 @@ fn default_snapshot_interval_sec() -> u64 {
 
 fn default_dump_dir() -> PathBuf {
     PathBuf::from(DEFAULT_DUMP_DIR)
-}
-
-fn default_log_level() -> String {
-    DEFAULT_LOG_LEVEL.to_string()
 }
 
 fn default_log_every_n() -> usize {
