@@ -31,14 +31,6 @@ log_level = "INFO"
 # Meilisearch currently supports six log levels, listed in order of increasing verbosity:  `OFF`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE`
 # https://docs.meilisearch.com/learn/configuration/instance_options.html#log-level
 
-max_index_size = "100 GiB"
-# Sets the maximum size of the index.
-# https://docs.meilisearch.com/learn/configuration/instance_options.html#max-index-size
-
-max_task_db_size = "100 GiB"
-# Sets the maximum size of the task database.
-# https://docs.meilisearch.com/learn/configuration/instance_options.html#max-task-db-size
-
 # max_indexing_memory = "2 GiB"
 # Sets the maximum amount of RAM Meilisearch can use when indexing.
 # https://docs.meilisearch.com/learn/configuration/instance_options.html#max-indexing-memory
