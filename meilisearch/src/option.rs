@@ -65,10 +65,10 @@ const MEILI_MAX_INDEXING_MEMORY: &str = "MEILI_MAX_INDEXING_MEMORY";
 const MEILI_MAX_INDEXING_THREADS: &str = "MEILI_MAX_INDEXING_THREADS";
 const DEFAULT_LOG_EVERY_N: usize = 100000;
 
-// Each environment (index and task-db) is taking space in the virtual address space
+// Each environment (index and task-db) is taking space in the virtual address space.
 //
-// The size of the virtual address sapce is limited by OS. About 100TB for Linux, about 10TB for Windows.
-// This means that the number of indexes is limited to about 200 for Linux, and about 20 for Windows.
+// The size of the virtual address space is limited by the OS. About 100TB for Linux and about 10TB for Windows.
+// This means that the number of indexes is limited to about 200 for Linux and about 20 for Windows.
 pub const INDEX_SIZE: u64 = 536_870_912_000; // 500 GiB
 pub const TASK_DB_SIZE: u64 = 10_737_418_240; // 10 GiB
 
