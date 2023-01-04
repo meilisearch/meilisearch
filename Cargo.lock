@@ -45,7 +45,7 @@ dependencies = [
  "actix-service",
  "actix-tls",
  "actix-utils",
- "ahash 0.7.6",
+ "ahash",
  "base64",
  "bitflags",
  "brotli",
@@ -178,7 +178,7 @@ dependencies = [
  "actix-tls",
  "actix-utils",
  "actix-web-codegen",
- "ahash 0.7.6",
+ "ahash",
  "bytes",
  "bytestring",
  "cfg-if",
@@ -253,12 +253,6 @@ dependencies = [
  "cpufeatures",
  "opaque-debug",
 ]
-
-[[package]]
-name = "ahash"
-version = "0.3.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8fd72866655d1904d6b0997d0b07ba561047d070fbe29de039031c641b61217"
 
 [[package]]
 name = "ahash"
@@ -661,31 +655,23 @@ dependencies = [
 
 [[package]]
 name = "charabia"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1234c5cd955fb67f2b111b43855a0eabdedc35d9fb4e6a9d24030050e89b779"
+checksum = "b57f9571f611796ea38e5a9c12e5ce37476f70397b032757f8dfe0c7b9bc5637"
 dependencies = [
- "character_converter",
  "cow-utils",
+ "csv",
  "deunicode",
  "fst",
  "jieba-rs",
  "lindera",
  "once_cell",
+ "pinyin",
+ "serde",
  "slice-group-by",
+ "unicode-normalization",
  "unicode-segmentation",
  "whatlang",
-]
-
-[[package]]
-name = "character_converter"
-version = "2.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14eb54f15451a7095181d32b3ac148ba3684ab8dc261a74208b2063c9293bb1c"
-dependencies = [
- "bincode",
- "fst",
- "once_cell",
 ]
 
 [[package]]
@@ -1223,6 +1209,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "encoding_rs_io"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1cc3c5651fb62ab8aa3103998dade57efdd028544bd300516baa31840c252a83"
+dependencies = [
+ "encoding_rs",
+]
+
+[[package]]
 name = "enum-iterator"
 version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1332,8 +1327,8 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "0.37.3"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.3#2101e3c6d592f6ce6cc25b6e4585f3a8a6246457"
+version = "0.38.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.38.0#c3f4835e8e102586bd6d5eb1e55c4bba5e92f994"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1351,8 +1346,8 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "0.37.3"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.3#2101e3c6d592f6ce6cc25b6e4585f3a8a6246457"
+version = "0.38.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.38.0#c3f4835e8e102586bd6d5eb1e55c4bba5e92f994"
 dependencies = [
  "serde_json",
 ]
@@ -1581,19 +1576,12 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96282e96bfcd3da0d3aa9938bedf1e50df3269b6db08b4876d2da0bb1a0841cf"
-dependencies = [
- "ahash 0.3.8",
- "autocfg",
-]
-
-[[package]]
-name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
+dependencies = [
+ "ahash",
+]
 
 [[package]]
 name = "heapless"
@@ -1801,7 +1789,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "10a35a97730320ffe8e2d410b5d3b69279b98d2c14bdb8b70ea89ecf7888d41e"
 dependencies = [
  "autocfg",
- "hashbrown 0.12.3",
+ "hashbrown",
  "serde",
 ]
 
@@ -1871,7 +1859,7 @@ checksum = "37228e06c75842d1097432d94d02f37fe3ebfca9791c2e8fef6e9db17ed128c1"
 dependencies = [
  "cedarwood",
  "fxhash",
- "hashbrown 0.12.3",
+ "hashbrown",
  "lazy_static",
  "phf",
  "phf_codegen",
@@ -1898,8 +1886,8 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "0.37.3"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.3#2101e3c6d592f6ce6cc25b6e4585f3a8a6246457"
+version = "0.38.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.38.0#c3f4835e8e102586bd6d5eb1e55c4bba5e92f994"
 dependencies = [
  "serde_json",
 ]
@@ -1986,9 +1974,9 @@ dependencies = [
 
 [[package]]
 name = "lindera"
-version = "0.14.0"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4dddd011921cac0ec59025a6b6e26c2cd9af3adce384b56c753c31df71a07965"
+checksum = "082ca91ac4d1557028ace9bfb8cee1500d156a4574dda93cfcdcf4caaebb9bd7"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1999,6 +1987,7 @@ dependencies = [
  "lindera-dictionary",
  "lindera-ipadic",
  "lindera-ipadic-builder",
+ "lindera-ko-dic",
  "lindera-ko-dic-builder",
  "lindera-unidic-builder",
  "serde",
@@ -2008,9 +1997,9 @@ dependencies = [
 
 [[package]]
 name = "lindera-cc-cedict-builder"
-version = "0.13.5"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "584491a91b758f92ef3202aaf969d837522f2c11390c4de0049a356d63bc0b0f"
+checksum = "a8967615a6d85320ec2755e1435c36165467ba01a79026adc3f86dad1b668df3"
 dependencies = [
  "anyhow",
  "bincode",
@@ -2028,14 +2017,14 @@ dependencies = [
 
 [[package]]
 name = "lindera-core"
-version = "0.13.5"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c726ee1bf3282621a802d50f5e03d3f88aae41456815e1d0cb2271a538ff83ec"
+checksum = "0e8ed3cea13f73557a4574a179b1518670a3b70bfdad120521313b03cc89380e"
 dependencies = [
  "anyhow",
  "bincode",
  "byteorder",
- "encoding",
+ "encoding_rs",
  "log",
  "serde",
  "thiserror",
@@ -2044,9 +2033,9 @@ dependencies = [
 
 [[package]]
 name = "lindera-decompress"
-version = "0.13.5"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f9df38ea9310a1256cdee64ff0ebe3f17c49314e3176e53d2213371729d6744"
+checksum = "2badb41828f89cfa6452db0a66da77897c0a04478304de26c8b2b36613e08d43"
 dependencies = [
  "anyhow",
  "lzma-rs",
@@ -2055,9 +2044,9 @@ dependencies = [
 
 [[package]]
 name = "lindera-dictionary"
-version = "0.13.5"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a525b654642ff9f27927c5abba33f4c651e984b54a65e4f787c0b8c8e22e4a6"
+checksum = "e219722c9f56b920c231210e7c25d8b5d35b508e7a2fd69d368916c4b1c926f6"
 dependencies = [
  "anyhow",
  "bincode",
@@ -2067,9 +2056,9 @@ dependencies = [
 
 [[package]]
 name = "lindera-ipadic"
-version = "0.13.5"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4797e016fc7dc0709ddb8c31da3b9e923e33e14043a4ff58431dd9c447ffacd2"
+checksum = "2c8e87c8362c724e8188fb7d9b6d184cac15d01369295e9bff7812b630d57e3b"
 dependencies = [
  "bincode",
  "byteorder",
@@ -2083,15 +2072,17 @@ dependencies = [
 
 [[package]]
 name = "lindera-ipadic-builder"
-version = "0.13.5"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9bd3ecfb07e8810f5ba313fa836804b66120f0ea76c2d93948c2ddcf4f81fd90"
+checksum = "1439e95852e444a116424086dc64d709c90e8af269ff7d2c2c4020f666f8dfab"
 dependencies = [
  "anyhow",
  "bincode",
  "byteorder",
  "clap 3.2.23",
- "encoding",
+ "csv",
+ "encoding_rs",
+ "encoding_rs_io",
  "env_logger",
  "glob",
  "lindera-core",
@@ -2102,10 +2093,26 @@ dependencies = [
 ]
 
 [[package]]
-name = "lindera-ko-dic-builder"
-version = "0.13.5"
+name = "lindera-ko-dic"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc86f26560ea69e91413eecc078d8e13f39b3c1fdc5a242d79d7622f6fab3a83"
+checksum = "cb15f949220da45872d774b7831bb030855ec083435c907499782f8558c8a203"
+dependencies = [
+ "bincode",
+ "byteorder",
+ "encoding",
+ "flate2",
+ "lindera-core",
+ "lindera-ko-dic-builder",
+ "once_cell",
+ "tar",
+]
+
+[[package]]
+name = "lindera-ko-dic-builder"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fde5a7352f4754be4f741e90bf4dff38a12a6572ab3880d0cf688e1166b8d82b"
 dependencies = [
  "anyhow",
  "bincode",
@@ -2123,9 +2130,9 @@ dependencies = [
 
 [[package]]
 name = "lindera-unidic-builder"
-version = "0.13.5"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05c1bb8b7d38ffec7d949ee2c603b6ef96dfa7cf4937e91bad295a2d2b267b82"
+checksum = "f1451b2ed8a7184a5f815d84f99d358c1d67297305831453dfdc0eb5d08e22b5"
 dependencies = [
  "anyhow",
  "bincode",
@@ -2297,6 +2304,7 @@ dependencies = [
  "http",
  "index-scheduler",
  "indexmap",
+ "insta",
  "itertools",
  "jsonwebtoken",
  "lazy_static",
@@ -2421,8 +2429,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.37.3"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.37.3#2101e3c6d592f6ce6cc25b6e4585f3a8a6246457"
+version = "0.38.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.38.0#c3f4835e8e102586bd6d5eb1e55c4bba5e92f994"
 dependencies = [
  "bimap",
  "bincode",
@@ -2861,6 +2869,12 @@ name = "pin-utils"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
+
+[[package]]
+name = "pinyin"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3bd12336e3afa34152e002f57df37a7056778daa59ea542b3473b87f5fb260c4"
 
 [[package]]
 name = "pkg-config"
@@ -4186,11 +4200,12 @@ dependencies = [
 
 [[package]]
 name = "whatlang"
-version = "0.13.0"
+version = "0.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "349357fdf0f049dcb402da4a4c5a5aae80a7f6b3e5976b38475ce4ac18e5cd2f"
+checksum = "9c531a2dc4c462b833788be2c07eef4e621d0e9edbd55bf280cc164c1c1aa043"
 dependencies = [
- "hashbrown 0.7.2",
+ "hashbrown",
+ "once_cell",
 ]
 
 [[package]]

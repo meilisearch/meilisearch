@@ -76,6 +76,7 @@ yaup = "0.2.0"
 actix-rt = "2.7.0"
 assert-json-diff = "2.0.2"
 brotli = "3.3.4"
+insta = "1.19.1"
 manifest-dir-macros = "0.1.16"
 maplit = "1.0.2"
 meili-snap = {path = "../meili-snap"}

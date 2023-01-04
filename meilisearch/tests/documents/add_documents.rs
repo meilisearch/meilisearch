@@ -896,16 +896,104 @@ async fn error_primary_key_inference() {
     index.wait_task(0).await;
     let (response, code) = index.get_task(0).await;
     assert_eq!(code, 200);
-    assert_eq!(response["status"], "failed");
 
-    let expected_error = json!({
-        "message": r#"The primary key inference process failed because the engine did not find any fields containing `id` substring in their name. If your document identifier does not contain any `id` substring, you can set the primary key of the index."#,
-        "code": "primary_key_inference_failed",
+    insta::assert_json_snapshot!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+    @r###"
+    {
+      "uid": 0,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": {
+        "message": "The primary key inference process failed because the engine did not find any field ending with `id` in its name. Please specify the primary key manually using the `primaryKey` query parameter.",
+        "code": "index_primary_key_no_candidate_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#primary_key_inference_failed"
-    });
+        "link": "https://docs.meilisearch.com/errors#index_primary_key_no_candidate_found"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
 
-    assert_eq!(response["error"], expected_error);
+    let documents = json!([
+        {
+            "primary_id": "12",
+            "object_id": "42",
+            "id": "124",
+            "title": "11",
+            "desc": "foobar"
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(1).await;
+    let (response, code) = index.get_task(1).await;
+    assert_eq!(code, 200);
+
+    insta::assert_json_snapshot!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+    @r###"
+    {
+      "uid": 1,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": {
+        "message": "The primary key inference process failed because the engine found 3 fields ending with `id` in their name, such as 'id' and 'object_id'. Please specify the primary key manually using the `primaryKey` query parameter.",
+        "code": "index_primary_key_multiple_candidates_found",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#index_primary_key_multiple_candidates_found"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let documents = json!([
+        {
+            "primary_id": "12",
+            "title": "11",
+            "desc": "foobar"
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(2).await;
+    let (response, code) = index.get_task(2).await;
+    assert_eq!(code, 200);
+
+    insta::assert_json_snapshot!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+    @r###"
+    {
+      "uid": 2,
+      "indexUid": "test",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
 }
 
 #[actix_rt::test]

@@ -108,7 +108,7 @@ impl fmt::Display for ErrorType {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Code {
     // error related to your setup
     IoError,
@@ -126,7 +126,8 @@ pub enum Code {
 
     // invalid state error
     InvalidState,
-    MissingPrimaryKey,
+    NoPrimaryKeyCandidateFound,
+    MultiplePrimaryKeyCandidatesFound,
     PrimaryKeyAlreadyPresent,
 
     MaxFieldsLimitExceeded,
@@ -211,9 +212,13 @@ impl Code {
             // invalid state error
             InvalidState => ErrCode::internal("invalid_state", StatusCode::INTERNAL_SERVER_ERROR),
             // thrown when no primary key has been set
-            MissingPrimaryKey => {
-                ErrCode::invalid("primary_key_inference_failed", StatusCode::BAD_REQUEST)
+            NoPrimaryKeyCandidateFound => {
+                ErrCode::invalid("index_primary_key_no_candidate_found", StatusCode::BAD_REQUEST)
             }
+            MultiplePrimaryKeyCandidatesFound => ErrCode::invalid(
+                "index_primary_key_multiple_candidates_found",
+                StatusCode::BAD_REQUEST,
+            ),
             // error thrown when trying to set an already existing primary key
             PrimaryKeyAlreadyPresent => {
                 ErrCode::invalid("index_primary_key_already_exists", StatusCode::BAD_REQUEST)
@@ -405,7 +410,10 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidDocumentId { .. } | UserError::TooManyDocumentIds { .. } => {
                         Code::InvalidDocumentId
                     }
-                    UserError::MissingPrimaryKey => Code::MissingPrimaryKey,
+                    UserError::NoPrimaryKeyCandidateFound => Code::NoPrimaryKeyCandidateFound,
+                    UserError::MultiplePrimaryKeyCandidatesFound { .. } => {
+                        Code::MultiplePrimaryKeyCandidatesFound
+                    }
                     UserError::PrimaryKeyCannotBeChanged(_) => Code::PrimaryKeyAlreadyPresent,
                     UserError::SortRankingRuleMissing => Code::Sort,
                     UserError::InvalidFacetsDistribution { .. } => Code::BadRequest,

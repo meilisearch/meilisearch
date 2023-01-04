@@ -260,7 +260,7 @@ impl From<v5::ResponseError> for v6::ResponseError {
             "invalid_index_uid" => v6::Code::InvalidIndexUid,
             "invalid_min_word_length_for_typo" => v6::Code::InvalidMinWordLengthForTypo,
             "invalid_state" => v6::Code::InvalidState,
-            "primary_key_inference_failed" => v6::Code::MissingPrimaryKey,
+            "primary_key_inference_failed" => v6::Code::NoPrimaryKeyCandidateFound,
             "index_primary_key_already_exists" => v6::Code::PrimaryKeyAlreadyPresent,
             "max_fields_limit_exceeded" => v6::Code::MaxFieldsLimitExceeded,
             "missing_document_id" => v6::Code::MissingDocumentId,
@@ -419,7 +419,7 @@ pub(crate) mod test {
         // tasks
         let tasks = dump.tasks().unwrap().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
-        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"6519f7064c45d2196dd59b71350a9bf5");
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"41f91d3a94911b2735ec41b07540df5c");
         assert_eq!(update_files.len(), 22);
         assert!(update_files[0].is_none()); // the dump creation
         assert!(update_files[1].is_some()); // the enqueued document addition
