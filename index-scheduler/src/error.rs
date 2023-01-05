@@ -48,11 +48,6 @@ impl From<DateField> for Code {
 pub enum Error {
     #[error("Index `{0}` not found.")]
     IndexNotFound(String),
-    #[error(
-        "Indexes {} not found.",
-        .0.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
-    )]
-    IndexesNotFound(Vec<String>),
     #[error("Index `{0}` already exists.")]
     IndexAlreadyExists(String),
     #[error(
@@ -64,6 +59,13 @@ pub enum Error {
         .0.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
     )]
     SwapDuplicateIndexesFound(Vec<String>),
+    #[error("Index `{0}` not found.")]
+    SwapIndexNotFound(String),
+    #[error(
+        "Indexes {} not found.",
+        .0.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
+    )]
+    SwapIndexesNotFound(Vec<String>),
     #[error("Corrupted dump.")]
     CorruptedDump,
     #[error(
@@ -136,10 +138,11 @@ impl ErrorCode for Error {
     fn error_code(&self) -> Code {
         match self {
             Error::IndexNotFound(_) => Code::IndexNotFound,
-            Error::IndexesNotFound(_) => Code::IndexNotFound,
             Error::IndexAlreadyExists(_) => Code::IndexAlreadyExists,
-            Error::SwapDuplicateIndexesFound(_) => Code::DuplicateIndexFound,
-            Error::SwapDuplicateIndexFound(_) => Code::DuplicateIndexFound,
+            Error::SwapDuplicateIndexesFound(_) => Code::InvalidDuplicateIndexesFound,
+            Error::SwapDuplicateIndexFound(_) => Code::InvalidDuplicateIndexesFound,
+            Error::SwapIndexNotFound(_) => Code::InvalidSwapIndexes,
+            Error::SwapIndexesNotFound(_) => Code::InvalidSwapIndexes,
             Error::InvalidTaskDate { field, .. } => (*field).into(),
             Error::InvalidTaskUids { .. } => Code::InvalidTaskUids,
             Error::InvalidTaskStatuses { .. } => Code::InvalidTaskStatuses,
@@ -157,6 +160,7 @@ impl ErrorCode for Error {
             Error::FileStore(e) => e.error_code(),
             Error::IoError(e) => e.error_code(),
             Error::Persist(e) => e.error_code(),
+
             // Irrecoverable errors
             Error::Anyhow(_) => Code::Internal,
             Error::CorruptedTaskQueue => Code::Internal,

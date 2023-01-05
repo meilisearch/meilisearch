@@ -146,6 +146,7 @@ pub enum Code {
 
     // Invalid swap-indexes
     InvalidSwapIndexes,
+    InvalidDuplicateIndexesFound,
 
     // Invalid settings update request
     InvalidSettingsDisplayedAttributes,
@@ -380,8 +381,13 @@ impl Code {
                 ErrCode::invalid("duplicate_index_found", StatusCode::BAD_REQUEST)
             }
 
+            // Swap indexes error
             InvalidSwapIndexes => ErrCode::invalid("invalid_swap_indexes", StatusCode::BAD_REQUEST),
+            InvalidDuplicateIndexesFound => {
+                ErrCode::invalid("invalid_swap_duplicate_index_found", StatusCode::BAD_REQUEST)
+            }
 
+            // Invalid settings
             InvalidSettingsDisplayedAttributes => {
                 ErrCode::invalid("invalid_settings_displayed_attributes", StatusCode::BAD_REQUEST)
             }
@@ -416,6 +422,7 @@ impl Code {
                 ErrCode::invalid("invalid_settings_pagination", StatusCode::BAD_REQUEST)
             }
 
+            // Invalid search
             InvalidSearchQ => ErrCode::invalid("invalid_search_q", StatusCode::BAD_REQUEST),
             InvalidSearchOffset => {
                 ErrCode::invalid("invalid_search_offset", StatusCode::BAD_REQUEST)

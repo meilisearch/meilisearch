@@ -882,11 +882,11 @@ impl IndexScheduler {
                 }
                 if !not_found_indexes.is_empty() {
                     if not_found_indexes.len() == 1 {
-                        return Err(Error::IndexNotFound(
+                        return Err(Error::SwapIndexNotFound(
                             not_found_indexes.into_iter().next().unwrap().clone(),
                         ));
                     } else {
-                        return Err(Error::IndexesNotFound(
+                        return Err(Error::SwapIndexesNotFound(
                             not_found_indexes.into_iter().cloned().collect(),
                         ));
                     }
