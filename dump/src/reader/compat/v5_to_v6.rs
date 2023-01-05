@@ -272,7 +272,7 @@ impl From<v5::ResponseError> for v6::ResponseError {
             "database_size_limit_reached" => v6::Code::DatabaseSizeLimitReached,
             "document_not_found" => v6::Code::DocumentNotFound,
             "internal" => v6::Code::Internal,
-            "invalid_geo_field" => v6::Code::InvalidGeoField,
+            "invalid_geo_field" => v6::Code::InvalidDocumentGeoField,
             "invalid_ranking_rule" => v6::Code::InvalidRankingRule,
             "invalid_store_file" => v6::Code::InvalidStore,
             "invalid_api_key" => v6::Code::InvalidToken,

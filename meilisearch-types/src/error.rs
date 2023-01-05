@@ -198,7 +198,7 @@ pub enum Code {
     DatabaseSizeLimitReached,
     DocumentNotFound,
     Internal,
-    InvalidGeoField,
+    InvalidDocumentGeoField,
     InvalidRankingRule,
     InvalidStore,
     InvalidToken,
@@ -307,7 +307,9 @@ impl Code {
             }
             DocumentNotFound => ErrCode::invalid("document_not_found", StatusCode::NOT_FOUND),
             Internal => ErrCode::internal("internal", StatusCode::INTERNAL_SERVER_ERROR),
-            InvalidGeoField => ErrCode::invalid("invalid_geo_field", StatusCode::BAD_REQUEST),
+            InvalidDocumentGeoField => {
+                ErrCode::invalid("invalid_document_geo_field", StatusCode::BAD_REQUEST)
+            }
             InvalidToken => ErrCode::authentication("invalid_api_key", StatusCode::FORBIDDEN),
             MissingAuthorizationHeader => {
                 ErrCode::authentication("missing_authorization_header", StatusCode::UNAUTHORIZED)
@@ -578,7 +580,7 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidFacetsDistribution { .. } => Code::BadRequest,
                     UserError::InvalidSortableAttribute { .. } => Code::Sort,
                     UserError::CriterionError(_) => Code::InvalidRankingRule,
-                    UserError::InvalidGeoField { .. } => Code::InvalidGeoField,
+                    UserError::InvalidGeoField { .. } => Code::InvalidDocumentGeoField,
                     UserError::SortError(_) => Code::Sort,
                     UserError::InvalidMinTypoWordLenSetting(_, _) => {
                         Code::InvalidMinWordLengthForTypo
