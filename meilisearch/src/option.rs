@@ -62,7 +62,7 @@ const DEFAULT_DUMP_DIR: &str = "dumps/";
 
 const MEILI_MAX_INDEXING_MEMORY: &str = "MEILI_MAX_INDEXING_MEMORY";
 const MEILI_MAX_INDEXING_THREADS: &str = "MEILI_MAX_INDEXING_THREADS";
-const DEFAULT_LOG_EVERY_N: usize = 100000;
+const DEFAULT_LOG_EVERY_N: usize = 100_000;
 
 // Each environment (index and task-db) is taking space in the virtual address space.
 //
@@ -87,6 +87,7 @@ pub enum LogLevel {
 pub struct LogLevelError {
     pub given_log_level: String,
 }
+
 impl Display for LogLevelError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
@@ -96,6 +97,7 @@ impl Display for LogLevelError {
         )
     }
 }
+
 impl Display for LogLevel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -108,7 +110,9 @@ impl Display for LogLevel {
         }
     }
 }
+
 impl std::error::Error for LogLevelError {}
+
 impl FromStr for LogLevel {
     type Err = LogLevelError;
 
@@ -476,18 +480,8 @@ impl Opt {
     }
 }
 
-#[derive(Debug, Clone, Parser, Deserialize)]
+#[derive(Debug, Default, Clone, Parser, Deserialize)]
 pub struct IndexerOpts {
-    /// Sets the amount of documents to skip before printing
-    /// a log regarding the indexing advancement.
-    #[serde(default = "default_log_every_n")]
-    #[clap(long, default_value_t = default_log_every_n(), hide = true)] // 100k
-    pub log_every_n: usize,
-
-    /// Grenad max number of chunks in bytes.
-    #[clap(long, hide = true)]
-    pub max_nb_chunks: Option<usize>,
-
     /// Sets the maximum amount of RAM Meilisearch can use when indexing. By default, Meilisearch
     /// uses no more than two thirds of available memory.
     #[clap(long, env = MEILI_MAX_INDEXING_MEMORY, default_value_t)]
@@ -505,12 +499,7 @@ pub struct IndexerOpts {
 impl IndexerOpts {
     /// Exports the values to their corresponding env vars if they are not set.
     pub fn export_to_env(self) {
-        let IndexerOpts {
-            max_indexing_memory,
-            max_indexing_threads,
-            log_every_n: _,
-            max_nb_chunks: _,
-        } = self;
+        let IndexerOpts { max_indexing_memory, max_indexing_threads } = self;
         if let Some(max_indexing_memory) = max_indexing_memory.0 {
             export_to_env_if_not_present(
                 MEILI_MAX_INDEXING_MEMORY,
@@ -534,24 +523,12 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
             .build()?;
 
         Ok(Self {
-            log_every_n: Some(other.log_every_n),
-            max_nb_chunks: other.max_nb_chunks,
+            log_every_n: Some(DEFAULT_LOG_EVERY_N),
             max_memory: other.max_indexing_memory.map(|b| b.get_bytes() as usize),
             thread_pool: Some(thread_pool),
             max_positions_per_attributes: None,
             ..Default::default()
         })
-    }
-}
-
-impl Default for IndexerOpts {
-    fn default() -> Self {
-        Self {
-            log_every_n: 100_000,
-            max_nb_chunks: None,
-            max_indexing_memory: MaxMemory::default(),
-            max_indexing_threads: MaxThreads::default(),
-        }
     }
 }
 
@@ -737,10 +714,6 @@ fn default_snapshot_interval_sec() -> &'static str {
 
 fn default_dump_dir() -> PathBuf {
     PathBuf::from(DEFAULT_DUMP_DIR)
-}
-
-fn default_log_every_n() -> usize {
-    DEFAULT_LOG_EVERY_N
 }
 
 /// Indicates if a snapshot was scheduled, and if yes with which interval.

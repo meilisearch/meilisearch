@@ -280,12 +280,7 @@ impl From<Opt> for Infos {
             ScheduleSnapshot::Enabled(interval) => Some(interval),
         };
 
-        let IndexerOpts {
-            log_every_n: _,
-            max_nb_chunks: _,
-            max_indexing_memory,
-            max_indexing_threads,
-        } = indexer_options;
+        let IndexerOpts { max_indexing_memory, max_indexing_threads } = indexer_options;
 
         // We're going to override every sensible information.
         // We consider information sensible if it contains a path, an address, or a key.
