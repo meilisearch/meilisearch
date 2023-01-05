@@ -95,6 +95,7 @@ enum ErrorType {
     InternalError,
     InvalidRequestError,
     AuthenticationError,
+    System,
 }
 
 impl fmt::Display for ErrorType {
@@ -105,6 +106,7 @@ impl fmt::Display for ErrorType {
             InternalError => write!(f, "internal"),
             InvalidRequestError => write!(f, "invalid_request"),
             AuthenticationError => write!(f, "auth"),
+            System => write!(f, "system"),
         }
     }
 }
@@ -240,12 +242,12 @@ impl Code {
 
         match self {
             // related to the setup
-            IoError => ErrCode::invalid("io_error", StatusCode::UNPROCESSABLE_ENTITY),
+            IoError => ErrCode::system("io_error", StatusCode::UNPROCESSABLE_ENTITY),
             TooManyOpenFiles => {
-                ErrCode::invalid("too_many_open_files", StatusCode::UNPROCESSABLE_ENTITY)
+                ErrCode::system("too_many_open_files", StatusCode::UNPROCESSABLE_ENTITY)
             }
             NoSpaceLeftOnDevice => {
-                ErrCode::invalid("no_space_left_on_device", StatusCode::UNPROCESSABLE_ENTITY)
+                ErrCode::system("no_space_left_on_device", StatusCode::UNPROCESSABLE_ENTITY)
             }
 
             // index related errors
@@ -530,6 +532,10 @@ impl ErrCode {
 
     fn invalid(error_name: &'static str, status_code: StatusCode) -> ErrCode {
         ErrCode { status_code, error_name, error_type: ErrorType::InvalidRequestError }
+    }
+
+    fn system(error_name: &'static str, status_code: StatusCode) -> ErrCode {
+        ErrCode { status_code, error_name, error_type: ErrorType::System }
     }
 }
 
