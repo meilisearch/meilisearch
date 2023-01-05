@@ -489,7 +489,7 @@ impl Opt {
     }
 }
 
-#[derive(Debug, Clone, Parser, Deserialize)]
+#[derive(Debug, Default, Clone, Parser, Deserialize)]
 pub struct IndexerOpts {
     /// Sets the maximum amount of RAM Meilisearch can use when indexing. By default, Meilisearch
     /// uses no more than two thirds of available memory.
@@ -538,15 +538,6 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
             max_positions_per_attributes: None,
             ..Default::default()
         })
-    }
-}
-
-impl Default for IndexerOpts {
-    fn default() -> Self {
-        Self {
-            max_indexing_memory: MaxMemory::default(),
-            max_indexing_threads: MaxThreads::default(),
-        }
     }
 }
 
