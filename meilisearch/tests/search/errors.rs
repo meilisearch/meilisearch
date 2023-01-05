@@ -12,7 +12,7 @@ async fn search_unexisting_index() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_not_found"
+        "link": "https://docs.meilisearch.com/errors#index-not-found"
     });
 
     index
@@ -73,7 +73,7 @@ async fn filter_invalid_syntax_object() {
         "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `title & Glass`.\n1:14 title & Glass",
         "code": "invalid_filter",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_filter"
+        "link": "https://docs.meilisearch.com/errors#invalid-filter"
     });
     index
         .search(json!({"filter": "title & Glass"}), |response, code| {
@@ -98,7 +98,7 @@ async fn filter_invalid_syntax_array() {
         "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `title & Glass`.\n1:14 title & Glass",
         "code": "invalid_filter",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_filter"
+        "link": "https://docs.meilisearch.com/errors#invalid-filter"
     });
     index
         .search(json!({"filter": ["title & Glass"]}), |response, code| {
@@ -123,7 +123,7 @@ async fn filter_invalid_syntax_string() {
         "message": "Found unexpected characters at the end of the filter: `XOR title = Glass`. You probably forgot an `OR` or an `AND` rule.\n15:32 title = Glass XOR title = Glass",
         "code": "invalid_filter",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_filter"
+        "link": "https://docs.meilisearch.com/errors#invalid-filter"
     });
     index
         .search(json!({"filter": "title = Glass XOR title = Glass"}), |response, code| {
@@ -148,7 +148,7 @@ async fn filter_invalid_attribute_array() {
         "message": "Attribute `many` is not filterable. Available filterable attributes are: `title`.\n1:5 many = Glass",
         "code": "invalid_filter",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_filter"
+        "link": "https://docs.meilisearch.com/errors#invalid-filter"
     });
     index
         .search(json!({"filter": ["many = Glass"]}), |response, code| {
@@ -173,7 +173,7 @@ async fn filter_invalid_attribute_string() {
         "message": "Attribute `many` is not filterable. Available filterable attributes are: `title`.\n1:5 many = Glass",
         "code": "invalid_filter",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_filter"
+        "link": "https://docs.meilisearch.com/errors#invalid-filter"
     });
     index
         .search(json!({"filter": "many = Glass"}), |response, code| {
@@ -198,7 +198,7 @@ async fn filter_reserved_geo_attribute_array() {
         "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the _geoRadius(latitude, longitude, distance) built-in rule to filter on _geo field coordinates.\n1:5 _geo = Glass",
         "code": "invalid_filter",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_filter"
+        "link": "https://docs.meilisearch.com/errors#invalid-filter"
     });
     index
         .search(json!({"filter": ["_geo = Glass"]}), |response, code| {
@@ -223,7 +223,7 @@ async fn filter_reserved_geo_attribute_string() {
         "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the _geoRadius(latitude, longitude, distance) built-in rule to filter on _geo field coordinates.\n1:5 _geo = Glass",
         "code": "invalid_filter",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_filter"
+        "link": "https://docs.meilisearch.com/errors#invalid-filter"
     });
     index
         .search(json!({"filter": "_geo = Glass"}), |response, code| {
@@ -248,7 +248,7 @@ async fn filter_reserved_attribute_array() {
         "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression.\n1:13 _geoDistance = Glass",
         "code": "invalid_filter",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_filter"
+        "link": "https://docs.meilisearch.com/errors#invalid-filter"
     });
     index
         .search(json!({"filter": ["_geoDistance = Glass"]}), |response, code| {
@@ -273,7 +273,7 @@ async fn filter_reserved_attribute_string() {
         "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression.\n1:13 _geoDistance = Glass",
         "code": "invalid_filter",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_filter"
+        "link": "https://docs.meilisearch.com/errors#invalid-filter"
     });
     index
         .search(json!({"filter": "_geoDistance = Glass"}), |response, code| {
@@ -298,7 +298,7 @@ async fn sort_geo_reserved_attribute() {
         "message": "`_geo` is a reserved keyword and thus can't be used as a sort expression. Use the _geoPoint(latitude, longitude) built-in rule to sort on _geo field coordinates.",
         "code": "invalid_sort",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_sort"
+        "link": "https://docs.meilisearch.com/errors#invalid-sort"
     });
     index
         .search(
@@ -328,7 +328,7 @@ async fn sort_reserved_attribute() {
         "message": "`_geoDistance` is a reserved keyword and thus can't be used as a sort expression.",
         "code": "invalid_sort",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_sort"
+        "link": "https://docs.meilisearch.com/errors#invalid-sort"
     });
     index
         .search(
@@ -358,7 +358,7 @@ async fn sort_unsortable_attribute() {
         "message": "Attribute `title` is not sortable. Available sortable attributes are: `id`.",
         "code": "invalid_sort",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_sort"
+        "link": "https://docs.meilisearch.com/errors#invalid-sort"
     });
     index
         .search(
@@ -388,7 +388,7 @@ async fn sort_invalid_syntax() {
         "message": "Invalid syntax for the sort parameter: expected expression ending by `:asc` or `:desc`, found `title`.",
         "code": "invalid_sort",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_sort"
+        "link": "https://docs.meilisearch.com/errors#invalid-sort"
     });
     index
         .search(
@@ -422,7 +422,7 @@ async fn sort_unset_ranking_rule() {
         "message": "The sort ranking rule must be specified in the ranking rules settings to use the sort parameter at search time.",
         "code": "invalid_sort",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_sort"
+        "link": "https://docs.meilisearch.com/errors#invalid-sort"
     });
     index
         .search(

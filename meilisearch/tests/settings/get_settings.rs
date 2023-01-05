@@ -185,7 +185,7 @@ async fn error_update_setting_unexisting_index_invalid_uid() {
         "message": "`test##!  ` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
         "code": "invalid_index_uid",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_index_uid"});
+        "link": "https://docs.meilisearch.com/errors#invalid-index-uid"});
 
     assert_eq!(response, expected);
 }
@@ -290,7 +290,7 @@ async fn error_set_invalid_ranking_rules() {
         "message": r#"`manyTheFish` ranking rule is invalid. Valid ranking rules are words, typo, sort, proximity, attribute, exactness and custom ranking rules."#,
         "code": "invalid_ranking_rule",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_ranking_rule"
+        "link": "https://docs.meilisearch.com/errors#invalid-ranking-rule"
     });
 
     assert_eq!(response["error"], expected_error);
