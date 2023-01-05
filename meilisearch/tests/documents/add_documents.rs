@@ -436,7 +436,7 @@ async fn error_add_malformed_ndjson_documents() {
     assert_eq!(
         response["message"],
         json!(
-            r#"The `ndjson` payload provided is malformed. `Couldn't serialize document value: trailing characters at line 2 column 1`."#
+            r#"The `ndjson` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 2 column 2`."#
         )
     );
     assert_eq!(response["code"], json!("malformed_payload"));
@@ -456,7 +456,7 @@ async fn error_add_malformed_ndjson_documents() {
     assert_eq!(status_code, 400);
     assert_eq!(
         response["message"],
-        json!("The `ndjson` payload provided is malformed. `Couldn't serialize document value: trailing characters at line 2 column 1`.")
+        json!("The `ndjson` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 2 column 2`.")
     );
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
@@ -726,6 +726,22 @@ async fn add_larger_dataset() {
     let server = Server::new().await;
     let index = server.index("test");
     let update_id = index.load_test_set().await;
+    let (response, code) = index.get_task(update_id).await;
+    assert_eq!(code, 200);
+    assert_eq!(response["status"], "succeeded");
+    assert_eq!(response["type"], "documentAdditionOrUpdate");
+    assert_eq!(response["details"]["indexedDocuments"], 77);
+    assert_eq!(response["details"]["receivedDocuments"], 77);
+    let (response, code) = index
+        .get_all_documents(GetAllDocumentsOptions { limit: Some(1000), ..Default::default() })
+        .await;
+    assert_eq!(code, 200, "failed with `{}`", response);
+    assert_eq!(response["results"].as_array().unwrap().len(), 77);
+
+    // x-ndjson add large test
+    let server = Server::new().await;
+    let index = server.index("test");
+    let update_id = index.load_test_set_ndjson().await;
     let (response, code) = index.get_task(update_id).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "succeeded");

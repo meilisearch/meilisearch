@@ -25,8 +25,30 @@ impl Index<'_> {
 
     pub async fn load_test_set(&self) -> u64 {
         let url = format!("/indexes/{}/documents", urlencode(self.uid.as_ref()));
-        let (response, code) =
-            self.service.post_str(url, include_str!("../assets/test_set.json")).await;
+        let (response, code) = self
+            .service
+            .post_str(
+                url,
+                include_str!("../assets/test_set.json"),
+                ("content-type", "application/json"),
+            )
+            .await;
+        assert_eq!(code, 202);
+        let update_id = response["taskUid"].as_i64().unwrap();
+        self.wait_task(update_id as u64).await;
+        update_id as u64
+    }
+
+    pub async fn load_test_set_ndjson(&self) -> u64 {
+        let url = format!("/indexes/{}/documents", urlencode(self.uid.as_ref()));
+        let (response, code) = self
+            .service
+            .post_str(
+                url,
+                include_str!("../assets/test_set.ndjson"),
+                ("content-type", "application/x-ndjson"),
+            )
+            .await;
         assert_eq!(code, 202);
         let update_id = response["taskUid"].as_i64().unwrap();
         self.wait_task(update_id as u64).await;
