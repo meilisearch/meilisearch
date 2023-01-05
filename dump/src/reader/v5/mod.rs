@@ -141,6 +141,10 @@ impl V5Reader {
             V5IndexReader::new(
                 index.uid.clone(),
                 &self.dump.path().join("indexes").join(index.index_meta.uuid.to_string()),
+                &index.index_meta,
+                BufReader::new(
+                    File::open(self.dump.path().join("updates").join("data.jsonl")).unwrap(),
+                ),
             )
         }))
     }
@@ -189,16 +193,39 @@ pub struct V5IndexReader {
 }
 
 impl V5IndexReader {
-    pub fn new(name: String, path: &Path) -> Result<Self> {
+    pub fn new(
+        name: String,
+        path: &Path,
+        index_metadata: &meta::IndexMeta,
+        tasks: BufReader<File>,
+    ) -> Result<Self> {
         let meta = File::open(path.join("meta.json"))?;
         let meta: meta::DumpMeta = serde_json::from_reader(meta)?;
+
+        let mut created_at = None;
+        let mut updated_at = None;
+
+        for line in tasks.lines() {
+            let task: Task = serde_json::from_str(&line?)?;
+
+            if *task.index_uid().unwrap_or_default().to_string() == name {
+                if updated_at.is_none() {
+                    updated_at = task.processed_at()
+                }
+
+                if task.id as usize == index_metadata.creation_task_id {
+                    created_at = task.created_at();
+
+                    break;
+                }
+            }
+        }
 
         let metadata = IndexMetadata {
             uid: name,
             primary_key: meta.primary_key,
-            // FIXME: Iterate over the whole task queue to find the creation and last update date.
-            created_at: OffsetDateTime::now_utc(),
-            updated_at: OffsetDateTime::now_utc(),
+            created_at: created_at.unwrap_or_else(OffsetDateTime::now_utc),
+            updated_at: updated_at.unwrap_or_else(OffsetDateTime::now_utc),
         };
 
         let ret = V5IndexReader {

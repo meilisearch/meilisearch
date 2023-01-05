@@ -140,6 +140,45 @@ impl Task {
             TaskContent::Dump { .. } => None,
         }
     }
+
+    pub fn processed_at(&self) -> Option<OffsetDateTime> {
+        match self.events.last() {
+            Some(TaskEvent::Succeeded { result: _, timestamp }) => Some(*timestamp),
+            _ => None,
+        }
+    }
+
+    pub fn created_at(&self) -> Option<OffsetDateTime> {
+        match &self.content {
+            TaskContent::IndexCreation { index_uid: _, primary_key: _ } => {
+                match self.events.first() {
+                    Some(TaskEvent::Created(ts)) => Some(*ts),
+                    _ => None,
+                }
+            }
+            TaskContent::DocumentAddition {
+                index_uid: _,
+                content_uuid: _,
+                merge_strategy: _,
+                primary_key: _,
+                documents_count: _,
+                allow_index_creation: _,
+            } => match self.events.first() {
+                Some(TaskEvent::Created(ts)) => Some(*ts),
+                _ => None,
+            },
+            TaskContent::SettingsUpdate {
+                index_uid: _,
+                settings: _,
+                is_deletion: _,
+                allow_index_creation: _,
+            } => match self.events.first() {
+                Some(TaskEvent::Created(ts)) => Some(*ts),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
 }
 
 impl IndexUid {
