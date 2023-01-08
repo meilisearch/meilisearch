@@ -1,9 +1,12 @@
-use std::str;
+use std::convert::Infallible;
+use std::num::ParseIntError;
+use std::{fmt, str};
 
 use actix_web::{web, HttpRequest, HttpResponse};
+use deserr::{DeserializeError, IntoValue, MergeWithError, ValuePointerRef};
 use meilisearch_auth::error::AuthControllerError;
 use meilisearch_auth::AuthController;
-use meilisearch_types::error::{Code, ResponseError};
+use meilisearch_types::error::{unwrap_any, Code, ErrorCode, ResponseError};
 use meilisearch_types::keys::{Action, Key};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -12,6 +15,7 @@ use uuid::Uuid;
 
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
+use crate::extractors::query_parameters::QueryParameter;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::Pagination;
 
@@ -45,10 +49,72 @@ pub async fn create_api_key(
     Ok(HttpResponse::Created().json(res))
 }
 
+#[derive(Debug)]
+pub struct PaginationDeserrError {
+    error: String,
+    code: Code,
+}
+
+impl std::fmt::Display for PaginationDeserrError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.error)
+    }
+}
+
+impl std::error::Error for PaginationDeserrError {}
+impl ErrorCode for PaginationDeserrError {
+    fn error_code(&self) -> Code {
+        self.code
+    }
+}
+
+impl MergeWithError<PaginationDeserrError> for PaginationDeserrError {
+    fn merge(
+        _self_: Option<Self>,
+        other: PaginationDeserrError,
+        _merge_location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        Err(other)
+    }
+}
+
+impl DeserializeError for PaginationDeserrError {
+    fn error<V: IntoValue>(
+        _self_: Option<Self>,
+        error: deserr::ErrorKind<V>,
+        location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        let error = unwrap_any(deserr::serde_json::JsonError::error(None, error, location)).0;
+
+        let code = match location.last_field() {
+            Some("offset") => Code::InvalidApiKeyLimit,
+            Some("limit") => Code::InvalidApiKeyOffset,
+            _ => Code::BadRequest,
+        };
+
+        Err(PaginationDeserrError { error, code })
+    }
+}
+
+impl MergeWithError<ParseIntError> for PaginationDeserrError {
+    fn merge(
+        _self_: Option<Self>,
+        other: ParseIntError,
+        merge_location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        PaginationDeserrError::error::<Infallible>(
+            None,
+            deserr::ErrorKind::Unexpected { msg: other.to_string() },
+            merge_location,
+        )
+    }
+}
+
 pub async fn list_api_keys(
     auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_GET }>, AuthController>,
-    paginate: web::Query<Pagination>,
+    paginate: QueryParameter<Pagination, PaginationDeserrError>,
 ) -> Result<HttpResponse, ResponseError> {
+    let paginate = paginate.into_inner();
     let page_view = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
         let keys = auth_controller.list_keys()?;
         let page_view = paginate

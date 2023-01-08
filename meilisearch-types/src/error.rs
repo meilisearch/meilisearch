@@ -230,7 +230,13 @@ pub enum Code {
     MissingPayload,
 
     ApiKeyNotFound,
-    MissingParameter,
+
+    MissingApiKeyActions,
+    MissingApiKeyExpiresAt,
+    MissingApiKeyIndexes,
+
+    InvalidApiKeyOffset,
+    InvalidApiKeyLimit,
     InvalidApiKeyActions,
     InvalidApiKeyIndexes,
     InvalidApiKeyExpiresAt,
@@ -362,7 +368,25 @@ impl Code {
 
             // error related to keys
             ApiKeyNotFound => ErrCode::invalid("api_key_not_found", StatusCode::NOT_FOUND),
-            MissingParameter => ErrCode::invalid("missing_parameter", StatusCode::BAD_REQUEST),
+
+            MissingApiKeyExpiresAt => {
+                ErrCode::invalid("missing_api_key_expires_at", StatusCode::BAD_REQUEST)
+            }
+
+            MissingApiKeyActions => {
+                ErrCode::invalid("missing_api_key_actions", StatusCode::BAD_REQUEST)
+            }
+
+            MissingApiKeyIndexes => {
+                ErrCode::invalid("missing_api_key_indexes", StatusCode::BAD_REQUEST)
+            }
+
+            InvalidApiKeyOffset => {
+                ErrCode::invalid("invalid_api_key_offset", StatusCode::BAD_REQUEST)
+            }
+            InvalidApiKeyLimit => {
+                ErrCode::invalid("invalid_api_key_limit", StatusCode::BAD_REQUEST)
+            }
             InvalidApiKeyActions => {
                 ErrCode::invalid("invalid_api_key_actions", StatusCode::BAD_REQUEST)
             }

@@ -291,7 +291,7 @@ impl From<v5::ResponseError> for v6::ResponseError {
             "malformed_payload" => v6::Code::MalformedPayload,
             "missing_payload" => v6::Code::MissingPayload,
             "api_key_not_found" => v6::Code::ApiKeyNotFound,
-            "missing_parameter" => v6::Code::MissingParameter,
+            "missing_parameter" => v6::Code::UnretrievableErrorCode,
             "invalid_api_key_actions" => v6::Code::InvalidApiKeyActions,
             "invalid_api_key_indexes" => v6::Code::InvalidApiKeyIndexes,
             "invalid_api_key_expires_at" => v6::Code::InvalidApiKeyExpiresAt,
