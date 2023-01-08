@@ -194,6 +194,11 @@ pub enum Code {
     InvalidTaskBeforeFinishedAt,
     InvalidTaskAfterFinishedAt,
 
+    // Documents API
+    InvalidDocumentFields,
+    InvalidDocumentLimit,
+    InvalidDocumentOffset,
+
     BadParameter,
     BadRequest,
     DatabaseSizeLimitReached,
@@ -495,6 +500,16 @@ impl Code {
             }
             InvalidTaskAfterFinishedAt => {
                 ErrCode::invalid("invalid_task_after_finished_at", StatusCode::BAD_REQUEST)
+            }
+
+            InvalidDocumentFields => {
+                ErrCode::invalid("invalid_document_fields", StatusCode::BAD_REQUEST)
+            }
+            InvalidDocumentLimit => {
+                ErrCode::invalid("invalid_document_limit", StatusCode::BAD_REQUEST)
+            }
+            InvalidDocumentOffset => {
+                ErrCode::invalid("invalid_document_offset", StatusCode::BAD_REQUEST)
             }
         }
     }

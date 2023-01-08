@@ -1,14 +1,19 @@
+use std::convert::Infallible;
+use std::fmt;
 use std::io::ErrorKind;
+use std::num::ParseIntError;
+use std::str::FromStr;
 
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use bstr::ByteSlice;
+use deserr::{DeserializeError, DeserializeFromValue, IntoValue, MergeWithError, ValuePointerRef};
 use futures::StreamExt;
 use index_scheduler::IndexScheduler;
 use log::debug;
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
-use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{unwrap_any, Code, ErrorCode, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
@@ -30,6 +35,7 @@ use crate::error::PayloadError::ReceivePayload;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::payload::Payload;
+use crate::extractors::query_parameters::QueryParameter;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::{fold_star_or, PaginationView, SummarizedTaskView};
 
@@ -76,16 +82,62 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Deserialize, Debug, DeserializeFromValue)]
+#[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct GetDocument {
     fields: Option<CS<StarOr<String>>>,
+}
+
+#[derive(Debug)]
+pub struct GetDocumentDeserrError {
+    error: String,
+    code: Code,
+}
+
+impl std::fmt::Display for GetDocumentDeserrError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.error)
+    }
+}
+
+impl std::error::Error for GetDocumentDeserrError {}
+impl ErrorCode for GetDocumentDeserrError {
+    fn error_code(&self) -> Code {
+        self.code
+    }
+}
+
+impl MergeWithError<GetDocumentDeserrError> for GetDocumentDeserrError {
+    fn merge(
+        _self_: Option<Self>,
+        other: GetDocumentDeserrError,
+        _merge_location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        Err(other)
+    }
+}
+
+impl DeserializeError for GetDocumentDeserrError {
+    fn error<V: IntoValue>(
+        _self_: Option<Self>,
+        error: deserr::ErrorKind<V>,
+        location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        let error = unwrap_any(deserr::serde_json::JsonError::error(None, error, location)).0;
+
+        let code = match location.last_field() {
+            Some("fields") => Code::InvalidDocumentFields,
+            _ => Code::BadRequest,
+        };
+
+        Err(GetDocumentDeserrError { error, code })
+    }
 }
 
 pub async fn get_document(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     path: web::Path<DocumentParam>,
-    params: web::Query<GetDocument>,
+    params: QueryParameter<GetDocument, GetDocumentDeserrError>,
 ) -> Result<HttpResponse, ResponseError> {
     let GetDocument { fields } = params.into_inner();
     let attributes_to_retrieve = fields.and_then(fold_star_or);
@@ -112,20 +164,82 @@ pub async fn delete_document(
     Ok(HttpResponse::Accepted().json(task))
 }
 
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Deserialize, Debug, DeserializeFromValue)]
+#[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct BrowseQuery {
-    #[serde(default)]
+    #[deserr(default, from(&String) = FromStr::from_str -> ParseIntError)]
     offset: usize,
-    #[serde(default = "crate::routes::PAGINATION_DEFAULT_LIMIT")]
+    #[deserr(default = crate::routes::PAGINATION_DEFAULT_LIMIT(), from(&String) = FromStr::from_str -> ParseIntError)]
     limit: usize,
     fields: Option<CS<StarOr<String>>>,
+}
+
+#[derive(Debug)]
+pub struct BrowseQueryDeserrError {
+    error: String,
+    code: Code,
+}
+
+impl std::fmt::Display for BrowseQueryDeserrError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.error)
+    }
+}
+
+impl std::error::Error for BrowseQueryDeserrError {}
+impl ErrorCode for BrowseQueryDeserrError {
+    fn error_code(&self) -> Code {
+        self.code
+    }
+}
+
+impl MergeWithError<BrowseQueryDeserrError> for BrowseQueryDeserrError {
+    fn merge(
+        _self_: Option<Self>,
+        other: BrowseQueryDeserrError,
+        _merge_location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        Err(other)
+    }
+}
+
+impl DeserializeError for BrowseQueryDeserrError {
+    fn error<V: IntoValue>(
+        _self_: Option<Self>,
+        error: deserr::ErrorKind<V>,
+        location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        let error = unwrap_any(deserr::serde_json::JsonError::error(None, error, location)).0;
+
+        let code = match location.last_field() {
+            Some("fields") => Code::InvalidDocumentFields,
+            Some("offset") => Code::InvalidDocumentOffset,
+            Some("limit") => Code::InvalidDocumentLimit,
+            _ => Code::BadRequest,
+        };
+
+        Err(BrowseQueryDeserrError { error, code })
+    }
+}
+
+impl MergeWithError<ParseIntError> for BrowseQueryDeserrError {
+    fn merge(
+        _self_: Option<Self>,
+        other: ParseIntError,
+        merge_location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        BrowseQueryDeserrError::error::<Infallible>(
+            None,
+            deserr::ErrorKind::Unexpected { msg: other.to_string() },
+            merge_location,
+        )
+    }
 }
 
 pub async fn get_all_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    params: web::Query<BrowseQuery>,
+    params: QueryParameter<BrowseQuery, BrowseQueryDeserrError>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
     let BrowseQuery { limit, offset, fields } = params.into_inner();
@@ -140,16 +254,62 @@ pub async fn get_all_documents(
     Ok(HttpResponse::Ok().json(ret))
 }
 
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Deserialize, Debug, DeserializeFromValue)]
+#[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct UpdateDocumentsQuery {
     pub primary_key: Option<String>,
+}
+
+#[derive(Debug)]
+pub struct UpdateDocumentsQueryDeserrError {
+    error: String,
+    code: Code,
+}
+
+impl std::fmt::Display for UpdateDocumentsQueryDeserrError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.error)
+    }
+}
+
+impl std::error::Error for UpdateDocumentsQueryDeserrError {}
+impl ErrorCode for UpdateDocumentsQueryDeserrError {
+    fn error_code(&self) -> Code {
+        self.code
+    }
+}
+
+impl MergeWithError<UpdateDocumentsQueryDeserrError> for UpdateDocumentsQueryDeserrError {
+    fn merge(
+        _self_: Option<Self>,
+        other: UpdateDocumentsQueryDeserrError,
+        _merge_location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        Err(other)
+    }
+}
+
+impl DeserializeError for UpdateDocumentsQueryDeserrError {
+    fn error<V: IntoValue>(
+        _self_: Option<Self>,
+        error: deserr::ErrorKind<V>,
+        location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        let error = unwrap_any(deserr::serde_json::JsonError::error(None, error, location)).0;
+
+        let code = match location.last_field() {
+            Some("primaryKey") => Code::InvalidIndexPrimaryKey,
+            _ => Code::BadRequest,
+        };
+
+        Err(UpdateDocumentsQueryDeserrError { error, code })
+    }
 }
 
 pub async fn add_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    params: web::Query<UpdateDocumentsQuery>,
+    params: QueryParameter<UpdateDocumentsQuery, UpdateDocumentsQueryDeserrError>,
     body: Payload,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
@@ -177,7 +337,7 @@ pub async fn add_documents(
 pub async fn update_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
     path: web::Path<String>,
-    params: web::Query<UpdateDocumentsQuery>,
+    params: QueryParameter<UpdateDocumentsQuery, UpdateDocumentsQueryDeserrError>,
     body: Payload,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
