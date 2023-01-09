@@ -169,6 +169,22 @@ impl Batch {
             Batch::IndexSwap { task } => vec![task.uid],
         }
     }
+
+    /// Return the index UID associated with this batch
+    pub fn index_uid(&self) -> Option<&str> {
+        use Batch::*;
+        match self {
+            TaskCancelation { .. }
+            | TaskDeletion(_)
+            | SnapshotCreation(_)
+            | Dump(_)
+            | IndexSwap { .. } => None,
+            IndexOperation { op, .. } => Some(op.index_uid()),
+            IndexCreation { index_uid, .. }
+            | IndexUpdate { index_uid, .. }
+            | IndexDeletion { index_uid, .. } => Some(index_uid),
+        }
+    }
 }
 
 impl IndexOperation {
