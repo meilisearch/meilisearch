@@ -245,9 +245,9 @@ async fn error_add_api_key_missing_parameter() {
 
     let expected_response = json!({
         "message": "`indexes` field is mandatory.",
-        "code": "missing_parameter",
+        "code": "missing_api_key_indexes",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#missing-parameter"
+        "link": "https://docs.meilisearch.com/errors#missing-api-key-indexes"
     });
 
     assert_eq!(response, expected_response);
@@ -263,9 +263,9 @@ async fn error_add_api_key_missing_parameter() {
 
     let expected_response = json!({
         "message": "`actions` field is mandatory.",
-        "code": "missing_parameter",
+        "code": "missing_api_key_actions",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#missing-parameter"
+        "link": "https://docs.meilisearch.com/errors#missing-api-key-actions"
     });
 
     assert_eq!(response, expected_response);
@@ -281,9 +281,9 @@ async fn error_add_api_key_missing_parameter() {
 
     let expected_response = json!({
         "message": "`expiresAt` field is mandatory.",
-        "code": "missing_parameter",
+        "code": "missing_api_key_expires_at",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#missing-parameter"
+        "link": "https://docs.meilisearch.com/errors#missing-api-key-expires-at"
     });
 
     assert_eq!(response, expected_response);

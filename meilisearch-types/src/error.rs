@@ -95,6 +95,7 @@ enum ErrorType {
     InternalError,
     InvalidRequestError,
     AuthenticationError,
+    System,
 }
 
 impl fmt::Display for ErrorType {
@@ -105,6 +106,7 @@ impl fmt::Display for ErrorType {
             InternalError => write!(f, "internal"),
             InvalidRequestError => write!(f, "invalid_request"),
             AuthenticationError => write!(f, "auth"),
+            System => write!(f, "system"),
         }
     }
 }
@@ -119,9 +121,13 @@ pub enum Code {
     // index related error
     CreateIndex,
     IndexAlreadyExists,
+    InvalidIndexPrimaryKey,
     IndexNotFound,
     InvalidIndexUid,
+    MissingIndexUid,
     InvalidMinWordLengthForTypo,
+    InvalidIndexLimit,
+    InvalidIndexOffset,
 
     DuplicateIndexFound,
 
@@ -138,23 +144,73 @@ pub enum Code {
     Filter,
     Sort,
 
+    // Invalid swap-indexes
+    InvalidSwapIndexes,
+    InvalidDuplicateIndexesFound,
+
+    // Invalid settings update request
+    InvalidSettingsDisplayedAttributes,
+    InvalidSettingsSearchableAttributes,
+    InvalidSettingsFilterableAttributes,
+    InvalidSettingsSortableAttributes,
+    InvalidSettingsRankingRules,
+    InvalidSettingsStopWords,
+    InvalidSettingsSynonyms,
+    InvalidSettingsDistinctAttribute,
+    InvalidSettingsTypoTolerance,
+    InvalidSettingsFaceting,
+    InvalidSettingsPagination,
+
+    // Invalid search request
+    InvalidSearchQ,
+    InvalidSearchOffset,
+    InvalidSearchLimit,
+    InvalidSearchPage,
+    InvalidSearchHitsPerPage,
+    InvalidSearchAttributesToRetrieve,
+    InvalidSearchAttributesToCrop,
+    InvalidSearchCropLength,
+    InvalidSearchAttributesToHighlight,
+    InvalidSearchShowMatchesPosition,
+    InvalidSearchFilter,
+    InvalidSearchSort,
+    InvalidSearchFacets,
+    InvalidSearchHighlightPreTag,
+    InvalidSearchHighlightPostTag,
+    InvalidSearchCropMarker,
+    InvalidSearchMatchingStrategy,
+
+    // Related to the tasks
+    InvalidTaskUids,
+    InvalidTaskTypes,
+    InvalidTaskStatuses,
+    InvalidTaskCanceledBy,
+    InvalidTaskLimit,
+    InvalidTaskFrom,
+    InvalidTaskBeforeEnqueuedAt,
+    InvalidTaskAfterEnqueuedAt,
+    InvalidTaskBeforeStartedAt,
+    InvalidTaskAfterStartedAt,
+    InvalidTaskBeforeFinishedAt,
+    InvalidTaskAfterFinishedAt,
+
+    // Documents API
+    InvalidDocumentFields,
+    InvalidDocumentLimit,
+    InvalidDocumentOffset,
+
     BadParameter,
     BadRequest,
     DatabaseSizeLimitReached,
     DocumentNotFound,
     Internal,
-    InvalidGeoField,
+    InvalidDocumentGeoField,
     InvalidRankingRule,
     InvalidStore,
     InvalidToken,
     MissingAuthorizationHeader,
     MissingMasterKey,
     DumpNotFound,
-    InvalidTaskDateFilter,
-    InvalidTaskStatusesFilter,
-    InvalidTaskTypesFilter,
-    InvalidTaskCanceledByFilter,
-    InvalidTaskUidsFilter,
     TaskNotFound,
     TaskDeletionWithEmptyQuery,
     TaskCancelationWithEmptyQuery,
@@ -174,7 +230,13 @@ pub enum Code {
     MissingPayload,
 
     ApiKeyNotFound,
-    MissingParameter,
+
+    MissingApiKeyActions,
+    MissingApiKeyExpiresAt,
+    MissingApiKeyIndexes,
+
+    InvalidApiKeyOffset,
+    InvalidApiKeyLimit,
     InvalidApiKeyActions,
     InvalidApiKeyIndexes,
     InvalidApiKeyExpiresAt,
@@ -192,12 +254,12 @@ impl Code {
 
         match self {
             // related to the setup
-            IoError => ErrCode::invalid("io_error", StatusCode::UNPROCESSABLE_ENTITY),
+            IoError => ErrCode::system("io_error", StatusCode::UNPROCESSABLE_ENTITY),
             TooManyOpenFiles => {
-                ErrCode::invalid("too_many_open_files", StatusCode::UNPROCESSABLE_ENTITY)
+                ErrCode::system("too_many_open_files", StatusCode::UNPROCESSABLE_ENTITY)
             }
             NoSpaceLeftOnDevice => {
-                ErrCode::invalid("no_space_left_on_device", StatusCode::UNPROCESSABLE_ENTITY)
+                ErrCode::system("no_space_left_on_device", StatusCode::UNPROCESSABLE_ENTITY)
             }
 
             // index related errors
@@ -209,6 +271,12 @@ impl Code {
             // thrown when requesting an unexisting index
             IndexNotFound => ErrCode::invalid("index_not_found", StatusCode::NOT_FOUND),
             InvalidIndexUid => ErrCode::invalid("invalid_index_uid", StatusCode::BAD_REQUEST),
+            MissingIndexUid => ErrCode::invalid("missing_index_uid", StatusCode::BAD_REQUEST),
+            InvalidIndexPrimaryKey => {
+                ErrCode::invalid("invalid_index_primary_key", StatusCode::BAD_REQUEST)
+            }
+            InvalidIndexLimit => ErrCode::invalid("invalid_index_limit", StatusCode::BAD_REQUEST),
+            InvalidIndexOffset => ErrCode::invalid("invalid_index_offset", StatusCode::BAD_REQUEST),
 
             // invalid state error
             InvalidState => ErrCode::internal("invalid_state", StatusCode::INTERNAL_SERVER_ERROR),
@@ -251,28 +319,15 @@ impl Code {
             }
             DocumentNotFound => ErrCode::invalid("document_not_found", StatusCode::NOT_FOUND),
             Internal => ErrCode::internal("internal", StatusCode::INTERNAL_SERVER_ERROR),
-            InvalidGeoField => ErrCode::invalid("invalid_geo_field", StatusCode::BAD_REQUEST),
+            InvalidDocumentGeoField => {
+                ErrCode::invalid("invalid_document_geo_field", StatusCode::BAD_REQUEST)
+            }
             InvalidToken => ErrCode::authentication("invalid_api_key", StatusCode::FORBIDDEN),
             MissingAuthorizationHeader => {
                 ErrCode::authentication("missing_authorization_header", StatusCode::UNAUTHORIZED)
             }
             MissingMasterKey => {
                 ErrCode::authentication("missing_master_key", StatusCode::UNAUTHORIZED)
-            }
-            InvalidTaskDateFilter => {
-                ErrCode::invalid("invalid_task_date_filter", StatusCode::BAD_REQUEST)
-            }
-            InvalidTaskUidsFilter => {
-                ErrCode::invalid("invalid_task_uids_filter", StatusCode::BAD_REQUEST)
-            }
-            InvalidTaskStatusesFilter => {
-                ErrCode::invalid("invalid_task_statuses_filter", StatusCode::BAD_REQUEST)
-            }
-            InvalidTaskTypesFilter => {
-                ErrCode::invalid("invalid_task_types_filter", StatusCode::BAD_REQUEST)
-            }
-            InvalidTaskCanceledByFilter => {
-                ErrCode::invalid("invalid_task_canceled_by_filter", StatusCode::BAD_REQUEST)
             }
             TaskNotFound => ErrCode::invalid("task_not_found", StatusCode::NOT_FOUND),
             TaskDeletionWithEmptyQuery => {
@@ -313,7 +368,25 @@ impl Code {
 
             // error related to keys
             ApiKeyNotFound => ErrCode::invalid("api_key_not_found", StatusCode::NOT_FOUND),
-            MissingParameter => ErrCode::invalid("missing_parameter", StatusCode::BAD_REQUEST),
+
+            MissingApiKeyExpiresAt => {
+                ErrCode::invalid("missing_api_key_expires_at", StatusCode::BAD_REQUEST)
+            }
+
+            MissingApiKeyActions => {
+                ErrCode::invalid("missing_api_key_actions", StatusCode::BAD_REQUEST)
+            }
+
+            MissingApiKeyIndexes => {
+                ErrCode::invalid("missing_api_key_indexes", StatusCode::BAD_REQUEST)
+            }
+
+            InvalidApiKeyOffset => {
+                ErrCode::invalid("invalid_api_key_offset", StatusCode::BAD_REQUEST)
+            }
+            InvalidApiKeyLimit => {
+                ErrCode::invalid("invalid_api_key_limit", StatusCode::BAD_REQUEST)
+            }
             InvalidApiKeyActions => {
                 ErrCode::invalid("invalid_api_key_actions", StatusCode::BAD_REQUEST)
             }
@@ -335,6 +408,132 @@ impl Code {
             }
             DuplicateIndexFound => {
                 ErrCode::invalid("duplicate_index_found", StatusCode::BAD_REQUEST)
+            }
+
+            // Swap indexes error
+            InvalidSwapIndexes => ErrCode::invalid("invalid_swap_indexes", StatusCode::BAD_REQUEST),
+            InvalidDuplicateIndexesFound => {
+                ErrCode::invalid("invalid_swap_duplicate_index_found", StatusCode::BAD_REQUEST)
+            }
+
+            // Invalid settings
+            InvalidSettingsDisplayedAttributes => {
+                ErrCode::invalid("invalid_settings_displayed_attributes", StatusCode::BAD_REQUEST)
+            }
+            InvalidSettingsSearchableAttributes => {
+                ErrCode::invalid("invalid_settings_searchable_attributes", StatusCode::BAD_REQUEST)
+            }
+            InvalidSettingsFilterableAttributes => {
+                ErrCode::invalid("invalid_settings_filterable_attributes", StatusCode::BAD_REQUEST)
+            }
+            InvalidSettingsSortableAttributes => {
+                ErrCode::invalid("invalid_settings_sortable_attributes", StatusCode::BAD_REQUEST)
+            }
+            InvalidSettingsRankingRules => {
+                ErrCode::invalid("invalid_settings_ranking_rules", StatusCode::BAD_REQUEST)
+            }
+            InvalidSettingsStopWords => {
+                ErrCode::invalid("invalid_settings_stop_words", StatusCode::BAD_REQUEST)
+            }
+            InvalidSettingsSynonyms => {
+                ErrCode::invalid("invalid_settings_synonyms", StatusCode::BAD_REQUEST)
+            }
+            InvalidSettingsDistinctAttribute => {
+                ErrCode::invalid("invalid_settings_distinct_attribute", StatusCode::BAD_REQUEST)
+            }
+            InvalidSettingsTypoTolerance => {
+                ErrCode::invalid("invalid_settings_typo_tolerance", StatusCode::BAD_REQUEST)
+            }
+            InvalidSettingsFaceting => {
+                ErrCode::invalid("invalid_settings_faceting", StatusCode::BAD_REQUEST)
+            }
+            InvalidSettingsPagination => {
+                ErrCode::invalid("invalid_settings_pagination", StatusCode::BAD_REQUEST)
+            }
+
+            // Invalid search
+            InvalidSearchQ => ErrCode::invalid("invalid_search_q", StatusCode::BAD_REQUEST),
+            InvalidSearchOffset => {
+                ErrCode::invalid("invalid_search_offset", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchLimit => ErrCode::invalid("invalid_search_limit", StatusCode::BAD_REQUEST),
+            InvalidSearchPage => ErrCode::invalid("invalid_search_page", StatusCode::BAD_REQUEST),
+            InvalidSearchHitsPerPage => {
+                ErrCode::invalid("invalid_search_hits_per_page", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchAttributesToRetrieve => {
+                ErrCode::invalid("invalid_search_attributes_to_retrieve", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchAttributesToCrop => {
+                ErrCode::invalid("invalid_search_attributes_to_crop", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchCropLength => {
+                ErrCode::invalid("invalid_search_crop_length", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchAttributesToHighlight => {
+                ErrCode::invalid("invalid_search_attributes_to_highlight", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchShowMatchesPosition => {
+                ErrCode::invalid("invalid_search_show_matches_position", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchFilter => {
+                ErrCode::invalid("invalid_search_filter", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchSort => ErrCode::invalid("invalid_search_sort", StatusCode::BAD_REQUEST),
+            InvalidSearchFacets => {
+                ErrCode::invalid("invalid_search_facets", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchHighlightPreTag => {
+                ErrCode::invalid("invalid_search_highlight_pre_tag", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchHighlightPostTag => {
+                ErrCode::invalid("invalid_search_highlight_post_tag", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchCropMarker => {
+                ErrCode::invalid("invalid_search_crop_marker", StatusCode::BAD_REQUEST)
+            }
+            InvalidSearchMatchingStrategy => {
+                ErrCode::invalid("invalid_search_matching_strategy", StatusCode::BAD_REQUEST)
+            }
+
+            // Related to the tasks
+            InvalidTaskUids => ErrCode::invalid("invalid_task_uids", StatusCode::BAD_REQUEST),
+            InvalidTaskTypes => ErrCode::invalid("invalid_task_types", StatusCode::BAD_REQUEST),
+            InvalidTaskStatuses => {
+                ErrCode::invalid("invalid_task_statuses", StatusCode::BAD_REQUEST)
+            }
+            InvalidTaskCanceledBy => {
+                ErrCode::invalid("invalid_task_canceled_by", StatusCode::BAD_REQUEST)
+            }
+            InvalidTaskLimit => ErrCode::invalid("invalid_task_limit", StatusCode::BAD_REQUEST),
+            InvalidTaskFrom => ErrCode::invalid("invalid_task_from", StatusCode::BAD_REQUEST),
+            InvalidTaskBeforeEnqueuedAt => {
+                ErrCode::invalid("invalid_task_before_enqueued_at", StatusCode::BAD_REQUEST)
+            }
+            InvalidTaskAfterEnqueuedAt => {
+                ErrCode::invalid("invalid_task_after_enqueued_at", StatusCode::BAD_REQUEST)
+            }
+            InvalidTaskBeforeStartedAt => {
+                ErrCode::invalid("invalid_task_before_started_at", StatusCode::BAD_REQUEST)
+            }
+            InvalidTaskAfterStartedAt => {
+                ErrCode::invalid("invalid_task_after_started_at", StatusCode::BAD_REQUEST)
+            }
+            InvalidTaskBeforeFinishedAt => {
+                ErrCode::invalid("invalid_task_before_finished_at", StatusCode::BAD_REQUEST)
+            }
+            InvalidTaskAfterFinishedAt => {
+                ErrCode::invalid("invalid_task_after_finished_at", StatusCode::BAD_REQUEST)
+            }
+
+            InvalidDocumentFields => {
+                ErrCode::invalid("invalid_document_fields", StatusCode::BAD_REQUEST)
+            }
+            InvalidDocumentLimit => {
+                ErrCode::invalid("invalid_document_limit", StatusCode::BAD_REQUEST)
+            }
+            InvalidDocumentOffset => {
+                ErrCode::invalid("invalid_document_offset", StatusCode::BAD_REQUEST)
             }
         }
     }
@@ -382,6 +581,10 @@ impl ErrCode {
     fn invalid(error_name: &'static str, status_code: StatusCode) -> ErrCode {
         ErrCode { status_code, error_name, error_type: ErrorType::InvalidRequestError }
     }
+
+    fn system(error_name: &'static str, status_code: StatusCode) -> ErrCode {
+        ErrCode { status_code, error_name, error_type: ErrorType::System }
+    }
 }
 
 impl ErrorCode for JoinError {
@@ -423,7 +626,7 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidFacetsDistribution { .. } => Code::BadRequest,
                     UserError::InvalidSortableAttribute { .. } => Code::Sort,
                     UserError::CriterionError(_) => Code::InvalidRankingRule,
-                    UserError::InvalidGeoField { .. } => Code::InvalidGeoField,
+                    UserError::InvalidGeoField { .. } => Code::InvalidDocumentGeoField,
                     UserError::SortError(_) => Code::Sort,
                     UserError::InvalidMinTypoWordLenSetting(_, _) => {
                         Code::InvalidMinWordLengthForTypo
@@ -473,6 +676,13 @@ impl ErrorCode for io::Error {
             Some(28) => Code::NoSpaceLeftOnDevice,
             _ => Code::Internal,
         }
+    }
+}
+
+pub fn unwrap_any<T>(any: Result<T, T>) -> T {
+    match any {
+        Ok(any) => any,
+        Err(any) => any,
     }
 }
 

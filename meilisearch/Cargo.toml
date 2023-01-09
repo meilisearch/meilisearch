@@ -19,6 +19,7 @@ byte-unit = { version = "4.0.14", default-features = false, features = ["std", "
 bytes = "1.2.1"
 clap = { version = "4.0.9", features = ["derive", "env"] }
 crossbeam-channel = "0.5.6"
+deserr = { version = "0.1.2", features = ["serde-json"] }
 dump = { path = "../dump" }
 either = "1.8.0"
 env_logger = "0.9.1"
@@ -71,6 +72,8 @@ toml = "0.5.9"
 uuid = { version = "1.1.2", features = ["serde", "v4"] }
 walkdir = "2.3.2"
 yaup = "0.2.0"
+serde_urlencoded = "0.7.1"
+actix-utils = "3.0.1"
 
 [dev-dependencies]
 actix-rt = "2.7.0"
@@ -99,17 +102,7 @@ zip = { version = "0.6.2", optional = true }
 default = ["analytics", "meilisearch-types/default", "mini-dashboard"]
 metrics = ["prometheus"]
 analytics = ["segment"]
-mini-dashboard = [
-    "actix-web-static-files",
-    "static-files",
-    "anyhow",
-    "cargo_toml",
-    "hex",
-    "reqwest",
-    "sha-1",
-    "tempfile",
-    "zip",
-]
+mini-dashboard = ["actix-web-static-files", "static-files", "anyhow", "cargo_toml", "hex", "reqwest", "sha-1", "tempfile", "zip"]
 chinese = ["meilisearch-types/chinese"]
 hebrew = ["meilisearch-types/hebrew"]
 japanese = ["meilisearch-types/japanese"]

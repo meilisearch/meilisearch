@@ -60,7 +60,7 @@ impl Key {
             .map(|act| {
                 from_value(act.clone()).map_err(|_| Error::InvalidApiKeyActions(act.clone()))
             })
-            .ok_or(Error::MissingParameter("actions"))??;
+            .ok_or(Error::MissingApiKeyActions)??;
 
         let indexes = value
             .get("indexes")
@@ -75,12 +75,12 @@ impl Key {
                             .collect()
                     })
             })
-            .ok_or(Error::MissingParameter("indexes"))??;
+            .ok_or(Error::MissingApiKeyIndexes)??;
 
         let expires_at = value
             .get("expiresAt")
             .map(parse_expiration_date)
-            .ok_or(Error::MissingParameter("expiresAt"))??;
+            .ok_or(Error::MissingApiKeyExpiresAt)??;
 
         let created_at = OffsetDateTime::now_utc();
         let updated_at = created_at;
@@ -344,8 +344,12 @@ pub mod actions {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("`{0}` field is mandatory.")]
-    MissingParameter(&'static str),
+    #[error("`expiresAt` field is mandatory.")]
+    MissingApiKeyExpiresAt,
+    #[error("`indexes` field is mandatory.")]
+    MissingApiKeyIndexes,
+    #[error("`actions` field is mandatory.")]
+    MissingApiKeyActions,
     #[error("`actions` field value `{0}` is invalid. It should be an array of string representing action names.")]
     InvalidApiKeyActions(Value),
     #[error("`indexes` field value `{0}` is invalid. It should be an array of string representing index names.")]
@@ -375,7 +379,9 @@ impl From<IndexUidFormatError> for Error {
 impl ErrorCode for Error {
     fn error_code(&self) -> Code {
         match self {
-            Self::MissingParameter(_) => Code::MissingParameter,
+            Self::MissingApiKeyExpiresAt => Code::MissingApiKeyExpiresAt,
+            Self::MissingApiKeyIndexes => Code::MissingApiKeyIndexes,
+            Self::MissingApiKeyActions => Code::MissingApiKeyActions,
             Self::InvalidApiKeyActions(_) => Code::InvalidApiKeyActions,
             Self::InvalidApiKeyIndexes(_) | Self::InvalidApiKeyIndexUid(_) => {
                 Code::InvalidApiKeyIndexes

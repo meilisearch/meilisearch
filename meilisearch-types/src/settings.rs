@@ -2,10 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
 
+use deserr::{DeserializeError, DeserializeFromValue};
 use fst::IntoStreamer;
-use milli::update::Setting;
 use milli::{Index, DEFAULT_VALUES_PER_FACET};
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// The maximimum number of results that the engine
 /// will be able to return in one search call.
@@ -27,16 +27,135 @@ where
     .serialize(s)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum Setting<T> {
+    Set(T),
+    Reset,
+    NotSet,
+}
+
+impl<T> Default for Setting<T> {
+    fn default() -> Self {
+        Self::NotSet
+    }
+}
+
+impl<T> From<Setting<T>> for milli::update::Setting<T> {
+    fn from(value: Setting<T>) -> Self {
+        match value {
+            Setting::Set(x) => milli::update::Setting::Set(x),
+            Setting::Reset => milli::update::Setting::Reset,
+            Setting::NotSet => milli::update::Setting::NotSet,
+        }
+    }
+}
+impl<T> From<milli::update::Setting<T>> for Setting<T> {
+    fn from(value: milli::update::Setting<T>) -> Self {
+        match value {
+            milli::update::Setting::Set(x) => Setting::Set(x),
+            milli::update::Setting::Reset => Setting::Reset,
+            milli::update::Setting::NotSet => Setting::NotSet,
+        }
+    }
+}
+
+impl<T> Setting<T> {
+    pub fn set(self) -> Option<T> {
+        match self {
+            Self::Set(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    pub const fn as_ref(&self) -> Setting<&T> {
+        match *self {
+            Self::Set(ref value) => Setting::Set(value),
+            Self::Reset => Setting::Reset,
+            Self::NotSet => Setting::NotSet,
+        }
+    }
+
+    pub const fn is_not_set(&self) -> bool {
+        matches!(self, Self::NotSet)
+    }
+
+    /// If `Self` is `Reset`, then map self to `Set` with the provided `val`.
+    pub fn or_reset(self, val: T) -> Self {
+        match self {
+            Self::Reset => Self::Set(val),
+            otherwise => otherwise,
+        }
+    }
+}
+
+impl<T: Serialize> Serialize for Setting<T> {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::Set(value) => Some(value),
+            // Usually not_set isn't serialized by setting skip_serializing_if field attribute
+            Self::NotSet | Self::Reset => None,
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for Setting<T> {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Deserialize::deserialize(deserializer).map(|x| match x {
+            Some(x) => Self::Set(x),
+            None => Self::Reset, // Reset is forced by sending null value
+        })
+    }
+}
+
+impl<T, E> DeserializeFromValue<E> for Setting<T>
+where
+    T: DeserializeFromValue<E>,
+    E: DeserializeError,
+{
+    fn deserialize_from_value<V: deserr::IntoValue>(
+        value: deserr::Value<V>,
+        location: deserr::ValuePointerRef,
+    ) -> Result<Self, E> {
+        match value {
+            deserr::Value::Null => Ok(Setting::Reset),
+            _ => T::deserialize_from_value(value, location).map(Setting::Set),
+        }
+    }
+    fn default() -> Option<Self> {
+        Some(Self::NotSet)
+    }
+}
+
 #[derive(Clone, Default, Debug, Serialize, PartialEq, Eq)]
 pub struct Checked;
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Unchecked;
 
+impl<E> DeserializeFromValue<E> for Unchecked
+where
+    E: DeserializeError,
+{
+    fn deserialize_from_value<V: deserr::IntoValue>(
+        _value: deserr::Value<V>,
+        _location: deserr::ValuePointerRef,
+    ) -> Result<Self, E> {
+        unreachable!()
+    }
+}
+
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, DeserializeFromValue)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
+#[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct MinWordSizeTyposSetting {
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
@@ -47,9 +166,10 @@ pub struct MinWordSizeTyposSetting {
 }
 
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, DeserializeFromValue)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
+#[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct TypoSettings {
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
@@ -66,9 +186,10 @@ pub struct TypoSettings {
 }
 
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, DeserializeFromValue)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
+#[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct FacetingSettings {
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
@@ -76,9 +197,10 @@ pub struct FacetingSettings {
 }
 
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, DeserializeFromValue)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
+#[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct PaginationSettings {
     #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
@@ -88,10 +210,11 @@ pub struct PaginationSettings {
 /// Holds all the settings for an index. `T` can either be `Checked` if they represents settings
 /// whose validity is guaranteed, or `Unchecked` if they need to be validated. In the later case, a
 /// call to `check` will return a `Settings<Checked>` from a `Settings<Unchecked>`.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, DeserializeFromValue)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[serde(bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'static>"))]
+#[deserr(rename_all = camelCase, deny_unknown_fields)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Settings<T> {
     #[serde(
