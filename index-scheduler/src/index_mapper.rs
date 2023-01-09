@@ -71,9 +71,10 @@ impl IndexMapper {
         &self,
         path: &Path,
         date: Option<(OffsetDateTime, OffsetDateTime)>,
+        map_size: usize,
     ) -> Result<Index> {
         let mut options = EnvOpenOptions::new();
-        options.map_size(clamp_to_page_size(self.index_size));
+        options.map_size(clamp_to_page_size(map_size));
         options.max_readers(1024);
 
         if let Some((created, updated)) = date {
@@ -102,7 +103,7 @@ impl IndexMapper {
                 let index_path = self.base_path.join(uuid.to_string());
                 fs::create_dir_all(&index_path)?;
 
-                let index = self.create_or_open_index(&index_path, date)?;
+                let index = self.create_or_open_index(&index_path, date, self.index_size)?;
 
                 wtxn.commit()?;
                 // TODO: it would be better to lazily create the index. But we need an Index::open function for milli.
@@ -196,7 +197,8 @@ impl IndexMapper {
                     Entry::Vacant(entry) => {
                         let index_path = self.base_path.join(uuid.to_string());
 
-                        let index = self.create_or_open_index(&index_path, None)?;
+                        let index =
+                            self.create_or_open_index(&index_path, None, self.index_size)?;
                         entry.insert(Available(index.clone()));
                         index
                     }
