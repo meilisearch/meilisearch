@@ -7,7 +7,6 @@ name = "meilisearch"
 version = "1.0.0"
 
 [dependencies]
-deserr = { path = "../../deserr", features = ["serde-json"] }
 actix-cors = "0.6.3"
 actix-http = { version = "3.2.2", default-features = false, features = ["compress-brotli", "compress-gzip", "rustls"] }
 actix-web = { version = "4.2.1", default-features = false, features = ["macros", "compress-brotli", "compress-gzip", "cookies", "rustls"] }
@@ -20,6 +19,7 @@ byte-unit = { version = "4.0.14", default-features = false, features = ["std", "
 bytes = "1.2.1"
 clap = { version = "4.0.9", features = ["derive", "env"] }
 crossbeam-channel = "0.5.6"
+deserr = { version = "0.1.2", features = ["serde-json"] }
 dump = { path = "../dump" }
 either = "1.8.0"
 env_logger = "0.9.1"
