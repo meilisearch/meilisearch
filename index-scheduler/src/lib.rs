@@ -763,8 +763,8 @@ impl IndexScheduler {
         Ok(task)
     }
 
-    /// Register a new task comming from a dump in the scheduler.
-    /// By takinig a mutable ref we're pretty sure no one will ever import a dump while actix is running.
+    /// Register a new task coming from a dump in the scheduler.
+    /// By taking a mutable ref we're pretty sure no one will ever import a dump while actix is running.
     pub fn register_dumped_task(
         &mut self,
         task: TaskDump,
@@ -938,6 +938,7 @@ impl IndexScheduler {
                 Some(batch) => batch,
                 None => return Ok(TickOutcome::WaitForSignal),
             };
+        let index_uid = batch.index_uid().map(ToOwned::to_owned);
         drop(rtxn);
 
         // 1. store the starting date with the bitmap of processing tasks.
@@ -1008,6 +1009,22 @@ impl IndexScheduler {
                 // the `started_at` date times and `processings` of the current processing tasks.
                 // This date time is used by the task cancelation to store the right `started_at`
                 // date in the task on disk.
+                return Ok(TickOutcome::TickAgain(0));
+            }
+            // If an index said it was full, we need to:
+            // 1. identify which index is full
+            // 2. close the associated environment
+            // 3. resize it
+            // 4. re-schedule tasks
+            Err(Error::Milli(milli::Error::UserError(
+                milli::UserError::MaxDatabaseSizeReached,
+            ))) if index_uid.is_some() => {
+                // fixme: add index_uid to match to avoid the unwrap
+                let index_uid = index_uid.unwrap();
+                // fixme: handle error more gracefully? not sure when this could happen
+                self.index_mapper.resize_index(&wtxn, &index_uid)?;
+                wtxn.abort().map_err(Error::HeedTransaction)?;
+
                 return Ok(TickOutcome::TickAgain(0));
             }
             // In case of a failure we must get back and patch all the tasks with the error.
