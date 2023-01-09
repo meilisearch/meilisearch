@@ -141,9 +141,6 @@ pub enum Code {
     MissingDocumentId,
     InvalidDocumentId,
 
-    Filter,
-    Sort,
-
     // Invalid swap-indexes
     InvalidSwapIndexes,
     InvalidDuplicateIndexesFound,
@@ -205,7 +202,6 @@ pub enum Code {
     DocumentNotFound,
     Internal,
     InvalidDocumentGeoField,
-    InvalidRankingRule,
     InvalidStore,
     InvalidToken,
     MissingAuthorizationHeader,
@@ -215,8 +211,6 @@ pub enum Code {
     TaskDeletionWithEmptyQuery,
     TaskCancelationWithEmptyQuery,
     PayloadTooLarge,
-    RetrieveDocument,
-    SearchDocuments,
     UnsupportedMediaType,
 
     DumpAlreadyInProgress,
@@ -292,8 +286,6 @@ impl Code {
             PrimaryKeyAlreadyPresent => {
                 ErrCode::invalid("index_primary_key_already_exists", StatusCode::BAD_REQUEST)
             }
-            // invalid ranking rule
-            InvalidRankingRule => ErrCode::invalid("invalid_ranking_rule", StatusCode::BAD_REQUEST),
 
             // invalid database
             InvalidStore => {
@@ -306,11 +298,6 @@ impl Code {
             }
             MissingDocumentId => ErrCode::invalid("missing_document_id", StatusCode::BAD_REQUEST),
             InvalidDocumentId => ErrCode::invalid("invalid_document_id", StatusCode::BAD_REQUEST),
-
-            // error related to filters
-            Filter => ErrCode::invalid("invalid_filter", StatusCode::BAD_REQUEST),
-            // error related to sorts
-            Sort => ErrCode::invalid("invalid_sort", StatusCode::BAD_REQUEST),
 
             BadParameter => ErrCode::invalid("bad_parameter", StatusCode::BAD_REQUEST),
             BadRequest => ErrCode::invalid("bad_request", StatusCode::BAD_REQUEST),
@@ -338,10 +325,6 @@ impl Code {
             }
             DumpNotFound => ErrCode::invalid("dump_not_found", StatusCode::NOT_FOUND),
             PayloadTooLarge => ErrCode::invalid("payload_too_large", StatusCode::PAYLOAD_TOO_LARGE),
-            RetrieveDocument => {
-                ErrCode::internal("unretrievable_document", StatusCode::BAD_REQUEST)
-            }
-            SearchDocuments => ErrCode::internal("search_error", StatusCode::BAD_REQUEST),
             UnsupportedMediaType => {
                 ErrCode::invalid("unsupported_media_type", StatusCode::UNSUPPORTED_MEDIA_TYPE)
             }
@@ -612,7 +595,7 @@ impl ErrorCode for milli::Error {
                     UserError::NoSpaceLeftOnDevice => Code::NoSpaceLeftOnDevice,
                     UserError::MaxDatabaseSizeReached => Code::DatabaseSizeLimitReached,
                     UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
-                    UserError::InvalidFilter(_) => Code::Filter,
+                    UserError::InvalidFilter(_) => Code::InvalidSearchFilter,
                     UserError::MissingDocumentId { .. } => Code::MissingDocumentId,
                     UserError::InvalidDocumentId { .. } | UserError::TooManyDocumentIds { .. } => {
                         Code::InvalidDocumentId
@@ -622,12 +605,12 @@ impl ErrorCode for milli::Error {
                         Code::MultiplePrimaryKeyCandidatesFound
                     }
                     UserError::PrimaryKeyCannotBeChanged(_) => Code::PrimaryKeyAlreadyPresent,
-                    UserError::SortRankingRuleMissing => Code::Sort,
+                    UserError::SortRankingRuleMissing => Code::InvalidSearchSort,
                     UserError::InvalidFacetsDistribution { .. } => Code::BadRequest,
-                    UserError::InvalidSortableAttribute { .. } => Code::Sort,
-                    UserError::CriterionError(_) => Code::InvalidRankingRule,
+                    UserError::InvalidSortableAttribute { .. } => Code::InvalidSearchSort,
+                    UserError::CriterionError(_) => Code::InvalidSettingsRankingRules,
                     UserError::InvalidGeoField { .. } => Code::InvalidDocumentGeoField,
-                    UserError::SortError(_) => Code::Sort,
+                    UserError::SortError(_) => Code::InvalidSearchSort,
                     UserError::InvalidMinTypoWordLenSetting(_, _) => {
                         Code::InvalidMinWordLengthForTypo
                     }
