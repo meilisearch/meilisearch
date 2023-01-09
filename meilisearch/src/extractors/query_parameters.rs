@@ -127,8 +127,5 @@ where
     #[inline]
     fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
         QueryParameter::from_query(req.query_string()).map(ok).unwrap_or_else(err)
-        // serde_urlencoded::from_str::<serde_json::Value>(req.query_string())
-        //     .map(|val| Ok(QueryParameter(val, PhantomData)))
-        //     .unwrap_or_else(|e| err(ResponseError::from_msg(e.to_string(), Code::BadRequest)))
     }
 }
