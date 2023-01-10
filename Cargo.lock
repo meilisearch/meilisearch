@@ -1310,7 +1310,7 @@ dependencies = [
 [[package]]
 name = "filter-parser"
 version = "0.38.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.38.0#c3f4835e8e102586bd6d5eb1e55c4bba5e92f994"
+source = "git+https://github.com/meilisearch/milli.git?branch=primary_key_inference_error_messages#be9786bed9cde854a76ce4b56f1a3d29a44ff385"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1329,7 +1329,7 @@ dependencies = [
 [[package]]
 name = "flatten-serde-json"
 version = "0.38.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.38.0#c3f4835e8e102586bd6d5eb1e55c4bba5e92f994"
+source = "git+https://github.com/meilisearch/milli.git?branch=primary_key_inference_error_messages#be9786bed9cde854a76ce4b56f1a3d29a44ff385"
 dependencies = [
  "serde_json",
 ]
@@ -1894,7 +1894,7 @@ dependencies = [
 [[package]]
 name = "json-depth-checker"
 version = "0.38.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.38.0#c3f4835e8e102586bd6d5eb1e55c4bba5e92f994"
+source = "git+https://github.com/meilisearch/milli.git?branch=primary_key_inference_error_messages#be9786bed9cde854a76ce4b56f1a3d29a44ff385"
 dependencies = [
  "serde_json",
 ]
@@ -2443,7 +2443,7 @@ dependencies = [
 [[package]]
 name = "milli"
 version = "0.38.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.38.0#c3f4835e8e102586bd6d5eb1e55c4bba5e92f994"
+source = "git+https://github.com/meilisearch/milli.git?branch=primary_key_inference_error_messages#be9786bed9cde854a76ce4b56f1a3d29a44ff385"
 dependencies = [
  "bimap",
  "bincode",
