@@ -255,6 +255,16 @@ impl Index {
         Ok(self.env.real_disk_size()?)
     }
 
+    /// Returns the map size the underlying environment was opened with, in bytes.
+    ///
+    /// This value does not represent the current on-disk size of the index.
+    ///
+    /// This value is the maximum between the map size passed during the opening of the index
+    /// and the on-disk size of the index at the time of opening.
+    pub fn map_size(&self) -> Result<usize> {
+        Ok(self.env.map_size()?)
+    }
+
     pub fn copy_to_path<P: AsRef<Path>>(&self, path: P, option: CompactionOption) -> Result<File> {
         self.env.copy_to_path(path, option).map_err(Into::into)
     }
