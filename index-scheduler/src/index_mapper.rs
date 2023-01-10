@@ -220,33 +220,51 @@ impl IndexMapper {
 
         drop(lock);
 
-        let current_size = index.map_size()?;
-        let new_size = current_size * 2;
-        let closing_event = index.prepare_for_closing();
+        let resize_succeeded = (move || {
+            let current_size = index.map_size()?;
+            let new_size = current_size * 2;
+            let closing_event = index.prepare_for_closing();
 
-        log::debug!("Waiting for index {name} to close");
+            log::debug!("Waiting for index {name} to close");
 
-        if !closing_event.wait_timeout(std::time::Duration::from_secs(600)) {
-            // fail after 10 minutes waiting
-            panic!("Could not resize index {name} (unable to close it)");
-        }
+            if !closing_event.wait_timeout(std::time::Duration::from_secs(600)) {
+                // fail after 10 minutes waiting
+                panic!("Could not resize index {name} (unable to close it)");
+            }
 
-        log::info!("Resized index {name} from {current_size} to {new_size} bytes");
+            log::info!("Resized index {name} from {current_size} to {new_size} bytes");
+            let index_path = self.base_path.join(uuid.to_string());
+            let index = self.create_or_open_index(&index_path, None, new_size)?;
+            Ok(index)
+        })();
 
-        let index_path = self.base_path.join(uuid.to_string());
-        let index = self.create_or_open_index(&index_path, None, new_size)?;
-
-        // Add back the resized index
+        // Put the map back to a consistent state.
+        // Even if there was an error we don't want to leave the map in an inconsistent state as it would cause
+        // deadlocks.
         let mut lock = self.index_map.write().unwrap();
-        let Some(BeingResized(resize_operation)) = lock.insert(uuid, Available(index)) else {
-            panic!("Index state for index {name} was modified while it was being resized")
+        let (resize_operation, resize_succeeded) = match resize_succeeded {
+            Ok(index) => {
+                // insert the resized index
+                let Some(BeingResized(resize_operation)) = lock.insert(uuid, Available(index)) else {
+                    panic!("Index state for index {name} was modified while it was being resized")
+                };
+
+                (resize_operation, Ok(()))
+            }
+            Err(error) => {
+                // there was an error, not much we can do... delete the index from the in-memory map to prevent future errors
+                let Some(BeingResized(resize_operation)) = lock.remove(&uuid) else {
+                                    panic!("Index state for index {name} was modified while it was being resized")
+                                };
+                (resize_operation, Err(error))
+            }
         };
 
         // drop the lock before signaling completion so that other threads don't immediately await on the lock after waking up.
         drop(lock);
         resize_operation.signal();
 
-        Ok(())
+        resize_succeeded
     }
 
     /// Return an index, may open it if it wasn't already opened.
