@@ -4,28 +4,28 @@ version = "1.0.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.64"
+anyhow = "1.0.68"
 bincode = "1.3.3"
 csv = "1.1.6"
 derive_builder = "0.11.2"
 dump = { path = "../dump" }
-enum-iterator = "1.1.3"
+enum-iterator = "1.2.0"
 file-store = { path = "../file-store" }
-log = "0.4.14"
+log = "0.4.17"
 meilisearch-types = { path = "../meilisearch-types" }
 page_size = "0.5.0"
-roaring = { version = "0.10.0", features = ["serde"] }
-serde = { version = "1.0.136", features = ["derive"] }
-serde_json = { version = "1.0.85", features = ["preserve_order"] }
+roaring = { version = "0.10.1", features = ["serde"] }
+serde = { version = "1.0.152", features = ["derive"] }
+serde_json = { version = "1.0.91", features = ["preserve_order"] }
 synchronoise = "1.0.1"
 tempfile = "3.3.0"
-thiserror = "1.0.30"
-time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
-uuid = { version = "1.1.2", features = ["serde", "v4"] }
+thiserror = "1.0.38"
+time = { version = "0.3.17", features = ["serde-well-known", "formatting", "parsing", "macros"] }
+uuid = { version = "1.2.2", features = ["serde", "v4"] }
 
 [dev-dependencies]
 big_s = "1.0.2"
 crossbeam = "0.8.2"
-insta = { version = "1.19.1", features = ["json", "redactions"] }
+insta = { version = "1.26.0", features = ["json", "redactions"] }
 meili-snap = { path = "../meili-snap" }
 nelson = { git = "https://github.com/meilisearch/nelson.git", rev = "675f13885548fb415ead8fbb447e9e6d9314000a"}

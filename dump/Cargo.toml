@@ -4,22 +4,22 @@ version = "1.0.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.65"
-flate2 = "1.0.22"
+anyhow = "1.0.68"
+flate2 = "1.0.25"
 http = "0.2.8"
 log = "0.4.17"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
-once_cell = "1.15.0"
-regex = "1.6.0"
-roaring = { version = "0.10.0", features = ["serde"] }
-serde = { version = "1.0.136", features = ["derive"] }
-serde_json = { version = "1.0.85", features = ["preserve_order"] }
+once_cell = "1.17.0"
+regex = "1.7.1"
+roaring = { version = "0.10.1", features = ["serde"] }
+serde = { version = "1.0.152", features = ["derive"] }
+serde_json = { version = "1.0.91", features = ["preserve_order"] }
 tar = "0.4.38"
 tempfile = "3.3.0"
-thiserror = "1.0.30"
-time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
-uuid = { version = "1.1.2", features = ["serde", "v4"] }
+thiserror = "1.0.38"
+time = { version = "0.3.17", features = ["serde-well-known", "formatting", "parsing", "macros"] }
+uuid = { version = "1.2.2", features = ["serde", "v4"] }
 
 [dev-dependencies]
 big_s = "1.0.2"

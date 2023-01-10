@@ -5,8 +5,8 @@ edition = "2021"
 
 [dependencies]
 tempfile = "3.3.0"
-thiserror = "1.0.30"
-uuid = { version = "1.1.2", features = ["serde", "v4"] }
+thiserror = "1.0.38"
+uuid = { version = "1.2.2", features = ["serde", "v4"] }
 
 [dev-dependencies]
-faux = "0.1.8"
+faux = "0.1.9"
