@@ -248,12 +248,12 @@ impl Code {
 
         match self {
             // related to the setup
-            IoError => ErrCode::system("io_error", StatusCode::UNPROCESSABLE_ENTITY),
+            IoError => ErrCode::system("io_error", StatusCode::INTERNAL_SERVER_ERROR),
             TooManyOpenFiles => {
-                ErrCode::system("too_many_open_files", StatusCode::UNPROCESSABLE_ENTITY)
+                ErrCode::system("too_many_open_files", StatusCode::INTERNAL_SERVER_ERROR)
             }
             NoSpaceLeftOnDevice => {
-                ErrCode::system("no_space_left_on_device", StatusCode::UNPROCESSABLE_ENTITY)
+                ErrCode::system("no_space_left_on_device", StatusCode::INTERNAL_SERVER_ERROR)
             }
 
             // index related errors
