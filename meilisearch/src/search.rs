@@ -695,7 +695,7 @@ fn parse_filter(facets: &Value) -> Result<Option<Filter>, MeilisearchHttpError> 
             Ok(condition)
         }
         Value::Array(arr) => parse_filter_array(arr),
-        v => Err(MeilisearchHttpError::InvalidExpression(&["Array"], v.clone())),
+        v => Err(MeilisearchHttpError::InvalidExpression(&["String", "Array"], v.clone())),
     }
 }
 
