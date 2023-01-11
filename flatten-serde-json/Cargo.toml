@@ -1,6 +1,6 @@
 [package]
 name = "flatten-serde-json"
-version = "0.38.0"
+version = "0.39.0"
 edition = "2021"
 description = "Flatten serde-json objects like elastic search"
 readme = "README.md"
