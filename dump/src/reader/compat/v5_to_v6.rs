@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use super::v4_to_v5::{CompatIndexV4ToV5, CompatV4ToV5};
 use crate::reader::{v5, v6, Document, UpdateFile};
 use crate::Result;
@@ -315,7 +317,26 @@ impl<T> From<v5::Settings<T>> for v6::Settings<v6::Unchecked> {
             searchable_attributes: settings.searchable_attributes.into(),
             filterable_attributes: settings.filterable_attributes.into(),
             sortable_attributes: settings.sortable_attributes.into(),
-            ranking_rules: settings.ranking_rules.into(),
+            ranking_rules: {
+                match settings.ranking_rules {
+                    v5::settings::Setting::Set(ranking_rules) => {
+                        let mut new_ranking_rules = vec![];
+                        for rule in ranking_rules {
+                            match v6::RankingRuleView::from_str(&rule) {
+                                Ok(new_rule) => {
+                                    new_ranking_rules.push(new_rule);
+                                }
+                                Err(_) => {
+                                    log::warn!("Error while importing settings. The ranking rule `{rule}` does not exist anymore.")
+                                }
+                            }
+                        }
+                        v6::Setting::Set(new_ranking_rules)
+                    }
+                    v5::settings::Setting::Reset => v6::Setting::Reset,
+                    v5::settings::Setting::NotSet => v6::Setting::NotSet,
+                }
+            },
             stop_words: settings.stop_words.into(),
             synonyms: settings.synonyms.into(),
             distinct_attribute: settings.distinct_attribute.into(),

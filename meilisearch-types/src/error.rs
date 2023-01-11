@@ -10,6 +10,8 @@ use deserr::{DeserializeError, IntoValue, MergeWithError, ValuePointerRef};
 use milli::heed::{Error as HeedError, MdbError};
 use serde::{Deserialize, Serialize};
 
+use self::deserr_codes::MissingIndexUid;
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "test-traits", derive(proptest_derive::Arbitrary))]
@@ -407,6 +409,82 @@ mod strategy {
 
     pub(super) fn status_code_strategy() -> impl Strategy<Value = StatusCode> {
         (100..999u16).prop_map(|i| StatusCode::from_u16(i).unwrap())
+    }
+}
+
+pub struct DeserrError<C: ErrorCode = deserr_codes::BadRequest> {
+    pub msg: String,
+    pub code: Code,
+    _phantom: PhantomData<C>,
+}
+impl<C: ErrorCode> std::fmt::Debug for DeserrError<C> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DeserrError").field("msg", &self.msg).field("code", &self.code).finish()
+    }
+}
+
+impl<C: ErrorCode> std::fmt::Display for DeserrError<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.msg)
+    }
+}
+
+impl<C: ErrorCode> std::error::Error for DeserrError<C> {}
+impl<C: ErrorCode> ErrorCode for DeserrError<C> {
+    fn error_code(&self) -> Code {
+        self.code
+    }
+}
+
+impl<C1: ErrorCode, C2: ErrorCode> MergeWithError<DeserrError<C2>> for DeserrError<C1> {
+    fn merge(
+        _self_: Option<Self>,
+        other: DeserrError<C2>,
+        _merge_location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        Err(DeserrError { msg: other.msg, code: other.code, _phantom: PhantomData })
+    }
+}
+
+impl DeserrError<MissingIndexUid> {
+    pub fn missing_index_uid(field: &str, location: ValuePointerRef) -> Self {
+        let x = unwrap_any(Self::error::<Infallible>(
+            None,
+            deserr::ErrorKind::MissingField { field },
+            location,
+        ));
+        Self { msg: x.msg, code: MissingIndexUid.error_code(), _phantom: PhantomData }
+    }
+}
+
+impl<C: Default + ErrorCode> deserr::DeserializeError for DeserrError<C> {
+    fn error<V: IntoValue>(
+        _self_: Option<Self>,
+        error: deserr::ErrorKind<V>,
+        location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        let msg = unwrap_any(deserr::serde_json::JsonError::error(None, error, location)).0;
+
+        Err(DeserrError { msg, code: C::default().error_code(), _phantom: PhantomData })
+    }
+}
+
+pub struct TakeErrorMessage<T>(pub T);
+
+impl<C: Default + ErrorCode, T> MergeWithError<TakeErrorMessage<T>> for DeserrError<C>
+where
+    T: std::error::Error,
+{
+    fn merge(
+        _self_: Option<Self>,
+        other: TakeErrorMessage<T>,
+        merge_location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        DeserrError::error::<Infallible>(
+            None,
+            deserr::ErrorKind::Unexpected { msg: other.0.to_string() },
+            merge_location,
+        )
     }
 }
 

@@ -1,13 +1,10 @@
-use std::fmt;
-
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use deserr::{IntoValue, ValuePointerRef};
 use index_scheduler::IndexScheduler;
 use log::debug;
-use meilisearch_types::error::{unwrap_any, Code, ErrorCode, ResponseError};
+use meilisearch_types::error::{DeserrError, ResponseError};
 use meilisearch_types::index_uid::IndexUid;
-use meilisearch_types::settings::{settings, Settings, Unchecked};
+use meilisearch_types::settings::{settings, RankingRuleView, Settings, Unchecked};
 use meilisearch_types::tasks::KindWithContent;
 use serde_json::json;
 
@@ -212,7 +209,7 @@ make_setting_route!(
             "TypoTolerance Updated".to_string(),
             json!({
                 "typo_tolerance": {
-                    "enabled": setting.as_ref().map(|s| !matches!(s.enabled.into(), Setting::Set(false))),
+                    "enabled": setting.as_ref().map(|s| !matches!(s.enabled, Setting::Set(false))),
                     "disable_on_attributes": setting
                         .as_ref()
                         .and_then(|s| s.disable_on_attributes.as_ref().set().map(|m| !m.is_empty())),
@@ -331,24 +328,24 @@ make_setting_route!(
 make_setting_route!(
     "/ranking-rules",
     put,
-    Vec<String>,
+    Vec<meilisearch_types::settings::RankingRuleView>,
     ranking_rules,
     "rankingRules",
     analytics,
-    |setting: &Option<Vec<String>>, req: &HttpRequest| {
+    |setting: &Option<Vec<meilisearch_types::settings::RankingRuleView>>, req: &HttpRequest| {
         use serde_json::json;
 
         analytics.publish(
             "RankingRules Updated".to_string(),
             json!({
                 "ranking_rules": {
-                    "words_position": setting.as_ref().map(|rr| rr.iter().position(|s| s == "words")),
-                    "typo_position": setting.as_ref().map(|rr| rr.iter().position(|s| s == "typo")),
-                    "proximity_position": setting.as_ref().map(|rr| rr.iter().position(|s| s == "proximity")),
-                    "attribute_position": setting.as_ref().map(|rr| rr.iter().position(|s| s == "attribute")),
-                    "sort_position": setting.as_ref().map(|rr| rr.iter().position(|s| s == "sort")),
-                    "exactness_position": setting.as_ref().map(|rr| rr.iter().position(|s| s == "exactness")),
-                    "values": setting.as_ref().map(|rr| rr.iter().filter(|s| !s.contains(':')).cloned().collect::<Vec<_>>().join(", ")),
+                    "words_position": setting.as_ref().map(|rr| rr.iter().position(|s| matches!(s, meilisearch_types::settings::RankingRuleView::Words))),
+                    "typo_position": setting.as_ref().map(|rr| rr.iter().position(|s| matches!(s, meilisearch_types::settings::RankingRuleView::Typo))),
+                    "proximity_position": setting.as_ref().map(|rr| rr.iter().position(|s| matches!(s, meilisearch_types::settings::RankingRuleView::Proximity))),
+                    "attribute_position": setting.as_ref().map(|rr| rr.iter().position(|s| matches!(s, meilisearch_types::settings::RankingRuleView::Attribute))),
+                    "sort_position": setting.as_ref().map(|rr| rr.iter().position(|s| matches!(s, meilisearch_types::settings::RankingRuleView::Sort))),
+                    "exactness_position": setting.as_ref().map(|rr| rr.iter().position(|s| matches!(s, meilisearch_types::settings::RankingRuleView::Exactness))),
+                    "values": setting.as_ref().map(|rr| rr.iter().filter(|s| matches!(s, meilisearch_types::settings::RankingRuleView::Asc(_) | meilisearch_types::settings::RankingRuleView::Desc(_)) ).map(|x| x.to_string()).collect::<Vec<_>>().join(", ")),
                 }
             }),
             Some(req),
@@ -428,66 +425,10 @@ generate_configure!(
     faceting
 );
 
-#[derive(Debug)]
-pub struct SettingsDeserrError {
-    error: String,
-    code: Code,
-}
-
-impl std::fmt::Display for SettingsDeserrError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.error)
-    }
-}
-
-impl std::error::Error for SettingsDeserrError {}
-impl ErrorCode for SettingsDeserrError {
-    fn error_code(&self) -> Code {
-        self.code
-    }
-}
-
-impl deserr::MergeWithError<SettingsDeserrError> for SettingsDeserrError {
-    fn merge(
-        _self_: Option<Self>,
-        other: SettingsDeserrError,
-        _merge_location: ValuePointerRef,
-    ) -> Result<Self, Self> {
-        Err(other)
-    }
-}
-
-impl deserr::DeserializeError for SettingsDeserrError {
-    fn error<V: IntoValue>(
-        _self_: Option<Self>,
-        error: deserr::ErrorKind<V>,
-        location: ValuePointerRef,
-    ) -> Result<Self, Self> {
-        let error = unwrap_any(deserr::serde_json::JsonError::error(None, error, location)).0;
-
-        let code = match location.first_field() {
-            Some("displayedAttributes") => Code::InvalidSettingsDisplayedAttributes,
-            Some("searchableAttributes") => Code::InvalidSettingsSearchableAttributes,
-            Some("filterableAttributes") => Code::InvalidSettingsFilterableAttributes,
-            Some("sortableAttributes") => Code::InvalidSettingsSortableAttributes,
-            Some("rankingRules") => Code::InvalidSettingsRankingRules,
-            Some("stopWords") => Code::InvalidSettingsStopWords,
-            Some("synonyms") => Code::InvalidSettingsSynonyms,
-            Some("distinctAttribute") => Code::InvalidSettingsDistinctAttribute,
-            Some("typoTolerance") => Code::InvalidSettingsTypoTolerance,
-            Some("faceting") => Code::InvalidSettingsFaceting,
-            Some("pagination") => Code::InvalidSettingsPagination,
-            _ => Code::BadRequest,
-        };
-
-        Err(SettingsDeserrError { error, code })
-    }
-}
-
 pub async fn update_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    body: ValidatedJson<Settings<Unchecked>, SettingsDeserrError>,
+    body: ValidatedJson<Settings<Unchecked>, DeserrError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -497,13 +438,13 @@ pub async fn update_all(
         "Settings Updated".to_string(),
         json!({
            "ranking_rules": {
-                "words_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| s == "words")),
-                "typo_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| s == "typo")),
-                "proximity_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| s == "proximity")),
-                "attribute_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| s == "attribute")),
-                "sort_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| s == "sort")),
-                "exactness_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| s == "exactness")),
-                "values": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().filter(|s| !s.contains(':')).cloned().collect::<Vec<_>>().join(", ")),
+                "words_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| matches!(s, RankingRuleView::Words))),
+                "typo_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| matches!(s, RankingRuleView::Typo))),
+                "proximity_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| matches!(s, RankingRuleView::Proximity))),
+                "attribute_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| matches!(s, RankingRuleView::Attribute))),
+                "sort_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| matches!(s, RankingRuleView::Sort))),
+                "exactness_position": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().position(|s| matches!(s, RankingRuleView::Exactness))),
+                "values": new_settings.ranking_rules.as_ref().set().map(|rr| rr.iter().filter(|s| !matches!(s, RankingRuleView::Asc(_) | RankingRuleView::Desc(_)) ).map(|x| x.to_string()).collect::<Vec<_>>().join(", ")),
             },
             "searchable_attributes": {
                 "total": new_settings.searchable_attributes.as_ref().set().map(|searchable| searchable.len()),

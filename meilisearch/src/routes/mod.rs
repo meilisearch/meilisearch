@@ -6,7 +6,8 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::DeserializeFromValue;
 use index_scheduler::{IndexScheduler, Query};
 use log::debug;
-use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::error::{DeserrError, ResponseError, TakeErrorMessage};
 use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::star_or::StarOr;
 use meilisearch_types::tasks::{Kind, Status, Task, TaskId};
@@ -14,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
 
+use self::indexes::search::parse_usize_take_error_message;
 use self::indexes::IndexStats;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
@@ -57,6 +59,14 @@ where
 {
     Ok(Some(input.parse()?))
 }
+pub fn from_string_to_option_take_error_message<T, E>(
+    input: &str,
+) -> Result<Option<T>, TakeErrorMessage<E>>
+where
+    T: FromStr<Err = E>,
+{
+    Ok(Some(input.parse().map_err(TakeErrorMessage)?))
+}
 
 const PAGINATION_DEFAULT_LIMIT: fn() -> usize = || 20;
 
@@ -83,17 +93,26 @@ impl From<Task> for SummarizedTaskView {
         }
     }
 }
+pub struct Pagination {
+    pub offset: usize,
+    pub limit: usize,
+}
 
 #[derive(DeserializeFromValue, Deserialize, Debug, Clone, Copy)]
-#[deserr(rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct Pagination {
+pub struct ListIndexes {
     #[serde(default)]
-    #[deserr(default, from(&String) = FromStr::from_str -> std::num::ParseIntError)]
+    #[deserr(error = DeserrError<InvalidIndexOffset>, default, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
     pub offset: usize,
     #[serde(default = "PAGINATION_DEFAULT_LIMIT")]
-    #[deserr(default = PAGINATION_DEFAULT_LIMIT(), from(&String) = FromStr::from_str -> std::num::ParseIntError)]
+    #[deserr(error = DeserrError<InvalidIndexLimit>, default = PAGINATION_DEFAULT_LIMIT(), from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
     pub limit: usize,
+}
+impl ListIndexes {
+    fn as_pagination(self) -> Pagination {
+        Pagination { offset: self.offset, limit: self.limit }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -1,4 +1,4 @@
-use meili_snap::insta::{self, assert_json_snapshot};
+use meili_snap::insta::{self, assert_debug_snapshot, assert_json_snapshot};
 use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
@@ -517,45 +517,25 @@ async fn test_summarized_settings_update() {
     let server = Server::new().await;
     let index = server.index("test");
     // here we should find my payload even in the failed task.
-    index.update_settings(json!({ "rankingRules": ["custom"] })).await;
+    let (response, code) = index.update_settings(json!({ "rankingRules": ["custom"] })).await;
+    assert_debug_snapshot!(code, @"400");
+    assert_json_snapshot!(response, @r###"
+    {
+      "message": "`custom` ranking rule is invalid. Valid ranking rules are words, typo, sort, proximity, attribute, exactness and custom ranking rules. at `.rankingRules[0]`.",
+      "code": "invalid_settings_ranking_rules",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-settings-ranking-rules"
+    }
+    "###);
+
+    index.update_settings(json!({ "displayedAttributes": ["doggos", "name"], "filterableAttributes": ["age", "nb_paw_pads"], "sortableAttributes": ["iq"] })).await;
     index.wait_task(0).await;
     let (task, _) = index.get_task(0).await;
-    dbg!(&task);
     assert_json_snapshot!(task, 
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
       "uid": 0,
-      "indexUid": "test",
-      "status": "failed",
-      "type": "settingsUpdate",
-      "canceledBy": null,
-      "details": {
-        "rankingRules": [
-          "custom"
-        ]
-      },
-      "error": {
-        "message": "`custom` ranking rule is invalid. Valid ranking rules are words, typo, sort, proximity, attribute, exactness and custom ranking rules.",
-        "code": "invalid_settings_ranking_rules",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-settings-ranking-rules"
-      },
-      "duration": "[duration]",
-      "enqueuedAt": "[date]",
-      "startedAt": "[date]",
-      "finishedAt": "[date]"
-    }
-    "###);
-
-    index.update_settings(json!({ "displayedAttributes": ["doggos", "name"], "filterableAttributes": ["age", "nb_paw_pads"], "sortableAttributes": ["iq"] })).await;
-    index.wait_task(1).await;
-    let (task, _) = index.get_task(1).await;
-    assert_json_snapshot!(task, 
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
-        @r###"
-    {
-      "uid": 1,
       "indexUid": "test",
       "status": "succeeded",
       "type": "settingsUpdate",
