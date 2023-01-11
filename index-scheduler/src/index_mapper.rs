@@ -1,21 +1,20 @@
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 use std::{fs, thread};
 
 use log::error;
 use meilisearch_types::heed::types::Str;
-use meilisearch_types::heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn};
+use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn};
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::Index;
-use synchronoise::SignalEvent;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use self::IndexStatus::{Available, BeingDeleted, BeingResized};
+use self::index_map::IndexMap;
+use self::IndexStatus::{Available, BeingDeleted, Closing, Missing};
 use crate::uuid_codec::UuidCodec;
-use crate::{clamp_to_page_size, Error, Result};
+use crate::{Error, Result};
 
 const INDEX_MAPPING: &str = "index-mapping";
 
@@ -26,52 +25,324 @@ const INDEX_MAPPING: &str = "index-mapping";
 /// 2. Opening indexes and storing references to these opened indexes
 /// 3. Accessing indexes through their uuid
 /// 4. Mapping a user-defined name to each index uuid.
+///
+/// # Implementation notes
+///
+/// An index exists as 3 bits of data:
+/// 1. The index data on disk, that can exist in 3 states: Missing, Present, or BeingDeleted.
+/// 2. The persistent database containing the association between the index' name and its UUID,
+///    that can exist in 2 states: Missing or Present.
+/// 3. The state of the index in the in-memory `IndexMap`, that can exist in multiple states:
+///   - Missing
+///   - Available
+///   - Closing (because an index needs resizing or was evicted from the cache)
+///   - BeingDeleted
+///
+/// All of this data should be kept consistent between index operations, which is achieved by the `IndexMapper`
+/// with the use of the following primitives:
+/// - A RwLock on the `IndexMap`.
+/// - Transactions on the association database.
+/// - ClosingEvent signals emitted when closing an environment.
 #[derive(Clone)]
 pub struct IndexMapper {
     /// Keep track of the opened indexes. Used mainly by the index resolver.
-    index_map: Arc<RwLock<HashMap<Uuid, IndexStatus>>>,
+    index_map: Arc<RwLock<IndexMap>>,
 
     /// Map an index name with an index uuid currently available on disk.
     pub(crate) index_mapping: Database<Str, UuidCodec>,
 
     /// Path to the folder where the LMDB environments of each index are.
     base_path: PathBuf,
-    index_size: usize,
+    /// The map size an index is opened with on the first time.
+    index_base_map_size: usize,
+    /// The quantity by which the map size of an index is incremented upon reopening, in bytes.
+    index_growth_amount: usize,
     pub indexer_config: Arc<IndexerConfig>,
 }
 
-/// Whether the index is available for use or is forbidden to be inserted back in the index map
-#[allow(clippy::large_enum_variant)]
-#[derive(Clone)]
-pub enum IndexStatus {
-    /// Do not insert it back in the index map as it is currently being deleted.
-    BeingDeleted,
-    /// Temporarily do not insert the index in the index map as it is currently being resized.
-    BeingResized(Arc<SignalEvent>),
-    /// You can use the index without worrying about anything.
-    Available(Index),
-}
+mod index_map {
+    /// the map size to use when we don't succeed in reading it in indexes.
+    const DEFAULT_MAP_SIZE: usize = 10 * 1024 * 1024 * 1024; // 10 GiB
 
-impl IndexMapper {
-    pub fn new(
-        env: &Env,
-        base_path: PathBuf,
-        index_size: usize,
-        indexer_config: IndexerConfig,
-    ) -> Result<Self> {
-        Ok(Self {
-            index_map: Arc::default(),
-            index_mapping: env.create_database(Some(INDEX_MAPPING))?,
-            base_path,
-            index_size,
-            indexer_config: Arc::new(indexer_config),
-        })
+    use std::collections::BTreeMap;
+    use std::path::Path;
+    use std::time::Duration;
+
+    use meilisearch_types::heed::{EnvClosingEvent, EnvOpenOptions};
+    use meilisearch_types::milli::Index;
+    use time::OffsetDateTime;
+    use uuid::Uuid;
+
+    use super::IndexStatus::{self, Available, BeingDeleted, Closing, Missing};
+    use crate::lru::{InsertionOutcome, LruMap};
+    use crate::{clamp_to_page_size, Result};
+
+    /// Keep an internally consistent view of the open indexes in memory.
+    ///
+    /// This view is made of an LRU cache that will evict the least frequently used indexes when new indexes are opened.
+    /// Indexes that are being closed (for resizing or due to cache eviction) or deleted cannot be evicted from the cache and
+    /// are stored separately.
+    ///
+    /// This view provides operations to change the state of the index as it is known in memory:
+    /// open an index (making it available for queries), close an index (specifying the new size it should be opened with),
+    /// delete an index.
+    ///
+    /// External consistency with the other bits of data of an index is provided by the `IndexMapper` parent structure.
+    pub struct IndexMap {
+        /// A LRU map of indexes that are in the open state and available for queries.
+        available: LruMap<Uuid, Index>,
+        /// A map of indexes that are not available for queries, either because they are being deleted
+        /// or because they are being closed.
+        ///
+        /// If they are being deleted, the UUID points to `None`.
+        unavailable: BTreeMap<Uuid, Option<ClosingIndex>>,
+
+        /// A monotonically increasing generation number, used to differentiate between multiple successive index closing requests.
+        ///
+        /// Because multiple readers could be waiting on an index to close, the following could theoretically happen:
+        ///
+        /// 1. Multiple readers wait for the index closing to occur.
+        /// 2. One of them "wins the race", takes the lock and then removes the index that finished closing from the map.
+        /// 3. The index is reopened, but must be closed again (such as being resized again).
+        /// 4. One reader that "lost the race" in (2) wakes up and tries to take the lock and remove the index from the map.
+        ///
+        /// In that situation, the index may or may not have finished closing. The `generation` field allows to remember which
+        /// closing request was made, so the reader that "lost the race" has the old generation and will need to wait again for the index
+        /// to close.
+        generation: usize,
+    }
+
+    #[derive(Clone)]
+    pub struct ClosingIndex {
+        uuid: Uuid,
+        closing_event: EnvClosingEvent,
+        map_size: usize,
+        generation: usize,
+    }
+
+    impl ClosingIndex {
+        /// Waits for the index to be definitely closed.
+        ///
+        /// To avoid blocking, users should relinquish their locks to the IndexMap before calling this function.
+        ///
+        /// After the index is physically closed, the in memory map must still be updated to take this into account.
+        /// To do so, a `ReopenableIndex` is returned, that can be used to either definitely close or definitely open
+        /// the index without waiting anymore.
+        pub fn wait_timeout(self, timeout: Duration) -> Option<ReopenableIndex> {
+            self.closing_event.wait_timeout(timeout).then_some(ReopenableIndex {
+                uuid: self.uuid,
+                map_size: self.map_size,
+                generation: self.generation,
+            })
+        }
+    }
+
+    pub struct ReopenableIndex {
+        uuid: Uuid,
+        map_size: usize,
+        generation: usize,
+    }
+
+    impl ReopenableIndex {
+        /// Attempts to reopen the index, which can result in the index being reopened again or not
+        /// (e.g. if another thread already opened and closed the index again).
+        ///
+        /// Use get again on the IndexMap to get the updated status.
+        ///
+        /// Fails if the underlying index creation fails.
+        ///
+        /// # Status table
+        ///
+        /// | Previous Status | New Status |
+        /// |-----------------|------------|
+        /// | Missing | Missing |
+        /// | BeingDeleted | BeingDeleted |
+        /// | Closing | Available or Closing depending on generation |
+        /// | Available | Available |
+        ///
+        pub fn reopen(self, map: &mut IndexMap, path: &Path) -> Result<()> {
+            if let Closing(reopen) = map.get(&self.uuid) {
+                if reopen.generation != self.generation {
+                    return Ok(());
+                }
+                map.unavailable.remove(&self.uuid);
+                map.create(&self.uuid, path, None, self.map_size)?;
+            }
+            Ok(())
+        }
+
+        /// Attempts to close the index, which may or may not result in the index being closed
+        /// (e.g. if another thread already reopened the index again).
+        ///
+        /// Use get again on the IndexMap to get the updated status.
+        ///
+        /// # Status table
+        ///
+        /// | Previous Status | New Status |
+        /// |-----------------|------------|
+        /// | Missing | Missing |
+        /// | BeingDeleted | BeingDeleted |
+        /// | Closing | Missing or Closing depending on generation |
+        /// | Available | Available |
+        pub fn close(self, map: &mut IndexMap) {
+            if let Closing(reopen) = map.get(&self.uuid) {
+                if reopen.generation != self.generation {
+                    return;
+                }
+                map.unavailable.remove(&self.uuid);
+            }
+        }
+    }
+
+    impl IndexMap {
+        pub fn new(cap: usize) -> IndexMap {
+            Self { unavailable: Default::default(), available: LruMap::new(cap), generation: 0 }
+        }
+
+        /// Gets the current status of an index in the map.
+        ///
+        /// If the index is available it can be accessed from the returned status.
+        pub fn get(&self, uuid: &Uuid) -> IndexStatus {
+            self.available
+                .get(uuid)
+                .map(|index| Available(index.clone()))
+                .unwrap_or_else(|| self.get_unavailable(uuid))
+        }
+
+        fn get_unavailable(&self, uuid: &Uuid) -> IndexStatus {
+            match self.unavailable.get(uuid) {
+                Some(Some(reopen)) => Closing(reopen.clone()),
+                Some(None) => BeingDeleted,
+                None => Missing,
+            }
+        }
+
+        /// Attempts to create a new index that wasn't existing before.
+        ///
+        /// # Status table
+        ///
+        /// | Previous Status | New Status |
+        /// |-----------------|------------|
+        /// | Missing | Available |
+        /// | BeingDeleted | panics |
+        /// | Closing | panics |
+        /// | Available | panics |
+        ///
+        pub fn create(
+            &mut self,
+            uuid: &Uuid,
+            path: &Path,
+            date: Option<(OffsetDateTime, OffsetDateTime)>,
+            map_size: usize,
+        ) -> Result<Index> {
+            if !matches!(self.get_unavailable(uuid), Missing) {
+                panic!("Attempt to open an index that was unavailable");
+            }
+            let index = create_or_open_index(path, date, map_size)?;
+            match self.available.insert(*uuid, index.clone()) {
+                InsertionOutcome::InsertedNew => (),
+                InsertionOutcome::Evicted(evicted_uuid, evicted_index) => {
+                    self.close(evicted_uuid, evicted_index, 0);
+                }
+                InsertionOutcome::Replaced(_) => {
+                    panic!("Attempt to open an index that was already opened")
+                }
+            }
+            Ok(index)
+        }
+
+        /// Increases the current generation. See documentation for this field.
+        ///
+        /// In the unlikely event that the 2^64 generations would have been exhausted, we simply wrap-around.
+        ///
+        /// For this to cause an issue, one should be able to stop a reader in time after it got a `ReopenableIndex` and before it takes the lock
+        /// to remove it from the unavailable map, and keep the reader in this frozen state for 2^64 closing of other indexes.
+        ///
+        /// This seems overwhelmingly impossible to achieve in practice.
+        fn next_generation(&mut self) -> usize {
+            self.generation = self.generation.wrapping_add(1);
+            self.generation
+        }
+
+        /// Attempts to close an index.
+        ///
+        /// # Status table
+        ///
+        /// | Previous Status | New Status |
+        /// |-----------------|------------|
+        /// | Missing | Missing |
+        /// | BeingDeleted | BeingDeleted |
+        /// | Closing | Closing |
+        /// | Available | Closing |
+        ///
+        pub fn close_for_resize(&mut self, uuid: &Uuid, map_size_growth: usize) {
+            let Some(index) = self.available.remove(uuid) else { return; };
+            self.close(*uuid, index, map_size_growth);
+        }
+
+        fn close(&mut self, uuid: Uuid, index: Index, map_size_growth: usize) {
+            let map_size = index.map_size().unwrap_or(DEFAULT_MAP_SIZE) + map_size_growth;
+            let closing_event = index.prepare_for_closing();
+            let generation = self.next_generation();
+            self.unavailable
+                .insert(uuid, Some(ClosingIndex { uuid, closing_event, map_size, generation }));
+        }
+
+        /// Attempts to delete and index.
+        ///
+        ///  `end_deletion` must be called just after.
+        ///
+        /// # Status table
+        ///
+        /// | Previous Status | New Status | Return value |
+        /// |-----------------|------------|--------------|
+        /// | Missing | BeingDeleted | Ok(None) |
+        /// | BeingDeleted | BeingDeleted | Err(None) |
+        /// | Closing | Closing | Err(Some(reopen)) |
+        /// | Available | BeingDeleted | Ok(Some(env_closing_event)) |
+        pub fn start_deletion(
+            &mut self,
+            uuid: &Uuid,
+        ) -> std::result::Result<Option<EnvClosingEvent>, Option<ClosingIndex>> {
+            if let Some(index) = self.available.remove(uuid) {
+                self.unavailable.insert(uuid, None);
+                return Ok(Some(index.prepare_for_closing()));
+            }
+            match self.unavailable.remove(uuid) {
+                Some(Some(reopen)) => Err(Some(reopen)),
+                Some(None) => Err(None),
+                None => Ok(None),
+            }
+        }
+
+        /// Marks that an index deletion finished.
+        ///
+        /// Must be used after calling `start_deletion`.
+        ///
+        /// # Status table
+        ///
+        /// | Previous Status | New Status |
+        /// |-----------------|------------|
+        /// | Missing | Missing |
+        /// | BeingDeleted | Missing |
+        /// | Closing | panics |
+        /// | Available | panics |
+        pub fn end_deletion(&mut self, uuid: &Uuid) {
+            assert!(
+                self.available.get(uuid).is_none(),
+                "Attempt to finish deletion of an index that was not being deleted"
+            );
+            // Do not panic if the index was Missing or BeingDeleted
+            assert!(
+                !matches!(self.unavailable.remove(uuid), Some(Some(_))),
+                "Attempt to finish deletion of an index that was being closed"
+            );
+        }
     }
 
     /// Create or open an index in the specified path.
-    /// The path *must* exists or an error will be thrown.
+    /// The path *must* exist or an error will be thrown.
     fn create_or_open_index(
-        &self,
         path: &Path,
         date: Option<(OffsetDateTime, OffsetDateTime)>,
         map_size: usize,
@@ -85,6 +356,40 @@ impl IndexMapper {
         } else {
             Ok(Index::new(options, path)?)
         }
+    }
+}
+
+/// Whether the index is available for use or is forbidden to be inserted back in the index map
+#[allow(clippy::large_enum_variant)]
+#[derive(Clone)]
+pub enum IndexStatus {
+    /// Not currently in the index map.
+    Missing,
+    /// Do not insert it back in the index map as it is currently being deleted.
+    BeingDeleted,
+    /// Temporarily do not insert the index in the index map as it is currently being resized/evicted from the map.
+    Closing(index_map::ClosingIndex),
+    /// You can use the index without worrying about anything.
+    Available(Index),
+}
+
+impl IndexMapper {
+    pub fn new(
+        env: &Env,
+        base_path: PathBuf,
+        index_base_map_size: usize,
+        index_growth_amount: usize,
+        index_count: usize,
+        indexer_config: IndexerConfig,
+    ) -> Result<Self> {
+        Ok(Self {
+            index_map: Arc::new(RwLock::new(IndexMap::new(index_count))),
+            index_mapping: env.create_database(Some(INDEX_MAPPING))?,
+            base_path,
+            index_base_map_size,
+            index_growth_amount,
+            indexer_config: Arc::new(indexer_config),
+        })
     }
 
     /// Get or create the index.
@@ -106,16 +411,17 @@ impl IndexMapper {
                 let index_path = self.base_path.join(uuid.to_string());
                 fs::create_dir_all(&index_path)?;
 
-                let index = self.create_or_open_index(&index_path, date, self.index_size)?;
-
-                wtxn.commit()?;
                 // Error if the UUIDv4 somehow already exists in the map, since it should be fresh.
                 // This is very unlikely to happen in practice.
                 // TODO: it would be better to lazily create the index. But we need an Index::open function for milli.
-                if self.index_map.write().unwrap().insert(uuid, Available(index.clone())).is_some()
-                {
-                    panic!("Uuid v4 conflict: index with UUID {uuid} already exists.");
-                }
+                let index = self.index_map.write().unwrap().create(
+                    &uuid,
+                    &index_path,
+                    date,
+                    self.index_base_map_size,
+                )?;
+
+                wtxn.commit()?;
 
                 Ok(index)
             }
@@ -135,23 +441,42 @@ impl IndexMapper {
         assert!(self.index_mapping.delete(&mut wtxn, name)?);
 
         wtxn.commit()?;
-        // We remove the index from the in-memory index map.
+
+        let mut tries = 0;
+        // Attempts to remove the index from the in-memory index map in a loop.
+        //
+        // If the index is currently being closed, we will wait for it to be closed and retry getting it in a subsequent
+        // loop iteration.
+        //
+        // We make 100 attempts before giving up.
+        // This could happen in the following situations:
+        //
+        // 1. There is a bug preventing the index from being correctly closed, or us from detecting this.
+        // 2. A user of the index is keeping it open for more than 600 seconds. This could happen e.g. during a pathological search.
+        //    This can not be caused by indexation because deleting an index happens in the scheduler itself, so cannot be concurrent with indexation.
+        //
+        // In these situations, reporting the error through a panic is in order.
         let closing_event = loop {
             let mut lock = self.index_map.write().unwrap();
-            let resize_operation = match lock.insert(uuid, BeingDeleted) {
-                Some(Available(index)) => break Some(index.prepare_for_closing()),
-                // The target index is in the middle of a resize operation.
-                // Wait for this operation to complete, then try again.
-                Some(BeingResized(resize_operation)) => resize_operation.clone(),
-                // The index is already being deleted or doesn't exist.
-                // It's OK to remove it from the map again.
-                _ => break None,
-            };
-
-            // Avoiding deadlocks: we need to drop the lock before waiting for the end of the resize, which
-            // will involve operations on the very map we're locking.
-            drop(lock);
-            resize_operation.wait();
+            match lock.start_deletion(&uuid) {
+                Ok(env_closing) => break env_closing,
+                Err(Some(reopen)) => {
+                    // drop the lock here so that we don't synchronously wait for the index to close.
+                    drop(lock);
+                    tries += 1;
+                    if tries >= 100 {
+                        panic!("Too many attempts to close index {name} prior to deletion.")
+                    }
+                    let reopen = if let Some(reopen) = reopen.wait_timeout(Duration::from_secs(6)) {
+                        reopen
+                    } else {
+                        continue;
+                    };
+                    reopen.close(&mut self.index_map.write().unwrap());
+                    continue;
+                }
+                Err(None) => return Ok(()),
+            }
         };
 
         let index_map = self.index_map.clone();
@@ -161,7 +486,7 @@ impl IndexMapper {
             .name(String::from("index_deleter"))
             .spawn(move || {
                 // We first wait to be sure that the previously opened index is effectively closed.
-                // This can take a lot of time, this is why we do that in a seperate thread.
+                // This can take a lot of time, this is why we do that in a separate thread.
                 if let Some(closing_event) = closing_event {
                     closing_event.wait();
                 }
@@ -175,7 +500,7 @@ impl IndexMapper {
                 }
 
                 // Finally we remove the entry from the index map.
-                assert!(matches!(index_map.write().unwrap().remove(&uuid), Some(BeingDeleted)));
+                index_map.write().unwrap().end_deletion(&uuid);
             })
             .unwrap();
 
@@ -195,76 +520,15 @@ impl IndexMapper {
     /// - If the Index corresponding to the passed name is concurrently being deleted/resized or cannot be found in the
     ///   in memory hash map.
     pub fn resize_index(&self, rtxn: &RoTxn, name: &str) -> Result<()> {
-        // fixme: factor to a function?
         let uuid = self
             .index_mapping
             .get(rtxn, name)?
             .ok_or_else(|| Error::IndexNotFound(name.to_string()))?;
 
         // We remove the index from the in-memory index map.
-        let mut lock = self.index_map.write().unwrap();
-        // signal that will be sent when the resize operation completes
-        let resize_operation = Arc::new(SignalEvent::manual(false));
-        let index = match lock.insert(uuid, BeingResized(resize_operation)) {
-            Some(Available(index)) => index,
-            Some(previous_status) => {
-                lock.insert(uuid, previous_status);
-                panic!(
-                    "Attempting to resize index {name} that is already being resized or deleted."
-                )
-            }
-            None => {
-                panic!("Could not find the status of index {name} in the in-memory index mapper.")
-            }
-        };
+        self.index_map.write().unwrap().close_for_resize(&uuid, self.index_growth_amount);
 
-        drop(lock);
-
-        let resize_succeeded = (move || {
-            let current_size = index.map_size()?;
-            let new_size = current_size * 2;
-            let closing_event = index.prepare_for_closing();
-
-            log::debug!("Waiting for index {name} to close");
-
-            if !closing_event.wait_timeout(std::time::Duration::from_secs(600)) {
-                // fail after 10 minutes waiting
-                panic!("Could not resize index {name} (unable to close it)");
-            }
-
-            log::info!("Resized index {name} from {current_size} to {new_size} bytes");
-            let index_path = self.base_path.join(uuid.to_string());
-            let index = self.create_or_open_index(&index_path, None, new_size)?;
-            Ok(index)
-        })();
-
-        // Put the map back to a consistent state.
-        // Even if there was an error we don't want to leave the map in an inconsistent state as it would cause
-        // deadlocks.
-        let mut lock = self.index_map.write().unwrap();
-        let (resize_operation, resize_succeeded) = match resize_succeeded {
-            Ok(index) => {
-                // insert the resized index
-                let Some(BeingResized(resize_operation)) = lock.insert(uuid, Available(index)) else {
-                    panic!("Index state for index {name} was modified while it was being resized")
-                };
-
-                (resize_operation, Ok(()))
-            }
-            Err(error) => {
-                // there was an error, not much we can do... delete the index from the in-memory map to prevent future errors
-                let Some(BeingResized(resize_operation)) = lock.remove(&uuid) else {
-                                    panic!("Index state for index {name} was modified while it was being resized")
-                                };
-                (resize_operation, Err(error))
-            }
-        };
-
-        // drop the lock before signaling completion so that other threads don't immediately await on the lock after waking up.
-        drop(lock);
-        resize_operation.signal();
-
-        resize_succeeded
+        Ok(())
     }
 
     /// Return an index, may open it if it wasn't already opened.
@@ -274,47 +538,68 @@ impl IndexMapper {
             .get(rtxn, name)?
             .ok_or_else(|| Error::IndexNotFound(name.to_string()))?;
 
-        // we clone here to drop the lock before entering the match
+        let mut tries = 0;
+        // attempts to open the index in a loop.
+        //
+        // If the index is currently being closed, we will wait for it to be closed and retry getting it in a subsequent
+        // loop iteration.
+        //
+        // We make 100 attempts before giving up.
+        // This could happen in the following situations:
+        //
+        // 1. There is a bug preventing the index from being correctly closed, or us from detecting it was.
+        // 2. A user of the index is keeping it open for more than 600 seconds. This could happen e.g. during a long indexation,
+        //    a pathological search, and so on.
+        //
+        // In these situations, reporting the error through a panic is in order.
         let index = loop {
-            let index = self.index_map.read().unwrap().get(&uuid).cloned();
+            tries += 1;
+            if tries > 100 {
+                panic!("Too many spurious wake ups while trying to open the index {name}");
+            }
+
+            // we get the index here to drop the lock before entering the match
+            let index = self.index_map.read().unwrap().get(&uuid);
 
             match index {
-                Some(Available(index)) => break index,
-                Some(BeingResized(ref resize_operation)) => {
+                Available(index) => break index,
+                Closing(reopen) => {
                     // Avoiding deadlocks: no lock taken while doing this operation.
-                    resize_operation.wait();
+                    let reopen = if let Some(reopen) = reopen.wait_timeout(Duration::from_secs(6)) {
+                        reopen
+                    } else {
+                        continue;
+                    };
+                    let index_path = self.base_path.join(uuid.to_string());
+                    // take the lock to reopen the environment.
+                    reopen.reopen(&mut self.index_map.write().unwrap(), &index_path)?;
                     continue;
                 }
-                Some(BeingDeleted) => return Err(Error::IndexNotFound(name.to_string())),
+                BeingDeleted => return Err(Error::IndexNotFound(name.to_string())),
                 // since we're lazy, it's possible that the index has not been opened yet.
-                None => {
+                Missing => {
                     let mut index_map = self.index_map.write().unwrap();
                     // between the read lock and the write lock it's not impossible
-                    // that someone already opened the index (eg if two search happens
+                    // that someone already opened the index (eg if two searches happen
                     // at the same time), thus before opening it we check a second time
                     // if it's not already there.
-                    // Since there is a good chance it's not already there we can use
-                    // the entry method.
-                    match index_map.entry(uuid) {
-                        Entry::Vacant(entry) => {
+                    match index_map.get(&uuid) {
+                        Missing => {
                             let index_path = self.base_path.join(uuid.to_string());
 
-                            let index =
-                                self.create_or_open_index(&index_path, None, self.index_size)?;
-                            entry.insert(Available(index.clone()));
-                            break index;
+                            break index_map.create(
+                                &uuid,
+                                &index_path,
+                                None,
+                                self.index_base_map_size,
+                            )?;
                         }
-                        Entry::Occupied(entry) => match entry.get() {
-                            Available(index) => break index.clone(),
-                            BeingResized(resize_operation) => {
-                                // Avoiding the deadlock: we drop the lock before waiting
-                                let resize_operation = resize_operation.clone();
-                                drop(index_map);
-                                resize_operation.wait();
-                                continue;
-                            }
-                            BeingDeleted => return Err(Error::IndexNotFound(name.to_string())),
-                        },
+                        Available(index) => break index,
+                        Closing(_) => {
+                            // the reopening will be handled in the next loop operation
+                            continue;
+                        }
+                        BeingDeleted => return Err(Error::IndexNotFound(name.to_string())),
                     }
                 }
             }
