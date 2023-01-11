@@ -270,6 +270,7 @@ pub struct TaskDateQueryRaw {
     pub after_finished_at: Option<String>,
     pub before_finished_at: Option<String>,
 }
+
 impl TaskDateQueryRaw {
     fn validate(self) -> Result<TaskDateQuery, ResponseError> {
         let Self {
