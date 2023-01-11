@@ -3,7 +3,7 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::DeserializeFromValue;
 use index_scheduler::IndexScheduler;
 use log::debug;
-use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::error::{deserr_codes::*, TakeErrorMessage};
 use meilisearch_types::error::{DeserrError, ResponseError};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::{self, FieldDistribution, Index};
@@ -12,7 +12,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
 
-use super::{ListIndexes, SummarizedTaskView};
+use self::search::parse_usize_take_error_message;
+
+use super::{Pagination, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
@@ -65,6 +67,23 @@ impl IndexView {
             updated_at: index.updated_at(&rtxn)?,
             primary_key: index.primary_key(&rtxn)?.map(String::from),
         })
+    }
+}
+
+#[derive(DeserializeFromValue, Deserialize, Debug, Clone, Copy)]
+#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ListIndexes {
+    #[serde(default)]
+    #[deserr(error = DeserrError<InvalidIndexOffset>, default, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
+    pub offset: usize,
+    #[serde(default = "PAGINATION_DEFAULT_LIMIT")]
+    #[deserr(error = DeserrError<InvalidIndexLimit>, default = PAGINATION_DEFAULT_LIMIT(), from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
+    pub limit: usize,
+}
+impl ListIndexes {
+    fn as_pagination(self) -> Pagination {
+        Pagination { offset: self.offset, limit: self.limit }
     }
 }
 

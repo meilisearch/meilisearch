@@ -118,7 +118,6 @@ impl fmt::Display for ErrorType {
 
 macro_rules! make_error_codes {
     ($($code_ident:ident, $err_type:ident, $status:ident);*) => {
-        #[repr(u32)]
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         pub enum Code {
             $($code_ident),*
@@ -210,7 +209,6 @@ InvalidIndexOffset                    , invalid       , BAD_REQUEST ;
 InvalidIndexPrimaryKey                , invalid       , BAD_REQUEST ;
 InvalidIndexUid                       , invalid       , BAD_REQUEST ;
 InvalidMinWordLengthForTypo           , invalid       , BAD_REQUEST ;
-InvalidRankingRule                    , invalid       , BAD_REQUEST ;
 InvalidSearchAttributesToCrop         , invalid       , BAD_REQUEST ;
 InvalidSearchAttributesToHighlight    , invalid       , BAD_REQUEST ;
 InvalidSearchAttributesToRetrieve     , invalid       , BAD_REQUEST ;
@@ -340,7 +338,7 @@ impl ErrorCode for milli::Error {
                     UserError::SortRankingRuleMissing => Code::InvalidSearchSort,
                     UserError::InvalidFacetsDistribution { .. } => Code::BadRequest,
                     UserError::InvalidSortableAttribute { .. } => Code::InvalidSearchSort,
-                    UserError::CriterionError(_) => Code::InvalidRankingRule,
+                    UserError::CriterionError(_) => Code::InvalidSettingsRankingRules,
                     UserError::InvalidGeoField { .. } => Code::InvalidDocumentGeoField,
                     UserError::SortError(_) => Code::InvalidSearchSort,
                     UserError::InvalidMinTypoWordLenSetting(_, _) => {

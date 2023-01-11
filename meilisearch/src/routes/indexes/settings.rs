@@ -16,7 +16,7 @@ use crate::routes::SummarizedTaskView;
 
 #[macro_export]
 macro_rules! make_setting_route {
-    ($route:literal, $update_verb:ident, $type:ty, $attr:ident, $camelcase_attr:literal, $analytics_var:ident, $analytics:expr) => {
+    ($route:literal, $update_verb:ident, $type:ty, $err_ty:ty, $attr:ident, $camelcase_attr:literal, $analytics_var:ident, $analytics:expr) => {
         pub mod $attr {
             use actix_web::web::Data;
             use actix_web::{web, HttpRequest, HttpResponse, Resource};
@@ -65,7 +65,7 @@ macro_rules! make_setting_route {
                     Data<IndexScheduler>,
                 >,
                 index_uid: actix_web::web::Path<String>,
-                body: actix_web::web::Json<Option<$type>>,
+                body: $crate::routes::indexes::ValidatedJson<Option<$type>, $err_ty>,
                 req: HttpRequest,
                 $analytics_var: web::Data<dyn Analytics>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
@@ -130,6 +130,9 @@ make_setting_route!(
     "/filterable-attributes",
     put,
     std::collections::BTreeSet<String>,
+    meilisearch_types::error::DeserrError<
+        meilisearch_types::error::deserr_codes::InvalidSettingsFilterableAttributes,
+    >,
     filterable_attributes,
     "filterableAttributes",
     analytics,
@@ -153,6 +156,9 @@ make_setting_route!(
     "/sortable-attributes",
     put,
     std::collections::BTreeSet<String>,
+    meilisearch_types::error::DeserrError<
+        meilisearch_types::error::deserr_codes::InvalidSettingsSortableAttributes,
+    >,
     sortable_attributes,
     "sortableAttributes",
     analytics,
@@ -176,6 +182,9 @@ make_setting_route!(
     "/displayed-attributes",
     put,
     Vec<String>,
+    meilisearch_types::error::DeserrError<
+        meilisearch_types::error::deserr_codes::InvalidSettingsDisplayedAttributes,
+    >,
     displayed_attributes,
     "displayedAttributes",
     analytics,
@@ -199,6 +208,9 @@ make_setting_route!(
     "/typo-tolerance",
     patch,
     meilisearch_types::settings::TypoSettings,
+    meilisearch_types::error::DeserrError<
+        meilisearch_types::error::deserr_codes::InvalidSettingsTypoTolerance,
+    >,
     typo_tolerance,
     "typoTolerance",
     analytics,
@@ -241,6 +253,9 @@ make_setting_route!(
     "/searchable-attributes",
     put,
     Vec<String>,
+    meilisearch_types::error::DeserrError<
+        meilisearch_types::error::deserr_codes::InvalidSettingsSearchableAttributes,
+    >,
     searchable_attributes,
     "searchableAttributes",
     analytics,
@@ -264,6 +279,9 @@ make_setting_route!(
     "/stop-words",
     put,
     std::collections::BTreeSet<String>,
+    meilisearch_types::error::DeserrError<
+        meilisearch_types::error::deserr_codes::InvalidSettingsStopWords,
+    >,
     stop_words,
     "stopWords",
     analytics,
@@ -286,6 +304,9 @@ make_setting_route!(
     "/synonyms",
     put,
     std::collections::BTreeMap<String, Vec<String>>,
+    meilisearch_types::error::DeserrError<
+        meilisearch_types::error::deserr_codes::InvalidSettingsSynonyms,
+    >,
     synonyms,
     "synonyms",
     analytics,
@@ -308,6 +329,9 @@ make_setting_route!(
     "/distinct-attribute",
     put,
     String,
+    meilisearch_types::error::DeserrError<
+        meilisearch_types::error::deserr_codes::InvalidSettingsDistinctAttribute,
+    >,
     distinct_attribute,
     "distinctAttribute",
     analytics,
@@ -329,6 +353,9 @@ make_setting_route!(
     "/ranking-rules",
     put,
     Vec<meilisearch_types::settings::RankingRuleView>,
+    meilisearch_types::error::DeserrError<
+        meilisearch_types::error::deserr_codes::InvalidSettingsRankingRules,
+    >,
     ranking_rules,
     "rankingRules",
     analytics,
@@ -357,6 +384,9 @@ make_setting_route!(
     "/faceting",
     patch,
     meilisearch_types::settings::FacetingSettings,
+    meilisearch_types::error::DeserrError<
+        meilisearch_types::error::deserr_codes::InvalidSettingsFaceting,
+    >,
     faceting,
     "faceting",
     analytics,
@@ -379,6 +409,9 @@ make_setting_route!(
     "/pagination",
     patch,
     meilisearch_types::settings::PaginationSettings,
+    meilisearch_types::error::DeserrError<
+        meilisearch_types::error::deserr_codes::InvalidSettingsPagination,
+    >,
     pagination,
     "pagination",
     analytics,

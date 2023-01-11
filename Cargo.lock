@@ -1024,32 +1024,13 @@ dependencies = [
 
 [[package]]
 name = "deserr"
-version = "0.1.2"
-dependencies = [
- "deserr-internal 0.1.2",
- "serde-cs",
- "serde_json",
-]
-
-[[package]]
-name = "deserr"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "86290491a2b5c21a1a5083da8dae831006761258fabd5617309c3eebc5f89468"
 dependencies = [
- "deserr-internal 0.1.4",
+ "deserr-internal",
  "serde-cs",
  "serde_json",
-]
-
-[[package]]
-name = "deserr-internal"
-version = "0.1.2"
-dependencies = [
- "convert_case 0.5.0",
- "proc-macro2 1.0.49",
- "quote 1.0.23",
- "syn 1.0.107",
 ]
 
 [[package]]
@@ -2326,7 +2307,7 @@ dependencies = [
  "cargo_toml",
  "clap 4.0.32",
  "crossbeam-channel",
- "deserr 0.1.2",
+ "deserr",
  "dump",
  "either",
  "env_logger",
@@ -2418,7 +2399,7 @@ dependencies = [
  "anyhow",
  "convert_case 0.6.0",
  "csv",
- "deserr 0.1.2",
+ "deserr",
  "either",
  "enum-iterator",
  "file-store",
@@ -2478,7 +2459,7 @@ dependencies = [
  "concat-arrays",
  "crossbeam-channel",
  "csv",
- "deserr 0.1.4",
+ "deserr",
  "either",
  "filter-parser",
  "flatten-serde-json",
@@ -2793,9 +2774,9 @@ dependencies = [
 
 [[package]]
 name = "pest"
-version = "2.5.2"
+version = "2.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f6e86fb9e7026527a0d46bc308b841d73170ef8f443e1807f6ef88526a816d4"
+checksum = "4257b4a04d91f7e9e6290be5d3da4804dd5784fafde3a497d73eb2b4a158c30a"
 dependencies = [
  "thiserror",
  "ucd-trie",
@@ -2803,9 +2784,9 @@ dependencies = [
 
 [[package]]
 name = "pest_derive"
-version = "2.5.2"
+version = "2.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96504449aa860c8dcde14f9fba5c58dc6658688ca1fe363589d6327b8662c603"
+checksum = "241cda393b0cdd65e62e07e12454f1f25d57017dcc514b1514cd3c4645e3a0a6"
 dependencies = [
  "pest",
  "pest_generator",
@@ -2813,9 +2794,9 @@ dependencies = [
 
 [[package]]
 name = "pest_generator"
-version = "2.5.2"
+version = "2.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "798e0220d1111ae63d66cb66a5dcb3fc2d986d520b98e49e1852bfdb11d7c5e7"
+checksum = "46b53634d8c8196302953c74d5352f33d0c512a9499bd2ce468fc9f4128fa27c"
 dependencies = [
  "pest",
  "pest_meta",
@@ -2826,13 +2807,13 @@ dependencies = [
 
 [[package]]
 name = "pest_meta"
-version = "2.5.2"
+version = "2.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "984298b75898e30a843e278a9f2452c31e349a073a0ce6fd950a12a74464e065"
+checksum = "0ef4f1332a8d4678b41966bb4cc1d0676880e84183a1ecc3f4b69f03e99c7a51"
 dependencies = [
  "once_cell",
  "pest",
- "sha1",
+ "sha2",
 ]
 
 [[package]]

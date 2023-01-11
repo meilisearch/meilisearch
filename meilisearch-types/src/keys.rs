@@ -2,7 +2,7 @@ use std::convert::Infallible;
 use std::fmt::Display;
 use std::hash::Hash;
 
-use deserr::{DeserializeError, DeserializeFromValue, MergeWithError, ValueKind, ValuePointerRef};
+use deserr::{DeserializeError, DeserializeFromValue, MergeWithError, ValuePointerRef};
 use enum_iterator::Sequence;
 use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
@@ -17,31 +17,6 @@ use crate::star_or::StarOr;
 
 pub type KeyId = Uuid;
 
-impl<C: Default + ErrorCode> DeserializeFromValue<DeserrError<C>> for Uuid {
-    fn deserialize_from_value<V: deserr::IntoValue>(
-        value: deserr::Value<V>,
-        location: deserr::ValuePointerRef,
-    ) -> std::result::Result<Self, DeserrError<C>> {
-        match value {
-            deserr::Value::String(s) => match Uuid::parse_str(&s) {
-                Ok(x) => Ok(x),
-                Err(e) => Err(unwrap_any(DeserrError::<C>::error::<V>(
-                    None,
-                    deserr::ErrorKind::Unexpected { msg: e.to_string() },
-                    location,
-                ))),
-            },
-            _ => Err(unwrap_any(DeserrError::<C>::error(
-                None,
-                deserr::ErrorKind::IncorrectValueKind {
-                    actual: value,
-                    accepted: &[ValueKind::String],
-                },
-                location,
-            ))),
-        }
-    }
-}
 impl<C: Default + ErrorCode> MergeWithError<IndexUidFormatError> for DeserrError<C> {
     fn merge(
         _self_: Option<Self>,
@@ -56,6 +31,10 @@ impl<C: Default + ErrorCode> MergeWithError<IndexUidFormatError> for DeserrError
     }
 }
 
+fn parse_uuid_from_str(s: &str) -> Result<Uuid, TakeErrorMessage<uuid::Error>> {
+    Uuid::parse_str(s).map_err(TakeErrorMessage)
+}
+
 #[derive(Debug, DeserializeFromValue)]
 #[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
 pub struct CreateApiKey {
@@ -63,12 +42,9 @@ pub struct CreateApiKey {
     pub description: Option<String>,
     #[deserr(error = DeserrError<InvalidApiKeyName>)]
     pub name: Option<String>,
-    #[deserr(default = Uuid::new_v4(), error = DeserrError<InvalidApiKeyUid>)]
+    #[deserr(default = Uuid::new_v4(), error = DeserrError<InvalidApiKeyUid>, from(&String) = parse_uuid_from_str -> TakeErrorMessage<uuid::Error>)]
     pub uid: KeyId,
-    // Value at `.name` is invalid. It is a dictionary, but is expected to be an array of strings containing action names.
-    // Value `indeex.create` at `.name[1]` is invalid. It is expected to be one of: ....
     #[deserr(error = DeserrError<InvalidApiKeyActions>)]
-    //, expected = "an array of string containing action names.")]
     pub actions: Vec<Action>,
     #[deserr(error = DeserrError<InvalidApiKeyIndexes>)]
     pub indexes: Vec<StarOr<IndexUid>>,

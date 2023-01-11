@@ -33,8 +33,7 @@ impl AuthController {
         Ok(Self { store: Arc::new(store), master_key: master_key.clone() })
     }
 
-    pub fn create_key(&self, value: CreateApiKey) -> Result<Key> {
-        let create_key = value;
+    pub fn create_key(&self, create_key: CreateApiKey) -> Result<Key> {
         match self.store.get_api_key(create_key.uid)? {
             Some(_) => Err(AuthControllerError::ApiKeyAlreadyExists(create_key.uid.to_string())),
             None => self.store.put_api_key(create_key.to_key()),

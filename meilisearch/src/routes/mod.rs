@@ -1,25 +1,21 @@
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
+use self::indexes::IndexStats;
+use crate::analytics::Analytics;
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::GuardedData;
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use deserr::DeserializeFromValue;
 use index_scheduler::{IndexScheduler, Query};
 use log::debug;
-use meilisearch_types::error::deserr_codes::*;
-use meilisearch_types::error::{DeserrError, ResponseError, TakeErrorMessage};
+use meilisearch_types::error::{ResponseError, TakeErrorMessage};
 use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::star_or::StarOr;
 use meilisearch_types::tasks::{Kind, Status, Task, TaskId};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
-
-use self::indexes::search::parse_usize_take_error_message;
-use self::indexes::IndexStats;
-use crate::analytics::Analytics;
-use crate::extractors::authentication::policies::*;
-use crate::extractors::authentication::GuardedData;
 
 mod api_key;
 mod dump;
@@ -96,23 +92,6 @@ impl From<Task> for SummarizedTaskView {
 pub struct Pagination {
     pub offset: usize,
     pub limit: usize,
-}
-
-#[derive(DeserializeFromValue, Deserialize, Debug, Clone, Copy)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ListIndexes {
-    #[serde(default)]
-    #[deserr(error = DeserrError<InvalidIndexOffset>, default, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
-    pub offset: usize,
-    #[serde(default = "PAGINATION_DEFAULT_LIMIT")]
-    #[deserr(error = DeserrError<InvalidIndexLimit>, default = PAGINATION_DEFAULT_LIMIT(), from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
-    pub limit: usize,
-}
-impl ListIndexes {
-    fn as_pagination(self) -> Pagination {
-        Pagination { offset: self.offset, limit: self.limit }
-    }
 }
 
 #[derive(Debug, Clone, Serialize)]

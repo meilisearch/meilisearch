@@ -9,7 +9,7 @@ actix-web = { version = "4.2.1", default-features = false }
 anyhow = "1.0.65"
 convert_case = "0.6.0"
 csv = "1.1.6"
-deserr = { path = "/Users/meilisearch/Documents/deserr", features = ["serde-json"] }
+deserr = { version = "0.1.4", features = ["serde-json"] }
 either = { version = "1.6.1", features = ["serde"] }
 enum-iterator = "1.1.3"
 file-store = { path = "../file-store" }
