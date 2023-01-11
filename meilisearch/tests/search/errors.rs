@@ -240,6 +240,8 @@ async fn search_bad_filter() {
     // Also, to trigger the error message we need to effectively create the index or else it'll throw an
     // index does not exists error.
     let (_, code) = index.create(None).await;
+    server.wait_task(0).await;
+
     snapshot!(code, @"202 Accepted");
 
     let (response, code) = index.search_post(json!({ "filter": true })).await;
