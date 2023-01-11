@@ -2,7 +2,7 @@ name: Publish to APT repository & Homebrew
 
 on:
   release:
-    types: [published]
+    types: [released]
 
 jobs:
   check-version:
