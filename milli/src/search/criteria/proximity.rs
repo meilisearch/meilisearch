@@ -599,7 +599,7 @@ mod tests {
 
     use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
     use crate::index::tests::TempIndex;
-    use crate::{CriterionImplementationStrategy, SearchResult};
+    use crate::{Criterion, CriterionImplementationStrategy, SearchResult};
 
     fn documents_with_enough_different_words_for_prefixes(prefixes: &[&str]) -> Vec<crate::Object> {
         let mut documents = Vec::new();
@@ -627,9 +627,9 @@ mod tests {
             .update_settings(|settings| {
                 settings.set_primary_key(S("id"));
                 settings.set_criteria(vec![
-                    "words".to_owned(),
-                    "typo".to_owned(),
-                    "proximity".to_owned(),
+                    Criterion::Words,
+                    Criterion::Typo,
+                    Criterion::Proximity,
                 ]);
             })
             .unwrap();

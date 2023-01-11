@@ -521,7 +521,7 @@ impl Performer for SettingsUpdate {
 
         if let Some(criteria) = self.criteria {
             if !criteria.is_empty() {
-                update.set_criteria(criteria);
+                update.set_criteria(criteria.iter().map(|c| c.parse()).collect::<Result<_, _>>()?);
             } else {
                 update.reset_criteria();
             }

@@ -4,6 +4,7 @@ use std::fs::{create_dir_all, remove_dir_all, File};
 use std::io::{self, BufRead, BufReader, Cursor, Read, Seek};
 use std::num::ParseFloatError;
 use std::path::Path;
+use std::str::FromStr;
 
 use criterion::BenchmarkId;
 use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
@@ -11,7 +12,7 @@ use milli::heed::EnvOpenOptions;
 use milli::update::{
     IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Settings,
 };
-use milli::{Filter, Index, Object, TermsMatchingStrategy};
+use milli::{Criterion, Filter, Index, Object, TermsMatchingStrategy};
 use serde_json::Value;
 
 pub struct Conf<'a> {
@@ -80,7 +81,7 @@ pub fn base_setup(conf: &Conf) -> Index {
         builder.reset_criteria();
         builder.reset_stop_words();
 
-        let criterion = criterion.iter().map(|s| s.to_string()).collect();
+        let criterion = criterion.iter().map(|s| Criterion::from_str(s).unwrap()).collect();
         builder.set_criteria(criterion);
     }
 

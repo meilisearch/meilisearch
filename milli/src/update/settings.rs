@@ -2,6 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::result::Result as StdResult;
 
 use charabia::{Tokenizer, TokenizerBuilder};
+use deserr::{DeserializeError, DeserializeFromValue};
 use itertools::Itertools;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use time::OffsetDateTime;
@@ -20,6 +21,25 @@ pub enum Setting<T> {
     Set(T),
     Reset,
     NotSet,
+}
+
+impl<T, E> DeserializeFromValue<E> for Setting<T>
+where
+    T: DeserializeFromValue<E>,
+    E: DeserializeError,
+{
+    fn deserialize_from_value<V: deserr::IntoValue>(
+        value: deserr::Value<V>,
+        location: deserr::ValuePointerRef,
+    ) -> std::result::Result<Self, E> {
+        match value {
+            deserr::Value::Null => Ok(Setting::Reset),
+            _ => T::deserialize_from_value(value, location).map(Setting::Set),
+        }
+    }
+    fn default() -> Option<Self> {
+        Some(Self::NotSet)
+    }
 }
 
 impl<T> Default for Setting<T> {
@@ -93,7 +113,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     displayed_fields: Setting<Vec<String>>,
     filterable_fields: Setting<HashSet<String>>,
     sortable_fields: Setting<HashSet<String>>,
-    criteria: Setting<Vec<String>>,
+    criteria: Setting<Vec<Criterion>>,
     stop_words: Setting<BTreeSet<String>>,
     distinct_field: Setting<String>,
     synonyms: Setting<HashMap<String, Vec<String>>>,
@@ -173,7 +193,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.criteria = Setting::Reset;
     }
 
-    pub fn set_criteria(&mut self, criteria: Vec<String>) {
+    pub fn set_criteria(&mut self, criteria: Vec<Criterion>) {
         self.criteria = Setting::Set(criteria);
     }
 
@@ -526,14 +546,9 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     }
 
     fn update_criteria(&mut self) -> Result<()> {
-        match self.criteria {
-            Setting::Set(ref fields) => {
-                let mut new_criteria = Vec::new();
-                for name in fields {
-                    let criterion: Criterion = name.parse()?;
-                    new_criteria.push(criterion);
-                }
-                self.index.put_criteria(self.wtxn, &new_criteria)?;
+        match &self.criteria {
+            Setting::Set(criteria) => {
+                self.index.put_criteria(self.wtxn, criteria)?;
             }
             Setting::Reset => {
                 self.index.delete_criteria(self.wtxn)?;
@@ -977,7 +992,7 @@ mod tests {
         index
             .update_settings(|settings| {
                 settings.set_displayed_fields(vec![S("name")]);
-                settings.set_criteria(vec![S("age:asc")]);
+                settings.set_criteria(vec![Criterion::Asc("age".to_owned())]);
             })
             .unwrap();
 
@@ -1246,7 +1261,7 @@ mod tests {
             .update_settings(|settings| {
                 settings.set_displayed_fields(vec!["hello".to_string()]);
                 settings.set_filterable_fields(hashset! { S("age"), S("toto") });
-                settings.set_criteria(vec!["toto:asc".to_string()]);
+                settings.set_criteria(vec![Criterion::Asc(S("toto"))]);
             })
             .unwrap();
 
@@ -1280,7 +1295,7 @@ mod tests {
             .update_settings(|settings| {
                 settings.set_displayed_fields(vec!["hello".to_string()]);
                 // It is only Asc(toto), there is a facet database but it is denied to filter with toto.
-                settings.set_criteria(vec!["toto:asc".to_string()]);
+                settings.set_criteria(vec![Criterion::Asc(S("toto"))]);
             })
             .unwrap();
 
