@@ -1,3 +1,4 @@
+use meili_snap::*;
 use serde_json::json;
 
 use super::DOCUMENTS;
@@ -37,104 +38,368 @@ async fn search_unexisting_parameter() {
 }
 
 #[actix_rt::test]
-async fn search_invalid_crop_marker() {
+async fn search_bad_q() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    // object
-    let response = index.search_post(json!({"cropMarker":  { "marker": "<crop>" }})).await;
-    meili_snap::snapshot!(format!("{:#?}", response), @r###"
-    (
-        Object {
-            "message": String("invalid type: Map `{\"marker\":\"<crop>\"}`, expected a String at `.cropMarker`."),
-            "code": String("invalid_search_crop_marker"),
-            "type": String("invalid_request"),
-            "link": String("https://docs.meilisearch.com/errors#invalid-search-crop-marker"),
-        },
-        400,
-    )
+    let (response, code) = index.search_post(json!({"q": ["doggo"]})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "invalid type: Sequence `[\"doggo\"]`, expected a String at `.q`.",
+      "code": "invalid_search_q",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-q"
+    }
+    "###);
+    // Can't make the `q` fail with a get search since it'll accept anything as a string.
+}
+
+#[actix_rt::test]
+async fn search_bad_offset() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.search_post(json!({"offset": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "invalid type: String `\"doggo\"`, expected a Integer at `.offset`.",
+      "code": "invalid_search_offset",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-offset"
+    }
     "###);
 
-    // array
-    let response = index.search_post(json!({"cropMarker": ["marker", "<crop>"]})).await;
-    meili_snap::snapshot!(format!("{:#?}", response), @r###"
-    (
-        Object {
-            "message": String("invalid type: Sequence `[\"marker\",\"<crop>\"]`, expected a String at `.cropMarker`."),
-            "code": String("invalid_search_crop_marker"),
-            "type": String("invalid_request"),
-            "link": String("https://docs.meilisearch.com/errors#invalid-search-crop-marker"),
-        },
-        400,
-    )
+    let (response, code) = index.search_get(json!({"offset": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "invalid digit found in string at `.offset`.",
+      "code": "invalid_search_offset",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-offset"
+    }
     "###);
 }
 
 #[actix_rt::test]
-async fn search_invalid_highlight_pre_tag() {
+async fn search_bad_limit() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    // object
-    let response = index.search_post(json!({"highlightPreTag":  { "marker": "<em>" }})).await;
-    meili_snap::snapshot!(format!("{:#?}", response), @r###"
-    (
-        Object {
-            "message": String("invalid type: Map `{\"marker\":\"<em>\"}`, expected a String at `.highlightPreTag`."),
-            "code": String("invalid_search_highlight_pre_tag"),
-            "type": String("invalid_request"),
-            "link": String("https://docs.meilisearch.com/errors#invalid-search-highlight-pre-tag"),
-        },
-        400,
-    )
+    let (response, code) = index.search_post(json!({"limit": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "invalid type: String `\"doggo\"`, expected a Integer at `.limit`.",
+      "code": "invalid_search_limit",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-limit"
+    }
     "###);
 
-    // array
-    let response = index.search_post(json!({"highlightPreTag": ["marker", "<em>"]})).await;
-    meili_snap::snapshot!(format!("{:#?}", response), @r###"
-    (
-        Object {
-            "message": String("invalid type: Sequence `[\"marker\",\"<em>\"]`, expected a String at `.highlightPreTag`."),
-            "code": String("invalid_search_highlight_pre_tag"),
-            "type": String("invalid_request"),
-            "link": String("https://docs.meilisearch.com/errors#invalid-search-highlight-pre-tag"),
-        },
-        400,
-    )
+    let (response, code) = index.search_get(json!({"limit": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "invalid digit found in string at `.limit`.",
+      "code": "invalid_search_limit",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-limit"
+    }
     "###);
 }
 
 #[actix_rt::test]
-async fn search_invalid_highlight_post_tag() {
+async fn search_bad_page() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    // object
-    let response = index.search_post(json!({"highlightPostTag":  { "marker": "</em>" }})).await;
-    meili_snap::snapshot!(format!("{:#?}", response), @r###"
-    (
-        Object {
-            "message": String("invalid type: Map `{\"marker\":\"</em>\"}`, expected a String at `.highlightPostTag`."),
-            "code": String("invalid_search_highlight_post_tag"),
-            "type": String("invalid_request"),
-            "link": String("https://docs.meilisearch.com/errors#invalid-search-highlight-post-tag"),
-        },
-        400,
-    )
+    let (response, code) = index.search_post(json!({"page": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "invalid type: String `\"doggo\"`, expected a Integer at `.page`.",
+      "code": "invalid_search_page",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-page"
+    }
     "###);
 
-    // array
-    let response = index.search_post(json!({"highlightPostTag": ["marker", "</em>"]})).await;
-    meili_snap::snapshot!(format!("{:#?}", response), @r###"
-    (
-        Object {
-            "message": String("invalid type: Sequence `[\"marker\",\"</em>\"]`, expected a String at `.highlightPostTag`."),
-            "code": String("invalid_search_highlight_post_tag"),
-            "type": String("invalid_request"),
-            "link": String("https://docs.meilisearch.com/errors#invalid-search-highlight-post-tag"),
-        },
-        400,
-    )
+    let (response, code) = index.search_get(json!({"page": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "invalid digit found in string at `.page`.",
+      "code": "invalid_search_page",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-page"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn search_bad_hits_per_page() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.search_post(json!({"hitsPerPage": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "invalid type: String `\"doggo\"`, expected a Integer at `.hitsPerPage`.",
+      "code": "invalid_search_hits_per_page",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-hits-per-page"
+    }
+    "###);
+
+    let (response, code) = index.search_get(json!({"hitsPerPage": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "invalid digit found in string at `.hitsPerPage`.",
+      "code": "invalid_search_hits_per_page",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-hits-per-page"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn search_bad_attributes_to_crop() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.search_post(json!({"attributesToCrop": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "invalid type: String `\"doggo\"`, expected a Sequence at `.attributesToCrop`.",
+      "code": "invalid_search_attributes_to_crop",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-attributes-to-crop"
+    }
+    "###);
+    // Can't make the `attributes_to_crop` fail with a get search since it'll accept anything as an array of strings.
+}
+
+#[actix_rt::test]
+async fn search_bad_crop_length() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.search_post(json!({"cropLength": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "invalid type: String `\"doggo\"`, expected a Integer at `.cropLength`.",
+      "code": "invalid_search_crop_length",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-crop-length"
+    }
+    "###);
+
+    let (response, code) = index.search_get(json!({"cropLength": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "invalid digit found in string at `.cropLength`.",
+      "code": "invalid_search_crop_length",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-crop-length"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn search_bad_attributes_to_highlight() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.search_post(json!({"attributesToHighlight": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "invalid type: String `\"doggo\"`, expected a Sequence at `.attributesToHighlight`.",
+      "code": "invalid_search_attributes_to_highlight",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-attributes-to-highlight"
+    }
+    "###);
+    // Can't make the `attributes_to_highlight` fail with a get search since it'll accept anything as an array of strings.
+}
+
+#[actix_rt::test]
+async fn search_bad_filter() {
+    // Since a filter is deserialized as a json Value it will never fail to deserialize.
+    // Thus the error message is not generated by deserr but written by us.
+    let server = Server::new().await;
+    let index = server.index("test");
+    // Also, to trigger the error message we need to effectively create the index or else it'll throw an
+    // index does not exists error.
+    let (_, code) = index.create(None).await;
+    server.wait_task(0).await;
+
+    snapshot!(code, @"202 Accepted");
+
+    let (response, code) = index.search_post(json!({ "filter": true })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid syntax for the filter parameter: `expected String, Array, found: true`.",
+      "code": "invalid_search_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
+    }
+    "###);
+    // Can't make the `filter` fail with a get search since it'll accept anything as a strings.
+}
+
+#[actix_rt::test]
+async fn search_bad_sort() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.search_post(json!({"sort": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "invalid type: String `\"doggo\"`, expected a Sequence at `.sort`.",
+      "code": "invalid_search_sort",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-sort"
+    }
+    "###);
+    // Can't make the `sort` fail with a get search since it'll accept anything as a strings.
+}
+
+#[actix_rt::test]
+async fn search_bad_show_matches_position() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.search_post(json!({"showMatchesPosition": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "invalid type: String `\"doggo\"`, expected a Boolean at `.showMatchesPosition`.",
+      "code": "invalid_search_show_matches_position",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-show-matches-position"
+    }
+    "###);
+
+    let (response, code) = index.search_get(json!({"showMatchesPosition": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "provided string was not `true` or `false` at `.showMatchesPosition`.",
+      "code": "invalid_search_show_matches_position",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-show-matches-position"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn search_bad_facets() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.search_post(json!({"facets": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "invalid type: String `\"doggo\"`, expected a Sequence at `.facets`.",
+      "code": "invalid_search_facets",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-facets"
+    }
+    "###);
+    // Can't make the `attributes_to_highlight` fail with a get search since it'll accept anything as an array of strings.
+}
+
+#[actix_rt::test]
+async fn search_bad_highlight_pre_tag() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.search_post(json!({"highlightPreTag": ["doggo"]})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "invalid type: Sequence `[\"doggo\"]`, expected a String at `.highlightPreTag`.",
+      "code": "invalid_search_highlight_pre_tag",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-highlight-pre-tag"
+    }
+    "###);
+    // Can't make the `highlight_pre_tag` fail with a get search since it'll accept anything as a strings.
+}
+
+#[actix_rt::test]
+async fn search_bad_highlight_post_tag() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.search_post(json!({"highlightPostTag": ["doggo"]})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "invalid type: Sequence `[\"doggo\"]`, expected a String at `.highlightPostTag`.",
+      "code": "invalid_search_highlight_post_tag",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-highlight-post-tag"
+    }
+    "###);
+    // Can't make the `highlight_post_tag` fail with a get search since it'll accept anything as a strings.
+}
+
+#[actix_rt::test]
+async fn search_bad_crop_marker() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.search_post(json!({"cropMarker": ["doggo"]})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "invalid type: Sequence `[\"doggo\"]`, expected a String at `.cropMarker`.",
+      "code": "invalid_search_crop_marker",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-crop-marker"
+    }
+    "###);
+    // Can't make the `crop_marker` fail with a get search since it'll accept anything as a strings.
+}
+
+#[actix_rt::test]
+async fn search_bad_matching_strategy() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.search_post(json!({"matchingStrategy": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Incorrect tag value at `.matchingStrategy`.",
+      "code": "invalid_search_matching_strategy",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-matching-strategy"
+    }
+    "###);
+
+    let (response, code) = index.search_get(json!({"matchingStrategy": "doggo"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Incorrect tag value at `.matchingStrategy`.",
+      "code": "invalid_search_matching_strategy",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-matching-strategy"
+    }
     "###);
 }
 
