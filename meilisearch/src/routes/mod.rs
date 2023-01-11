@@ -3,10 +3,9 @@ use std::str::FromStr;
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use deserr::DeserializeFromValue;
 use index_scheduler::{IndexScheduler, Query};
 use log::debug;
-use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{ResponseError, TakeErrorMessage};
 use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::star_or::StarOr;
 use meilisearch_types::tasks::{Kind, Status, Task, TaskId};
@@ -57,6 +56,14 @@ where
 {
     Ok(Some(input.parse()?))
 }
+pub fn from_string_to_option_take_error_message<T, E>(
+    input: &str,
+) -> Result<Option<T>, TakeErrorMessage<E>>
+where
+    T: FromStr<Err = E>,
+{
+    Ok(Some(input.parse().map_err(TakeErrorMessage)?))
+}
 
 const PAGINATION_DEFAULT_LIMIT: fn() -> usize = || 20;
 
@@ -83,16 +90,8 @@ impl From<Task> for SummarizedTaskView {
         }
     }
 }
-
-#[derive(DeserializeFromValue, Deserialize, Debug, Clone, Copy)]
-#[deserr(rename_all = camelCase, deny_unknown_fields)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Pagination {
-    #[serde(default)]
-    #[deserr(default, from(&String) = FromStr::from_str -> std::num::ParseIntError)]
     pub offset: usize,
-    #[serde(default = "PAGINATION_DEFAULT_LIMIT")]
-    #[deserr(default = PAGINATION_DEFAULT_LIMIT(), from(&String) = FromStr::from_str -> std::num::ParseIntError)]
     pub limit: usize,
 }
 

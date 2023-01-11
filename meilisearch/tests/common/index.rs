@@ -197,6 +197,76 @@ impl Index<'_> {
         self.service.patch_encoded(url, settings, self.encoder).await
     }
 
+    pub async fn update_settings_displayed_attributes(
+        &self,
+        settings: Value,
+    ) -> (Value, StatusCode) {
+        let url =
+            format!("/indexes/{}/settings/displayed-attributes", urlencode(self.uid.as_ref()));
+        self.service.put_encoded(url, settings, self.encoder).await
+    }
+
+    pub async fn update_settings_searchable_attributes(
+        &self,
+        settings: Value,
+    ) -> (Value, StatusCode) {
+        let url =
+            format!("/indexes/{}/settings/searchable-attributes", urlencode(self.uid.as_ref()));
+        self.service.put_encoded(url, settings, self.encoder).await
+    }
+
+    pub async fn update_settings_filterable_attributes(
+        &self,
+        settings: Value,
+    ) -> (Value, StatusCode) {
+        let url =
+            format!("/indexes/{}/settings/filterable-attributes", urlencode(self.uid.as_ref()));
+        self.service.put_encoded(url, settings, self.encoder).await
+    }
+
+    pub async fn update_settings_sortable_attributes(
+        &self,
+        settings: Value,
+    ) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/sortable-attributes", urlencode(self.uid.as_ref()));
+        self.service.put_encoded(url, settings, self.encoder).await
+    }
+
+    pub async fn update_settings_ranking_rules(&self, settings: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/ranking-rules", urlencode(self.uid.as_ref()));
+        self.service.put_encoded(url, settings, self.encoder).await
+    }
+
+    pub async fn update_settings_stop_words(&self, settings: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/stop-words", urlencode(self.uid.as_ref()));
+        self.service.put_encoded(url, settings, self.encoder).await
+    }
+
+    pub async fn update_settings_synonyms(&self, settings: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/synonyms", urlencode(self.uid.as_ref()));
+        self.service.put_encoded(url, settings, self.encoder).await
+    }
+
+    pub async fn update_settings_distinct_attribute(&self, settings: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/distinct-attribute", urlencode(self.uid.as_ref()));
+        self.service.put_encoded(url, settings, self.encoder).await
+    }
+
+    pub async fn update_settings_typo_tolerance(&self, settings: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/typo-tolerance", urlencode(self.uid.as_ref()));
+        self.service.patch_encoded(url, settings, self.encoder).await
+    }
+
+    pub async fn update_settings_faceting(&self, settings: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/faceting", urlencode(self.uid.as_ref()));
+        self.service.patch_encoded(url, settings, self.encoder).await
+    }
+
+    pub async fn update_settings_pagination(&self, settings: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/pagination", urlencode(self.uid.as_ref()));
+        self.service.patch_encoded(url, settings, self.encoder).await
+    }
+
     pub async fn delete_settings(&self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/settings", urlencode(self.uid.as_ref()));
         self.service.delete(url).await

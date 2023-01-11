@@ -8,10 +8,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use error::{AuthControllerError, Result};
-use meilisearch_types::keys::{Action, Key};
+use meilisearch_types::keys::{Action, CreateApiKey, Key, PatchApiKey};
 use meilisearch_types::star_or::StarOr;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 pub use store::open_auth_store_env;
 use store::{generate_key_as_hexa, HeedAuthStore};
 use time::OffsetDateTime;
@@ -34,17 +33,18 @@ impl AuthController {
         Ok(Self { store: Arc::new(store), master_key: master_key.clone() })
     }
 
-    pub fn create_key(&self, value: Value) -> Result<Key> {
-        let key = Key::create_from_value(value)?;
-        match self.store.get_api_key(key.uid)? {
-            Some(_) => Err(AuthControllerError::ApiKeyAlreadyExists(key.uid.to_string())),
-            None => self.store.put_api_key(key),
+    pub fn create_key(&self, create_key: CreateApiKey) -> Result<Key> {
+        match self.store.get_api_key(create_key.uid)? {
+            Some(_) => Err(AuthControllerError::ApiKeyAlreadyExists(create_key.uid.to_string())),
+            None => self.store.put_api_key(create_key.to_key()),
         }
     }
 
-    pub fn update_key(&self, uid: Uuid, value: Value) -> Result<Key> {
+    pub fn update_key(&self, uid: Uuid, patch: PatchApiKey) -> Result<Key> {
         let mut key = self.get_key(uid)?;
-        key.update_from_value(value)?;
+        key.description = patch.description;
+        key.name = patch.name;
+        key.updated_at = OffsetDateTime::now_utc();
         self.store.put_api_key(key)
     }
 
