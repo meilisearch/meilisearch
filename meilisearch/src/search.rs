@@ -44,7 +44,7 @@ pub struct SearchQuery {
     pub hits_per_page: Option<usize>,
     #[deserr(error = DeserrError<InvalidSearchAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
-    #[deserr(error = DeserrError<InvalidSearchAttributesToRetrieve>)]
+    #[deserr(error = DeserrError<InvalidSearchAttributesToCrop>)]
     pub attributes_to_crop: Option<Vec<String>>,
     #[deserr(error = DeserrError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
     pub crop_length: usize,
