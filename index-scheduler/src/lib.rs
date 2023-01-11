@@ -24,6 +24,7 @@ pub mod error;
 mod index_mapper;
 #[cfg(test)]
 mod insta_snapshot;
+mod lru;
 mod utils;
 mod uuid_codec;
 
