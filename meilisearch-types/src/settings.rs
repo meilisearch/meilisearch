@@ -11,8 +11,8 @@ use milli::update::Setting;
 use milli::{Criterion, CriterionError, Index, DEFAULT_VALUES_PER_FACET};
 use serde::{Deserialize, Serialize, Serializer};
 
-use crate::error::DeserrError;
-use crate::error::{deserr_codes::*, unwrap_any};
+use crate::error::deserr_codes::*;
+use crate::error::{unwrap_any, DeserrError};
 
 /// The maximimum number of results that the engine
 /// will be able to return in one search call.

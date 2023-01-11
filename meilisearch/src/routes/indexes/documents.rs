@@ -1,12 +1,6 @@
-use crate::analytics::{Analytics, DocumentDeletionKind};
-use crate::error::MeilisearchHttpError;
-use crate::error::PayloadError::ReceivePayload;
-use crate::extractors::authentication::policies::*;
-use crate::extractors::authentication::GuardedData;
-use crate::extractors::payload::Payload;
-use crate::extractors::query_parameters::QueryParameter;
-use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::{fold_star_or, PaginationView, SummarizedTaskView};
+use std::io::ErrorKind;
+use std::num::ParseIntError;
+
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
@@ -16,8 +10,8 @@ use futures::StreamExt;
 use index_scheduler::IndexScheduler;
 use log::debug;
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
-use meilisearch_types::error::{deserr_codes::*, TakeErrorMessage};
-use meilisearch_types::error::{DeserrError, ResponseError};
+use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::error::{DeserrError, ResponseError, TakeErrorMessage};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
@@ -29,13 +23,20 @@ use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_cs::vec::CS;
 use serde_json::Value;
-use std::io::ErrorKind;
-use std::num::ParseIntError;
 use tempfile::tempfile;
 use tokio::fs::File;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
 
 use super::search::parse_usize_take_error_message;
+use crate::analytics::{Analytics, DocumentDeletionKind};
+use crate::error::MeilisearchHttpError;
+use crate::error::PayloadError::ReceivePayload;
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::GuardedData;
+use crate::extractors::payload::Payload;
+use crate::extractors::query_parameters::QueryParameter;
+use crate::extractors::sequential_extractor::SeqHandler;
+use crate::routes::{fold_star_or, PaginationView, SummarizedTaskView};
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]

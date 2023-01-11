@@ -3,8 +3,8 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::DeserializeFromValue;
 use index_scheduler::IndexScheduler;
 use log::debug;
-use meilisearch_types::error::{deserr_codes::*, TakeErrorMessage};
-use meilisearch_types::error::{DeserrError, ResponseError};
+use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::error::{DeserrError, ResponseError, TakeErrorMessage};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::{self, FieldDistribution, Index};
 use meilisearch_types::tasks::KindWithContent;
@@ -13,7 +13,6 @@ use serde_json::json;
 use time::OffsetDateTime;
 
 use self::search::parse_usize_take_error_message;
-
 use super::{Pagination, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;

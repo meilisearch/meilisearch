@@ -4,22 +4,21 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::DeserializeFromValue;
 use meilisearch_auth::error::AuthControllerError;
 use meilisearch_auth::AuthController;
-use meilisearch_types::error::{deserr_codes::*, TakeErrorMessage};
-use meilisearch_types::error::{Code, DeserrError, ResponseError};
+use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::error::{Code, DeserrError, ResponseError, TakeErrorMessage};
 use meilisearch_types::keys::{Action, CreateApiKey, Key, PatchApiKey};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+use super::indexes::search::parse_usize_take_error_message;
+use super::PAGINATION_DEFAULT_LIMIT;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::json::ValidatedJson;
 use crate::extractors::query_parameters::QueryParameter;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::Pagination;
-
-use super::indexes::search::parse_usize_take_error_message;
-use super::PAGINATION_DEFAULT_LIMIT;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(

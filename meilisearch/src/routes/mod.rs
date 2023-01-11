@@ -1,10 +1,6 @@
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
-use self::indexes::IndexStats;
-use crate::analytics::Analytics;
-use crate::extractors::authentication::policies::*;
-use crate::extractors::authentication::GuardedData;
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::{IndexScheduler, Query};
@@ -16,6 +12,11 @@ use meilisearch_types::tasks::{Kind, Status, Task, TaskId};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
+
+use self::indexes::IndexStats;
+use crate::analytics::Analytics;
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::GuardedData;
 
 mod api_key;
 mod dump;

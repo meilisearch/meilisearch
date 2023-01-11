@@ -5,7 +5,8 @@ use std::time::Instant;
 
 use deserr::DeserializeFromValue;
 use either::Either;
-use meilisearch_types::error::{deserr_codes::*, DeserrError};
+use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::error::DeserrError;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::TokenizerBuilder;
