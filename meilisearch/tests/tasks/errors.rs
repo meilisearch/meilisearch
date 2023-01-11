@@ -11,7 +11,7 @@ async fn task_bad_uids() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task uid `doggo` is invalid. It should only contain numeric characters.",
+      "message": "invalid digit found in string at `.uids`.",
       "code": "invalid_task_uids",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
@@ -22,7 +22,7 @@ async fn task_bad_uids() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task uid `doggo` is invalid. It should only contain numeric characters.",
+      "message": "invalid digit found in string at `.uids`.",
       "code": "invalid_task_uids",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
@@ -33,7 +33,7 @@ async fn task_bad_uids() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task uid `doggo` is invalid. It should only contain numeric characters.",
+      "message": "invalid digit found in string at `.uids`.",
       "code": "invalid_task_uids",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
@@ -49,7 +49,7 @@ async fn task_bad_canceled_by() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task canceledBy `doggo` is invalid. It should only contains numeric characters separated by `,` character.",
+      "message": "invalid digit found in string at `.canceledBy`.",
       "code": "invalid_task_canceled_by",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-canceled-by"
@@ -60,7 +60,7 @@ async fn task_bad_canceled_by() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task canceledBy `doggo` is invalid. It should only contains numeric characters separated by `,` character.",
+      "message": "invalid digit found in string at `.canceledBy`.",
       "code": "invalid_task_canceled_by",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-canceled-by"
@@ -71,7 +71,7 @@ async fn task_bad_canceled_by() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task canceledBy `doggo` is invalid. It should only contains numeric characters separated by `,` character.",
+      "message": "invalid digit found in string at `.canceledBy`.",
       "code": "invalid_task_canceled_by",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-canceled-by"
@@ -87,7 +87,7 @@ async fn task_bad_types() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task type `doggo` is invalid. Available task types are `documentAdditionOrUpdate`, `documentDeletion`, `settingsUpdate`, `indexCreation`, `indexDeletion`, `indexUpdate`, `indexSwap`, `taskCancelation`, `taskDeletion`, `dumpCreation`, `snapshotCreation`",
+      "message": "`doggo` is not a type. Available types are `documentAdditionOrUpdate`, `documentDeletion`, `settingsUpdate`, `indexCreation`, `indexDeletion`, `indexUpdate`, `indexSwap`, `taskCancelation`, `taskDeletion`, `dumpCreation`, `snapshotCreation`. at `.types`.",
       "code": "invalid_task_types",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-types"
@@ -98,7 +98,7 @@ async fn task_bad_types() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task type `doggo` is invalid. Available task types are `documentAdditionOrUpdate`, `documentDeletion`, `settingsUpdate`, `indexCreation`, `indexDeletion`, `indexUpdate`, `indexSwap`, `taskCancelation`, `taskDeletion`, `dumpCreation`, `snapshotCreation`",
+      "message": "`doggo` is not a type. Available types are `documentAdditionOrUpdate`, `documentDeletion`, `settingsUpdate`, `indexCreation`, `indexDeletion`, `indexUpdate`, `indexSwap`, `taskCancelation`, `taskDeletion`, `dumpCreation`, `snapshotCreation`. at `.types`.",
       "code": "invalid_task_types",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-types"
@@ -109,7 +109,7 @@ async fn task_bad_types() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task type `doggo` is invalid. Available task types are `documentAdditionOrUpdate`, `documentDeletion`, `settingsUpdate`, `indexCreation`, `indexDeletion`, `indexUpdate`, `indexSwap`, `taskCancelation`, `taskDeletion`, `dumpCreation`, `snapshotCreation`",
+      "message": "`doggo` is not a type. Available types are `documentAdditionOrUpdate`, `documentDeletion`, `settingsUpdate`, `indexCreation`, `indexDeletion`, `indexUpdate`, `indexSwap`, `taskCancelation`, `taskDeletion`, `dumpCreation`, `snapshotCreation`. at `.types`.",
       "code": "invalid_task_types",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-types"
@@ -125,7 +125,7 @@ async fn task_bad_statuses() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task status `doggo` is invalid. Available task statuses are `enqueued`, `processing`, `succeeded`, `failed`, `canceled`.",
+      "message": "`doggo` is not a status. Available status are `enqueued`, `processing`, `succeeded`, `failed`, `canceled`. at `.statuses`.",
       "code": "invalid_task_statuses",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-statuses"
@@ -136,7 +136,7 @@ async fn task_bad_statuses() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task status `doggo` is invalid. Available task statuses are `enqueued`, `processing`, `succeeded`, `failed`, `canceled`.",
+      "message": "`doggo` is not a status. Available status are `enqueued`, `processing`, `succeeded`, `failed`, `canceled`. at `.statuses`.",
       "code": "invalid_task_statuses",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-statuses"
@@ -147,7 +147,7 @@ async fn task_bad_statuses() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task status `doggo` is invalid. Available task statuses are `enqueued`, `processing`, `succeeded`, `failed`, `canceled`.",
+      "message": "`doggo` is not a status. Available status are `enqueued`, `processing`, `succeeded`, `failed`, `canceled`. at `.statuses`.",
       "code": "invalid_task_statuses",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-statuses"
@@ -163,7 +163,7 @@ async fn task_bad_index_uids() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "the good doggo is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+      "message": "`the good doggo` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_). at `.indexUids`.",
       "code": "invalid_index_uid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-index-uid"
@@ -174,7 +174,7 @@ async fn task_bad_index_uids() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "the good doggo is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+      "message": "`the good doggo` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_). at `.indexUids`.",
       "code": "invalid_index_uid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-index-uid"
@@ -185,7 +185,7 @@ async fn task_bad_index_uids() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "the good doggo is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+      "message": "`the good doggo` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_). at `.indexUids`.",
       "code": "invalid_index_uid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-index-uid"
@@ -201,10 +201,10 @@ async fn task_bad_limit() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Query deserialize error: invalid digit found in string",
-      "code": "bad_request",
+      "message": "invalid digit found in string at `.limit`.",
+      "code": "invalid_task_limit",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad-request"
+      "link": "https://docs.meilisearch.com/errors#invalid-task-limit"
     }
     "###);
 
@@ -212,7 +212,7 @@ async fn task_bad_limit() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Query deserialize error: unknown field `limit`",
+      "message": "Json deserialize error: unknown field `limit`, expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt` at ``.",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad-request"
@@ -223,7 +223,7 @@ async fn task_bad_limit() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Query deserialize error: unknown field `limit`",
+      "message": "Json deserialize error: unknown field `limit`, expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt` at ``.",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad-request"
@@ -239,10 +239,10 @@ async fn task_bad_from() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Query deserialize error: invalid digit found in string",
-      "code": "bad_request",
+      "message": "invalid digit found in string at `.from`.",
+      "code": "invalid_task_from",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad-request"
+      "link": "https://docs.meilisearch.com/errors#invalid-task-from"
     }
     "###);
 
@@ -250,7 +250,7 @@ async fn task_bad_from() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Query deserialize error: unknown field `from`",
+      "message": "Json deserialize error: unknown field `from`, expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt` at ``.",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad-request"
@@ -261,7 +261,7 @@ async fn task_bad_from() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Query deserialize error: unknown field `from`",
+      "message": "Json deserialize error: unknown field `from`, expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt` at ``.",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad-request"
@@ -277,7 +277,7 @@ async fn task_bad_after_enqueued_at() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task `afterEnqueuedAt` `doggo` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "message": "`doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.afterEnqueuedAt`.",
       "code": "invalid_task_after_enqueued_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-after-enqueued-at"
@@ -288,7 +288,7 @@ async fn task_bad_after_enqueued_at() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task `afterEnqueuedAt` `doggo` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "message": "`doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.afterEnqueuedAt`.",
       "code": "invalid_task_after_enqueued_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-after-enqueued-at"
@@ -299,7 +299,7 @@ async fn task_bad_after_enqueued_at() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task `afterEnqueuedAt` `doggo` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "message": "`doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.afterEnqueuedAt`.",
       "code": "invalid_task_after_enqueued_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-after-enqueued-at"
@@ -315,7 +315,7 @@ async fn task_bad_before_enqueued_at() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task `beforeEnqueuedAt` `doggo` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "message": "`doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.beforeEnqueuedAt`.",
       "code": "invalid_task_before_enqueued_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-before-enqueued-at"
@@ -326,7 +326,7 @@ async fn task_bad_before_enqueued_at() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task `beforeEnqueuedAt` `doggo` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "message": "`doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.beforeEnqueuedAt`.",
       "code": "invalid_task_before_enqueued_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-before-enqueued-at"
@@ -337,7 +337,7 @@ async fn task_bad_before_enqueued_at() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task `beforeEnqueuedAt` `doggo` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "message": "`doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.beforeEnqueuedAt`.",
       "code": "invalid_task_before_enqueued_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-before-enqueued-at"
@@ -353,7 +353,7 @@ async fn task_bad_after_started_at() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task `afterStartedAt` `doggo` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "message": "`doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.afterStartedAt`.",
       "code": "invalid_task_after_started_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-after-started-at"
@@ -364,7 +364,7 @@ async fn task_bad_after_started_at() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task `afterStartedAt` `doggo` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "message": "`doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.afterStartedAt`.",
       "code": "invalid_task_after_started_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-after-started-at"
@@ -375,7 +375,7 @@ async fn task_bad_after_started_at() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task `afterStartedAt` `doggo` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "message": "`doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.afterStartedAt`.",
       "code": "invalid_task_after_started_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-after-started-at"
@@ -391,7 +391,7 @@ async fn task_bad_before_started_at() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task `beforeStartedAt` `doggo` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "message": "`doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.beforeStartedAt`.",
       "code": "invalid_task_before_started_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-before-started-at"
@@ -402,7 +402,7 @@ async fn task_bad_before_started_at() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task `beforeStartedAt` `doggo` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "message": "`doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.beforeStartedAt`.",
       "code": "invalid_task_before_started_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-before-started-at"
@@ -413,7 +413,7 @@ async fn task_bad_before_started_at() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task `beforeStartedAt` `doggo` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "message": "`doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.beforeStartedAt`.",
       "code": "invalid_task_before_started_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-before-started-at"
@@ -429,7 +429,7 @@ async fn task_bad_after_finished_at() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task `afterFinishedAt` `doggo` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "message": "`doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.afterFinishedAt`.",
       "code": "invalid_task_after_finished_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-after-finished-at"
@@ -440,7 +440,7 @@ async fn task_bad_after_finished_at() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task `afterFinishedAt` `doggo` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "message": "`doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.afterFinishedAt`.",
       "code": "invalid_task_after_finished_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-after-finished-at"
@@ -451,7 +451,7 @@ async fn task_bad_after_finished_at() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task `afterFinishedAt` `doggo` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "message": "`doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.afterFinishedAt`.",
       "code": "invalid_task_after_finished_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-after-finished-at"
@@ -467,7 +467,7 @@ async fn task_bad_before_finished_at() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task `beforeFinishedAt` `doggo` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "message": "`doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.beforeFinishedAt`.",
       "code": "invalid_task_before_finished_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-before-finished-at"
@@ -478,7 +478,7 @@ async fn task_bad_before_finished_at() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task `beforeFinishedAt` `doggo` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "message": "`doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.beforeFinishedAt`.",
       "code": "invalid_task_before_finished_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-before-finished-at"
@@ -489,7 +489,7 @@ async fn task_bad_before_finished_at() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Task `beforeFinishedAt` `doggo` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "message": "`doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.beforeFinishedAt`.",
       "code": "invalid_task_before_finished_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-before-finished-at"

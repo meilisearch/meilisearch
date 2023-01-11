@@ -183,7 +183,7 @@ async fn get_task_filter_error() {
     assert_eq!(code, 400, "{}", response);
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Query deserialize error: unknown field `lol`",
+      "message": "Json deserialize error: unknown field `lol`, expected one of `limit`, `from`, `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt` at ``.",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad-request"
@@ -194,7 +194,7 @@ async fn get_task_filter_error() {
     assert_eq!(code, 400, "{}", response);
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Task uid `pied` is invalid. It should only contain numeric characters.",
+      "message": "invalid digit found in string at `.uids`.",
       "code": "invalid_task_uids",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
@@ -205,10 +205,10 @@ async fn get_task_filter_error() {
     assert_eq!(code, 400, "{}", response);
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Query deserialize error: invalid digit found in string",
-      "code": "bad_request",
+      "message": "invalid digit found in string at `.from`.",
+      "code": "invalid_task_from",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad-request"
+      "link": "https://docs.meilisearch.com/errors#invalid-task-from"
     }
     "###);
 
@@ -216,7 +216,7 @@ async fn get_task_filter_error() {
     assert_eq!(code, 400, "{}", response);
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Task `beforeStartedAt` `pied` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "message": "`pied` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.beforeStartedAt`.",
       "code": "invalid_task_before_started_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-before-started-at"
@@ -243,7 +243,7 @@ async fn delete_task_filter_error() {
     assert_eq!(code, 400, "{}", response);
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Query deserialize error: unknown field `lol`",
+      "message": "Json deserialize error: unknown field `lol`, expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt` at ``.",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad-request"
@@ -254,7 +254,7 @@ async fn delete_task_filter_error() {
     assert_eq!(code, 400, "{}", response);
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Task uid `pied` is invalid. It should only contain numeric characters.",
+      "message": "invalid digit found in string at `.uids`.",
       "code": "invalid_task_uids",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
@@ -281,7 +281,7 @@ async fn cancel_task_filter_error() {
     assert_eq!(code, 400, "{}", response);
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Query deserialize error: unknown field `lol`",
+      "message": "Json deserialize error: unknown field `lol`, expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt` at ``.",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad-request"
@@ -292,7 +292,7 @@ async fn cancel_task_filter_error() {
     assert_eq!(code, 400, "{}", response);
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Task uid `pied` is invalid. It should only contain numeric characters.",
+      "message": "invalid digit found in string at `.uids`.",
       "code": "invalid_task_uids",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
