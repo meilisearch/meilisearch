@@ -497,7 +497,7 @@ mod tests {
         create_disjoint_combinations, create_non_disjoint_combinations,
     };
     use crate::snapshot_tests::display_bitmap;
-    use crate::SearchResult;
+    use crate::{Criterion, SearchResult};
 
     #[test]
     fn test_exact_words_subcriterion() {
@@ -506,7 +506,7 @@ mod tests {
         index
             .update_settings(|settings| {
                 settings.set_primary_key(S("id"));
-                settings.set_criteria(vec!["exactness".to_owned()]);
+                settings.set_criteria(vec![Criterion::Exactness]);
             })
             .unwrap();
 

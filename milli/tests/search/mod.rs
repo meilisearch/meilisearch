@@ -38,8 +38,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
 
     let mut builder = Settings::new(&mut wtxn, &index, &config);
 
-    let criteria = criteria.iter().map(|c| c.to_string()).collect();
-    builder.set_criteria(criteria);
+    builder.set_criteria(criteria.to_vec());
     builder.set_filterable_fields(hashset! {
         S("tag"),
         S("asc_desc_rank"),

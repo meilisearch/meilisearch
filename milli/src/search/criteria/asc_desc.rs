@@ -343,7 +343,7 @@ mod tests {
     use maplit::hashset;
 
     use crate::index::tests::TempIndex;
-    use crate::{AscDesc, Filter, Search, SearchResult};
+    use crate::{AscDesc, Criterion, Filter, Search, SearchResult};
 
     // Note that in this test, only the iterative sort algorithms are used. Set the CANDIDATES_THESHOLD
     // constant to 0 to ensure that the other sort algorithms are also correct.
@@ -356,7 +356,7 @@ mod tests {
                 settings.set_primary_key("id".to_owned());
                 settings
                     .set_sortable_fields(maplit::hashset! { S("id"), S("mod_10"), S("mod_20") });
-                settings.set_criteria(vec!["sort".to_owned()]);
+                settings.set_criteria(vec![Criterion::Sort]);
             })
             .unwrap();
 
@@ -443,7 +443,7 @@ mod tests {
                 settings.set_primary_key("id".to_owned());
                 settings.set_filterable_fields(hashset! { S("id"), S("mod_10"), S("mod_20") });
                 settings.set_sortable_fields(hashset! { S("id"), S("mod_10"), S("mod_20") });
-                settings.set_criteria(vec!["sort".to_owned()]);
+                settings.set_criteria(vec![Criterion::Sort]);
             })
             .unwrap();
 
