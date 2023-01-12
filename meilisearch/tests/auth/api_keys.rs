@@ -249,9 +249,9 @@ async fn error_add_api_key_missing_parameter() {
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
       "message": "Missing field `indexes`",
-      "code": "bad_request",
+      "code": "missing_api_key_indexes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad-request"
+      "link": "https://docs.meilisearch.com/errors#missing-api-key-indexes"
     }
     "###);
 
@@ -266,9 +266,9 @@ async fn error_add_api_key_missing_parameter() {
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
       "message": "Missing field `actions`",
-      "code": "bad_request",
+      "code": "missing_api_key_actions",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad-request"
+      "link": "https://docs.meilisearch.com/errors#missing-api-key-actions"
     }
     "###);
 
@@ -279,22 +279,13 @@ async fn error_add_api_key_missing_parameter() {
         "actions": ["documents.add"],
     });
     let (response, code) = server.add_api_key(content).await;
-    meili_snap::snapshot!(code, @"201 Created");
+    meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
     {
-      "name": null,
-      "description": "Indexing API key",
-      "key": "[ignored]",
-      "uid": "[ignored]",
-      "actions": [
-        "documents.add"
-      ],
-      "indexes": [
-        "products"
-      ],
-      "expiresAt": null,
-      "createdAt": "[ignored]",
-      "updatedAt": "[ignored]"
+      "message": "Missing field `expiresAt`",
+      "code": "missing_api_key_expires_at",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing-api-key-expires-at"
     }
     "###);
 }

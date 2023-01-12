@@ -48,39 +48,39 @@ pub fn parse_bool_take_error_message(
 #[derive(Debug, deserr::DeserializeFromValue)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQueryGet {
-    #[deserr(error = DeserrQueryParamError<InvalidSearchQ>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchQ>)]
     q: Option<String>,
-    #[deserr(error = DeserrQueryParamError<InvalidSearchOffset>, default = DEFAULT_SEARCH_OFFSET(), from(String) = parse_usize_query_param -> TakeErrorMessage<DetailedParseIntError>)]
+    #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrQueryParamError<InvalidSearchOffset>, from(String) = parse_usize_query_param -> TakeErrorMessage<DetailedParseIntError>)]
     offset: usize,
-    #[deserr(error = DeserrQueryParamError<InvalidSearchLimit>, default = DEFAULT_SEARCH_LIMIT(), from(String) = parse_usize_query_param -> TakeErrorMessage<DetailedParseIntError>)]
+    #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrQueryParamError<InvalidSearchLimit>, from(String) = parse_usize_query_param -> TakeErrorMessage<DetailedParseIntError>)]
     limit: usize,
-    #[deserr(error = DeserrQueryParamError<InvalidSearchPage>, from(Option<String>) = parse_option_usize_query_param -> TakeErrorMessage<std::num::ParseIntError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchPage>, from(Option<String>) = parse_option_usize_query_param -> TakeErrorMessage<std::num::ParseIntError>)]
     page: Option<usize>,
-    #[deserr(error = DeserrQueryParamError<InvalidSearchHitsPerPage>, from(Option<String>) = parse_option_usize_query_param -> TakeErrorMessage<std::num::ParseIntError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchHitsPerPage>, from(Option<String>) = parse_option_usize_query_param -> TakeErrorMessage<std::num::ParseIntError>)]
     hits_per_page: Option<usize>,
-    #[deserr(error = DeserrQueryParamError<InvalidSearchAttributesToRetrieve>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToRetrieve>)]
     attributes_to_retrieve: Option<CS<String>>,
-    #[deserr(error = DeserrQueryParamError<InvalidSearchAttributesToCrop>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToCrop>)]
     attributes_to_crop: Option<CS<String>>,
-    #[deserr(error = DeserrQueryParamError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH(), from(String) = parse_usize_query_param -> TakeErrorMessage<DetailedParseIntError>)]
+    #[deserr(default = DEFAULT_CROP_LENGTH(), error = DeserrQueryParamError<InvalidSearchCropLength>, from(String) = parse_usize_query_param -> TakeErrorMessage<DetailedParseIntError>)]
     crop_length: usize,
-    #[deserr(error = DeserrQueryParamError<InvalidSearchAttributesToHighlight>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToHighlight>)]
     attributes_to_highlight: Option<CS<String>>,
-    #[deserr(error = DeserrQueryParamError<InvalidSearchFilter>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchFilter>)]
     filter: Option<String>,
-    #[deserr(error = DeserrQueryParamError<InvalidSearchSort>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchSort>)]
     sort: Option<String>,
-    #[deserr(error = DeserrQueryParamError<InvalidSearchShowMatchesPosition>, default, from(&String) = parse_bool_take_error_message -> TakeErrorMessage<std::str::ParseBoolError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowMatchesPosition>, from(&String) = parse_bool_take_error_message -> TakeErrorMessage<std::str::ParseBoolError>)]
     show_matches_position: bool,
-    #[deserr(error = DeserrQueryParamError<InvalidSearchFacets>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchFacets>)]
     facets: Option<CS<String>>,
-    #[deserr(error = DeserrQueryParamError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
+    #[deserr( default = DEFAULT_HIGHLIGHT_PRE_TAG(), error = DeserrQueryParamError<InvalidSearchHighlightPreTag>)]
     highlight_pre_tag: String,
-    #[deserr(error = DeserrQueryParamError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
+    #[deserr( default = DEFAULT_HIGHLIGHT_POST_TAG(), error = DeserrQueryParamError<InvalidSearchHighlightPostTag>)]
     highlight_post_tag: String,
-    #[deserr(error = DeserrQueryParamError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
+    #[deserr(default = DEFAULT_CROP_MARKER(), error = DeserrQueryParamError<InvalidSearchCropMarker>)]
     crop_marker: String,
-    #[deserr(error = DeserrQueryParamError<InvalidSearchMatchingStrategy>, default)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchMatchingStrategy>)]
     matching_strategy: MatchingStrategy,
 }
 

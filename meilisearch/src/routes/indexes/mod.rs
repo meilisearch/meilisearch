@@ -76,10 +76,10 @@ impl IndexView {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ListIndexes {
     #[serde(default)]
-    #[deserr(error = DeserrQueryParamError<InvalidIndexOffset>, default, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidIndexOffset>, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
     pub offset: usize,
     #[serde(default = "PAGINATION_DEFAULT_LIMIT")]
-    #[deserr(error = DeserrQueryParamError<InvalidIndexLimit>, default = PAGINATION_DEFAULT_LIMIT(), from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
+    #[deserr(default = PAGINATION_DEFAULT_LIMIT(), error = DeserrQueryParamError<InvalidIndexLimit>, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
     pub limit: usize,
 }
 impl ListIndexes {

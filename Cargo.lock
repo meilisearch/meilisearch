@@ -1025,8 +1025,6 @@ dependencies = [
 [[package]]
 name = "deserr"
 version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86290491a2b5c21a1a5083da8dae831006761258fabd5617309c3eebc5f89468"
 dependencies = [
  "deserr-internal",
  "serde-cs",
@@ -1036,8 +1034,6 @@ dependencies = [
 [[package]]
 name = "deserr-internal"
 version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7131de1c27581bc376a22166c9f570be91b76cb096be2f6aecf224c27bf7c49a"
 dependencies = [
  "convert_case 0.5.0",
  "proc-macro2 1.0.49",
@@ -1315,8 +1311,7 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "0.39.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.39.0#e6bea999740b153871f665abce869ffbb5aa94c5"
+version = "0.38.0"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1334,8 +1329,7 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "0.39.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.39.0#e6bea999740b153871f665abce869ffbb5aa94c5"
+version = "0.38.0"
 dependencies = [
  "serde_json",
 ]
@@ -1899,8 +1893,7 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "0.39.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.39.0#e6bea999740b153871f665abce869ffbb5aa94c5"
+version = "0.38.0"
 dependencies = [
  "serde_json",
 ]
@@ -2448,8 +2441,7 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.39.0"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.39.0#e6bea999740b153871f665abce869ffbb5aa94c5"
+version = "0.38.0"
 dependencies = [
  "bimap",
  "bincode",

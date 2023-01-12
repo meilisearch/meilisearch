@@ -22,7 +22,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[derive(DeserializeFromValue, Debug, Clone, PartialEq, Eq)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SwapIndexesPayload {
-    #[deserr(error = DeserrJsonError<InvalidSwapIndexes>)]
+    #[deserr(error = DeserrJsonError<InvalidSwapIndexes>, missing_field_error = DeserrJsonError::missing_swap_indexes_indexes)]
     indexes: Vec<String>,
 }
 

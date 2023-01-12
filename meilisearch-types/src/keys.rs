@@ -38,17 +38,17 @@ fn parse_uuid_from_str(s: &str) -> Result<Uuid, TakeErrorMessage<uuid::Error>> {
 #[derive(Debug, DeserializeFromValue)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct CreateApiKey {
-    #[deserr(error = DeserrJsonError<InvalidApiKeyDescription>)]
+    #[deserr(default, error = DeserrJsonError<InvalidApiKeyDescription>)]
     pub description: Option<String>,
-    #[deserr(error = DeserrJsonError<InvalidApiKeyName>)]
+    #[deserr(default, error = DeserrJsonError<InvalidApiKeyName>)]
     pub name: Option<String>,
     #[deserr(default = Uuid::new_v4(), error = DeserrJsonError<InvalidApiKeyUid>, from(&String) = parse_uuid_from_str -> TakeErrorMessage<uuid::Error>)]
     pub uid: KeyId,
-    #[deserr(error = DeserrJsonError<InvalidApiKeyActions>)]
+    #[deserr(error = DeserrJsonError<InvalidApiKeyActions>, missing_field_error = DeserrJsonError::missing_api_key_actions)]
     pub actions: Vec<Action>,
-    #[deserr(error = DeserrJsonError<InvalidApiKeyIndexes>)]
+    #[deserr(error = DeserrJsonError<InvalidApiKeyIndexes>, missing_field_error = DeserrJsonError::missing_api_key_indexes)]
     pub indexes: Vec<StarOr<IndexUid>>,
-    #[deserr(error = DeserrJsonError<InvalidApiKeyExpiresAt>, default = None, from(&String) = parse_expiration_date -> TakeErrorMessage<ParseOffsetDateTimeError>)]
+    #[deserr(error = DeserrJsonError<InvalidApiKeyExpiresAt>, from(&String) = parse_expiration_date -> TakeErrorMessage<ParseOffsetDateTimeError>, missing_field_error = DeserrJsonError::missing_api_key_expires_at)]
     pub expires_at: Option<OffsetDateTime>,
 }
 impl CreateApiKey {
@@ -94,9 +94,9 @@ fn deny_immutable_fields_api_key(
 #[derive(Debug, DeserializeFromValue)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_api_key)]
 pub struct PatchApiKey {
-    #[deserr(error = DeserrJsonError<InvalidApiKeyDescription>)]
+    #[deserr(default, error = DeserrJsonError<InvalidApiKeyDescription>)]
     pub description: Option<String>,
-    #[deserr(error = DeserrJsonError<InvalidApiKeyName>)]
+    #[deserr(default, error = DeserrJsonError<InvalidApiKeyName>)]
     pub name: Option<String>,
 }
 

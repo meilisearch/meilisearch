@@ -169,61 +169,61 @@ impl From<Details> for DetailsView {
 #[derive(Debug, DeserializeFromValue)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct TasksFilterQuery {
-    #[deserr(error = DeserrQueryParamError<InvalidTaskLimit>, default = DEFAULT_LIMIT(), from(String) = parse_u32_query_param -> TakeErrorMessage<DetailedParseIntError>)]
+    #[deserr(default = DEFAULT_LIMIT(), error = DeserrQueryParamError<InvalidTaskLimit>, from(String) = parse_u32_query_param -> TakeErrorMessage<DetailedParseIntError>)]
     pub limit: u32,
-    #[deserr(error = DeserrQueryParamError<InvalidTaskFrom>, from(Option<String>) = parse_option_u32_query_param -> TakeErrorMessage<DetailedParseIntError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskFrom>, from(Option<String>) = parse_option_u32_query_param -> TakeErrorMessage<DetailedParseIntError>)]
     pub from: Option<TaskId>,
 
-    #[deserr(error = DeserrQueryParamError<InvalidTaskUids>, from(Option<CS<String>>) = parse_option_vec_u32_query_param -> TakeErrorMessage<DetailedParseIntError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskUids>, from(Option<CS<String>>) = parse_option_vec_u32_query_param -> TakeErrorMessage<DetailedParseIntError>)]
     pub uids: Option<Vec<u32>>,
-    #[deserr(error = DeserrQueryParamError<InvalidTaskCanceledBy>, from(Option<CS<String>>) = parse_option_vec_u32_query_param -> TakeErrorMessage<DetailedParseIntError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskCanceledBy>, from(Option<CS<String>>) = parse_option_vec_u32_query_param -> TakeErrorMessage<DetailedParseIntError>)]
     pub canceled_by: Option<Vec<u32>>,
-    #[deserr(error = DeserrQueryParamError<InvalidTaskTypes>, default = None, from(Option<CS<StarOr<String>>>) = parse_option_cs_star_or::<Kind> -> TakeErrorMessage<ResponseError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskTypes>, default = None, from(Option<CS<StarOr<String>>>) = parse_option_cs_star_or::<Kind> -> TakeErrorMessage<ResponseError>)]
     pub types: Option<Vec<Kind>>,
-    #[deserr(error = DeserrQueryParamError<InvalidTaskStatuses>, default = None, from(Option<CS<StarOr<String>>>) = parse_option_cs_star_or::<Status> -> TakeErrorMessage<ResponseError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskStatuses>, default = None, from(Option<CS<StarOr<String>>>) = parse_option_cs_star_or::<Status> -> TakeErrorMessage<ResponseError>)]
     pub statuses: Option<Vec<Status>>,
-    #[deserr(error = DeserrQueryParamError<InvalidIndexUid>, default = None, from(Option<CS<StarOr<String>>>) = parse_option_cs_star_or::<IndexUid> -> TakeErrorMessage<ResponseError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidIndexUid>, default = None, from(Option<CS<StarOr<String>>>) = parse_option_cs_star_or::<IndexUid> -> TakeErrorMessage<ResponseError>)]
     pub index_uids: Option<Vec<IndexUid>>,
 
-    #[deserr(error = DeserrQueryParamError<InvalidTaskAfterEnqueuedAt>, default = None, from(Option<String>) = deserialize_date_after -> TakeErrorMessage<InvalidTaskDateError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterEnqueuedAt>, default = None, from(Option<String>) = deserialize_date_after -> TakeErrorMessage<InvalidTaskDateError>)]
     pub after_enqueued_at: Option<OffsetDateTime>,
-    #[deserr(error = DeserrQueryParamError<InvalidTaskBeforeEnqueuedAt>, default = None, from(Option<String>) = deserialize_date_before -> TakeErrorMessage<InvalidTaskDateError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeEnqueuedAt>, default = None, from(Option<String>) = deserialize_date_before -> TakeErrorMessage<InvalidTaskDateError>)]
     pub before_enqueued_at: Option<OffsetDateTime>,
-    #[deserr(error = DeserrQueryParamError<InvalidTaskAfterStartedAt>, default = None, from(Option<String>) = deserialize_date_after -> TakeErrorMessage<InvalidTaskDateError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterStartedAt>, default = None, from(Option<String>) = deserialize_date_after -> TakeErrorMessage<InvalidTaskDateError>)]
     pub after_started_at: Option<OffsetDateTime>,
-    #[deserr(error = DeserrQueryParamError<InvalidTaskBeforeStartedAt>, default = None, from(Option<String>) = deserialize_date_before -> TakeErrorMessage<InvalidTaskDateError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeStartedAt>, default = None, from(Option<String>) = deserialize_date_before -> TakeErrorMessage<InvalidTaskDateError>)]
     pub before_started_at: Option<OffsetDateTime>,
-    #[deserr(error = DeserrQueryParamError<InvalidTaskAfterFinishedAt>, default = None, from(Option<String>) = deserialize_date_after -> TakeErrorMessage<InvalidTaskDateError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterFinishedAt>, default = None, from(Option<String>) = deserialize_date_after -> TakeErrorMessage<InvalidTaskDateError>)]
     pub after_finished_at: Option<OffsetDateTime>,
-    #[deserr(error = DeserrQueryParamError<InvalidTaskBeforeFinishedAt>, default = None, from(Option<String>) = deserialize_date_before -> TakeErrorMessage<InvalidTaskDateError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeFinishedAt>, default = None, from(Option<String>) = deserialize_date_before -> TakeErrorMessage<InvalidTaskDateError>)]
     pub before_finished_at: Option<OffsetDateTime>,
 }
 
 #[derive(Deserialize, Debug, DeserializeFromValue)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct TaskDeletionOrCancelationQuery {
-    #[deserr(error = DeserrQueryParamError<InvalidTaskUids>, from(Option<CS<String>>) = parse_option_vec_u32_query_param -> TakeErrorMessage<DetailedParseIntError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskUids>, from(Option<CS<String>>) = parse_option_vec_u32_query_param -> TakeErrorMessage<DetailedParseIntError>)]
     pub uids: Option<Vec<u32>>,
-    #[deserr(error = DeserrQueryParamError<InvalidTaskCanceledBy>, from(Option<CS<String>>) = parse_option_vec_u32_query_param -> TakeErrorMessage<DetailedParseIntError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskCanceledBy>, from(Option<CS<String>>) = parse_option_vec_u32_query_param -> TakeErrorMessage<DetailedParseIntError>)]
     pub canceled_by: Option<Vec<u32>>,
-    #[deserr(error = DeserrQueryParamError<InvalidTaskTypes>, default = None, from(Option<CS<StarOr<String>>>) = parse_option_cs_star_or::<Kind> -> TakeErrorMessage<ResponseError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskTypes>, default = None, from(Option<CS<StarOr<String>>>) = parse_option_cs_star_or::<Kind> -> TakeErrorMessage<ResponseError>)]
     pub types: Option<Vec<Kind>>,
-    #[deserr(error = DeserrQueryParamError<InvalidTaskStatuses>, default = None, from(Option<CS<StarOr<String>>>) = parse_option_cs_star_or::<Status> -> TakeErrorMessage<ResponseError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskStatuses>, default = None, from(Option<CS<StarOr<String>>>) = parse_option_cs_star_or::<Status> -> TakeErrorMessage<ResponseError>)]
     pub statuses: Option<Vec<Status>>,
-    #[deserr(error = DeserrQueryParamError<InvalidIndexUid>, default = None, from(Option<CS<StarOr<String>>>) = parse_option_cs_star_or::<IndexUid> -> TakeErrorMessage<ResponseError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidIndexUid>, default = None, from(Option<CS<StarOr<String>>>) = parse_option_cs_star_or::<IndexUid> -> TakeErrorMessage<ResponseError>)]
     pub index_uids: Option<Vec<IndexUid>>,
 
-    #[deserr(error = DeserrQueryParamError<InvalidTaskAfterEnqueuedAt>, default = None, from(Option<String>) = deserialize_date_after -> TakeErrorMessage<InvalidTaskDateError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterEnqueuedAt>, default = None, from(Option<String>) = deserialize_date_after -> TakeErrorMessage<InvalidTaskDateError>)]
     pub after_enqueued_at: Option<OffsetDateTime>,
-    #[deserr(error = DeserrQueryParamError<InvalidTaskBeforeEnqueuedAt>, default = None, from(Option<String>) = deserialize_date_before -> TakeErrorMessage<InvalidTaskDateError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeEnqueuedAt>, default = None, from(Option<String>) = deserialize_date_before -> TakeErrorMessage<InvalidTaskDateError>)]
     pub before_enqueued_at: Option<OffsetDateTime>,
-    #[deserr(error = DeserrQueryParamError<InvalidTaskAfterStartedAt>, default = None, from(Option<String>) = deserialize_date_after -> TakeErrorMessage<InvalidTaskDateError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterStartedAt>, default = None, from(Option<String>) = deserialize_date_after -> TakeErrorMessage<InvalidTaskDateError>)]
     pub after_started_at: Option<OffsetDateTime>,
-    #[deserr(error = DeserrQueryParamError<InvalidTaskBeforeStartedAt>, default = None, from(Option<String>) = deserialize_date_before -> TakeErrorMessage<InvalidTaskDateError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeStartedAt>, default = None, from(Option<String>) = deserialize_date_before -> TakeErrorMessage<InvalidTaskDateError>)]
     pub before_started_at: Option<OffsetDateTime>,
-    #[deserr(error = DeserrQueryParamError<InvalidTaskAfterFinishedAt>, default = None, from(Option<String>) = deserialize_date_after -> TakeErrorMessage<InvalidTaskDateError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterFinishedAt>, default = None, from(Option<String>) = deserialize_date_after -> TakeErrorMessage<InvalidTaskDateError>)]
     pub after_finished_at: Option<OffsetDateTime>,
-    #[deserr(error = DeserrQueryParamError<InvalidTaskBeforeFinishedAt>, default = None, from(Option<String>) = deserialize_date_before -> TakeErrorMessage<InvalidTaskDateError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeFinishedAt>, default = None, from(Option<String>) = deserialize_date_before -> TakeErrorMessage<InvalidTaskDateError>)]
     pub before_finished_at: Option<OffsetDateTime>,
 }
 

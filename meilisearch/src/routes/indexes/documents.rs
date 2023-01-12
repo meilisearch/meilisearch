@@ -85,7 +85,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct GetDocument {
     // TODO: strongly typed argument here
-    #[deserr(error = DeserrQueryParamError<InvalidDocumentFields>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
     fields: Option<CS<StarOr<String>>>,
 }
 
@@ -122,11 +122,11 @@ pub async fn delete_document(
 #[derive(Deserialize, Debug, DeserializeFromValue)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct BrowseQuery {
-    #[deserr(error = DeserrQueryParamError<InvalidDocumentFields>, default, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<ParseIntError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<ParseIntError>)]
     offset: usize,
-    #[deserr(error = DeserrQueryParamError<InvalidDocumentLimit>, default = crate::routes::PAGINATION_DEFAULT_LIMIT(), from(&String) = parse_usize_take_error_message -> TakeErrorMessage<ParseIntError>)]
+    #[deserr(default = crate::routes::PAGINATION_DEFAULT_LIMIT(), error = DeserrQueryParamError<InvalidDocumentLimit>, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<ParseIntError>)]
     limit: usize,
-    #[deserr(error = DeserrQueryParamError<InvalidDocumentLimit>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentLimit>)]
     fields: Option<CS<StarOr<String>>>,
 }
 
@@ -151,7 +151,7 @@ pub async fn get_all_documents(
 #[derive(Deserialize, Debug, DeserializeFromValue)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct UpdateDocumentsQuery {
-    #[deserr(error = DeserrJsonError<InvalidIndexPrimaryKey>)]
+    #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
     pub primary_key: Option<String>,
 }
 

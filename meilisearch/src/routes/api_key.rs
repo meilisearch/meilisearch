@@ -55,10 +55,10 @@ pub async fn create_api_key(
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ListApiKeys {
     #[serde(default)]
-    #[deserr(error = DeserrQueryParamError<InvalidApiKeyOffset>, default, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidApiKeyOffset>, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
     pub offset: usize,
     #[serde(default = "PAGINATION_DEFAULT_LIMIT")]
-    #[deserr(error = DeserrQueryParamError<InvalidApiKeyLimit>, default = PAGINATION_DEFAULT_LIMIT(), from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
+    #[deserr(default = PAGINATION_DEFAULT_LIMIT(), error = DeserrQueryParamError<InvalidApiKeyLimit>, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
     pub limit: usize,
 }
 impl ListApiKeys {

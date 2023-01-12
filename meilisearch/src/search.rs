@@ -3,8 +3,8 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 use std::time::Instant;
 
+use deserr::DeserializeFromValue;
 use either::Either;
-use meilisearch_types::deserr::DeserializeFromValue;
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::DeserrJsonError;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -32,39 +32,39 @@ pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 #[derive(Debug, Clone, Default, PartialEq, DeserializeFromValue)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQuery {
-    #[deserr(error = DeserrJsonError<InvalidSearchQ>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
-    #[deserr(error = DeserrJsonError<InvalidSearchOffset>, default = DEFAULT_SEARCH_OFFSET())]
+    #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
-    #[deserr(error = DeserrJsonError<InvalidSearchLimit>, default = DEFAULT_SEARCH_LIMIT())]
+    #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
     pub limit: usize,
-    #[deserr(error = DeserrJsonError<InvalidSearchPage>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
     pub page: Option<usize>,
-    #[deserr(error = DeserrJsonError<InvalidSearchHitsPerPage>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchHitsPerPage>)]
     pub hits_per_page: Option<usize>,
-    #[deserr(error = DeserrJsonError<InvalidSearchAttributesToRetrieve>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
-    #[deserr(error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
     pub attributes_to_crop: Option<Vec<String>>,
-    #[deserr(error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
     pub crop_length: usize,
-    #[deserr(error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
     pub attributes_to_highlight: Option<HashSet<String>>,
-    #[deserr(error = DeserrJsonError<InvalidSearchShowMatchesPosition>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>, default)]
     pub show_matches_position: bool,
-    #[deserr(error = DeserrJsonError<InvalidSearchFilter>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
-    #[deserr(error = DeserrJsonError<InvalidSearchSort>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
     pub sort: Option<Vec<String>>,
-    #[deserr(error = DeserrJsonError<InvalidSearchFacets>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
-    #[deserr(error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
     pub highlight_pre_tag: String,
-    #[deserr(error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
     pub highlight_post_tag: String,
-    #[deserr(error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
     pub crop_marker: String,
-    #[deserr(error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
     pub matching_strategy: MatchingStrategy,
 }
 

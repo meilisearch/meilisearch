@@ -14,7 +14,9 @@ use serde_cs::vec::CS;
 
 use crate::star_or::StarOr;
 
-use self::deserr_codes::MissingIndexUid;
+use self::deserr_codes::{
+    MissingApiKeyActions, MissingApiKeyExpiresAt, MissingApiKeyIndexes, MissingIndexUid, InvalidSwapIndexes, MissingSwapIndexesIndexes,
+};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -185,7 +187,6 @@ DumpAlreadyProcessing                 , invalid       , CONFLICT;
 DumpNotFound                          , invalid       , NOT_FOUND;
 DumpProcessFailed                     , internal      , INTERNAL_SERVER_ERROR;
 DuplicateIndexFound                   , invalid       , BAD_REQUEST;
-
 ImmutableApiKeyUid                    , invalid       , BAD_REQUEST;
 ImmutableApiKeyKey                    , invalid       , BAD_REQUEST;
 ImmutableApiKeyActions                , invalid       , BAD_REQUEST;
@@ -193,11 +194,9 @@ ImmutableApiKeyIndexes                , invalid       , BAD_REQUEST;
 ImmutableApiKeyExpiresAt              , invalid       , BAD_REQUEST;
 ImmutableApiKeyCreatedAt              , invalid       , BAD_REQUEST;
 ImmutableApiKeyUpdatedAt              , invalid       , BAD_REQUEST;
-
 ImmutableIndexUid                     , invalid       , BAD_REQUEST;
 ImmutableIndexCreatedAt               , invalid       , BAD_REQUEST;
 ImmutableIndexUpdatedAt               , invalid       , BAD_REQUEST;
-
 IndexAlreadyExists                    , invalid       , CONFLICT ;
 IndexCreationFailed                   , internal      , INTERNAL_SERVER_ERROR;
 IndexNotFound                         , invalid       , NOT_FOUND;
@@ -281,6 +280,7 @@ MissingDocumentId                     , invalid       , BAD_REQUEST ;
 MissingIndexUid                       , invalid       , BAD_REQUEST ;
 MissingMasterKey                      , authentication, UNAUTHORIZED ;
 MissingPayload                        , invalid       , BAD_REQUEST ;
+MissingSwapIndexesIndexes             , invalid       , BAD_REQUEST ;
 MissingTaskFilters                    , invalid       , BAD_REQUEST ;
 NoSpaceLeftOnDevice                   , system        , UNPROCESSABLE_ENTITY;
 PayloadTooLarge                       , invalid       , PAYLOAD_TOO_LARGE ;
@@ -476,6 +476,47 @@ impl DeserrJsonError<MissingIndexUid> {
             location,
         ));
         Self { msg: x.msg, code: MissingIndexUid.error_code(), _phantom: PhantomData }
+    }
+}
+impl DeserrJsonError<MissingApiKeyActions> {
+    pub fn missing_api_key_actions(field: &str, location: ValuePointerRef) -> Self {
+        let x = unwrap_any(Self::error::<Infallible>(
+            None,
+            deserr::ErrorKind::MissingField { field },
+            location,
+        ));
+        Self { msg: x.msg, code: MissingApiKeyActions.error_code(), _phantom: PhantomData }
+    }
+}
+impl DeserrJsonError<MissingApiKeyExpiresAt> {
+    pub fn missing_api_key_expires_at(field: &str, location: ValuePointerRef) -> Self {
+        let x = unwrap_any(Self::error::<Infallible>(
+            None,
+            deserr::ErrorKind::MissingField { field },
+            location,
+        ));
+        Self { msg: x.msg, code: MissingApiKeyExpiresAt.error_code(), _phantom: PhantomData }
+    }
+}
+impl DeserrJsonError<MissingApiKeyIndexes> {
+    pub fn missing_api_key_indexes(field: &str, location: ValuePointerRef) -> Self {
+        let x = unwrap_any(Self::error::<Infallible>(
+            None,
+            deserr::ErrorKind::MissingField { field },
+            location,
+        ));
+        Self { msg: x.msg, code: MissingApiKeyIndexes.error_code(), _phantom: PhantomData }
+    }
+}
+
+impl DeserrJsonError<InvalidSwapIndexes> {
+    pub fn missing_swap_indexes_indexes(field: &str, location: ValuePointerRef) -> Self {
+        let x = unwrap_any(Self::error::<Infallible>(
+            None,
+            deserr::ErrorKind::MissingField { field },
+            location,
+        ));
+        Self { msg: x.msg, code: MissingSwapIndexesIndexes.error_code(), _phantom: PhantomData }
     }
 }
 
