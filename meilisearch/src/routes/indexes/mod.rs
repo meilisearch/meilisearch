@@ -1,9 +1,11 @@
+use std::convert::Infallible;
+
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use deserr::DeserializeFromValue;
+use deserr::{DeserializeError, DeserializeFromValue, ValuePointerRef};
 use index_scheduler::IndexScheduler;
 use log::debug;
-use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::error::{deserr_codes::*, unwrap_any, Code};
 use meilisearch_types::error::{DeserrError, ResponseError, TakeErrorMessage};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::{self, FieldDistribution, Index};
@@ -140,8 +142,27 @@ pub async fn create_index(
     }
 }
 
+fn deny_immutable_fields_index(
+    field: &str,
+    accepted: &[&str],
+    location: ValuePointerRef,
+) -> DeserrError {
+    let mut error = unwrap_any(DeserrError::<BadRequest>::error::<Infallible>(
+        None,
+        deserr::ErrorKind::UnknownKey { key: field, accepted },
+        location,
+    ));
+
+    error.code = match field {
+        "uid" => Code::ImmutableIndexUid,
+        "createdAt" => Code::ImmutableIndexCreatedAt,
+        "updatedAt" => Code::ImmutableIndexUpdatedAt,
+        _ => Code::BadRequest,
+    };
+    error
+}
 #[derive(DeserializeFromValue, Debug)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_index)]
 pub struct UpdateIndexRequest {
     #[deserr(error = DeserrError<InvalidIndexPrimaryKey>)]
     primary_key: Option<String>,

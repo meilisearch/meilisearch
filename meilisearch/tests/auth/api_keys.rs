@@ -1404,9 +1404,9 @@ async fn error_patch_api_key_indexes() {
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
       "message": "Json deserialize error: unknown field `indexes`, expected one of `description`, `name` at ``.",
-      "code": "immutable_field",
+      "code": "immutable_api_key_indexes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#immutable-field"
+      "link": "https://docs.meilisearch.com/errors#immutable-api-key-indexes"
     }
     "###);
     meili_snap::snapshot!(code, @"400 Bad Request");
@@ -1481,9 +1481,9 @@ async fn error_patch_api_key_actions() {
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
       "message": "Json deserialize error: unknown field `actions`, expected one of `description`, `name` at ``.",
-      "code": "immutable_field",
+      "code": "immutable_api_key_actions",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#immutable-field"
+      "link": "https://docs.meilisearch.com/errors#immutable-api-key-actions"
     }
     "###);
     meili_snap::snapshot!(code, @"400 Bad Request");
@@ -1550,9 +1550,9 @@ async fn error_patch_api_key_expiration_date() {
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
       "message": "Json deserialize error: unknown field `expiresAt`, expected one of `description`, `name` at ``.",
-      "code": "immutable_field",
+      "code": "immutable_api_key_expires_at",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#immutable-field"
+      "link": "https://docs.meilisearch.com/errors#immutable-api-key-expires-at"
     }
     "###);
     meili_snap::snapshot!(code, @"400 Bad Request");

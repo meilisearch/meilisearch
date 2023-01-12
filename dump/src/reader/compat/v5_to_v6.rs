@@ -292,14 +292,14 @@ impl From<v5::ResponseError> for v6::ResponseError {
             "malformed_payload" => v6::Code::MalformedPayload,
             "missing_payload" => v6::Code::MissingPayload,
             "api_key_not_found" => v6::Code::ApiKeyNotFound,
-            "missing_parameter" => v6::Code::UnretrievableErrorCode,
+            "missing_parameter" => v6::Code::BadRequest,
             "invalid_api_key_actions" => v6::Code::InvalidApiKeyActions,
             "invalid_api_key_indexes" => v6::Code::InvalidApiKeyIndexes,
             "invalid_api_key_expires_at" => v6::Code::InvalidApiKeyExpiresAt,
             "invalid_api_key_description" => v6::Code::InvalidApiKeyDescription,
             "invalid_api_key_name" => v6::Code::InvalidApiKeyName,
             "invalid_api_key_uid" => v6::Code::InvalidApiKeyUid,
-            "immutable_field" => v6::Code::ImmutableField,
+            "immutable_field" => v6::Code::BadRequest,
             "api_key_already_exists" => v6::Code::ApiKeyAlreadyExists,
             other => {
                 log::warn!("Unknown error code {}", other);
