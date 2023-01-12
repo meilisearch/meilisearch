@@ -8,8 +8,10 @@ pub mod star_or;
 pub mod tasks;
 pub mod versioning;
 
+pub use deserr;
 pub use milli;
 pub use milli::{heed, Index};
+pub use serde_cs;
 use uuid::Uuid;
 pub use versioning::VERSION_FILE_NAME;
 

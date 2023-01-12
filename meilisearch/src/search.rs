@@ -3,10 +3,10 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 use std::time::Instant;
 
-use deserr::DeserializeFromValue;
 use either::Either;
+use meilisearch_types::deserr::DeserializeFromValue;
 use meilisearch_types::error::deserr_codes::*;
-use meilisearch_types::error::DeserrError;
+use meilisearch_types::error::DeserrJsonError;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::TokenizerBuilder;
@@ -30,41 +30,41 @@ pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 
 #[derive(Debug, Clone, Default, PartialEq, DeserializeFromValue)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQuery {
-    #[deserr(error = DeserrError<InvalidSearchQ>)]
+    #[deserr(error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
-    #[deserr(error = DeserrError<InvalidSearchOffset>, default = DEFAULT_SEARCH_OFFSET())]
+    #[deserr(error = DeserrJsonError<InvalidSearchOffset>, default = DEFAULT_SEARCH_OFFSET())]
     pub offset: usize,
-    #[deserr(error = DeserrError<InvalidSearchLimit>, default = DEFAULT_SEARCH_LIMIT())]
+    #[deserr(error = DeserrJsonError<InvalidSearchLimit>, default = DEFAULT_SEARCH_LIMIT())]
     pub limit: usize,
-    #[deserr(error = DeserrError<InvalidSearchPage>)]
+    #[deserr(error = DeserrJsonError<InvalidSearchPage>)]
     pub page: Option<usize>,
-    #[deserr(error = DeserrError<InvalidSearchHitsPerPage>)]
+    #[deserr(error = DeserrJsonError<InvalidSearchHitsPerPage>)]
     pub hits_per_page: Option<usize>,
-    #[deserr(error = DeserrError<InvalidSearchAttributesToRetrieve>)]
+    #[deserr(error = DeserrJsonError<InvalidSearchAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
-    #[deserr(error = DeserrError<InvalidSearchAttributesToCrop>)]
+    #[deserr(error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
     pub attributes_to_crop: Option<Vec<String>>,
-    #[deserr(error = DeserrError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
+    #[deserr(error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
     pub crop_length: usize,
-    #[deserr(error = DeserrError<InvalidSearchAttributesToHighlight>)]
+    #[deserr(error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
     pub attributes_to_highlight: Option<HashSet<String>>,
-    #[deserr(error = DeserrError<InvalidSearchShowMatchesPosition>, default)]
+    #[deserr(error = DeserrJsonError<InvalidSearchShowMatchesPosition>, default)]
     pub show_matches_position: bool,
-    #[deserr(error = DeserrError<InvalidSearchFilter>)]
+    #[deserr(error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
-    #[deserr(error = DeserrError<InvalidSearchSort>)]
+    #[deserr(error = DeserrJsonError<InvalidSearchSort>)]
     pub sort: Option<Vec<String>>,
-    #[deserr(error = DeserrError<InvalidSearchFacets>)]
+    #[deserr(error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
-    #[deserr(error = DeserrError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
+    #[deserr(error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
     pub highlight_pre_tag: String,
-    #[deserr(error = DeserrError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
+    #[deserr(error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
     pub highlight_post_tag: String,
-    #[deserr(error = DeserrError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
+    #[deserr(error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
     pub crop_marker: String,
-    #[deserr(error = DeserrError<InvalidSearchMatchingStrategy>, default)]
+    #[deserr(error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
     pub matching_strategy: MatchingStrategy,
 }
 

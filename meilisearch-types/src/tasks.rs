@@ -348,7 +348,7 @@ impl FromStr for Status {
         } else {
             Err(ResponseError::from_msg(
                 format!(
-                    "`{}` is not a status. Available status are {}.",
+                    "`{}` is not a valid task status. Available statuses are {}.",
                     status,
                     enum_iterator::all::<Status>()
                         .map(|s| format!("`{s}`"))
@@ -440,7 +440,7 @@ impl FromStr for Kind {
         } else {
             Err(ResponseError::from_msg(
                 format!(
-                    "`{}` is not a type. Available types are {}.",
+                    "`{}` is not a valid task type. Available types are {}.",
                     kind,
                     enum_iterator::all::<Kind>()
                         .map(|k| format!(

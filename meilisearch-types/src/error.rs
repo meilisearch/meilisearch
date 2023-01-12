@@ -1,14 +1,18 @@
 use std::convert::Infallible;
 use std::marker::PhantomData;
+use std::str::FromStr;
 use std::{fmt, io};
 
 use actix_web::http::StatusCode;
 use actix_web::{self as aweb, HttpResponseBuilder};
 use aweb::rt::task::JoinError;
 use convert_case::Casing;
-use deserr::{DeserializeError, IntoValue, MergeWithError, ValuePointerRef};
+use deserr::{DeserializeError, ErrorKind, IntoValue, MergeWithError, ValueKind, ValuePointerRef};
 use milli::heed::{Error as HeedError, MdbError};
 use serde::{Deserialize, Serialize};
+use serde_cs::vec::CS;
+
+use crate::star_or::StarOr;
 
 use self::deserr_codes::MissingIndexUid;
 
@@ -422,41 +426,49 @@ mod strategy {
     }
 }
 
-pub struct DeserrError<C: ErrorCode = deserr_codes::BadRequest> {
+pub struct DeserrJson;
+pub struct DeserrQueryParam;
+
+pub type DeserrJsonError<C = deserr_codes::BadRequest> = DeserrError<DeserrJson, C>;
+pub type DeserrQueryParamError<C = deserr_codes::BadRequest> = DeserrError<DeserrQueryParam, C>;
+
+pub struct DeserrError<Format, C: Default + ErrorCode> {
     pub msg: String,
     pub code: Code,
-    _phantom: PhantomData<C>,
+    _phantom: PhantomData<(Format, C)>,
 }
-impl<C: ErrorCode> std::fmt::Debug for DeserrError<C> {
+impl<Format, C: Default + ErrorCode> std::fmt::Debug for DeserrError<Format, C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DeserrError").field("msg", &self.msg).field("code", &self.code).finish()
     }
 }
 
-impl<C: ErrorCode> std::fmt::Display for DeserrError<C> {
+impl<Format, C: Default + ErrorCode> std::fmt::Display for DeserrError<Format, C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.msg)
     }
 }
 
-impl<C: ErrorCode> std::error::Error for DeserrError<C> {}
-impl<C: ErrorCode> ErrorCode for DeserrError<C> {
+impl<Format, C: Default + ErrorCode> std::error::Error for DeserrError<Format, C> {}
+impl<Format, C: Default + ErrorCode> ErrorCode for DeserrError<Format, C> {
     fn error_code(&self) -> Code {
         self.code
     }
 }
 
-impl<C1: ErrorCode, C2: ErrorCode> MergeWithError<DeserrError<C2>> for DeserrError<C1> {
+impl<Format, C1: Default + ErrorCode, C2: Default + ErrorCode>
+    MergeWithError<DeserrError<Format, C2>> for DeserrError<Format, C1>
+{
     fn merge(
         _self_: Option<Self>,
-        other: DeserrError<C2>,
+        other: DeserrError<Format, C2>,
         _merge_location: ValuePointerRef,
     ) -> Result<Self, Self> {
         Err(DeserrError { msg: other.msg, code: other.code, _phantom: PhantomData })
     }
 }
 
-impl DeserrError<MissingIndexUid> {
+impl DeserrJsonError<MissingIndexUid> {
     pub fn missing_index_uid(field: &str, location: ValuePointerRef) -> Self {
         let x = unwrap_any(Self::error::<Infallible>(
             None,
@@ -467,21 +479,364 @@ impl DeserrError<MissingIndexUid> {
     }
 }
 
-impl<C: Default + ErrorCode> deserr::DeserializeError for DeserrError<C> {
+// if the error happened in the root, then an empty string is returned.
+pub fn location_json_description(location: ValuePointerRef, article: &str) -> String {
+    fn rec(location: ValuePointerRef) -> String {
+        match location {
+            ValuePointerRef::Origin => String::new(),
+            ValuePointerRef::Key { key, prev } => rec(*prev) + "." + key,
+            ValuePointerRef::Index { index, prev } => format!("{}[{index}]", rec(*prev)),
+        }
+    }
+    match location {
+        ValuePointerRef::Origin => String::new(),
+        _ => {
+            format!("{article} `{}`", rec(location))
+        }
+    }
+}
+
+fn value_kinds_description_json(kinds: &[ValueKind]) -> String {
+    fn order(kind: &ValueKind) -> u8 {
+        match kind {
+            ValueKind::Null => 0,
+            ValueKind::Boolean => 1,
+            ValueKind::Integer => 2,
+            ValueKind::NegativeInteger => 3,
+            ValueKind::Float => 4,
+            ValueKind::String => 5,
+            ValueKind::Sequence => 6,
+            ValueKind::Map => 7,
+        }
+    }
+
+    fn single_description(kind: &ValueKind) -> &'static str {
+        match kind {
+            ValueKind::Null => "null",
+            ValueKind::Boolean => "a boolean",
+            ValueKind::Integer => "a positive integer",
+            ValueKind::NegativeInteger => "an integer",
+            ValueKind::Float => "a number",
+            ValueKind::String => "a string",
+            ValueKind::Sequence => "an array",
+            ValueKind::Map => "an object",
+        }
+    }
+
+    fn description_rec(kinds: &[ValueKind], count_items: &mut usize, message: &mut String) {
+        let (msg_part, rest): (_, &[ValueKind]) = match kinds {
+            [] => (String::new(), &[]),
+            [ValueKind::Integer | ValueKind::NegativeInteger, ValueKind::Float, rest @ ..] => {
+                ("a number".to_owned(), rest)
+            }
+            [ValueKind::Integer, ValueKind::NegativeInteger, ValueKind::Float, rest @ ..] => {
+                ("a number".to_owned(), rest)
+            }
+            [ValueKind::Integer, ValueKind::NegativeInteger, rest @ ..] => {
+                ("an integer".to_owned(), rest)
+            }
+            [a] => (single_description(a).to_owned(), &[]),
+            [a, rest @ ..] => (single_description(a).to_owned(), rest),
+        };
+
+        if rest.is_empty() {
+            if *count_items == 0 {
+                message.push_str(&msg_part);
+            } else if *count_items == 1 {
+                message.push_str(&format!(" or {msg_part}"));
+            } else {
+                message.push_str(&format!(", or {msg_part}"));
+            }
+        } else {
+            if *count_items == 0 {
+                message.push_str(&msg_part);
+            } else {
+                message.push_str(&format!(", {msg_part}"));
+            }
+
+            *count_items += 1;
+            description_rec(rest, count_items, message);
+        }
+    }
+
+    let mut kinds = kinds.to_owned();
+    kinds.sort_by_key(order);
+    kinds.dedup();
+
+    if kinds.is_empty() {
+        "a different value".to_owned()
+    } else {
+        let mut message = String::new();
+        description_rec(kinds.as_slice(), &mut 0, &mut message);
+        message
+    }
+}
+
+fn value_description_with_kind_json(v: &serde_json::Value) -> String {
+    match v.kind() {
+        ValueKind::Null => "null".to_owned(),
+        kind => {
+            format!(
+                "{}: `{}`",
+                value_kinds_description_json(&[kind]),
+                serde_json::to_string(v).unwrap()
+            )
+        }
+    }
+}
+
+impl<C: Default + ErrorCode> deserr::DeserializeError for DeserrJsonError<C> {
     fn error<V: IntoValue>(
         _self_: Option<Self>,
         error: deserr::ErrorKind<V>,
         location: ValuePointerRef,
     ) -> Result<Self, Self> {
-        let msg = unwrap_any(deserr::serde_json::JsonError::error(None, error, location)).0;
+        let mut message = String::new();
 
-        Err(DeserrError { msg, code: C::default().error_code(), _phantom: PhantomData })
+        message.push_str(&match error {
+            ErrorKind::IncorrectValueKind { actual, accepted } => {
+                let expected = value_kinds_description_json(accepted);
+                // if we're not able to get the value as a string then we print nothing.
+                let received = value_description_with_kind_json(&serde_json::Value::from(actual));
+
+                let location = location_json_description(location, " at");
+
+                format!("Invalid value type{location}: expected {expected}, but found {received}")
+            }
+            ErrorKind::MissingField { field } => {
+                // serde_json original message:
+                // Json deserialize error: missing field `lol` at line 1 column 2
+                let location = location_json_description(location, " inside");
+                format!("Missing field `{field}`{location}")
+            }
+            ErrorKind::UnknownKey { key, accepted } => {
+                let location = location_json_description(location, " inside");
+                format!(
+                    "Unknown field `{}`{location}: expected one of {}",
+                    key,
+                    accepted
+                        .iter()
+                        .map(|accepted| format!("`{}`", accepted))
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                )
+            }
+            ErrorKind::UnknownValue { value, accepted } => {
+                let location = location_json_description(location, " at");
+                format!(
+                    "Unknown value `{}`{location}: expected one of {}",
+                    value,
+                    accepted
+                        .iter()
+                        .map(|accepted| format!("`{}`", accepted))
+                        .collect::<Vec<String>>()
+                        .join(", "),
+                )
+            }
+            ErrorKind::Unexpected { msg } => {
+                let location = location_json_description(location, " at");
+                // serde_json original message:
+                // The json payload provided is malformed. `trailing characters at line 1 column 19`.
+                format!("Invalid value{location}: {msg}")
+            }
+        });
+
+        Err(DeserrJsonError {
+            msg: message,
+            code: C::default().error_code(),
+            _phantom: PhantomData,
+        })
     }
 }
 
+// if the error happened in the root, then an empty string is returned.
+pub fn location_query_param_description(location: ValuePointerRef, article: &str) -> String {
+    fn rec(location: ValuePointerRef) -> String {
+        match location {
+            ValuePointerRef::Origin => String::new(),
+            ValuePointerRef::Key { key, prev } => {
+                if matches!(prev, ValuePointerRef::Origin) {
+                    key.to_owned()
+                } else {
+                    rec(*prev) + "." + key
+                }
+            }
+            ValuePointerRef::Index { index, prev } => format!("{}[{index}]", rec(*prev)),
+        }
+    }
+    match location {
+        ValuePointerRef::Origin => String::new(),
+        _ => {
+            format!("{article} `{}`", rec(location))
+        }
+    }
+}
+
+impl<C: Default + ErrorCode> deserr::DeserializeError for DeserrQueryParamError<C> {
+    fn error<V: IntoValue>(
+        _self_: Option<Self>,
+        error: deserr::ErrorKind<V>,
+        location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        let mut message = String::new();
+
+        message.push_str(&match error {
+            ErrorKind::IncorrectValueKind { actual, accepted } => {
+                let expected = value_kinds_description_query_param(accepted);
+                // if we're not able to get the value as a string then we print nothing.
+                let received = value_description_with_kind_query_param(actual);
+
+                let location = location_query_param_description(location, " for parameter");
+
+                format!("Invalid value type{location}: expected {expected}, but found {received}")
+            }
+            ErrorKind::MissingField { field } => {
+                // serde_json original message:
+                // Json deserialize error: missing field `lol` at line 1 column 2
+                let location = location_query_param_description(location, " inside");
+                format!("Missing parameter `{field}`{location}")
+            }
+            ErrorKind::UnknownKey { key, accepted } => {
+                let location = location_query_param_description(location, " inside");
+                format!(
+                    "Unknown parameter `{}`{location}: expected one of {}",
+                    key,
+                    accepted
+                        .iter()
+                        .map(|accepted| format!("`{}`", accepted))
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                )
+            }
+            ErrorKind::UnknownValue { value, accepted } => {
+                let location = location_query_param_description(location, " for parameter");
+                format!(
+                    "Unknown value `{}`{location}: expected one of {}",
+                    value,
+                    accepted
+                        .iter()
+                        .map(|accepted| format!("`{}`", accepted))
+                        .collect::<Vec<String>>()
+                        .join(", "),
+                )
+            }
+            ErrorKind::Unexpected { msg } => {
+                let location = location_query_param_description(location, " in parameter");
+                // serde_json original message:
+                // The json payload provided is malformed. `trailing characters at line 1 column 19`.
+                format!("Invalid value{location}: {msg}")
+            }
+        });
+
+        Err(DeserrQueryParamError {
+            msg: message,
+            code: C::default().error_code(),
+            _phantom: PhantomData,
+        })
+    }
+}
+
+fn value_kinds_description_query_param(_accepted: &[ValueKind]) -> String {
+    "a string".to_owned()
+}
+
+fn value_description_with_kind_query_param<V: IntoValue>(actual: deserr::Value<V>) -> String {
+    match actual {
+        deserr::Value::Null => "null".to_owned(),
+        deserr::Value::Boolean(x) => format!("a boolean: `{x}`"),
+        deserr::Value::Integer(x) => format!("an integer: `{x}`"),
+        deserr::Value::NegativeInteger(x) => {
+            format!("an integer: `{x}`")
+        }
+        deserr::Value::Float(x) => {
+            format!("a number: `{x}`")
+        }
+        deserr::Value::String(x) => {
+            format!("a string: `{x}`")
+        }
+        deserr::Value::Sequence(_) => "multiple values".to_owned(),
+        deserr::Value::Map(_) => "multiple parameters".to_owned(),
+    }
+}
+
+#[derive(Debug)]
+pub struct DetailedParseIntError(String);
+impl fmt::Display for DetailedParseIntError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "could not parse `{}` as a positive integer", self.0)
+    }
+}
+impl std::error::Error for DetailedParseIntError {}
+
+pub fn parse_u32_query_param(x: String) -> Result<u32, TakeErrorMessage<DetailedParseIntError>> {
+    x.parse::<u32>().map_err(|_e| TakeErrorMessage(DetailedParseIntError(x.to_owned())))
+}
+pub fn parse_usize_query_param(
+    x: String,
+) -> Result<usize, TakeErrorMessage<DetailedParseIntError>> {
+    x.parse::<usize>().map_err(|_e| TakeErrorMessage(DetailedParseIntError(x.to_owned())))
+}
+pub fn parse_option_usize_query_param(
+    s: Option<String>,
+) -> Result<Option<usize>, TakeErrorMessage<DetailedParseIntError>> {
+    if let Some(s) = s {
+        parse_usize_query_param(s).map(Some)
+    } else {
+        Ok(None)
+    }
+}
+pub fn parse_option_u32_query_param(
+    s: Option<String>,
+) -> Result<Option<u32>, TakeErrorMessage<DetailedParseIntError>> {
+    if let Some(s) = s {
+        parse_u32_query_param(s).map(Some)
+    } else {
+        Ok(None)
+    }
+}
+pub fn parse_option_vec_u32_query_param(
+    s: Option<serde_cs::vec::CS<String>>,
+) -> Result<Option<Vec<u32>>, TakeErrorMessage<DetailedParseIntError>> {
+    if let Some(s) = s {
+        s.into_iter()
+            .map(parse_u32_query_param)
+            .collect::<Result<Vec<u32>, TakeErrorMessage<DetailedParseIntError>>>()
+            .map(Some)
+    } else {
+        Ok(None)
+    }
+}
+pub fn parse_option_cs_star_or<T: FromStr>(
+    s: Option<CS<StarOr<String>>>,
+) -> Result<Option<Vec<T>>, TakeErrorMessage<T::Err>> {
+    if let Some(s) = s.and_then(fold_star_or) as Option<Vec<String>> {
+        s.into_iter()
+            .map(|s| T::from_str(&s))
+            .collect::<Result<Vec<T>, T::Err>>()
+            .map_err(TakeErrorMessage)
+            .map(Some)
+    } else {
+        Ok(None)
+    }
+}
+
+/// Extracts the raw values from the `StarOr` types and
+/// return None if a `StarOr::Star` is encountered.
+pub fn fold_star_or<T, O>(content: impl IntoIterator<Item = StarOr<T>>) -> Option<O>
+where
+    O: FromIterator<T>,
+{
+    content
+        .into_iter()
+        .map(|value| match value {
+            StarOr::Star => None,
+            StarOr::Other(val) => Some(val),
+        })
+        .collect()
+}
 pub struct TakeErrorMessage<T>(pub T);
 
-impl<C: Default + ErrorCode, T> MergeWithError<TakeErrorMessage<T>> for DeserrError<C>
+impl<C: Default + ErrorCode, T> MergeWithError<TakeErrorMessage<T>> for DeserrJsonError<C>
 where
     T: std::error::Error,
 {
@@ -490,7 +845,24 @@ where
         other: TakeErrorMessage<T>,
         merge_location: ValuePointerRef,
     ) -> Result<Self, Self> {
-        DeserrError::error::<Infallible>(
+        DeserrJsonError::error::<Infallible>(
+            None,
+            deserr::ErrorKind::Unexpected { msg: other.0.to_string() },
+            merge_location,
+        )
+    }
+}
+
+impl<C: Default + ErrorCode, T> MergeWithError<TakeErrorMessage<T>> for DeserrQueryParamError<C>
+where
+    T: std::error::Error,
+{
+    fn merge(
+        _self_: Option<Self>,
+        other: TakeErrorMessage<T>,
+        merge_location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        DeserrQueryParamError::error::<Infallible>(
             None,
             deserr::ErrorKind::Unexpected { msg: other.0.to_string() },
             merge_location,
@@ -508,5 +880,34 @@ macro_rules! internal_error {
                 }
             }
         )*
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use deserr::ValueKind;
+
+    use crate::error::value_kinds_description_json;
+
+    #[test]
+    fn test_value_kinds_description_json() {
+        insta::assert_display_snapshot!(value_kinds_description_json(&[]), @"a different value");
+
+        insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Boolean]), @"a boolean");
+        insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Integer]), @"a positive integer");
+        insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::NegativeInteger]), @"an integer");
+        insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Integer]), @"a positive integer");
+        insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::String]), @"a string");
+        insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Sequence]), @"an array");
+        insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Map]), @"an object");
+
+        insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Integer, ValueKind::Boolean]), @"a boolean or a positive integer");
+        insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Null, ValueKind::Integer]), @"null or a positive integer");
+        insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Sequence, ValueKind::NegativeInteger]), @"an integer or an array");
+        insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Integer, ValueKind::Float]), @"a number");
+        insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Integer, ValueKind::Float, ValueKind::NegativeInteger]), @"a number");
+        insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Integer, ValueKind::Float, ValueKind::NegativeInteger, ValueKind::Null]), @"null or a number");
+        insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Boolean, ValueKind::Integer, ValueKind::Float, ValueKind::NegativeInteger, ValueKind::Null]), @"null, a boolean, or a number");
+        insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Null, ValueKind::Boolean, ValueKind::Integer, ValueKind::Float, ValueKind::NegativeInteger, ValueKind::Null]), @"null, a boolean, or a number");
     }
 }

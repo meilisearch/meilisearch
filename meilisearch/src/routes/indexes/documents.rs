@@ -10,18 +10,18 @@ use futures::StreamExt;
 use index_scheduler::IndexScheduler;
 use log::debug;
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
-use meilisearch_types::error::deserr_codes::*;
-use meilisearch_types::error::{DeserrError, ResponseError, TakeErrorMessage};
+use meilisearch_types::error::{deserr_codes::*, fold_star_or, DeserrQueryParamError};
+use meilisearch_types::error::{DeserrJsonError, ResponseError, TakeErrorMessage};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
+use meilisearch_types::serde_cs::vec::CS;
 use meilisearch_types::star_or::StarOr;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::{milli, Document, Index};
 use mime::Mime;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
-use serde_cs::vec::CS;
 use serde_json::Value;
 use tempfile::tempfile;
 use tokio::fs::File;
@@ -36,7 +36,7 @@ use crate::extractors::authentication::GuardedData;
 use crate::extractors::payload::Payload;
 use crate::extractors::query_parameters::QueryParameter;
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::{fold_star_or, PaginationView, SummarizedTaskView};
+use crate::routes::{PaginationView, SummarizedTaskView};
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]
@@ -82,16 +82,17 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 #[derive(Deserialize, Debug, DeserializeFromValue)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct GetDocument {
-    #[deserr(error = DeserrError<InvalidDocumentFields>)]
+    // TODO: strongly typed argument here
+    #[deserr(error = DeserrQueryParamError<InvalidDocumentFields>)]
     fields: Option<CS<StarOr<String>>>,
 }
 
 pub async fn get_document(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     path: web::Path<DocumentParam>,
-    params: QueryParameter<GetDocument, DeserrError>,
+    params: QueryParameter<GetDocument, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
     let GetDocument { fields } = params.into_inner();
     let attributes_to_retrieve = fields.and_then(fold_star_or);
@@ -119,20 +120,20 @@ pub async fn delete_document(
 }
 
 #[derive(Deserialize, Debug, DeserializeFromValue)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct BrowseQuery {
-    #[deserr(error = DeserrError<InvalidDocumentFields>, default, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<ParseIntError>)]
+    #[deserr(error = DeserrQueryParamError<InvalidDocumentFields>, default, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<ParseIntError>)]
     offset: usize,
-    #[deserr(error = DeserrError<InvalidDocumentLimit>, default = crate::routes::PAGINATION_DEFAULT_LIMIT(), from(&String) = parse_usize_take_error_message -> TakeErrorMessage<ParseIntError>)]
+    #[deserr(error = DeserrQueryParamError<InvalidDocumentLimit>, default = crate::routes::PAGINATION_DEFAULT_LIMIT(), from(&String) = parse_usize_take_error_message -> TakeErrorMessage<ParseIntError>)]
     limit: usize,
-    #[deserr(error = DeserrError<InvalidDocumentLimit>)]
+    #[deserr(error = DeserrQueryParamError<InvalidDocumentLimit>)]
     fields: Option<CS<StarOr<String>>>,
 }
 
 pub async fn get_all_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    params: QueryParameter<BrowseQuery, DeserrError>,
+    params: QueryParameter<BrowseQuery, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
     let BrowseQuery { limit, offset, fields } = params.into_inner();
@@ -148,16 +149,16 @@ pub async fn get_all_documents(
 }
 
 #[derive(Deserialize, Debug, DeserializeFromValue)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct UpdateDocumentsQuery {
-    #[deserr(error = DeserrError<InvalidIndexPrimaryKey>)]
+    #[deserr(error = DeserrJsonError<InvalidIndexPrimaryKey>)]
     pub primary_key: Option<String>,
 }
 
 pub async fn add_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    params: QueryParameter<UpdateDocumentsQuery, DeserrError>,
+    params: QueryParameter<UpdateDocumentsQuery, DeserrJsonError>,
     body: Payload,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
@@ -185,7 +186,7 @@ pub async fn add_documents(
 pub async fn update_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
     path: web::Path<String>,
-    params: QueryParameter<UpdateDocumentsQuery, DeserrError>,
+    params: QueryParameter<UpdateDocumentsQuery, DeserrJsonError>,
     body: Payload,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,

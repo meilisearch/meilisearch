@@ -4,8 +4,8 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::DeserializeFromValue;
 use meilisearch_auth::error::AuthControllerError;
 use meilisearch_auth::AuthController;
-use meilisearch_types::error::deserr_codes::*;
-use meilisearch_types::error::{Code, DeserrError, ResponseError, TakeErrorMessage};
+use meilisearch_types::error::{deserr_codes::*, DeserrQueryParamError};
+use meilisearch_types::error::{Code, DeserrJsonError, ResponseError, TakeErrorMessage};
 use meilisearch_types::keys::{Action, CreateApiKey, Key, PatchApiKey};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -36,7 +36,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 pub async fn create_api_key(
     auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_CREATE }>, AuthController>,
-    body: ValidatedJson<CreateApiKey, DeserrError>,
+    body: ValidatedJson<CreateApiKey, DeserrJsonError>,
     _req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
     let v = body.into_inner();
@@ -51,14 +51,14 @@ pub async fn create_api_key(
 }
 
 #[derive(DeserializeFromValue, Deserialize, Debug, Clone, Copy)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ListApiKeys {
     #[serde(default)]
-    #[deserr(error = DeserrError<InvalidApiKeyOffset>, default, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
+    #[deserr(error = DeserrQueryParamError<InvalidApiKeyOffset>, default, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
     pub offset: usize,
     #[serde(default = "PAGINATION_DEFAULT_LIMIT")]
-    #[deserr(error = DeserrError<InvalidApiKeyLimit>, default = PAGINATION_DEFAULT_LIMIT(), from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
+    #[deserr(error = DeserrQueryParamError<InvalidApiKeyLimit>, default = PAGINATION_DEFAULT_LIMIT(), from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
     pub limit: usize,
 }
 impl ListApiKeys {
@@ -69,7 +69,7 @@ impl ListApiKeys {
 
 pub async fn list_api_keys(
     auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_GET }>, AuthController>,
-    list_api_keys: QueryParameter<ListApiKeys, DeserrError>,
+    list_api_keys: QueryParameter<ListApiKeys, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
     let paginate = list_api_keys.into_inner().as_pagination();
     let page_view = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
@@ -106,7 +106,7 @@ pub async fn get_api_key(
 
 pub async fn patch_api_key(
     auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_UPDATE }>, AuthController>,
-    body: ValidatedJson<PatchApiKey, DeserrError>,
+    body: ValidatedJson<PatchApiKey, DeserrJsonError>,
     path: web::Path<AuthParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let key = path.into_inner().key;

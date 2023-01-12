@@ -248,7 +248,7 @@ async fn error_add_api_key_missing_parameter() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "Json deserialize error: missing field `indexes` at ``",
+      "message": "Missing field `indexes`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad-request"
@@ -265,7 +265,7 @@ async fn error_add_api_key_missing_parameter() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "Json deserialize error: missing field `actions` at ``",
+      "message": "Missing field `actions`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad-request"
@@ -314,7 +314,7 @@ async fn error_add_api_key_invalid_parameters_description() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "invalid type: Map `{\"name\":\"products\"}`, expected a String at `.description`.",
+      "message": "Invalid value type at `.description`: expected a string, but found an object: `{\"name\":\"products\"}`",
       "code": "invalid_api_key_description",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-api-key-description"
@@ -337,7 +337,7 @@ async fn error_add_api_key_invalid_parameters_name() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "invalid type: Map `{\"name\":\"products\"}`, expected a String at `.name`.",
+      "message": "Invalid value type at `.name`: expected a string, but found an object: `{\"name\":\"products\"}`",
       "code": "invalid_api_key_name",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-api-key-name"
@@ -360,7 +360,7 @@ async fn error_add_api_key_invalid_parameters_indexes() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "invalid type: Map `{\"name\":\"products\"}`, expected a Sequence at `.indexes`.",
+      "message": "Invalid value type at `.indexes`: expected an array, but found an object: `{\"name\":\"products\"}`",
       "code": "invalid_api_key_indexes",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-api-key-indexes"
@@ -386,7 +386,7 @@ async fn error_add_api_key_invalid_index_uids() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "`invalid index # / \\name with spaces` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_). at `.indexes[0]`.",
+      "message": "Invalid value at `.indexes[0]`: `invalid index # / \\name with spaces` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
       "code": "invalid_api_key_indexes",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-api-key-indexes"
@@ -411,7 +411,7 @@ async fn error_add_api_key_invalid_parameters_actions() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "invalid type: Map `{\"name\":\"products\"}`, expected a Sequence at `.actions`.",
+      "message": "Invalid value type at `.actions`: expected an array, but found an object: `{\"name\":\"products\"}`",
       "code": "invalid_api_key_actions",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-api-key-actions"
@@ -431,7 +431,7 @@ async fn error_add_api_key_invalid_parameters_actions() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "Json deserialize error: unknown value `doc.add`, expected one of `*`, `search`, `documents.*`, `documents.add`, `documents.get`, `documents.delete`, `indexes.*`, `indexes.create`, `indexes.get`, `indexes.update`, `indexes.delete`, `indexes.swap`, `tasks.*`, `tasks.cancel`, `tasks.delete`, `tasks.get`, `settings.*`, `settings.get`, `settings.update`, `stats.*`, `stats.get`, `metrics.*`, `metrics.get`, `dumps.*`, `dumps.create`, `version`, `keys.create`, `keys.get`, `keys.update`, `keys.delete` at `.actions[0]`.",
+      "message": "Unknown value `doc.add` at `.actions[0]`: expected one of `*`, `search`, `documents.*`, `documents.add`, `documents.get`, `documents.delete`, `indexes.*`, `indexes.create`, `indexes.get`, `indexes.update`, `indexes.delete`, `indexes.swap`, `tasks.*`, `tasks.cancel`, `tasks.delete`, `tasks.get`, `settings.*`, `settings.get`, `settings.update`, `stats.*`, `stats.get`, `metrics.*`, `metrics.get`, `dumps.*`, `dumps.create`, `version`, `keys.create`, `keys.get`, `keys.update`, `keys.delete`",
       "code": "invalid_api_key_actions",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-api-key-actions"
@@ -455,7 +455,7 @@ async fn error_add_api_key_invalid_parameters_expires_at() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "invalid type: Map `{\"name\":\"products\"}`, expected a String at `.expiresAt`.",
+      "message": "Invalid value type at `.expiresAt`: expected a string, but found an object: `{\"name\":\"products\"}`",
       "code": "invalid_api_key_expires_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-api-key-expires-at"
@@ -478,7 +478,7 @@ async fn error_add_api_key_invalid_parameters_expires_at_in_the_past() {
 
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "`2010-11-13T00:00:00Z` is not a valid date. It should follow the RFC 3339 format to represents a date or datetime in the future or specified as a null value. e.g. 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM:SS'.\n at `.expiresAt`.",
+      "message": "Invalid value at `.expiresAt`: `2010-11-13T00:00:00Z` is not a valid date. It should follow the RFC 3339 format to represents a date or datetime in the future or specified as a null value. e.g. 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM:SS'.\n",
       "code": "invalid_api_key_expires_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-api-key-expires-at"
@@ -503,7 +503,7 @@ async fn error_add_api_key_invalid_parameters_uid() {
 
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "invalid length: expected length 32 for simple format, found 13 at `.uid`.",
+      "message": "Invalid value at `.uid`: invalid length: expected length 32 for simple format, found 13",
       "code": "invalid_api_key_uid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-api-key-uid"
@@ -1403,7 +1403,7 @@ async fn error_patch_api_key_indexes() {
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "Json deserialize error: unknown field `indexes`, expected one of `description`, `name` at ``.",
+      "message": "Unknown field `indexes`: expected one of `description`, `name`",
       "code": "immutable_api_key_indexes",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#immutable-api-key-indexes"
@@ -1480,7 +1480,7 @@ async fn error_patch_api_key_actions() {
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "Json deserialize error: unknown field `actions`, expected one of `description`, `name` at ``.",
+      "message": "Unknown field `actions`: expected one of `description`, `name`",
       "code": "immutable_api_key_actions",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#immutable-api-key-actions"
@@ -1549,7 +1549,7 @@ async fn error_patch_api_key_expiration_date() {
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "Json deserialize error: unknown field `expiresAt`, expected one of `description`, `name` at ``.",
+      "message": "Unknown field `expiresAt`: expected one of `description`, `name`",
       "code": "immutable_api_key_expires_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#immutable-api-key-expires-at"
@@ -1670,7 +1670,7 @@ async fn error_patch_api_key_indexes_invalid_parameters() {
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "invalid type: Integer `13`, expected a String at `.description`.",
+      "message": "Invalid value type at `.description`: expected a string, but found a positive integer: `13`",
       "code": "invalid_api_key_description",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-api-key-description"
@@ -1686,7 +1686,7 @@ async fn error_patch_api_key_indexes_invalid_parameters() {
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "invalid type: Integer `13`, expected a String at `.name`.",
+      "message": "Invalid value type at `.name`: expected a string, but found a positive integer: `13`",
       "code": "invalid_api_key_name",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-api-key-name"

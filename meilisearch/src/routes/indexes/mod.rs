@@ -5,8 +5,8 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::{DeserializeError, DeserializeFromValue, ValuePointerRef};
 use index_scheduler::IndexScheduler;
 use log::debug;
-use meilisearch_types::error::deserr_codes::*;
-use meilisearch_types::error::{unwrap_any, Code, DeserrError, ResponseError, TakeErrorMessage};
+use meilisearch_types::error::{deserr_codes::*, unwrap_any, Code, DeserrQueryParamError};
+use meilisearch_types::error::{DeserrJsonError, ResponseError, TakeErrorMessage};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::{self, FieldDistribution, Index};
 use meilisearch_types::tasks::KindWithContent;
@@ -72,14 +72,14 @@ impl IndexView {
 }
 
 #[derive(DeserializeFromValue, Deserialize, Debug, Clone, Copy)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ListIndexes {
     #[serde(default)]
-    #[deserr(error = DeserrError<InvalidIndexOffset>, default, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
+    #[deserr(error = DeserrQueryParamError<InvalidIndexOffset>, default, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
     pub offset: usize,
     #[serde(default = "PAGINATION_DEFAULT_LIMIT")]
-    #[deserr(error = DeserrError<InvalidIndexLimit>, default = PAGINATION_DEFAULT_LIMIT(), from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
+    #[deserr(error = DeserrQueryParamError<InvalidIndexLimit>, default = PAGINATION_DEFAULT_LIMIT(), from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
     pub limit: usize,
 }
 impl ListIndexes {
@@ -90,7 +90,7 @@ impl ListIndexes {
 
 pub async fn list_indexes(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, Data<IndexScheduler>>,
-    paginate: QueryParameter<ListIndexes, DeserrError>,
+    paginate: QueryParameter<ListIndexes, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
     let search_rules = &index_scheduler.filters().search_rules;
     let indexes: Vec<_> = index_scheduler.indexes()?;
@@ -107,17 +107,17 @@ pub async fn list_indexes(
 }
 
 #[derive(DeserializeFromValue, Debug)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct IndexCreateRequest {
-    #[deserr(error = DeserrError<InvalidIndexUid>, missing_field_error = DeserrError::missing_index_uid)]
+    #[deserr(error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
     uid: String,
-    #[deserr(error = DeserrError<InvalidIndexPrimaryKey>)]
+    #[deserr(error = DeserrJsonError<InvalidIndexPrimaryKey>)]
     primary_key: Option<String>,
 }
 
 pub async fn create_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_CREATE }>, Data<IndexScheduler>>,
-    body: ValidatedJson<IndexCreateRequest, DeserrError>,
+    body: ValidatedJson<IndexCreateRequest, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -146,8 +146,8 @@ fn deny_immutable_fields_index(
     field: &str,
     accepted: &[&str],
     location: ValuePointerRef,
-) -> DeserrError {
-    let mut error = unwrap_any(DeserrError::<BadRequest>::error::<Infallible>(
+) -> DeserrJsonError {
+    let mut error = unwrap_any(DeserrJsonError::<BadRequest>::error::<Infallible>(
         None,
         deserr::ErrorKind::UnknownKey { key: field, accepted },
         location,
@@ -162,9 +162,9 @@ fn deny_immutable_fields_index(
     error
 }
 #[derive(DeserializeFromValue, Debug)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_index)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_index)]
 pub struct UpdateIndexRequest {
-    #[deserr(error = DeserrError<InvalidIndexPrimaryKey>)]
+    #[deserr(error = DeserrJsonError<InvalidIndexPrimaryKey>)]
     primary_key: Option<String>,
 }
 
@@ -183,7 +183,7 @@ pub async fn get_index(
 pub async fn update_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_UPDATE }>, Data<IndexScheduler>>,
     path: web::Path<String>,
-    body: ValidatedJson<UpdateIndexRequest, DeserrError>,
+    body: ValidatedJson<UpdateIndexRequest, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {

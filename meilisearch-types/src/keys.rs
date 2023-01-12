@@ -11,19 +11,19 @@ use time::{Date, OffsetDateTime, PrimitiveDateTime};
 use uuid::Uuid;
 
 use crate::error::deserr_codes::*;
-use crate::error::{unwrap_any, Code, DeserrError, ErrorCode, TakeErrorMessage};
+use crate::error::{unwrap_any, Code, DeserrJsonError, ErrorCode, TakeErrorMessage};
 use crate::index_uid::{IndexUid, IndexUidFormatError};
 use crate::star_or::StarOr;
 
 pub type KeyId = Uuid;
 
-impl<C: Default + ErrorCode> MergeWithError<IndexUidFormatError> for DeserrError<C> {
+impl<C: Default + ErrorCode> MergeWithError<IndexUidFormatError> for DeserrJsonError<C> {
     fn merge(
         _self_: Option<Self>,
         other: IndexUidFormatError,
         merge_location: deserr::ValuePointerRef,
     ) -> std::result::Result<Self, Self> {
-        DeserrError::error::<Infallible>(
+        DeserrJsonError::error::<Infallible>(
             None,
             deserr::ErrorKind::Unexpected { msg: other.to_string() },
             merge_location,
@@ -36,19 +36,19 @@ fn parse_uuid_from_str(s: &str) -> Result<Uuid, TakeErrorMessage<uuid::Error>> {
 }
 
 #[derive(Debug, DeserializeFromValue)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct CreateApiKey {
-    #[deserr(error = DeserrError<InvalidApiKeyDescription>)]
+    #[deserr(error = DeserrJsonError<InvalidApiKeyDescription>)]
     pub description: Option<String>,
-    #[deserr(error = DeserrError<InvalidApiKeyName>)]
+    #[deserr(error = DeserrJsonError<InvalidApiKeyName>)]
     pub name: Option<String>,
-    #[deserr(default = Uuid::new_v4(), error = DeserrError<InvalidApiKeyUid>, from(&String) = parse_uuid_from_str -> TakeErrorMessage<uuid::Error>)]
+    #[deserr(default = Uuid::new_v4(), error = DeserrJsonError<InvalidApiKeyUid>, from(&String) = parse_uuid_from_str -> TakeErrorMessage<uuid::Error>)]
     pub uid: KeyId,
-    #[deserr(error = DeserrError<InvalidApiKeyActions>)]
+    #[deserr(error = DeserrJsonError<InvalidApiKeyActions>)]
     pub actions: Vec<Action>,
-    #[deserr(error = DeserrError<InvalidApiKeyIndexes>)]
+    #[deserr(error = DeserrJsonError<InvalidApiKeyIndexes>)]
     pub indexes: Vec<StarOr<IndexUid>>,
-    #[deserr(error = DeserrError<InvalidApiKeyExpiresAt>, default = None, from(&String) = parse_expiration_date -> TakeErrorMessage<ParseOffsetDateTimeError>)]
+    #[deserr(error = DeserrJsonError<InvalidApiKeyExpiresAt>, default = None, from(&String) = parse_expiration_date -> TakeErrorMessage<ParseOffsetDateTimeError>)]
     pub expires_at: Option<OffsetDateTime>,
 }
 impl CreateApiKey {
@@ -72,8 +72,8 @@ fn deny_immutable_fields_api_key(
     field: &str,
     accepted: &[&str],
     location: ValuePointerRef,
-) -> DeserrError {
-    let mut error = unwrap_any(DeserrError::<BadRequest>::error::<Infallible>(
+) -> DeserrJsonError {
+    let mut error = unwrap_any(DeserrJsonError::<BadRequest>::error::<Infallible>(
         None,
         deserr::ErrorKind::UnknownKey { key: field, accepted },
         location,
@@ -92,11 +92,11 @@ fn deny_immutable_fields_api_key(
 }
 
 #[derive(Debug, DeserializeFromValue)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_api_key)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_api_key)]
 pub struct PatchApiKey {
-    #[deserr(error = DeserrError<InvalidApiKeyDescription>)]
+    #[deserr(error = DeserrJsonError<InvalidApiKeyDescription>)]
     pub description: Option<String>,
-    #[deserr(error = DeserrError<InvalidApiKeyName>)]
+    #[deserr(error = DeserrJsonError<InvalidApiKeyName>)]
     pub name: Option<String>,
 }
 

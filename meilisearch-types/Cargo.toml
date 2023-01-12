@@ -21,6 +21,7 @@ proptest = { version = "1.0.0", optional = true }
 proptest-derive = { version = "0.3.0", optional = true }
 roaring = { version = "0.10.0", features = ["serde"] }
 serde = { version = "1.0.145", features = ["derive"] }
+serde-cs = "0.2.4"
 serde_json = "1.0.85"
 tar = "0.4.38"
 tempfile = "3.3.0"

@@ -282,7 +282,7 @@ async fn error_set_invalid_ranking_rules() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "`manyTheFish` ranking rule is invalid. Valid ranking rules are words, typo, sort, proximity, attribute, exactness and custom ranking rules. at `.rankingRules[0]`.",
+      "message": "Invalid value at `.rankingRules[0]`: `manyTheFish` ranking rule is invalid. Valid ranking rules are words, typo, sort, proximity, attribute, exactness and custom ranking rules.",
       "code": "invalid_settings_ranking_rules",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-settings-ranking-rules"

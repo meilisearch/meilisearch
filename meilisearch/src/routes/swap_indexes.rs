@@ -3,7 +3,7 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::DeserializeFromValue;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::error::deserr_codes::InvalidSwapIndexes;
-use meilisearch_types::error::{DeserrError, ResponseError};
+use meilisearch_types::error::{DeserrJsonError, ResponseError};
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use serde_json::json;
 
@@ -20,15 +20,15 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 #[derive(DeserializeFromValue, Debug, Clone, PartialEq, Eq)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SwapIndexesPayload {
-    #[deserr(error = DeserrError<InvalidSwapIndexes>)]
+    #[deserr(error = DeserrJsonError<InvalidSwapIndexes>)]
     indexes: Vec<String>,
 }
 
 pub async fn swap_indexes(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_SWAP }>, Data<IndexScheduler>>,
-    params: ValidatedJson<Vec<SwapIndexesPayload>, DeserrError>,
+    params: ValidatedJson<Vec<SwapIndexesPayload>, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -44,6 +44,7 @@ pub async fn swap_indexes(
 
     let mut swaps = vec![];
     for SwapIndexesPayload { indexes } in params.into_iter() {
+        // TODO: switch to deserr
         let (lhs, rhs) = match indexes.as_slice() {
             [lhs, rhs] => (lhs, rhs),
             _ => {

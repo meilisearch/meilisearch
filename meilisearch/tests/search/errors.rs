@@ -46,7 +46,7 @@ async fn search_bad_q() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: Sequence `[\"doggo\"]`, expected a String at `.q`.",
+      "message": "Invalid value type at `.q`: expected a string, but found an array: `[\"doggo\"]`",
       "code": "invalid_search_q",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-q"
@@ -64,18 +64,18 @@ async fn search_bad_offset() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Integer at `.offset`.",
+      "message": "Invalid value type at `.offset`: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_search_offset",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-offset"
     }
     "###);
 
-    let (response, code) = index.search_get(json!({"offset": "doggo"})).await;
+    let (response, code) = index.search_get("offset=doggo").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid digit found in string at `.offset`.",
+      "message": "Invalid value in parameter `offset`: could not parse `doggo` as a positive integer",
       "code": "invalid_search_offset",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-offset"
@@ -92,18 +92,18 @@ async fn search_bad_limit() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Integer at `.limit`.",
+      "message": "Invalid value type at `.limit`: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_search_limit",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-limit"
     }
     "###);
 
-    let (response, code) = index.search_get(json!({"limit": "doggo"})).await;
+    let (response, code) = index.search_get("limit=doggo").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid digit found in string at `.limit`.",
+      "message": "Invalid value in parameter `limit`: could not parse `doggo` as a positive integer",
       "code": "invalid_search_limit",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-limit"
@@ -120,18 +120,18 @@ async fn search_bad_page() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Integer at `.page`.",
+      "message": "Invalid value type at `.page`: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_search_page",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-page"
     }
     "###);
 
-    let (response, code) = index.search_get(json!({"page": "doggo"})).await;
+    let (response, code) = index.search_get("page=doggo").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid digit found in string at `.page`.",
+      "message": "Invalid value in parameter `page`: could not parse `doggo` as a positive integer",
       "code": "invalid_search_page",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-page"
@@ -148,18 +148,18 @@ async fn search_bad_hits_per_page() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Integer at `.hitsPerPage`.",
+      "message": "Invalid value type at `.hitsPerPage`: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_search_hits_per_page",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-hits-per-page"
     }
     "###);
 
-    let (response, code) = index.search_get(json!({"hitsPerPage": "doggo"})).await;
+    let (response, code) = index.search_get("hitsPerPage=doggo").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid digit found in string at `.hitsPerPage`.",
+      "message": "Invalid value in parameter `hitsPerPage`: could not parse `doggo` as a positive integer",
       "code": "invalid_search_hits_per_page",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-hits-per-page"
@@ -176,7 +176,7 @@ async fn search_bad_attributes_to_crop() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Sequence at `.attributesToCrop`.",
+      "message": "Invalid value type at `.attributesToCrop`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_search_attributes_to_crop",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-attributes-to-crop"
@@ -194,18 +194,18 @@ async fn search_bad_crop_length() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Integer at `.cropLength`.",
+      "message": "Invalid value type at `.cropLength`: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_search_crop_length",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-crop-length"
     }
     "###);
 
-    let (response, code) = index.search_get(json!({"cropLength": "doggo"})).await;
+    let (response, code) = index.search_get("cropLength=doggo").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid digit found in string at `.cropLength`.",
+      "message": "Invalid value in parameter `cropLength`: could not parse `doggo` as a positive integer",
       "code": "invalid_search_crop_length",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-crop-length"
@@ -222,7 +222,7 @@ async fn search_bad_attributes_to_highlight() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Sequence at `.attributesToHighlight`.",
+      "message": "Invalid value type at `.attributesToHighlight`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_search_attributes_to_highlight",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-attributes-to-highlight"
@@ -266,7 +266,7 @@ async fn search_bad_sort() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Sequence at `.sort`.",
+      "message": "Invalid value type at `.sort`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_search_sort",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-sort"
@@ -284,18 +284,18 @@ async fn search_bad_show_matches_position() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Boolean at `.showMatchesPosition`.",
+      "message": "Invalid value type at `.showMatchesPosition`: expected a boolean, but found a string: `\"doggo\"`",
       "code": "invalid_search_show_matches_position",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-show-matches-position"
     }
     "###);
 
-    let (response, code) = index.search_get(json!({"showMatchesPosition": "doggo"})).await;
+    let (response, code) = index.search_get("showMatchesPosition=doggo").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "provided string was not `true` or `false` at `.showMatchesPosition`.",
+      "message": "Invalid value in parameter `showMatchesPosition`: provided string was not `true` or `false`",
       "code": "invalid_search_show_matches_position",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-show-matches-position"
@@ -312,7 +312,7 @@ async fn search_bad_facets() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Sequence at `.facets`.",
+      "message": "Invalid value type at `.facets`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-facets"
@@ -330,7 +330,7 @@ async fn search_bad_highlight_pre_tag() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: Sequence `[\"doggo\"]`, expected a String at `.highlightPreTag`.",
+      "message": "Invalid value type at `.highlightPreTag`: expected a string, but found an array: `[\"doggo\"]`",
       "code": "invalid_search_highlight_pre_tag",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-highlight-pre-tag"
@@ -348,7 +348,7 @@ async fn search_bad_highlight_post_tag() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: Sequence `[\"doggo\"]`, expected a String at `.highlightPostTag`.",
+      "message": "Invalid value type at `.highlightPostTag`: expected a string, but found an array: `[\"doggo\"]`",
       "code": "invalid_search_highlight_post_tag",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-highlight-post-tag"
@@ -366,7 +366,7 @@ async fn search_bad_crop_marker() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: Sequence `[\"doggo\"]`, expected a String at `.cropMarker`.",
+      "message": "Invalid value type at `.cropMarker`: expected a string, but found an array: `[\"doggo\"]`",
       "code": "invalid_search_crop_marker",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-crop-marker"
@@ -384,18 +384,18 @@ async fn search_bad_matching_strategy() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Json deserialize error: unknown value `doggo`, expected one of `last`, `all` at `.matchingStrategy`.",
+      "message": "Unknown value `doggo` at `.matchingStrategy`: expected one of `last`, `all`",
       "code": "invalid_search_matching_strategy",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-matching-strategy"
     }
     "###);
 
-    let (response, code) = index.search_get(json!({"matchingStrategy": "doggo"})).await;
+    let (response, code) = index.search_get("matchingStrategy=doggo").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Json deserialize error: unknown value `doggo`, expected one of `last`, `all` at `.matchingStrategy`.",
+      "message": "Unknown value `doggo` for parameter `matchingStrategy`: expected one of `last`, `all`",
       "code": "invalid_search_matching_strategy",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-matching-strategy"
