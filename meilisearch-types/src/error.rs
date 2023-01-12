@@ -15,7 +15,8 @@ use serde_cs::vec::CS;
 use crate::star_or::StarOr;
 
 use self::deserr_codes::{
-    MissingApiKeyActions, MissingApiKeyExpiresAt, MissingApiKeyIndexes, MissingIndexUid, InvalidSwapIndexes, MissingSwapIndexesIndexes,
+    InvalidSwapIndexes, MissingApiKeyActions, MissingApiKeyExpiresAt, MissingApiKeyIndexes,
+    MissingIndexUid, MissingSwapIndexes,
 };
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -280,7 +281,7 @@ MissingDocumentId                     , invalid       , BAD_REQUEST ;
 MissingIndexUid                       , invalid       , BAD_REQUEST ;
 MissingMasterKey                      , authentication, UNAUTHORIZED ;
 MissingPayload                        , invalid       , BAD_REQUEST ;
-MissingSwapIndexesIndexes             , invalid       , BAD_REQUEST ;
+MissingSwapIndexes             , invalid       , BAD_REQUEST ;
 MissingTaskFilters                    , invalid       , BAD_REQUEST ;
 NoSpaceLeftOnDevice                   , system        , UNPROCESSABLE_ENTITY;
 PayloadTooLarge                       , invalid       , PAYLOAD_TOO_LARGE ;
@@ -516,7 +517,7 @@ impl DeserrJsonError<InvalidSwapIndexes> {
             deserr::ErrorKind::MissingField { field },
             location,
         ));
-        Self { msg: x.msg, code: MissingSwapIndexesIndexes.error_code(), _phantom: PhantomData }
+        Self { msg: x.msg, code: MissingSwapIndexes.error_code(), _phantom: PhantomData }
     }
 }
 

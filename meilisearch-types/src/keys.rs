@@ -48,7 +48,7 @@ pub struct CreateApiKey {
     pub actions: Vec<Action>,
     #[deserr(error = DeserrJsonError<InvalidApiKeyIndexes>, missing_field_error = DeserrJsonError::missing_api_key_indexes)]
     pub indexes: Vec<StarOr<IndexUid>>,
-    #[deserr(error = DeserrJsonError<InvalidApiKeyExpiresAt>, from(&String) = parse_expiration_date -> TakeErrorMessage<ParseOffsetDateTimeError>, missing_field_error = DeserrJsonError::missing_api_key_expires_at)]
+    #[deserr(error = DeserrJsonError<InvalidApiKeyExpiresAt>, from(Option<String>) = parse_expiration_date -> TakeErrorMessage<ParseOffsetDateTimeError>, missing_field_error = DeserrJsonError::missing_api_key_expires_at)]
     pub expires_at: Option<OffsetDateTime>,
 }
 impl CreateApiKey {
@@ -159,36 +159,39 @@ impl Display for ParseOffsetDateTimeError {
 impl std::error::Error for ParseOffsetDateTimeError {}
 
 fn parse_expiration_date(
-    string: &str,
+    string: Option<String>,
 ) -> std::result::Result<Option<OffsetDateTime>, TakeErrorMessage<ParseOffsetDateTimeError>> {
-    let datetime = if let Ok(datetime) = OffsetDateTime::parse(string, &Rfc3339) {
+    let Some(string) = string else {
+        return Ok(None)
+    };
+    let datetime = if let Ok(datetime) = OffsetDateTime::parse(&string, &Rfc3339) {
         datetime
     } else if let Ok(primitive_datetime) = PrimitiveDateTime::parse(
-        string,
+        &string,
         format_description!(
             "[year repr:full base:calendar]-[month repr:numerical]-[day]T[hour]:[minute]:[second]"
         ),
     ) {
         primitive_datetime.assume_utc()
     } else if let Ok(primitive_datetime) = PrimitiveDateTime::parse(
-        string,
+        &string,
         format_description!(
             "[year repr:full base:calendar]-[month repr:numerical]-[day] [hour]:[minute]:[second]"
         ),
     ) {
         primitive_datetime.assume_utc()
     } else if let Ok(date) = Date::parse(
-        string,
+        &string,
         format_description!("[year repr:full base:calendar]-[month repr:numerical]-[day]"),
     ) {
         PrimitiveDateTime::new(date, time!(00:00)).assume_utc()
     } else {
-        return Err(TakeErrorMessage(ParseOffsetDateTimeError(string.to_owned())));
+        return Err(TakeErrorMessage(ParseOffsetDateTimeError(string)));
     };
     if datetime > OffsetDateTime::now_utc() {
         Ok(Some(datetime))
     } else {
-        Err(TakeErrorMessage(ParseOffsetDateTimeError(string.to_owned())))
+        Err(TakeErrorMessage(ParseOffsetDateTimeError(string)))
     }
 }
 
