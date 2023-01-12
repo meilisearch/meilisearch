@@ -80,12 +80,12 @@ fn deny_immutable_fields_api_key(
     ));
 
     error.code = match field {
-        "uid" => Code::ImmutableField,
-        "actions" => Code::ImmutableField,
-        "indexes" => Code::ImmutableField,
-        "expiresAt" => Code::ImmutableField,
-        "createdAt" => Code::ImmutableField,
-        "updatedAt" => Code::ImmutableField,
+        "uid" => Code::ImmutableApiKeyUid,
+        "actions" => Code::ImmutableApiKeyActions,
+        "indexes" => Code::ImmutableApiKeyIndexes,
+        "expiresAt" => Code::ImmutableApiKeyExpiresAt,
+        "createdAt" => Code::ImmutableApiKeyCreatedAt,
+        "updatedAt" => Code::ImmutableApiKeyUpdatedAt,
         _ => Code::BadRequest,
     };
     error

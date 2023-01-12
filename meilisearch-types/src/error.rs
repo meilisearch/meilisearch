@@ -181,7 +181,19 @@ DumpAlreadyProcessing                 , invalid       , CONFLICT;
 DumpNotFound                          , invalid       , NOT_FOUND;
 DumpProcessFailed                     , internal      , INTERNAL_SERVER_ERROR;
 DuplicateIndexFound                   , invalid       , BAD_REQUEST;
-ImmutableField                        , invalid       , BAD_REQUEST;
+
+ImmutableApiKeyUid                    , invalid       , BAD_REQUEST;
+ImmutableApiKeyKey                    , invalid       , BAD_REQUEST;
+ImmutableApiKeyActions                , invalid       , BAD_REQUEST;
+ImmutableApiKeyIndexes                , invalid       , BAD_REQUEST;
+ImmutableApiKeyExpiresAt              , invalid       , BAD_REQUEST;
+ImmutableApiKeyCreatedAt              , invalid       , BAD_REQUEST;
+ImmutableApiKeyUpdatedAt              , invalid       , BAD_REQUEST;
+
+ImmutableIndexUid                     , invalid       , BAD_REQUEST;
+ImmutableIndexCreatedAt               , invalid       , BAD_REQUEST;
+ImmutableIndexUpdatedAt               , invalid       , BAD_REQUEST;
+
 IndexAlreadyExists                    , invalid       , CONFLICT ;
 IndexCreationFailed                   , internal      , INTERNAL_SERVER_ERROR;
 IndexNotFound                         , invalid       , NOT_FOUND;
