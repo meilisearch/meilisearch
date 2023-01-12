@@ -27,7 +27,7 @@ use super::{config_user_id_path, DocumentDeletionKind, MEILISEARCH_CONFIG_PATH};
 use crate::analytics::Analytics;
 use crate::option::{default_http_addr, IndexerOpts, MaxMemory, MaxThreads, ScheduleSnapshot};
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
-use crate::routes::tasks::TasksFilterQueryRaw;
+use crate::routes::tasks::TasksFilterQuery;
 use crate::routes::{create_all_stats, Stats};
 use crate::search::{
     SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
@@ -195,7 +195,7 @@ impl super::Analytics for SegmentAnalytics {
         let _ = self.sender.try_send(AnalyticsMsg::AggregateUpdateDocuments(aggregate));
     }
 
-    fn get_tasks(&self, query: &TasksFilterQueryRaw, request: &HttpRequest) {
+    fn get_tasks(&self, query: &TasksFilterQuery, request: &HttpRequest) {
         let aggregate = TasksAggregator::from_query(query, request);
         let _ = self.sender.try_send(AnalyticsMsg::AggregateTasks(aggregate));
     }
@@ -868,21 +868,21 @@ pub struct TasksAggregator {
 }
 
 impl TasksAggregator {
-    pub fn from_query(query: &TasksFilterQueryRaw, request: &HttpRequest) -> Self {
+    pub fn from_query(query: &TasksFilterQuery, request: &HttpRequest) -> Self {
         Self {
             timestamp: Some(OffsetDateTime::now_utc()),
             user_agents: extract_user_agents(request).into_iter().collect(),
-            filtered_by_uid: query.common.uids.is_some(),
-            filtered_by_index_uid: query.common.index_uids.is_some(),
-            filtered_by_type: query.common.types.is_some(),
-            filtered_by_status: query.common.statuses.is_some(),
-            filtered_by_canceled_by: query.common.canceled_by.is_some(),
-            filtered_by_before_enqueued_at: query.dates.before_enqueued_at.is_some(),
-            filtered_by_after_enqueued_at: query.dates.after_enqueued_at.is_some(),
-            filtered_by_before_started_at: query.dates.before_started_at.is_some(),
-            filtered_by_after_started_at: query.dates.after_started_at.is_some(),
-            filtered_by_before_finished_at: query.dates.before_finished_at.is_some(),
-            filtered_by_after_finished_at: query.dates.after_finished_at.is_some(),
+            filtered_by_uid: query.uids.is_some(),
+            filtered_by_index_uid: query.index_uids.is_some(),
+            filtered_by_type: query.types.is_some(),
+            filtered_by_status: query.statuses.is_some(),
+            filtered_by_canceled_by: query.canceled_by.is_some(),
+            filtered_by_before_enqueued_at: query.before_enqueued_at.is_some(),
+            filtered_by_after_enqueued_at: query.after_enqueued_at.is_some(),
+            filtered_by_before_started_at: query.before_started_at.is_some(),
+            filtered_by_after_started_at: query.after_started_at.is_some(),
+            filtered_by_before_finished_at: query.before_finished_at.is_some(),
+            filtered_by_after_finished_at: query.after_finished_at.is_some(),
             total_received: 1,
         }
     }
