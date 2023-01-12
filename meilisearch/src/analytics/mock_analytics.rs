@@ -7,8 +7,8 @@ use serde_json::Value;
 
 use super::{find_user_id, Analytics, DocumentDeletionKind};
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
-use crate::Opt;
 use crate::routes::tasks::TasksFilterQuery;
+use crate::Opt;
 
 pub struct MockAnalytics {
     instance_uid: Option<InstanceUid>,

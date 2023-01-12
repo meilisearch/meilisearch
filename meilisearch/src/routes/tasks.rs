@@ -5,8 +5,8 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::DeserializeFromValue;
 use index_scheduler::{IndexScheduler, Query, TaskId};
-use meilisearch_types::error::{deserr_codes::*, TakeErrorMessage};
-use meilisearch_types::error::{DeserrError, ResponseError};
+use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::error::{DeserrError, ResponseError, TakeErrorMessage};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::star_or::StarOr;
@@ -586,10 +586,8 @@ mod tests {
     use meili_snap::snapshot;
     use meilisearch_types::error::DeserrError;
 
-    use crate::{
-        extractors::query_parameters::QueryParameter,
-        routes::tasks::{TaskDeletionOrCancelationQuery, TasksFilterQuery},
-    };
+    use crate::extractors::query_parameters::QueryParameter;
+    use crate::routes::tasks::{TaskDeletionOrCancelationQuery, TasksFilterQuery};
 
     fn deserr_query_params<T>(j: &str) -> Result<T, actix_web::Error>
     where
