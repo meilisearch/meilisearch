@@ -114,6 +114,10 @@ impl V3Reader {
             V3IndexReader::new(
                 index.uid.clone(),
                 &self.dump.path().join("indexes").join(index.uuid.to_string()),
+                &index,
+                BufReader::new(
+                    File::open(self.dump.path().join("updates").join("data.jsonl")).unwrap(),
+                ),
             )
         }))
     }
@@ -147,6 +151,7 @@ impl V3Reader {
     }
 }
 
+#[derive(Debug)]
 pub struct V3IndexReader {
     metadata: IndexMetadata,
     settings: Settings<Checked>,
@@ -155,16 +160,43 @@ pub struct V3IndexReader {
 }
 
 impl V3IndexReader {
-    pub fn new(name: String, path: &Path) -> Result<Self> {
+    pub fn new(
+        name: String,
+        path: &Path,
+        index_uuid: &IndexUuid,
+        tasks: BufReader<File>,
+    ) -> Result<Self> {
         let meta = File::open(path.join("meta.json"))?;
         let meta: DumpMeta = serde_json::from_reader(meta)?;
+
+        let mut created_entry = (u64::MAX, None);
+        let mut updated_entry = (u64::MIN, None);
+
+        for line in tasks.lines() {
+            let task: Task = serde_json::from_str(&line?)?;
+
+            if &task.uuid == &index_uuid.uuid {
+                let update_id = task.update.id();
+
+                if update_id <= created_entry.0 {
+                    created_entry.0 = update_id;
+                    created_entry.1 = task.update.created_at();
+                }
+
+                if update_id >= updated_entry.0 {
+                    updated_entry.0 = update_id;
+                    updated_entry.1 = task.update.processed_at();
+                }
+            }
+        }
+
+        let current_time = OffsetDateTime::now_utc();
 
         let metadata = IndexMetadata {
             uid: name,
             primary_key: meta.primary_key,
-            // FIXME: Iterate over the whole task queue to find the creation and last update date.
-            created_at: OffsetDateTime::now_utc(),
-            updated_at: OffsetDateTime::now_utc(),
+            created_at: created_entry.1.unwrap_or(current_time),
+            updated_at: updated_entry.1.unwrap_or(current_time),
         };
 
         let ret = V3IndexReader {
@@ -263,12 +295,12 @@ pub(crate) mod test {
         assert!(indexes.is_empty());
 
         // products
-        insta::assert_json_snapshot!(products.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(products.metadata(), @r###"
         {
           "uid": "products",
           "primaryKey": "sku",
-          "createdAt": "[now]",
-          "updatedAt": "[now]"
+          "createdAt": "2022-10-07T11:38:54.734594617Z",
+          "updatedAt": "2022-10-07T11:38:55.963185778Z"
         }
         "###);
 
@@ -278,12 +310,12 @@ pub(crate) mod test {
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"548284a84de510f71e88e6cdea495cf5");
 
         // movies
-        insta::assert_json_snapshot!(movies.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(movies.metadata(), @r###"
         {
           "uid": "movies",
           "primaryKey": "id",
-          "createdAt": "[now]",
-          "updatedAt": "[now]"
+          "createdAt": "2022-10-07T11:38:54.004402239Z",
+          "updatedAt": "2022-10-07T11:39:04.188852537Z"
         }
         "###);
 
@@ -293,11 +325,11 @@ pub(crate) mod test {
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"d153b5a81d8b3cdcbe1dec270b574022");
 
         // movies2
-        insta::assert_json_snapshot!(movies2.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(movies2.metadata(), { ".updatedAt" => "[now]" }, @r###"
         {
           "uid": "movies_2",
           "primaryKey": null,
-          "createdAt": "[now]",
+          "createdAt": "2022-10-07T11:39:03.703667164Z",
           "updatedAt": "[now]"
         }
         "###);
@@ -308,12 +340,12 @@ pub(crate) mod test {
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"d751713988987e9331980363e24189ce");
 
         // spells
-        insta::assert_json_snapshot!(spells.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(spells.metadata(), @r###"
         {
           "uid": "dnd_spells",
           "primaryKey": "index",
-          "createdAt": "[now]",
-          "updatedAt": "[now]"
+          "createdAt": "2022-10-07T11:38:56.263041061Z",
+          "updatedAt": "2022-10-07T11:38:56.521004328Z"
         }
         "###);
 

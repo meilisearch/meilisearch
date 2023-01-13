@@ -74,6 +74,26 @@ impl UpdateStatus {
             _ => None,
         }
     }
+
+    pub fn created_at(&self) -> Option<OffsetDateTime> {
+        match self {
+            UpdateStatus::Processing(u) => Some(u.from.enqueued_at.clone()),
+            UpdateStatus::Enqueued(u) => Some(u.enqueued_at.clone()),
+            UpdateStatus::Processed(u) => Some(u.from.from.enqueued_at.clone()),
+            UpdateStatus::Aborted(u) => Some(u.from.enqueued_at.clone()),
+            UpdateStatus::Failed(u) => Some(u.from.from.enqueued_at.clone()),
+        }
+    }
+
+    pub fn processed_at(&self) -> Option<OffsetDateTime> {
+        match self {
+            UpdateStatus::Processing(u) => Some(u.started_processing_at.clone()),
+            UpdateStatus::Enqueued(_) => None,
+            UpdateStatus::Processed(u) => Some(u.processed_at.clone()),
+            UpdateStatus::Aborted(_) => None,
+            UpdateStatus::Failed(u) => Some(u.failed_at.clone()),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
