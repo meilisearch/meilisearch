@@ -419,7 +419,7 @@ checksum = "b645a089122eccb6111b4f81cbc1a49f5900ac4666bb93ac027feaecf15607bf"
 
 [[package]]
 name = "benchmarks"
-version = "0.39.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "bytes",
@@ -427,7 +427,7 @@ dependencies = [
  "criterion",
  "csv",
  "flate2",
- "milli 0.39.0",
+ "milli 1.0.0",
  "mimalloc",
  "rand",
  "rand_chacha",
@@ -840,7 +840,7 @@ dependencies = [
 
 [[package]]
 name = "cli"
-version = "0.39.0"
+version = "1.0.0"
 dependencies = [
  "bimap",
  "byte-unit",
@@ -848,7 +848,7 @@ dependencies = [
  "csv",
  "eyre",
  "indicatif",
- "milli 0.39.0",
+ "milli 1.0.0",
  "mimalloc",
  "serde",
  "serde_json",
@@ -1570,7 +1570,7 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "0.39.0"
+version = "1.0.0"
 dependencies = [
  "insta",
  "nom",
@@ -1598,7 +1598,7 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "0.39.0"
+version = "1.0.0"
 dependencies = [
  "criterion",
  "serde_json",
@@ -2281,7 +2281,7 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "0.39.0"
+version = "1.0.0"
 dependencies = [
  "criterion",
  "serde_json",
@@ -2884,7 +2884,7 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.39.0"
+version = "1.0.0"
 dependencies = [
  "big_s",
  "bimap",
@@ -2897,8 +2897,8 @@ dependencies = [
  "csv",
  "deserr",
  "either",
- "filter-parser 0.39.0",
- "flatten-serde-json 0.39.0",
+ "filter-parser 1.0.0",
+ "flatten-serde-json 1.0.0",
  "fst",
  "fuzzcheck",
  "fxhash",
@@ -2907,7 +2907,7 @@ dependencies = [
  "heed",
  "insta",
  "itertools",
- "json-depth-checker 0.39.0",
+ "json-depth-checker 1.0.0",
  "levenshtein_automata",
  "log",
  "logging_timer",
