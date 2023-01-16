@@ -33,7 +33,7 @@ pub const DEFAULT_CROP_MARKER: fn() -> String = || "…".to_string();
 pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 
-#[derive(Debug, Clone, Default, PartialEq, DeserializeFromValue)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, DeserializeFromValue)]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQuery {
     pub q: Option<String>,

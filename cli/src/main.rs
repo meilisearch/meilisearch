@@ -86,7 +86,7 @@ impl Settings {
                 Ok(stop_words.stream().into_strs()?.into_iter().collect())
             })
             .transpose()?
-            .unwrap_or_else(Vec::new);
+            .unwrap_or_default();
         let distinct_field = index.distinct_field(&txn)?.map(String::from);
 
         // in milli each word in the synonyms map were split on their separator. Since we lost
@@ -103,8 +103,8 @@ impl Settings {
 
         println!(
             "displayed attributes:\n\t{}\nsearchable attributes:\n\t{}\nfilterable attributes:\n\t{}\nsortable attributes:\n\t{}\ncriterion:\n\t{}\nstop words:\n\t{}\ndistinct fields:\n\t{}\nsynonyms:\n\t{}\nexact attributes:\n\t{}\n",
-            displayed_attributes.unwrap_or(vec!["*".to_owned()]).join("\n\t"),
-            searchable_attributes.unwrap_or(vec!["*".to_owned()]).join("\n\t"),
+            displayed_attributes.unwrap_or_else(|| vec!["*".to_owned()]).join("\n\t"),
+            searchable_attributes.unwrap_or_else(|| vec!["*".to_owned()]).join("\n\t"),
             filterable_attributes.join("\n\t"),
             sortable_attributes.join("\n\t"),
             criteria.join("\n\t"),
