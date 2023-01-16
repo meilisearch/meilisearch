@@ -13,8 +13,7 @@ members = [
     "filter-parser",
     "flatten-serde-json",
     "json-depth-checker",
-    "benchmarks",
-    "cli"
+    "benchmarks"
 ]
 
 [profile.release]
