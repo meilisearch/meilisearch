@@ -1,0 +1,30 @@
+name-template: 'Milli v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+exclude-labels:
+  - 'skip changelog'
+version-resolver:
+  minor:
+    labels:
+      - 'DB breaking'
+      - 'API breaking'
+  default: patch
+categories:
+  - title: 'API breaking'
+    label: 'API breaking'
+  - title: 'DB breaking'
+    label: 'DB breaking'
+  - title: 'Changes'
+    label: 'no breaking'
+template: |
+  $CHANGES
+
+  Thanks again to $CONTRIBUTORS! 🎉
+no-changes-template: 'Changes are coming soon 😎'
+sort-direction: 'ascending'
+replacers:
+  - search: '/(?:and )?@dependabot-preview(?:\[bot\])?,?/g'
+    replace: ''
+  - search: '/(?:and )?@bors(?:\[bot\])?,?/g'
+    replace: ''
+  - search: '/(?:and )?@meili-bot,?/g'
+    replace: ''

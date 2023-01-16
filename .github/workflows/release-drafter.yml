@@ -1,0 +1,16 @@
+name: Release Drafter
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  update_release_draft:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: release-drafter/release-drafter@v5
+        with:
+          config-name: release-draft-template.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_DRAFTER_TOKEN }}

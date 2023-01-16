@@ -1,0 +1,27 @@
+[package]
+name = "json-depth-checker"
+version = "0.0.0"
+authors = ["Automatically generated"]
+publish = false
+edition = "2018"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary-json = "0.1.1"
+serde_json = "1.0.79"
+
+[dependencies.json-depth-checker]
+path = ".."
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "depth"
+path = "fuzz_targets/depth.rs"
+test = false
+doc = false

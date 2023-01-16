@@ -9,6 +9,12 @@ members = [
     "dump",
     "file-store",
     "permissive-json-pointer",
+    "milli",
+    "filter-parser",
+    "flatten-serde-json",
+    "json-depth-checker",
+    "benchmarks",
+    "cli"
 ]
 
 [profile.release]
