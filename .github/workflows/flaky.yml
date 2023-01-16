@@ -22,5 +22,11 @@ jobs:
         override: true
     - name: Install cargo-flaky
       run: cargo install cargo-flaky
-    - name: Run cargo flaky 100 times
-      run: cargo flaky -i 100 --release
+    - name: Run cargo flaky in the dumps
+      run: cd dump; cargo flaky -i 100 --release
+    - name: Run cargo flaky in the index-scheduler
+      run: cd index-scheduler; cargo flaky -i 100 --release
+    - name: Run cargo flaky in the auth
+      run: cd meilisearch-auth; cargo flaky -i 100 --release
+    - name: Run cargo flaky in meilisearch
+      run: cd meilisearch; cargo flaky -i 100 --release
