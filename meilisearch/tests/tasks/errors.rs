@@ -43,7 +43,7 @@ async fn task_bad_uids() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid value in parameter `uids`: could not parse `dogo` as a positive integer",
+      "message": "Invalid value in parameter `uids[1]`: could not parse `dogo` as a positive integer",
       "code": "invalid_task_uids",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-uids"

@@ -4,14 +4,15 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::DeserializeFromValue;
 use meilisearch_auth::error::AuthControllerError;
 use meilisearch_auth::AuthController;
-use meilisearch_types::error::{deserr_codes::*, DeserrQueryParamError};
-use meilisearch_types::error::{Code, DeserrJsonError, ResponseError, TakeErrorMessage};
+use meilisearch_types::deserr::query_params::Param;
+use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
+use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::keys::{Action, CreateApiKey, Key, PatchApiKey};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use super::indexes::search::parse_usize_take_error_message;
 use super::PAGINATION_DEFAULT_LIMIT;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
@@ -50,20 +51,17 @@ pub async fn create_api_key(
     Ok(HttpResponse::Created().json(res))
 }
 
-#[derive(DeserializeFromValue, Deserialize, Debug, Clone, Copy)]
+#[derive(DeserializeFromValue, Debug, Clone, Copy)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ListApiKeys {
-    #[serde(default)]
-    #[deserr(default, error = DeserrQueryParamError<InvalidApiKeyOffset>, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
-    pub offset: usize,
-    #[serde(default = "PAGINATION_DEFAULT_LIMIT")]
-    #[deserr(default = PAGINATION_DEFAULT_LIMIT(), error = DeserrQueryParamError<InvalidApiKeyLimit>, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
-    pub limit: usize,
+    #[deserr(default, error = DeserrQueryParamError<InvalidApiKeyOffset>)]
+    pub offset: Param<usize>,
+    #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidApiKeyLimit>)]
+    pub limit: Param<usize>,
 }
 impl ListApiKeys {
     fn as_pagination(self) -> Pagination {
-        Pagination { offset: self.offset, limit: self.limit }
+        Pagination { offset: self.offset.0, limit: self.limit.0 }
     }
 }
 
@@ -172,7 +170,7 @@ impl KeyView {
             key: generated_key,
             uid: key.uid,
             actions: key.actions,
-            indexes: key.indexes.into_iter().map(String::from).collect(),
+            indexes: key.indexes.into_iter().map(|x| x.to_string()).collect(),
             expires_at: key.expires_at,
             created_at: key.created_at,
             updated_at: key.updated_at,

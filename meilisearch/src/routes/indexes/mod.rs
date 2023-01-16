@@ -5,8 +5,10 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::{DeserializeError, DeserializeFromValue, ValuePointerRef};
 use index_scheduler::IndexScheduler;
 use log::debug;
-use meilisearch_types::error::{deserr_codes::*, unwrap_any, Code, DeserrQueryParamError};
-use meilisearch_types::error::{DeserrJsonError, ResponseError, TakeErrorMessage};
+use meilisearch_types::deserr::query_params::Param;
+use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{deserr_codes::*, unwrap_any, Code};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::{self, FieldDistribution, Index};
 use meilisearch_types::tasks::KindWithContent;
@@ -14,7 +16,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
 
-use self::search::parse_usize_take_error_message;
 use super::{Pagination, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
@@ -71,20 +72,17 @@ impl IndexView {
     }
 }
 
-#[derive(DeserializeFromValue, Deserialize, Debug, Clone, Copy)]
+#[derive(DeserializeFromValue, Debug, Clone, Copy)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ListIndexes {
-    #[serde(default)]
-    #[deserr(default, error = DeserrQueryParamError<InvalidIndexOffset>, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
-    pub offset: usize,
-    #[serde(default = "PAGINATION_DEFAULT_LIMIT")]
-    #[deserr(default = PAGINATION_DEFAULT_LIMIT(), error = DeserrQueryParamError<InvalidIndexLimit>, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
-    pub limit: usize,
+    #[deserr(default, error = DeserrQueryParamError<InvalidIndexOffset>)]
+    pub offset: Param<usize>,
+    #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidIndexLimit>)]
+    pub limit: Param<usize>,
 }
 impl ListIndexes {
     fn as_pagination(self) -> Pagination {
-        Pagination { offset: self.offset, limit: self.limit }
+        Pagination { offset: self.offset.0, limit: self.limit.0 }
     }
 }
 

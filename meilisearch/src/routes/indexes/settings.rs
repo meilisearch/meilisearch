@@ -2,7 +2,8 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::IndexScheduler;
 use log::debug;
-use meilisearch_types::error::{DeserrJsonError, ResponseError};
+use meilisearch_types::deserr::DeserrJsonError;
+use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::settings::{settings, RankingRuleView, Settings, Unchecked};
 use meilisearch_types::tasks::KindWithContent;
@@ -130,7 +131,7 @@ make_setting_route!(
     "/filterable-attributes",
     put,
     std::collections::BTreeSet<String>,
-    meilisearch_types::error::DeserrJsonError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsFilterableAttributes,
     >,
     filterable_attributes,
@@ -156,7 +157,7 @@ make_setting_route!(
     "/sortable-attributes",
     put,
     std::collections::BTreeSet<String>,
-    meilisearch_types::error::DeserrJsonError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsSortableAttributes,
     >,
     sortable_attributes,
@@ -182,7 +183,7 @@ make_setting_route!(
     "/displayed-attributes",
     put,
     Vec<String>,
-    meilisearch_types::error::DeserrJsonError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsDisplayedAttributes,
     >,
     displayed_attributes,
@@ -208,7 +209,7 @@ make_setting_route!(
     "/typo-tolerance",
     patch,
     meilisearch_types::settings::TypoSettings,
-    meilisearch_types::error::DeserrJsonError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsTypoTolerance,
     >,
     typo_tolerance,
@@ -253,7 +254,7 @@ make_setting_route!(
     "/searchable-attributes",
     put,
     Vec<String>,
-    meilisearch_types::error::DeserrJsonError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsSearchableAttributes,
     >,
     searchable_attributes,
@@ -279,7 +280,7 @@ make_setting_route!(
     "/stop-words",
     put,
     std::collections::BTreeSet<String>,
-    meilisearch_types::error::DeserrJsonError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsStopWords,
     >,
     stop_words,
@@ -304,7 +305,7 @@ make_setting_route!(
     "/synonyms",
     put,
     std::collections::BTreeMap<String, Vec<String>>,
-    meilisearch_types::error::DeserrJsonError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsSynonyms,
     >,
     synonyms,
@@ -329,7 +330,7 @@ make_setting_route!(
     "/distinct-attribute",
     put,
     String,
-    meilisearch_types::error::DeserrJsonError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsDistinctAttribute,
     >,
     distinct_attribute,
@@ -353,7 +354,7 @@ make_setting_route!(
     "/ranking-rules",
     put,
     Vec<meilisearch_types::settings::RankingRuleView>,
-    meilisearch_types::error::DeserrJsonError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsRankingRules,
     >,
     ranking_rules,
@@ -384,7 +385,7 @@ make_setting_route!(
     "/faceting",
     patch,
     meilisearch_types::settings::FacetingSettings,
-    meilisearch_types::error::DeserrJsonError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsFaceting,
     >,
     faceting,
@@ -409,7 +410,7 @@ make_setting_route!(
     "/pagination",
     patch,
     meilisearch_types::settings::PaginationSettings,
-    meilisearch_types::error::DeserrJsonError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsPagination,
     >,
     pagination,

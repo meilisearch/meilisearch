@@ -29,6 +29,12 @@ impl IndexUid {
     }
 }
 
+impl fmt::Display for IndexUid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
 impl std::ops::Deref for IndexUid {
     type Target = str;
 

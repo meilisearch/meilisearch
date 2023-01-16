@@ -1,5 +1,4 @@
 use std::io::ErrorKind;
-use std::num::ParseIntError;
 
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;
@@ -9,14 +8,15 @@ use deserr::DeserializeFromValue;
 use futures::StreamExt;
 use index_scheduler::IndexScheduler;
 use log::debug;
+use meilisearch_types::deserr::query_params::Param;
+use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
-use meilisearch_types::error::{deserr_codes::*, fold_star_or, DeserrQueryParamError};
-use meilisearch_types::error::{DeserrJsonError, ResponseError, TakeErrorMessage};
+use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
-use meilisearch_types::serde_cs::vec::CS;
-use meilisearch_types::star_or::StarOr;
+use meilisearch_types::star_or::OptionStarOrList;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::{milli, Document, Index};
 use mime::Mime;
@@ -27,7 +27,6 @@ use tempfile::tempfile;
 use tokio::fs::File;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
 
-use super::search::parse_usize_take_error_message;
 use crate::analytics::{Analytics, DocumentDeletionKind};
 use crate::error::MeilisearchHttpError;
 use crate::error::PayloadError::ReceivePayload;
@@ -36,7 +35,7 @@ use crate::extractors::authentication::GuardedData;
 use crate::extractors::payload::Payload;
 use crate::extractors::query_parameters::QueryParameter;
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::{PaginationView, SummarizedTaskView};
+use crate::routes::{PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]
@@ -81,12 +80,11 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-#[derive(Deserialize, Debug, DeserializeFromValue)]
+#[derive(Debug, DeserializeFromValue)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct GetDocument {
-    // TODO: strongly typed argument here
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
-    fields: Option<CS<StarOr<String>>>,
+    fields: OptionStarOrList<String>,
 }
 
 pub async fn get_document(
@@ -95,7 +93,7 @@ pub async fn get_document(
     params: QueryParameter<GetDocument, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
     let GetDocument { fields } = params.into_inner();
-    let attributes_to_retrieve = fields.and_then(fold_star_or);
+    let attributes_to_retrieve = fields.merge_star_and_none();
 
     let index = index_scheduler.index(&path.index_uid)?;
     let document = retrieve_document(&index, &path.document_id, attributes_to_retrieve)?;
@@ -119,15 +117,15 @@ pub async fn delete_document(
     Ok(HttpResponse::Accepted().json(task))
 }
 
-#[derive(Deserialize, Debug, DeserializeFromValue)]
+#[derive(Debug, DeserializeFromValue)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct BrowseQuery {
-    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<ParseIntError>)]
-    offset: usize,
-    #[deserr(default = crate::routes::PAGINATION_DEFAULT_LIMIT(), error = DeserrQueryParamError<InvalidDocumentLimit>, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<ParseIntError>)]
-    limit: usize,
+    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
+    offset: Param<usize>,
+    #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidDocumentLimit>)]
+    limit: Param<usize>,
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentLimit>)]
-    fields: Option<CS<StarOr<String>>>,
+    fields: OptionStarOrList<String>,
 }
 
 pub async fn get_all_documents(
@@ -137,12 +135,12 @@ pub async fn get_all_documents(
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
     let BrowseQuery { limit, offset, fields } = params.into_inner();
-    let attributes_to_retrieve = fields.and_then(fold_star_or);
+    let attributes_to_retrieve = fields.merge_star_and_none();
 
     let index = index_scheduler.index(&index_uid)?;
-    let (total, documents) = retrieve_documents(&index, offset, limit, attributes_to_retrieve)?;
+    let (total, documents) = retrieve_documents(&index, offset.0, limit.0, attributes_to_retrieve)?;
 
-    let ret = PaginationView::new(offset, limit, total as usize, documents);
+    let ret = PaginationView::new(offset.0, limit.0, total as usize, documents);
 
     debug!("returns: {:?}", ret);
     Ok(HttpResponse::Ok().json(ret))

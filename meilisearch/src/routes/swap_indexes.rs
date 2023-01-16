@@ -2,8 +2,9 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::DeserializeFromValue;
 use index_scheduler::IndexScheduler;
+use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::InvalidSwapIndexes;
-use meilisearch_types::error::{DeserrJsonError, ResponseError};
+use meilisearch_types::error::ResponseError;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use serde_json::json;
 
@@ -22,7 +23,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[derive(DeserializeFromValue, Debug, Clone, PartialEq, Eq)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SwapIndexesPayload {
-    #[deserr(error = DeserrJsonError<InvalidSwapIndexes>, missing_field_error = DeserrJsonError::missing_swap_indexes_indexes)]
+    #[deserr(error = DeserrJsonError<InvalidSwapIndexes>, missing_field_error = DeserrJsonError::missing_swap_indexes)]
     indexes: Vec<String>,
 }
 

@@ -1026,7 +1026,18 @@ dependencies = [
 name = "deserr"
 version = "0.1.4"
 dependencies = [
- "deserr-internal",
+ "deserr-internal 0.1.4",
+ "serde-cs",
+ "serde_json",
+]
+
+[[package]]
+name = "deserr"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86290491a2b5c21a1a5083da8dae831006761258fabd5617309c3eebc5f89468"
+dependencies = [
+ "deserr-internal 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde-cs",
  "serde_json",
 ]
@@ -1039,6 +1050,18 @@ dependencies = [
  "proc-macro2 1.0.49",
  "quote 1.0.23",
  "syn 1.0.107",
+]
+
+[[package]]
+name = "deserr-internal"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7131de1c27581bc376a22166c9f570be91b76cb096be2f6aecf224c27bf7c49a"
+dependencies = [
+ "convert_case 0.5.0",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -2300,7 +2323,7 @@ dependencies = [
  "cargo_toml",
  "clap 4.0.32",
  "crossbeam-channel",
- "deserr",
+ "deserr 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "dump",
  "either",
  "env_logger",
@@ -2391,7 +2414,7 @@ dependencies = [
  "anyhow",
  "convert_case 0.6.0",
  "csv",
- "deserr",
+ "deserr 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "either",
  "enum-iterator",
  "file-store",
@@ -2451,7 +2474,7 @@ dependencies = [
  "concat-arrays",
  "crossbeam-channel",
  "csv",
- "deserr",
+ "deserr 0.1.4",
  "either",
  "filter-parser",
  "flatten-serde-json",

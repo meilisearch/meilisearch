@@ -1,15 +1,12 @@
-use std::str::FromStr;
-
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::IndexScheduler;
 use log::debug;
 use meilisearch_auth::IndexSearchRules;
-use meilisearch_types::error::{
-    deserr_codes::*, parse_option_usize_query_param, parse_usize_query_param,
-    DeserrQueryParamError, DetailedParseIntError,
-};
-use meilisearch_types::error::{DeserrJsonError, ResponseError, TakeErrorMessage};
+use meilisearch_types::deserr::{DeserrQueryParamError, DeserrJsonError};
+use meilisearch_types::deserr::query_params::Param;
+use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::error::ResponseError;
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 
@@ -33,45 +30,33 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-pub fn parse_usize_take_error_message(
-    s: &str,
-) -> Result<usize, TakeErrorMessage<std::num::ParseIntError>> {
-    usize::from_str(s).map_err(TakeErrorMessage)
-}
-
-pub fn parse_bool_take_error_message(
-    s: &str,
-) -> Result<bool, TakeErrorMessage<std::str::ParseBoolError>> {
-    s.parse().map_err(TakeErrorMessage)
-}
-
 #[derive(Debug, deserr::DeserializeFromValue)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchQ>)]
     q: Option<String>,
-    #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrQueryParamError<InvalidSearchOffset>, from(String) = parse_usize_query_param -> TakeErrorMessage<DetailedParseIntError>)]
-    offset: usize,
-    #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrQueryParamError<InvalidSearchLimit>, from(String) = parse_usize_query_param -> TakeErrorMessage<DetailedParseIntError>)]
-    limit: usize,
-    #[deserr(default, error = DeserrQueryParamError<InvalidSearchPage>, from(Option<String>) = parse_option_usize_query_param -> TakeErrorMessage<std::num::ParseIntError>)]
-    page: Option<usize>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidSearchHitsPerPage>, from(Option<String>) = parse_option_usize_query_param -> TakeErrorMessage<std::num::ParseIntError>)]
-    hits_per_page: Option<usize>,
+    #[deserr(default = Param(DEFAULT_SEARCH_OFFSET()), error = DeserrQueryParamError<InvalidSearchOffset>)]
+    offset: Param<usize>,
+    #[deserr(default = Param(DEFAULT_SEARCH_LIMIT()), error = DeserrQueryParamError<InvalidSearchLimit>)]
+    limit: Param<usize>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchPage>)]
+    page: Option<Param<usize>>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchHitsPerPage>)]
+    hits_per_page: Option<Param<usize>>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToRetrieve>)]
     attributes_to_retrieve: Option<CS<String>>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToCrop>)]
     attributes_to_crop: Option<CS<String>>,
-    #[deserr(default = DEFAULT_CROP_LENGTH(), error = DeserrQueryParamError<InvalidSearchCropLength>, from(String) = parse_usize_query_param -> TakeErrorMessage<DetailedParseIntError>)]
-    crop_length: usize,
+    #[deserr(default = Param(DEFAULT_CROP_LENGTH()), error = DeserrQueryParamError<InvalidSearchCropLength>)]
+    crop_length: Param<usize>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToHighlight>)]
     attributes_to_highlight: Option<CS<String>>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchFilter>)]
     filter: Option<String>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchSort>)]
     sort: Option<String>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowMatchesPosition>, from(&String) = parse_bool_take_error_message -> TakeErrorMessage<std::str::ParseBoolError>)]
-    show_matches_position: bool,
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowMatchesPosition>)]
+    show_matches_position: Param<bool>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchFacets>)]
     facets: Option<CS<String>>,
     #[deserr( default = DEFAULT_HIGHLIGHT_PRE_TAG(), error = DeserrQueryParamError<InvalidSearchHighlightPreTag>)]
@@ -96,17 +81,17 @@ impl From<SearchQueryGet> for SearchQuery {
 
         Self {
             q: other.q,
-            offset: other.offset,
-            limit: other.limit,
-            page: other.page,
-            hits_per_page: other.hits_per_page,
+            offset: other.offset.0,
+            limit: other.limit.0,
+            page: other.page.as_deref().copied(),
+            hits_per_page: other.hits_per_page.as_deref().copied(),
             attributes_to_retrieve: other.attributes_to_retrieve.map(|o| o.into_iter().collect()),
             attributes_to_crop: other.attributes_to_crop.map(|o| o.into_iter().collect()),
-            crop_length: other.crop_length,
+            crop_length: other.crop_length.0,
             attributes_to_highlight: other.attributes_to_highlight.map(|o| o.into_iter().collect()),
             filter,
             sort: other.sort.map(|attr| fix_sort_query_parameters(&attr)),
-            show_matches_position: other.show_matches_position,
+            show_matches_position: other.show_matches_position.0,
             facets: other.facets.map(|o| o.into_iter().collect()),
             highlight_pre_tag: other.highlight_pre_tag,
             highlight_post_tag: other.highlight_post_tag,

@@ -295,7 +295,7 @@ async fn search_bad_show_matches_position() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid value in parameter `showMatchesPosition`: provided string was not `true` or `false`",
+      "message": "Invalid value in parameter `showMatchesPosition`: could not parse `doggo` as a boolean, expected either `true` or `false`",
       "code": "invalid_search_show_matches_position",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-search-show-matches-position"

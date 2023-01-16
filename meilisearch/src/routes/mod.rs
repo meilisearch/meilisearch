@@ -41,7 +41,7 @@ where
     Ok(Some(input.parse()?))
 }
 
-const PAGINATION_DEFAULT_LIMIT: fn() -> usize = || 20;
+const PAGINATION_DEFAULT_LIMIT: usize = 20;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

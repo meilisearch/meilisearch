@@ -5,8 +5,8 @@ use std::time::Instant;
 
 use deserr::DeserializeFromValue;
 use either::Either;
+use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
-use meilisearch_types::error::DeserrJsonError;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::TokenizerBuilder;
@@ -15,7 +15,7 @@ use milli::{
     SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::{json, Value};
 
 use crate::error::MeilisearchHttpError;
@@ -74,9 +74,8 @@ impl SearchQuery {
     }
 }
 
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq, DeserializeFromValue)]
+#[derive(Debug, Clone, PartialEq, Eq, DeserializeFromValue)]
 #[deserr(rename_all = camelCase)]
-#[serde(rename_all = "camelCase")]
 pub enum MatchingStrategy {
     /// Remove query words from last to first
     Last,
