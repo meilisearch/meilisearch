@@ -179,15 +179,15 @@ async fn error_update_setting_unexisting_index_invalid_uid() {
     let server = Server::new().await;
     let index = server.index("test##!  ");
     let (response, code) = index.update_settings(json!({})).await;
-    assert_eq!(code, 400);
-
-    let expected = json!({
-        "message": "`test##!  ` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
-        "code": "invalid_index_uid",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-index-uid"});
-
-    assert_eq!(response, expected);
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "message": "`test##!  ` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+      "code": "invalid_index_uid",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-index-uid"
+    }
+    "###);
 }
 
 macro_rules! test_setting_routes {
@@ -278,22 +278,16 @@ async fn error_set_invalid_ranking_rules() {
     let index = server.index("test");
     index.create(None).await;
 
-    let (_response, _code) =
-        index.update_settings(json!({ "rankingRules": [ "manyTheFish"]})).await;
-    index.wait_task(1).await;
-    let (response, code) = index.get_task(1).await;
-
-    assert_eq!(code, 200);
-    assert_eq!(response["status"], "failed");
-
-    let expected_error = json!({
-        "message": r#"`manyTheFish` ranking rule is invalid. Valid ranking rules are words, typo, sort, proximity, attribute, exactness and custom ranking rules."#,
-        "code": "invalid_ranking_rule",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-ranking-rule"
-    });
-
-    assert_eq!(response["error"], expected_error);
+    let (response, code) = index.update_settings(json!({ "rankingRules": [ "manyTheFish"]})).await;
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "message": "`manyTheFish` ranking rule is invalid. Valid ranking rules are words, typo, sort, proximity, attribute, exactness and custom ranking rules. at `.rankingRules[0]`.",
+      "code": "invalid_settings_ranking_rules",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-settings-ranking-rules"
+    }
+    "###);
 }
 
 #[actix_rt::test]

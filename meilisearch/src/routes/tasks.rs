@@ -1,10 +1,12 @@
+use std::num::ParseIntError;
 use std::str::FromStr;
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use index_scheduler::error::DateField;
+use deserr::DeserializeFromValue;
 use index_scheduler::{IndexScheduler, Query, TaskId};
-use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::error::{DeserrError, ResponseError, TakeErrorMessage};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::star_or::StarOr;
@@ -14,14 +16,16 @@ use meilisearch_types::tasks::{
 use serde::{Deserialize, Serialize};
 use serde_cs::vec::CS;
 use serde_json::json;
-use time::{Duration, OffsetDateTime};
+use time::format_description::well_known::Rfc3339;
+use time::macros::format_description;
+use time::{Date, Duration, OffsetDateTime, Time};
 use tokio::task;
 
-use self::date_deserializer::{deserialize_date, DeserializeDateOption};
 use super::{fold_star_or, SummarizedTaskView};
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
+use crate::extractors::query_parameters::QueryParameter;
 use crate::extractors::sequential_extractor::SeqHandler;
 
 const DEFAULT_LIMIT: fn() -> u32 = || 20;
@@ -160,307 +164,124 @@ impl From<Details> for DetailsView {
     }
 }
 
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct TaskCommonQueryRaw {
-    pub uids: Option<CS<String>>,
-    pub canceled_by: Option<CS<String>>,
-    pub types: Option<CS<StarOr<String>>>,
-    pub statuses: Option<CS<StarOr<String>>>,
-    pub index_uids: Option<CS<StarOr<String>>>,
+fn parse_option_cs<T: FromStr>(
+    s: Option<CS<String>>,
+) -> Result<Option<Vec<T>>, TakeErrorMessage<T::Err>> {
+    if let Some(s) = s {
+        s.into_iter()
+            .map(|s| T::from_str(&s))
+            .collect::<Result<Vec<T>, T::Err>>()
+            .map_err(TakeErrorMessage)
+            .map(Some)
+    } else {
+        Ok(None)
+    }
 }
-
-impl TaskCommonQueryRaw {
-    fn validate(self) -> Result<TaskCommonQuery, ResponseError> {
-        let Self { uids, canceled_by, types, statuses, index_uids } = self;
-        let uids = if let Some(uids) = uids {
-            Some(
-                uids.into_iter()
-                    .map(|uid_string| {
-                        uid_string.parse::<u32>().map_err(|_e| {
-                            index_scheduler::Error::InvalidTaskUids { task_uid: uid_string }.into()
-                        })
-                    })
-                    .collect::<Result<Vec<u32>, ResponseError>>()?,
-            )
-        } else {
-            None
-        };
-        let canceled_by = if let Some(canceled_by) = canceled_by {
-            Some(
-                canceled_by
-                    .into_iter()
-                    .map(|canceled_by_string| {
-                        canceled_by_string.parse::<u32>().map_err(|_e| {
-                            index_scheduler::Error::InvalidTaskCanceledBy {
-                                canceled_by: canceled_by_string,
-                            }
-                            .into()
-                        })
-                    })
-                    .collect::<Result<Vec<u32>, ResponseError>>()?,
-            )
-        } else {
-            None
-        };
-
-        let types = if let Some(types) = types.and_then(fold_star_or) as Option<Vec<String>> {
-            Some(
-                types
-                    .into_iter()
-                    .map(|type_string| {
-                        Kind::from_str(&type_string).map_err(|_e| {
-                            index_scheduler::Error::InvalidTaskTypes { type_: type_string }.into()
-                        })
-                    })
-                    .collect::<Result<Vec<Kind>, ResponseError>>()?,
-            )
-        } else {
-            None
-        };
-        let statuses = if let Some(statuses) =
-            statuses.and_then(fold_star_or) as Option<Vec<String>>
-        {
-            Some(
-                statuses
-                    .into_iter()
-                    .map(|status_string| {
-                        Status::from_str(&status_string).map_err(|_e| {
-                            index_scheduler::Error::InvalidTaskStatuses { status: status_string }
-                                .into()
-                        })
-                    })
-                    .collect::<Result<Vec<Status>, ResponseError>>()?,
-            )
-        } else {
-            None
-        };
-
-        let index_uids =
-            if let Some(index_uids) = index_uids.and_then(fold_star_or) as Option<Vec<String>> {
-                Some(
-                    index_uids
-                        .into_iter()
-                        .map(|index_uid_string| {
-                            IndexUid::from_str(&index_uid_string)
-                                .map(|index_uid| index_uid.to_string())
-                                .map_err(|_e| {
-                                    index_scheduler::Error::InvalidIndexUid {
-                                        index_uid: index_uid_string,
-                                    }
-                                    .into()
-                                })
-                        })
-                        .collect::<Result<Vec<String>, ResponseError>>()?,
-                )
-            } else {
-                None
-            };
-        Ok(TaskCommonQuery { types, uids, canceled_by, statuses, index_uids })
+fn parse_option_cs_star_or<T: FromStr>(
+    s: Option<CS<StarOr<String>>>,
+) -> Result<Option<Vec<T>>, TakeErrorMessage<T::Err>> {
+    if let Some(s) = s.and_then(fold_star_or) as Option<Vec<String>> {
+        s.into_iter()
+            .map(|s| T::from_str(&s))
+            .collect::<Result<Vec<T>, T::Err>>()
+            .map_err(TakeErrorMessage)
+            .map(Some)
+    } else {
+        Ok(None)
+    }
+}
+fn parse_option_str<T: FromStr>(s: Option<String>) -> Result<Option<T>, TakeErrorMessage<T::Err>> {
+    if let Some(s) = s {
+        T::from_str(&s).map_err(TakeErrorMessage).map(Some)
+    } else {
+        Ok(None)
     }
 }
 
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct TaskDateQueryRaw {
-    pub after_enqueued_at: Option<String>,
-    pub before_enqueued_at: Option<String>,
-    pub after_started_at: Option<String>,
-    pub before_started_at: Option<String>,
-    pub after_finished_at: Option<String>,
-    pub before_finished_at: Option<String>,
-}
-impl TaskDateQueryRaw {
-    fn validate(self) -> Result<TaskDateQuery, ResponseError> {
-        let Self {
-            after_enqueued_at,
-            before_enqueued_at,
-            after_started_at,
-            before_started_at,
-            after_finished_at,
-            before_finished_at,
-        } = self;
-
-        let mut query = TaskDateQuery {
-            after_enqueued_at: None,
-            before_enqueued_at: None,
-            after_started_at: None,
-            before_started_at: None,
-            after_finished_at: None,
-            before_finished_at: None,
-        };
-
-        for (field_name, string_value, before_or_after, dest) in [
-            (
-                DateField::AfterEnqueuedAt,
-                after_enqueued_at,
-                DeserializeDateOption::After,
-                &mut query.after_enqueued_at,
-            ),
-            (
-                DateField::BeforeEnqueuedAt,
-                before_enqueued_at,
-                DeserializeDateOption::Before,
-                &mut query.before_enqueued_at,
-            ),
-            (
-                DateField::AfterStartedAt,
-                after_started_at,
-                DeserializeDateOption::After,
-                &mut query.after_started_at,
-            ),
-            (
-                DateField::BeforeStartedAt,
-                before_started_at,
-                DeserializeDateOption::Before,
-                &mut query.before_started_at,
-            ),
-            (
-                DateField::AfterFinishedAt,
-                after_finished_at,
-                DeserializeDateOption::After,
-                &mut query.after_finished_at,
-            ),
-            (
-                DateField::BeforeFinishedAt,
-                before_finished_at,
-                DeserializeDateOption::Before,
-                &mut query.before_finished_at,
-            ),
-        ] {
-            if let Some(string_value) = string_value {
-                *dest = Some(deserialize_date(field_name, &string_value, before_or_after)?);
-            }
-        }
-
-        Ok(query)
-    }
+fn parse_str<T: FromStr>(s: String) -> Result<T, TakeErrorMessage<T::Err>> {
+    T::from_str(&s).map_err(TakeErrorMessage)
 }
 
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct TasksFilterQueryRaw {
-    #[serde(flatten)]
-    pub common: TaskCommonQueryRaw,
-    #[serde(default = "DEFAULT_LIMIT")]
-    pub limit: u32,
-    pub from: Option<TaskId>,
-    #[serde(flatten)]
-    pub dates: TaskDateQueryRaw,
-}
-
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct TaskDeletionOrCancelationQueryRaw {
-    #[serde(flatten)]
-    pub common: TaskCommonQueryRaw,
-    #[serde(flatten)]
-    pub dates: TaskDateQueryRaw,
-}
-
-impl TasksFilterQueryRaw {
-    fn validate(self) -> Result<TasksFilterQuery, ResponseError> {
-        let Self { common, limit, from, dates } = self;
-        let common = common.validate()?;
-        let dates = dates.validate()?;
-
-        Ok(TasksFilterQuery { common, limit, from, dates })
-    }
-}
-
-impl TaskDeletionOrCancelationQueryRaw {
-    fn validate(self) -> Result<TaskDeletionOrCancelationQuery, ResponseError> {
-        let Self { common, dates } = self;
-        let common = common.validate()?;
-        let dates = dates.validate()?;
-
-        Ok(TaskDeletionOrCancelationQuery { common, dates })
-    }
-}
-
-#[derive(Serialize, Debug)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct TaskDateQuery {
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        serialize_with = "time::serde::rfc3339::option::serialize"
-    )]
-    after_enqueued_at: Option<OffsetDateTime>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        serialize_with = "time::serde::rfc3339::option::serialize"
-    )]
-    before_enqueued_at: Option<OffsetDateTime>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        serialize_with = "time::serde::rfc3339::option::serialize"
-    )]
-    after_started_at: Option<OffsetDateTime>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        serialize_with = "time::serde::rfc3339::option::serialize"
-    )]
-    before_started_at: Option<OffsetDateTime>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        serialize_with = "time::serde::rfc3339::option::serialize"
-    )]
-    after_finished_at: Option<OffsetDateTime>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        serialize_with = "time::serde::rfc3339::option::serialize"
-    )]
-    before_finished_at: Option<OffsetDateTime>,
-}
-
-#[derive(Debug)]
-pub struct TaskCommonQuery {
-    types: Option<Vec<Kind>>,
-    uids: Option<Vec<TaskId>>,
-    canceled_by: Option<Vec<TaskId>>,
-    statuses: Option<Vec<Status>>,
-    index_uids: Option<Vec<String>>,
-}
-
-#[derive(Debug)]
+#[derive(Debug, DeserializeFromValue)]
+#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
 pub struct TasksFilterQuery {
-    limit: u32,
-    from: Option<TaskId>,
-    common: TaskCommonQuery,
-    dates: TaskDateQuery,
+    #[deserr(error = DeserrError<InvalidTaskLimit>, default = DEFAULT_LIMIT(), from(String) = parse_str::<u32> -> TakeErrorMessage<ParseIntError>)]
+    pub limit: u32,
+    #[deserr(error = DeserrError<InvalidTaskFrom>, from(Option<String>) = parse_option_str::<TaskId> -> TakeErrorMessage<ParseIntError>)]
+    pub from: Option<TaskId>,
+
+    #[deserr(error = DeserrError<InvalidTaskUids>, from(Option<CS<String>>) = parse_option_cs::<u32> -> TakeErrorMessage<ParseIntError>)]
+    pub uids: Option<Vec<u32>>,
+    #[deserr(error = DeserrError<InvalidTaskCanceledBy>, from(Option<CS<String>>) = parse_option_cs::<u32> -> TakeErrorMessage<ParseIntError>)]
+    pub canceled_by: Option<Vec<u32>>,
+    #[deserr(error = DeserrError<InvalidTaskTypes>, default = None, from(Option<CS<StarOr<String>>>) = parse_option_cs_star_or::<Kind> -> TakeErrorMessage<ResponseError>)]
+    pub types: Option<Vec<Kind>>,
+    #[deserr(error = DeserrError<InvalidTaskStatuses>, default = None, from(Option<CS<StarOr<String>>>) = parse_option_cs_star_or::<Status> -> TakeErrorMessage<ResponseError>)]
+    pub statuses: Option<Vec<Status>>,
+    #[deserr(error = DeserrError<InvalidIndexUid>, default = None, from(Option<CS<StarOr<String>>>) = parse_option_cs_star_or::<IndexUid> -> TakeErrorMessage<ResponseError>)]
+    pub index_uids: Option<Vec<IndexUid>>,
+
+    #[deserr(error = DeserrError<InvalidTaskAfterEnqueuedAt>, default = None, from(Option<String>) = deserialize_date_after -> TakeErrorMessage<InvalidTaskDateError>)]
+    pub after_enqueued_at: Option<OffsetDateTime>,
+    #[deserr(error = DeserrError<InvalidTaskBeforeEnqueuedAt>, default = None, from(Option<String>) = deserialize_date_before -> TakeErrorMessage<InvalidTaskDateError>)]
+    pub before_enqueued_at: Option<OffsetDateTime>,
+    #[deserr(error = DeserrError<InvalidTaskAfterStartedAt>, default = None, from(Option<String>) = deserialize_date_after -> TakeErrorMessage<InvalidTaskDateError>)]
+    pub after_started_at: Option<OffsetDateTime>,
+    #[deserr(error = DeserrError<InvalidTaskBeforeStartedAt>, default = None, from(Option<String>) = deserialize_date_before -> TakeErrorMessage<InvalidTaskDateError>)]
+    pub before_started_at: Option<OffsetDateTime>,
+    #[deserr(error = DeserrError<InvalidTaskAfterFinishedAt>, default = None, from(Option<String>) = deserialize_date_after -> TakeErrorMessage<InvalidTaskDateError>)]
+    pub after_finished_at: Option<OffsetDateTime>,
+    #[deserr(error = DeserrError<InvalidTaskBeforeFinishedAt>, default = None, from(Option<String>) = deserialize_date_before -> TakeErrorMessage<InvalidTaskDateError>)]
+    pub before_finished_at: Option<OffsetDateTime>,
 }
 
-#[derive(Debug)]
+#[derive(Deserialize, Debug, DeserializeFromValue)]
+#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
 pub struct TaskDeletionOrCancelationQuery {
-    common: TaskCommonQuery,
-    dates: TaskDateQuery,
+    #[deserr(error = DeserrError<InvalidTaskUids>, from(Option<CS<String>>) = parse_option_cs::<u32> -> TakeErrorMessage<ParseIntError>)]
+    pub uids: Option<Vec<u32>>,
+    #[deserr(error = DeserrError<InvalidTaskCanceledBy>, from(Option<CS<String>>) = parse_option_cs::<u32> -> TakeErrorMessage<ParseIntError>)]
+    pub canceled_by: Option<Vec<u32>>,
+    #[deserr(error = DeserrError<InvalidTaskTypes>, default = None, from(Option<CS<StarOr<String>>>) = parse_option_cs_star_or::<Kind> -> TakeErrorMessage<ResponseError>)]
+    pub types: Option<Vec<Kind>>,
+    #[deserr(error = DeserrError<InvalidTaskStatuses>, default = None, from(Option<CS<StarOr<String>>>) = parse_option_cs_star_or::<Status> -> TakeErrorMessage<ResponseError>)]
+    pub statuses: Option<Vec<Status>>,
+    #[deserr(error = DeserrError<InvalidIndexUid>, default = None, from(Option<CS<StarOr<String>>>) = parse_option_cs_star_or::<IndexUid> -> TakeErrorMessage<ResponseError>)]
+    pub index_uids: Option<Vec<IndexUid>>,
+
+    #[deserr(error = DeserrError<InvalidTaskAfterEnqueuedAt>, default = None, from(Option<String>) = deserialize_date_after -> TakeErrorMessage<InvalidTaskDateError>)]
+    pub after_enqueued_at: Option<OffsetDateTime>,
+    #[deserr(error = DeserrError<InvalidTaskBeforeEnqueuedAt>, default = None, from(Option<String>) = deserialize_date_before -> TakeErrorMessage<InvalidTaskDateError>)]
+    pub before_enqueued_at: Option<OffsetDateTime>,
+    #[deserr(error = DeserrError<InvalidTaskAfterStartedAt>, default = None, from(Option<String>) = deserialize_date_after -> TakeErrorMessage<InvalidTaskDateError>)]
+    pub after_started_at: Option<OffsetDateTime>,
+    #[deserr(error = DeserrError<InvalidTaskBeforeStartedAt>, default = None, from(Option<String>) = deserialize_date_before -> TakeErrorMessage<InvalidTaskDateError>)]
+    pub before_started_at: Option<OffsetDateTime>,
+    #[deserr(error = DeserrError<InvalidTaskAfterFinishedAt>, default = None, from(Option<String>) = deserialize_date_after -> TakeErrorMessage<InvalidTaskDateError>)]
+    pub after_finished_at: Option<OffsetDateTime>,
+    #[deserr(error = DeserrError<InvalidTaskBeforeFinishedAt>, default = None, from(Option<String>) = deserialize_date_before -> TakeErrorMessage<InvalidTaskDateError>)]
+    pub before_finished_at: Option<OffsetDateTime>,
 }
 
 async fn cancel_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_CANCEL }>, Data<IndexScheduler>>,
-    params: web::Query<TaskDeletionOrCancelationQueryRaw>,
+    params: QueryParameter<TaskDeletionOrCancelationQuery, DeserrError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let query = params.into_inner().validate()?;
     let TaskDeletionOrCancelationQuery {
-        common: TaskCommonQuery { types, uids, canceled_by, statuses, index_uids },
-        dates:
-            TaskDateQuery {
-                after_enqueued_at,
-                before_enqueued_at,
-                after_started_at,
-                before_started_at,
-                after_finished_at,
-                before_finished_at,
-            },
-    } = query;
+        types,
+        uids,
+        canceled_by,
+        statuses,
+        index_uids,
+        after_enqueued_at,
+        before_enqueued_at,
+        after_started_at,
+        before_started_at,
+        after_finished_at,
+        before_finished_at,
+    } = params.into_inner();
 
     analytics.publish(
         "Tasks Canceled".to_string(),
@@ -485,7 +306,7 @@ async fn cancel_tasks(
         from: None,
         statuses,
         types,
-        index_uids,
+        index_uids: index_uids.map(|xs| xs.into_iter().map(|s| s.to_string()).collect()),
         uids,
         canceled_by,
         before_enqueued_at,
@@ -516,22 +337,24 @@ async fn cancel_tasks(
 
 async fn delete_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_DELETE }>, Data<IndexScheduler>>,
-    params: web::Query<TaskDeletionOrCancelationQueryRaw>,
+    params: QueryParameter<TaskDeletionOrCancelationQuery, DeserrError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let TaskDeletionOrCancelationQuery {
-        common: TaskCommonQuery { types, uids, canceled_by, statuses, index_uids },
-        dates:
-            TaskDateQuery {
-                after_enqueued_at,
-                before_enqueued_at,
-                after_started_at,
-                before_started_at,
-                after_finished_at,
-                before_finished_at,
-            },
-    } = params.into_inner().validate()?;
+        types,
+        uids,
+        canceled_by,
+        statuses,
+        index_uids,
+
+        after_enqueued_at,
+        before_enqueued_at,
+        after_started_at,
+        before_started_at,
+        after_finished_at,
+        before_finished_at,
+    } = params.into_inner();
 
     analytics.publish(
         "Tasks Deleted".to_string(),
@@ -556,7 +379,7 @@ async fn delete_tasks(
         from: None,
         statuses,
         types,
-        index_uids,
+        index_uids: index_uids.map(|xs| xs.into_iter().map(|s| s.to_string()).collect()),
         uids,
         canceled_by,
         after_enqueued_at,
@@ -595,26 +418,28 @@ pub struct AllTasks {
 
 async fn get_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, Data<IndexScheduler>>,
-    params: web::Query<TasksFilterQueryRaw>,
+    params: QueryParameter<TasksFilterQuery, DeserrError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    let params = params.into_inner();
     analytics.get_tasks(&params, &req);
 
     let TasksFilterQuery {
-        common: TaskCommonQuery { types, uids, canceled_by, statuses, index_uids },
+        types,
+        uids,
+        canceled_by,
+        statuses,
+        index_uids,
         limit,
         from,
-        dates:
-            TaskDateQuery {
-                after_enqueued_at,
-                before_enqueued_at,
-                after_started_at,
-                before_started_at,
-                after_finished_at,
-                before_finished_at,
-            },
-    } = params.into_inner().validate()?;
+        after_enqueued_at,
+        before_enqueued_at,
+        after_started_at,
+        before_started_at,
+        after_finished_at,
+        before_finished_at,
+    } = params;
 
     // We +1 just to know if there is more after this "page" or not.
     let limit = limit.saturating_add(1);
@@ -624,7 +449,7 @@ async fn get_tasks(
         from,
         statuses,
         types,
-        index_uids,
+        index_uids: index_uids.map(|xs| xs.into_iter().map(|s| s.to_string()).collect()),
         uids,
         canceled_by,
         before_enqueued_at,
@@ -691,333 +516,275 @@ async fn get_task(
     }
 }
 
-pub(crate) mod date_deserializer {
-    use index_scheduler::error::DateField;
-    use meilisearch_types::error::ResponseError;
-    use time::format_description::well_known::Rfc3339;
-    use time::macros::format_description;
-    use time::{Date, Duration, OffsetDateTime, Time};
+pub enum DeserializeDateOption {
+    Before,
+    After,
+}
 
-    pub enum DeserializeDateOption {
-        Before,
-        After,
-    }
-
-    pub fn deserialize_date(
-        field_name: DateField,
-        value: &str,
-        option: DeserializeDateOption,
-    ) -> std::result::Result<OffsetDateTime, ResponseError> {
-        // We can't parse using time's rfc3339 format, since then we won't know what part of the
-        // datetime was not explicitly specified, and thus we won't be able to increment it to the
-        // next step.
-        if let Ok(datetime) = OffsetDateTime::parse(value, &Rfc3339) {
-            // fully specified up to the second
-            // we assume that the subseconds are 0 if not specified, and we don't increment to the next second
-            Ok(datetime)
-        } else if let Ok(datetime) = Date::parse(
-            value,
-            format_description!("[year repr:full base:calendar]-[month repr:numerical]-[day]"),
-        ) {
-            let datetime = datetime.with_time(Time::MIDNIGHT).assume_utc();
-            // add one day since the time was not specified
-            match option {
-                DeserializeDateOption::Before => Ok(datetime),
-                DeserializeDateOption::After => {
-                    let datetime = datetime.checked_add(Duration::days(1)).unwrap_or(datetime);
-                    Ok(datetime)
-                }
+pub fn deserialize_date(
+    value: &str,
+    option: DeserializeDateOption,
+) -> std::result::Result<OffsetDateTime, TakeErrorMessage<InvalidTaskDateError>> {
+    // We can't parse using time's rfc3339 format, since then we won't know what part of the
+    // datetime was not explicitly specified, and thus we won't be able to increment it to the
+    // next step.
+    if let Ok(datetime) = OffsetDateTime::parse(value, &Rfc3339) {
+        // fully specified up to the second
+        // we assume that the subseconds are 0 if not specified, and we don't increment to the next second
+        Ok(datetime)
+    } else if let Ok(datetime) = Date::parse(
+        value,
+        format_description!("[year repr:full base:calendar]-[month repr:numerical]-[day]"),
+    ) {
+        let datetime = datetime.with_time(Time::MIDNIGHT).assume_utc();
+        // add one day since the time was not specified
+        match option {
+            DeserializeDateOption::Before => Ok(datetime),
+            DeserializeDateOption::After => {
+                let datetime = datetime.checked_add(Duration::days(1)).unwrap_or(datetime);
+                Ok(datetime)
             }
-        } else {
-            Err(index_scheduler::Error::InvalidTaskDate {
-                field: field_name,
-                date: value.to_string(),
-            }
-            .into())
         }
+    } else {
+        Err(TakeErrorMessage(InvalidTaskDateError(value.to_owned())))
     }
 }
 
+pub fn deserialize_date_before(
+    value: Option<String>,
+) -> std::result::Result<Option<OffsetDateTime>, TakeErrorMessage<InvalidTaskDateError>> {
+    if let Some(value) = value {
+        let date = deserialize_date(&value, DeserializeDateOption::Before)?;
+        Ok(Some(date))
+    } else {
+        Ok(None)
+    }
+}
+pub fn deserialize_date_after(
+    value: Option<String>,
+) -> std::result::Result<Option<OffsetDateTime>, TakeErrorMessage<InvalidTaskDateError>> {
+    if let Some(value) = value {
+        let date = deserialize_date(&value, DeserializeDateOption::After)?;
+        Ok(Some(date))
+    } else {
+        Ok(None)
+    }
+}
+
+#[derive(Debug)]
+pub struct InvalidTaskDateError(String);
+impl std::fmt::Display for InvalidTaskDateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "`{}` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.", self.0)
+    }
+}
+impl std::error::Error for InvalidTaskDateError {}
+
 #[cfg(test)]
 mod tests {
+    use deserr::DeserializeFromValue;
     use meili_snap::snapshot;
+    use meilisearch_types::error::DeserrError;
 
-    use crate::routes::tasks::{TaskDeletionOrCancelationQueryRaw, TasksFilterQueryRaw};
+    use crate::extractors::query_parameters::QueryParameter;
+    use crate::routes::tasks::{TaskDeletionOrCancelationQuery, TasksFilterQuery};
+
+    fn deserr_query_params<T>(j: &str) -> Result<T, actix_web::Error>
+    where
+        T: DeserializeFromValue<DeserrError>,
+    {
+        QueryParameter::<T, DeserrError>::from_query(j).map(|p| p.0)
+    }
 
     #[test]
     fn deserialize_task_filter_dates() {
         {
-            let json = r#" { 
-                "afterEnqueuedAt": "2021-12-03", 
-                "beforeEnqueuedAt": "2021-12-03",
-                "afterStartedAt": "2021-12-03", 
-                "beforeStartedAt": "2021-12-03",
-                "afterFinishedAt": "2021-12-03", 
-                "beforeFinishedAt": "2021-12-03"
-            } "#;
-            let query = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap();
-            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"2021-12-04 0:00:00.0 +00:00:00");
-            snapshot!(format!("{:?}", query.dates.before_enqueued_at.unwrap()), @"2021-12-03 0:00:00.0 +00:00:00");
-            snapshot!(format!("{:?}", query.dates.after_started_at.unwrap()), @"2021-12-04 0:00:00.0 +00:00:00");
-            snapshot!(format!("{:?}", query.dates.before_started_at.unwrap()), @"2021-12-03 0:00:00.0 +00:00:00");
-            snapshot!(format!("{:?}", query.dates.after_finished_at.unwrap()), @"2021-12-04 0:00:00.0 +00:00:00");
-            snapshot!(format!("{:?}", query.dates.before_finished_at.unwrap()), @"2021-12-03 0:00:00.0 +00:00:00");
+            let params = "afterEnqueuedAt=2021-12-03&beforeEnqueuedAt=2021-12-03&afterStartedAt=2021-12-03&beforeStartedAt=2021-12-03&afterFinishedAt=2021-12-03&beforeFinishedAt=2021-12-03";
+            let query = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap();
+
+            snapshot!(format!("{:?}", query.after_enqueued_at.unwrap()), @"2021-12-04 0:00:00.0 +00:00:00");
+            snapshot!(format!("{:?}", query.before_enqueued_at.unwrap()), @"2021-12-03 0:00:00.0 +00:00:00");
+            snapshot!(format!("{:?}", query.after_started_at.unwrap()), @"2021-12-04 0:00:00.0 +00:00:00");
+            snapshot!(format!("{:?}", query.before_started_at.unwrap()), @"2021-12-03 0:00:00.0 +00:00:00");
+            snapshot!(format!("{:?}", query.after_finished_at.unwrap()), @"2021-12-04 0:00:00.0 +00:00:00");
+            snapshot!(format!("{:?}", query.before_finished_at.unwrap()), @"2021-12-03 0:00:00.0 +00:00:00");
         }
         {
-            let json = r#" { "afterEnqueuedAt": "2021-12-03T23:45:23Z", "beforeEnqueuedAt": "2021-12-03T23:45:23Z" } "#;
-            let query = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap();
-            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"2021-12-03 23:45:23.0 +00:00:00");
-            snapshot!(format!("{:?}", query.dates.before_enqueued_at.unwrap()), @"2021-12-03 23:45:23.0 +00:00:00");
+            let params =
+                "afterEnqueuedAt=2021-12-03T23:45:23Z&beforeEnqueuedAt=2021-12-03T23:45:23Z";
+            let query = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap();
+            snapshot!(format!("{:?}", query.after_enqueued_at.unwrap()), @"2021-12-03 23:45:23.0 +00:00:00");
+            snapshot!(format!("{:?}", query.before_enqueued_at.unwrap()), @"2021-12-03 23:45:23.0 +00:00:00");
         }
         {
-            let json = r#" { "afterEnqueuedAt": "1997-11-12T09:55:06-06:20" } "#;
-            let query = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap();
-            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"1997-11-12 9:55:06.0 -06:20:00");
+            let params = "afterEnqueuedAt=1997-11-12T09:55:06-06:20";
+            let query = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap();
+            snapshot!(format!("{:?}", query.after_enqueued_at.unwrap()), @"1997-11-12 9:55:06.0 -06:20:00");
         }
         {
-            let json = r#" { "afterEnqueuedAt": "1997-11-12T09:55:06+00:00" } "#;
-            let query = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap();
-            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"1997-11-12 9:55:06.0 +00:00:00");
+            let params = "afterEnqueuedAt=1997-11-12T09:55:06%2B00:00";
+            let query = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap();
+            snapshot!(format!("{:?}", query.after_enqueued_at.unwrap()), @"1997-11-12 9:55:06.0 +00:00:00");
         }
         {
-            let json = r#" { "afterEnqueuedAt": "1997-11-12T09:55:06.200000300Z" } "#;
-            let query = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap();
-            snapshot!(format!("{:?}", query.dates.after_enqueued_at.unwrap()), @"1997-11-12 9:55:06.2000003 +00:00:00");
+            let params = "afterEnqueuedAt=1997-11-12T09:55:06.200000300Z";
+            let query = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap();
+            snapshot!(format!("{:?}", query.after_enqueued_at.unwrap()), @"1997-11-12 9:55:06.2000003 +00:00:00");
         }
         {
-            let json = r#" { "afterFinishedAt": "2021" } "#;
-            let err = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap_err();
-            snapshot!(format!("{err}"), @"Task `afterFinishedAt` `2021` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.");
+            let params = "afterFinishedAt=2021";
+            let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
+            snapshot!(format!("{err}"), @"`2021` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.afterFinishedAt`.");
         }
         {
-            let json = r#" { "beforeFinishedAt": "2021" } "#;
-            let err = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap_err();
-            snapshot!(format!("{err}"), @"Task `beforeFinishedAt` `2021` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.");
+            let params = "beforeFinishedAt=2021";
+            let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
+            snapshot!(format!("{err}"), @"`2021` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.beforeFinishedAt`.");
         }
         {
-            let json = r#" { "afterEnqueuedAt": "2021-12" } "#;
-            let err = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap_err();
-            snapshot!(format!("{err}"), @"Task `afterEnqueuedAt` `2021-12` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.");
+            let params = "afterEnqueuedAt=2021-12";
+            let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
+            snapshot!(format!("{err}"), @"`2021-12` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.afterEnqueuedAt`.");
         }
 
         {
-            let json = r#" { "beforeEnqueuedAt": "2021-12-03T23" } "#;
-            let err = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap_err();
-            snapshot!(format!("{err}"), @"Task `beforeEnqueuedAt` `2021-12-03T23` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.");
+            let params = "beforeEnqueuedAt=2021-12-03T23";
+            let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
+            snapshot!(format!("{err}"), @"`2021-12-03T23` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.beforeEnqueuedAt`.");
         }
         {
-            let json = r#" { "afterStartedAt": "2021-12-03T23:45" } "#;
-            let err = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap_err();
-            snapshot!(format!("{err}"), @"Task `afterStartedAt` `2021-12-03T23:45` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.");
-
-            let json = r#" { "beforeStartedAt": "2021-12-03T23:45" } "#;
-            let err = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap_err();
-            snapshot!(format!("{err}"), @"Task `beforeStartedAt` `2021-12-03T23:45` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.");
+            let params = "afterStartedAt=2021-12-03T23:45";
+            let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
+            snapshot!(format!("{err}"), @"`2021-12-03T23:45` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.afterStartedAt`.");
+        }
+        {
+            let params = "beforeStartedAt=2021-12-03T23:45";
+            let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
+            snapshot!(format!("{err}"), @"`2021-12-03T23:45` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.beforeStartedAt`.");
         }
     }
 
     #[test]
     fn deserialize_task_filter_uids() {
         {
-            let json = r#" { "uids": "78,1,12,73" } "#;
-            let query = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap();
-            snapshot!(format!("{:?}", query.common.uids.unwrap()), @"[78, 1, 12, 73]");
+            let params = "uids=78,1,12,73";
+            let query = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap();
+            snapshot!(format!("{:?}", query.uids.unwrap()), @"[78, 1, 12, 73]");
         }
         {
-            let json = r#" { "uids": "1" } "#;
-            let query = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap();
-            snapshot!(format!("{:?}", query.common.uids.unwrap()), @"[1]");
+            let params = "uids=1";
+            let query = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap();
+            snapshot!(format!("{:?}", query.uids.unwrap()), @"[1]");
         }
         {
-            let json = r#" { "uids": "78,hello,world" } "#;
-            let err = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap_err();
-            snapshot!(format!("{err}"), @"Task uid `hello` is invalid. It should only contain numeric characters.");
+            let params = "uids=78,hello,world";
+            let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
+            snapshot!(format!("{err}"), @"invalid digit found in string at `.uids`.");
         }
         {
-            let json = r#" { "uids": "cat" } "#;
-            let err = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap_err();
-            snapshot!(format!("{err}"), @"Task uid `cat` is invalid. It should only contain numeric characters.");
+            let params = "uids=cat";
+            let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
+            snapshot!(format!("{err}"), @"invalid digit found in string at `.uids`.");
         }
     }
 
     #[test]
     fn deserialize_task_filter_status() {
         {
-            let json = r#" { "statuses": "succeeded,failed,enqueued,processing,canceled" } "#;
-            let query = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap();
-            snapshot!(format!("{:?}", query.common.statuses.unwrap()), @"[Succeeded, Failed, Enqueued, Processing, Canceled]");
+            let params = "statuses=succeeded,failed,enqueued,processing,canceled";
+            let query = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap();
+            snapshot!(format!("{:?}", query.statuses.unwrap()), @"[Succeeded, Failed, Enqueued, Processing, Canceled]");
         }
         {
-            let json = r#" { "statuses": "enqueued" } "#;
-            let query = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap();
-            snapshot!(format!("{:?}", query.common.statuses.unwrap()), @"[Enqueued]");
+            let params = "statuses=enqueued";
+            let query = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap();
+            snapshot!(format!("{:?}", query.statuses.unwrap()), @"[Enqueued]");
         }
         {
-            let json = r#" { "statuses": "finished" } "#;
-            let err = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap_err();
-            snapshot!(format!("{err}"), @"Task status `finished` is invalid. Available task statuses are `enqueued`, `processing`, `succeeded`, `failed`, `canceled`.");
+            let params = "statuses=finished";
+            let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
+            snapshot!(format!("{err}"), @"`finished` is not a status. Available status are `enqueued`, `processing`, `succeeded`, `failed`, `canceled`. at `.statuses`.");
         }
     }
     #[test]
     fn deserialize_task_filter_types() {
         {
-            let json = r#" { "types": "documentAdditionOrUpdate,documentDeletion,settingsUpdate,indexCreation,indexDeletion,indexUpdate,indexSwap,taskCancelation,taskDeletion,dumpCreation,snapshotCreation" }"#;
-            let query = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap();
-            snapshot!(format!("{:?}", query.common.types.unwrap()), @"[DocumentAdditionOrUpdate, DocumentDeletion, SettingsUpdate, IndexCreation, IndexDeletion, IndexUpdate, IndexSwap, TaskCancelation, TaskDeletion, DumpCreation, SnapshotCreation]");
+            let params = "types=documentAdditionOrUpdate,documentDeletion,settingsUpdate,indexCreation,indexDeletion,indexUpdate,indexSwap,taskCancelation,taskDeletion,dumpCreation,snapshotCreation";
+            let query = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap();
+            snapshot!(format!("{:?}", query.types.unwrap()), @"[DocumentAdditionOrUpdate, DocumentDeletion, SettingsUpdate, IndexCreation, IndexDeletion, IndexUpdate, IndexSwap, TaskCancelation, TaskDeletion, DumpCreation, SnapshotCreation]");
         }
         {
-            let json = r#" { "types": "settingsUpdate" } "#;
-            let query = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap();
-            snapshot!(format!("{:?}", query.common.types.unwrap()), @"[SettingsUpdate]");
+            let params = "types=settingsUpdate";
+            let query = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap();
+            snapshot!(format!("{:?}", query.types.unwrap()), @"[SettingsUpdate]");
         }
         {
-            let json = r#" { "types": "createIndex" } "#;
-            let err = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap_err();
-            snapshot!(format!("{err}"), @"Task type `createIndex` is invalid. Available task types are `documentAdditionOrUpdate`, `documentDeletion`, `settingsUpdate`, `indexCreation`, `indexDeletion`, `indexUpdate`, `indexSwap`, `taskCancelation`, `taskDeletion`, `dumpCreation`, `snapshotCreation`");
+            let params = "types=createIndex";
+            let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
+            snapshot!(format!("{err}"), @"`createIndex` is not a type. Available types are `documentAdditionOrUpdate`, `documentDeletion`, `settingsUpdate`, `indexCreation`, `indexDeletion`, `indexUpdate`, `indexSwap`, `taskCancelation`, `taskDeletion`, `dumpCreation`, `snapshotCreation`. at `.types`.");
         }
     }
     #[test]
     fn deserialize_task_filter_index_uids() {
         {
-            let json = r#" { "indexUids": "toto,tata-78" }"#;
-            let query = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap();
-            snapshot!(format!("{:?}", query.common.index_uids.unwrap()), @r###"["toto", "tata-78"]"###);
+            let params = "indexUids=toto,tata-78";
+            let query = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap();
+            snapshot!(format!("{:?}", query.index_uids.unwrap()), @r###"[IndexUid("toto"), IndexUid("tata-78")]"###);
         }
         {
-            let json = r#" { "indexUids": "index_a" } "#;
-            let query = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap();
-            snapshot!(format!("{:?}", query.common.index_uids.unwrap()), @r###"["index_a"]"###);
+            let params = "indexUids=index_a";
+            let query = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap();
+            snapshot!(format!("{:?}", query.index_uids.unwrap()), @r###"[IndexUid("index_a")]"###);
         }
         {
-            let json = r#" { "indexUids": "1,hé" } "#;
-            let err = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap_err();
-            snapshot!(format!("{err}"), @"hé is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).");
+            let params = "indexUids=1,hé";
+            let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
+            snapshot!(format!("{err}"), @"`hé` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_). at `.indexUids`.");
         }
         {
-            let json = r#" { "indexUids": "hé" } "#;
-            let err = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap_err();
-            snapshot!(format!("{err}"), @"hé is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).");
+            let params = "indexUids=hé";
+            let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
+            snapshot!(format!("{err}"), @"`hé` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_). at `.indexUids`.");
         }
     }
 
     #[test]
     fn deserialize_task_filter_general() {
         {
-            let json = r#" { "from": 12, "limit": 15, "indexUids": "toto,tata-78", "statuses": "succeeded,enqueued", "afterEnqueuedAt": "2012-04-23", "uids": "1,2,3" }"#;
-            let query =
-                serde_json::from_str::<TasksFilterQueryRaw>(json).unwrap().validate().unwrap();
-            snapshot!(format!("{:?}", query), @r###"TasksFilterQuery { limit: 15, from: Some(12), common: TaskCommonQuery { types: None, uids: Some([1, 2, 3]), canceled_by: None, statuses: Some([Succeeded, Enqueued]), index_uids: Some(["toto", "tata-78"]) }, dates: TaskDateQuery { after_enqueued_at: Some(2012-04-24 0:00:00.0 +00:00:00), before_enqueued_at: None, after_started_at: None, before_started_at: None, after_finished_at: None, before_finished_at: None } }"###);
+            let params = "from=12&limit=15&indexUids=toto,tata-78&statuses=succeeded,enqueued&afterEnqueuedAt=2012-04-23&uids=1,2,3";
+            let query = deserr_query_params::<TasksFilterQuery>(params).unwrap();
+            snapshot!(format!("{:?}", query), @r###"TasksFilterQuery { limit: 15, from: Some(12), uids: Some([1, 2, 3]), canceled_by: None, types: None, statuses: Some([Succeeded, Enqueued]), index_uids: Some([IndexUid("toto"), IndexUid("tata-78")]), after_enqueued_at: Some(2012-04-24 0:00:00.0 +00:00:00), before_enqueued_at: None, after_started_at: None, before_started_at: None, after_finished_at: None, before_finished_at: None }"###);
         }
         {
             // Stars should translate to `None` in the query
             // Verify value of the default limit
-            let json = r#" { "indexUids": "*", "statuses": "succeeded,*", "afterEnqueuedAt": "2012-04-23", "uids": "1,2,3" }"#;
-            let query =
-                serde_json::from_str::<TasksFilterQueryRaw>(json).unwrap().validate().unwrap();
-            snapshot!(format!("{:?}", query), @"TasksFilterQuery { limit: 20, from: None, common: TaskCommonQuery { types: None, uids: Some([1, 2, 3]), canceled_by: None, statuses: None, index_uids: None }, dates: TaskDateQuery { after_enqueued_at: Some(2012-04-24 0:00:00.0 +00:00:00), before_enqueued_at: None, after_started_at: None, before_started_at: None, after_finished_at: None, before_finished_at: None } }");
+            let params = "indexUids=*&statuses=succeeded,*&afterEnqueuedAt=2012-04-23&uids=1,2,3";
+            let query = deserr_query_params::<TasksFilterQuery>(params).unwrap();
+            snapshot!(format!("{:?}", query), @"TasksFilterQuery { limit: 20, from: None, uids: Some([1, 2, 3]), canceled_by: None, types: None, statuses: None, index_uids: None, after_enqueued_at: Some(2012-04-24 0:00:00.0 +00:00:00), before_enqueued_at: None, after_started_at: None, before_started_at: None, after_finished_at: None, before_finished_at: None }");
         }
         {
             // Stars should also translate to `None` in task deletion/cancelation queries
-            let json = r#" { "indexUids": "*", "statuses": "succeeded,*", "afterEnqueuedAt": "2012-04-23", "uids": "1,2,3" }"#;
-            let query = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json)
-                .unwrap()
-                .validate()
-                .unwrap();
-            snapshot!(format!("{:?}", query), @"TaskDeletionOrCancelationQuery { common: TaskCommonQuery { types: None, uids: Some([1, 2, 3]), canceled_by: None, statuses: None, index_uids: None }, dates: TaskDateQuery { after_enqueued_at: Some(2012-04-24 0:00:00.0 +00:00:00), before_enqueued_at: None, after_started_at: None, before_started_at: None, after_finished_at: None, before_finished_at: None } }");
+            let params = "indexUids=*&statuses=succeeded,*&afterEnqueuedAt=2012-04-23&uids=1,2,3";
+            let query = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap();
+            snapshot!(format!("{:?}", query), @"TaskDeletionOrCancelationQuery { uids: Some([1, 2, 3]), canceled_by: None, types: None, statuses: None, index_uids: None, after_enqueued_at: Some(2012-04-24 0:00:00.0 +00:00:00), before_enqueued_at: None, after_started_at: None, before_started_at: None, after_finished_at: None, before_finished_at: None }");
         }
         {
             // Stars in uids not allowed
-            let json = r#" { "uids": "*" }"#;
-            let err =
-                serde_json::from_str::<TasksFilterQueryRaw>(json).unwrap().validate().unwrap_err();
-            snapshot!(format!("{err}"), @"Task uid `*` is invalid. It should only contain numeric characters.");
+            let params = "uids=*";
+            let err = deserr_query_params::<TasksFilterQuery>(params).unwrap_err();
+            snapshot!(format!("{err}"), @"invalid digit found in string at `.uids`.");
         }
         {
             // From not allowed in task deletion/cancelation queries
-            let json = r#" { "from": 12 }"#;
-            let err = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json).unwrap_err();
-            snapshot!(format!("{err}"), @"unknown field `from` at line 1 column 15");
+            let params = "from=12";
+            let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
+            snapshot!(format!("{err}"), @"Json deserialize error: unknown field `from`, expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt` at ``.");
         }
         {
             // Limit not allowed in task deletion/cancelation queries
-            let json = r#" { "limit": 12 }"#;
-            let err = serde_json::from_str::<TaskDeletionOrCancelationQueryRaw>(json).unwrap_err();
-            snapshot!(format!("{err}"), @"unknown field `limit` at line 1 column 16");
+            let params = "limit=12";
+            let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
+            snapshot!(format!("{err}"), @"Json deserialize error: unknown field `limit`, expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt` at ``.");
         }
     }
 }

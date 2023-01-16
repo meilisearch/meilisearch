@@ -1,6 +1,5 @@
 use std::{thread, time};
 
-use assert_json_diff::assert_json_include;
 use serde_json::{json, Value};
 
 use crate::common::Server;
@@ -34,37 +33,36 @@ async fn add_valid_api_key() {
     });
 
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(201, code, "{:?}", &response);
-    assert!(response["key"].is_string());
-    assert!(response["expiresAt"].is_string());
-    assert!(response["createdAt"].is_string());
-    assert!(response["updatedAt"].is_string());
-
-    let expected_response = json!({
-        "name": "indexing-key",
-        "description": "Indexing API key",
-        "uid": "4bc0887a-0e41-4f3b-935d-0c451dcee9c8",
-        "key": "d9e776b8412f1db6974c9a5556b961c3559440b6588216f4ea5d9ed49f7c8f3c",
-        "indexes": ["products"],
-        "actions": [
-            "search",
-            "documents.add",
-            "documents.get",
-            "documents.delete",
-            "indexes.create",
-            "indexes.get",
-            "indexes.update",
-            "indexes.delete",
-            "tasks.get",
-            "settings.get",
-            "settings.update",
-            "stats.get",
-            "dumps.create",
-        ],
-        "expiresAt": "2050-11-13T00:00:00Z"
-    });
-
-    assert_json_include!(actual: response, expected: expected_response);
+    meili_snap::snapshot!(code, @"201 Created");
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "name": "indexing-key",
+      "description": "Indexing API key",
+      "key": "d9e776b8412f1db6974c9a5556b961c3559440b6588216f4ea5d9ed49f7c8f3c",
+      "uid": "4bc0887a-0e41-4f3b-935d-0c451dcee9c8",
+      "actions": [
+        "search",
+        "documents.add",
+        "documents.get",
+        "documents.delete",
+        "indexes.create",
+        "indexes.get",
+        "indexes.update",
+        "indexes.delete",
+        "tasks.get",
+        "settings.get",
+        "settings.update",
+        "stats.get",
+        "dumps.create"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -94,34 +92,36 @@ async fn add_valid_api_key_expired_at() {
     });
 
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(201, code, "{:?}", &response);
-    assert!(response["key"].is_string());
-    assert!(response["expiresAt"].is_string());
-    assert!(response["createdAt"].is_string());
-    assert!(response["updatedAt"].is_string());
-
-    let expected_response = json!({
-        "description": "Indexing API key",
-        "indexes": ["products"],
-        "actions": [
-            "search",
-            "documents.add",
-            "documents.get",
-            "documents.delete",
-            "indexes.create",
-            "indexes.get",
-            "indexes.update",
-            "indexes.delete",
-            "tasks.get",
-            "settings.get",
-            "settings.update",
-            "stats.get",
-            "dumps.create",
-        ],
-        "expiresAt": "2050-11-13T00:00:00Z"
-    });
-
-    assert_json_include!(actual: response, expected: expected_response);
+    meili_snap::snapshot!(code, @"201 Created");
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
+    {
+      "name": null,
+      "description": "Indexing API key",
+      "key": "[ignored]",
+      "uid": "[ignored]",
+      "actions": [
+        "search",
+        "documents.add",
+        "documents.get",
+        "documents.delete",
+        "indexes.create",
+        "indexes.get",
+        "indexes.update",
+        "indexes.delete",
+        "tasks.get",
+        "settings.get",
+        "settings.update",
+        "stats.get",
+        "dumps.create"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -136,21 +136,24 @@ async fn add_valid_api_key_no_description() {
     });
 
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(201, code, "{:?}", &response);
-    assert!(response["key"].is_string());
-    assert!(response["expiresAt"].is_string());
-    assert!(response["createdAt"].is_string());
-    assert!(response["updatedAt"].is_string());
-
-    let expected_response = json!({
-        "actions": ["documents.add"],
-        "indexes": [
-            "products"
-        ],
-        "expiresAt": "2050-11-13T00:00:00Z"
-    });
-
-    assert_json_include!(actual: response, expected: expected_response);
+    meili_snap::snapshot!(code, @"201 Created");
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
+    {
+      "name": null,
+      "description": null,
+      "key": "[ignored]",
+      "uid": "[ignored]",
+      "actions": [
+        "documents.add"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -166,21 +169,24 @@ async fn add_valid_api_key_null_description() {
     });
 
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(201, code, "{:?}", &response);
-    assert!(response["key"].is_string());
-    assert!(response["expiresAt"].is_string());
-    assert!(response["createdAt"].is_string());
-    assert!(response["updatedAt"].is_string());
-
-    let expected_response = json!({
-        "actions": ["documents.add"],
-        "indexes": [
-            "products"
-        ],
-        "expiresAt": "2050-11-13T00:00:00Z"
-    });
-
-    assert_json_include!(actual: response, expected: expected_response);
+    meili_snap::snapshot!(code, @"201 Created");
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
+    {
+      "name": null,
+      "description": null,
+      "key": "[ignored]",
+      "uid": "[ignored]",
+      "actions": [
+        "documents.add"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -193,16 +199,15 @@ async fn error_add_api_key_no_header() {
         "expiresAt": "2050-11-13T00:00:00Z"
     });
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(401, code, "{:?}", &response);
-
-    let expected_response = json!({
-        "message": "The Authorization header is missing. It must use the bearer authorization method.",
-        "code": "missing_authorization_header",
-        "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(code, @"401 Unauthorized");
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "The Authorization header is missing. It must use the bearer authorization method.",
+      "code": "missing_authorization_header",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -217,16 +222,15 @@ async fn error_add_api_key_bad_key() {
         "expiresAt": "2050-11-13T00:00:00Z"
     });
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(403, code, "{:?}", &response);
-
-    let expected_response = json!({
-        "message": "The provided API key is invalid.",
-        "code": "invalid_api_key",
-        "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#invalid-api-key"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(code, @"403 Forbidden");
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "The provided API key is invalid.",
+      "code": "invalid_api_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -241,16 +245,15 @@ async fn error_add_api_key_missing_parameter() {
         "expiresAt": "2050-11-13T00:00:00Z"
     });
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(400, code, "{:?}", &response);
-
-    let expected_response = json!({
-        "message": "`indexes` field is mandatory.",
-        "code": "missing_api_key_indexes",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#missing-api-key-indexes"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "Json deserialize error: missing field `indexes` at ``",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad-request"
+    }
+    "###);
 
     // missing actions
     let content = json!({
@@ -259,16 +262,15 @@ async fn error_add_api_key_missing_parameter() {
         "expiresAt": "2050-11-13T00:00:00Z"
     });
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(400, code, "{:?}", &response);
-
-    let expected_response = json!({
-        "message": "`actions` field is mandatory.",
-        "code": "missing_api_key_actions",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#missing-api-key-actions"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "Json deserialize error: missing field `actions` at ``",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad-request"
+    }
+    "###);
 
     // missing expiration date
     let content = json!({
@@ -277,16 +279,24 @@ async fn error_add_api_key_missing_parameter() {
         "actions": ["documents.add"],
     });
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(400, code, "{:?}", &response);
-
-    let expected_response = json!({
-        "message": "`expiresAt` field is mandatory.",
-        "code": "missing_api_key_expires_at",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#missing-api-key-expires-at"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(code, @"201 Created");
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
+    {
+      "name": null,
+      "description": "Indexing API key",
+      "key": "[ignored]",
+      "uid": "[ignored]",
+      "actions": [
+        "documents.add"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": null,
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -301,16 +311,15 @@ async fn error_add_api_key_invalid_parameters_description() {
         "expiresAt": "2050-11-13T00:00:00Z"
     });
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(400, code, "{:?}", &response);
-
-    let expected_response = json!({
-        "message": r#"`description` field value `{"name":"products"}` is invalid. It should be a string or specified as a null value."#,
-        "code": "invalid_api_key_description",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-api-key-description"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "invalid type: Map `{\"name\":\"products\"}`, expected a String at `.description`.",
+      "code": "invalid_api_key_description",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key-description"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -325,16 +334,15 @@ async fn error_add_api_key_invalid_parameters_name() {
         "expiresAt": "2050-11-13T00:00:00Z"
     });
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(400, code, "{:?}", &response);
-
-    let expected_response = json!({
-        "message": r#"`name` field value `{"name":"products"}` is invalid. It should be a string or specified as a null value."#,
-        "code": "invalid_api_key_name",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-api-key-name"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "invalid type: Map `{\"name\":\"products\"}`, expected a String at `.name`.",
+      "code": "invalid_api_key_name",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key-name"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -349,16 +357,15 @@ async fn error_add_api_key_invalid_parameters_indexes() {
         "expiresAt": "2050-11-13T00:00:00Z"
     });
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(400, code, "{:?}", &response);
-
-    let expected_response = json!({
-        "message": r#"`indexes` field value `{"name":"products"}` is invalid. It should be an array of string representing index names."#,
-        "code": "invalid_api_key_indexes",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-api-key-indexes"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "invalid type: Map `{\"name\":\"products\"}`, expected a Sequence at `.indexes`.",
+      "code": "invalid_api_key_indexes",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key-indexes"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -376,15 +383,15 @@ async fn error_add_api_key_invalid_index_uids() {
     });
     let (response, code) = server.add_api_key(content).await;
 
-    let expected_response = json!({
-        "message": r#"`invalid index # / \name with spaces` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_)."#,
-        "code": "invalid_api_key_indexes",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-api-key-indexes"
-    });
-
-    assert_eq!(response, expected_response);
-    assert_eq!(code, 400);
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "`invalid index # / \\name with spaces` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_). at `.indexes[0]`.",
+      "code": "invalid_api_key_indexes",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key-indexes"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -401,14 +408,15 @@ async fn error_add_api_key_invalid_parameters_actions() {
     let (response, code) = server.add_api_key(content).await;
     assert_eq!(400, code, "{:?}", &response);
 
-    let expected_response = json!({
-        "message": r#"`actions` field value `{"name":"products"}` is invalid. It should be an array of string representing action names."#,
-        "code": "invalid_api_key_actions",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-api-key-actions"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "invalid type: Map `{\"name\":\"products\"}`, expected a Sequence at `.actions`.",
+      "code": "invalid_api_key_actions",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key-actions"
+    }
+    "###);
 
     let content = json!({
         "description": "Indexing API key",
@@ -419,16 +427,16 @@ async fn error_add_api_key_invalid_parameters_actions() {
         "expiresAt": "2050-11-13T00:00:00Z"
     });
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(400, code, "{:?}", &response);
 
-    let expected_response = json!({
-        "message": r#"`actions` field value `["doc.add"]` is invalid. It should be an array of string representing action names."#,
-        "code": "invalid_api_key_actions",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-api-key-actions"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "Json deserialize error: unknown value `doc.add`, expected one of `*`, `search`, `documents.*`, `documents.add`, `documents.get`, `documents.delete`, `indexes.*`, `indexes.create`, `indexes.get`, `indexes.update`, `indexes.delete`, `indexes.swap`, `tasks.*`, `tasks.cancel`, `tasks.delete`, `tasks.get`, `settings.*`, `settings.get`, `settings.update`, `stats.*`, `stats.get`, `metrics.*`, `metrics.get`, `dumps.*`, `dumps.create`, `version`, `keys.create`, `keys.get`, `keys.update`, `keys.delete` at `.actions[0]`.",
+      "code": "invalid_api_key_actions",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key-actions"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -443,16 +451,16 @@ async fn error_add_api_key_invalid_parameters_expires_at() {
         "expiresAt": {"name":"products"}
     });
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(400, code, "{:?}", &response);
 
-    let expected_response = json!({
-        "message": r#"`expiresAt` field value `{"name":"products"}` is invalid. It should follow the RFC 3339 format to represents a date or datetime in the future or specified as a null value. e.g. 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM:SS'."#,
-        "code": "invalid_api_key_expires_at",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-api-key-expires-at"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "invalid type: Map `{\"name\":\"products\"}`, expected a String at `.expiresAt`.",
+      "code": "invalid_api_key_expires_at",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key-expires-at"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -467,16 +475,16 @@ async fn error_add_api_key_invalid_parameters_expires_at_in_the_past() {
         "expiresAt": "2010-11-13T00:00:00Z"
     });
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(400, code, "{:?}", &response);
 
-    let expected_response = json!({
-        "message": r#"`expiresAt` field value `"2010-11-13T00:00:00Z"` is invalid. It should follow the RFC 3339 format to represents a date or datetime in the future or specified as a null value. e.g. 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM:SS'."#,
-        "code": "invalid_api_key_expires_at",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-api-key-expires-at"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "`2010-11-13T00:00:00Z` is not a valid date. It should follow the RFC 3339 format to represents a date or datetime in the future or specified as a null value. e.g. 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM:SS'.\n at `.expiresAt`.",
+      "code": "invalid_api_key_expires_at",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key-expires-at"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"400 Bad Request");
 }
 
 #[actix_rt::test]
@@ -492,16 +500,16 @@ async fn error_add_api_key_invalid_parameters_uid() {
         "expiresAt": "2050-11-13T00:00:00Z"
     });
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(400, code, "{:?}", &response);
 
-    let expected_response = json!({
-        "message": r#"`uid` field value `"aaaaabbbbbccc"` is invalid. It should be a valid UUID v4 string or omitted."#,
-        "code": "invalid_api_key_uid",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-api-key-uid"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "invalid length: expected length 32 for simple format, found 13 at `.uid`.",
+      "code": "invalid_api_key_uid",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key-uid"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"400 Bad Request");
 }
 
 #[actix_rt::test]
@@ -517,20 +525,36 @@ async fn error_add_api_key_parameters_uid_already_exist() {
 
     // first creation is valid.
     let (response, code) = server.add_api_key(content.clone()).await;
-    assert_eq!(201, code, "{:?}", &response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "name": null,
+      "description": null,
+      "key": "d9e776b8412f1db6974c9a5556b961c3559440b6588216f4ea5d9ed49f7c8f3c",
+      "uid": "4bc0887a-0e41-4f3b-935d-0c451dcee9c8",
+      "actions": [
+        "search"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"201 Created");
 
     // uid already exist.
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(409, code, "{:?}", &response);
-
-    let expected_response = json!({
-        "message": "`uid` field value `4bc0887a-0e41-4f3b-935d-0c451dcee9c8` is already an existing API key.",
-        "code": "api_key_already_exists",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#api-key-already-exists"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "`uid` field value `4bc0887a-0e41-4f3b-935d-0c451dcee9c8` is already an existing API key.",
+      "code": "api_key_already_exists",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#api-key-already-exists"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"409 Conflict");
 }
 
 #[actix_rt::test]
@@ -562,51 +586,103 @@ async fn get_api_key() {
     });
 
     let (response, code) = server.add_api_key(content).await;
-    // must pass if add_valid_api_key test passes.
-    assert_eq!(201, code, "{:?}", &response);
-    assert!(response["key"].is_string());
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "name": null,
+      "description": "Indexing API key",
+      "key": "d9e776b8412f1db6974c9a5556b961c3559440b6588216f4ea5d9ed49f7c8f3c",
+      "uid": "4bc0887a-0e41-4f3b-935d-0c451dcee9c8",
+      "actions": [
+        "search",
+        "documents.add",
+        "documents.get",
+        "documents.delete",
+        "indexes.create",
+        "indexes.get",
+        "indexes.update",
+        "indexes.delete",
+        "tasks.get",
+        "settings.get",
+        "settings.update",
+        "stats.get",
+        "dumps.create"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"201 Created");
 
     let key = response["key"].as_str().unwrap();
 
-    let expected_response = json!({
-        "description": "Indexing API key",
-        "indexes": ["products"],
-        "uid": uid.to_string(),
-        "actions": [
-            "search",
-            "documents.add",
-            "documents.get",
-            "documents.delete",
-            "indexes.create",
-            "indexes.get",
-            "indexes.update",
-            "indexes.delete",
-            "tasks.get",
-            "settings.get",
-            "settings.update",
-            "stats.get",
-            "dumps.create",
-        ],
-        "expiresAt": "2050-11-13T00:00:00Z"
-    });
-
     // get with uid
     let (response, code) = server.get_api_key(&uid).await;
-    assert_eq!(200, code, "{:?}", &response);
-    assert!(response["key"].is_string());
-    assert!(response["expiresAt"].is_string());
-    assert!(response["createdAt"].is_string());
-    assert!(response["updatedAt"].is_string());
-    assert_json_include!(actual: response, expected: &expected_response);
-
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "name": null,
+      "description": "Indexing API key",
+      "key": "d9e776b8412f1db6974c9a5556b961c3559440b6588216f4ea5d9ed49f7c8f3c",
+      "uid": "4bc0887a-0e41-4f3b-935d-0c451dcee9c8",
+      "actions": [
+        "search",
+        "documents.add",
+        "documents.get",
+        "documents.delete",
+        "indexes.create",
+        "indexes.get",
+        "indexes.update",
+        "indexes.delete",
+        "tasks.get",
+        "settings.get",
+        "settings.update",
+        "stats.get",
+        "dumps.create"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"200 OK");
     // get with key
     let (response, code) = server.get_api_key(&key).await;
-    assert_eq!(200, code, "{:?}", &response);
-    assert!(response["key"].is_string());
-    assert!(response["expiresAt"].is_string());
-    assert!(response["createdAt"].is_string());
-    assert!(response["updatedAt"].is_string());
-    assert_json_include!(actual: response, expected: &expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "name": null,
+      "description": "Indexing API key",
+      "key": "d9e776b8412f1db6974c9a5556b961c3559440b6588216f4ea5d9ed49f7c8f3c",
+      "uid": "4bc0887a-0e41-4f3b-935d-0c451dcee9c8",
+      "actions": [
+        "search",
+        "documents.add",
+        "documents.get",
+        "documents.delete",
+        "indexes.create",
+        "indexes.get",
+        "indexes.update",
+        "indexes.delete",
+        "tasks.get",
+        "settings.get",
+        "settings.update",
+        "stats.get",
+        "dumps.create"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"200 OK");
 }
 
 #[actix_rt::test]
@@ -616,16 +692,15 @@ async fn error_get_api_key_no_header() {
     let (response, code) = server
         .get_api_key("d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4")
         .await;
-    assert_eq!(401, code, "{:?}", &response);
-
-    let expected_response = json!({
-        "message": "The Authorization header is missing. It must use the bearer authorization method.",
-        "code": "missing_authorization_header",
-        "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "The Authorization header is missing. It must use the bearer authorization method.",
+      "code": "missing_authorization_header",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"401 Unauthorized");
 }
 
 #[actix_rt::test]
@@ -636,16 +711,15 @@ async fn error_get_api_key_bad_key() {
     let (response, code) = server
         .get_api_key("d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4")
         .await;
-    assert_eq!(403, code, "{:?}", &response);
-
-    let expected_response = json!({
-        "message": "The provided API key is invalid.",
-        "code": "invalid_api_key",
-        "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#invalid-api-key"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "The provided API key is invalid.",
+      "code": "invalid_api_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"403 Forbidden");
 }
 
 #[actix_rt::test]
@@ -656,16 +730,15 @@ async fn error_get_api_key_not_found() {
     let (response, code) = server
         .get_api_key("d0552b41d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4")
         .await;
-    assert_eq!(404, code, "{:?}", &response);
-
-    let expected_response = json!({
-        "message": "API key `d0552b41d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4` not found.",
-        "code": "api_key_not_found",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#api-key-not-found"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "API key `d0552b41d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4` not found.",
+      "code": "api_key_not_found",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#api-key-not-found"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"404 Not Found");
 }
 
 #[actix_rt::test]
@@ -695,55 +768,105 @@ async fn list_api_keys() {
     });
 
     let (response, code) = server.add_api_key(content).await;
-    // must pass if add_valid_api_key test passes.
-    assert_eq!(201, code, "{:?}", &response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
+    {
+      "name": null,
+      "description": "Indexing API key",
+      "key": "[ignored]",
+      "uid": "[ignored]",
+      "actions": [
+        "search",
+        "documents.add",
+        "documents.get",
+        "documents.delete",
+        "indexes.create",
+        "indexes.get",
+        "indexes.update",
+        "indexes.delete",
+        "tasks.get",
+        "settings.get",
+        "settings.update",
+        "stats.get",
+        "dumps.create"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"201 Created");
 
     let (response, code) = server.list_api_keys().await;
-    assert_eq!(200, code, "{:?}", &response);
-
-    let expected_response = json!({ "results":
-        [
-            {
-                "description": "Indexing API key",
-                "indexes": ["products"],
-                "actions": [
-                    "search",
-                    "documents.add",
-                    "documents.get",
-                    "documents.delete",
-                    "indexes.create",
-                    "indexes.get",
-                    "indexes.update",
-                    "indexes.delete",
-                    "tasks.get",
-                    "settings.get",
-                    "settings.update",
-                    "stats.get",
-                    "dumps.create",
-                ],
-                "expiresAt": "2050-11-13T00:00:00Z"
-            },
-            {
-                "name": "Default Search API Key",
-                "description": "Use it to search from the frontend",
-                "indexes": ["*"],
-                "actions": ["search"],
-                "expiresAt": serde_json::Value::Null,
-            },
-            {
-                "name": "Default Admin API Key",
-                "description": "Use it for anything that is not a search operation. Caution! Do not expose it on a public frontend",
-                "indexes": ["*"],
-                "actions": ["*"],
-                "expiresAt": serde_json::Value::Null,
-            }
-        ],
-        "limit": 20,
-        "offset": 0,
-        "total": 3,
-    });
-
-    assert_json_include!(actual: response, expected: expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".results[].createdAt" => "[ignored]", ".results[].updatedAt" => "[ignored]", ".results[].uid" => "[ignored]", ".results[].key" => "[ignored]" }), @r###"
+    {
+      "results": [
+        {
+          "name": null,
+          "description": "Indexing API key",
+          "key": "[ignored]",
+          "uid": "[ignored]",
+          "actions": [
+            "search",
+            "documents.add",
+            "documents.get",
+            "documents.delete",
+            "indexes.create",
+            "indexes.get",
+            "indexes.update",
+            "indexes.delete",
+            "tasks.get",
+            "settings.get",
+            "settings.update",
+            "stats.get",
+            "dumps.create"
+          ],
+          "indexes": [
+            "products"
+          ],
+          "expiresAt": "2050-11-13T00:00:00Z",
+          "createdAt": "[ignored]",
+          "updatedAt": "[ignored]"
+        },
+        {
+          "name": "Default Search API Key",
+          "description": "Use it to search from the frontend",
+          "key": "[ignored]",
+          "uid": "[ignored]",
+          "actions": [
+            "search"
+          ],
+          "indexes": [
+            "*"
+          ],
+          "expiresAt": null,
+          "createdAt": "[ignored]",
+          "updatedAt": "[ignored]"
+        },
+        {
+          "name": "Default Admin API Key",
+          "description": "Use it for anything that is not a search operation. Caution! Do not expose it on a public frontend",
+          "key": "[ignored]",
+          "uid": "[ignored]",
+          "actions": [
+            "*"
+          ],
+          "indexes": [
+            "*"
+          ],
+          "expiresAt": null,
+          "createdAt": "[ignored]",
+          "updatedAt": "[ignored]"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 3
+    }
+    "###);
+    meili_snap::snapshot!(code, @"200 OK");
 }
 
 #[actix_rt::test]
@@ -751,16 +874,15 @@ async fn error_list_api_keys_no_header() {
     let server = Server::new_auth().await;
 
     let (response, code) = server.list_api_keys().await;
-    assert_eq!(401, code, "{:?}", &response);
-
-    let expected_response = json!({
-        "message": "The Authorization header is missing. It must use the bearer authorization method.",
-        "code": "missing_authorization_header",
-        "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "The Authorization header is missing. It must use the bearer authorization method.",
+      "code": "missing_authorization_header",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"401 Unauthorized");
 }
 
 #[actix_rt::test]
@@ -769,16 +891,15 @@ async fn error_list_api_keys_bad_key() {
     server.use_api_key("d4000bd7225f77d1eb22cc706ed36772bbc36767c016a27f76def7537b68600d");
 
     let (response, code) = server.list_api_keys().await;
-    assert_eq!(403, code, "{:?}", &response);
-
-    let expected_response = json!({
-        "message": "The provided API key is invalid.",
-        "code": "invalid_api_key",
-        "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#invalid-api-key"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "The provided API key is invalid.",
+      "code": "invalid_api_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"403 Forbidden");
 }
 
 #[actix_rt::test]
@@ -808,18 +929,54 @@ async fn delete_api_key() {
     });
 
     let (response, code) = server.add_api_key(content).await;
-    // must pass if add_valid_api_key test passes.
-    assert_eq!(201, code, "{:?}", &response);
-    assert!(response["key"].is_string());
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
+    {
+      "name": null,
+      "description": "Indexing API key",
+      "key": "[ignored]",
+      "uid": "[ignored]",
+      "actions": [
+        "search",
+        "documents.add",
+        "documents.get",
+        "documents.delete",
+        "indexes.create",
+        "indexes.get",
+        "indexes.update",
+        "indexes.delete",
+        "tasks.get",
+        "settings.get",
+        "settings.update",
+        "stats.get",
+        "dumps.create"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"201 Created");
 
     let uid = response["uid"].as_str().unwrap();
 
     let (response, code) = server.delete_api_key(&uid).await;
-    assert_eq!(204, code, "{:?}", &response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @"null");
+    meili_snap::snapshot!(code, @"204 No Content");
 
     // check if API key no longer exist.
     let (response, code) = server.get_api_key(&uid).await;
-    assert_eq!(404, code, "{:?}", &response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".message" => "[ignored]" }), @r###"
+    {
+      "message": "[ignored]",
+      "code": "api_key_not_found",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#api-key-not-found"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"404 Not Found");
 }
 
 #[actix_rt::test]
@@ -829,16 +986,16 @@ async fn error_delete_api_key_no_header() {
     let (response, code) = server
         .delete_api_key("d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4")
         .await;
-    assert_eq!(401, code, "{:?}", &response);
 
-    let expected_response = json!({
-        "message": "The Authorization header is missing. It must use the bearer authorization method.",
-        "code": "missing_authorization_header",
-        "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "The Authorization header is missing. It must use the bearer authorization method.",
+      "code": "missing_authorization_header",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"401 Unauthorized");
 }
 
 #[actix_rt::test]
@@ -849,16 +1006,15 @@ async fn error_delete_api_key_bad_key() {
     let (response, code) = server
         .delete_api_key("d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4")
         .await;
-    assert_eq!(403, code, "{:?}", &response);
-
-    let expected_response = json!({
-        "message": "The provided API key is invalid.",
-        "code": "invalid_api_key",
-        "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#invalid-api-key"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "The provided API key is invalid.",
+      "code": "invalid_api_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"403 Forbidden");
 }
 
 #[actix_rt::test]
@@ -869,16 +1025,15 @@ async fn error_delete_api_key_not_found() {
     let (response, code) = server
         .delete_api_key("d0552b41d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4")
         .await;
-    assert_eq!(404, code, "{:?}", &response);
-
-    let expected_response = json!({
-        "message": "API key `d0552b41d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4` not found.",
-        "code": "api_key_not_found",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#api-key-not-found"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "API key `d0552b41d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4` not found.",
+      "code": "api_key_not_found",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#api-key-not-found"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"404 Not Found");
 }
 
 #[actix_rt::test]
@@ -904,104 +1059,132 @@ async fn patch_api_key_description() {
     });
 
     let (response, code) = server.add_api_key(content).await;
-    // must pass if add_valid_api_key test passes.
-    assert_eq!(201, code, "{:?}", &response);
-    assert!(response["key"].is_string());
-    assert!(response["createdAt"].is_string());
-    assert!(response["updatedAt"].is_string());
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]"  }), @r###"
+    {
+      "name": null,
+      "description": null,
+      "key": "[ignored]",
+      "uid": "[ignored]",
+      "actions": [
+        "search",
+        "documents.add",
+        "documents.get",
+        "documents.delete",
+        "indexes.create",
+        "indexes.get",
+        "indexes.update",
+        "indexes.delete",
+        "stats.get",
+        "dumps.create"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"201 Created");
 
     let uid = response["uid"].as_str().unwrap();
-    let created_at = response["createdAt"].as_str().unwrap();
-    let updated_at = response["updatedAt"].as_str().unwrap();
 
     // Add a description
     let content = json!({ "description": "Indexing API key" });
 
     thread::sleep(time::Duration::new(1, 0));
     let (response, code) = server.patch_api_key(&uid, content).await;
-    assert_eq!(200, code, "{:?}", &response);
-    assert!(response["key"].is_string());
-    assert!(response["expiresAt"].is_string());
-    assert!(response["createdAt"].is_string());
-    assert_ne!(response["updatedAt"].as_str().unwrap(), updated_at);
-    assert_eq!(response["createdAt"].as_str().unwrap(), created_at);
-
-    let expected = json!({
-        "description": "Indexing API key",
-        "indexes": ["products"],
-        "actions": [
-            "search",
-            "documents.add",
-            "documents.get",
-            "documents.delete",
-            "indexes.create",
-            "indexes.get",
-            "indexes.update",
-            "indexes.delete",
-            "stats.get",
-            "dumps.create",
-        ],
-        "expiresAt": "2050-11-13T00:00:00Z"
-    });
-
-    assert_json_include!(actual: response, expected: expected);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
+    {
+      "name": null,
+      "description": "Indexing API key",
+      "key": "[ignored]",
+      "uid": "[ignored]",
+      "actions": [
+        "search",
+        "documents.add",
+        "documents.get",
+        "documents.delete",
+        "indexes.create",
+        "indexes.get",
+        "indexes.update",
+        "indexes.delete",
+        "stats.get",
+        "dumps.create"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"200 OK");
 
     // Change the description
     let content = json!({ "description": "Product API key" });
 
     let (response, code) = server.patch_api_key(&uid, content).await;
-    assert_eq!(200, code, "{:?}", &response);
-    assert!(response["key"].is_string());
-    assert!(response["expiresAt"].is_string());
-    assert!(response["createdAt"].is_string());
-
-    let expected = json!({
-        "description": "Product API key",
-        "indexes": ["products"],
-        "actions": [
-            "search",
-            "documents.add",
-            "documents.get",
-            "documents.delete",
-            "indexes.create",
-            "indexes.get",
-            "indexes.update",
-            "indexes.delete",
-            "stats.get",
-            "dumps.create",
-        ],
-        "expiresAt": "2050-11-13T00:00:00Z"
-    });
-
-    assert_json_include!(actual: response, expected: expected);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
+    {
+      "name": null,
+      "description": "Product API key",
+      "key": "[ignored]",
+      "uid": "[ignored]",
+      "actions": [
+        "search",
+        "documents.add",
+        "documents.get",
+        "documents.delete",
+        "indexes.create",
+        "indexes.get",
+        "indexes.update",
+        "indexes.delete",
+        "stats.get",
+        "dumps.create"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"200 OK");
 
     // Remove the description
     let content = json!({ "description": serde_json::Value::Null });
 
     let (response, code) = server.patch_api_key(&uid, content).await;
-    assert_eq!(200, code, "{:?}", &response);
-    assert!(response["key"].is_string());
-    assert!(response["expiresAt"].is_string());
-    assert!(response["createdAt"].is_string());
-
-    let expected = json!({
-        "indexes": ["products"],
-        "actions": [
-            "search",
-            "documents.add",
-            "documents.get",
-            "documents.delete",
-            "indexes.create",
-            "indexes.get",
-            "indexes.update",
-            "indexes.delete",
-            "stats.get",
-            "dumps.create",
-        ],
-        "expiresAt": "2050-11-13T00:00:00Z"
-    });
-
-    assert_json_include!(actual: response, expected: expected);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
+    {
+      "name": null,
+      "description": null,
+      "key": "[ignored]",
+      "uid": "[ignored]",
+      "actions": [
+        "search",
+        "documents.add",
+        "documents.get",
+        "documents.delete",
+        "indexes.create",
+        "indexes.get",
+        "indexes.update",
+        "indexes.delete",
+        "stats.get",
+        "dumps.create"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"200 OK");
 }
 
 #[actix_rt::test]
@@ -1027,11 +1210,33 @@ async fn patch_api_key_name() {
     });
 
     let (response, code) = server.add_api_key(content).await;
-    // must pass if add_valid_api_key test passes.
-    assert_eq!(201, code, "{:?}", &response);
-    assert!(response["key"].is_string());
-    assert!(response["createdAt"].is_string());
-    assert!(response["updatedAt"].is_string());
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
+    {
+      "name": null,
+      "description": null,
+      "key": "[ignored]",
+      "uid": "[ignored]",
+      "actions": [
+        "search",
+        "documents.add",
+        "documents.get",
+        "documents.delete",
+        "indexes.create",
+        "indexes.get",
+        "indexes.update",
+        "indexes.delete",
+        "stats.get",
+        "dumps.create"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"201 Created");
 
     let uid = response["uid"].as_str().unwrap();
     let created_at = response["createdAt"].as_str().unwrap();
@@ -1042,89 +1247,100 @@ async fn patch_api_key_name() {
 
     thread::sleep(time::Duration::new(1, 0));
     let (response, code) = server.patch_api_key(&uid, content).await;
-    assert_eq!(200, code, "{:?}", &response);
-    assert!(response["key"].is_string());
-    assert!(response["expiresAt"].is_string());
-    assert!(response["createdAt"].is_string());
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
+    {
+      "name": "Indexing API key",
+      "description": null,
+      "key": "[ignored]",
+      "uid": "[ignored]",
+      "actions": [
+        "search",
+        "documents.add",
+        "documents.get",
+        "documents.delete",
+        "indexes.create",
+        "indexes.get",
+        "indexes.update",
+        "indexes.delete",
+        "stats.get",
+        "dumps.create"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"200 OK");
+
     assert_ne!(response["updatedAt"].as_str().unwrap(), updated_at);
     assert_eq!(response["createdAt"].as_str().unwrap(), created_at);
-
-    let expected = json!({
-        "name": "Indexing API key",
-        "indexes": ["products"],
-        "actions": [
-            "search",
-            "documents.add",
-            "documents.get",
-            "documents.delete",
-            "indexes.create",
-            "indexes.get",
-            "indexes.update",
-            "indexes.delete",
-            "stats.get",
-            "dumps.create",
-        ],
-        "expiresAt": "2050-11-13T00:00:00Z"
-    });
-
-    assert_json_include!(actual: response, expected: expected);
 
     // Change the name
     let content = json!({ "name": "Product API key" });
 
     let (response, code) = server.patch_api_key(&uid, content).await;
-    assert_eq!(200, code, "{:?}", &response);
-    assert!(response["key"].is_string());
-    assert!(response["expiresAt"].is_string());
-    assert!(response["createdAt"].is_string());
-
-    let expected = json!({
-        "name": "Product API key",
-        "indexes": ["products"],
-        "actions": [
-            "search",
-            "documents.add",
-            "documents.get",
-            "documents.delete",
-            "indexes.create",
-            "indexes.get",
-            "indexes.update",
-            "indexes.delete",
-            "stats.get",
-            "dumps.create",
-        ],
-        "expiresAt": "2050-11-13T00:00:00Z"
-    });
-
-    assert_json_include!(actual: response, expected: expected);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
+    {
+      "name": "Product API key",
+      "description": null,
+      "key": "[ignored]",
+      "uid": "[ignored]",
+      "actions": [
+        "search",
+        "documents.add",
+        "documents.get",
+        "documents.delete",
+        "indexes.create",
+        "indexes.get",
+        "indexes.update",
+        "indexes.delete",
+        "stats.get",
+        "dumps.create"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"200 OK");
 
     // Remove the name
     let content = json!({ "name": serde_json::Value::Null });
 
     let (response, code) = server.patch_api_key(&uid, content).await;
-    assert_eq!(200, code, "{:?}", &response);
-    assert!(response["key"].is_string());
-    assert!(response["expiresAt"].is_string());
-    assert!(response["createdAt"].is_string());
-
-    let expected = json!({
-        "indexes": ["products"],
-        "actions": [
-            "search",
-            "documents.add",
-            "documents.get",
-            "documents.delete",
-            "indexes.create",
-            "indexes.get",
-            "indexes.update",
-            "indexes.delete",
-            "stats.get",
-            "dumps.create",
-        ],
-        "expiresAt": "2050-11-13T00:00:00Z"
-    });
-
-    assert_json_include!(actual: response, expected: expected);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
+    {
+      "name": null,
+      "description": null,
+      "key": "[ignored]",
+      "uid": "[ignored]",
+      "actions": [
+        "search",
+        "documents.add",
+        "documents.get",
+        "documents.delete",
+        "indexes.create",
+        "indexes.get",
+        "indexes.update",
+        "indexes.delete",
+        "stats.get",
+        "dumps.create"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"200 OK");
 }
 
 #[actix_rt::test]
@@ -1151,11 +1367,33 @@ async fn error_patch_api_key_indexes() {
     });
 
     let (response, code) = server.add_api_key(content).await;
-    // must pass if add_valid_api_key test passes.
-    assert_eq!(201, code, "{:?}", &response);
-    assert!(response["key"].is_string());
-    assert!(response["createdAt"].is_string());
-    assert!(response["updatedAt"].is_string());
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
+    {
+      "name": null,
+      "description": "Indexing API key",
+      "key": "[ignored]",
+      "uid": "[ignored]",
+      "actions": [
+        "search",
+        "documents.add",
+        "documents.get",
+        "documents.delete",
+        "indexes.create",
+        "indexes.get",
+        "indexes.update",
+        "indexes.delete",
+        "stats.get",
+        "dumps.create"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"201 Created");
 
     let uid = response["uid"].as_str().unwrap();
 
@@ -1163,15 +1401,15 @@ async fn error_patch_api_key_indexes() {
 
     thread::sleep(time::Duration::new(1, 0));
     let (response, code) = server.patch_api_key(&uid, content).await;
-    assert_eq!(400, code, "{:?}", &response);
-
-    let expected = json!({"message": "The `indexes` field cannot be modified for the given resource.",
-        "code": "immutable_field",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#immutable-field"
-    });
-
-    assert_json_include!(actual: response, expected: expected);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "Json deserialize error: unknown field `indexes`, expected one of `description`, `name` at ``.",
+      "code": "immutable_api_key_indexes",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#immutable-api-key-indexes"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"400 Bad Request");
 }
 
 #[actix_rt::test]
@@ -1198,11 +1436,33 @@ async fn error_patch_api_key_actions() {
     });
 
     let (response, code) = server.add_api_key(content).await;
-    // must pass if add_valid_api_key test passes.
-    assert_eq!(201, code, "{:?}", &response);
-    assert!(response["key"].is_string());
-    assert!(response["createdAt"].is_string());
-    assert!(response["updatedAt"].is_string());
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
+    {
+      "name": null,
+      "description": "Indexing API key",
+      "key": "[ignored]",
+      "uid": "[ignored]",
+      "actions": [
+        "search",
+        "documents.add",
+        "documents.get",
+        "documents.delete",
+        "indexes.create",
+        "indexes.get",
+        "indexes.update",
+        "indexes.delete",
+        "stats.get",
+        "dumps.create"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"201 Created");
 
     let uid = response["uid"].as_str().unwrap();
 
@@ -1218,15 +1478,15 @@ async fn error_patch_api_key_actions() {
 
     thread::sleep(time::Duration::new(1, 0));
     let (response, code) = server.patch_api_key(&uid, content).await;
-    assert_eq!(400, code, "{:?}", &response);
-
-    let expected = json!({"message": "The `actions` field cannot be modified for the given resource.",
-        "code": "immutable_field",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#immutable-field"
-    });
-
-    assert_json_include!(actual: response, expected: expected);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "Json deserialize error: unknown field `actions`, expected one of `description`, `name` at ``.",
+      "code": "immutable_api_key_actions",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#immutable-api-key-actions"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"400 Bad Request");
 }
 
 #[actix_rt::test]
@@ -1253,11 +1513,33 @@ async fn error_patch_api_key_expiration_date() {
     });
 
     let (response, code) = server.add_api_key(content).await;
-    // must pass if add_valid_api_key test passes.
-    assert_eq!(201, code, "{:?}", &response);
-    assert!(response["key"].is_string());
-    assert!(response["createdAt"].is_string());
-    assert!(response["updatedAt"].is_string());
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
+    {
+      "name": null,
+      "description": "Indexing API key",
+      "key": "[ignored]",
+      "uid": "[ignored]",
+      "actions": [
+        "search",
+        "documents.add",
+        "documents.get",
+        "documents.delete",
+        "indexes.create",
+        "indexes.get",
+        "indexes.update",
+        "indexes.delete",
+        "stats.get",
+        "dumps.create"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"201 Created");
 
     let uid = response["uid"].as_str().unwrap();
 
@@ -1265,15 +1547,15 @@ async fn error_patch_api_key_expiration_date() {
 
     thread::sleep(time::Duration::new(1, 0));
     let (response, code) = server.patch_api_key(&uid, content).await;
-    assert_eq!(400, code, "{:?}", &response);
-
-    let expected = json!({"message": "The `expiresAt` field cannot be modified for the given resource.",
-        "code": "immutable_field",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#immutable-field"
-    });
-
-    assert_json_include!(actual: response, expected: expected);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "Json deserialize error: unknown field `expiresAt`, expected one of `description`, `name` at ``.",
+      "code": "immutable_api_key_expires_at",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#immutable-api-key-expires-at"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"400 Bad Request");
 }
 
 #[actix_rt::test]
@@ -1286,16 +1568,16 @@ async fn error_patch_api_key_no_header() {
             json!({}),
         )
         .await;
-    assert_eq!(401, code, "{:?}", &response);
 
-    let expected_response = json!({
-        "message": "The Authorization header is missing. It must use the bearer authorization method.",
-        "code": "missing_authorization_header",
-        "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "The Authorization header is missing. It must use the bearer authorization method.",
+      "code": "missing_authorization_header",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"401 Unauthorized");
 }
 
 #[actix_rt::test]
@@ -1309,16 +1591,16 @@ async fn error_patch_api_key_bad_key() {
             json!({}),
         )
         .await;
-    assert_eq!(403, code, "{:?}", &response);
 
-    let expected_response = json!({
-        "message": "The provided API key is invalid.",
-        "code": "invalid_api_key",
-        "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#invalid-api-key"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "The provided API key is invalid.",
+      "code": "invalid_api_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"403 Forbidden");
 }
 
 #[actix_rt::test]
@@ -1332,16 +1614,16 @@ async fn error_patch_api_key_not_found() {
             json!({}),
         )
         .await;
-    assert_eq!(404, code, "{:?}", &response);
 
-    let expected_response = json!({
-        "message": "API key `d0552b41d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4` not found.",
-        "code": "api_key_not_found",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#api-key-not-found"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "API key `d0552b41d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4` not found.",
+      "code": "api_key_not_found",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#api-key-not-found"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"404 Not Found");
 }
 
 #[actix_rt::test]
@@ -1359,9 +1641,24 @@ async fn error_patch_api_key_indexes_invalid_parameters() {
     });
 
     let (response, code) = server.add_api_key(content).await;
-    // must pass if add_valid_api_key test passes.
-    assert_eq!(201, code, "{:?}", &response);
-    assert!(response["key"].is_string());
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
+    {
+      "name": null,
+      "description": "Indexing API key",
+      "key": "[ignored]",
+      "uid": "[ignored]",
+      "actions": [
+        "search"
+      ],
+      "indexes": [
+        "products"
+      ],
+      "expiresAt": "2050-11-13T00:00:00Z",
+      "createdAt": "[ignored]",
+      "updatedAt": "[ignored]"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"201 Created");
 
     let uid = response["uid"].as_str().unwrap();
 
@@ -1371,16 +1668,15 @@ async fn error_patch_api_key_indexes_invalid_parameters() {
     });
 
     let (response, code) = server.patch_api_key(&uid, content).await;
-    assert_eq!(400, code, "{:?}", &response);
-
-    let expected_response = json!({
-        "message": "`description` field value `13` is invalid. It should be a string or specified as a null value.",
-        "code": "invalid_api_key_description",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-api-key-description"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "invalid type: Integer `13`, expected a String at `.description`.",
+      "code": "invalid_api_key_description",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key-description"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"400 Bad Request");
 
     // invalid name
     let content = json!({
@@ -1388,77 +1684,108 @@ async fn error_patch_api_key_indexes_invalid_parameters() {
     });
 
     let (response, code) = server.patch_api_key(&uid, content).await;
-    assert_eq!(400, code, "{:?}", &response);
-
-    let expected_response = json!({
-        "message": "`name` field value `13` is invalid. It should be a string or specified as a null value.",
-        "code": "invalid_api_key_name",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-api-key-name"
-    });
-
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "invalid type: Integer `13`, expected a String at `.name`.",
+      "code": "invalid_api_key_name",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key-name"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"400 Bad Request");
 }
 
 #[actix_rt::test]
 async fn error_access_api_key_routes_no_master_key_set() {
     let mut server = Server::new().await;
 
-    let expected_response = json!({
-        "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
-        "code": "missing_master_key",
-        "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#missing-master-key"
-    });
-    let expected_code = 401;
-
     let (response, code) = server.add_api_key(json!({})).await;
-
-    assert_eq!(expected_code, code, "{:?}", &response);
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
+      "code": "missing_master_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#missing-master-key"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"401 Unauthorized");
 
     let (response, code) = server.patch_api_key("content", json!({})).await;
-
-    assert_eq!(expected_code, code, "{:?}", &response);
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
+      "code": "missing_master_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#missing-master-key"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"401 Unauthorized");
 
     let (response, code) = server.get_api_key("content").await;
-
-    assert_eq!(expected_code, code, "{:?}", &response);
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
+      "code": "missing_master_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#missing-master-key"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"401 Unauthorized");
 
     let (response, code) = server.list_api_keys().await;
-
-    assert_eq!(expected_code, code, "{:?}", &response);
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
+      "code": "missing_master_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#missing-master-key"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"401 Unauthorized");
 
     server.use_api_key("MASTER_KEY");
 
-    let expected_response = json!({
-        "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
-        "code": "missing_master_key",
-        "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#missing-master-key"
-    });
-    let expected_code = 401;
-
     let (response, code) = server.add_api_key(json!({})).await;
-
-    assert_eq!(expected_code, code, "{:?}", &response);
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
+      "code": "missing_master_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#missing-master-key"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"401 Unauthorized");
 
     let (response, code) = server.patch_api_key("content", json!({})).await;
-
-    assert_eq!(expected_code, code, "{:?}", &response);
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
+      "code": "missing_master_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#missing-master-key"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"401 Unauthorized");
 
     let (response, code) = server.get_api_key("content").await;
-
-    assert_eq!(expected_code, code, "{:?}", &response);
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
+      "code": "missing_master_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#missing-master-key"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"401 Unauthorized");
 
     let (response, code) = server.list_api_keys().await;
-
-    assert_eq!(expected_code, code, "{:?}", &response);
-    assert_eq!(response, expected_response);
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
+      "code": "missing_master_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#missing-master-key"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"401 Unauthorized");
 }

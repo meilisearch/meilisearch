@@ -200,11 +200,14 @@ async fn search_with_filter_string_notation() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    index.update_settings(json!({"filterableAttributes": ["title"]})).await;
+    let (_, code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
+    meili_snap::snapshot!(code, @"202 Accepted");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (_, code) = index.add_documents(documents, None).await;
+    meili_snap::snapshot!(code, @"202 Accepted");
+    let res = index.wait_task(1).await;
+    meili_snap::snapshot!(res["status"], @r###""succeeded""###);
 
     index
         .search(
@@ -220,11 +223,15 @@ async fn search_with_filter_string_notation() {
 
     let index = server.index("nested");
 
-    index.update_settings(json!({"filterableAttributes": ["cattos", "doggos.age"]})).await;
+    let (_, code) =
+        index.update_settings(json!({"filterableAttributes": ["cattos", "doggos.age"]})).await;
+    meili_snap::snapshot!(code, @"202 Accepted");
 
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(3).await;
+    let (_, code) = index.add_documents(documents, None).await;
+    meili_snap::snapshot!(code, @"202 Accepted");
+    let res = index.wait_task(3).await;
+    meili_snap::snapshot!(res["status"], @r###""succeeded""###);
 
     index
         .search(

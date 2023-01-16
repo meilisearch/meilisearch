@@ -19,7 +19,7 @@ byte-unit = { version = "4.0.14", default-features = false, features = ["std", "
 bytes = "1.2.1"
 clap = { version = "4.0.9", features = ["derive", "env"] }
 crossbeam-channel = "0.5.6"
-deserr = { version = "0.1.2", features = ["serde-json"] }
+deserr = "0.1.4"
 dump = { path = "../dump" }
 either = "1.8.0"
 env_logger = "0.9.1"
@@ -109,5 +109,5 @@ japanese = ["meilisearch-types/japanese"]
 thai = ["meilisearch-types/thai"]
 
 [package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.4/build.zip"
-sha1 = "b53c2edb51d4ce1984d5586333b91c4ad3a1b4e4"
+assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.5/build.zip"
+sha1 = "6fe959b78511b32e9ff857fd9fd31740633b9fce"

@@ -1,14 +1,12 @@
 use std::convert::Infallible;
-use std::num::ParseIntError;
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use deserr::{
-    DeserializeError, DeserializeFromValue, ErrorKind, IntoValue, MergeWithError, ValuePointerRef,
-};
+use deserr::{DeserializeError, DeserializeFromValue, ValuePointerRef};
 use index_scheduler::IndexScheduler;
 use log::debug;
-use meilisearch_types::error::{unwrap_any, Code, ErrorCode, ResponseError};
+use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::error::{unwrap_any, Code, DeserrError, ResponseError, TakeErrorMessage};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::{self, FieldDistribution, Index};
 use meilisearch_types::tasks::KindWithContent;
@@ -16,7 +14,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
 
-use super::{Pagination, SummarizedTaskView};
+use self::search::parse_usize_take_error_message;
+use super::{Pagination, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
@@ -72,9 +71,26 @@ impl IndexView {
     }
 }
 
+#[derive(DeserializeFromValue, Deserialize, Debug, Clone, Copy)]
+#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ListIndexes {
+    #[serde(default)]
+    #[deserr(error = DeserrError<InvalidIndexOffset>, default, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
+    pub offset: usize,
+    #[serde(default = "PAGINATION_DEFAULT_LIMIT")]
+    #[deserr(error = DeserrError<InvalidIndexLimit>, default = PAGINATION_DEFAULT_LIMIT(), from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
+    pub limit: usize,
+}
+impl ListIndexes {
+    fn as_pagination(self) -> Pagination {
+        Pagination { offset: self.offset, limit: self.limit }
+    }
+}
+
 pub async fn list_indexes(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, Data<IndexScheduler>>,
-    paginate: QueryParameter<Pagination, ListIndexesDeserrError>,
+    paginate: QueryParameter<ListIndexes, DeserrError>,
 ) -> Result<HttpResponse, ResponseError> {
     let search_rules = &index_scheduler.filters().search_rules;
     let indexes: Vec<_> = index_scheduler.indexes()?;
@@ -84,82 +100,24 @@ pub async fn list_indexes(
         .map(|(name, index)| IndexView::new(name, &index))
         .collect::<Result<Vec<_>, _>>()?;
 
-    let ret = paginate.auto_paginate_sized(indexes.into_iter());
+    let ret = paginate.as_pagination().auto_paginate_sized(indexes.into_iter());
 
     debug!("returns: {:?}", ret);
     Ok(HttpResponse::Ok().json(ret))
 }
 
-#[derive(Debug)]
-pub struct ListIndexesDeserrError {
-    error: String,
-    code: Code,
-}
-
-impl std::fmt::Display for ListIndexesDeserrError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.error)
-    }
-}
-
-impl std::error::Error for ListIndexesDeserrError {}
-impl ErrorCode for ListIndexesDeserrError {
-    fn error_code(&self) -> Code {
-        self.code
-    }
-}
-
-impl MergeWithError<ListIndexesDeserrError> for ListIndexesDeserrError {
-    fn merge(
-        _self_: Option<Self>,
-        other: ListIndexesDeserrError,
-        _merge_location: ValuePointerRef,
-    ) -> Result<Self, Self> {
-        Err(other)
-    }
-}
-
-impl deserr::DeserializeError for ListIndexesDeserrError {
-    fn error<V: IntoValue>(
-        _self_: Option<Self>,
-        error: ErrorKind<V>,
-        location: ValuePointerRef,
-    ) -> Result<Self, Self> {
-        let code = match location.last_field() {
-            Some("offset") => Code::InvalidIndexLimit,
-            Some("limit") => Code::InvalidIndexOffset,
-            _ => Code::BadRequest,
-        };
-        let error = unwrap_any(deserr::serde_json::JsonError::error(None, error, location)).0;
-
-        Err(ListIndexesDeserrError { error, code })
-    }
-}
-
-impl MergeWithError<ParseIntError> for ListIndexesDeserrError {
-    fn merge(
-        _self_: Option<Self>,
-        other: ParseIntError,
-        merge_location: ValuePointerRef,
-    ) -> Result<Self, Self> {
-        ListIndexesDeserrError::error::<Infallible>(
-            None,
-            ErrorKind::Unexpected { msg: other.to_string() },
-            merge_location,
-        )
-    }
-}
-
 #[derive(DeserializeFromValue, Debug)]
-#[deserr(rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
 pub struct IndexCreateRequest {
+    #[deserr(error = DeserrError<InvalidIndexUid>, missing_field_error = DeserrError::missing_index_uid)]
     uid: String,
+    #[deserr(error = DeserrError<InvalidIndexPrimaryKey>)]
     primary_key: Option<String>,
 }
 
 pub async fn create_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_CREATE }>, Data<IndexScheduler>>,
-    body: ValidatedJson<IndexCreateRequest, CreateIndexesDeserrError>,
+    body: ValidatedJson<IndexCreateRequest, DeserrError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -184,58 +142,29 @@ pub async fn create_index(
     }
 }
 
-#[derive(Debug)]
-pub struct CreateIndexesDeserrError {
-    error: String,
-    code: Code,
+fn deny_immutable_fields_index(
+    field: &str,
+    accepted: &[&str],
+    location: ValuePointerRef,
+) -> DeserrError {
+    let mut error = unwrap_any(DeserrError::<BadRequest>::error::<Infallible>(
+        None,
+        deserr::ErrorKind::UnknownKey { key: field, accepted },
+        location,
+    ));
+
+    error.code = match field {
+        "uid" => Code::ImmutableIndexUid,
+        "createdAt" => Code::ImmutableIndexCreatedAt,
+        "updatedAt" => Code::ImmutableIndexUpdatedAt,
+        _ => Code::BadRequest,
+    };
+    error
 }
-
-impl std::fmt::Display for CreateIndexesDeserrError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.error)
-    }
-}
-
-impl std::error::Error for CreateIndexesDeserrError {}
-impl ErrorCode for CreateIndexesDeserrError {
-    fn error_code(&self) -> Code {
-        self.code
-    }
-}
-
-impl MergeWithError<CreateIndexesDeserrError> for CreateIndexesDeserrError {
-    fn merge(
-        _self_: Option<Self>,
-        other: CreateIndexesDeserrError,
-        _merge_location: ValuePointerRef,
-    ) -> Result<Self, Self> {
-        Err(other)
-    }
-}
-
-impl deserr::DeserializeError for CreateIndexesDeserrError {
-    fn error<V: IntoValue>(
-        _self_: Option<Self>,
-        error: ErrorKind<V>,
-        location: ValuePointerRef,
-    ) -> Result<Self, Self> {
-        let code = match location.last_field() {
-            Some("uid") => Code::InvalidIndexUid,
-            Some("primaryKey") => Code::InvalidIndexPrimaryKey,
-            None if matches!(error, ErrorKind::MissingField { field } if field == "uid") => {
-                Code::MissingIndexUid
-            }
-            _ => Code::BadRequest,
-        };
-        let error = unwrap_any(deserr::serde_json::JsonError::error(None, error, location)).0;
-
-        Err(CreateIndexesDeserrError { error, code })
-    }
-}
-
 #[derive(DeserializeFromValue, Debug)]
-#[deserr(rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_index)]
 pub struct UpdateIndexRequest {
+    #[deserr(error = DeserrError<InvalidIndexPrimaryKey>)]
     primary_key: Option<String>,
 }
 
@@ -254,7 +183,7 @@ pub async fn get_index(
 pub async fn update_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_UPDATE }>, Data<IndexScheduler>>,
     path: web::Path<String>,
-    body: ValidatedJson<UpdateIndexRequest, UpdateIndexesDeserrError>,
+    body: ValidatedJson<UpdateIndexRequest, DeserrError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -276,51 +205,6 @@ pub async fn update_index(
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
-}
-
-#[derive(Debug)]
-pub struct UpdateIndexesDeserrError {
-    error: String,
-    code: Code,
-}
-
-impl std::fmt::Display for UpdateIndexesDeserrError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.error)
-    }
-}
-
-impl std::error::Error for UpdateIndexesDeserrError {}
-impl ErrorCode for UpdateIndexesDeserrError {
-    fn error_code(&self) -> Code {
-        self.code
-    }
-}
-
-impl MergeWithError<UpdateIndexesDeserrError> for UpdateIndexesDeserrError {
-    fn merge(
-        _self_: Option<Self>,
-        other: UpdateIndexesDeserrError,
-        _merge_location: ValuePointerRef,
-    ) -> Result<Self, Self> {
-        Err(other)
-    }
-}
-
-impl deserr::DeserializeError for UpdateIndexesDeserrError {
-    fn error<V: IntoValue>(
-        _self_: Option<Self>,
-        error: ErrorKind<V>,
-        location: ValuePointerRef,
-    ) -> Result<Self, Self> {
-        let code = match location.last_field() {
-            Some("primaryKey") => Code::InvalidIndexPrimaryKey,
-            _ => Code::BadRequest,
-        };
-        let error = unwrap_any(deserr::serde_json::JsonError::error(None, error, location)).0;
-
-        Err(UpdateIndexesDeserrError { error, code })
-    }
 }
 
 pub async fn delete_index(

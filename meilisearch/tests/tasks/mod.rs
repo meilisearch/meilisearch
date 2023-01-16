@@ -1,4 +1,6 @@
-use meili_snap::insta::{self, assert_json_snapshot};
+mod errors;
+
+use meili_snap::insta::assert_json_snapshot;
 use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
@@ -179,9 +181,9 @@ async fn get_task_filter_error() {
 
     let (response, code) = server.tasks_filter(json!( { "lol": "pied" })).await;
     assert_eq!(code, 400, "{}", response);
-    insta::assert_json_snapshot!(response, @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Query deserialize error: unknown field `lol`",
+      "message": "Json deserialize error: unknown field `lol`, expected one of `limit`, `from`, `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt` at ``.",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad-request"
@@ -190,9 +192,9 @@ async fn get_task_filter_error() {
 
     let (response, code) = server.tasks_filter(json!( { "uids": "pied" })).await;
     assert_eq!(code, 400, "{}", response);
-    insta::assert_json_snapshot!(response, @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Task uid `pied` is invalid. It should only contain numeric characters.",
+      "message": "invalid digit found in string at `.uids`.",
       "code": "invalid_task_uids",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
@@ -201,20 +203,20 @@ async fn get_task_filter_error() {
 
     let (response, code) = server.tasks_filter(json!( { "from": "pied" })).await;
     assert_eq!(code, 400, "{}", response);
-    insta::assert_json_snapshot!(response, @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Query deserialize error: invalid digit found in string",
-      "code": "bad_request",
+      "message": "invalid digit found in string at `.from`.",
+      "code": "invalid_task_from",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad-request"
+      "link": "https://docs.meilisearch.com/errors#invalid-task-from"
     }
     "###);
 
     let (response, code) = server.tasks_filter(json!( { "beforeStartedAt": "pied" })).await;
     assert_eq!(code, 400, "{}", response);
-    insta::assert_json_snapshot!(response, @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Task `beforeStartedAt` `pied` is invalid. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+      "message": "`pied` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.beforeStartedAt`.",
       "code": "invalid_task_before_started_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-before-started-at"
@@ -228,7 +230,7 @@ async fn delete_task_filter_error() {
 
     let (response, code) = server.delete_tasks(json!(null)).await;
     assert_eq!(code, 400, "{}", response);
-    insta::assert_json_snapshot!(response, @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
       "message": "Query parameters to filter the tasks to delete are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
       "code": "missing_task_filters",
@@ -239,9 +241,9 @@ async fn delete_task_filter_error() {
 
     let (response, code) = server.delete_tasks(json!({ "lol": "pied" })).await;
     assert_eq!(code, 400, "{}", response);
-    insta::assert_json_snapshot!(response, @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Query deserialize error: unknown field `lol`",
+      "message": "Json deserialize error: unknown field `lol`, expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt` at ``.",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad-request"
@@ -250,9 +252,9 @@ async fn delete_task_filter_error() {
 
     let (response, code) = server.delete_tasks(json!({ "uids": "pied" })).await;
     assert_eq!(code, 400, "{}", response);
-    insta::assert_json_snapshot!(response, @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Task uid `pied` is invalid. It should only contain numeric characters.",
+      "message": "invalid digit found in string at `.uids`.",
       "code": "invalid_task_uids",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
@@ -266,7 +268,7 @@ async fn cancel_task_filter_error() {
 
     let (response, code) = server.cancel_tasks(json!(null)).await;
     assert_eq!(code, 400, "{}", response);
-    insta::assert_json_snapshot!(response, @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
       "message": "Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
       "code": "missing_task_filters",
@@ -277,9 +279,9 @@ async fn cancel_task_filter_error() {
 
     let (response, code) = server.cancel_tasks(json!({ "lol": "pied" })).await;
     assert_eq!(code, 400, "{}", response);
-    insta::assert_json_snapshot!(response, @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Query deserialize error: unknown field `lol`",
+      "message": "Json deserialize error: unknown field `lol`, expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt` at ``.",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad-request"
@@ -288,9 +290,9 @@ async fn cancel_task_filter_error() {
 
     let (response, code) = server.cancel_tasks(json!({ "uids": "pied" })).await;
     assert_eq!(code, 400, "{}", response);
-    insta::assert_json_snapshot!(response, @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Task uid `pied` is invalid. It should only contain numeric characters.",
+      "message": "invalid digit found in string at `.uids`.",
       "code": "invalid_task_uids",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
@@ -517,45 +519,25 @@ async fn test_summarized_settings_update() {
     let server = Server::new().await;
     let index = server.index("test");
     // here we should find my payload even in the failed task.
-    index.update_settings(json!({ "rankingRules": ["custom"] })).await;
+    let (response, code) = index.update_settings(json!({ "rankingRules": ["custom"] })).await;
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "message": "`custom` ranking rule is invalid. Valid ranking rules are words, typo, sort, proximity, attribute, exactness and custom ranking rules. at `.rankingRules[0]`.",
+      "code": "invalid_settings_ranking_rules",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-settings-ranking-rules"
+    }
+    "###);
+
+    index.update_settings(json!({ "displayedAttributes": ["doggos", "name"], "filterableAttributes": ["age", "nb_paw_pads"], "sortableAttributes": ["iq"] })).await;
     index.wait_task(0).await;
     let (task, _) = index.get_task(0).await;
-    dbg!(&task);
     assert_json_snapshot!(task, 
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
       "uid": 0,
-      "indexUid": "test",
-      "status": "failed",
-      "type": "settingsUpdate",
-      "canceledBy": null,
-      "details": {
-        "rankingRules": [
-          "custom"
-        ]
-      },
-      "error": {
-        "message": "`custom` ranking rule is invalid. Valid ranking rules are words, typo, sort, proximity, attribute, exactness and custom ranking rules.",
-        "code": "invalid_ranking_rule",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-ranking-rule"
-      },
-      "duration": "[duration]",
-      "enqueuedAt": "[date]",
-      "startedAt": "[date]",
-      "finishedAt": "[date]"
-    }
-    "###);
-
-    index.update_settings(json!({ "displayedAttributes": ["doggos", "name"], "filterableAttributes": ["age", "nb_paw_pads"], "sortableAttributes": ["iq"] })).await;
-    index.wait_task(1).await;
-    let (task, _) = index.get_task(1).await;
-    assert_json_snapshot!(task, 
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
-        @r###"
-    {
-      "uid": 1,
       "indexUid": "test",
       "status": "succeeded",
       "type": "settingsUpdate",

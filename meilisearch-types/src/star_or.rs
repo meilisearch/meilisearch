@@ -3,8 +3,11 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::str::FromStr;
 
+use deserr::{DeserializeError, DeserializeFromValue, MergeWithError, ValueKind};
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+use crate::error::unwrap_any;
 
 /// A type that tries to match either a star (*) or
 /// any other thing that implements `FromStr`.
@@ -12,6 +15,35 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 pub enum StarOr<T> {
     Star,
     Other(T),
+}
+
+impl<E: DeserializeError, T> DeserializeFromValue<E> for StarOr<T>
+where
+    T: FromStr,
+    E: MergeWithError<T::Err>,
+{
+    fn deserialize_from_value<V: deserr::IntoValue>(
+        value: deserr::Value<V>,
+        location: deserr::ValuePointerRef,
+    ) -> Result<Self, E> {
+        match value {
+            deserr::Value::String(v) => match v.as_str() {
+                "*" => Ok(StarOr::Star),
+                v => match FromStr::from_str(v) {
+                    Ok(x) => Ok(StarOr::Other(x)),
+                    Err(e) => Err(unwrap_any(E::merge(None, e, location))),
+                },
+            },
+            _ => Err(unwrap_any(E::error::<V>(
+                None,
+                deserr::ErrorKind::IncorrectValueKind {
+                    actual: value,
+                    accepted: &[ValueKind::String],
+                },
+                location,
+            ))),
+        }
+    }
 }
 
 impl<T: FromStr> FromStr for StarOr<T> {

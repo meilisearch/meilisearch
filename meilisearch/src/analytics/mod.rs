@@ -15,7 +15,7 @@ use platform_dirs::AppDirs;
 use serde_json::Value;
 
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
-use crate::routes::tasks::TasksFilterQueryRaw;
+use crate::routes::tasks::TasksFilterQuery;
 
 // if we are in debug mode OR the analytics feature is disabled
 // the `SegmentAnalytics` point to the mock instead of the real analytics
@@ -94,7 +94,7 @@ pub trait Analytics: Sync + Send {
     );
 
     // this method should be called to aggregate the get tasks requests.
-    fn get_tasks(&self, query: &TasksFilterQueryRaw, request: &HttpRequest);
+    fn get_tasks(&self, query: &TasksFilterQuery, request: &HttpRequest);
 
     // this method should be called to aggregate a add documents request
     fn health_seen(&self, request: &HttpRequest);

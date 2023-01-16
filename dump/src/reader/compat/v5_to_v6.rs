@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use super::v4_to_v5::{CompatIndexV4ToV5, CompatV4ToV5};
 use crate::reader::{v5, v6, Document, UpdateFile};
 use crate::Result;
@@ -254,51 +256,50 @@ impl<T> From<v5::Setting<T>> for v6::Setting<T> {
 impl From<v5::ResponseError> for v6::ResponseError {
     fn from(error: v5::ResponseError) -> Self {
         let code = match error.error_code.as_ref() {
-            "index_creation_failed" => v6::Code::CreateIndex,
+            "index_creation_failed" => v6::Code::IndexCreationFailed,
             "index_already_exists" => v6::Code::IndexAlreadyExists,
             "index_not_found" => v6::Code::IndexNotFound,
             "invalid_index_uid" => v6::Code::InvalidIndexUid,
             "invalid_min_word_length_for_typo" => v6::Code::InvalidMinWordLengthForTypo,
             "invalid_state" => v6::Code::InvalidState,
-            "primary_key_inference_failed" => v6::Code::NoPrimaryKeyCandidateFound,
-            "index_primary_key_already_exists" => v6::Code::PrimaryKeyAlreadyPresent,
+            "primary_key_inference_failed" => v6::Code::IndexPrimaryKeyNoCandidateFound,
+            "index_primary_key_already_exists" => v6::Code::IndexPrimaryKeyAlreadyExists,
             "max_fields_limit_exceeded" => v6::Code::MaxFieldsLimitExceeded,
             "missing_document_id" => v6::Code::MissingDocumentId,
             "invalid_document_id" => v6::Code::InvalidDocumentId,
-            "invalid_filter" => v6::Code::Filter,
-            "invalid_sort" => v6::Code::Sort,
+            "invalid_filter" => v6::Code::InvalidSettingsFilterableAttributes,
+            "invalid_sort" => v6::Code::InvalidSettingsSortableAttributes,
             "bad_parameter" => v6::Code::BadParameter,
             "bad_request" => v6::Code::BadRequest,
             "database_size_limit_reached" => v6::Code::DatabaseSizeLimitReached,
             "document_not_found" => v6::Code::DocumentNotFound,
             "internal" => v6::Code::Internal,
             "invalid_geo_field" => v6::Code::InvalidDocumentGeoField,
-            "invalid_ranking_rule" => v6::Code::InvalidRankingRule,
-            "invalid_store_file" => v6::Code::InvalidStore,
-            "invalid_api_key" => v6::Code::InvalidToken,
+            "invalid_ranking_rule" => v6::Code::InvalidSettingsRankingRules,
+            "invalid_store_file" => v6::Code::InvalidStoreFile,
+            "invalid_api_key" => v6::Code::InvalidApiKey,
             "missing_authorization_header" => v6::Code::MissingAuthorizationHeader,
             "no_space_left_on_device" => v6::Code::NoSpaceLeftOnDevice,
             "dump_not_found" => v6::Code::DumpNotFound,
             "task_not_found" => v6::Code::TaskNotFound,
             "payload_too_large" => v6::Code::PayloadTooLarge,
-            "unretrievable_document" => v6::Code::RetrieveDocument,
-            "search_error" => v6::Code::SearchDocuments,
+            "unretrievable_document" => v6::Code::UnretrievableDocument,
             "unsupported_media_type" => v6::Code::UnsupportedMediaType,
-            "dump_already_processing" => v6::Code::DumpAlreadyInProgress,
+            "dump_already_processing" => v6::Code::DumpAlreadyProcessing,
             "dump_process_failed" => v6::Code::DumpProcessFailed,
             "invalid_content_type" => v6::Code::InvalidContentType,
             "missing_content_type" => v6::Code::MissingContentType,
             "malformed_payload" => v6::Code::MalformedPayload,
             "missing_payload" => v6::Code::MissingPayload,
             "api_key_not_found" => v6::Code::ApiKeyNotFound,
-            "missing_parameter" => v6::Code::UnretrievableErrorCode,
+            "missing_parameter" => v6::Code::BadRequest,
             "invalid_api_key_actions" => v6::Code::InvalidApiKeyActions,
             "invalid_api_key_indexes" => v6::Code::InvalidApiKeyIndexes,
             "invalid_api_key_expires_at" => v6::Code::InvalidApiKeyExpiresAt,
             "invalid_api_key_description" => v6::Code::InvalidApiKeyDescription,
             "invalid_api_key_name" => v6::Code::InvalidApiKeyName,
             "invalid_api_key_uid" => v6::Code::InvalidApiKeyUid,
-            "immutable_field" => v6::Code::ImmutableField,
+            "immutable_field" => v6::Code::BadRequest,
             "api_key_already_exists" => v6::Code::ApiKeyAlreadyExists,
             other => {
                 log::warn!("Unknown error code {}", other);
@@ -316,7 +317,26 @@ impl<T> From<v5::Settings<T>> for v6::Settings<v6::Unchecked> {
             searchable_attributes: settings.searchable_attributes.into(),
             filterable_attributes: settings.filterable_attributes.into(),
             sortable_attributes: settings.sortable_attributes.into(),
-            ranking_rules: settings.ranking_rules.into(),
+            ranking_rules: {
+                match settings.ranking_rules {
+                    v5::settings::Setting::Set(ranking_rules) => {
+                        let mut new_ranking_rules = vec![];
+                        for rule in ranking_rules {
+                            match v6::RankingRuleView::from_str(&rule) {
+                                Ok(new_rule) => {
+                                    new_ranking_rules.push(new_rule);
+                                }
+                                Err(_) => {
+                                    log::warn!("Error while importing settings. The ranking rule `{rule}` does not exist anymore.")
+                                }
+                            }
+                        }
+                        v6::Setting::Set(new_ranking_rules)
+                    }
+                    v5::settings::Setting::Reset => v6::Setting::Reset,
+                    v5::settings::Setting::NotSet => v6::Setting::NotSet,
+                }
+            },
             stop_words: settings.stop_words.into(),
             synonyms: settings.synonyms.into(),
             distinct_attribute: settings.distinct_attribute.into(),

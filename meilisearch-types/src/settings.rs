@@ -1,11 +1,18 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::convert::Infallible;
+use std::fmt;
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
+use std::str::FromStr;
 
-use deserr::{DeserializeError, DeserializeFromValue};
+use deserr::{DeserializeError, DeserializeFromValue, ErrorKind, MergeWithError, ValuePointerRef};
 use fst::IntoStreamer;
-use milli::{Index, DEFAULT_VALUES_PER_FACET};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use milli::update::Setting;
+use milli::{Criterion, CriterionError, Index, DEFAULT_VALUES_PER_FACET};
+use serde::{Deserialize, Serialize, Serializer};
+
+use crate::error::deserr_codes::*;
+use crate::error::{unwrap_any, DeserrError};
 
 /// The maximimum number of results that the engine
 /// will be able to return in one search call.
@@ -27,112 +34,6 @@ where
     .serialize(s)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
-pub enum Setting<T> {
-    Set(T),
-    Reset,
-    NotSet,
-}
-
-impl<T> Default for Setting<T> {
-    fn default() -> Self {
-        Self::NotSet
-    }
-}
-
-impl<T> From<Setting<T>> for milli::update::Setting<T> {
-    fn from(value: Setting<T>) -> Self {
-        match value {
-            Setting::Set(x) => milli::update::Setting::Set(x),
-            Setting::Reset => milli::update::Setting::Reset,
-            Setting::NotSet => milli::update::Setting::NotSet,
-        }
-    }
-}
-impl<T> From<milli::update::Setting<T>> for Setting<T> {
-    fn from(value: milli::update::Setting<T>) -> Self {
-        match value {
-            milli::update::Setting::Set(x) => Setting::Set(x),
-            milli::update::Setting::Reset => Setting::Reset,
-            milli::update::Setting::NotSet => Setting::NotSet,
-        }
-    }
-}
-
-impl<T> Setting<T> {
-    pub fn set(self) -> Option<T> {
-        match self {
-            Self::Set(value) => Some(value),
-            _ => None,
-        }
-    }
-
-    pub const fn as_ref(&self) -> Setting<&T> {
-        match *self {
-            Self::Set(ref value) => Setting::Set(value),
-            Self::Reset => Setting::Reset,
-            Self::NotSet => Setting::NotSet,
-        }
-    }
-
-    pub const fn is_not_set(&self) -> bool {
-        matches!(self, Self::NotSet)
-    }
-
-    /// If `Self` is `Reset`, then map self to `Set` with the provided `val`.
-    pub fn or_reset(self, val: T) -> Self {
-        match self {
-            Self::Reset => Self::Set(val),
-            otherwise => otherwise,
-        }
-    }
-}
-
-impl<T: Serialize> Serialize for Setting<T> {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            Self::Set(value) => Some(value),
-            // Usually not_set isn't serialized by setting skip_serializing_if field attribute
-            Self::NotSet | Self::Reset => None,
-        }
-        .serialize(serializer)
-    }
-}
-
-impl<'de, T: Deserialize<'de>> Deserialize<'de> for Setting<T> {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        Deserialize::deserialize(deserializer).map(|x| match x {
-            Some(x) => Self::Set(x),
-            None => Self::Reset, // Reset is forced by sending null value
-        })
-    }
-}
-
-impl<T, E> DeserializeFromValue<E> for Setting<T>
-where
-    T: DeserializeFromValue<E>,
-    E: DeserializeError,
-{
-    fn deserialize_from_value<V: deserr::IntoValue>(
-        value: deserr::Value<V>,
-        location: deserr::ValuePointerRef,
-    ) -> Result<Self, E> {
-        match value {
-            deserr::Value::Null => Ok(Setting::Reset),
-            _ => T::deserialize_from_value(value, location).map(Setting::Set),
-        }
-    }
-    fn default() -> Option<Self> {
-        Some(Self::NotSet)
-    }
-}
-
 #[derive(Clone, Default, Debug, Serialize, PartialEq, Eq)]
 pub struct Checked;
 
@@ -151,78 +52,90 @@ where
     }
 }
 
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+fn validate_min_word_size_for_typo_setting<E: DeserializeError>(
+    s: MinWordSizeTyposSetting,
+    location: ValuePointerRef,
+) -> Result<MinWordSizeTyposSetting, E> {
+    if let (Setting::Set(one), Setting::Set(two)) = (s.one_typo, s.two_typos) {
+        if one > two {
+            return Err(unwrap_any(E::error::<Infallible>(None, ErrorKind::Unexpected { msg: format!("`minWordSizeForTypos` setting is invalid. `oneTypo` and `twoTypos` fields should be between `0` and `255`, and `twoTypos` should be greater or equals to `oneTypo` but found `oneTypo: {one}` and twoTypos: {two}`.") }, location)));
+        }
+    }
+    Ok(s)
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, DeserializeFromValue)]
-#[serde(deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
-#[deserr(rename_all = camelCase, deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[deserr(deny_unknown_fields, rename_all = camelCase, validate = validate_min_word_size_for_typo_setting -> DeserrError<InvalidMinWordLengthForTypo>)]
 pub struct MinWordSizeTyposSetting {
-    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     pub one_typo: Setting<u8>,
-    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     pub two_typos: Setting<u8>,
 }
 
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, DeserializeFromValue)]
-#[serde(deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
-#[deserr(rename_all = camelCase, deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[deserr(deny_unknown_fields, rename_all = camelCase, where_predicate = __Deserr_E: deserr::MergeWithError<DeserrError<InvalidMinWordLengthForTypo>>)]
 pub struct TypoSettings {
-    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     pub enabled: Setting<bool>,
-    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(error = DeserrError<InvalidMinWordLengthForTypo>)]
     pub min_word_size_for_typos: Setting<MinWordSizeTyposSetting>,
-    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     pub disable_on_words: Setting<BTreeSet<String>>,
-    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     pub disable_on_attributes: Setting<BTreeSet<String>>,
 }
 
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, DeserializeFromValue)]
-#[serde(deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct FacetingSettings {
-    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     pub max_values_per_facet: Setting<usize>,
 }
 
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, DeserializeFromValue)]
-#[serde(deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct PaginationSettings {
-    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     pub max_total_hits: Setting<usize>,
+}
+
+impl MergeWithError<milli::CriterionError> for DeserrError<InvalidSettingsRankingRules> {
+    fn merge(
+        _self_: Option<Self>,
+        other: milli::CriterionError,
+        merge_location: ValuePointerRef,
+    ) -> Result<Self, Self> {
+        Self::error::<Infallible>(
+            None,
+            ErrorKind::Unexpected { msg: other.to_string() },
+            merge_location,
+        )
+    }
 }
 
 /// Holds all the settings for an index. `T` can either be `Checked` if they represents settings
 /// whose validity is guaranteed, or `Unchecked` if they need to be validated. In the later case, a
 /// call to `check` will return a `Settings<Checked>` from a `Settings<Unchecked>`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, DeserializeFromValue)]
-#[serde(deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
-#[serde(bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'static>"))]
-#[deserr(rename_all = camelCase, deny_unknown_fields)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(
+    deny_unknown_fields,
+    rename_all = "camelCase",
+    bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'static>")
+)]
+#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
 pub struct Settings<T> {
     #[serde(
         default,
         serialize_with = "serialize_with_wildcard",
         skip_serializing_if = "Setting::is_not_set"
     )]
-    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[deserr(error = DeserrError<InvalidSettingsDisplayedAttributes>)]
     pub displayed_attributes: Setting<Vec<String>>,
 
     #[serde(
@@ -230,38 +143,39 @@ pub struct Settings<T> {
         serialize_with = "serialize_with_wildcard",
         skip_serializing_if = "Setting::is_not_set"
     )]
-    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[deserr(error = DeserrError<InvalidSettingsSearchableAttributes>)]
     pub searchable_attributes: Setting<Vec<String>>,
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[deserr(error = DeserrError<InvalidSettingsFilterableAttributes>)]
     pub filterable_attributes: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[deserr(error = DeserrError<InvalidSettingsSortableAttributes>)]
     pub sortable_attributes: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
-    pub ranking_rules: Setting<Vec<String>>,
+    #[deserr(error = DeserrError<InvalidSettingsRankingRules>)]
+    pub ranking_rules: Setting<Vec<RankingRuleView>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[deserr(error = DeserrError<InvalidSettingsStopWords>)]
     pub stop_words: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[deserr(error = DeserrError<InvalidSettingsSynonyms>)]
     pub synonyms: Setting<BTreeMap<String, Vec<String>>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[deserr(error = DeserrError<InvalidSettingsDistinctAttribute>)]
     pub distinct_attribute: Setting<String>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[deserr(error = DeserrError<InvalidSettingsTypoTolerance>)]
     pub typo_tolerance: Setting<TypoSettings>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[deserr(error = DeserrError<InvalidSettingsFaceting>)]
     pub faceting: Setting<FacetingSettings>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[cfg_attr(test, proptest(strategy = "test::setting_strategy()"))]
+    #[deserr(error = DeserrError<InvalidSettingsPagination>)]
     pub pagination: Setting<PaginationSettings>,
 
     #[serde(skip)]
+    #[deserr(skip)]
     pub _kind: PhantomData<T>,
 }
 
@@ -396,7 +310,9 @@ pub fn apply_settings_to_builder(
     }
 
     match settings.ranking_rules {
-        Setting::Set(ref criteria) => builder.set_criteria(criteria.clone()),
+        Setting::Set(ref criteria) => {
+            builder.set_criteria(criteria.iter().map(|c| c.clone().into()).collect())
+        }
         Setting::Reset => builder.reset_criteria(),
         Setting::NotSet => (),
     }
@@ -510,7 +426,7 @@ pub fn settings(
 
     let sortable_attributes = index.sortable_fields(rtxn)?.into_iter().collect();
 
-    let criteria = index.criteria(rtxn)?.into_iter().map(|c| c.to_string()).collect();
+    let criteria = index.criteria(rtxn)?;
 
     let stop_words = index
         .stop_words(rtxn)?
@@ -571,7 +487,7 @@ pub fn settings(
         },
         filterable_attributes: Setting::Set(filterable_attributes),
         sortable_attributes: Setting::Set(sortable_attributes),
-        ranking_rules: Setting::Set(criteria),
+        ranking_rules: Setting::Set(criteria.iter().map(|c| c.clone().into()).collect()),
         stop_words: Setting::Set(stop_words),
         distinct_attribute: match distinct_field {
             Some(field) => Setting::Set(field),
@@ -585,15 +501,105 @@ pub fn settings(
     })
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, DeserializeFromValue)]
+#[deserr(from(&String) = FromStr::from_str -> CriterionError)]
+pub enum RankingRuleView {
+    /// Sorted by decreasing number of matched query terms.
+    /// Query words at the front of an attribute is considered better than if it was at the back.
+    Words,
+    /// Sorted by increasing number of typos.
+    Typo,
+    /// Sorted by increasing distance between matched query terms.
+    Proximity,
+    /// Documents with quey words contained in more important
+    /// attributes are considered better.
+    Attribute,
+    /// Dynamically sort at query time the documents. None, one or multiple Asc/Desc sortable
+    /// attributes can be used in place of this criterion at query time.
+    Sort,
+    /// Sorted by the similarity of the matched words with the query words.
+    Exactness,
+    /// Sorted by the increasing value of the field specified.
+    Asc(String),
+    /// Sorted by the decreasing value of the field specified.
+    Desc(String),
+}
+impl Serialize for RankingRuleView {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&format!("{}", Criterion::from(self.clone())))
+    }
+}
+impl<'de> Deserialize<'de> for RankingRuleView {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct Visitor;
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = RankingRuleView;
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(formatter, "the name of a valid ranking rule (string)")
+            }
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                let criterion = Criterion::from_str(v).map_err(|_| {
+                    E::invalid_value(serde::de::Unexpected::Str(v), &"a valid ranking rule")
+                })?;
+                Ok(RankingRuleView::from(criterion))
+            }
+        }
+        deserializer.deserialize_str(Visitor)
+    }
+}
+impl FromStr for RankingRuleView {
+    type Err = <Criterion as FromStr>::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(RankingRuleView::from(Criterion::from_str(s)?))
+    }
+}
+impl fmt::Display for RankingRuleView {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt::Display::fmt(&Criterion::from(self.clone()), f)
+    }
+}
+impl From<Criterion> for RankingRuleView {
+    fn from(value: Criterion) -> Self {
+        match value {
+            Criterion::Words => RankingRuleView::Words,
+            Criterion::Typo => RankingRuleView::Typo,
+            Criterion::Proximity => RankingRuleView::Proximity,
+            Criterion::Attribute => RankingRuleView::Attribute,
+            Criterion::Sort => RankingRuleView::Sort,
+            Criterion::Exactness => RankingRuleView::Exactness,
+            Criterion::Asc(x) => RankingRuleView::Asc(x),
+            Criterion::Desc(x) => RankingRuleView::Desc(x),
+        }
+    }
+}
+impl From<RankingRuleView> for Criterion {
+    fn from(value: RankingRuleView) -> Self {
+        match value {
+            RankingRuleView::Words => Criterion::Words,
+            RankingRuleView::Typo => Criterion::Typo,
+            RankingRuleView::Proximity => Criterion::Proximity,
+            RankingRuleView::Attribute => Criterion::Attribute,
+            RankingRuleView::Sort => Criterion::Sort,
+            RankingRuleView::Exactness => Criterion::Exactness,
+            RankingRuleView::Asc(x) => Criterion::Asc(x),
+            RankingRuleView::Desc(x) => Criterion::Desc(x),
+        }
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod test {
-    use proptest::prelude::*;
-
     use super::*;
-
-    pub(super) fn setting_strategy<T: Arbitrary + Clone>() -> impl Strategy<Value = Setting<T>> {
-        prop_oneof![Just(Setting::NotSet), Just(Setting::Reset), any::<T>().prop_map(Setting::Set)]
-    }
 
     #[test]
     fn test_setting_check() {

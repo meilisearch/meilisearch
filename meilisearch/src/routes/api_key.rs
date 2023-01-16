@@ -1,20 +1,21 @@
-use std::convert::Infallible;
-use std::num::ParseIntError;
-use std::{fmt, str};
+use std::str;
 
 use actix_web::{web, HttpRequest, HttpResponse};
-use deserr::{DeserializeError, IntoValue, MergeWithError, ValuePointerRef};
+use deserr::DeserializeFromValue;
 use meilisearch_auth::error::AuthControllerError;
 use meilisearch_auth::AuthController;
-use meilisearch_types::error::{unwrap_any, Code, ErrorCode, ResponseError};
-use meilisearch_types::keys::{Action, Key};
+use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::error::{Code, DeserrError, ResponseError, TakeErrorMessage};
+use meilisearch_types::keys::{Action, CreateApiKey, Key, PatchApiKey};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+use super::indexes::search::parse_usize_take_error_message;
+use super::PAGINATION_DEFAULT_LIMIT;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
+use crate::extractors::json::ValidatedJson;
 use crate::extractors::query_parameters::QueryParameter;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::Pagination;
@@ -35,7 +36,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 pub async fn create_api_key(
     auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_CREATE }>, AuthController>,
-    body: web::Json<Value>,
+    body: ValidatedJson<CreateApiKey, DeserrError>,
     _req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
     let v = body.into_inner();
@@ -49,72 +50,28 @@ pub async fn create_api_key(
     Ok(HttpResponse::Created().json(res))
 }
 
-#[derive(Debug)]
-pub struct PaginationDeserrError {
-    error: String,
-    code: Code,
+#[derive(DeserializeFromValue, Deserialize, Debug, Clone, Copy)]
+#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ListApiKeys {
+    #[serde(default)]
+    #[deserr(error = DeserrError<InvalidApiKeyOffset>, default, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
+    pub offset: usize,
+    #[serde(default = "PAGINATION_DEFAULT_LIMIT")]
+    #[deserr(error = DeserrError<InvalidApiKeyLimit>, default = PAGINATION_DEFAULT_LIMIT(), from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
+    pub limit: usize,
 }
-
-impl std::fmt::Display for PaginationDeserrError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.error)
-    }
-}
-
-impl std::error::Error for PaginationDeserrError {}
-impl ErrorCode for PaginationDeserrError {
-    fn error_code(&self) -> Code {
-        self.code
-    }
-}
-
-impl MergeWithError<PaginationDeserrError> for PaginationDeserrError {
-    fn merge(
-        _self_: Option<Self>,
-        other: PaginationDeserrError,
-        _merge_location: ValuePointerRef,
-    ) -> Result<Self, Self> {
-        Err(other)
-    }
-}
-
-impl DeserializeError for PaginationDeserrError {
-    fn error<V: IntoValue>(
-        _self_: Option<Self>,
-        error: deserr::ErrorKind<V>,
-        location: ValuePointerRef,
-    ) -> Result<Self, Self> {
-        let error = unwrap_any(deserr::serde_json::JsonError::error(None, error, location)).0;
-
-        let code = match location.last_field() {
-            Some("offset") => Code::InvalidApiKeyLimit,
-            Some("limit") => Code::InvalidApiKeyOffset,
-            _ => Code::BadRequest,
-        };
-
-        Err(PaginationDeserrError { error, code })
-    }
-}
-
-impl MergeWithError<ParseIntError> for PaginationDeserrError {
-    fn merge(
-        _self_: Option<Self>,
-        other: ParseIntError,
-        merge_location: ValuePointerRef,
-    ) -> Result<Self, Self> {
-        PaginationDeserrError::error::<Infallible>(
-            None,
-            deserr::ErrorKind::Unexpected { msg: other.to_string() },
-            merge_location,
-        )
+impl ListApiKeys {
+    fn as_pagination(self) -> Pagination {
+        Pagination { offset: self.offset, limit: self.limit }
     }
 }
 
 pub async fn list_api_keys(
     auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_GET }>, AuthController>,
-    paginate: QueryParameter<Pagination, PaginationDeserrError>,
+    list_api_keys: QueryParameter<ListApiKeys, DeserrError>,
 ) -> Result<HttpResponse, ResponseError> {
-    let paginate = paginate.into_inner();
+    let paginate = list_api_keys.into_inner().as_pagination();
     let page_view = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
         let keys = auth_controller.list_keys()?;
         let page_view = paginate
@@ -149,15 +106,15 @@ pub async fn get_api_key(
 
 pub async fn patch_api_key(
     auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_UPDATE }>, AuthController>,
-    body: web::Json<Value>,
+    body: ValidatedJson<PatchApiKey, DeserrError>,
     path: web::Path<AuthParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let key = path.into_inner().key;
-    let body = body.into_inner();
+    let patch_api_key = body.into_inner();
     let res = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
         let uid =
             Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_encoded_key(&key))?;
-        let key = auth_controller.update_key(uid, body)?;
+        let key = auth_controller.update_key(uid, patch_api_key)?;
 
         Ok(KeyView::from_key(key, &auth_controller))
     })

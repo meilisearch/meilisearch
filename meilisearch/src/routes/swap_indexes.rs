@@ -1,10 +1,9 @@
-use std::fmt;
-
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use deserr::{DeserializeFromValue, IntoValue, ValuePointerRef};
+use deserr::DeserializeFromValue;
 use index_scheduler::IndexScheduler;
-use meilisearch_types::error::{unwrap_any, Code, ErrorCode, ResponseError};
+use meilisearch_types::error::deserr_codes::InvalidSwapIndexes;
+use meilisearch_types::error::{DeserrError, ResponseError};
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use serde_json::json;
 
@@ -21,14 +20,15 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 #[derive(DeserializeFromValue, Debug, Clone, PartialEq, Eq)]
-#[deserr(rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SwapIndexesPayload {
+    #[deserr(error = DeserrError<InvalidSwapIndexes>)]
     indexes: Vec<String>,
 }
 
 pub async fn swap_indexes(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_SWAP }>, Data<IndexScheduler>>,
-    params: ValidatedJson<Vec<SwapIndexesPayload>, SwapIndexesDeserrError>,
+    params: ValidatedJson<Vec<SwapIndexesPayload>, DeserrError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -61,50 +61,4 @@ pub async fn swap_indexes(
     let task = index_scheduler.register(task)?;
     let task: SummarizedTaskView = task.into();
     Ok(HttpResponse::Accepted().json(task))
-}
-
-#[derive(Debug)]
-pub struct SwapIndexesDeserrError {
-    error: String,
-    code: Code,
-}
-
-impl std::fmt::Display for SwapIndexesDeserrError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.error)
-    }
-}
-
-impl std::error::Error for SwapIndexesDeserrError {}
-impl ErrorCode for SwapIndexesDeserrError {
-    fn error_code(&self) -> Code {
-        self.code
-    }
-}
-
-impl deserr::MergeWithError<SwapIndexesDeserrError> for SwapIndexesDeserrError {
-    fn merge(
-        _self_: Option<Self>,
-        other: SwapIndexesDeserrError,
-        _merge_location: ValuePointerRef,
-    ) -> Result<Self, Self> {
-        Err(other)
-    }
-}
-
-impl deserr::DeserializeError for SwapIndexesDeserrError {
-    fn error<V: IntoValue>(
-        _self_: Option<Self>,
-        error: deserr::ErrorKind<V>,
-        location: ValuePointerRef,
-    ) -> Result<Self, Self> {
-        let error = unwrap_any(deserr::serde_json::JsonError::error(None, error, location)).0;
-
-        let code = match location.last_field() {
-            Some("indexes") => Code::InvalidSwapIndexes,
-            _ => Code::BadRequest,
-        };
-
-        Err(SwapIndexesDeserrError { error, code })
-    }
 }

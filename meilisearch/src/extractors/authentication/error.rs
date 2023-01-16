@@ -17,7 +17,7 @@ impl ErrorCode for AuthenticationError {
     fn error_code(&self) -> Code {
         match self {
             AuthenticationError::MissingAuthorizationHeader => Code::MissingAuthorizationHeader,
-            AuthenticationError::InvalidToken => Code::InvalidToken,
+            AuthenticationError::InvalidToken => Code::InvalidApiKey,
             AuthenticationError::IrretrievableState => Code::Internal,
             AuthenticationError::MissingMasterKey => Code::MissingMasterKey,
         }
