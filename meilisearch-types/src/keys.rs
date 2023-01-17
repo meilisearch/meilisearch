@@ -1,8 +1,8 @@
 use std::convert::Infallible;
-use std::fmt::Display;
 use std::hash::Hash;
+use std::str::FromStr;
 
-use deserr::{DeserializeError, DeserializeFromValue, MergeWithError, ValuePointerRef};
+use deserr::{DeserializeError, DeserializeFromValue, ValuePointerRef};
 use enum_iterator::Sequence;
 use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
@@ -10,45 +10,28 @@ use time::macros::{format_description, time};
 use time::{Date, OffsetDateTime, PrimitiveDateTime};
 use uuid::Uuid;
 
+use crate::deserr::DeserrJsonError;
 use crate::error::deserr_codes::*;
-use crate::error::{unwrap_any, Code, DeserrError, ErrorCode, TakeErrorMessage};
-use crate::index_uid::{IndexUid, IndexUidFormatError};
+use crate::error::{unwrap_any, Code, ParseOffsetDateTimeError};
+use crate::index_uid::IndexUid;
 use crate::star_or::StarOr;
 
 pub type KeyId = Uuid;
 
-impl<C: Default + ErrorCode> MergeWithError<IndexUidFormatError> for DeserrError<C> {
-    fn merge(
-        _self_: Option<Self>,
-        other: IndexUidFormatError,
-        merge_location: deserr::ValuePointerRef,
-    ) -> std::result::Result<Self, Self> {
-        DeserrError::error::<Infallible>(
-            None,
-            deserr::ErrorKind::Unexpected { msg: other.to_string() },
-            merge_location,
-        )
-    }
-}
-
-fn parse_uuid_from_str(s: &str) -> Result<Uuid, TakeErrorMessage<uuid::Error>> {
-    Uuid::parse_str(s).map_err(TakeErrorMessage)
-}
-
 #[derive(Debug, DeserializeFromValue)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct CreateApiKey {
-    #[deserr(error = DeserrError<InvalidApiKeyDescription>)]
+    #[deserr(default, error = DeserrJsonError<InvalidApiKeyDescription>)]
     pub description: Option<String>,
-    #[deserr(error = DeserrError<InvalidApiKeyName>)]
+    #[deserr(default, error = DeserrJsonError<InvalidApiKeyName>)]
     pub name: Option<String>,
-    #[deserr(default = Uuid::new_v4(), error = DeserrError<InvalidApiKeyUid>, from(&String) = parse_uuid_from_str -> TakeErrorMessage<uuid::Error>)]
+    #[deserr(default = Uuid::new_v4(), error = DeserrJsonError<InvalidApiKeyUid>, from(&String) = Uuid::from_str -> uuid::Error)]
     pub uid: KeyId,
-    #[deserr(error = DeserrError<InvalidApiKeyActions>)]
+    #[deserr(error = DeserrJsonError<InvalidApiKeyActions>, missing_field_error = DeserrJsonError::missing_api_key_actions)]
     pub actions: Vec<Action>,
-    #[deserr(error = DeserrError<InvalidApiKeyIndexes>)]
+    #[deserr(error = DeserrJsonError<InvalidApiKeyIndexes>, missing_field_error = DeserrJsonError::missing_api_key_indexes)]
     pub indexes: Vec<StarOr<IndexUid>>,
-    #[deserr(error = DeserrError<InvalidApiKeyExpiresAt>, default = None, from(&String) = parse_expiration_date -> TakeErrorMessage<ParseOffsetDateTimeError>)]
+    #[deserr(error = DeserrJsonError<InvalidApiKeyExpiresAt>, from(Option<String>) = parse_expiration_date -> ParseOffsetDateTimeError, missing_field_error = DeserrJsonError::missing_api_key_expires_at)]
     pub expires_at: Option<OffsetDateTime>,
 }
 impl CreateApiKey {
@@ -72,8 +55,8 @@ fn deny_immutable_fields_api_key(
     field: &str,
     accepted: &[&str],
     location: ValuePointerRef,
-) -> DeserrError {
-    let mut error = unwrap_any(DeserrError::<BadRequest>::error::<Infallible>(
+) -> DeserrJsonError {
+    let mut error = unwrap_any(DeserrJsonError::<BadRequest>::error::<Infallible>(
         None,
         deserr::ErrorKind::UnknownKey { key: field, accepted },
         location,
@@ -92,11 +75,11 @@ fn deny_immutable_fields_api_key(
 }
 
 #[derive(Debug, DeserializeFromValue)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_api_key)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_api_key)]
 pub struct PatchApiKey {
-    #[deserr(error = DeserrError<InvalidApiKeyDescription>)]
+    #[deserr(default, error = DeserrJsonError<InvalidApiKeyDescription>)]
     pub description: Option<String>,
-    #[deserr(error = DeserrError<InvalidApiKeyName>)]
+    #[deserr(default, error = DeserrJsonError<InvalidApiKeyName>)]
     pub name: Option<String>,
 }
 
@@ -149,46 +132,40 @@ impl Key {
     }
 }
 
-#[derive(Debug)]
-pub struct ParseOffsetDateTimeError(String);
-impl Display for ParseOffsetDateTimeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "`{original}` is not a valid date. It should follow the RFC 3339 format to represents a date or datetime in the future or specified as a null value. e.g. 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM:SS'.", original = self.0)
-    }
-}
-impl std::error::Error for ParseOffsetDateTimeError {}
-
 fn parse_expiration_date(
-    string: &str,
-) -> std::result::Result<Option<OffsetDateTime>, TakeErrorMessage<ParseOffsetDateTimeError>> {
-    let datetime = if let Ok(datetime) = OffsetDateTime::parse(string, &Rfc3339) {
+    string: Option<String>,
+) -> std::result::Result<Option<OffsetDateTime>, ParseOffsetDateTimeError> {
+    let Some(string) = string else {
+        return Ok(None)
+    };
+    let datetime = if let Ok(datetime) = OffsetDateTime::parse(&string, &Rfc3339) {
         datetime
     } else if let Ok(primitive_datetime) = PrimitiveDateTime::parse(
-        string,
+        &string,
         format_description!(
             "[year repr:full base:calendar]-[month repr:numerical]-[day]T[hour]:[minute]:[second]"
         ),
     ) {
         primitive_datetime.assume_utc()
     } else if let Ok(primitive_datetime) = PrimitiveDateTime::parse(
-        string,
+        &string,
         format_description!(
             "[year repr:full base:calendar]-[month repr:numerical]-[day] [hour]:[minute]:[second]"
         ),
     ) {
         primitive_datetime.assume_utc()
     } else if let Ok(date) = Date::parse(
-        string,
+        &string,
         format_description!("[year repr:full base:calendar]-[month repr:numerical]-[day]"),
     ) {
         PrimitiveDateTime::new(date, time!(00:00)).assume_utc()
     } else {
-        return Err(TakeErrorMessage(ParseOffsetDateTimeError(string.to_owned())));
+        return Err(ParseOffsetDateTimeError(string));
     };
     if datetime > OffsetDateTime::now_utc() {
         Ok(Some(datetime))
     } else {
-        Err(TakeErrorMessage(ParseOffsetDateTimeError(string.to_owned())))
+        Err(ParseOffsetDateTimeError(string))
     }
 }
 

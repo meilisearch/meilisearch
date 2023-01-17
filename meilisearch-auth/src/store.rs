@@ -3,7 +3,6 @@ use std::cmp::Reverse;
 use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
 use std::fs::create_dir_all;
-use std::ops::Deref;
 use std::path::Path;
 use std::str;
 use std::sync::Arc;
@@ -135,7 +134,7 @@ impl HeedAuthStore {
                 for index in key.indexes.iter() {
                     db.put(
                         &mut wtxn,
-                        &(&uid, &action, Some(index.deref().as_bytes())),
+                        &(&uid, &action, Some(index.to_string().as_bytes())),
                         &key.expires_at,
                     )?;
                 }

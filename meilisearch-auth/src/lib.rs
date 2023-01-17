@@ -3,7 +3,6 @@ pub mod error;
 mod store;
 
 use std::collections::{HashMap, HashSet};
-use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -86,15 +85,13 @@ impl AuthController {
                     key.indexes
                         .into_iter()
                         .filter_map(|index| {
-                            search_rules.get_index_search_rules(index.deref()).map(
-                                |index_search_rules| {
-                                    (String::from(index), Some(index_search_rules))
-                                },
+                            search_rules.get_index_search_rules(&format!("{index}")).map(
+                                |index_search_rules| (index.to_string(), Some(index_search_rules)),
                             )
                         })
                         .collect(),
                 ),
-                None => SearchRules::Set(key.indexes.into_iter().map(String::from).collect()),
+                None => SearchRules::Set(key.indexes.into_iter().map(|x| x.to_string()).collect()),
             };
         } else if let Some(search_rules) = search_rules {
             filters.search_rules = search_rules;

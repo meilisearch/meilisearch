@@ -1,13 +1,11 @@
 use std::collections::BTreeMap;
-use std::str::FromStr;
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::{IndexScheduler, Query};
 use log::debug;
-use meilisearch_types::error::{ResponseError, TakeErrorMessage};
+use meilisearch_types::error::ResponseError;
 use meilisearch_types::settings::{Settings, Unchecked};
-use meilisearch_types::star_or::StarOr;
 use meilisearch_types::tasks::{Kind, Status, Task, TaskId};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -35,37 +33,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/swap-indexes").configure(swap_indexes::configure));
 }
 
-/// Extracts the raw values from the `StarOr` types and
-/// return None if a `StarOr::Star` is encountered.
-pub fn fold_star_or<T, O>(content: impl IntoIterator<Item = StarOr<T>>) -> Option<O>
-where
-    O: FromIterator<T>,
-{
-    content
-        .into_iter()
-        .map(|value| match value {
-            StarOr::Star => None,
-            StarOr::Other(val) => Some(val),
-        })
-        .collect()
-}
-
-pub fn from_string_to_option<T, E>(input: &str) -> Result<Option<T>, E>
-where
-    T: FromStr<Err = E>,
-{
-    Ok(Some(input.parse()?))
-}
-pub fn from_string_to_option_take_error_message<T, E>(
-    input: &str,
-) -> Result<Option<T>, TakeErrorMessage<E>>
-where
-    T: FromStr<Err = E>,
-{
-    Ok(Some(input.parse().map_err(TakeErrorMessage)?))
-}
-
-const PAGINATION_DEFAULT_LIMIT: fn() -> usize = || 20;
+const PAGINATION_DEFAULT_LIMIT: usize = 20;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

@@ -19,7 +19,7 @@ byte-unit = { version = "4.0.14", default-features = false, features = ["std", "
 bytes = "1.2.1"
 clap = { version = "4.0.9", features = ["derive", "env"] }
 crossbeam-channel = "0.5.6"
-deserr = "0.1.4"
+deserr = "0.1.5"
 dump = { path = "../dump" }
 either = "1.8.0"
 env_logger = "0.9.1"
@@ -55,7 +55,6 @@ rustls = "0.20.6"
 rustls-pemfile = "1.0.1"
 segment = { version = "0.2.1", optional = true }
 serde = { version = "1.0.145", features = ["derive"] }
-serde-cs = "0.2.4"
 serde_json = { version = "1.0.85", features = ["preserve_order"] }
 sha2 = "0.10.6"
 siphasher = "0.3.10"

@@ -289,8 +289,8 @@ impl Index<'_> {
             eprintln!("Error with post search");
             resume_unwind(e);
         }
-
-        let (response, code) = self.search_get(query).await;
+        let query = yaup::to_string(&query).unwrap();
+        let (response, code) = self.search_get(&query).await;
         if let Err(e) = catch_unwind(move || test(response, code)) {
             eprintln!("Error with get search");
             resume_unwind(e);
@@ -302,9 +302,8 @@ impl Index<'_> {
         self.service.post_encoded(url, query, self.encoder).await
     }
 
-    pub async fn search_get(&self, query: Value) -> (Value, StatusCode) {
-        let params = yaup::to_string(&query).unwrap();
-        let url = format!("/indexes/{}/search?{}", urlencode(self.uid.as_ref()), params);
+    pub async fn search_get(&self, query: &str) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/search?{}", urlencode(self.uid.as_ref()), query);
         self.service.get(url).await
     }
 
