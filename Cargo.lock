@@ -1009,39 +1009,20 @@ dependencies = [
 
 [[package]]
 name = "deserr"
-version = "0.1.4"
-dependencies = [
- "deserr-internal 0.1.4",
- "serde-cs",
- "serde_json",
-]
-
-[[package]]
-name = "deserr"
-version = "0.1.4"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86290491a2b5c21a1a5083da8dae831006761258fabd5617309c3eebc5f89468"
+checksum = "5d3c6417f0bf7561774690e3d47f9659b0cbc3614c7af7bfda404fda7a2c11d3"
 dependencies = [
- "deserr-internal 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "deserr-internal",
  "serde-cs",
  "serde_json",
 ]
 
 [[package]]
 name = "deserr-internal"
-version = "0.1.4"
-dependencies = [
- "convert_case 0.5.0",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "deserr-internal"
-version = "0.1.4"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7131de1c27581bc376a22166c9f570be91b76cb096be2f6aecf224c27bf7c49a"
+checksum = "196415cbd3b782cddecbdd69da18cd9b19e1bb0bdbb649e87b5afd83fa8d322b"
 dependencies = [
  "convert_case 0.5.0",
  "proc-macro2",
@@ -1319,7 +1300,8 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "0.38.0"
+version = "0.39.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.39.1#0c7d1f761e5db6d086f27d3f0f47a97c7f4a5f08"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1337,7 +1319,8 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "0.38.0"
+version = "0.39.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.39.1#0c7d1f761e5db6d086f27d3f0f47a97c7f4a5f08"
 dependencies = [
  "serde_json",
 ]
@@ -1901,7 +1884,8 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "0.38.0"
+version = "0.39.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.39.1#0c7d1f761e5db6d086f27d3f0f47a97c7f4a5f08"
 dependencies = [
  "serde_json",
 ]
@@ -2308,7 +2292,7 @@ dependencies = [
  "cargo_toml",
  "clap 4.0.32",
  "crossbeam-channel",
- "deserr 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "deserr",
  "dump",
  "either",
  "env_logger",
@@ -2399,7 +2383,7 @@ dependencies = [
  "anyhow",
  "convert_case 0.6.0",
  "csv",
- "deserr 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "deserr",
  "either",
  "enum-iterator",
  "file-store",
@@ -2447,7 +2431,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.38.0"
+version = "0.39.1"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.39.1#0c7d1f761e5db6d086f27d3f0f47a97c7f4a5f08"
 dependencies = [
  "bimap",
  "bincode",
@@ -2457,7 +2442,7 @@ dependencies = [
  "concat-arrays",
  "crossbeam-channel",
  "csv",
- "deserr 0.1.4",
+ "deserr",
  "either",
  "filter-parser",
  "flatten-serde-json",

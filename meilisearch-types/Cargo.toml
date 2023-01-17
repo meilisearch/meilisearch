@@ -9,14 +9,14 @@ actix-web = { version = "4.2.1", default-features = false }
 anyhow = "1.0.65"
 convert_case = "0.6.0"
 csv = "1.1.6"
-deserr = "0.1.4"
+deserr = "0.1.5"
 either = { version = "1.6.1", features = ["serde"] }
 enum-iterator = "1.1.3"
 file-store = { path = "../file-store" }
 flate2 = "1.0.24"
 fst = "0.4.7"
 memmap2 = "0.5.7"
-milli = { path = "/Users/meilisearch/Documents/milli2/milli", default-features = false }
+milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.39.1", default-features = false }
 roaring = { version = "0.10.0", features = ["serde"] }
 serde = { version = "1.0.145", features = ["derive"] }
 serde-cs = "0.2.4"
