@@ -89,14 +89,17 @@ pub struct GetDocument {
 
 pub async fn get_document(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
-    path: web::Path<DocumentParam>,
+    document_param: web::Path<DocumentParam>,
     params: QueryParameter<GetDocument, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
+    let DocumentParam { index_uid, document_id } = document_param.into_inner();
+    let index_uid = IndexUid::try_from(index_uid)?;
+
     let GetDocument { fields } = params.into_inner();
     let attributes_to_retrieve = fields.merge_star_and_none();
 
-    let index = index_scheduler.index(&path.index_uid)?;
-    let document = retrieve_document(&index, &path.document_id, attributes_to_retrieve)?;
+    let index = index_scheduler.index(&index_uid)?;
+    let document = retrieve_document(&index, &document_id, attributes_to_retrieve)?;
     debug!("returns: {:?}", document);
     Ok(HttpResponse::Ok().json(document))
 }
@@ -107,10 +110,15 @@ pub async fn delete_document(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    let DocumentParam { index_uid, document_id } = path.into_inner();
+    let index_uid = IndexUid::try_from(index_uid)?;
+
     analytics.delete_documents(DocumentDeletionKind::PerDocumentId, &req);
 
-    let DocumentParam { document_id, index_uid } = path.into_inner();
-    let task = KindWithContent::DocumentDeletion { index_uid, documents_ids: vec![document_id] };
+    let task = KindWithContent::DocumentDeletion {
+        index_uid: index_uid.to_string(),
+        documents_ids: vec![document_id],
+    };
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
     debug!("returns: {:?}", task);
@@ -133,6 +141,7 @@ pub async fn get_all_documents(
     index_uid: web::Path<String>,
     params: QueryParameter<BrowseQuery, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     debug!("called with params: {:?}", params);
     let BrowseQuery { limit, offset, fields } = params.into_inner();
     let attributes_to_retrieve = fields.merge_star_and_none();
@@ -161,6 +170,8 @@ pub async fn add_documents(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
     debug!("called with params: {:?}", params);
     let params = params.into_inner();
 
@@ -170,7 +181,7 @@ pub async fn add_documents(
     let task = document_addition(
         extract_mime_type(&req)?,
         index_scheduler,
-        index_uid.into_inner(),
+        index_uid,
         params.primary_key,
         body,
         IndexDocumentsMethod::ReplaceDocuments,
@@ -183,14 +194,15 @@ pub async fn add_documents(
 
 pub async fn update_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
-    path: web::Path<String>,
+    index_uid: web::Path<String>,
     params: QueryParameter<UpdateDocumentsQuery, DeserrJsonError>,
     body: Payload,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
     debug!("called with params: {:?}", params);
-    let index_uid = path.into_inner();
 
     analytics.update_documents(&params, index_scheduler.index(&index_uid).is_err(), &req);
 
@@ -212,7 +224,7 @@ pub async fn update_documents(
 async fn document_addition(
     mime_type: Option<Mime>,
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
-    index_uid: String,
+    index_uid: IndexUid,
     primary_key: Option<String>,
     mut body: Payload,
     method: IndexDocumentsMethod,
@@ -232,9 +244,6 @@ async fn document_addition(
             return Err(MeilisearchHttpError::MissingContentType(ACCEPTED_CONTENT_TYPE.clone()))
         }
     };
-
-    // is your indexUid valid?
-    let index_uid = IndexUid::try_from(index_uid)?.into_inner();
 
     let (uuid, mut update_file) = index_scheduler.create_update_file()?;
 
@@ -311,7 +320,7 @@ async fn document_addition(
         documents_count,
         primary_key,
         allow_index_creation,
-        index_uid,
+        index_uid: index_uid.to_string(),
     };
 
     let scheduler = index_scheduler.clone();
@@ -329,12 +338,13 @@ async fn document_addition(
 
 pub async fn delete_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
-    path: web::Path<String>,
+    index_uid: web::Path<String>,
     body: web::Json<Vec<Value>>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", body);
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     analytics.delete_documents(DocumentDeletionKind::PerBatch, &req);
 
@@ -344,7 +354,7 @@ pub async fn delete_documents(
         .collect();
 
     let task =
-        KindWithContent::DocumentDeletion { index_uid: path.into_inner(), documents_ids: ids };
+        KindWithContent::DocumentDeletion { index_uid: index_uid.to_string(), documents_ids: ids };
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
@@ -354,13 +364,14 @@ pub async fn delete_documents(
 
 pub async fn clear_all_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
-    path: web::Path<String>,
+    index_uid: web::Path<String>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     analytics.delete_documents(DocumentDeletionKind::ClearAll, &req);
 
-    let task = KindWithContent::DocumentClear { index_uid: path.into_inner() };
+    let task = KindWithContent::DocumentClear { index_uid: index_uid.to_string() };
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 

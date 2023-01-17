@@ -1,3 +1,4 @@
+use meili_snap::{json_string, snapshot};
 use serde_json::{json, Value};
 
 use crate::common::Server;
@@ -182,15 +183,13 @@ async fn get_invalid_index_uid() {
     let index = server.index("this is not a valid index name");
     let (response, code) = index.get().await;
 
-    assert_eq!(code, 404);
-    assert_eq!(
-        response,
-        json!(
-        {
-        "message": "Index `this is not a valid index name` not found.",
-        "code": "index_not_found",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-not-found"
-            })
-    );
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "`this is not a valid index name` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+      "code": "invalid_index_uid",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-index-uid"
+    }
+    "###);
 }

@@ -5,6 +5,7 @@ use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::InvalidSwapIndexes;
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use serde_json::json;
 
@@ -24,7 +25,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SwapIndexesPayload {
     #[deserr(error = DeserrJsonError<InvalidSwapIndexes>, missing_field_error = DeserrJsonError::missing_swap_indexes)]
-    indexes: Vec<String>,
+    indexes: Vec<IndexUid>,
 }
 
 pub async fn swap_indexes(
@@ -55,7 +56,7 @@ pub async fn swap_indexes(
         if !search_rules.is_index_authorized(lhs) || !search_rules.is_index_authorized(rhs) {
             return Err(AuthenticationError::InvalidToken.into());
         }
-        swaps.push(IndexSwap { indexes: (lhs.clone(), rhs.clone()) });
+        swaps.push(IndexSwap { indexes: (lhs.to_string(), rhs.to_string()) });
     }
 
     let task = KindWithContent::IndexSwap { swaps };

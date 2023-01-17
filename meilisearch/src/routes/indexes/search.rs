@@ -7,6 +7,7 @@ use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 
@@ -154,6 +155,8 @@ pub async fn search_with_url_query(
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
     let mut query: SearchQuery = params.into_inner().into();
 
     // Tenant token search_rules.
@@ -185,6 +188,8 @@ pub async fn search_with_post(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
     let mut query = params.into_inner();
     debug!("search called with params: {:?}", query);
 

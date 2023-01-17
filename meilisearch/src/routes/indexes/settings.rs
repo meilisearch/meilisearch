@@ -41,12 +41,14 @@ macro_rules! make_setting_route {
                 >,
                 index_uid: web::Path<String>,
             ) -> Result<HttpResponse, ResponseError> {
+                let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
                 let new_settings = Settings { $attr: Setting::Reset.into(), ..Default::default() };
 
                 let allow_index_creation = index_scheduler.filters().allow_index_creation;
-                let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
+
                 let task = KindWithContent::SettingsUpdate {
-                    index_uid,
+                    index_uid: index_uid.to_string(),
                     new_settings: Box::new(new_settings),
                     is_deletion: true,
                     allow_index_creation,
@@ -70,6 +72,8 @@ macro_rules! make_setting_route {
                 req: HttpRequest,
                 $analytics_var: web::Data<dyn Analytics>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
+                let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
                 let body = body.into_inner();
 
                 $analytics(&body, &req);
@@ -83,9 +87,9 @@ macro_rules! make_setting_route {
                 };
 
                 let allow_index_creation = index_scheduler.filters().allow_index_creation;
-                let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
+
                 let task = KindWithContent::SettingsUpdate {
-                    index_uid,
+                    index_uid: index_uid.to_string(),
                     new_settings: Box::new(new_settings),
                     is_deletion: false,
                     allow_index_creation,
@@ -106,6 +110,8 @@ macro_rules! make_setting_route {
                 >,
                 index_uid: actix_web::web::Path<String>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
+                let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
                 let index = index_scheduler.index(&index_uid)?;
                 let rtxn = index.read_txn()?;
                 let settings = settings(&index, &rtxn)?;
@@ -466,6 +472,8 @@ pub async fn update_all(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
     let new_settings = body.into_inner();
 
     analytics.publish(
@@ -571,6 +579,8 @@ pub async fn get_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
     let index = index_scheduler.index(&index_uid)?;
     let rtxn = index.read_txn()?;
     let new_settings = settings(&index, &rtxn)?;
@@ -582,6 +592,8 @@ pub async fn delete_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
     let new_settings = Settings::cleared().into_unchecked();
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation;

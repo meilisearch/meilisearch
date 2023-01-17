@@ -12,7 +12,7 @@ use meilisearch_types::error::{unwrap_any, Code, ResponseError};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::{self, FieldDistribution, Index};
 use meilisearch_types::tasks::KindWithContent;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::json;
 use time::OffsetDateTime;
 
@@ -49,7 +49,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexView {
     pub uid: String,
@@ -108,8 +108,8 @@ pub async fn list_indexes(
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct IndexCreateRequest {
     #[deserr(error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
-    uid: String,
-    #[deserr(error = DeserrJsonError<InvalidIndexPrimaryKey>)]
+    uid: IndexUid,
+    #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
     primary_key: Option<String>,
 }
 
@@ -120,7 +120,6 @@ pub async fn create_index(
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let IndexCreateRequest { primary_key, uid } = body.into_inner();
-    let uid = IndexUid::try_from(uid)?.into_inner();
 
     let allow_index_creation = index_scheduler.filters().search_rules.is_index_authorized(&uid);
     if allow_index_creation {
@@ -130,7 +129,7 @@ pub async fn create_index(
             Some(&req),
         );
 
-        let task = KindWithContent::IndexCreation { index_uid: uid, primary_key };
+        let task = KindWithContent::IndexCreation { index_uid: uid.to_string(), primary_key };
         let task: SummarizedTaskView =
             tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
@@ -162,7 +161,7 @@ fn deny_immutable_fields_index(
 #[derive(DeserializeFromValue, Debug)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_index)]
 pub struct UpdateIndexRequest {
-    #[deserr(error = DeserrJsonError<InvalidIndexPrimaryKey>)]
+    #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
     primary_key: Option<String>,
 }
 
@@ -170,6 +169,8 @@ pub async fn get_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
     let index = index_scheduler.index(&index_uid)?;
     let index_view = IndexView::new(index_uid.into_inner(), &index)?;
 
@@ -180,12 +181,13 @@ pub async fn get_index(
 
 pub async fn update_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_UPDATE }>, Data<IndexScheduler>>,
-    path: web::Path<String>,
+    index_uid: web::Path<String>,
     body: ValidatedJson<UpdateIndexRequest, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", body);
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let body = body.into_inner();
     analytics.publish(
         "Index Updated".to_string(),
@@ -194,7 +196,7 @@ pub async fn update_index(
     );
 
     let task = KindWithContent::IndexUpdate {
-        index_uid: path.into_inner(),
+        index_uid: index_uid.into_inner(),
         primary_key: body.primary_key,
     };
 
@@ -209,6 +211,7 @@ pub async fn delete_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_DELETE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let task = KindWithContent::IndexDeletion { index_uid: index_uid.into_inner() };
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
@@ -222,6 +225,7 @@ pub async fn get_index_stats(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     analytics.publish("Stats Seen".to_string(), json!({ "per_index_uid": true }), Some(&req));
 
     let stats = IndexStats::new((*index_scheduler).clone(), index_uid.into_inner())?;

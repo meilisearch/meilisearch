@@ -2,11 +2,14 @@ use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
 
+use deserr::DeserializeFromValue;
+
 use crate::error::{Code, ErrorCode};
 
 /// An index uid is composed of only ascii alphanumeric characters, - and _, between 1 and 400
 /// bytes long
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, DeserializeFromValue)]
+#[deserr(from(String) = IndexUid::try_from -> IndexUidFormatError)]
 pub struct IndexUid(String);
 
 impl IndexUid {
