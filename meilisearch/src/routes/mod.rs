@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::str::FromStr;
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
@@ -32,13 +31,6 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::resource("/version").route(web::get().to(get_version)))
         .service(web::scope("/indexes").configure(indexes::configure))
         .service(web::scope("/swap-indexes").configure(swap_indexes::configure));
-}
-
-pub fn from_string_to_option<T, E>(input: &str) -> Result<Option<T>, E>
-where
-    T: FromStr<Err = E>,
-{
-    Ok(Some(input.parse()?))
 }
 
 const PAGINATION_DEFAULT_LIMIT: usize = 20;

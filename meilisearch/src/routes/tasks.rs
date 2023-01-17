@@ -501,15 +501,21 @@ mod tests {
     use deserr::DeserializeFromValue;
     use meili_snap::snapshot;
     use meilisearch_types::deserr::DeserrQueryParamError;
+    use meilisearch_types::error::{Code, ResponseError};
 
-    use crate::extractors::query_parameters::QueryParameter;
     use crate::routes::tasks::{TaskDeletionOrCancelationQuery, TasksFilterQuery};
 
-    fn deserr_query_params<T>(j: &str) -> Result<T, actix_web::Error>
+    fn deserr_query_params<T>(j: &str) -> Result<T, ResponseError>
     where
         T: DeserializeFromValue<DeserrQueryParamError>,
     {
-        QueryParameter::<T, DeserrQueryParamError>::from_query(j).map(|p| p.0)
+        let value = serde_urlencoded::from_str::<serde_json::Value>(j)
+            .map_err(|e| ResponseError::from_msg(e.to_string(), Code::BadRequest))?;
+
+        match deserr::deserialize::<_, _, DeserrQueryParamError>(value) {
+            Ok(data) => Ok(data),
+            Err(e) => Err(ResponseError::from(e)),
+        }
     }
 
     #[test]
@@ -556,33 +562,75 @@ mod tests {
         {
             let params = "afterFinishedAt=2021";
             let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
-            snapshot!(format!("{err:?}"), @r###"ResponseError { code: 400, message: "Invalid value in parameter `afterFinishedAt`: `2021` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.", error_code: "invalid_task_after_finished_at", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#invalid-task-after-finished-at" }"###);
+            snapshot!(meili_snap::json_string!(err), @r###"
+            {
+              "message": "Invalid value in parameter `afterFinishedAt`: `2021` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+              "code": "invalid_task_after_finished_at",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid-task-after-finished-at"
+            }
+            "###);
         }
         {
             let params = "beforeFinishedAt=2021";
             let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
-            snapshot!(format!("{err:?}"), @r###"ResponseError { code: 400, message: "Invalid value in parameter `beforeFinishedAt`: `2021` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.", error_code: "invalid_task_before_finished_at", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#invalid-task-before-finished-at" }"###);
+            snapshot!(meili_snap::json_string!(err), @r###"
+            {
+              "message": "Invalid value in parameter `beforeFinishedAt`: `2021` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+              "code": "invalid_task_before_finished_at",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid-task-before-finished-at"
+            }
+            "###);
         }
         {
             let params = "afterEnqueuedAt=2021-12";
             let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
-            snapshot!(format!("{err:?}"), @r###"ResponseError { code: 400, message: "Invalid value in parameter `afterEnqueuedAt`: `2021-12` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.", error_code: "invalid_task_after_enqueued_at", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#invalid-task-after-enqueued-at" }"###);
+            snapshot!(meili_snap::json_string!(err), @r###"
+            {
+              "message": "Invalid value in parameter `afterEnqueuedAt`: `2021-12` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+              "code": "invalid_task_after_enqueued_at",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid-task-after-enqueued-at"
+            }
+            "###);
         }
 
         {
             let params = "beforeEnqueuedAt=2021-12-03T23";
             let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
-            snapshot!(format!("{err:?}"), @r###"ResponseError { code: 400, message: "Invalid value in parameter `beforeEnqueuedAt`: `2021-12-03T23` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.", error_code: "invalid_task_before_enqueued_at", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#invalid-task-before-enqueued-at" }"###);
+            snapshot!(meili_snap::json_string!(err), @r###"
+            {
+              "message": "Invalid value in parameter `beforeEnqueuedAt`: `2021-12-03T23` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+              "code": "invalid_task_before_enqueued_at",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid-task-before-enqueued-at"
+            }
+            "###);
         }
         {
             let params = "afterStartedAt=2021-12-03T23:45";
             let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
-            snapshot!(format!("{err:?}"), @r###"ResponseError { code: 400, message: "Invalid value in parameter `afterStartedAt`: `2021-12-03T23:45` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.", error_code: "invalid_task_after_started_at", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#invalid-task-after-started-at" }"###);
+            snapshot!(meili_snap::json_string!(err), @r###"
+            {
+              "message": "Invalid value in parameter `afterStartedAt`: `2021-12-03T23:45` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+              "code": "invalid_task_after_started_at",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid-task-after-started-at"
+            }
+            "###);
         }
         {
             let params = "beforeStartedAt=2021-12-03T23:45";
             let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
-            snapshot!(format!("{err:?}"), @r###"ResponseError { code: 400, message: "Invalid value in parameter `beforeStartedAt`: `2021-12-03T23:45` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.", error_code: "invalid_task_before_started_at", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#invalid-task-before-started-at" }"###);
+            snapshot!(meili_snap::json_string!(err), @r###"
+            {
+              "message": "Invalid value in parameter `beforeStartedAt`: `2021-12-03T23:45` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
+              "code": "invalid_task_before_started_at",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid-task-before-started-at"
+            }
+            "###);
         }
     }
 
@@ -601,17 +649,38 @@ mod tests {
         {
             let params = "uids=cat,*,dog";
             let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
-            snapshot!(format!("{err:?}"), @r###"ResponseError { code: 400, message: "Invalid value in parameter `uids[0]`: could not parse `cat` as a positive integer", error_code: "invalid_task_uids", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#invalid-task-uids" }"###);
+            snapshot!(meili_snap::json_string!(err), @r###"
+            {
+              "message": "Invalid value in parameter `uids[0]`: could not parse `cat` as a positive integer",
+              "code": "invalid_task_uids",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
+            }
+            "###);
         }
         {
             let params = "uids=78,hello,world";
             let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
-            snapshot!(format!("{err:?}"), @r###"ResponseError { code: 400, message: "Invalid value in parameter `uids[1]`: could not parse `hello` as a positive integer", error_code: "invalid_task_uids", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#invalid-task-uids" }"###);
+            snapshot!(meili_snap::json_string!(err), @r###"
+            {
+              "message": "Invalid value in parameter `uids[1]`: could not parse `hello` as a positive integer",
+              "code": "invalid_task_uids",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
+            }
+            "###);
         }
         {
             let params = "uids=cat";
             let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
-            snapshot!(format!("{err:?}"), @r###"ResponseError { code: 400, message: "Invalid value in parameter `uids`: could not parse `cat` as a positive integer", error_code: "invalid_task_uids", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#invalid-task-uids" }"###);
+            snapshot!(meili_snap::json_string!(err), @r###"
+            {
+              "message": "Invalid value in parameter `uids`: could not parse `cat` as a positive integer",
+              "code": "invalid_task_uids",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
+            }
+            "###);
         }
     }
 
@@ -630,7 +699,14 @@ mod tests {
         {
             let params = "statuses=finished";
             let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
-            snapshot!(format!("{err:?}"), @r###"ResponseError { code: 400, message: "Invalid value in parameter `statuses`: `finished` is not a valid task status. Available statuses are `enqueued`, `processing`, `succeeded`, `failed`, `canceled`.", error_code: "invalid_task_statuses", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#invalid-task-statuses" }"###);
+            snapshot!(meili_snap::json_string!(err), @r###"
+            {
+              "message": "Invalid value in parameter `statuses`: `finished` is not a valid task status. Available statuses are `enqueued`, `processing`, `succeeded`, `failed`, `canceled`.",
+              "code": "invalid_task_statuses",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid-task-statuses"
+            }
+            "###);
         }
     }
     #[test]
@@ -648,7 +724,14 @@ mod tests {
         {
             let params = "types=createIndex";
             let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
-            snapshot!(format!("{err:?}"), @r###"ResponseError { code: 400, message: "Invalid value in parameter `types`: `createIndex` is not a valid task type. Available types are `documentAdditionOrUpdate`, `documentDeletion`, `settingsUpdate`, `indexCreation`, `indexDeletion`, `indexUpdate`, `indexSwap`, `taskCancelation`, `taskDeletion`, `dumpCreation`, `snapshotCreation`.", error_code: "invalid_task_types", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#invalid-task-types" }"###);
+            snapshot!(meili_snap::json_string!(err), @r###"
+            {
+              "message": "Invalid value in parameter `types`: `createIndex` is not a valid task type. Available types are `documentAdditionOrUpdate`, `documentDeletion`, `settingsUpdate`, `indexCreation`, `indexDeletion`, `indexUpdate`, `indexSwap`, `taskCancelation`, `taskDeletion`, `dumpCreation`, `snapshotCreation`.",
+              "code": "invalid_task_types",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid-task-types"
+            }
+            "###);
         }
     }
     #[test]
@@ -666,12 +749,26 @@ mod tests {
         {
             let params = "indexUids=1,hé";
             let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
-            snapshot!(format!("{err:?}"), @r###"ResponseError { code: 400, message: "Invalid value in parameter `indexUids[1]`: `hé` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).", error_code: "invalid_index_uid", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#invalid-index-uid" }"###);
+            snapshot!(meili_snap::json_string!(err), @r###"
+            {
+              "message": "Invalid value in parameter `indexUids[1]`: `hé` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+              "code": "invalid_index_uid",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid-index-uid"
+            }
+            "###);
         }
         {
             let params = "indexUids=hé";
             let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
-            snapshot!(format!("{err:?}"), @r###"ResponseError { code: 400, message: "Invalid value in parameter `indexUids`: `hé` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).", error_code: "invalid_index_uid", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#invalid-index-uid" }"###);
+            snapshot!(meili_snap::json_string!(err), @r###"
+            {
+              "message": "Invalid value in parameter `indexUids`: `hé` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+              "code": "invalid_index_uid",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid-index-uid"
+            }
+            "###);
         }
     }
 
@@ -699,19 +796,40 @@ mod tests {
             // Star in from not allowed
             let params = "uids=*&from=*";
             let err = deserr_query_params::<TasksFilterQuery>(params).unwrap_err();
-            snapshot!(format!("{err:?}"), @r###"ResponseError { code: 400, message: "Invalid value in parameter `from`: could not parse `*` as a positive integer", error_code: "invalid_task_from", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#invalid-task-from" }"###);
+            snapshot!(meili_snap::json_string!(err), @r###"
+            {
+              "message": "Invalid value in parameter `from`: could not parse `*` as a positive integer",
+              "code": "invalid_task_from",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid-task-from"
+            }
+            "###);
         }
         {
             // From not allowed in task deletion/cancelation queries
             let params = "from=12";
             let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
-            snapshot!(format!("{err:?}"), @r###"ResponseError { code: 400, message: "Unknown parameter `from`: expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`", error_code: "bad_request", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#bad-request" }"###);
+            snapshot!(meili_snap::json_string!(err), @r###"
+            {
+              "message": "Unknown parameter `from`: expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
+              "code": "bad_request",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#bad-request"
+            }
+            "###);
         }
         {
             // Limit not allowed in task deletion/cancelation queries
             let params = "limit=12";
             let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
-            snapshot!(format!("{err:?}"), @r###"ResponseError { code: 400, message: "Unknown parameter `limit`: expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`", error_code: "bad_request", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#bad-request" }"###);
+            snapshot!(meili_snap::json_string!(err), @r###"
+            {
+              "message": "Unknown parameter `limit`: expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
+              "code": "bad_request",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#bad-request"
+            }
+            "###);
         }
     }
 
