@@ -11,8 +11,8 @@ use time::{Date, OffsetDateTime, PrimitiveDateTime};
 use uuid::Uuid;
 
 use crate::deserr::DeserrJsonError;
-use crate::error::{deserr_codes::*, ParseOffsetDateTimeError};
-use crate::error::{unwrap_any, Code};
+use crate::error::deserr_codes::*;
+use crate::error::{unwrap_any, Code, ParseOffsetDateTimeError};
 use crate::index_uid::IndexUid;
 use crate::star_or::StarOr;
 

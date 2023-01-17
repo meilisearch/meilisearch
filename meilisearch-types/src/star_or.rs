@@ -1,9 +1,13 @@
-use std::{fmt, marker::PhantomData, str::FromStr};
+use std::fmt;
+use std::marker::PhantomData;
+use std::str::FromStr;
 
 use deserr::{DeserializeError, DeserializeFromValue, MergeWithError, ValueKind};
-use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
+use serde::de::Visitor;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::{deserr::query_params::FromQueryParameter, error::unwrap_any};
+use crate::deserr::query_params::FromQueryParameter;
+use crate::error::unwrap_any;
 
 /// A type that tries to match either a star (*) or
 /// any other thing that implements `FromStr`.
