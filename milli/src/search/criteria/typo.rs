@@ -423,13 +423,8 @@ mod test {
             wdcache: &mut WordDerivationsCache::new(),
             excluded_candidates: &RoaringBitmap::new(),
         };
-        let parent = Initial::<NoopDistinct>::new(
-            &context,
-            query_tree,
-            Some(facet_candidates),
-            false,
-            None,
-        );
+        let parent =
+            Initial::<NoopDistinct>::new(&context, query_tree, Some(facet_candidates), false, None);
         let criteria = Typo::new(&context, Box::new(parent));
 
         let result = display_criteria(criteria, criterion_parameters);
