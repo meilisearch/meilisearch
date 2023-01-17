@@ -230,8 +230,12 @@ pub struct IndexSchedulerOptions {
     pub dumps_path: PathBuf,
     /// The maximum size, in bytes, of the task index.
     pub task_db_size: usize,
-    /// The maximum size, in bytes, of each meilisearch index.
-    pub index_size: usize,
+    /// The size, in bytes, with which a meilisearch index is opened the first time of each meilisearch index.
+    pub index_base_map_size: usize,
+    /// The size, in bytes, by which the map size of an index is increased when it resized due to being full.
+    pub index_growth_amount: usize,
+    /// The number of indexes that can be concurrently opened in memory.
+    pub index_count: usize,
     /// Configuration used during indexing for each meilisearch index.
     pub indexer_config: IndexerConfig,
     /// Set to `true` iff the index scheduler is allowed to automatically
@@ -383,7 +387,9 @@ impl IndexScheduler {
             index_mapper: IndexMapper::new(
                 &env,
                 options.indexes_path,
-                options.index_size,
+                options.index_base_map_size,
+                options.index_growth_amount,
+                options.index_count,
                 options.indexer_config,
             )?,
             env,
@@ -1163,7 +1169,9 @@ mod tests {
                 snapshots_path: tempdir.path().join("snapshots"),
                 dumps_path: tempdir.path().join("dumps"),
                 task_db_size: 1000 * 1000, // 1 MB, we don't use MiB on purpose.
-                index_size: 1000 * 1000,   // 1 MB, we don't use MiB on purpose.
+                index_base_map_size: 1000 * 1000, // 1 MB, we don't use MiB on purpose.
+                index_growth_amount: 1000 * 1000, // 1 MB
+                index_count: 5,
                 indexer_config: IndexerConfig::default(),
                 autobatching_enabled,
             };

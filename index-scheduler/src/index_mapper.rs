@@ -35,7 +35,10 @@ pub struct IndexMapper {
 
     /// Path to the folder where the LMDB environments of each index are.
     base_path: PathBuf,
-    index_size: usize,
+    /// The map size an index is opened with on the first time.
+    index_base_map_size: usize,
+    /// The quantity by which the map size of an index is incremented upon reopening, in bytes.
+    index_growth_amount: usize,
     pub indexer_config: Arc<IndexerConfig>,
 }
 
@@ -171,14 +174,17 @@ impl IndexMapper {
     pub fn new(
         env: &Env,
         base_path: PathBuf,
-        index_size: usize,
+        index_base_map_size: usize,
+        index_growth_amount: usize,
+        index_count: usize,
         indexer_config: IndexerConfig,
     ) -> Result<Self> {
         Ok(Self {
-            index_map: Arc::new(RwLock::new(IndexMap::new(20))),
+            index_map: Arc::new(RwLock::new(IndexMap::new(index_count))),
             index_mapping: env.create_database(Some(INDEX_MAPPING))?,
             base_path,
-            index_size,
+            index_base_map_size,
+            index_growth_amount,
             indexer_config: Arc::new(indexer_config),
         })
     }
@@ -221,7 +227,8 @@ impl IndexMapper {
                 let index_path = self.base_path.join(uuid.to_string());
                 fs::create_dir_all(&index_path)?;
 
-                let index = self.create_or_open_index(&index_path, date, self.index_size)?;
+                let index =
+                    self.create_or_open_index(&index_path, date, self.index_base_map_size)?;
 
                 wtxn.commit()?;
                 // Error if the UUIDv4 somehow already exists in the map, since it should be fresh.
@@ -324,7 +331,7 @@ impl IndexMapper {
 
         let resize_succeeded = (move || {
             let current_size = index.map_size()?;
-            let new_size = current_size * 2;
+            let new_size = current_size + self.index_growth_amount;
             let closing_event = index.prepare_for_closing();
 
             log::debug!("Waiting for index {name} to close");
@@ -400,8 +407,11 @@ impl IndexMapper {
                         None => {
                             let index_path = self.base_path.join(uuid.to_string());
 
-                            let index =
-                                self.create_or_open_index(&index_path, None, self.index_size)?;
+                            let index = self.create_or_open_index(
+                                &index_path,
+                                None,
+                                self.index_base_map_size,
+                            )?;
                             match index_map.insert(&uuid, index.clone()) {
                                 InsertionOutcome::InsertedNew => break (index, None),
                                 InsertionOutcome::Evicted(evicted_uuid, evicted_index) => {
