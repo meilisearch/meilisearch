@@ -17,8 +17,6 @@ flate2 = "1.0.24"
 fst = "0.4.7"
 memmap2 = "0.5.7"
 milli = { path = "/Users/meilisearch/Documents/milli2/milli", default-features = false }
-proptest = { version = "1.0.0", optional = true }
-proptest-derive = { version = "0.3.0", optional = true }
 roaring = { version = "0.10.0", features = ["serde"] }
 serde = { version = "1.0.145", features = ["derive"] }
 serde-cs = "0.2.4"
@@ -33,8 +31,6 @@ uuid = { version = "1.1.2", features = ["serde", "v4"] }
 [dev-dependencies]
 insta = "1.19.1"
 meili-snap = { path = "../meili-snap" }
-proptest = "1.0.0"
-proptest-derive = "0.3.0"
 
 [features]
 # all specialized tokenizations
@@ -48,4 +44,3 @@ hebrew = ["milli/hebrew"]
 japanese = ["milli/japanese"]
 # thai specialized tokenization
 thai = ["milli/thai"]
-test-traits = ["proptest", "proptest-derive"]

@@ -9,10 +9,7 @@ use crate::error::{Code, ErrorCode};
 /// An index uid is composed of only ascii alphanumeric characters, - and _, between 1 and 400
 /// bytes long
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "test-traits", derive(proptest_derive::Arbitrary))]
-pub struct IndexUid(
-    #[cfg_attr(feature = "test-traits", proptest(regex("[a-zA-Z0-9_-]{1,400}")))] String,
-);
+pub struct IndexUid(String);
 
 impl IndexUid {
     pub fn new_unchecked(s: impl AsRef<str>) -> Self {
