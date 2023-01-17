@@ -254,7 +254,7 @@ pub(crate) mod test_helpers {
             max_group_size: u8,
             min_level_size: u8,
         ) -> FacetIndex<BoundCodec> {
-            let group_size = std::cmp::min(127, std::cmp::max(group_size, 2)); // 2 <= x <= 127
+            let group_size = group_size.clamp(2, 127);
             let max_group_size = std::cmp::min(127, std::cmp::max(group_size * 2, max_group_size)); // 2*group_size <= x <= 127
             let min_level_size = std::cmp::max(1, min_level_size); // 1 <= x <= inf
             let mut options = heed::EnvOpenOptions::new();
@@ -307,7 +307,7 @@ pub(crate) mod test_helpers {
                 min_level_size: self.min_level_size.get(),
                 max_group_size: self.max_group_size.get(),
             };
-            let key_bytes = BoundCodec::bytes_encode(&key).unwrap();
+            let key_bytes = BoundCodec::bytes_encode(key).unwrap();
             update.insert(wtxn, field_id, &key_bytes, docids).unwrap();
         }
         pub fn delete_single_docid<'a>(
@@ -333,7 +333,7 @@ pub(crate) mod test_helpers {
                 min_level_size: self.min_level_size.get(),
                 max_group_size: self.max_group_size.get(),
             };
-            let key_bytes = BoundCodec::bytes_encode(&key).unwrap();
+            let key_bytes = BoundCodec::bytes_encode(key).unwrap();
             update.delete(wtxn, field_id, &key_bytes, docids).unwrap();
         }
 
@@ -354,7 +354,7 @@ pub(crate) mod test_helpers {
                 let key: FacetGroupKey<&[u8]> =
                     FacetGroupKey { field_id: *field_id, level: 0, left_bound: &left_bound_bytes };
                 let key = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_encode(&key).unwrap();
-                let value = CboRoaringBitmapCodec::bytes_encode(&docids).unwrap();
+                let value = CboRoaringBitmapCodec::bytes_encode(docids).unwrap();
                 writer.insert(&key, &value).unwrap();
             }
             writer.finish().unwrap();
@@ -381,19 +381,19 @@ pub(crate) mod test_helpers {
                 level_no_prefix.extend_from_slice(&field_id.to_be_bytes());
                 level_no_prefix.push(level_no);
 
-                let mut iter = self
+                let iter = self
                     .content
                     .as_polymorph()
                     .prefix_iter::<_, ByteSlice, FacetGroupValueCodec>(txn, &level_no_prefix)
                     .unwrap();
-                while let Some(el) = iter.next() {
+                for el in iter {
                     let (key, value) = el.unwrap();
-                    let key = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(&key).unwrap();
+                    let key = FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(key).unwrap();
 
                     let mut prefix_start_below = vec![];
                     prefix_start_below.extend_from_slice(&field_id.to_be_bytes());
                     prefix_start_below.push(level_no - 1);
-                    prefix_start_below.extend_from_slice(&key.left_bound);
+                    prefix_start_below.extend_from_slice(key.left_bound);
 
                     let start_below = {
                         let mut start_below_iter = self
@@ -405,19 +405,19 @@ pub(crate) mod test_helpers {
                             )
                             .unwrap();
                         let (key_bytes, _) = start_below_iter.next().unwrap().unwrap();
-                        FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(&key_bytes).unwrap()
+                        FacetGroupKeyCodec::<ByteSliceRefCodec>::bytes_decode(key_bytes).unwrap()
                     };
 
                     assert!(value.size > 0);
 
                     let mut actual_size = 0;
                     let mut values_below = RoaringBitmap::new();
-                    let mut iter_below = self
+                    let iter_below = self
                         .content
                         .range(txn, &(start_below..))
                         .unwrap()
                         .take(value.size as usize);
-                    while let Some(el) = iter_below.next() {
+                    for el in iter_below {
                         let (_, value) = el.unwrap();
                         actual_size += 1;
                         values_below |= value.bitmap;
@@ -438,8 +438,8 @@ pub(crate) mod test_helpers {
     {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let txn = self.env.read_txn().unwrap();
-            let mut iter = self.content.iter(&txn).unwrap();
-            while let Some(el) = iter.next() {
+            let iter = self.content.iter(&txn).unwrap();
+            for el in iter {
                 let (key, value) = el.unwrap();
                 let FacetGroupKey { field_id, level, left_bound: bound } = key;
                 let bound = BoundCodec::bytes_decode(bound).unwrap();

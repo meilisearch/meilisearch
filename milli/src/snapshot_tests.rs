@@ -198,118 +198,94 @@ macro_rules! db_snap {
 }
 
 pub fn snap_word_docids(index: &Index) -> String {
-    let snap = make_db_snap_from_iter!(index, word_docids, |(s, b)| {
+    make_db_snap_from_iter!(index, word_docids, |(s, b)| {
         &format!("{s:<16} {}", display_bitmap(&b))
-    });
-    snap
+    })
 }
 pub fn snap_exact_word_docids(index: &Index) -> String {
-    let snap = make_db_snap_from_iter!(index, exact_word_docids, |(s, b)| {
+    make_db_snap_from_iter!(index, exact_word_docids, |(s, b)| {
         &format!("{s:<16} {}", display_bitmap(&b))
-    });
-    snap
+    })
 }
 pub fn snap_word_prefix_docids(index: &Index) -> String {
-    let snap = make_db_snap_from_iter!(index, word_prefix_docids, |(s, b)| {
+    make_db_snap_from_iter!(index, word_prefix_docids, |(s, b)| {
         &format!("{s:<16} {}", display_bitmap(&b))
-    });
-    snap
+    })
 }
 pub fn snap_exact_word_prefix_docids(index: &Index) -> String {
-    let snap = make_db_snap_from_iter!(index, exact_word_prefix_docids, |(s, b)| {
+    make_db_snap_from_iter!(index, exact_word_prefix_docids, |(s, b)| {
         &format!("{s:<16} {}", display_bitmap(&b))
-    });
-    snap
+    })
 }
 pub fn snap_docid_word_positions(index: &Index) -> String {
-    let snap = make_db_snap_from_iter!(index, docid_word_positions, |((idx, s), b)| {
+    make_db_snap_from_iter!(index, docid_word_positions, |((idx, s), b)| {
         &format!("{idx:<6} {s:<16} {}", display_bitmap(&b))
-    });
-    snap
+    })
 }
 pub fn snap_word_pair_proximity_docids(index: &Index) -> String {
-    let snap = make_db_snap_from_iter!(index, word_pair_proximity_docids, |(
-        (proximity, word1, word2),
-        b,
-    )| {
+    make_db_snap_from_iter!(index, word_pair_proximity_docids, |((proximity, word1, word2), b)| {
         &format!("{proximity:<2} {word1:<16} {word2:<16} {}", display_bitmap(&b))
-    });
-    snap
+    })
 }
 pub fn snap_word_prefix_pair_proximity_docids(index: &Index) -> String {
-    let snap = make_db_snap_from_iter!(index, word_prefix_pair_proximity_docids, |(
+    make_db_snap_from_iter!(index, word_prefix_pair_proximity_docids, |(
         (proximity, word1, prefix),
         b,
     )| {
         &format!("{proximity:<2} {word1:<16} {prefix:<4} {}", display_bitmap(&b))
-    });
-    snap
+    })
 }
 pub fn snap_prefix_word_pair_proximity_docids(index: &Index) -> String {
-    let snap = make_db_snap_from_iter!(index, prefix_word_pair_proximity_docids, |(
+    make_db_snap_from_iter!(index, prefix_word_pair_proximity_docids, |(
         (proximity, prefix, word2),
         b,
     )| {
         &format!("{proximity:<2} {prefix:<4} {word2:<16} {}", display_bitmap(&b))
-    });
-    snap
+    })
 }
 pub fn snap_word_position_docids(index: &Index) -> String {
-    let snap = make_db_snap_from_iter!(index, word_position_docids, |((word, position), b)| {
+    make_db_snap_from_iter!(index, word_position_docids, |((word, position), b)| {
         &format!("{word:<16} {position:<6} {}", display_bitmap(&b))
-    });
-    snap
+    })
 }
 pub fn snap_field_id_word_count_docids(index: &Index) -> String {
-    let snap = make_db_snap_from_iter!(index, field_id_word_count_docids, |(
-        (field_id, word_count),
-        b,
-    )| {
+    make_db_snap_from_iter!(index, field_id_word_count_docids, |((field_id, word_count), b)| {
         &format!("{field_id:<3} {word_count:<6} {}", display_bitmap(&b))
-    });
-    snap
+    })
 }
 pub fn snap_word_prefix_position_docids(index: &Index) -> String {
-    let snap = make_db_snap_from_iter!(index, word_prefix_position_docids, |(
-        (word_prefix, position),
-        b,
-    )| {
+    make_db_snap_from_iter!(index, word_prefix_position_docids, |((word_prefix, position), b)| {
         &format!("{word_prefix:<4} {position:<6} {}", display_bitmap(&b))
-    });
-    snap
+    })
 }
 pub fn snap_facet_id_f64_docids(index: &Index) -> String {
-    let snap = make_db_snap_from_iter!(index, facet_id_f64_docids, |(
+    make_db_snap_from_iter!(index, facet_id_f64_docids, |(
         FacetGroupKey { field_id, level, left_bound },
         FacetGroupValue { size, bitmap },
     )| {
         &format!("{field_id:<3} {level:<2} {left_bound:<6} {size:<2} {}", display_bitmap(&bitmap))
-    });
-    snap
+    })
 }
 pub fn snap_facet_id_exists_docids(index: &Index) -> String {
-    let snap = make_db_snap_from_iter!(index, facet_id_exists_docids, |(facet_id, docids)| {
+    make_db_snap_from_iter!(index, facet_id_exists_docids, |(facet_id, docids)| {
         &format!("{facet_id:<3} {}", display_bitmap(&docids))
-    });
-    snap
+    })
 }
 pub fn snap_facet_id_string_docids(index: &Index) -> String {
-    let snap = make_db_snap_from_iter!(index, facet_id_string_docids, |(
+    make_db_snap_from_iter!(index, facet_id_string_docids, |(
         FacetGroupKey { field_id, level, left_bound },
         FacetGroupValue { size, bitmap },
     )| {
         &format!("{field_id:<3} {level:<2} {left_bound:<12} {size:<2} {}", display_bitmap(&bitmap))
-    });
-    snap
+    })
 }
 pub fn snap_field_id_docid_facet_strings(index: &Index) -> String {
-    let snap = make_db_snap_from_iter!(index, field_id_docid_facet_strings, |(
+    make_db_snap_from_iter!(index, field_id_docid_facet_strings, |(
         (field_id, doc_id, string),
         other_string,
     )| {
         &format!("{field_id:<3} {doc_id:<4} {string:<12} {other_string}")
-    });
-    snap
+    })
 }
 pub fn snap_documents_ids(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
@@ -541,7 +517,8 @@ pub fn convert_snap_to_hash_if_needed<'snap>(
     snap: &'snap str,
     inline: bool,
 ) -> Vec<(String, Cow<'snap, str>)> {
-    let store_whole_snapshot = std::env::var("MILLI_TEST_FULL_SNAPS").unwrap_or("false".to_owned());
+    let store_whole_snapshot =
+        std::env::var("MILLI_TEST_FULL_SNAPS").unwrap_or_else(|_| "false".to_owned());
     let store_whole_snapshot: bool = store_whole_snapshot.parse().unwrap();
 
     let max_len = if inline { 256 } else { 2048 };

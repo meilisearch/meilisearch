@@ -56,12 +56,12 @@ impl Conf<'_> {
 }
 
 pub fn base_setup(conf: &Conf) -> Index {
-    match remove_dir_all(&conf.database_name) {
+    match remove_dir_all(conf.database_name) {
         Ok(_) => (),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
         Err(e) => panic!("{}", e),
     }
-    create_dir_all(&conf.database_name).unwrap();
+    create_dir_all(conf.database_name).unwrap();
 
     let mut options = EnvOpenOptions::new();
     options.map_size(100 * 1024 * 1024 * 1024); // 100 GB
@@ -142,7 +142,7 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
 
 pub fn documents_from(filename: &str, filetype: &str) -> DocumentsBatchReader<impl BufRead + Seek> {
     let reader =
-        File::open(filename).expect(&format!("could not find the dataset in: {}", filename));
+        File::open(filename).unwrap_or_else(|_| panic!("could not find the dataset in: {}", filename));
     let reader = BufReader::new(reader);
     let documents = match filetype {
         "csv" => documents_from_csv(reader).unwrap(),

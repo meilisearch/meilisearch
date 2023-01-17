@@ -30,7 +30,7 @@ fn setup_dir(path: impl AsRef<Path>) {
 
 fn setup_index() -> Index {
     let path = "benches.mmdb";
-    setup_dir(&path);
+    setup_dir(path);
     let mut options = EnvOpenOptions::new();
     options.map_size(100 * 1024 * 1024 * 1024); // 100 GB
     options.max_readers(10);
@@ -62,7 +62,7 @@ fn setup_settings<'t>(
     builder.execute(|_| (), || false).unwrap();
 }
 
-fn setup_index_with_settings<'t>(
+fn setup_index_with_settings(
     primary_key: &str,
     searchable_fields: &[&str],
     filterable_fields: &[&str],
@@ -121,7 +121,7 @@ fn indexing_songs_default(c: &mut Criterion) {
                 let sortable_fields = [];
 
                 setup_index_with_settings(
-                    &primary_key,
+                    primary_key,
                     &searchable_fields,
                     &filterable_fields,
                     &sortable_fields,
@@ -166,7 +166,7 @@ fn reindexing_songs_default(c: &mut Criterion) {
                 let sortable_fields = [];
 
                 let index = setup_index_with_settings(
-                    &primary_key,
+                    primary_key,
                     &searchable_fields,
                     &filterable_fields,
                     &sortable_fields,
@@ -232,7 +232,7 @@ fn deleting_songs_in_batches_default(c: &mut Criterion) {
                 let sortable_fields = [];
 
                 let index = setup_index_with_settings(
-                    &primary_key,
+                    primary_key,
                     &searchable_fields,
                     &filterable_fields,
                     &sortable_fields,
@@ -295,7 +295,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                 let sortable_fields = [];
 
                 let index = setup_index_with_settings(
-                    &primary_key,
+                    primary_key,
                     &searchable_fields,
                     &filterable_fields,
                     &sortable_fields,
@@ -377,7 +377,7 @@ fn indexing_songs_without_faceted_numbers(c: &mut Criterion) {
                 let sortable_fields = [];
 
                 setup_index_with_settings(
-                    &primary_key,
+                    primary_key,
                     &searchable_fields,
                     &filterable_fields,
                     &sortable_fields,
@@ -422,7 +422,7 @@ fn indexing_songs_without_faceted_fields(c: &mut Criterion) {
                 let sortable_fields = [];
 
                 setup_index_with_settings(
-                    &primary_key,
+                    primary_key,
                     &searchable_fields,
                     &filterable_fields,
                     &sortable_fields,
@@ -466,7 +466,7 @@ fn indexing_wiki(c: &mut Criterion) {
                 let sortable_fields = [];
 
                 setup_index_with_settings(
-                    &primary_key,
+                    primary_key,
                     &searchable_fields,
                     &filterable_fields,
                     &sortable_fields,
@@ -511,7 +511,7 @@ fn reindexing_wiki(c: &mut Criterion) {
                 let sortable_fields = [];
 
                 let index = setup_index_with_settings(
-                    &primary_key,
+                    primary_key,
                     &searchable_fields,
                     &filterable_fields,
                     &sortable_fields,
@@ -578,7 +578,7 @@ fn deleting_wiki_in_batches_default(c: &mut Criterion) {
                 let sortable_fields = [];
 
                 let index = setup_index_with_settings(
-                    &primary_key,
+                    primary_key,
                     &searchable_fields,
                     &filterable_fields,
                     &sortable_fields,
@@ -641,7 +641,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                 let sortable_fields = [];
 
                 let index = setup_index_with_settings(
-                    &primary_key,
+                    primary_key,
                     &searchable_fields,
                     &filterable_fields,
                     &sortable_fields,
@@ -732,7 +732,7 @@ fn indexing_movies_default(c: &mut Criterion) {
                 let sortable_fields = [];
 
                 setup_index_with_settings(
-                    &primary_key,
+                    primary_key,
                     &searchable_fields,
                     &filterable_fields,
                     &sortable_fields,
@@ -776,7 +776,7 @@ fn reindexing_movies_default(c: &mut Criterion) {
                 let sortable_fields = [];
 
                 let index = setup_index_with_settings(
-                    &primary_key,
+                    primary_key,
                     &searchable_fields,
                     &filterable_fields,
                     &sortable_fields,
@@ -841,7 +841,7 @@ fn deleting_movies_in_batches_default(c: &mut Criterion) {
                 let sortable_fields = [];
 
                 let index = setup_index_with_settings(
-                    &primary_key,
+                    primary_key,
                     &searchable_fields,
                     &filterable_fields,
                     &sortable_fields,
@@ -903,7 +903,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                 let sortable_fields = [];
 
                 let index = setup_index_with_settings(
-                    &primary_key,
+                    primary_key,
                     &searchable_fields,
                     &filterable_fields,
                     &sortable_fields,
@@ -1011,7 +1011,7 @@ fn indexing_nested_movies_default(c: &mut Criterion) {
                 let sortable_fields = ["popularity", "runtime", "vote_average", "release_date"];
 
                 setup_index_with_settings(
-                    &primary_key,
+                    primary_key,
                     &searchable_fields,
                     &filterable_fields,
                     &sortable_fields,
@@ -1078,7 +1078,7 @@ fn deleting_nested_movies_in_batches_default(c: &mut Criterion) {
                 let sortable_fields = ["popularity", "runtime", "vote_average", "release_date"];
 
                 let index = setup_index_with_settings(
-                    &primary_key,
+                    primary_key,
                     &searchable_fields,
                     &filterable_fields,
                     &sortable_fields,
@@ -1148,7 +1148,7 @@ fn indexing_nested_movies_without_faceted_fields(c: &mut Criterion) {
                 let sortable_fields = [];
 
                 setup_index_with_settings(
-                    &primary_key,
+                    primary_key,
                     &searchable_fields,
                     &filterable_fields,
                     &sortable_fields,
@@ -1192,7 +1192,7 @@ fn indexing_geo(c: &mut Criterion) {
                 let sortable_fields = ["_geo", "population", "elevation"];
 
                 setup_index_with_settings(
-                    &primary_key,
+                    primary_key,
                     &searchable_fields,
                     &filterable_fields,
                     &sortable_fields,
@@ -1237,7 +1237,7 @@ fn reindexing_geo(c: &mut Criterion) {
                 let sortable_fields = ["_geo", "population", "elevation"];
 
                 let index = setup_index_with_settings(
-                    &primary_key,
+                    primary_key,
                     &searchable_fields,
                     &filterable_fields,
                     &sortable_fields,
@@ -1304,7 +1304,7 @@ fn deleting_geo_in_batches_default(c: &mut Criterion) {
                 let sortable_fields = ["_geo", "population", "elevation"];
 
                 let index = setup_index_with_settings(
-                    &primary_key,
+                    primary_key,
                     &searchable_fields,
                     &filterable_fields,
                     &sortable_fields,

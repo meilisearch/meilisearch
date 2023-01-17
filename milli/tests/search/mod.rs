@@ -87,8 +87,8 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
 }
 
 pub fn internal_to_external_ids(index: &Index, internal_ids: &[DocumentId]) -> Vec<String> {
-    let mut rtxn = index.read_txn().unwrap();
-    let docid_map = index.external_documents_ids(&mut rtxn).unwrap();
+    let rtxn = index.read_txn().unwrap();
+    let docid_map = index.external_documents_ids(&rtxn).unwrap();
     let docid_map: std::collections::HashMap<_, _> =
         EXTERNAL_DOCUMENTS_IDS.iter().map(|id| (docid_map.get(id).unwrap(), id)).collect();
     internal_ids.iter().map(|id| docid_map.get(id).unwrap().to_string()).collect()
@@ -170,18 +170,16 @@ pub fn expected_order(
 fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
     let mut id = None;
     if let Some((field, filter)) = filter.split_once("!=") {
-        if field == "tag" && document.tag != filter {
-            id = Some(document.id.clone())
-        } else if field == "asc_desc_rank"
-            && Ok(&document.asc_desc_rank) != filter.parse::<u32>().as_ref()
+        if field == "tag" && document.tag != filter
+            || (field == "asc_desc_rank"
+                && Ok(&document.asc_desc_rank) != filter.parse::<u32>().as_ref())
         {
             id = Some(document.id.clone())
         }
     } else if let Some((field, filter)) = filter.split_once('=') {
-        if field == "tag" && document.tag == filter {
-            id = Some(document.id.clone())
-        } else if field == "asc_desc_rank"
-            && document.asc_desc_rank == filter.parse::<u32>().unwrap()
+        if field == "tag" && document.tag == filter
+            || (field == "asc_desc_rank"
+                && document.asc_desc_rank == filter.parse::<u32>().unwrap())
         {
             id = Some(document.id.clone())
         }

@@ -1539,7 +1539,9 @@ mod tests {
 
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
-        (0..5).for_each(|id| drop(builder.delete_external_id(&id.to_string())));
+        (0..5).for_each(|id| {
+            builder.delete_external_id(&id.to_string());
+        });
         builder.execute().unwrap();
 
         index

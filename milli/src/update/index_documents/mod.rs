@@ -1126,14 +1126,14 @@ mod tests {
             }))
             .unwrap();
 
-        let mut rtxn = index.read_txn().unwrap();
+        let rtxn = index.read_txn().unwrap();
 
-        assert!(index.word_docids.get(&mut rtxn, "0").unwrap().is_some());
-        assert!(index.word_docids.get(&mut rtxn, "64").unwrap().is_some());
-        assert!(index.word_docids.get(&mut rtxn, "256").unwrap().is_some());
-        assert!(index.word_docids.get(&mut rtxn, "1024").unwrap().is_some());
-        assert!(index.word_docids.get(&mut rtxn, "32768").unwrap().is_some());
-        assert!(index.word_docids.get(&mut rtxn, "65535").unwrap().is_some());
+        assert!(index.word_docids.get(&rtxn, "0").unwrap().is_some());
+        assert!(index.word_docids.get(&rtxn, "64").unwrap().is_some());
+        assert!(index.word_docids.get(&rtxn, "256").unwrap().is_some());
+        assert!(index.word_docids.get(&rtxn, "1024").unwrap().is_some());
+        assert!(index.word_docids.get(&rtxn, "32768").unwrap().is_some());
+        assert!(index.word_docids.get(&rtxn, "65535").unwrap().is_some());
     }
 
     #[test]

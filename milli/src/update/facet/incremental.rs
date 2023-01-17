@@ -882,6 +882,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::needless_range_loop)]
     fn delete_shuffled() {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
         let mut txn = index.env.write_txn().unwrap();

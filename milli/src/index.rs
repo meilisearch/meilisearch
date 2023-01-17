@@ -1297,7 +1297,7 @@ pub(crate) mod tests {
         pub fn delete_document(&self, external_document_id: &str) {
             let mut wtxn = self.write_txn().unwrap();
 
-            let mut delete = DeleteDocuments::new(&mut wtxn, &self).unwrap();
+            let mut delete = DeleteDocuments::new(&mut wtxn, self).unwrap();
             delete.strategy(self.index_documents_config.deletion_strategy);
 
             delete.delete_external_id(external_document_id);

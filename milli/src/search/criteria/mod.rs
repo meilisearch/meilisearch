@@ -964,7 +964,7 @@ pub mod test {
             let mut docid_words = HashMap::new();
             for (word, docids) in word_docids.iter() {
                 for docid in docids {
-                    let words = docid_words.entry(docid).or_insert(vec![]);
+                    let words: &mut Vec<_> = docid_words.entry(docid).or_default();
                     words.push(word.clone());
                 }
             }
@@ -996,9 +996,8 @@ pub mod test {
                             } else {
                                 (s(lword), s(rword), (lposition - rposition + 1) as i32)
                             };
-                            let docids = word_pair_proximity_docids
-                                .entry(key)
-                                .or_insert(RoaringBitmap::new());
+                            let docids: &mut RoaringBitmap =
+                                word_pair_proximity_docids.entry(key).or_default();
                             docids.push(candidate);
                         }
                     }
@@ -1015,15 +1014,13 @@ pub mod test {
                                 docid_words.iter().position(|w| w.starts_with(pword)).unwrap();
                             if lposition < rposition {
                                 let key = (s(lword), s(pword), (rposition - lposition) as i32);
-                                let docids = word_prefix_pair_proximity_docids
-                                    .entry(key)
-                                    .or_insert(RoaringBitmap::new());
+                                let docids: &mut RoaringBitmap =
+                                    word_prefix_pair_proximity_docids.entry(key).or_default();
                                 docids.push(candidate);
                             } else {
                                 let key = (s(lword), s(pword), (lposition - rposition) as i32);
-                                let docids = prefix_word_pair_proximity_docids
-                                    .entry(key)
-                                    .or_insert(RoaringBitmap::new());
+                                let docids: &mut RoaringBitmap =
+                                    prefix_word_pair_proximity_docids.entry(key).or_default();
                                 docids.push(candidate);
                             };
                         }

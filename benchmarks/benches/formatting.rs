@@ -55,7 +55,7 @@ fn bench_formatting(c: &mut criterion::Criterion) {
             group.bench_function(conf.name, |b| {
                 b.iter(|| {
                     let mut matcher = conf.matching_words.build(conf.text);
-                    matcher.format(option.clone());
+                    matcher.format(*option);
                 })
             });
         }

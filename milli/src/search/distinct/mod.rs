@@ -113,7 +113,7 @@ mod test {
         let fid = fields_map.id(distinct).unwrap();
 
         let documents = DocumentsBatchReader::from_reader(Cursor::new(JSON.as_slice())).unwrap();
-        let map = (0..documents.documents_count() as u32).collect();
+        let map = (0..documents.documents_count()).collect();
 
         txn.commit().unwrap();
 

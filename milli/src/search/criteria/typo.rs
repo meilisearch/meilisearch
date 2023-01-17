@@ -426,7 +426,7 @@ mod test {
         let parent = Initial::<NoopDistinct>::new(
             &context,
             query_tree,
-            Some(facet_candidates.clone()),
+            Some(facet_candidates),
             false,
             None,
         );
@@ -469,7 +469,7 @@ mod test {
         let parent = Initial::<NoopDistinct>::new(
             &context,
             Some(query_tree),
-            Some(facet_candidates.clone()),
+            Some(facet_candidates),
             false,
             None,
         );

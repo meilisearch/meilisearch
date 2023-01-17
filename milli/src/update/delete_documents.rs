@@ -659,7 +659,9 @@ mod tests {
         // Delete some documents.
         let mut builder = DeleteDocuments::new(wtxn, index).unwrap();
         builder.strategy(strategy);
-        external_ids.iter().for_each(|id| drop(builder.delete_external_id(id)));
+        external_ids.iter().for_each(|id| {
+            builder.delete_external_id(id);
+        });
         builder.execute().unwrap();
 
         ids_to_delete

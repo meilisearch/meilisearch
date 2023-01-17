@@ -177,11 +177,10 @@ mod tests {
                 |facet, count, _| {
                     let facet = OrderedF64Codec::bytes_decode(facet).unwrap();
                     if nbr_facets == 100 {
-                        return Ok(ControlFlow::Break(()));
+                        Ok(ControlFlow::Break(()))
                     } else {
                         nbr_facets += 1;
                         results.push_str(&format!("{facet}: {count}\n"));
-
                         Ok(ControlFlow::Continue(()))
                     }
                 },

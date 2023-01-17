@@ -348,9 +348,9 @@ fn criteria_mixup() {
         builder.execute(|_| (), || false).unwrap();
         wtxn.commit().unwrap();
 
-        let mut rtxn = index.read_txn().unwrap();
+        let rtxn = index.read_txn().unwrap();
 
-        let mut search = Search::new(&mut rtxn, &index);
+        let mut search = Search::new(&rtxn, &index);
         search.query(search::TEST_QUERY);
         search.limit(EXTERNAL_DOCUMENTS_IDS.len());
         search.terms_matching_strategy(ALLOW_OPTIONAL_WORDS);
@@ -440,9 +440,9 @@ fn criteria_ascdesc() {
         builder.execute(|_| (), || false).unwrap();
         wtxn.commit().unwrap();
 
-        let mut rtxn = index.read_txn().unwrap();
+        let rtxn = index.read_txn().unwrap();
 
-        let mut search = Search::new(&mut rtxn, &index);
+        let mut search = Search::new(&rtxn, &index);
         search.limit(ASC_DESC_CANDIDATES_THRESHOLD + 1);
 
         let SearchResult { documents_ids, .. } = search.execute().unwrap();
