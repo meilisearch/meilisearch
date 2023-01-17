@@ -1,6 +1,6 @@
 [package]
 name = "json-depth-checker"
-version = "0.39.0"
+version = "0.39.1"
 edition = "2021"
 description = "A library that indicates if a JSON must be flattened"
 publish = false
