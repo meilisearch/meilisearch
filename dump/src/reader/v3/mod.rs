@@ -112,7 +112,6 @@ impl V3Reader {
     pub fn indexes(&self) -> Result<impl Iterator<Item = Result<V3IndexReader>> + '_> {
         Ok(self.index_uuid.iter().map(|index| -> Result<_> {
             V3IndexReader::new(
-                index.uid.clone(),
                 &self.dump.path().join("indexes").join(index.uuid.to_string()),
                 &index,
                 BufReader::new(
@@ -160,43 +159,42 @@ pub struct V3IndexReader {
 }
 
 impl V3IndexReader {
-    pub fn new(
-        name: String,
-        path: &Path,
-        index_uuid: &IndexUuid,
-        tasks: BufReader<File>,
-    ) -> Result<Self> {
+    pub fn new(path: &Path, index_uuid: &IndexUuid, tasks: BufReader<File>) -> Result<Self> {
         let meta = File::open(path.join("meta.json"))?;
         let meta: DumpMeta = serde_json::from_reader(meta)?;
 
-        let mut created_entry = (u64::MAX, None);
-        let mut updated_entry = (u64::MIN, None);
+        let mut created_at = None;
+        let mut updated_at = None;
 
         for line in tasks.lines() {
             let task: Task = serde_json::from_str(&line?)?;
 
-            if &task.uuid == &index_uuid.uuid {
-                let update_id = task.update.id();
+            if task.uuid != index_uuid.uuid || !task.is_finished() {
+                continue;
+            }
 
-                if update_id <= created_entry.0 {
-                    created_entry.0 = update_id;
-                    created_entry.1 = task.update.created_at();
-                }
+            let new_created_at = match task.update.meta() {
+                Kind::DocumentAddition { .. } | Kind::Settings(_) => task.update.finished_at(),
+                _ => None,
+            };
+            let new_updated_at = task.update.finished_at();
 
-                if update_id >= updated_entry.0 {
-                    updated_entry.0 = update_id;
-                    updated_entry.1 = task.update.processed_at();
-                }
+            if created_at.is_none() || created_at > new_created_at {
+                created_at = new_created_at;
+            }
+
+            if updated_at.is_none() || updated_at < new_updated_at {
+                updated_at = new_updated_at;
             }
         }
 
         let current_time = OffsetDateTime::now_utc();
 
         let metadata = IndexMetadata {
-            uid: name,
+            uid: index_uuid.uid.clone(),
             primary_key: meta.primary_key,
-            created_at: created_entry.1.unwrap_or(current_time),
-            updated_at: updated_entry.1.unwrap_or(current_time),
+            created_at: created_at.unwrap_or(current_time),
+            updated_at: updated_at.unwrap_or(current_time),
         };
 
         let ret = V3IndexReader {
@@ -299,7 +297,7 @@ pub(crate) mod test {
         {
           "uid": "products",
           "primaryKey": "sku",
-          "createdAt": "2022-10-07T11:38:54.734594617Z",
+          "createdAt": "2022-10-07T11:38:54.74389899Z",
           "updatedAt": "2022-10-07T11:38:55.963185778Z"
         }
         "###);
@@ -314,7 +312,7 @@ pub(crate) mod test {
         {
           "uid": "movies",
           "primaryKey": "id",
-          "createdAt": "2022-10-07T11:38:54.004402239Z",
+          "createdAt": "2022-10-07T11:38:54.026649575Z",
           "updatedAt": "2022-10-07T11:39:04.188852537Z"
         }
         "###);
@@ -325,11 +323,11 @@ pub(crate) mod test {
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"d153b5a81d8b3cdcbe1dec270b574022");
 
         // movies2
-        insta::assert_json_snapshot!(movies2.metadata(), { ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(movies2.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
         {
           "uid": "movies_2",
           "primaryKey": null,
-          "createdAt": "2022-10-07T11:39:03.703667164Z",
+          "createdAt": "[now]",
           "updatedAt": "[now]"
         }
         "###);
@@ -344,7 +342,7 @@ pub(crate) mod test {
         {
           "uid": "dnd_spells",
           "primaryKey": "index",
-          "createdAt": "2022-10-07T11:38:56.263041061Z",
+          "createdAt": "2022-10-07T11:38:56.265951133Z",
           "updatedAt": "2022-10-07T11:38:56.521004328Z"
         }
         "###);

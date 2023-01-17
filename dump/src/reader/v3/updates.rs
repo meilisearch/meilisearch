@@ -75,7 +75,7 @@ impl UpdateStatus {
         }
     }
 
-    pub fn created_at(&self) -> Option<OffsetDateTime> {
+    pub fn enqueued_at(&self) -> Option<OffsetDateTime> {
         match self {
             UpdateStatus::Processing(u) => Some(u.from.enqueued_at.clone()),
             UpdateStatus::Enqueued(u) => Some(u.enqueued_at.clone()),
@@ -85,9 +85,9 @@ impl UpdateStatus {
         }
     }
 
-    pub fn processed_at(&self) -> Option<OffsetDateTime> {
+    pub fn finished_at(&self) -> Option<OffsetDateTime> {
         match self {
-            UpdateStatus::Processing(u) => Some(u.started_processing_at.clone()),
+            UpdateStatus::Processing(_) => None,
             UpdateStatus::Enqueued(_) => None,
             UpdateStatus::Processed(u) => Some(u.processed_at.clone()),
             UpdateStatus::Aborted(_) => None,
