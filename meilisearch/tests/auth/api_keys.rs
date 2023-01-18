@@ -1080,14 +1080,14 @@ async fn patch_api_key_description() {
 
     let uid = response["uid"].as_str().unwrap();
 
-    // Add a description
-    let content = json!({ "description": "Indexing API key" });
+    // Add a description and a name
+    let content = json!({ "description": "Indexing API key", "name": "bob" });
 
     thread::sleep(time::Duration::new(1, 0));
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
     {
-      "name": null,
+      "name": "bob",
       "description": "Indexing API key",
       "key": "[ignored]",
       "uid": "[ignored]",
@@ -1233,15 +1233,15 @@ async fn patch_api_key_name() {
     let created_at = response["createdAt"].as_str().unwrap();
     let updated_at = response["updatedAt"].as_str().unwrap();
 
-    // Add a name
-    let content = json!({ "name": "Indexing API key" });
+    // Add a name and description
+    let content = json!({ "name": "Indexing API key", "description": "The doggoscription" });
 
     thread::sleep(time::Duration::new(1, 0));
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
     {
       "name": "Indexing API key",
-      "description": null,
+      "description": "The doggoscription",
       "key": "[ignored]",
       "uid": "[ignored]",
       "actions": [
@@ -1302,7 +1302,7 @@ async fn patch_api_key_name() {
     meili_snap::snapshot!(code, @"200 OK");
 
     // Remove the name
-    let content = json!({ "name": serde_json::Value::Null });
+    let content = json!({ "name": null });
 
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
