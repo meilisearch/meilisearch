@@ -13,7 +13,6 @@
 </h4>
 
 <p align="center">
-  <a href="https://github.com/meilisearch/meilisearch/actions"><img src="https://github.com/meilisearch/meilisearch/workflows/Cargo%20test/badge.svg" alt="Build Status"></a>
   <a href="https://deps.rs/repo/github/meilisearch/meilisearch"><img src="https://deps.rs/repo/github/meilisearch/meilisearch/status.svg" alt="Dependency status"></a>
   <a href="https://github.com/meilisearch/meilisearch/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-informational" alt="License"></a>
   <a href="https://app.bors.tech/repositories/26457"><img src="https://bors.tech/images/badge_small.svg" alt="Bors enabled"></a>
