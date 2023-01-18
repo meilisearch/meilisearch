@@ -1,0 +1,27 @@
+[package]
+name = "flatten-serde-json-fuzz"
+version = "0.0.0"
+authors = ["Automatically generated"]
+publish = false
+edition = "2018"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary-json = "0.1.1"
+json-depth-checker = { path = "../../json-depth-checker" }
+
+[dependencies.flatten-serde-json]
+path = ".."
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "flatten"
+path = "fuzz_targets/flatten.rs"
+test = false
+doc = false

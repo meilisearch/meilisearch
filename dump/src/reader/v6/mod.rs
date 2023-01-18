@@ -26,7 +26,7 @@ pub type Kind = crate::KindDump;
 pub type Details = meilisearch_types::tasks::Details;
 
 // everything related to the settings
-pub type Setting<T> = meilisearch_types::settings::Setting<T>;
+pub type Setting<T> = meilisearch_types::milli::update::Setting<T>;
 pub type TypoTolerance = meilisearch_types::settings::TypoSettings;
 pub type MinWordSizeForTypos = meilisearch_types::settings::MinWordSizeTyposSetting;
 pub type FacetingSettings = meilisearch_types::settings::FacetingSettings;
@@ -40,6 +40,7 @@ pub type IndexUid = meilisearch_types::index_uid::IndexUid;
 // everything related to the errors
 pub type ResponseError = meilisearch_types::error::ResponseError;
 pub type Code = meilisearch_types::error::Code;
+pub type RankingRuleView = meilisearch_types::settings::RankingRuleView;
 
 pub struct V6Reader {
     dump: TempDir,

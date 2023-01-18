@@ -1,0 +1,10 @@
+---
+source: milli/src/update/prefix_word_pairs/mod.rs
+---
+5                [51, ]
+am               [51, ]
+at               [51, ]
+bell             [51, ]
+rings            [51, ]
+the              [51, ]
+

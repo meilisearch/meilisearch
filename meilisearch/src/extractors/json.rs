@@ -32,7 +32,7 @@ impl<T, E> ValidatedJson<T, E> {
 
 impl<T, E> FromRequest for ValidatedJson<T, E>
 where
-    E: DeserializeError + ErrorCode + 'static,
+    E: DeserializeError + ErrorCode + std::error::Error + 'static,
     T: DeserializeFromValue<E>,
 {
     type Error = actix_web::Error;
@@ -55,7 +55,7 @@ pub struct ValidatedJsonExtractFut<T, E> {
 impl<T, E> Future for ValidatedJsonExtractFut<T, E>
 where
     T: DeserializeFromValue<E>,
-    E: DeserializeError + ErrorCode + 'static,
+    E: DeserializeError + ErrorCode + std::error::Error + 'static,
 {
     type Output = Result<ValidatedJson<T, E>, actix_web::Error>;
 

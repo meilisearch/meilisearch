@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use super::{find_user_id, Analytics, DocumentDeletionKind};
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
-use crate::routes::tasks::TasksFilterQueryRaw;
+use crate::routes::tasks::TasksFilterQuery;
 use crate::Opt;
 
 pub struct MockAnalytics {
@@ -58,6 +58,6 @@ impl Analytics for MockAnalytics {
         _request: &HttpRequest,
     ) {
     }
-    fn get_tasks(&self, _query: &TasksFilterQueryRaw, _request: &HttpRequest) {}
+    fn get_tasks(&self, _query: &TasksFilterQuery, _request: &HttpRequest) {}
     fn health_seen(&self, _request: &HttpRequest) {}
 }

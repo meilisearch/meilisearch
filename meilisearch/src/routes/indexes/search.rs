@@ -5,7 +5,8 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::IndexScheduler;
 use log::debug;
 use meilisearch_auth::IndexSearchRules;
-use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::error::{DeserrError, ResponseError, TakeErrorMessage};
 use serde_cs::vec::CS;
 use serde_json::Value;
 
@@ -15,11 +16,11 @@ use crate::extractors::authentication::GuardedData;
 use crate::extractors::json::ValidatedJson;
 use crate::extractors::query_parameters::QueryParameter;
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::from_string_to_option;
+use crate::routes::from_string_to_option_take_error_message;
 use crate::search::{
-    perform_search, MatchingStrategy, SearchDeserError, SearchQuery, DEFAULT_CROP_LENGTH,
-    DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
-    DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
+    perform_search, MatchingStrategy, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
+    DEFAULT_SEARCH_OFFSET,
 };
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -30,35 +31,54 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
+pub fn parse_usize_take_error_message(
+    s: &str,
+) -> Result<usize, TakeErrorMessage<std::num::ParseIntError>> {
+    usize::from_str(s).map_err(TakeErrorMessage)
+}
+
+pub fn parse_bool_take_error_message(
+    s: &str,
+) -> Result<bool, TakeErrorMessage<std::str::ParseBoolError>> {
+    s.parse().map_err(TakeErrorMessage)
+}
+
 #[derive(Debug, deserr::DeserializeFromValue)]
-#[deserr(rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQueryGet {
+    #[deserr(error = DeserrError<InvalidSearchQ>)]
     q: Option<String>,
-    #[deserr(default = DEFAULT_SEARCH_OFFSET(), from(&String) = FromStr::from_str -> std::num::ParseIntError)]
+    #[deserr(error = DeserrError<InvalidSearchOffset>, default = DEFAULT_SEARCH_OFFSET(), from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
     offset: usize,
-    #[deserr(default = DEFAULT_SEARCH_LIMIT(), from(&String) = FromStr::from_str -> std::num::ParseIntError)]
+    #[deserr(error = DeserrError<InvalidSearchLimit>, default = DEFAULT_SEARCH_LIMIT(), from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
     limit: usize,
-    #[deserr(from(&String) = from_string_to_option -> std::num::ParseIntError)]
+    #[deserr(error = DeserrError<InvalidSearchPage>, from(&String) = from_string_to_option_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
     page: Option<usize>,
-    #[deserr(from(&String) = from_string_to_option -> std::num::ParseIntError)]
+    #[deserr(error = DeserrError<InvalidSearchHitsPerPage>, from(&String) = from_string_to_option_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
     hits_per_page: Option<usize>,
+    #[deserr(error = DeserrError<InvalidSearchAttributesToRetrieve>)]
     attributes_to_retrieve: Option<CS<String>>,
+    #[deserr(error = DeserrError<InvalidSearchAttributesToCrop>)]
     attributes_to_crop: Option<CS<String>>,
-    #[deserr(default = DEFAULT_CROP_LENGTH(), from(&String) = FromStr::from_str -> std::num::ParseIntError)]
+    #[deserr(error = DeserrError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH(), from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
     crop_length: usize,
+    #[deserr(error = DeserrError<InvalidSearchAttributesToHighlight>)]
     attributes_to_highlight: Option<CS<String>>,
+    #[deserr(error = DeserrError<InvalidSearchFilter>)]
     filter: Option<String>,
+    #[deserr(error = DeserrError<InvalidSearchSort>)]
     sort: Option<String>,
-    #[deserr(default, from(&String) = FromStr::from_str -> std::str::ParseBoolError)]
+    #[deserr(error = DeserrError<InvalidSearchShowMatchesPosition>, default, from(&String) = parse_bool_take_error_message -> TakeErrorMessage<std::str::ParseBoolError>)]
     show_matches_position: bool,
+    #[deserr(error = DeserrError<InvalidSearchFacets>)]
     facets: Option<CS<String>>,
-    #[deserr(default = DEFAULT_HIGHLIGHT_PRE_TAG())]
+    #[deserr(error = DeserrError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
     highlight_pre_tag: String,
-    #[deserr(default = DEFAULT_HIGHLIGHT_POST_TAG())]
+    #[deserr(error = DeserrError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
     highlight_post_tag: String,
-    #[deserr(default = DEFAULT_CROP_MARKER())]
+    #[deserr(error = DeserrError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
     crop_marker: String,
-    #[deserr(default)]
+    #[deserr(error = DeserrError<InvalidSearchMatchingStrategy>, default)]
     matching_strategy: MatchingStrategy,
 }
 
@@ -142,7 +162,7 @@ fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 pub async fn search_with_url_query(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    params: QueryParameter<SearchQueryGet, SearchDeserError>,
+    params: QueryParameter<SearchQueryGet, DeserrError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -174,7 +194,7 @@ pub async fn search_with_url_query(
 pub async fn search_with_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    params: ValidatedJson<SearchQuery, SearchDeserError>,
+    params: ValidatedJson<SearchQuery, DeserrError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {

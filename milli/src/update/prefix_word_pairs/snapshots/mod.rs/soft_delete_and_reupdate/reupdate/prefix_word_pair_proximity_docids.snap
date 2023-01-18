@@ -1,0 +1,17 @@
+---
+source: milli/src/update/prefix_word_pairs/mod.rs
+---
+1  a    5                [51, ]
+1  a    amazing          [50, ]
+1  a    an               [50, ]
+1  a    and              [50, ]
+1  a    beautiful        [50, ]
+1  b    house            [50, ]
+1  b    rings            [51, ]
+2  a    am               [51, ]
+2  a    amazing          [50, ]
+2  a    and              [50, ]
+2  a    beautiful        [50, ]
+2  a    house            [50, ]
+2  b    at               [51, ]
+

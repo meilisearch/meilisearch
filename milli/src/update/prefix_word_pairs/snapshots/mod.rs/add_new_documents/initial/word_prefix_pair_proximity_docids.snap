@@ -1,0 +1,26 @@
+---
+source: milli/src/update/prefix_word_pairs/mod.rs
+---
+1  5                a    [101, ]
+1  amazing          a    [100, ]
+1  an               a    [100, ]
+1  and              b    [100, ]
+1  and              be   [100, ]
+1  at               a    [100, ]
+1  rings            a    [101, ]
+1  the              b    [101, ]
+1  the              be   [101, ]
+2  amazing          b    [100, ]
+2  amazing          be   [100, ]
+2  an               a    [100, ]
+2  at               a    [100, 101, ]
+2  bell             a    [101, ]
+3  an               b    [100, ]
+3  an               be   [100, ]
+3  at               a    [100, ]
+3  rings            a    [101, ]
+3  the              a    [101, ]
+4  at               b    [100, ]
+4  at               be   [100, ]
+4  bell             a    [101, ]
+

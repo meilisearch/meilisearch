@@ -9,6 +9,11 @@ members = [
     "dump",
     "file-store",
     "permissive-json-pointer",
+    "milli",
+    "filter-parser",
+    "flatten-serde-json",
+    "json-depth-checker",
+    "benchmarks"
 ]
 
 [profile.release]
@@ -17,5 +22,28 @@ codegen-units = 1
 [profile.dev.package.flate2]
 opt-level = 3
 
-[profile.dev.package.milli]
+[profile.dev.package.grenad]
+opt-level = 3
+[profile.dev.package.roaring]
+opt-level = 3
+
+[profile.dev.package.lindera-ipadic-builder]
+opt-level = 3
+[profile.dev.package.encoding]
+opt-level = 3
+[profile.dev.package.yada]
+opt-level = 3
+
+[profile.release.package.lindera-ipadic-builder]
+opt-level = 3
+[profile.release.package.encoding]
+opt-level = 3
+[profile.release.package.yada]
+opt-level = 3
+
+[profile.bench.package.lindera-ipadic-builder]
+opt-level = 3
+[profile.bench.package.encoding]
+opt-level = 3
+[profile.bench.package.yada]
 opt-level = 3

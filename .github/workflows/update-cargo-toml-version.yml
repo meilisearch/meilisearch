@@ -13,7 +13,6 @@ env:
   GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
 
 jobs:
-
   update-version-cargo-toml:
     name: Update version in Cargo.toml files
     runs-on: ubuntu-latest

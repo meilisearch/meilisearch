@@ -1,0 +1,80 @@
+[package]
+name = "milli"
+version = "1.0.0"
+authors = ["Kerollmops <clement@meilisearch.com>"]
+edition = "2018"
+
+[dependencies]
+bimap = { version = "0.6.2", features = ["serde"] }
+bincode = "1.3.3"
+bstr = "1.0.1"
+byteorder = "1.4.3"
+charabia = { version = "0.7.0", default-features = false }
+concat-arrays = "0.1.2"
+crossbeam-channel = "0.5.6"
+deserr = "0.1.4"
+either = "1.8.0"
+flatten-serde-json = { path = "../flatten-serde-json" }
+fst = "0.4.7"
+fxhash = "0.2.1"
+geoutils = "0.5.1"
+grenad = { version = "0.4.3", default-features = false, features = ["tempfile"] }
+heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.4", default-features = false, features = ["lmdb", "sync-read-txn"] }
+json-depth-checker = { path = "../json-depth-checker" }
+levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
+memmap2 = "0.5.7"
+obkv = "0.2.0"
+once_cell = "1.15.0"
+ordered-float = "3.2.0"
+rayon = "1.5.3"
+roaring = "0.10.1"
+rstar = { version = "0.9.3", features = ["serde"] }
+serde = { version = "1.0.145", features = ["derive"] }
+serde_json = { version = "1.0.85", features = ["preserve_order"] }
+slice-group-by = "0.3.0"
+smallstr =  { version = "0.3.0", features = ["serde"] }
+smallvec = "1.10.0"
+smartstring = "1.0.1"
+tempfile = "3.3.0"
+thiserror = "1.0.37"
+time = { version = "0.3.15", features = ["serde-well-known", "formatting", "parsing", "macros"] }
+uuid = { version = "1.1.2", features = ["v4"] }
+
+filter-parser = { path = "../filter-parser" }
+
+# documents words self-join
+itertools = "0.10.5"
+
+# logging
+log = "0.4.17"
+logging_timer = "1.1.0"
+csv = "1.1.6"
+
+[dev-dependencies]
+big_s = "1.0.2"
+insta = "1.21.0"
+maplit = "1.0.2"
+md5 = "0.7.0"
+rand = {version = "0.8.5", features = ["small_rng"] }
+
+[target.'cfg(fuzzing)'.dev-dependencies]
+fuzzcheck = "0.12.1"
+
+[features]
+default = [ "charabia/default" ]
+
+# allow chinese specialized tokenization
+chinese = ["charabia/chinese"]
+
+# allow hebrew specialized tokenization
+hebrew = ["charabia/hebrew"]
+
+# allow japanese specialized tokenization
+japanese = ["charabia/japanese"]
+japanese-transliteration = ["charabia/japanese-transliteration"]
+
+# allow korean specialized tokenization
+korean = ["charabia/korean"]
+
+# allow thai specialized tokenization
+thai = ["charabia/thai"]

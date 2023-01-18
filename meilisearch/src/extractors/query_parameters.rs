@@ -22,7 +22,7 @@ impl<T, E> QueryParameter<T, E> {
 impl<T, E> QueryParameter<T, E>
 where
     T: DeserializeFromValue<E>,
-    E: DeserializeError + ErrorCode + 'static,
+    E: DeserializeError + ErrorCode + std::error::Error + 'static,
 {
     pub fn from_query(query_str: &str) -> Result<Self, actix_web::Error> {
         let value = serde_urlencoded::from_str::<serde_json::Value>(query_str)
@@ -58,7 +58,7 @@ impl<T: fmt::Display, E> fmt::Display for QueryParameter<T, E> {
 impl<T, E> FromRequest for QueryParameter<T, E>
 where
     T: DeserializeFromValue<E>,
-    E: DeserializeError + ErrorCode + 'static,
+    E: DeserializeError + ErrorCode + std::error::Error + 'static,
 {
     type Error = actix_web::Error;
     type Future = Ready<Result<Self, actix_web::Error>>;

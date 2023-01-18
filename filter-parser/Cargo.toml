@@ -1,0 +1,13 @@
+[package]
+name = "filter-parser"
+version = "1.0.0"
+edition = "2021"
+description = "The parser for the Meilisearch filter syntax"
+publish = false
+
+[dependencies]
+nom = "7.1.1"
+nom_locate = "4.0.0"
+
+[dev-dependencies]
+insta = "1.21.0"
