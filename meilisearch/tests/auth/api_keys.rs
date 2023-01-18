@@ -1119,7 +1119,7 @@ async fn patch_api_key_description() {
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
     {
-      "name": null,
+      "name": "bob",
       "description": "Product API key",
       "key": "[ignored]",
       "uid": "[ignored]",
@@ -1151,7 +1151,7 @@ async fn patch_api_key_description() {
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
     {
-      "name": null,
+      "name": "bob",
       "description": null,
       "key": "[ignored]",
       "uid": "[ignored]",
@@ -1276,7 +1276,7 @@ async fn patch_api_key_name() {
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
     {
       "name": "Product API key",
-      "description": null,
+      "description": "The doggoscription",
       "key": "[ignored]",
       "uid": "[ignored]",
       "actions": [
@@ -1308,7 +1308,7 @@ async fn patch_api_key_name() {
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
     {
       "name": null,
-      "description": null,
+      "description": "The doggoscription",
       "key": "[ignored]",
       "uid": "[ignored]",
       "actions": [

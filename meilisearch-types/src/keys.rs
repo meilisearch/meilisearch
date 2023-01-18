@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use deserr::{DeserializeError, DeserializeFromValue, ValuePointerRef};
 use enum_iterator::Sequence;
+use milli::update::Setting;
 use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
 use time::macros::{format_description, time};
@@ -78,9 +79,9 @@ fn deny_immutable_fields_api_key(
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_api_key)]
 pub struct PatchApiKey {
     #[deserr(default, error = DeserrJsonError<InvalidApiKeyDescription>)]
-    pub description: Option<String>,
+    pub description: Setting<String>,
     #[deserr(default, error = DeserrJsonError<InvalidApiKeyName>)]
-    pub name: Option<String>,
+    pub name: Setting<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
