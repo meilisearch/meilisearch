@@ -155,6 +155,11 @@ impl Index<'_> {
         self.service.get(url).await
     }
 
+    pub async fn get_all_documents_raw(&self, options: &str) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/documents{}", urlencode(self.uid.as_ref()), options);
+        self.service.get(url).await
+    }
+
     pub async fn get_all_documents(&self, options: GetAllDocumentsOptions) -> (Value, StatusCode) {
         let mut url = format!("/indexes/{}/documents?", urlencode(self.uid.as_ref()));
         if let Some(limit) = options.limit {
@@ -185,6 +190,11 @@ impl Index<'_> {
     pub async fn delete_batch(&self, ids: Vec<u64>) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/documents/delete-batch", urlencode(self.uid.as_ref()));
         self.service.post_encoded(url, serde_json::to_value(&ids).unwrap(), self.encoder).await
+    }
+
+    pub async fn delete_batch_raw(&self, body: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/documents/delete-batch", urlencode(self.uid.as_ref()));
+        self.service.post_encoded(url, body, self.encoder).await
     }
 
     pub async fn settings(&self) -> (Value, StatusCode) {
