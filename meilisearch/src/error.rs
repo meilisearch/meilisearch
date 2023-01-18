@@ -24,8 +24,8 @@ pub enum MeilisearchHttpError {
     MissingPayload(PayloadType),
     #[error("The provided payload reached the size limit.")]
     PayloadTooLarge,
-    #[error("Two indexes must be given for each swap. The list `{:?}` contains {} indexes.",
-        .0, .0.len()
+    #[error("Two indexes must be given for each swap. The list `[{}]` contains {} indexes.",
+        .0.iter().map(|uid| format!("\"{uid}\"")).collect::<Vec<_>>().join(", "), .0.len()
     )]
     SwapIndexPayloadWrongLength(Vec<IndexUid>),
     #[error(transparent)]
