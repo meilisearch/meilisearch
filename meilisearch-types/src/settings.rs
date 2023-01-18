@@ -67,7 +67,7 @@ fn validate_min_word_size_for_typo_setting<E: DeserializeError>(
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, DeserializeFromValue)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-#[deserr(deny_unknown_fields, rename_all = camelCase, validate = validate_min_word_size_for_typo_setting -> DeserrJsonError<InvalidMinWordLengthForTypo>)]
+#[deserr(deny_unknown_fields, rename_all = camelCase, validate = validate_min_word_size_for_typo_setting -> DeserrJsonError<InvalidSettingsTypoTolerance>)]
 pub struct MinWordSizeTyposSetting {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
@@ -79,13 +79,13 @@ pub struct MinWordSizeTyposSetting {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, DeserializeFromValue)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-#[deserr(deny_unknown_fields, rename_all = camelCase, where_predicate = __Deserr_E: deserr::MergeWithError<DeserrJsonError<InvalidMinWordLengthForTypo>>)]
+#[deserr(deny_unknown_fields, rename_all = camelCase, where_predicate = __Deserr_E: deserr::MergeWithError<DeserrJsonError<InvalidSettingsTypoTolerance>>)]
 pub struct TypoSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     pub enabled: Setting<bool>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidMinWordLengthForTypo>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsTypoTolerance>)]
     pub min_word_size_for_typos: Setting<MinWordSizeTyposSetting>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
