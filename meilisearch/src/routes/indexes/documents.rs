@@ -128,11 +128,11 @@ pub async fn delete_document(
 #[derive(Debug, DeserializeFromValue)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct BrowseQuery {
-    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentOffset>)]
     offset: Param<usize>,
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidDocumentLimit>)]
     limit: Param<usize>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentLimit>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
     fields: OptionStarOrList<String>,
 }
 

@@ -502,12 +502,21 @@ impl IndexScheduler {
         }
 
         if let Some(canceled_by) = &query.canceled_by {
+            let mut all_canceled_tasks = RoaringBitmap::new();
             for cancel_task_uid in canceled_by {
                 if let Some(canceled_by_uid) =
                     self.canceled_by.get(rtxn, &BEU32::new(*cancel_task_uid))?
                 {
-                    tasks &= canceled_by_uid;
+                    all_canceled_tasks |= canceled_by_uid;
                 }
+            }
+
+            // if the canceled_by has been specified but no task
+            // matches then we prefer matching zero than all tasks.
+            if all_canceled_tasks.is_empty() {
+                return Ok(RoaringBitmap::new());
+            } else {
+                tasks &= all_canceled_tasks;
             }
         }
 

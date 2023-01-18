@@ -1077,7 +1077,7 @@ async fn batch_several_documents_addition() {
     futures::future::join_all(waiter).await;
     index.wait_task(9).await;
 
-    let (response, _code) = index.filtered_tasks(&[], &["failed"]).await;
+    let (response, _code) = index.filtered_tasks(&[], &["failed"], &[]).await;
 
     // Check if only the 6th task failed
     println!("{}", &response);
