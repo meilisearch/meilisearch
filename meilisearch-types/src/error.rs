@@ -224,7 +224,6 @@ InvalidIndexLimit                     , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexOffset                    , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexPrimaryKey                , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexUid                       , InvalidRequest       , BAD_REQUEST ;
-InvalidMinWordLengthForTypo           , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToCrop         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToHighlight    , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToRetrieve     , InvalidRequest       , BAD_REQUEST ;
@@ -334,7 +333,7 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidGeoField { .. } => Code::InvalidDocumentGeoField,
                     UserError::SortError(_) => Code::InvalidSearchSort,
                     UserError::InvalidMinTypoWordLenSetting(_, _) => {
-                        Code::InvalidMinWordLengthForTypo
+                        Code::InvalidSettingsTypoTolerance
                     }
                 }
             }

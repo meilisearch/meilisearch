@@ -260,7 +260,7 @@ impl From<v5::ResponseError> for v6::ResponseError {
             "index_already_exists" => v6::Code::IndexAlreadyExists,
             "index_not_found" => v6::Code::IndexNotFound,
             "invalid_index_uid" => v6::Code::InvalidIndexUid,
-            "invalid_min_word_length_for_typo" => v6::Code::InvalidMinWordLengthForTypo,
+            "invalid_min_word_length_for_typo" => v6::Code::InvalidSettingsTypoTolerance,
             "invalid_state" => v6::Code::InvalidState,
             "primary_key_inference_failed" => v6::Code::IndexPrimaryKeyNoCandidateFound,
             "index_primary_key_already_exists" => v6::Code::IndexPrimaryKeyAlreadyExists,

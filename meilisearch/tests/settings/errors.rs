@@ -243,11 +243,38 @@ async fn settings_bad_typo_tolerance() {
     }
     "###);
 
+    let (response, code) =
+        index.update_settings(json!({ "typoTolerance": { "minWordSizeForTypos": "doggo" }})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.typoTolerance.minWordSizeForTypos`: expected an object, but found a string: `\"doggo\"`",
+      "code": "invalid_settings_typo_tolerance",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-settings-typo-tolerance"
+    }
+    "###);
+
     let (response, code) = index.update_settings_typo_tolerance(json!("doggo")).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
       "message": "Invalid value type: expected an object, but found a string: `\"doggo\"`",
+      "code": "invalid_settings_typo_tolerance",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-settings-typo-tolerance"
+    }
+    "###);
+
+    let (response, code) = index
+        .update_settings_typo_tolerance(
+            json!({ "typoTolerance": { "minWordSizeForTypos": "doggo" }}),
+        )
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Unknown field `typoTolerance`: expected one of `enabled`, `minWordSizeForTypos`, `disableOnWords`, `disableOnAttributes`",
       "code": "invalid_settings_typo_tolerance",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-settings-typo-tolerance"
