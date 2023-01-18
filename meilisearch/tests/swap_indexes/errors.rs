@@ -11,7 +11,7 @@ async fn swap_indexes_bad_format() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Sequence at ``.",
+      "message": "Invalid value type: expected an array, but found a string: `\"doggo\"`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad-request"
@@ -21,7 +21,7 @@ async fn swap_indexes_bad_format() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Map at `[0]`.",
+      "message": "Invalid value type at `[0]`: expected an object, but found a string: `\"doggo\"`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad-request"
@@ -37,7 +37,7 @@ async fn swap_indexes_bad_indexes() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Sequence at `[0].indexes`.",
+      "message": "Invalid value type at `[0].indexes`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_swap_indexes",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-swap-indexes"
@@ -47,7 +47,7 @@ async fn swap_indexes_bad_indexes() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Two indexes must be given for each swap. The list `[\"doggo\"]` contains 1 indexes.",
+      "message": "Two indexes must be given for each swap. The list `[IndexUid(\"doggo\")]` contains 1 indexes.",
       "code": "invalid_swap_indexes",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-swap-indexes"

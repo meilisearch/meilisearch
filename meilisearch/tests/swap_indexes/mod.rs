@@ -155,7 +155,7 @@ async fn swap_indexes() {
     server.wait_task(4).await;
 
     // ensure the index creation worked properly
-    let (tasks, code) = server.tasks_filter(json!({ "limit": 2 })).await;
+    let (tasks, code) = server.tasks_filter("limit=2").await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(tasks, { ".results[].duration" => "[duration]", ".results[].enqueuedAt" => "[date]", ".results[].startedAt" => "[date]", ".results[].finishedAt" => "[date]" }), @r###"
     {
