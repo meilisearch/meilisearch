@@ -2321,9 +2321,7 @@ pub(crate) mod tests {
             .unwrap_err();
         assert!(matches!(
             err1,
-            Error::UserError(UserError::InvalidGeoField(
-                GeoError::BadLatitudeAndLongitude { .. }
-            ))
+            Error::UserError(UserError::InvalidGeoField(GeoError::BadLatitudeAndLongitude { .. }))
         ));
 
         db_snap!(index, geo_faceted_documents_ids); // ensure that no more document was inserted
