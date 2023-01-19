@@ -248,7 +248,7 @@ async fn delete_task_filter_error() {
     assert_eq!(code, 400, "{}", response);
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Query parameters to filter the tasks to delete are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
+      "message": "Query parameters to filter the tasks to delete are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
       "code": "missing_task_filters",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#missing-task-filters"
@@ -286,7 +286,7 @@ async fn cancel_task_filter_error() {
     assert_eq!(code, 400, "{}", response);
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
+      "message": "Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
       "code": "missing_task_filters",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#missing-task-filters"
