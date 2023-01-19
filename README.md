@@ -4,6 +4,14 @@
 
 <p align="center">a concurrent indexer combined with fast and relevant search algorithms</p>
 
+---
+
+DO NOT CONTRIBUTE TO THIS REPOSITORY ANYMORE, IT WILL BE ARCHIVED SOON. ONLY MEILI TEAM IS ALLOWED TO CONTRIBUTE.
+
+The content of this repository is now available in the [Meilisearch repository](https://github.com/meilisearch/meilisearch) in the workspace `milli`.
+
+---
+
 ## Introduction
 
 This repository contains the core engine used in [Meilisearch].
