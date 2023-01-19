@@ -15,7 +15,7 @@ async fn get_all_documents_bad_offset() {
       "message": "Invalid value in parameter `offset`: could not parse `` as a positive integer",
       "code": "invalid_document_offset",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-document-offset"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_offset"
     }
     "###);
 
@@ -26,7 +26,7 @@ async fn get_all_documents_bad_offset() {
       "message": "Invalid value in parameter `offset`: could not parse `doggo` as a positive integer",
       "code": "invalid_document_offset",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-document-offset"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_offset"
     }
     "###);
 
@@ -37,7 +37,7 @@ async fn get_all_documents_bad_offset() {
       "message": "Invalid value in parameter `offset`: could not parse `-1` as a positive integer",
       "code": "invalid_document_offset",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-document-offset"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_offset"
     }
     "###);
 }
@@ -54,7 +54,7 @@ async fn get_all_documents_bad_limit() {
       "message": "Invalid value in parameter `limit`: could not parse `` as a positive integer",
       "code": "invalid_document_limit",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-document-limit"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_limit"
     }
     "###);
 
@@ -65,7 +65,7 @@ async fn get_all_documents_bad_limit() {
       "message": "Invalid value in parameter `limit`: could not parse `doggo` as a positive integer",
       "code": "invalid_document_limit",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-document-limit"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_limit"
     }
     "###);
 
@@ -76,7 +76,7 @@ async fn get_all_documents_bad_limit() {
       "message": "Invalid value in parameter `limit`: could not parse `-1` as a positive integer",
       "code": "invalid_document_limit",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-document-limit"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_limit"
     }
     "###);
 }
@@ -93,7 +93,7 @@ async fn delete_documents_batch() {
       "message": "Json deserialize error: invalid type: string \"doggo\", expected a sequence at line 1 column 7",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad-request"
+      "link": "https://docs.meilisearch.com/errors#bad_request"
     }
     "###);
 }
