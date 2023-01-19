@@ -113,7 +113,7 @@ impl V3Reader {
         Ok(self.index_uuid.iter().map(|index| -> Result<_> {
             V3IndexReader::new(
                 &self.dump.path().join("indexes").join(index.uuid.to_string()),
-                &index,
+                index,
                 BufReader::new(
                     File::open(self.dump.path().join("updates").join("data.jsonl")).unwrap(),
                 ),
@@ -150,7 +150,6 @@ impl V3Reader {
     }
 }
 
-#[derive(Debug)]
 pub struct V3IndexReader {
     metadata: IndexMetadata,
     settings: Settings<Checked>,
@@ -169,7 +168,7 @@ impl V3IndexReader {
         for line in tasks.lines() {
             let task: Task = serde_json::from_str(&line?)?;
 
-            if task.uuid != index_uuid.uuid || !task.is_finished() {
+            if !(task.uuid == index_uuid.uuid && task.is_finished()) {
                 continue;
             }
 
