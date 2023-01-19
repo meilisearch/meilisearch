@@ -333,7 +333,7 @@ async fn search_non_filterable_facets() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid facet distribution, the fields `doggo` are not set as filterable.",
+      "message": "Invalid facet distribution, attribute `doggo` is not filterable. The available filterable attribute is `title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
@@ -344,7 +344,97 @@ async fn search_non_filterable_facets() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid facet distribution, the fields `doggo` are not set as filterable.",
+      "message": "Invalid facet distribution, attribute `doggo` is not filterable. The available filterable attribute is `title`.",
+      "code": "invalid_search_facets",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn search_non_filterable_facets_multiple_filterable() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    index.update_settings(json!({"filterableAttributes": ["title", "genres"]})).await;
+    index.wait_task(0).await;
+
+    let (response, code) = index.search_post(json!({"facets": ["doggo"]})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid facet distribution, attribute `doggo` is not filterable. The available filterable attributes are `genres, title`.",
+      "code": "invalid_search_facets",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+    }
+    "###);
+
+    let (response, code) = index.search_get("facets=doggo").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid facet distribution, attribute `doggo` is not filterable. The available filterable attributes are `genres, title`.",
+      "code": "invalid_search_facets",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn search_non_filterable_facets_no_filterable() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    index.update_settings(json!({"filterableAttributes": []})).await;
+    index.wait_task(0).await;
+
+    let (response, code) = index.search_post(json!({"facets": ["doggo"]})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid facet distribution, this index does not have configured filterable attributes.",
+      "code": "invalid_search_facets",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+    }
+    "###);
+
+    let (response, code) = index.search_get("facets=doggo").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid facet distribution, this index does not have configured filterable attributes.",
+      "code": "invalid_search_facets",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn search_non_filterable_facets_multiple_facets() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    index.update_settings(json!({"filterableAttributes": ["title", "genres"]})).await;
+    index.wait_task(0).await;
+
+    let (response, code) = index.search_post(json!({"facets": ["doggo", "neko"]})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid facet distribution, attributes `doggo, neko` are not filterable. The available filterable attributes are `genres, title`.",
+      "code": "invalid_search_facets",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+    }
+    "###);
+
+    let (response, code) = index.search_get("facets=doggo,neko").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid facet distribution, attributes `doggo, neko` are not filterable. The available filterable attributes are `genres, title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
