@@ -9,7 +9,7 @@ We try to:
 use deserr::{ErrorKind, IntoValue, ValueKind, ValuePointerRef};
 
 use super::{DeserrJsonError, DeserrQueryParamError};
-use crate::error::ErrorCode;
+use crate::error::{Code, ErrorCode};
 
 /// Return a description of the given location in a Json, preceded by the given article.
 /// e.g. `at .key1[8].key2`. If the location is the origin, the given article will not be
@@ -177,6 +177,19 @@ impl<C: Default + ErrorCode> deserr::DeserializeError for DeserrJsonError<C> {
 
         Err(DeserrJsonError::new(message, C::default().error_code()))
     }
+}
+
+pub fn immutable_field_error(field: &str, accepted: &[&str], code: Code) -> DeserrJsonError {
+    let msg = format!(
+        "Immutable field `{field}`: expected one of {}",
+        accepted
+            .iter()
+            .map(|accepted| format!("`{}`", accepted))
+            .collect::<Vec<String>>()
+            .join(", ")
+    );
+
+    DeserrJsonError::new(msg, code)
 }
 
 /// Return a description of the given location in query parameters, preceded by the
