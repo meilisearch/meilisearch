@@ -322,6 +322,37 @@ async fn search_bad_facets() {
 }
 
 #[actix_rt::test]
+async fn search_non_filterable_facets() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    index.update_settings(json!({"filterableAttributes": ["title"]})).await;
+    // Wait for the settings update to complete
+    index.wait_task(0).await;
+
+    let (response, code) = index.search_post(json!({"facets": ["doggo"]})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid facet distribution, the fields `doggo` are not set as filterable.",
+      "code": "invalid_search_facets",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-facets"
+    }
+    "###);
+
+    let (response, code) = index.search_get("facets=doggo").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid facet distribution, the fields `doggo` are not set as filterable.",
+      "code": "invalid_search_facets",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid-search-facets"
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn search_bad_highlight_pre_tag() {
     let server = Server::new().await;
     let index = server.index("test");

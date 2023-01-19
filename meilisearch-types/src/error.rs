@@ -327,7 +327,7 @@ impl ErrorCode for milli::Error {
                     }
                     UserError::PrimaryKeyCannotBeChanged(_) => Code::IndexPrimaryKeyAlreadyExists,
                     UserError::SortRankingRuleMissing => Code::InvalidSearchSort,
-                    UserError::InvalidFacetsDistribution { .. } => Code::BadRequest,
+                    UserError::InvalidFacetsDistribution { .. } => Code::InvalidSearchFacets,
                     UserError::InvalidSortableAttribute { .. } => Code::InvalidSearchSort,
                     UserError::CriterionError(_) => Code::InvalidSettingsRankingRules,
                     UserError::InvalidGeoField { .. } => Code::InvalidDocumentGeoField,
