@@ -101,6 +101,15 @@ Meilisearch is a search engine created by [Meili](https://www.welcometothejungle
 
 Thank you for your support!
 
-## 📦 Internal crates and their versioning
+## 👩‍💻 Contributing
 
-The crates in this repository are not currently available on crates.io and do not follow [semver conventions](https://semver.org). However, the Meilisearch search engine is well versioned, and releases follow the semver conventions.
+Meilisearch is and always will be open-source! If you want to contribute to the project, please take a look at this [guidelines](CONTRIBUTING.md).
+
+We are looking forward to review your contribution! ❤️
+
+## 📦 Technical information
+
+More information about technical details related to the Meilisearch project:
+- The releases of Meilisearch and their associated binaries are available [in this GitHub section](https://github.com/meilisearch/meilisearch/releases).
+- We versionize the Meilisearch binaries following the [SemVer conventions](https://semver.org/), and we also provide our detailed [versioning policy](https://github.com/meilisearch/engine-team/blob/main/resources/versioning-policy.md).
+- The crates in this repository are not currently available on [crates.io](https://crates.io/) and do not follow [SemVer conventions](https://semver.org).
