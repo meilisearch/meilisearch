@@ -19,7 +19,7 @@ async fn error_get_unexisting_task_status() {
         "message": "Task `1` not found.",
         "code": "task_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#task-not-found"
+        "link": "https://docs.meilisearch.com/errors#task_not_found"
     });
 
     assert_eq!(response, expected_response);
@@ -366,7 +366,7 @@ async fn test_summarized_document_addition_or_update() {
     index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), None).await;
     index.wait_task(0).await;
     let (task, _) = index.get_task(0).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -390,7 +390,7 @@ async fn test_summarized_document_addition_or_update() {
     index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), Some("id")).await;
     index.wait_task(1).await;
     let (task, _) = index.get_task(1).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -419,7 +419,7 @@ async fn test_summarized_delete_batch() {
     index.delete_batch(vec![1, 2, 3]).await;
     index.wait_task(0).await;
     let (task, _) = index.get_task(0).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -449,7 +449,7 @@ async fn test_summarized_delete_batch() {
     index.delete_batch(vec![42]).await;
     index.wait_task(2).await;
     let (task, _) = index.get_task(2).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -478,7 +478,7 @@ async fn test_summarized_delete_document() {
     index.delete_document(1).await;
     index.wait_task(0).await;
     let (task, _) = index.get_task(0).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -508,7 +508,7 @@ async fn test_summarized_delete_document() {
     index.delete_document(42).await;
     index.wait_task(2).await;
     let (task, _) = index.get_task(2).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -549,7 +549,7 @@ async fn test_summarized_settings_update() {
     index.update_settings(json!({ "displayedAttributes": ["doggos", "name"], "filterableAttributes": ["age", "nb_paw_pads"], "sortableAttributes": ["iq"] })).await;
     index.wait_task(0).await;
     let (task, _) = index.get_task(0).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -587,7 +587,7 @@ async fn test_summarized_index_creation() {
     index.create(None).await;
     index.wait_task(0).await;
     let (task, _) = index.get_task(0).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -610,7 +610,7 @@ async fn test_summarized_index_creation() {
     index.create(Some("doggos")).await;
     index.wait_task(1).await;
     let (task, _) = index.get_task(1).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -643,7 +643,7 @@ async fn test_summarized_index_deletion() {
     index.delete().await;
     index.wait_task(0).await;
     let (task, _) = index.get_task(0).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -673,7 +673,7 @@ async fn test_summarized_index_deletion() {
     index.delete().await;
     index.wait_task(2).await;
     let (task, _) = index.get_task(2).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -697,7 +697,7 @@ async fn test_summarized_index_deletion() {
     index.delete().await;
     index.wait_task(2).await;
     let (task, _) = index.get_task(2).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -726,7 +726,7 @@ async fn test_summarized_index_update() {
     index.update(None).await;
     index.wait_task(0).await;
     let (task, _) = index.get_task(0).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -754,7 +754,7 @@ async fn test_summarized_index_update() {
     index.update(Some("bones")).await;
     index.wait_task(1).await;
     let (task, _) = index.get_task(1).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -785,7 +785,7 @@ async fn test_summarized_index_update() {
     index.update(None).await;
     index.wait_task(3).await;
     let (task, _) = index.get_task(3).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -808,7 +808,7 @@ async fn test_summarized_index_update() {
     index.update(Some("bones")).await;
     index.wait_task(4).await;
     let (task, _) = index.get_task(4).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -839,7 +839,7 @@ async fn test_summarized_index_swap() {
         .await;
     server.wait_task(0).await;
     let (task, _) = server.get_task(0).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -880,7 +880,7 @@ async fn test_summarized_index_swap() {
         .await;
     server.wait_task(3).await;
     let (task, _) = server.get_task(3).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -918,7 +918,7 @@ async fn test_summarized_task_cancelation() {
     server.cancel_tasks("uids=0").await;
     index.wait_task(1).await;
     let (task, _) = index.get_task(1).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -951,7 +951,7 @@ async fn test_summarized_task_deletion() {
     server.delete_tasks("uids=0").await;
     index.wait_task(1).await;
     let (task, _) = index.get_task(1).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -980,7 +980,7 @@ async fn test_summarized_dump_creation() {
     server.create_dump().await;
     server.wait_task(0).await;
     let (task, _) = server.get_task(0).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".details.dumpUid" => "[dumpUid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {

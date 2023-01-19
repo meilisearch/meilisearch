@@ -177,7 +177,7 @@ async fn error_create_existing_index() {
         "message": "Index `test` already exists.",
         "code": "index_already_exists",
         "type": "invalid_request",
-        "link":"https://docs.meilisearch.com/errors#index-already-exists"
+        "link":"https://docs.meilisearch.com/errors#index_already_exists"
     });
 
     assert_eq!(response["error"], expected_response);
