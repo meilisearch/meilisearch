@@ -155,10 +155,7 @@ macro_rules! make_error_codes {
 
             /// return the doc url associated with the error
             fn url(&self) -> String {
-                format!(
-                    "https://docs.meilisearch.com/errors#{}",
-                    self.name().to_case(convert_case::Case::Kebab)
-                )
+                format!("https://docs.meilisearch.com/errors#{}", self.name())
             }
         }
         pub mod deserr_codes {
