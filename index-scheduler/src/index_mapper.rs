@@ -61,6 +61,9 @@ pub struct IndexMapper {
 }
 
 mod index_map {
+    /// the map size to use when we don't succeed in reading it in indexes.
+    const DEFAULT_MAP_SIZE: usize = 10_737_418_240; // 10 GiB
+
     use std::collections::BTreeMap;
     use std::path::Path;
     use std::time::Duration;
@@ -259,8 +262,7 @@ mod index_map {
         }
 
         fn close(&mut self, uuid: Uuid, index: Index, map_size_growth: usize) {
-            /// TODO: default map_size
-            let map_size = index.map_size().unwrap_or_default() + map_size_growth;
+            let map_size = index.map_size().unwrap_or(DEFAULT_MAP_SIZE) + map_size_growth;
             let closing_event = index.prepare_for_closing();
             let generation = self.next_generation();
             self.unavailable
