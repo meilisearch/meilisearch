@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::convert::Infallible;
+use std::fmt::Write;
 use std::{io, str};
 
 use heed::{Error as HeedError, MdbError};
@@ -100,10 +101,11 @@ A document identifier can be of type integer or string, \
 only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_).", .document_id.to_string()
     )]
     InvalidDocumentId { document_id: Value },
-    #[error("Invalid facet distribution, the fields `{}` are not set as filterable.",
-        .invalid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
-     )]
-    InvalidFacetsDistribution { invalid_facets_name: BTreeSet<String> },
+    #[error("Invalid facet distribution, {}", format_invalid_filter_distribution(.invalid_facets_name, .valid_facets_name))]
+    InvalidFacetsDistribution {
+        invalid_facets_name: BTreeSet<String>,
+        valid_facets_name: BTreeSet<String>,
+    },
     #[error(transparent)]
     InvalidGeoField(#[from] GeoError),
     #[error("{0}")]
@@ -164,6 +166,50 @@ pub enum GeoError {
     BadLatitude { document_id: Value, value: Value },
     #[error("Could not parse longitude in the document with the id: `{document_id}`. Was expecting a finite number but instead got `{value}`.")]
     BadLongitude { document_id: Value, value: Value },
+}
+
+fn format_invalid_filter_distribution(
+    invalid_facets_name: &BTreeSet<String>,
+    valid_facets_name: &BTreeSet<String>,
+) -> String {
+    if valid_facets_name.is_empty() {
+        return "this index does not have configured filterable attributes.".into();
+    }
+
+    let mut result = String::new();
+
+    match invalid_facets_name.len() {
+        0 => (),
+        1 => write!(
+            result,
+            "attribute `{}` is not filterable.",
+            invalid_facets_name.first().unwrap()
+        )
+        .unwrap(),
+        _ => write!(
+            result,
+            "attributes `{}` are not filterable.",
+            invalid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
+        )
+        .unwrap(),
+    };
+
+    match valid_facets_name.len() {
+        1 => write!(
+            result,
+            " The available filterable attribute is `{}`.",
+            valid_facets_name.first().unwrap()
+        )
+        .unwrap(),
+        _ => write!(
+            result,
+            " The available filterable attributes are `{}`.",
+            valid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
+        )
+        .unwrap(),
+    }
+
+    result
 }
 
 /// A little macro helper to autogenerate From implementation that needs two `Into`.
