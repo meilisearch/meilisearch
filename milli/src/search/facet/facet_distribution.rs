@@ -291,6 +291,7 @@ impl<'a> FacetDistribution<'a> {
                 if !invalid_fields.is_empty() {
                     return Err(UserError::InvalidFacetsDistribution {
                         invalid_facets_name: invalid_fields.into_iter().cloned().collect(),
+                        valid_facets_name: filterable_fields.into_iter().collect(),
                     }
                     .into());
                 } else {
