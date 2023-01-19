@@ -202,7 +202,7 @@ async fn get_task_filter_error() {
       "message": "Unknown parameter `lol`: expected one of `limit`, `from`, `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad-request"
+      "link": "https://docs.meilisearch.com/errors#bad_request"
     }
     "###);
 
@@ -213,7 +213,7 @@ async fn get_task_filter_error() {
       "message": "Invalid value in parameter `uids`: could not parse `pied` as a positive integer",
       "code": "invalid_task_uids",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
+      "link": "https://docs.meilisearch.com/errors#invalid_task_uids"
     }
     "###);
 
@@ -224,7 +224,7 @@ async fn get_task_filter_error() {
       "message": "Invalid value in parameter `from`: could not parse `pied` as a positive integer",
       "code": "invalid_task_from",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-task-from"
+      "link": "https://docs.meilisearch.com/errors#invalid_task_from"
     }
     "###);
 
@@ -235,7 +235,7 @@ async fn get_task_filter_error() {
       "message": "Invalid value in parameter `beforeStartedAt`: `pied` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
       "code": "invalid_task_before_started_at",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-task-before-started-at"
+      "link": "https://docs.meilisearch.com/errors#invalid_task_before_started_at"
     }
     "###);
 }
@@ -251,7 +251,7 @@ async fn delete_task_filter_error() {
       "message": "Query parameters to filter the tasks to delete are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
       "code": "missing_task_filters",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing-task-filters"
+      "link": "https://docs.meilisearch.com/errors#missing_task_filters"
     }
     "###);
 
@@ -262,7 +262,7 @@ async fn delete_task_filter_error() {
       "message": "Unknown parameter `lol`: expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad-request"
+      "link": "https://docs.meilisearch.com/errors#bad_request"
     }
     "###);
 
@@ -273,7 +273,7 @@ async fn delete_task_filter_error() {
       "message": "Invalid value in parameter `uids`: could not parse `pied` as a positive integer",
       "code": "invalid_task_uids",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
+      "link": "https://docs.meilisearch.com/errors#invalid_task_uids"
     }
     "###);
 }
@@ -289,7 +289,7 @@ async fn cancel_task_filter_error() {
       "message": "Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
       "code": "missing_task_filters",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing-task-filters"
+      "link": "https://docs.meilisearch.com/errors#missing_task_filters"
     }
     "###);
 
@@ -300,7 +300,7 @@ async fn cancel_task_filter_error() {
       "message": "Unknown parameter `lol`: expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad-request"
+      "link": "https://docs.meilisearch.com/errors#bad_request"
     }
     "###);
 
@@ -311,7 +311,7 @@ async fn cancel_task_filter_error() {
       "message": "Invalid value in parameter `uids`: could not parse `pied` as a positive integer",
       "code": "invalid_task_uids",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
+      "link": "https://docs.meilisearch.com/errors#invalid_task_uids"
     }
     "###);
 }
@@ -436,7 +436,7 @@ async fn test_summarized_delete_batch() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-not-found"
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -495,7 +495,7 @@ async fn test_summarized_delete_document() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-not-found"
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -542,7 +542,7 @@ async fn test_summarized_settings_update() {
       "message": "Invalid value at `.rankingRules[0]`: `custom` ranking rule is invalid. Valid ranking rules are words, typo, sort, proximity, attribute, exactness and custom ranking rules.",
       "code": "invalid_settings_ranking_rules",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-ranking-rules"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_ranking_rules"
     }
     "###);
 
@@ -626,7 +626,7 @@ async fn test_summarized_index_creation() {
         "message": "Index `test` already exists.",
         "code": "index_already_exists",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-already-exists"
+        "link": "https://docs.meilisearch.com/errors#index_already_exists"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -659,7 +659,7 @@ async fn test_summarized_index_deletion() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-not-found"
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -742,7 +742,7 @@ async fn test_summarized_index_update() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-not-found"
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -770,7 +770,7 @@ async fn test_summarized_index_update() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-not-found"
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -862,7 +862,7 @@ async fn test_summarized_index_swap() {
         "message": "Indexes `cattos`, `doggos` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-not-found"
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",

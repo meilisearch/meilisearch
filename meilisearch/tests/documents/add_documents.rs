@@ -929,7 +929,7 @@ async fn error_primary_key_inference() {
         "message": "The primary key inference failed as the engine did not find any field ending with `id` in its name. Please specify the primary key manually using the `primaryKey` query parameter.",
         "code": "index_primary_key_no_candidate_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-primary-key-no-candidate-found"
+        "link": "https://docs.meilisearch.com/errors#index_primary_key_no_candidate_found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -969,7 +969,7 @@ async fn error_primary_key_inference() {
         "message": "The primary key inference failed as the engine found 3 fields ending with `id` in their names: 'id' and 'object_id'. Please specify the primary key manually using the `primaryKey` query parameter.",
         "code": "index_primary_key_multiple_candidates_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-primary-key-multiple-candidates-found"
+        "link": "https://docs.meilisearch.com/errors#index_primary_key_multiple_candidates_found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
