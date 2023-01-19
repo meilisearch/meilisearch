@@ -11,6 +11,7 @@ use time::macros::{format_description, time};
 use time::{Date, OffsetDateTime, PrimitiveDateTime};
 use uuid::Uuid;
 
+use crate::deserr::error_messages::immutable_field_error;
 use crate::deserr::DeserrJsonError;
 use crate::error::deserr_codes::*;
 use crate::error::{unwrap_any, Code, ParseOffsetDateTimeError};
@@ -57,22 +58,19 @@ fn deny_immutable_fields_api_key(
     accepted: &[&str],
     location: ValuePointerRef,
 ) -> DeserrJsonError {
-    let mut error = unwrap_any(DeserrJsonError::<BadRequest>::error::<Infallible>(
-        None,
-        deserr::ErrorKind::UnknownKey { key: field, accepted },
-        location,
-    ));
-
-    error.code = match field {
-        "uid" => Code::ImmutableApiKeyUid,
-        "actions" => Code::ImmutableApiKeyActions,
-        "indexes" => Code::ImmutableApiKeyIndexes,
-        "expiresAt" => Code::ImmutableApiKeyExpiresAt,
-        "createdAt" => Code::ImmutableApiKeyCreatedAt,
-        "updatedAt" => Code::ImmutableApiKeyUpdatedAt,
-        _ => Code::BadRequest,
-    };
-    error
+    match field {
+        "uid" => immutable_field_error(field, accepted, Code::ImmutableApiKeyUid),
+        "actions" => immutable_field_error(field, accepted, Code::ImmutableApiKeyActions),
+        "indexes" => immutable_field_error(field, accepted, Code::ImmutableApiKeyIndexes),
+        "expiresAt" => immutable_field_error(field, accepted, Code::ImmutableApiKeyExpiresAt),
+        "createdAt" => immutable_field_error(field, accepted, Code::ImmutableApiKeyCreatedAt),
+        "updatedAt" => immutable_field_error(field, accepted, Code::ImmutableApiKeyUpdatedAt),
+        _ => unwrap_any(DeserrJsonError::<BadRequest>::error::<Infallible>(
+            None,
+            deserr::ErrorKind::UnknownKey { key: field, accepted },
+            location,
+        )),
+    }
 }
 
 #[derive(Debug, DeserializeFromValue)]

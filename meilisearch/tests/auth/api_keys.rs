@@ -1394,7 +1394,7 @@ async fn error_patch_api_key_indexes() {
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "Unknown field `indexes`: expected one of `description`, `name`",
+      "message": "Immutable field `indexes`: expected one of `description`, `name`",
       "code": "immutable_api_key_indexes",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#immutable_api_key_indexes"
@@ -1471,7 +1471,7 @@ async fn error_patch_api_key_actions() {
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "Unknown field `actions`: expected one of `description`, `name`",
+      "message": "Immutable field `actions`: expected one of `description`, `name`",
       "code": "immutable_api_key_actions",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#immutable_api_key_actions"
@@ -1540,7 +1540,7 @@ async fn error_patch_api_key_expiration_date() {
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "Unknown field `expiresAt`: expected one of `description`, `name`",
+      "message": "Immutable field `expiresAt`: expected one of `description`, `name`",
       "code": "immutable_api_key_expires_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#immutable_api_key_expires_at"

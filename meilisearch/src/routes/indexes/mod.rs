@@ -5,6 +5,7 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::{DeserializeError, DeserializeFromValue, ValuePointerRef};
 use index_scheduler::IndexScheduler;
 use log::debug;
+use meilisearch_types::deserr::error_messages::immutable_field_error;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::deserr_codes::*;
@@ -144,20 +145,18 @@ fn deny_immutable_fields_index(
     accepted: &[&str],
     location: ValuePointerRef,
 ) -> DeserrJsonError {
-    let mut error = unwrap_any(DeserrJsonError::<BadRequest>::error::<Infallible>(
-        None,
-        deserr::ErrorKind::UnknownKey { key: field, accepted },
-        location,
-    ));
-
-    error.code = match field {
-        "uid" => Code::ImmutableIndexUid,
-        "createdAt" => Code::ImmutableIndexCreatedAt,
-        "updatedAt" => Code::ImmutableIndexUpdatedAt,
-        _ => Code::BadRequest,
-    };
-    error
+    match field {
+        "uid" => immutable_field_error(field, accepted, Code::ImmutableIndexUid),
+        "createdAt" => immutable_field_error(field, accepted, Code::ImmutableIndexCreatedAt),
+        "updatedAt" => immutable_field_error(field, accepted, Code::ImmutableIndexUpdatedAt),
+        _ => unwrap_any(DeserrJsonError::<BadRequest>::error::<Infallible>(
+            None,
+            deserr::ErrorKind::UnknownKey { key: field, accepted },
+            location,
+        )),
+    }
 }
+
 #[derive(DeserializeFromValue, Debug)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_index)]
 pub struct UpdateIndexRequest {
