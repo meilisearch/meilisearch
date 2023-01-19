@@ -112,8 +112,11 @@ impl V3Reader {
     pub fn indexes(&self) -> Result<impl Iterator<Item = Result<V3IndexReader>> + '_> {
         Ok(self.index_uuid.iter().map(|index| -> Result<_> {
             V3IndexReader::new(
-                index.uid.clone(),
                 &self.dump.path().join("indexes").join(index.uuid.to_string()),
+                index,
+                BufReader::new(
+                    File::open(self.dump.path().join("updates").join("data.jsonl")).unwrap(),
+                ),
             )
         }))
     }
@@ -155,16 +158,42 @@ pub struct V3IndexReader {
 }
 
 impl V3IndexReader {
-    pub fn new(name: String, path: &Path) -> Result<Self> {
+    pub fn new(path: &Path, index_uuid: &IndexUuid, tasks: BufReader<File>) -> Result<Self> {
         let meta = File::open(path.join("meta.json"))?;
         let meta: DumpMeta = serde_json::from_reader(meta)?;
 
+        let mut created_at = None;
+        let mut updated_at = None;
+
+        for line in tasks.lines() {
+            let task: Task = serde_json::from_str(&line?)?;
+
+            if !(task.uuid == index_uuid.uuid && task.is_finished()) {
+                continue;
+            }
+
+            let new_created_at = match task.update.meta() {
+                Kind::DocumentAddition { .. } | Kind::Settings(_) => task.update.finished_at(),
+                _ => None,
+            };
+            let new_updated_at = task.update.finished_at();
+
+            if created_at.is_none() || created_at > new_created_at {
+                created_at = new_created_at;
+            }
+
+            if updated_at.is_none() || updated_at < new_updated_at {
+                updated_at = new_updated_at;
+            }
+        }
+
+        let current_time = OffsetDateTime::now_utc();
+
         let metadata = IndexMetadata {
-            uid: name,
+            uid: index_uuid.uid.clone(),
             primary_key: meta.primary_key,
-            // FIXME: Iterate over the whole task queue to find the creation and last update date.
-            created_at: OffsetDateTime::now_utc(),
-            updated_at: OffsetDateTime::now_utc(),
+            created_at: created_at.unwrap_or(current_time),
+            updated_at: updated_at.unwrap_or(current_time),
         };
 
         let ret = V3IndexReader {
@@ -263,12 +292,12 @@ pub(crate) mod test {
         assert!(indexes.is_empty());
 
         // products
-        insta::assert_json_snapshot!(products.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(products.metadata(), @r###"
         {
           "uid": "products",
           "primaryKey": "sku",
-          "createdAt": "[now]",
-          "updatedAt": "[now]"
+          "createdAt": "2022-10-07T11:38:54.74389899Z",
+          "updatedAt": "2022-10-07T11:38:55.963185778Z"
         }
         "###);
 
@@ -278,12 +307,12 @@ pub(crate) mod test {
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"548284a84de510f71e88e6cdea495cf5");
 
         // movies
-        insta::assert_json_snapshot!(movies.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(movies.metadata(), @r###"
         {
           "uid": "movies",
           "primaryKey": "id",
-          "createdAt": "[now]",
-          "updatedAt": "[now]"
+          "createdAt": "2022-10-07T11:38:54.026649575Z",
+          "updatedAt": "2022-10-07T11:39:04.188852537Z"
         }
         "###);
 
@@ -308,12 +337,12 @@ pub(crate) mod test {
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"d751713988987e9331980363e24189ce");
 
         // spells
-        insta::assert_json_snapshot!(spells.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        insta::assert_json_snapshot!(spells.metadata(), @r###"
         {
           "uid": "dnd_spells",
           "primaryKey": "index",
-          "createdAt": "[now]",
-          "updatedAt": "[now]"
+          "createdAt": "2022-10-07T11:38:56.265951133Z",
+          "updatedAt": "2022-10-07T11:38:56.521004328Z"
         }
         "###);
 

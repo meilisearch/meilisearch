@@ -74,6 +74,26 @@ impl UpdateStatus {
             _ => None,
         }
     }
+
+    pub fn enqueued_at(&self) -> Option<OffsetDateTime> {
+        match self {
+            UpdateStatus::Processing(u) => Some(u.from.enqueued_at),
+            UpdateStatus::Enqueued(u) => Some(u.enqueued_at),
+            UpdateStatus::Processed(u) => Some(u.from.from.enqueued_at),
+            UpdateStatus::Aborted(u) => Some(u.from.enqueued_at),
+            UpdateStatus::Failed(u) => Some(u.from.from.enqueued_at),
+        }
+    }
+
+    pub fn finished_at(&self) -> Option<OffsetDateTime> {
+        match self {
+            UpdateStatus::Processing(_) => None,
+            UpdateStatus::Enqueued(_) => None,
+            UpdateStatus::Processed(u) => Some(u.processed_at),
+            UpdateStatus::Aborted(_) => None,
+            UpdateStatus::Failed(u) => Some(u.failed_at),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
