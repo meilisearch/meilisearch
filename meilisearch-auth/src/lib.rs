@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use error::{AuthControllerError, Result};
 use meilisearch_types::keys::{Action, CreateApiKey, Key, PatchApiKey};
+use meilisearch_types::milli::update::Setting;
 use meilisearch_types::star_or::StarOr;
 use serde::{Deserialize, Serialize};
 pub use store::open_auth_store_env;
@@ -41,8 +42,14 @@ impl AuthController {
 
     pub fn update_key(&self, uid: Uuid, patch: PatchApiKey) -> Result<Key> {
         let mut key = self.get_key(uid)?;
-        key.description = patch.description;
-        key.name = patch.name;
+        match patch.description {
+            Setting::NotSet => (),
+            description => key.description = description.set(),
+        };
+        match patch.name {
+            Setting::NotSet => (),
+            name => key.name = name.set(),
+        };
         key.updated_at = OffsetDateTime::now_utc();
         self.store.put_api_key(key)
     }
