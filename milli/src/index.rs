@@ -2292,4 +2292,38 @@ pub(crate) mod tests {
             assert!(all_ids.insert(id));
         }
     }
+
+    #[test]
+    fn bug_3007() {
+        // https://github.com/meilisearch/meilisearch/issues/3007
+
+        use crate::error::{GeoError, UserError};
+        let index = TempIndex::new();
+
+        // Given is an index with a geo field NOT contained in the sortable_fields of the settings
+        index
+            .update_settings(|settings| {
+                settings.set_primary_key("id".to_string());
+                settings.set_filterable_fields(HashSet::from(["_geo".to_string()]));
+            })
+            .unwrap();
+
+        // happy path
+        index.add_documents(documents!({ "id" : 5, "_geo": {"lat": 12.0, "lng": 11.0}})).unwrap();
+
+        db_snap!(index, geo_faceted_documents_ids);
+
+        // both are unparseable, we expect GeoError::BadLatitudeAndLongitude
+        let err1 = index
+            .add_documents(
+                documents!({ "id" : 6, "_geo": {"lat": "unparseable", "lng": "unparseable"}}),
+            )
+            .unwrap_err();
+        assert!(matches!(
+            err1,
+            Error::UserError(UserError::InvalidGeoField(GeoError::BadLatitudeAndLongitude { .. }))
+        ));
+
+        db_snap!(index, geo_faceted_documents_ids); // ensure that no more document was inserted
+    }
 }

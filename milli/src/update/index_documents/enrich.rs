@@ -98,7 +98,12 @@ pub fn enrich_documents_batch<R: Read + Seek>(
     // If the settings specifies that a _geo field must be used therefore we must check the
     // validity of it in all the documents of this batch and this is when we return `Some`.
     let geo_field_id = match documents_batch_index.id("_geo") {
-        Some(geo_field_id) if index.sortable_fields(rtxn)?.contains("_geo") => Some(geo_field_id),
+        Some(geo_field_id)
+            if index.sortable_fields(rtxn)?.contains("_geo")
+                || index.filterable_fields(rtxn)?.contains("_geo") =>
+        {
+            Some(geo_field_id)
+        }
         _otherwise => None,
     };
 
@@ -367,7 +372,9 @@ pub fn extract_finite_float_from_value(value: Value) -> StdResult<f64, Value> {
 
 pub fn validate_geo_from_json(id: &DocumentId, bytes: &[u8]) -> Result<StdResult<(), GeoError>> {
     use GeoError::*;
-    let debug_id = || Value::from(id.debug());
+    let debug_id = || {
+        serde_json::from_slice(id.value().as_bytes()).unwrap_or_else(|_| Value::from(id.debug()))
+    };
     match serde_json::from_slice(bytes).map_err(InternalError::SerdeJson)? {
         Value::Object(mut object) => match (object.remove("lat"), object.remove("lng")) {
             (Some(lat), Some(lng)) => {
