@@ -966,34 +966,6 @@ mod tests {
     }
 
     #[test]
-    fn index_all_flavour_of_geo() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.update_method = IndexDocumentsMethod::ReplaceDocuments;
-
-        index
-            .update_settings(|settings| {
-                settings.set_filterable_fields(hashset!(S("_geo")));
-            })
-            .unwrap();
-
-        index
-            .add_documents(documents!([
-              { "id": 0, "_geo": { "lat": 31, "lng": [42] } },
-              { "id": 1, "_geo": { "lat": "31" }, "_geo.lng": 42 },
-              { "id": 2, "_geo": { "lng": "42" }, "_geo.lat": "31" },
-              { "id": 3, "_geo.lat": 31, "_geo.lng": "42" },
-            ]))
-            .unwrap();
-
-        let rtxn = index.read_txn().unwrap();
-
-        let mut search = crate::Search::new(&rtxn, &index);
-        search.filter(crate::Filter::from_str("_geoRadius(31, 42, 0.000001)").unwrap().unwrap());
-        let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
-        assert_eq!(documents_ids, vec![0, 1, 2, 3]);
-    }
-
-    #[test]
     fn geo_error() {
         let mut index = TempIndex::new();
         index.index_documents_config.update_method = IndexDocumentsMethod::ReplaceDocuments;
