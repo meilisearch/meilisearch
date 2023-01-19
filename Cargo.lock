@@ -1747,8 +1747,8 @@ checksum = "2540771e65fc8cb83cd6e8a237f70c319bd5c29f78ed1084ba5d50eeac86f7f9"
 
 [[package]]
 name = "heed"
-version = "0.12.4"
-source = "git+https://github.com/meilisearch/heed?tag=v0.12.4#7a4542bc72dd60ef0f508c89900ea292218223fb"
+version = "0.12.5"
+source = "git+https://github.com/meilisearch/heed?tag=v0.12.5#4158a6c484752afaaf9e2530a6ee0e7ab0f24ee8"
 dependencies = [
  "byteorder",
  "heed-traits",
@@ -1765,12 +1765,12 @@ dependencies = [
 [[package]]
 name = "heed-traits"
 version = "0.7.0"
-source = "git+https://github.com/meilisearch/heed?tag=v0.12.4#7a4542bc72dd60ef0f508c89900ea292218223fb"
+source = "git+https://github.com/meilisearch/heed?tag=v0.12.5#4158a6c484752afaaf9e2530a6ee0e7ab0f24ee8"
 
 [[package]]
 name = "heed-types"
 version = "0.7.2"
-source = "git+https://github.com/meilisearch/heed?tag=v0.12.4#7a4542bc72dd60ef0f508c89900ea292218223fb"
+source = "git+https://github.com/meilisearch/heed?tag=v0.12.5#4158a6c484752afaaf9e2530a6ee0e7ab0f24ee8"
 dependencies = [
  "bincode",
  "heed-traits",
