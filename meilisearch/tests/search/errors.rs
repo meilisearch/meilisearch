@@ -519,7 +519,7 @@ async fn search_bad_matching_strategy() {
       "message": "Invalid value type at `.matchingStrategy`: expected a string, but found an object: `{\"doggo\":\"doggo\"}`",
       "code": "invalid_search_matching_strategy",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-search-matching-strategy"
+      "link": "https://docs.meilisearch.com/errors#invalid_search_matching_strategy"
     }
     "###);
 
