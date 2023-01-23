@@ -52,7 +52,7 @@ fn value_kinds_description_json(kinds: &[ValueKind]) -> String {
             ValueKind::Null => "null",
             ValueKind::Boolean => "a boolean",
             ValueKind::Integer => "a positive integer",
-            ValueKind::NegativeInteger => "an integer",
+            ValueKind::NegativeInteger => "a negative integer",
             ValueKind::Float => "a number",
             ValueKind::String => "a string",
             ValueKind::Sequence => "an array",
@@ -310,7 +310,7 @@ mod tests {
 
         insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Boolean]), @"a boolean");
         insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Integer]), @"a positive integer");
-        insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::NegativeInteger]), @"an integer");
+        insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::NegativeInteger]), @"a negative integer");
         insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Integer]), @"a positive integer");
         insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::String]), @"a string");
         insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Sequence]), @"an array");
@@ -318,7 +318,7 @@ mod tests {
 
         insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Integer, ValueKind::Boolean]), @"a boolean or a positive integer");
         insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Null, ValueKind::Integer]), @"null or a positive integer");
-        insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Sequence, ValueKind::NegativeInteger]), @"an integer or an array");
+        insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Sequence, ValueKind::NegativeInteger]), @"a negative integer or an array");
         insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Integer, ValueKind::Float]), @"a number");
         insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Integer, ValueKind::Float, ValueKind::NegativeInteger]), @"a number");
         insta::assert_display_snapshot!(value_kinds_description_json(&[ValueKind::Integer, ValueKind::Float, ValueKind::NegativeInteger, ValueKind::Null]), @"null or a number");
