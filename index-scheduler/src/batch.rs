@@ -1003,11 +1003,13 @@ impl IndexScheduler {
                     match index.primary_key(index_wtxn)? {
                         // if a primary key was set AND had already been defined in the index
                         // but to a different value, we can make the whole batch fail.
-                        Some(pk) => if primary_key != pk {
-                            return Err(milli::Error::from(
-                                milli::UserError::PrimaryKeyCannotBeChanged(pk.to_string()),
-                            )
-                            .into());
+                        Some(pk) => {
+                            if primary_key != pk {
+                                return Err(milli::Error::from(
+                                    milli::UserError::PrimaryKeyCannotBeChanged(pk.to_string()),
+                                )
+                                .into());
+                            }
                         }
                         // if the primary key was set and there was no primary key set for this index
                         // we set it to the received value before starting the indexing process.
