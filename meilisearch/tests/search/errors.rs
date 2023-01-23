@@ -512,6 +512,17 @@ async fn search_bad_matching_strategy() {
     }
     "###);
 
+    let (response, code) = index.search_post(json!({"matchingStrategy": {"doggo": "doggo"}})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.matchingStrategy`: expected a string, but found an object: `{\"doggo\":\"doggo\"}`",
+      "code": "invalid_search_matching_strategy",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_matching_strategy"
+    }
+    "###);
+
     let (response, code) = index.search_get("matchingStrategy=doggo").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
