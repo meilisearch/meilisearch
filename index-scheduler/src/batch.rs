@@ -207,7 +207,7 @@ impl IndexScheduler {
                 must_create_index,
             })),
             BatchKind::DocumentImport { method, import_ids, .. } => {
-                let tasks = self.get_existing_tasks(rtxn, import_ids)?;
+                let mut tasks = self.get_existing_tasks(rtxn, import_ids)?;
                 let primary_key = match &tasks[0].kind {
                     KindWithContent::DocumentAdditionOrUpdate { primary_key, .. } => {
                         primary_key.clone()
@@ -217,8 +217,18 @@ impl IndexScheduler {
 
                 let mut documents_counts = Vec::new();
                 let mut content_files = Vec::new();
-                for task in &tasks {
+                let mut drain_after = tasks.len();
+
+                for (i, task) in tasks.iter().enumerate() {
                     match task.kind {
+                        KindWithContent::DocumentAdditionOrUpdate {
+                            primary_key: ref pk, ..
+                        } if pk != &primary_key => {
+                            // we can't autobatch document additions that don't share the same
+                            // primary key because that would make the whole batch fails.
+                            drain_after = i;
+                            break;
+                        }
                         KindWithContent::DocumentAdditionOrUpdate {
                             content_file,
                             documents_count,
@@ -230,6 +240,8 @@ impl IndexScheduler {
                         _ => unreachable!(),
                     }
                 }
+
+                tasks.drain(drain_after..);
 
                 Ok(Some(Batch::IndexOperation {
                     op: IndexOperation::DocumentImport {
@@ -985,17 +997,32 @@ impl IndexScheduler {
                 let mut primary_key_has_been_set = false;
                 let must_stop_processing = self.must_stop_processing.clone();
                 let indexer_config = self.index_mapper.indexer_config();
-                // TODO use the code from the IndexCreate operation
+
                 if let Some(primary_key) = primary_key {
-                    if index.primary_key(index_wtxn)?.is_none() {
-                        let mut builder =
-                            milli::update::Settings::new(index_wtxn, index, indexer_config);
-                        builder.set_primary_key(primary_key);
-                        builder.execute(
-                            |indexing_step| debug!("update: {:?}", indexing_step),
-                            || must_stop_processing.clone().get(),
-                        )?;
-                        primary_key_has_been_set = true;
+                    match index.primary_key(index_wtxn)? {
+                        // if a primary key was set AND had already be defined in the index
+                        // but to a different value then we can make the whole batch fail.
+                        Some(pk) if primary_key != pk => {
+                            return Err(milli::Error::from(
+                                milli::UserError::PrimaryKeyCannotBeChanged(pk.to_string()),
+                            )
+                            .into());
+                        }
+                        // if the primary key was set and equal to the one already set for
+                        // the index then there is nothing to do.
+                        Some(_) => (),
+                        // if the primary key was set and there was no primary key set for this index
+                        // we set it to the received value before starting the indexing process.
+                        None => {
+                            let mut builder =
+                                milli::update::Settings::new(index_wtxn, index, indexer_config);
+                            builder.set_primary_key(primary_key);
+                            builder.execute(
+                                |indexing_step| debug!("update: {:?}", indexing_step),
+                                || must_stop_processing.clone().get(),
+                            )?;
+                            primary_key_has_been_set = true;
+                        }
                     }
                 }
 
@@ -1059,7 +1086,8 @@ impl IndexScheduler {
                             task.status = Status::Failed;
                             task.details = Some(Details::DocumentAdditionOrUpdate {
                                 received_documents: count,
-                                indexed_documents: Some(count),
+                                // if there was an error we indexed 0 documents.
+                                indexed_documents: Some(0),
                             });
                             task.error = Some(error.into())
                         }

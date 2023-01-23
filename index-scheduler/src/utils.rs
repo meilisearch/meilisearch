@@ -404,15 +404,19 @@ impl IndexScheduler {
                     Details::DocumentAdditionOrUpdate { received_documents, indexed_documents } => {
                         assert_eq!(kind.as_kind(), Kind::DocumentAdditionOrUpdate);
                         match indexed_documents {
-                            Some(0) => assert_ne!(status, Status::Enqueued),
                             Some(indexed_documents) => {
-                                assert_eq!(status, Status::Succeeded);
-                                assert!(indexed_documents <= received_documents);
+                                assert!(matches!(
+                                    status,
+                                    Status::Succeeded | Status::Failed | Status::Canceled
+                                ));
+                                match status {
+                                    Status::Succeeded => assert!(indexed_documents <= received_documents),
+                                    Status::Failed | Status::Canceled => assert_eq!(indexed_documents, 0),
+                                    status => panic!("DocumentAddition can't have an indexed_document set if it's {}", status),
+                                }
                             }
                             None => {
-                                assert_ne!(status, Status::Succeeded);
-                                assert_ne!(status, Status::Canceled);
-                                assert_ne!(status, Status::Failed);
+                                assert!(matches!(status, Status::Enqueued | Status::Processing))
                             }
                         }
                     }
@@ -504,7 +508,11 @@ impl IndexScheduler {
             if let KindWithContent::DocumentAdditionOrUpdate { content_file, .. } = kind {
                 match status {
                     Status::Enqueued | Status::Processing => {
-                        assert!(self.file_store.__all_uuids().contains(&content_file));
+                        assert!(
+                            self.file_store.__all_uuids().contains(&content_file),
+                            "Could not find uuid `{content_file}` in the file_store. Available uuids are {:?}.",
+                            self.file_store.__all_uuids(),
+                        );
                     }
                     Status::Succeeded | Status::Failed | Status::Canceled => {
                         assert!(!self.file_store.__all_uuids().contains(&content_file));

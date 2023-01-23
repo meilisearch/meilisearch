@@ -1,0 +1,25 @@
+---
+source: index-scheduler/src/lib.rs
+---
+[
+  {
+    "doggoid": 0,
+    "doggo": "jean bob"
+  },
+  {
+    "doggoid": 2,
+    "doggo": "jean bob"
+  },
+  {
+    "doggoid": 3,
+    "doggo": "jean bob"
+  },
+  {
+    "doggoid": 4,
+    "doggo": "jean bob"
+  },
+  {
+    "doggoid": 5,
+    "doggo": "jean bob"
+  }
+]

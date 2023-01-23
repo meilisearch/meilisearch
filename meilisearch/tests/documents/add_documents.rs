@@ -923,7 +923,7 @@ async fn error_primary_key_inference() {
       "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
-        "indexedDocuments": 1
+        "indexedDocuments": 0
       },
       "error": {
         "message": "The primary key inference failed as the engine did not find any field ending with `id` in its name. Please specify the primary key manually using the `primaryKey` query parameter.",
@@ -963,7 +963,7 @@ async fn error_primary_key_inference() {
       "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
-        "indexedDocuments": 1
+        "indexedDocuments": 0
       },
       "error": {
         "message": "The primary key inference failed as the engine found 3 fields ending with `id` in their names: 'id' and 'object_id'. Please specify the primary key manually using the `primaryKey` query parameter.",
