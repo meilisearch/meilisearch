@@ -1009,9 +1009,9 @@ dependencies = [
 
 [[package]]
 name = "deserr"
-version = "0.1.5"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d3c6417f0bf7561774690e3d47f9659b0cbc3614c7af7bfda404fda7a2c11d3"
+checksum = "28380303ca15ec07e1d5b079baf19cf849b09edad5cab219c1c51b2bd07523de"
 dependencies = [
  "deserr-internal",
  "serde-cs",
@@ -1020,9 +1020,9 @@ dependencies = [
 
 [[package]]
 name = "deserr-internal"
-version = "0.1.5"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "196415cbd3b782cddecbdd69da18cd9b19e1bb0bdbb649e87b5afd83fa8d322b"
+checksum = "860928cd8af78d223a3d70dd581f21d7c3de8aa2eecd938e0c0a399ded7c1451"
 dependencies = [
  "convert_case 0.5.0",
  "proc-macro2",
@@ -1300,8 +1300,8 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "0.39.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.39.1#0c7d1f761e5db6d086f27d3f0f47a97c7f4a5f08"
+version = "0.40.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.40.0#1c4b1b3b2dcd1b84da603a381c898da879c4adb5"
 dependencies = [
  "nom",
  "nom_locate",
@@ -1319,8 +1319,8 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "0.39.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.39.1#0c7d1f761e5db6d086f27d3f0f47a97c7f4a5f08"
+version = "0.40.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.40.0#1c4b1b3b2dcd1b84da603a381c898da879c4adb5"
 dependencies = [
  "serde_json",
 ]
@@ -1884,8 +1884,8 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "0.39.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.39.1#0c7d1f761e5db6d086f27d3f0f47a97c7f4a5f08"
+version = "0.40.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.40.0#1c4b1b3b2dcd1b84da603a381c898da879c4adb5"
 dependencies = [
  "serde_json",
 ]
@@ -2431,8 +2431,8 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.39.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.39.1#0c7d1f761e5db6d086f27d3f0f47a97c7f4a5f08"
+version = "0.40.0"
+source = "git+https://github.com/meilisearch/milli.git?tag=v0.40.0#1c4b1b3b2dcd1b84da603a381c898da879c4adb5"
 dependencies = [
  "bimap",
  "bincode",
