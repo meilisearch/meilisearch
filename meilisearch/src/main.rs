@@ -199,7 +199,7 @@ fn print_master_key_too_short_warning() {
         stderr,
         " Meilisearch started with a master key considered unsafe for use in a production environment.
 
-A master key of at least {MASTER_KEY_MIN_SIZE} bytes will be required when switching to a production environment."
+ A master key of at least {MASTER_KEY_MIN_SIZE} bytes will be required when switching to a production environment."
     )
     .unwrap();
     stderr.reset().unwrap();
