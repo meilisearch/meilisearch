@@ -11,11 +11,11 @@ source: index-scheduler/src/lib.rs
 2 {uid: 2, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("doggoid"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000002, documents_count: 1, allow_index_creation: true }}
 3 {uid: 3, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000003, documents_count: 1, allow_index_creation: true }}
 4 {uid: 4, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000004, documents_count: 1, allow_index_creation: true }}
-5 {uid: 5, status: enqueued, details: { received_documents: 1, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("doggoid"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000005, documents_count: 1, allow_index_creation: true }}
+5 {uid: 5, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("doggoid"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000005, documents_count: 1, allow_index_creation: true }}
 ----------------------------------------------------------------------
 ### Status:
-enqueued [5,]
-succeeded [0,2,3,4,]
+enqueued []
+succeeded [0,2,3,4,5,]
 failed [1,]
 ----------------------------------------------------------------------
 ### Kind:
@@ -42,16 +42,15 @@ doggos [0,1,2,3,4,5,]
 [timestamp] [0,]
 [timestamp] [1,]
 [timestamp] [2,]
-[timestamp] [3,4,]
+[timestamp] [3,4,5,]
 ----------------------------------------------------------------------
 ### Finished At:
 [timestamp] [0,]
 [timestamp] [1,]
 [timestamp] [2,]
-[timestamp] [3,4,]
+[timestamp] [3,4,5,]
 ----------------------------------------------------------------------
 ### File Store:
-00000000-0000-0000-0000-000000000005
 
 ----------------------------------------------------------------------
 

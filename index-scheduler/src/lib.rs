@@ -3281,13 +3281,9 @@ mod tests {
         snapshot!(primary_key, @"paw");
 
         // We should be able to batch together the next two tasks that don't specify any primary key
-        // and it should succeed.
+        // + the last task that matches the current primary-key. Everything should succeed.
         handle.advance_one_successful_batch();
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "fourth_and_fifth_tasks_succeeds");
-
-        // Finally the last task should succeed since its primary key is the same as the valid one.
-        handle.advance_one_successful_batch();
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "sixth_task_succeeds");
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_other_tasks_succeeds");
 
         // Is the primary key still what we expect?
         let index = index_scheduler.index("doggos").unwrap();
@@ -3360,13 +3356,9 @@ mod tests {
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "third_task_succeeds");
 
         // We should be able to batch together the next two tasks that don't specify any primary key
-        // and it should succeed.
+        // + the last task that matches the current primary-key. Everything should succeed.
         handle.advance_one_successful_batch();
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "fourth_and_fifth_tasks_succeeds");
-
-        // Finally the last task should succeed.
-        handle.advance_one_successful_batch();
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "sixth_task_succeeds");
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_other_tasks_succeeds");
 
         // Is the primary key still what we expect?
         let index = index_scheduler.index("doggos").unwrap();
