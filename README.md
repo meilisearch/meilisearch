@@ -68,7 +68,7 @@ Install one of our SDKs in your project for seamless integration between Meilise
 
 Take a look at the complete [Meilisearch integration list](https://docs.meilisearch.com/learn/what_is_meilisearch/sdks.html).
 
-![Logos belonging to different languages and frameworks supported by Meilisearch, including React, Ruby on Rails, Go, Rust, and PHP](assets/integrations.png)
+[![Logos belonging to different languages and frameworks supported by Meilisearch, including React, Ruby on Rails, Go, Rust, and PHP](assets/integrations.png)](https://docs.meilisearch.com/learn/what_is_meilisearch/sdks.html)
 
 ## ⚙️ Advanced usage
 
