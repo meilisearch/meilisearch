@@ -333,6 +333,80 @@ mod index_map {
             Ok(Index::new(options, path)?)
         }
     }
+
+    /// Putting the tests of the LRU down there so we have access to the cache's private members
+    #[cfg(test)]
+    mod tests {
+
+        use meilisearch_types::heed::Env;
+        use meilisearch_types::Index;
+        use uuid::Uuid;
+
+        use super::super::IndexMapper;
+        use crate::tests::IndexSchedulerHandle;
+        use crate::utils::clamp_to_page_size;
+        use crate::IndexScheduler;
+
+        impl IndexMapper {
+            fn test() -> (Self, Env, IndexSchedulerHandle) {
+                let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
+                (index_scheduler.index_mapper, index_scheduler.env, handle)
+            }
+        }
+
+        fn check_first_unavailable(mapper: &IndexMapper, expected_uuid: Uuid, is_closing: bool) {
+            let index_map = mapper.index_map.read().unwrap();
+            let (uuid, state) = index_map.unavailable.first_key_value().unwrap();
+            assert_eq!(uuid, &expected_uuid);
+            assert_eq!(state.is_some(), is_closing);
+        }
+
+        #[test]
+        fn evict_indexes() {
+            let (mapper, env, _handle) = IndexMapper::test();
+            let mut uuids = vec![];
+            // LRU cap + 1
+            for i in 0..(5 + 1) {
+                let index_name = format!("index-{i}");
+                let wtxn = env.write_txn().unwrap();
+                mapper.create_index(wtxn, &index_name, None).unwrap();
+                let txn = env.read_txn().unwrap();
+                uuids.push(mapper.index_mapping.get(&txn, &index_name).unwrap().unwrap());
+            }
+            // index-0 was evicted
+            check_first_unavailable(&mapper, uuids[0], true);
+
+            // get back the evicted index
+            let wtxn = env.write_txn().unwrap();
+            mapper.create_index(wtxn, "index-0", None).unwrap();
+
+            // Least recently used is now index-1
+            check_first_unavailable(&mapper, uuids[1], true);
+        }
+
+        #[test]
+        fn resize_index() {
+            let (mapper, env, _handle) = IndexMapper::test();
+            let index = mapper.create_index(env.write_txn().unwrap(), "index", None).unwrap();
+            assert_index_size(index, mapper.index_base_map_size);
+
+            mapper.resize_index(&env.read_txn().unwrap(), "index").unwrap();
+
+            let index = mapper.create_index(env.write_txn().unwrap(), "index", None).unwrap();
+            assert_index_size(index, mapper.index_base_map_size + mapper.index_growth_amount);
+
+            mapper.resize_index(&env.read_txn().unwrap(), "index").unwrap();
+
+            let index = mapper.create_index(env.write_txn().unwrap(), "index", None).unwrap();
+            assert_index_size(index, mapper.index_base_map_size + mapper.index_growth_amount * 2);
+        }
+
+        fn assert_index_size(index: Index, expected: usize) {
+            let expected = clamp_to_page_size(expected);
+            let index_map_size = index.map_size().unwrap();
+            assert_eq!(index_map_size, expected);
+        }
+    }
 }
 
 /// Whether the index is available for use or is forbidden to be inserted back in the index map
