@@ -63,6 +63,11 @@ impl Index<'_> {
         self.service.post_encoded("/indexes", body, self.encoder).await
     }
 
+    pub async fn update_raw(&self, body: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}", urlencode(self.uid.as_ref()));
+        self.service.patch_encoded(url, body, self.encoder).await
+    }
+
     pub async fn update(&self, primary_key: Option<&str>) -> (Value, StatusCode) {
         let body = json!({
             "primaryKey": primary_key,
