@@ -2326,4 +2326,35 @@ pub(crate) mod tests {
 
         db_snap!(index, geo_faceted_documents_ids); // ensure that no more document was inserted
     }
+
+    #[test]
+    fn unexpected_extra_fields_in_geo_field() {
+        let index = TempIndex::new();
+
+        index
+            .update_settings(|settings| {
+                settings.set_primary_key("id".to_string());
+                settings.set_filterable_fields(HashSet::from(["_geo".to_string()]));
+            })
+            .unwrap();
+
+        let err = index
+            .add_documents(
+                documents!({ "id" : "doggo", "_geo": { "lat": 1, "lng": 2, "doggo": "are the best" }}),
+            )
+            .unwrap_err();
+        insta::assert_display_snapshot!(err, @r###"The `_geo` field in the document with the id: `"\"doggo\""` contains the following unexpected fields: `{"doggo":"are the best"}`."###);
+
+        db_snap!(index, geo_faceted_documents_ids); // ensure that no documents were inserted
+
+        // multiple fields and complex values
+        let err = index
+            .add_documents(
+                documents!({ "id" : "doggo", "_geo": { "lat": 1, "lng": 2, "doggo": "are the best", "and": { "all": ["cats", { "are": "beautiful" } ] } } }),
+            )
+            .unwrap_err();
+        insta::assert_display_snapshot!(err, @r###"The `_geo` field in the document with the id: `"\"doggo\""` contains the following unexpected fields: `{"and":{"all":["cats",{"are":"beautiful"}]},"doggo":"are the best"}`."###);
+
+        db_snap!(index, geo_faceted_documents_ids); // ensure that no documents were inserted
+    }
 }

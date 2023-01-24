@@ -154,6 +154,8 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
 pub enum GeoError {
     #[error("The `_geo` field in the document with the id: `{document_id}` is not an object. Was expecting an object with the `_geo.lat` and `_geo.lng` fields but instead got `{value}`.")]
     NotAnObject { document_id: Value, value: Value },
+    #[error("The `_geo` field in the document with the id: `{document_id}` contains the following unexpected fields: `{value}`.")]
+    UnexpectedExtraFields { document_id: Value, value: Value },
     #[error("Could not find latitude nor longitude in the document with the id: `{document_id}`. Was expecting `_geo.lat` and `_geo.lng` fields.")]
     MissingLatitudeAndLongitude { document_id: Value },
     #[error("Could not find latitude in the document with the id: `{document_id}`. Was expecting a `_geo.lat` field.")]
