@@ -508,14 +508,23 @@ impl IndexScheduler {
             if let KindWithContent::DocumentAdditionOrUpdate { content_file, .. } = kind {
                 match status {
                     Status::Enqueued | Status::Processing => {
-                        assert!(
-                            self.file_store.__all_uuids().contains(&content_file),
-                            "Could not find uuid `{content_file}` in the file_store. Available uuids are {:?}.",
-                            self.file_store.__all_uuids(),
+                        assert!(self
+                        .file_store
+                        .all_uuids()
+                        .unwrap()
+                        .find(|uuid| uuid.as_ref().unwrap() == &content_file)
+                        .is_some(),
+                       "Could not find uuid `{content_file}` in the file_store. Available uuids are {:?}.",
+                        self.file_store.all_uuids().unwrap().collect::<Result<Vec<_>>>(),
                         );
                     }
                     Status::Succeeded | Status::Failed | Status::Canceled => {
-                        assert!(!self.file_store.__all_uuids().contains(&content_file));
+                        assert!(self
+                            .file_store
+                            .all_uuids()
+                            .unwrap()
+                            .find(|uuid| uuid.as_ref().unwrap() == &content_file)
+                            .is_none());
                     }
                 }
             }

@@ -343,6 +343,7 @@ impl ErrorCode for file_store::Error {
         match self {
             Self::IoError(e) => e.error_code(),
             Self::PersistError(e) => e.error_code(),
+            Self::CouldNotParseFileNameAsUtf8 | Self::UuidError(_) => Code::Internal,
         }
     }
 }

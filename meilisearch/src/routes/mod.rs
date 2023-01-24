@@ -4,6 +4,7 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::{IndexScheduler, Query};
 use log::debug;
+use meilisearch_auth::AuthController;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::tasks::{Kind, Status, Task, TaskId};
@@ -230,13 +231,15 @@ pub struct Stats {
 
 async fn get_stats(
     index_scheduler: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<IndexScheduler>>,
+    auth_controller: GuardedData<ActionPolicy<{ actions::STATS_GET }>, AuthController>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     analytics.publish("Stats Seen".to_string(), json!({ "per_index_uid": false }), Some(&req));
     let search_rules = &index_scheduler.filters().search_rules;
 
-    let stats = create_all_stats((*index_scheduler).clone(), search_rules)?;
+    let stats =
+        create_all_stats((*index_scheduler).clone(), (*auth_controller).clone(), search_rules)?;
 
     debug!("returns: {:?}", stats);
     Ok(HttpResponse::Ok().json(stats))
@@ -244,6 +247,7 @@ async fn get_stats(
 
 pub fn create_all_stats(
     index_scheduler: Data<IndexScheduler>,
+    auth_controller: AuthController,
     search_rules: &meilisearch_auth::SearchRules,
 ) -> Result<Stats, ResponseError> {
     let mut last_task: Option<OffsetDateTime> = None;
@@ -253,6 +257,7 @@ pub fn create_all_stats(
         Query { statuses: Some(vec![Status::Processing]), limit: Some(1), ..Query::default() },
         search_rules.authorized_indexes(),
     )?;
+    // accumulate the size of each indexes
     let processing_index = processing_task.first().and_then(|task| task.index_uid());
     for (name, index) in index_scheduler.indexes()? {
         if !search_rules.is_index_authorized(&name) {
@@ -273,6 +278,11 @@ pub fn create_all_stats(
 
         indexes.insert(name, stats);
     }
+
+    database_size += index_scheduler.size()?;
+    database_size += auth_controller.size()?;
+    database_size += index_scheduler.update_file_size()?;
+
     let stats = Stats { database_size, last_update: last_task, indexes };
     Ok(stats)
 }
