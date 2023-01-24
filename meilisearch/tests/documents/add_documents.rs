@@ -1458,14 +1458,19 @@ async fn add_documents_invalid_geo_field() {
     {
       "uid": 13,
       "indexUid": "test",
-      "status": "succeeded",
+      "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
         "indexedDocuments": 1
       },
-      "error": null,
+      "error": {
+        "message": "The `_geo` field in the document with the id: `11` contains the following unexpected fields: `{\"doggo\":\"are the best\"}`.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
