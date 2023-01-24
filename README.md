@@ -8,7 +8,7 @@
 
 DO NOT CONTRIBUTE TO THIS REPOSITORY ANYMORE, IT WILL BE ARCHIVED SOON. ONLY MEILI TEAM IS ALLOWED TO CONTRIBUTE.
 
-The content of this repository is now available in the [Meilisearch repository](https://github.com/meilisearch/meilisearch) in the workspace `milli`.
+The content of this repository is now available in the [Meilisearch repository in the workspace `milli`](https://github.com/meilisearch/meilisearch/tree/main/milli).
 
 ---
 
