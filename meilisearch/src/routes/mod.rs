@@ -22,6 +22,7 @@ const PAGINATION_DEFAULT_LIMIT: usize = 20;
 mod api_key;
 mod dump;
 pub mod indexes;
+mod multi_search;
 mod swap_indexes;
 pub mod tasks;
 
@@ -33,6 +34,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::resource("/stats").route(web::get().to(get_stats)))
         .service(web::resource("/version").route(web::get().to(get_version)))
         .service(web::scope("/indexes").configure(indexes::configure))
+        .service(web::scope("/multi-search").configure(multi_search::configure))
         .service(web::scope("/swap-indexes").configure(swap_indexes::configure));
 }
 
