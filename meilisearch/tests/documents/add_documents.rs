@@ -1034,6 +1034,7 @@ async fn add_documents_invalid_geo_field() {
     index.create(Some("id")).await;
     index.update_settings(json!({"sortableAttributes": ["_geo"]})).await;
 
+    // _geo is not an object
     let documents = json!([
         {
             "id": "11",
@@ -1063,6 +1064,408 @@ async fn add_documents_invalid_geo_field() {
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
       },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is an object but is missing both the lat and lng
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": {}
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(3).await;
+    let (response, code) = index.get_task(3).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 3,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": {
+        "message": "Could not find latitude nor longitude in the document with the id: `11`. Was expecting `_geo.lat` and `_geo.lng` fields.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is an object but is missing both the lat and lng and contain an unexpected field
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": { "doggos": "are good" }
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(4).await;
+    let (response, code) = index.get_task(4).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 4,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": {
+        "message": "Could not find latitude nor longitude in the document with the id: `11`. Was expecting `_geo.lat` and `_geo.lng` fields.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is an object but only contains the lat
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": { "lat": 12 }
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(5).await;
+    let (response, code) = index.get_task(5).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 5,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": {
+        "message": "Could not find longitude in the document with the id: `11`. Was expecting a `_geo.lng` field.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is an object but only contains the lng
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": { "lng": 12 }
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(6).await;
+    let (response, code) = index.get_task(6).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 6,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": {
+        "message": "Could not find latitude in the document with the id: `11`. Was expecting a `_geo.lat` field.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is an object but the lat has a wrong type
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": { "lat": true }
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(7).await;
+    let (response, code) = index.get_task(7).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 7,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": {
+        "message": "Could not find longitude in the document with the id: `11`. Was expecting a `_geo.lng` field.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is an object but the lng has a wrong type
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": { "lng": true }
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(8).await;
+    let (response, code) = index.get_task(8).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 8,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": {
+        "message": "Could not find latitude in the document with the id: `11`. Was expecting a `_geo.lat` field.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is an object but the lat and lng have a wrong type
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": { "lat": false, "lng": true }
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(9).await;
+    let (response, code) = index.get_task(9).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 9,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": {
+        "message": "Could not parse latitude nor longitude in the document with the id: `11`. Was expecting finite numbers but instead got `false` and `true`.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is an object but the lat can't be parsed as a float
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": { "lat": "doggo" }
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(10).await;
+    let (response, code) = index.get_task(10).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 10,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": {
+        "message": "Could not find longitude in the document with the id: `11`. Was expecting a `_geo.lng` field.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is an object but the lng can't be parsed as a float
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": { "lng": "doggo" }
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(11).await;
+    let (response, code) = index.get_task(11).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 11,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": {
+        "message": "Could not find latitude in the document with the id: `11`. Was expecting a `_geo.lat` field.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is an object but the lat and lng can't be parsed as a float
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": { "lat": "doggo", "lng": "doggo" }
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(12).await;
+    let (response, code) = index.get_task(12).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 12,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": {
+        "message": "Could not parse latitude nor longitude in the document with the id: `11`. Was expecting finite numbers but instead got `\"doggo\"` and `\"doggo\"`.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is a valid object but contains one extra unknown field
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": { "lat": 1, "lng": 2, "doggo": "are the best" }
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(13).await;
+    let (response, code) = index.get_task(13).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 13,
+      "indexUid": "test",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
