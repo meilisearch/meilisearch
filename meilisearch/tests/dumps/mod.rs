@@ -811,7 +811,7 @@ async fn import_dump_v5() {
     assert_eq!(code, 200);
     assert_eq!(stats, expected_stats);
 
-    let (keys, code) = server.list_api_keys().await;
+    let (keys, code) = server.list_api_keys("").await;
     assert_eq!(code, 200);
     let key = &keys["results"][0];
 

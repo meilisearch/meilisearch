@@ -790,7 +790,7 @@ async fn list_api_keys() {
     "###);
     meili_snap::snapshot!(code, @"201 Created");
 
-    let (response, code) = server.list_api_keys().await;
+    let (response, code) = server.list_api_keys("").await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".results[].createdAt" => "[ignored]", ".results[].updatedAt" => "[ignored]", ".results[].uid" => "[ignored]", ".results[].key" => "[ignored]" }), @r###"
     {
       "results": [
@@ -864,7 +864,7 @@ async fn list_api_keys() {
 async fn error_list_api_keys_no_header() {
     let server = Server::new_auth().await;
 
-    let (response, code) = server.list_api_keys().await;
+    let (response, code) = server.list_api_keys("").await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
       "message": "The Authorization header is missing. It must use the bearer authorization method.",
@@ -881,7 +881,7 @@ async fn error_list_api_keys_bad_key() {
     let mut server = Server::new_auth().await;
     server.use_api_key("d4000bd7225f77d1eb22cc706ed36772bbc36767c016a27f76def7537b68600d");
 
-    let (response, code) = server.list_api_keys().await;
+    let (response, code) = server.list_api_keys("").await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
       "message": "The provided API key is invalid.",
@@ -1723,7 +1723,7 @@ async fn error_access_api_key_routes_no_master_key_set() {
     "###);
     meili_snap::snapshot!(code, @"401 Unauthorized");
 
-    let (response, code) = server.list_api_keys().await;
+    let (response, code) = server.list_api_keys("").await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
       "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
@@ -1769,7 +1769,7 @@ async fn error_access_api_key_routes_no_master_key_set() {
     "###);
     meili_snap::snapshot!(code, @"401 Unauthorized");
 
-    let (response, code) = server.list_api_keys().await;
+    let (response, code) = server.list_api_keys("").await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
       "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
