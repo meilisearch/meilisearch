@@ -379,6 +379,10 @@ pub fn validate_geo_from_json(id: &DocumentId, bytes: &[u8]) -> Result<StdResult
         Value::Object(mut object) => match (object.remove("lat"), object.remove("lng")) {
             (Some(lat), Some(lng)) => {
                 match (extract_finite_float_from_value(lat), extract_finite_float_from_value(lng)) {
+                    (Ok(_), Ok(_)) if !object.is_empty() => Ok(Err(UnexpectedExtraFields {
+                        document_id: debug_id(),
+                        value: object.into(),
+                    })),
                     (Ok(_), Ok(_)) => Ok(Ok(())),
                     (Err(value), Ok(_)) => Ok(Err(BadLatitude { document_id: debug_id(), value })),
                     (Ok(_), Err(value)) => Ok(Err(BadLongitude { document_id: debug_id(), value })),
