@@ -95,8 +95,16 @@ impl Server {
         self.index_with_encoder(uid, Encoder::Plain)
     }
 
+    pub async fn create_index(&self, body: Value) -> (Value, StatusCode) {
+        self.service.post("/indexes", body).await
+    }
+
     pub fn index_with_encoder(&self, uid: impl AsRef<str>, encoder: Encoder) -> Index<'_> {
         Index { uid: uid.as_ref().to_string(), service: &self.service, encoder }
+    }
+
+    pub async fn list_indexes_raw(&self, parameters: &str) -> (Value, StatusCode) {
+        self.service.get(format!("/indexes{parameters}")).await
     }
 
     pub async fn list_indexes(
