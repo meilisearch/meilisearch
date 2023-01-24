@@ -57,7 +57,8 @@ async fn main() -> anyhow::Result<()> {
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     let analytics = if !opt.no_analytics {
-        analytics::SegmentAnalytics::new(&opt, index_scheduler.clone()).await
+        analytics::SegmentAnalytics::new(&opt, index_scheduler.clone(), auth_controller.clone())
+            .await
     } else {
         analytics::MockAnalytics::new(&opt)
     };
