@@ -37,12 +37,12 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: build
-        args: --locked --release --no-default-features
+        args: --locked --release --no-default-features --all
     - name: Run cargo test
       uses: actions-rs/cargo@v1
       with:
         command: test
-        args: --locked --release
+        args: --locked --release --all
 
   test-others:
     name: Tests on ${{ matrix.os }}
@@ -59,12 +59,12 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: build
-        args: --locked --release --no-default-features
+        args: --locked --release --no-default-features --all
     - name: Run cargo test
       uses: actions-rs/cargo@v1
       with:
         command: test
-        args: --locked --release
+        args: --locked --release --all
 
   # We run tests in debug also, to make sure that the debug_assertions are hit
   test-debug:
@@ -89,7 +89,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --locked
+          args: --locked --all
 
   clippy:
     name: Run Clippy
