@@ -2,7 +2,6 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::IndexScheduler;
 use log::debug;
-use meilisearch_auth::IndexSearchRules;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::deserr_codes::*;
@@ -18,9 +17,9 @@ use crate::extractors::json::ValidatedJson;
 use crate::extractors::query_parameters::QueryParameter;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::search::{
-    perform_search, MatchingStrategy, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
-    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
-    DEFAULT_SEARCH_OFFSET,
+    add_search_rules, perform_search, MatchingStrategy, SearchQuery, DEFAULT_CROP_LENGTH,
+    DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
+    DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
 };
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -98,26 +97,6 @@ impl From<SearchQueryGet> for SearchQuery {
             highlight_post_tag: other.highlight_post_tag,
             crop_marker: other.crop_marker,
             matching_strategy: other.matching_strategy,
-        }
-    }
-}
-
-/// Incorporate search rules in search query
-fn add_search_rules(query: &mut SearchQuery, rules: IndexSearchRules) {
-    query.filter = match (query.filter.take(), rules.filter) {
-        (None, rules_filter) => rules_filter,
-        (filter, None) => filter,
-        (Some(filter), Some(rules_filter)) => {
-            let filter = match filter {
-                Value::Array(filter) => filter,
-                filter => vec![filter],
-            };
-            let rules_filter = match rules_filter {
-                Value::Array(rules_filter) => rules_filter,
-                rules_filter => vec![rules_filter],
-            };
-
-            Some(Value::Array([filter, rules_filter].concat()))
         }
     }
 }
