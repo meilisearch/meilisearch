@@ -183,9 +183,6 @@ impl BatchKind {
                 )
             }
             // if the primary key set in the task was different than ours we should stop and make this batch fail asap.
-            // TODO: maybe we could continue to batch tasks that'll fail? But that would mean we need to be extra
-            // cautious with the index deletion and document clear because we should remember that these tasks were
-            // supposed to fail even if we don't execute them.
             K::DocumentImport { method, allow_index_creation, primary_key } => (
                 Break(BatchKind::DocumentImport {
                     method,
@@ -220,18 +217,6 @@ impl BatchKind {
             (this, kind) if !index_already_exists && this.allow_index_creation() == Some(false) && kind.allow_index_creation() == Some(true) => {
                 Break(this)
             },
-            //
-            // 1. If both task don't interact with primary key -> we can continue
-            // 2. Else ->
-            //   2.1 If we already have a primary-key ->
-            //     2.1.1 If the task we're trying to accumulate have a pk -> it must be equal to our primary key to continue
-            //     2.1.2 If the task don't have a primary-key -> we can continue
-            //   (We've already ensured that the current batch was correct according to our pk in a previous step of the autobatcher)
-            //   2.2 If we don't have a primary-key ->
-            //     2.2.1 If both the batch and the task have a primary key they should be equal
-            //     2.2.2 If the batch is set to Some(None), the task should be too
-            //     2.2.3 If the batch is set to None -> we can continue
-            //
             // NOTE: We need to negate the whole condition since we're checking if we need to break instead of continue.
             //       I wrote it this way because it's easier to understand than the other way around.
             (this, kind) if !(
@@ -244,14 +229,14 @@ impl BatchKind {
                         primary_key.is_some() &&
                         // 2.1.1 If the task we're trying to accumulate have a pk it must be equal to our primary key
                         // 2.1.2 If the task don't have a primary-key -> we can continue
-                        dbg!(kind.primary_key()).map_or(true, |pk| pk == primary_key)
+                        kind.primary_key().map_or(true, |pk| pk == primary_key)
                     ) ||
                     // 2.2 If we don't have a primary-key ->
                     (
                         // 2.2.1 If both the batch and the task have a primary key they should be equal
                         // 2.2.2 If the batch is set to Some(None), the task should be too
                         // 2.2.3 If the batch is set to None -> we can continue
-                        dbg!(&this.primary_key()).zip(dbg!(kind.primary_key())).map_or(true, |(this, kind)| this == kind)
+                        this.primary_key().zip(kind.primary_key()).map_or(true, |(this, kind)| this == kind)
                     )
                 )
 
