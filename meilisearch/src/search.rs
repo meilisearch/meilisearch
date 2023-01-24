@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use deserr::DeserializeFromValue;
 use either::Either;
+use meilisearch_auth::IndexSearchRules;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -74,6 +75,99 @@ impl SearchQuery {
     }
 }
 
+/// A `SearchQuery` + an index UID.
+// This struct contains the fields of `SearchQuery` inline.
+// This is because neither deserr nor serde support `flatten` when using `deny_unknown_fields.
+// The `From<SearchQueryWithIndex>` implementation ensures both structs remain up to date.
+#[derive(Debug, deserr::DeserializeFromValue)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+pub struct SearchQueryWithIndex {
+    pub index_uid: String,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
+    pub q: Option<String>,
+    #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
+    pub offset: usize,
+    #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
+    pub limit: usize,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
+    pub page: Option<usize>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchHitsPerPage>)]
+    pub hits_per_page: Option<usize>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToRetrieve>)]
+    pub attributes_to_retrieve: Option<BTreeSet<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
+    pub attributes_to_crop: Option<Vec<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
+    pub crop_length: usize,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
+    pub attributes_to_highlight: Option<HashSet<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>, default)]
+    pub show_matches_position: bool,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
+    pub filter: Option<Value>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
+    pub sort: Option<Vec<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
+    pub facets: Option<Vec<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
+    pub highlight_pre_tag: String,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
+    pub highlight_post_tag: String,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
+    pub crop_marker: String,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
+    pub matching_strategy: MatchingStrategy,
+}
+
+impl SearchQueryWithIndex {
+    pub fn into_index_query(self) -> (String, SearchQuery) {
+        let SearchQueryWithIndex {
+            index_uid,
+            q,
+            offset,
+            limit,
+            page,
+            hits_per_page,
+            attributes_to_retrieve,
+            attributes_to_crop,
+            crop_length,
+            attributes_to_highlight,
+            show_matches_position,
+            filter,
+            sort,
+            facets,
+            highlight_pre_tag,
+            highlight_post_tag,
+            crop_marker,
+            matching_strategy,
+        } = self;
+        (
+            index_uid,
+            SearchQuery {
+                q,
+                offset,
+                limit,
+                page,
+                hits_per_page,
+                attributes_to_retrieve,
+                attributes_to_crop,
+                crop_length,
+                attributes_to_highlight,
+                show_matches_position,
+                filter,
+                sort,
+                facets,
+                highlight_pre_tag,
+                highlight_post_tag,
+                crop_marker,
+                matching_strategy,
+                // do not use ..Default::default() here,
+                // rather add any missing field from `SearchQuery` to `SearchQueryWithIndex`
+            },
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, DeserializeFromValue)]
 #[deserr(rename_all = camelCase)]
 pub enum MatchingStrategy {
@@ -121,12 +215,40 @@ pub struct SearchResult {
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchResultWithIndex {
+    pub index_uid: String,
+    #[serde(flatten)]
+    pub result: SearchResult,
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum HitsInfo {
     #[serde(rename_all = "camelCase")]
     Pagination { hits_per_page: usize, page: usize, total_pages: usize, total_hits: usize },
     #[serde(rename_all = "camelCase")]
     OffsetLimit { limit: usize, offset: usize, estimated_total_hits: usize },
+}
+
+/// Incorporate search rules in search query
+pub fn add_search_rules(query: &mut SearchQuery, rules: IndexSearchRules) {
+    query.filter = match (query.filter.take(), rules.filter) {
+        (None, rules_filter) => rules_filter,
+        (filter, None) => filter,
+        (Some(filter), Some(rules_filter)) => {
+            let filter = match filter {
+                Value::Array(filter) => filter,
+                filter => vec![filter],
+            };
+            let rules_filter = match rules_filter {
+                Value::Array(rules_filter) => rules_filter,
+                rules_filter => vec![rules_filter],
+            };
+
+            Some(Value::Array([filter, rules_filter].concat()))
+        }
+    }
 }
 
 pub fn perform_search(
