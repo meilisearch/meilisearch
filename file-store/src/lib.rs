@@ -94,15 +94,17 @@ impl FileStore {
         Ok(())
     }
 
-    pub fn update_total_size(&self) -> Result<u64> {
+    /// Compute the size of all the updates contained in the file store.
+    pub fn compute_total_size(&self) -> Result<u64> {
         let mut total = 0;
         for uuid in self.all_uuids()? {
-            total += self.get_size(uuid?)?;
+            total += self.compute_size(uuid?).unwrap_or_default();
         }
         Ok(total)
     }
 
-    pub fn get_size(&self, uuid: Uuid) -> Result<u64> {
+    /// Compute the size of one update
+    pub fn compute_size(&self, uuid: Uuid) -> Result<u64> {
         Ok(self.get_update(uuid)?.metadata()?.len())
     }
 

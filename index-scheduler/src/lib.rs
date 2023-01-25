@@ -903,8 +903,8 @@ impl IndexScheduler {
     }
 
     /// The size on disk taken by all the updates files contained in the `IndexScheduler`, in bytes.
-    pub fn update_file_size(&self) -> Result<u64> {
-        Ok(self.file_store.update_total_size()?)
+    pub fn compute_update_file_size(&self) -> Result<u64> {
+        Ok(self.file_store.compute_total_size()?)
     }
 
     /// Delete a file from the index scheduler.

@@ -514,7 +514,7 @@ impl IndexScheduler {
                             .unwrap()
                             .any(|uuid| uuid.as_ref().unwrap() == &content_file),
                             "Could not find uuid `{content_file}` in the file_store. Available uuids are {:?}.",
-                            self.file_store.all_uuids().unwrap().collect::<Result<Vec<_>>>().unwrap(),
+                            self.file_store.all_uuids().unwrap().collect::<std::result::Result<Vec<_>, file_store::Error>>().unwrap(),
                         );
                     }
                     Status::Succeeded | Status::Failed | Status::Canceled => {

@@ -281,7 +281,7 @@ pub fn create_all_stats(
 
     database_size += index_scheduler.size()?;
     database_size += auth_controller.size()?;
-    database_size += index_scheduler.update_file_size()?;
+    database_size += index_scheduler.compute_update_file_size()?;
 
     let stats = Stats { database_size, last_update: last_task, indexes };
     Ok(stats)
