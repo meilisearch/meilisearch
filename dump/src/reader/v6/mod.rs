@@ -35,7 +35,7 @@ pub type PaginationSettings = meilisearch_types::settings::PaginationSettings;
 // everything related to the api keys
 pub type Action = meilisearch_types::keys::Action;
 pub type StarOr<T> = meilisearch_types::star_or::StarOr<T>;
-pub type IndexUid = meilisearch_types::index_uid::IndexUid;
+pub type IndexUidPattern = meilisearch_types::index_uid_pattern::IndexUidPattern;
 
 // everything related to the errors
 pub type ResponseError = meilisearch_types::error::ResponseError;

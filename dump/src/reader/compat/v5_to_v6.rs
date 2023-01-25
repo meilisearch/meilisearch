@@ -183,7 +183,7 @@ impl CompatV5ToV6 {
                     .map(|index| match index {
                         v5::StarOr::Star => v6::StarOr::Star,
                         v5::StarOr::Other(uid) => {
-                            v6::StarOr::Other(v6::IndexUid::new_unchecked(uid.as_str()))
+                            v6::StarOr::Other(v6::IndexUidPattern::new_unchecked(uid.as_str()))
                         }
                     })
                     .collect(),

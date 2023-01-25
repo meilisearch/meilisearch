@@ -10,11 +10,16 @@ use crate::index_uid::{IndexUid, IndexUidFormatError};
 /// An index uid pattern is composed of only ascii alphanumeric characters, - and _, between 1 and 400
 /// bytes long and optionally ending with a *.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "test-traits", derive(proptest_derive::Arbitrary))]
 pub struct IndexUidPattern(
     #[cfg_attr(feature = "test-traits", proptest(regex("[a-zA-Z0-9_-]{1,400}\\*?")))] String,
 );
 
 impl IndexUidPattern {
+    pub fn new_unchecked(s: impl AsRef<str>) -> Self {
+        Self(s.as_ref().to_string())
+    }
+
     /// Returns wether this index uid matches this index uid pattern.
     pub fn matches(&self, uid: &IndexUid) -> bool {
         self.matches_str(uid.as_str())
