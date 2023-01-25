@@ -278,6 +278,65 @@ impl<'a> FacetDistribution<'a> {
         }
     }
 
+    pub fn compute_stats(&self) -> Result<BTreeMap<String, (f64, f64)>> {
+        let fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
+        let filterable_fields = self.index.filterable_fields(self.rtxn)?;
+        let candidates = if let Some(candidates) = self.candidates.clone() {
+            candidates
+        } else {
+            return Ok(Default::default());
+        };
+
+        let fields = match &self.facets {
+            Some(facets) => {
+                let invalid_fields: HashSet<_> = facets
+                    .iter()
+                    .filter(|facet| !crate::is_faceted(facet, &filterable_fields))
+                    .collect();
+                if !invalid_fields.is_empty() {
+                    return Err(UserError::InvalidFacetsDistribution {
+                        invalid_facets_name: invalid_fields.into_iter().cloned().collect(),
+                        valid_facets_name: filterable_fields.into_iter().collect(),
+                    }
+                    .into());
+                } else {
+                    facets.clone()
+                }
+            }
+            None => filterable_fields,
+        };
+
+        let mut distribution = BTreeMap::new();
+        for (fid, name) in fields_ids_map.iter() {
+            if crate::is_faceted(name, &fields) {
+                let min_value = if let Some(min_value) = crate::search::criteria::facet_min_value(
+                    self.index,
+                    self.rtxn,
+                    fid,
+                    candidates.clone(),
+                )? {
+                    min_value
+                } else {
+                    continue;
+                };
+                let max_value = if let Some(max_value) = crate::search::criteria::facet_max_value(
+                    self.index,
+                    self.rtxn,
+                    fid,
+                    candidates.clone(),
+                )? {
+                    max_value
+                } else {
+                    continue;
+                };
+
+                distribution.insert(name.to_string(), (min_value, max_value));
+            }
+        }
+
+        Ok(distribution)
+    }
+
     pub fn execute(&self) -> Result<BTreeMap<String, BTreeMap<String, u64>>> {
         let fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
         let filterable_fields = self.index.filterable_fields(self.rtxn)?;

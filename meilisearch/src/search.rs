@@ -108,7 +108,7 @@ pub struct SearchHit {
     pub matches_position: Option<MatchesPosition>,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
     pub hits: Vec<SearchHit>,
@@ -118,6 +118,8 @@ pub struct SearchResult {
     pub hits_info: HitsInfo,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facet_distribution: Option<BTreeMap<String, BTreeMap<String, u64>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub facet_stats: Option<BTreeMap<String, FacetStats>>,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]
@@ -127,6 +129,12 @@ pub enum HitsInfo {
     Pagination { hits_per_page: usize, page: usize, total_pages: usize, total_hits: usize },
     #[serde(rename_all = "camelCase")]
     OffsetLimit { limit: usize, offset: usize, estimated_total_hits: usize },
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq)]
+pub struct FacetStats {
+    pub min: f64,
+    pub max: f64,
 }
 
 pub fn perform_search(
@@ -300,7 +308,7 @@ pub fn perform_search(
         HitsInfo::OffsetLimit { limit: query.limit, offset, estimated_total_hits: number_of_hits }
     };
 
-    let facet_distribution = match query.facets {
+    let (facet_distribution, facet_stats) = match query.facets {
         Some(ref fields) => {
             let mut facet_distribution = index.facets_distribution(&rtxn);
 
@@ -314,11 +322,15 @@ pub fn perform_search(
                 facet_distribution.facets(fields);
             }
             let distribution = facet_distribution.candidates(candidates).execute()?;
-
-            Some(distribution)
+            let stats = facet_distribution.compute_stats()?;
+            (Some(distribution), Some(stats))
         }
-        None => None,
+        None => (None, None),
     };
+
+    let facet_stats = facet_stats.map(|stats| {
+        stats.into_iter().map(|(k, (min, max))| (k, FacetStats { min, max })).collect()
+    });
 
     let result = SearchResult {
         hits: documents,
@@ -326,6 +338,7 @@ pub fn perform_search(
         query: query.q.clone().unwrap_or_default(),
         processing_time_ms: before_search.elapsed().as_millis(),
         facet_distribution,
+        facet_stats,
     };
     Ok(result)
 }
