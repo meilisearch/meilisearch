@@ -8,6 +8,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use error::{AuthControllerError, Result};
+use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::keys::{Action, CreateApiKey, Key, PatchApiKey};
 use meilisearch_types::star_or::StarOr;
 use serde::{Deserialize, Serialize};
@@ -141,9 +142,7 @@ impl AuthController {
             .get_expiration_date(uid, action, None)?
             .or(match index {
                 // else check if the key has access to the requested index.
-                Some(index) => {
-                    self.store.get_expiration_date(uid, action, Some(index.as_bytes()))?
-                }
+                Some(index) => self.store.get_expiration_date(uid, action, Some(index))?,
                 // or to any index if no index has been requested.
                 None => self.store.prefix_first_expiration_date(uid, action)?,
             }) {
@@ -196,8 +195,20 @@ impl Default for SearchRules {
 impl SearchRules {
     pub fn is_index_authorized(&self, index: &str) -> bool {
         match self {
-            Self::Set(set) => set.contains("*") || set.contains(index),
-            Self::Map(map) => map.contains_key("*") || map.contains_key(index),
+            Self::Set(set) => {
+                set.contains("*")
+                    || set.contains(index)
+                    || set
+                        .iter() // We must store the IndexUidPattern in the Set
+                        .any(|pattern| IndexUidPattern::new_unchecked(pattern).matches_str(index))
+            }
+            Self::Map(map) => {
+                map.contains_key("*")
+                    || map.contains_key(index)
+                    || map
+                        .keys() // We must store the IndexUidPattern in the Map
+                        .any(|pattern| IndexUidPattern::new_unchecked(pattern).matches_str(index))
+            }
         }
     }
 
