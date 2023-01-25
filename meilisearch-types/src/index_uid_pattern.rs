@@ -1,7 +1,10 @@
+use std::borrow::Borrow;
 use std::error::Error;
 use std::fmt;
+use std::ops::Deref;
 use std::str::FromStr;
 
+use deserr::DeserializeFromValue;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Code, ErrorCode};
@@ -9,15 +12,23 @@ use crate::index_uid::{IndexUid, IndexUidFormatError};
 
 /// An index uid pattern is composed of only ascii alphanumeric characters, - and _, between 1 and 400
 /// bytes long and optionally ending with a *.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "test-traits", derive(proptest_derive::Arbitrary))]
-pub struct IndexUidPattern(
-    #[cfg_attr(feature = "test-traits", proptest(regex("[a-zA-Z0-9_-]{1,400}\\*?")))] String,
-);
+#[derive(Serialize, Deserialize, DeserializeFromValue, Debug, Clone, PartialEq, Eq, Hash)]
+#[deserr(from(&String) = FromStr::from_str -> IndexUidPatternFormatError)]
+pub struct IndexUidPattern(String);
 
 impl IndexUidPattern {
     pub fn new_unchecked(s: impl AsRef<str>) -> Self {
         Self(s.as_ref().to_string())
+    }
+
+    /// Matches any index name.
+    pub fn all() -> Self {
+        IndexUidPattern::from_str("*").unwrap()
+    }
+
+    /// Returns `true` if the pattern matches a specific index name.
+    pub fn is_exact(&self) -> bool {
+        !self.0.ends_with('*')
     }
 
     /// Returns wether this index uid matches this index uid pattern.
@@ -34,10 +45,16 @@ impl IndexUidPattern {
     }
 }
 
-impl std::ops::Deref for IndexUidPattern {
+impl Deref for IndexUidPattern {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Borrow<str> for IndexUidPattern {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }

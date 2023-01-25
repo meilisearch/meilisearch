@@ -230,7 +230,10 @@ pub mod policies {
                     }
                 }
 
-                return auth.get_key_filters(uid, Some(data.claims.search_rules)).ok();
+                match auth.get_key_filters(uid, Some(data.claims.search_rules)) {
+                    Ok(auth) if auth.search_rules.is_index_authorized() => Some(auth),
+                    _ => None,
+                }
             }
 
             None
