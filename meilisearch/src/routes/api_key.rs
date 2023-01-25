@@ -61,6 +61,7 @@ pub struct ListApiKeys {
     #[deserr(error = DeserrError<InvalidApiKeyLimit>, default = PAGINATION_DEFAULT_LIMIT(), from(&String) = parse_usize_take_error_message -> TakeErrorMessage<std::num::ParseIntError>)]
     pub limit: usize,
 }
+
 impl ListApiKeys {
     fn as_pagination(self) -> Pagination {
         Pagination { offset: self.offset, limit: self.limit }

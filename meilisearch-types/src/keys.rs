@@ -12,15 +12,15 @@ use uuid::Uuid;
 
 use crate::error::deserr_codes::*;
 use crate::error::{unwrap_any, Code, DeserrError, ErrorCode, TakeErrorMessage};
-use crate::index_uid::{IndexUid, IndexUidFormatError};
+use crate::index_uid_pattern::{IndexUidPattern, IndexUidPatternFormatError};
 use crate::star_or::StarOr;
 
 pub type KeyId = Uuid;
 
-impl<C: Default + ErrorCode> MergeWithError<IndexUidFormatError> for DeserrError<C> {
+impl<C: Default + ErrorCode> MergeWithError<IndexUidPatternFormatError> for DeserrError<C> {
     fn merge(
         _self_: Option<Self>,
-        other: IndexUidFormatError,
+        other: IndexUidPatternFormatError,
         merge_location: deserr::ValuePointerRef,
     ) -> std::result::Result<Self, Self> {
         DeserrError::error::<Infallible>(
@@ -47,10 +47,11 @@ pub struct CreateApiKey {
     #[deserr(error = DeserrError<InvalidApiKeyActions>)]
     pub actions: Vec<Action>,
     #[deserr(error = DeserrError<InvalidApiKeyIndexes>)]
-    pub indexes: Vec<StarOr<IndexUid>>,
+    pub indexes: Vec<StarOr<IndexUidPattern>>,
     #[deserr(error = DeserrError<InvalidApiKeyExpiresAt>, default = None, from(&String) = parse_expiration_date -> TakeErrorMessage<ParseOffsetDateTimeError>)]
     pub expires_at: Option<OffsetDateTime>,
 }
+
 impl CreateApiKey {
     pub fn to_key(self) -> Key {
         let CreateApiKey { description, name, uid, actions, indexes, expires_at } = self;
@@ -108,7 +109,7 @@ pub struct Key {
     pub name: Option<String>,
     pub uid: KeyId,
     pub actions: Vec<Action>,
-    pub indexes: Vec<StarOr<IndexUid>>,
+    pub indexes: Vec<StarOr<IndexUidPattern>>,
     #[serde(with = "time::serde::rfc3339::option")]
     pub expires_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339")]

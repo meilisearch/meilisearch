@@ -56,6 +56,7 @@ where
 {
     Ok(Some(input.parse()?))
 }
+
 pub fn from_string_to_option_take_error_message<T, E>(
     input: &str,
 ) -> Result<Option<T>, TakeErrorMessage<E>>
@@ -90,6 +91,7 @@ impl From<Task> for SummarizedTaskView {
         }
     }
 }
+
 pub struct Pagination {
     pub offset: usize,
     pub limit: usize,
