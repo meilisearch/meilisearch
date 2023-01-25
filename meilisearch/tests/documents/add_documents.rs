@@ -1,4 +1,5 @@
 use actix_web::test;
+use meili_snap::{json_string, snapshot};
 use serde_json::{json, Value};
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
@@ -30,8 +31,17 @@ async fn add_documents_test_json_content_types() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 202);
-    assert_eq!(response["taskUid"], 0);
+    snapshot!(status_code, @"202 Accepted");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "taskUid": 0,
+      "indexUid": "dog",
+      "status": "enqueued",
+      "type": "documentAdditionOrUpdate",
+      "enqueuedAt": "[date]"
+    }
+    "###);
 
     // put
     let req = test::TestRequest::put()
@@ -43,8 +53,17 @@ async fn add_documents_test_json_content_types() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 202);
-    assert_eq!(response["taskUid"], 1);
+    snapshot!(status_code, @"202 Accepted");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "taskUid": 1,
+      "indexUid": "dog",
+      "status": "enqueued",
+      "type": "documentAdditionOrUpdate",
+      "enqueuedAt": "[date]"
+    }
+    "###);
 }
 
 /// Here we try to send a single document instead of an array with a single document inside.
@@ -69,8 +88,17 @@ async fn add_single_document_test_json_content_types() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 202);
-    assert_eq!(response["taskUid"], 0);
+    snapshot!(status_code, @"202 Accepted");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "taskUid": 0,
+      "indexUid": "dog",
+      "status": "enqueued",
+      "type": "documentAdditionOrUpdate",
+      "enqueuedAt": "[date]"
+    }
+    "###);
 
     // put
     let req = test::TestRequest::put()
@@ -82,8 +110,17 @@ async fn add_single_document_test_json_content_types() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 202);
-    assert_eq!(response["taskUid"], 1);
+    snapshot!(status_code, @"202 Accepted");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "taskUid": 1,
+      "indexUid": "dog",
+      "status": "enqueued",
+      "type": "documentAdditionOrUpdate",
+      "enqueuedAt": "[date]"
+    }
+    "###);
 }
 
 /// Here we try sending encoded (compressed) document request
@@ -110,8 +147,17 @@ async fn add_single_document_gzip_encoded() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 202);
-    assert_eq!(response["taskUid"], 0);
+    snapshot!(status_code, @"202 Accepted");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "taskUid": 0,
+      "indexUid": "dog",
+      "status": "enqueued",
+      "type": "documentAdditionOrUpdate",
+      "enqueuedAt": "[date]"
+    }
+    "###);
 
     // put
     let req = test::TestRequest::put()
@@ -124,8 +170,17 @@ async fn add_single_document_gzip_encoded() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 202);
-    assert_eq!(response["taskUid"], 1);
+    snapshot!(status_code, @"202 Accepted");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "taskUid": 1,
+      "indexUid": "dog",
+      "status": "enqueued",
+      "type": "documentAdditionOrUpdate",
+      "enqueuedAt": "[date]"
+    }
+    "###);
 }
 
 /// Here we try document request with every encoding
@@ -184,16 +239,16 @@ async fn error_add_documents_test_bad_content_types() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 415);
-    assert_eq!(
-        response["message"],
-        json!(
-            r#"The Content-Type `text/plain` is invalid. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`"#
-        )
-    );
-    assert_eq!(response["code"], "invalid_content_type");
-    assert_eq!(response["type"], "invalid_request");
-    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#invalid_content_type");
+    snapshot!(status_code, @"415 Unsupported Media Type");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "message": "The Content-Type `text/plain` is invalid. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`",
+      "code": "invalid_content_type",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_content_type"
+    }
+    "###);
 
     // put
     let req = test::TestRequest::put()
@@ -205,16 +260,16 @@ async fn error_add_documents_test_bad_content_types() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 415);
-    assert_eq!(
-        response["message"],
-        json!(
-            r#"The Content-Type `text/plain` is invalid. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`"#
-        )
-    );
-    assert_eq!(response["code"], "invalid_content_type");
-    assert_eq!(response["type"], "invalid_request");
-    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#invalid_content_type");
+    snapshot!(status_code, @"415 Unsupported Media Type");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "message": "The Content-Type `text/plain` is invalid. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`",
+      "code": "invalid_content_type",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_content_type"
+    }
+    "###);
 }
 
 /// missing content-type must be refused
@@ -239,16 +294,16 @@ async fn error_add_documents_test_no_content_type() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 415);
-    assert_eq!(
-        response["message"],
-        json!(
-            r#"A Content-Type header is missing. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`"#
-        )
-    );
-    assert_eq!(response["code"], "missing_content_type");
-    assert_eq!(response["type"], "invalid_request");
-    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#missing_content_type");
+    snapshot!(status_code, @"415 Unsupported Media Type");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "message": "A Content-Type header is missing. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`",
+      "code": "missing_content_type",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_content_type"
+    }
+    "###);
 
     // put
     let req = test::TestRequest::put()
@@ -259,16 +314,16 @@ async fn error_add_documents_test_no_content_type() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 415);
-    assert_eq!(
-        response["message"],
-        json!(
-            r#"A Content-Type header is missing. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`"#
-        )
-    );
-    assert_eq!(response["code"], "missing_content_type");
-    assert_eq!(response["type"], "invalid_request");
-    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#missing_content_type");
+    snapshot!(status_code, @"415 Unsupported Media Type");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "message": "A Content-Type header is missing. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`",
+      "code": "missing_content_type",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_content_type"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -288,16 +343,16 @@ async fn error_add_malformed_csv_documents() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 400);
-    assert_eq!(
-        response["message"],
-        json!(
-            r#"The `csv` payload provided is malformed: `CSV error: record 1 (line: 2, byte: 12): found record with 3 fields, but the previous record has 2 fields`."#
-        )
-    );
-    assert_eq!(response["code"], json!("malformed_payload"));
-    assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
+    snapshot!(status_code, @"400 Bad Request");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "message": "The `csv` payload provided is malformed: `CSV error: record 1 (line: 2, byte: 12): found record with 3 fields, but the previous record has 2 fields`.",
+      "code": "malformed_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#malformed_payload"
+    }
+    "###);
 
     // put
     let req = test::TestRequest::put()
@@ -309,16 +364,16 @@ async fn error_add_malformed_csv_documents() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 400);
-    assert_eq!(
-        response["message"],
-        json!(
-            r#"The `csv` payload provided is malformed: `CSV error: record 1 (line: 2, byte: 12): found record with 3 fields, but the previous record has 2 fields`."#
-        )
-    );
-    assert_eq!(response["code"], json!("malformed_payload"));
-    assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
+    snapshot!(status_code, @"400 Bad Request");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "message": "The `csv` payload provided is malformed: `CSV error: record 1 (line: 2, byte: 12): found record with 3 fields, but the previous record has 2 fields`.",
+      "code": "malformed_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#malformed_payload"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -338,16 +393,16 @@ async fn error_add_malformed_json_documents() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 400);
-    assert_eq!(
-        response["message"],
-        json!(
-            r#"The `json` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 1 column 14`."#
-        )
-    );
-    assert_eq!(response["code"], json!("malformed_payload"));
-    assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
+    snapshot!(status_code, @"400 Bad Request");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "message": "The `json` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 1 column 14`.",
+      "code": "malformed_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#malformed_payload"
+    }
+    "###);
 
     // put
     let req = test::TestRequest::put()
@@ -359,16 +414,16 @@ async fn error_add_malformed_json_documents() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 400);
-    assert_eq!(
-        response["message"],
-        json!(
-            r#"The `json` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 1 column 14`."#
-        )
-    );
-    assert_eq!(response["code"], json!("malformed_payload"));
-    assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
+    snapshot!(status_code, @"400 Bad Request");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "message": "The `json` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 1 column 14`.",
+      "code": "malformed_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#malformed_payload"
+    }
+    "###);
 
     // truncate
 
@@ -384,16 +439,16 @@ async fn error_add_malformed_json_documents() {
     let res = test::call_service(&app, req).await;
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 400);
-    assert_eq!(
-        response["message"],
-        json!(
-            r#"The `json` payload provided is malformed. `Couldn't serialize document value: data are neither an object nor a list of objects`."#
-        )
-    );
-    assert_eq!(response["code"], json!("malformed_payload"));
-    assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
+    snapshot!(status_code, @"400 Bad Request");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "message": "The `json` payload provided is malformed. `Couldn't serialize document value: data are neither an object nor a list of objects`.",
+      "code": "malformed_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#malformed_payload"
+    }
+    "###);
 
     // add one more char to the long string to test if the truncating works.
     let document = format!("\"{}m\"", long);
@@ -405,14 +460,16 @@ async fn error_add_malformed_json_documents() {
     let res = test::call_service(&app, req).await;
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 400);
-    assert_eq!(
-        response["message"],
-        json!("The `json` payload provided is malformed. `Couldn't serialize document value: data are neither an object nor a list of objects`.")
-    );
-    assert_eq!(response["code"], json!("malformed_payload"));
-    assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
+    snapshot!(status_code, @"400 Bad Request");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "message": "The `json` payload provided is malformed. `Couldn't serialize document value: data are neither an object nor a list of objects`.",
+      "code": "malformed_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#malformed_payload"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -432,16 +489,16 @@ async fn error_add_malformed_ndjson_documents() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 400);
-    assert_eq!(
-        response["message"],
-        json!(
-            r#"The `ndjson` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 2 column 2`."#
-        )
-    );
-    assert_eq!(response["code"], json!("malformed_payload"));
-    assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
+    snapshot!(status_code, @"400 Bad Request");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "message": "The `ndjson` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 2 column 2`.",
+      "code": "malformed_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#malformed_payload"
+    }
+    "###);
 
     // put
     let req = test::TestRequest::put()
@@ -453,14 +510,16 @@ async fn error_add_malformed_ndjson_documents() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 400);
-    assert_eq!(
-        response["message"],
-        json!("The `ndjson` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 2 column 2`.")
-    );
-    assert_eq!(response["code"], json!("malformed_payload"));
-    assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
+    snapshot!(status_code, @"400 Bad Request");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "message": "The `ndjson` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 2 column 2`.",
+      "code": "malformed_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#malformed_payload"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -480,11 +539,16 @@ async fn error_add_missing_payload_csv_documents() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 400);
-    assert_eq!(response["message"], json!(r#"A csv payload is missing."#));
-    assert_eq!(response["code"], json!("missing_payload"));
-    assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing_payload"));
+    snapshot!(status_code, @"400 Bad Request");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "message": "A csv payload is missing.",
+      "code": "missing_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_payload"
+    }
+    "###);
 
     // put
     let req = test::TestRequest::put()
@@ -496,11 +560,16 @@ async fn error_add_missing_payload_csv_documents() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 400);
-    assert_eq!(response["message"], json!(r#"A csv payload is missing."#));
-    assert_eq!(response["code"], json!("missing_payload"));
-    assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing_payload"));
+    snapshot!(status_code, @"400 Bad Request");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "message": "A csv payload is missing.",
+      "code": "missing_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_payload"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -520,11 +589,16 @@ async fn error_add_missing_payload_json_documents() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 400);
-    assert_eq!(response["message"], json!(r#"A json payload is missing."#));
-    assert_eq!(response["code"], json!("missing_payload"));
-    assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing_payload"));
+    snapshot!(status_code, @"400 Bad Request");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "message": "A json payload is missing.",
+      "code": "missing_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_payload"
+    }
+    "###);
 
     // put
     let req = test::TestRequest::put()
@@ -536,11 +610,16 @@ async fn error_add_missing_payload_json_documents() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 400);
-    assert_eq!(response["message"], json!(r#"A json payload is missing."#));
-    assert_eq!(response["code"], json!("missing_payload"));
-    assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing_payload"));
+    snapshot!(status_code, @"400 Bad Request");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "message": "A json payload is missing.",
+      "code": "missing_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_payload"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -560,11 +639,16 @@ async fn error_add_missing_payload_ndjson_documents() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 400);
-    assert_eq!(response["message"], json!(r#"A ndjson payload is missing."#));
-    assert_eq!(response["code"], json!("missing_payload"));
-    assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing_payload"));
+    snapshot!(status_code, @"400 Bad Request");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "message": "A ndjson payload is missing.",
+      "code": "missing_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_payload"
+    }
+    "###);
 
     // put
     let req = test::TestRequest::put()
@@ -576,11 +660,16 @@ async fn error_add_missing_payload_ndjson_documents() {
     let status_code = res.status();
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
-    assert_eq!(status_code, 400);
-    assert_eq!(response["message"], json!(r#"A ndjson payload is missing."#));
-    assert_eq!(response["code"], json!("missing_payload"));
-    assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing_payload"));
+    snapshot!(status_code, @"400 Bad Request");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "message": "A ndjson payload is missing.",
+      "code": "missing_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_payload"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -596,26 +685,32 @@ async fn add_documents_no_index_creation() {
     ]);
 
     let (response, code) = index.add_documents(documents, None).await;
-    assert_eq!(code, 202);
+    snapshot!(code, @"202 Accepted");
     assert_eq!(response["taskUid"], 0);
-    /*
-     * currently we don’t check these field to stay ISO with meilisearch
-     * assert_eq!(response["status"], "pending");
-     * assert_eq!(response["meta"]["type"], "DocumentsAddition");
-     * assert_eq!(response["meta"]["format"], "Json");
-     * assert_eq!(response["meta"]["primaryKey"], Value::Null);
-     * assert!(response.get("enqueuedAt").is_some());
-     */
 
     index.wait_task(0).await;
 
     let (response, code) = index.get_task(0).await;
-    assert_eq!(code, 200);
-    assert_eq!(response["status"], "succeeded");
-    assert_eq!(response["uid"], 0);
-    assert_eq!(response["type"], "documentAdditionOrUpdate");
-    assert_eq!(response["details"]["receivedDocuments"], 1);
-    assert_eq!(response["details"]["indexedDocuments"], 1);
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 0,
+      "indexUid": "test",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
 
     let processed_at =
         OffsetDateTime::parse(response["finishedAt"].as_str().unwrap(), &Rfc3339).unwrap();
@@ -625,7 +720,7 @@ async fn add_documents_no_index_creation() {
 
     // index was created, and primary key was inferred.
     let (response, code) = index.get().await;
-    assert_eq!(code, 200);
+    snapshot!(code, @"200 OK");
     assert_eq!(response["primaryKey"], "id");
 }
 
@@ -635,15 +730,16 @@ async fn error_document_add_create_index_bad_uid() {
     let index = server.index("883  fj!");
     let (response, code) = index.add_documents(json!([{"id": 1}]), None).await;
 
-    let expected_response = json!({
-        "message": "`883  fj!` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
-        "code": "invalid_index_uid",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
-    });
-
-    assert_eq!(code, 400);
-    assert_eq!(response, expected_response);
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "message": "`883  fj!` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+      "code": "invalid_index_uid",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -658,21 +754,53 @@ async fn document_addition_with_primary_key() {
         }
     ]);
     let (response, code) = index.add_documents(documents, Some("primary")).await;
-    assert_eq!(code, 202, "response: {}", response);
+    snapshot!(code, @"202 Accepted");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "taskUid": 0,
+      "indexUid": "test",
+      "status": "enqueued",
+      "type": "documentAdditionOrUpdate",
+      "enqueuedAt": "[date]"
+    }
+    "###);
 
     index.wait_task(0).await;
 
     let (response, code) = index.get_task(0).await;
-    assert_eq!(code, 200);
-    assert_eq!(response["status"], "succeeded");
-    assert_eq!(response["uid"], 0);
-    assert_eq!(response["type"], "documentAdditionOrUpdate");
-    assert_eq!(response["details"]["receivedDocuments"], 1);
-    assert_eq!(response["details"]["indexedDocuments"], 1);
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 0,
+      "indexUid": "test",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
 
     let (response, code) = index.get().await;
-    assert_eq!(code, 200);
-    assert_eq!(response["primaryKey"], "primary");
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".createdAt" => "[date]", ".updatedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": "test",
+      "createdAt": "[date]",
+      "updatedAt": "[date]",
+      "primaryKey": "primary"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -688,7 +816,17 @@ async fn replace_document() {
     ]);
 
     let (response, code) = index.add_documents(documents, None).await;
-    assert_eq!(code, 202, "response: {}", response);
+    snapshot!(code,@"202 Accepted");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "taskUid": 0,
+      "indexUid": "test",
+      "status": "enqueued",
+      "type": "documentAdditionOrUpdate",
+      "enqueuedAt": "[date]"
+    }
+    "###);
 
     index.wait_task(0).await;
 
@@ -700,17 +838,41 @@ async fn replace_document() {
     ]);
 
     let (_response, code) = index.add_documents(documents, None).await;
-    assert_eq!(code, 202);
+    snapshot!(code,@"202 Accepted");
 
     index.wait_task(1).await;
 
     let (response, code) = index.get_task(1).await;
-    assert_eq!(code, 200);
-    assert_eq!(response["status"], "succeeded");
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 1,
+      "indexUid": "test",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
 
     let (response, code) = index.get_document(1, None).await;
-    assert_eq!(code, 200);
-    assert_eq!(response.to_string(), r##"{"doc_id":1,"other":"bar"}"##);
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response),
+        @r###"
+    {
+      "doc_id": 1,
+      "other": "bar"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -718,7 +880,7 @@ async fn add_no_documents() {
     let server = Server::new().await;
     let index = server.index("test");
     let (_response, code) = index.add_documents(json!([]), None).await;
-    assert_eq!(code, 202);
+    snapshot!(code, @"202 Accepted");
 }
 
 #[actix_rt::test]
@@ -769,20 +931,31 @@ async fn error_add_documents_bad_document_id() {
     index.add_documents(documents, None).await;
     index.wait_task(1).await;
     let (response, code) = index.get_task(1).await;
-    assert_eq!(code, 200);
-    assert_eq!(response["status"], json!("failed"));
-    assert_eq!(
-        response["error"]["message"],
-        json!(
-            r#"Document identifier `"foo & bar"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_)."#
-        )
-    );
-    assert_eq!(response["error"]["code"], json!("invalid_document_id"));
-    assert_eq!(response["error"]["type"], json!("invalid_request"));
-    assert_eq!(
-        response["error"]["link"],
-        json!("https://docs.meilisearch.com/errors#invalid_document_id")
-    );
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 1,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Document identifier `\"foo & bar\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_).",
+        "code": "invalid_document_id",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_id"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -799,18 +972,31 @@ async fn error_add_documents_missing_document_id() {
     index.add_documents(documents, None).await;
     index.wait_task(1).await;
     let (response, code) = index.get_task(1).await;
-    assert_eq!(code, 200);
-    assert_eq!(response["status"], "failed");
-    assert_eq!(
-        response["error"]["message"],
-        json!(r#"Document doesn't have a `docid` attribute: `{"id":"11","content":"foobar"}`."#)
-    );
-    assert_eq!(response["error"]["code"], json!("missing_document_id"));
-    assert_eq!(response["error"]["type"], json!("invalid_request"));
-    assert_eq!(
-        response["error"]["link"],
-        json!("https://docs.meilisearch.com/errors#missing_document_id")
-    );
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 1,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Document doesn't have a `docid` attribute: `{\"id\":\"11\",\"content\":\"foobar\"}`.",
+        "code": "missing_document_id",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#missing_document_id"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -831,22 +1017,14 @@ async fn error_document_field_limit_reached() {
     let documents = json!([big_object]);
 
     let (_response, code) = index.update_documents(documents, Some("id")).await;
-    assert_eq!(code, 202);
+    snapshot!(code, @"202");
 
     index.wait_task(0).await;
     let (response, code) = index.get_task(0).await;
-    assert_eq!(code, 200);
+    snapshot!(code, @"200");
     // Documents without a primary key are not accepted.
-    assert_eq!(response["status"], "failed");
-
-    let expected_error = json!({
-        "message": "A document cannot contain more than 65,535 fields.",
-        "code": "document_fields_limit_reached",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#document_fields_limit_reached"
-    });
-
-    assert_eq!(response["error"], expected_error);
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @"");
 }
 
 #[actix_rt::test]
@@ -856,6 +1034,7 @@ async fn add_documents_invalid_geo_field() {
     index.create(Some("id")).await;
     index.update_settings(json!({"sortableAttributes": ["_geo"]})).await;
 
+    // _geo is not an object
     let documents = json!([
         {
             "id": "11",
@@ -866,8 +1045,438 @@ async fn add_documents_invalid_geo_field() {
     index.add_documents(documents, None).await;
     index.wait_task(2).await;
     let (response, code) = index.get_task(2).await;
-    assert_eq!(code, 200);
-    assert_eq!(response["status"], "failed");
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 2,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "The `_geo` field in the document with the id: `11` is not an object. Was expecting an object with the `_geo.lat` and `_geo.lng` fields but instead got `\"foobar\"`.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is an object but is missing both the lat and lng
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": {}
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(3).await;
+    let (response, code) = index.get_task(3).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 3,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Could not find latitude nor longitude in the document with the id: `11`. Was expecting `_geo.lat` and `_geo.lng` fields.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is an object but is missing both the lat and lng and contains an unexpected field
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": { "doggos": "are good" }
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(4).await;
+    let (response, code) = index.get_task(4).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 4,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Could not find latitude nor longitude in the document with the id: `11`. Was expecting `_geo.lat` and `_geo.lng` fields.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is an object but only contains the lat
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": { "lat": 12 }
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(5).await;
+    let (response, code) = index.get_task(5).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 5,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Could not find longitude in the document with the id: `11`. Was expecting a `_geo.lng` field.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is an object but only contains the lng
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": { "lng": 12 }
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(6).await;
+    let (response, code) = index.get_task(6).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 6,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Could not find latitude in the document with the id: `11`. Was expecting a `_geo.lat` field.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is an object but the lat has a wrong type
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": { "lat": true }
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(7).await;
+    let (response, code) = index.get_task(7).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 7,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Could not find longitude in the document with the id: `11`. Was expecting a `_geo.lng` field.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is an object but the lng has a wrong type
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": { "lng": true }
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(8).await;
+    let (response, code) = index.get_task(8).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 8,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Could not find latitude in the document with the id: `11`. Was expecting a `_geo.lat` field.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is an object but the lat and lng have a wrong type
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": { "lat": false, "lng": true }
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(9).await;
+    let (response, code) = index.get_task(9).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 9,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Could not parse latitude nor longitude in the document with the id: `11`. Was expecting finite numbers but instead got `false` and `true`.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is an object but the lat can't be parsed as a float
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": { "lat": "doggo" }
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(10).await;
+    let (response, code) = index.get_task(10).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 10,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Could not find longitude in the document with the id: `11`. Was expecting a `_geo.lng` field.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is an object but the lng can't be parsed as a float
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": { "lng": "doggo" }
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(11).await;
+    let (response, code) = index.get_task(11).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 11,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Could not find latitude in the document with the id: `11`. Was expecting a `_geo.lat` field.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is an object but the lat and lng can't be parsed as a float
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": { "lat": "doggo", "lng": "doggo" }
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(12).await;
+    let (response, code) = index.get_task(12).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 12,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Could not parse latitude nor longitude in the document with the id: `11`. Was expecting finite numbers but instead got `\"doggo\"` and `\"doggo\"`.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // _geo is a valid object but contains one extra unknown field
+    let documents = json!([
+        {
+            "id": "11",
+            "_geo": { "lat": 1, "lng": 2, "doggo": "are the best" }
+        }
+    ]);
+
+    index.add_documents(documents, None).await;
+    index.wait_task(13).await;
+    let (response, code) = index.get_task(13).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 13,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "The `_geo` field in the document with the id: `11` contains the following unexpected fields: `{\"doggo\":\"are the best\"}`.",
+        "code": "invalid_document_geo_field",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -885,15 +1494,16 @@ async fn error_add_documents_payload_size() {
     let documents = json!(documents);
     let (response, code) = index.add_documents(documents, None).await;
 
-    let expected_response = json!({
-        "message": "The provided payload reached the size limit.",
-        "code": "payload_too_large",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#payload_too_large"
-    });
-
-    assert_eq!(response, expected_response);
-    assert_eq!(code, 413);
+    snapshot!(code, @"413 Payload Too Large");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "message": "The provided payload reached the size limit.",
+      "code": "payload_too_large",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#payload_too_large"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -913,7 +1523,7 @@ async fn error_primary_key_inference() {
     let (response, code) = index.get_task(0).await;
     assert_eq!(code, 200);
 
-    insta::assert_json_snapshot!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
     @r###"
     {
       "uid": 0,
@@ -953,7 +1563,7 @@ async fn error_primary_key_inference() {
     let (response, code) = index.get_task(1).await;
     assert_eq!(code, 200);
 
-    insta::assert_json_snapshot!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
     @r###"
     {
       "uid": 1,
@@ -991,7 +1601,7 @@ async fn error_primary_key_inference() {
     let (response, code) = index.get_task(2).await;
     assert_eq!(code, 200);
 
-    insta::assert_json_snapshot!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
     @r###"
     {
       "uid": 2,

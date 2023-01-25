@@ -16,7 +16,7 @@ file-store = { path = "../file-store" }
 flate2 = "1.0.24"
 fst = "0.4.7"
 memmap2 = "0.5.7"
-milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.40.0", default-features = false }
+milli = { git = "https://github.com/meilisearch/milli.git", tag = "v0.41.0", default-features = false }
 roaring = { version = "0.10.0", features = ["serde"] }
 serde = { version = "1.0.145", features = ["derive"] }
 serde-cs = "0.2.4"
