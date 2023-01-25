@@ -1,5 +1,6 @@
 use std::mem::take;
 
+use heed::BytesDecode;
 use itertools::Itertools;
 use log::debug;
 use ordered_float::OrderedFloat;
@@ -7,7 +8,7 @@ use roaring::RoaringBitmap;
 
 use super::{Criterion, CriterionParameters, CriterionResult};
 use crate::facet::FacetType;
-use crate::heed_codec::facet::FacetGroupKeyCodec;
+use crate::heed_codec::facet::{FacetGroupKeyCodec, OrderedF64Codec};
 use crate::heed_codec::ByteSliceRefCodec;
 use crate::search::criteria::{resolve_query_tree, CriteriaBuilder, InitialCandidates};
 use crate::search::facet::{ascending_facet_sort, descending_facet_sort};
@@ -194,6 +195,38 @@ fn facet_ordered_iterative<'t>(
     let string_iter =
         iterative_facet_string_ordered_iter(index, rtxn, field_id, is_ascending, candidates)?;
     Ok(Box::new(number_iter.chain(string_iter).map(Ok)) as Box<dyn Iterator<Item = _>>)
+}
+
+fn facet_extreme_value<'t>(
+    mut extreme_it: Box<dyn Iterator<Item = heed::Result<(RoaringBitmap, &[u8])>> + 't>,
+) -> Result<Option<f64>> {
+    let extreme_value =
+        if let Some(extreme_value) = extreme_it.next() { extreme_value } else { return Ok(None) };
+    let (_, extreme_value) = extreme_value?;
+
+    Ok(OrderedF64Codec::bytes_decode(extreme_value))
+}
+
+pub fn facet_min_value<'t>(
+    index: &'t Index,
+    rtxn: &'t heed::RoTxn,
+    field_id: FieldId,
+    candidates: RoaringBitmap,
+) -> Result<Option<f64>> {
+    let db = index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>();
+    let it = ascending_facet_sort(rtxn, db, field_id, candidates)?;
+    facet_extreme_value(it)
+}
+
+pub fn facet_max_value<'t>(
+    index: &'t Index,
+    rtxn: &'t heed::RoTxn,
+    field_id: FieldId,
+    candidates: RoaringBitmap,
+) -> Result<Option<f64>> {
+    let db = index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>();
+    let it = descending_facet_sort(rtxn, db, field_id, candidates)?;
+    facet_extreme_value(it)
 }
 
 fn facet_ordered_set_based<'t>(
