@@ -1108,7 +1108,7 @@ async fn add_documents_invalid_geo_field() {
     }
     "###);
 
-    // _geo is an object but is missing both the lat and lng and contain an unexpected field
+    // _geo is an object but is missing both the lat and lng and contains an unexpected field
     let documents = json!([
         {
             "id": "11",
