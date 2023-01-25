@@ -902,7 +902,7 @@ impl IndexScheduler {
         Ok(self.file_store.new_update_with_uuid(uuid)?)
     }
 
-    /// List the update files contained in the IndexScheduler.
+    /// The size on disk taken by all the updates files contained in the `IndexScheduler`, in bytes.
     pub fn update_file_size(&self) -> Result<u64> {
         Ok(self.file_store.update_total_size()?)
     }
