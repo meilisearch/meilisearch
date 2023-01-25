@@ -31,6 +31,7 @@ jobs:
       with:
         toolchain: stable
         override: true
+    # Disable cache due to disk space issues with Windows workers in CI
     # - name: Cache dependencies
     #   uses: Swatinem/rust-cache@v2.2.0
     - name: Run cargo check without any default features
