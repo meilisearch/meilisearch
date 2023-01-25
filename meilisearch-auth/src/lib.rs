@@ -33,6 +33,11 @@ impl AuthController {
         Ok(Self { store: Arc::new(store), master_key: master_key.clone() })
     }
 
+    /// Return the size of the `AuthController` database in bytes.
+    pub fn size(&self) -> Result<u64> {
+        self.store.size()
+    }
+
     pub fn create_key(&self, create_key: CreateApiKey) -> Result<Key> {
         match self.store.get_api_key(create_key.uid)? {
             Some(_) => Err(AuthControllerError::ApiKeyAlreadyExists(create_key.uid.to_string())),

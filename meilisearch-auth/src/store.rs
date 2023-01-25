@@ -60,6 +60,11 @@ impl HeedAuthStore {
         Ok(Self { env, keys, action_keyid_index_expiration, should_close_on_drop: true })
     }
 
+    /// Return the size in bytes of database
+    pub fn size(&self) -> Result<u64> {
+        Ok(self.env.real_disk_size()?)
+    }
+
     pub fn set_drop_on_close(&mut self, v: bool) {
         self.should_close_on_drop = v;
     }

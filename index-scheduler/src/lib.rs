@@ -452,6 +452,10 @@ impl IndexScheduler {
         &self.index_mapper.indexer_config
     }
 
+    pub fn size(&self) -> Result<u64> {
+        Ok(self.env.real_disk_size()?)
+    }
+
     /// Return the index corresponding to the name.
     ///
     /// * If the index wasn't opened before, the index will be opened.
@@ -896,6 +900,11 @@ impl IndexScheduler {
     #[cfg(test)]
     pub fn create_update_file_with_uuid(&self, uuid: u128) -> Result<(Uuid, file_store::File)> {
         Ok(self.file_store.new_update_with_uuid(uuid)?)
+    }
+
+    /// The size on disk taken by all the updates files contained in the `IndexScheduler`, in bytes.
+    pub fn compute_update_file_size(&self) -> Result<u64> {
+        Ok(self.file_store.compute_total_size()?)
     }
 
     /// Delete a file from the index scheduler.
