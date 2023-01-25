@@ -942,7 +942,7 @@ async fn error_add_documents_bad_document_id() {
       "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
-        "indexedDocuments": 1
+        "indexedDocuments": 0
       },
       "error": {
         "message": "Document identifier `\"foo & bar\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_).",
@@ -983,7 +983,7 @@ async fn error_add_documents_missing_document_id() {
       "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
-        "indexedDocuments": 1
+        "indexedDocuments": 0
       },
       "error": {
         "message": "Document doesn't have a `docid` attribute: `{\"id\":\"11\",\"content\":\"foobar\"}`.",
@@ -1056,7 +1056,7 @@ async fn add_documents_invalid_geo_field() {
       "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
-        "indexedDocuments": 1
+        "indexedDocuments": 0
       },
       "error": {
         "message": "The `_geo` field in the document with the id: `11` is not an object. Was expecting an object with the `_geo.lat` and `_geo.lng` fields but instead got `\"foobar\"`.",
@@ -1093,7 +1093,7 @@ async fn add_documents_invalid_geo_field() {
       "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
-        "indexedDocuments": 1
+        "indexedDocuments": 0
       },
       "error": {
         "message": "Could not find latitude nor longitude in the document with the id: `11`. Was expecting `_geo.lat` and `_geo.lng` fields.",
@@ -1130,7 +1130,7 @@ async fn add_documents_invalid_geo_field() {
       "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
-        "indexedDocuments": 1
+        "indexedDocuments": 0
       },
       "error": {
         "message": "Could not find latitude nor longitude in the document with the id: `11`. Was expecting `_geo.lat` and `_geo.lng` fields.",
@@ -1167,7 +1167,7 @@ async fn add_documents_invalid_geo_field() {
       "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
-        "indexedDocuments": 1
+        "indexedDocuments": 0
       },
       "error": {
         "message": "Could not find longitude in the document with the id: `11`. Was expecting a `_geo.lng` field.",
@@ -1204,7 +1204,7 @@ async fn add_documents_invalid_geo_field() {
       "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
-        "indexedDocuments": 1
+        "indexedDocuments": 0
       },
       "error": {
         "message": "Could not find latitude in the document with the id: `11`. Was expecting a `_geo.lat` field.",
@@ -1241,7 +1241,7 @@ async fn add_documents_invalid_geo_field() {
       "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
-        "indexedDocuments": 1
+        "indexedDocuments": 0
       },
       "error": {
         "message": "Could not find longitude in the document with the id: `11`. Was expecting a `_geo.lng` field.",
@@ -1278,7 +1278,7 @@ async fn add_documents_invalid_geo_field() {
       "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
-        "indexedDocuments": 1
+        "indexedDocuments": 0
       },
       "error": {
         "message": "Could not find latitude in the document with the id: `11`. Was expecting a `_geo.lat` field.",
@@ -1315,7 +1315,7 @@ async fn add_documents_invalid_geo_field() {
       "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
-        "indexedDocuments": 1
+        "indexedDocuments": 0
       },
       "error": {
         "message": "Could not parse latitude nor longitude in the document with the id: `11`. Was expecting finite numbers but instead got `false` and `true`.",
@@ -1352,7 +1352,7 @@ async fn add_documents_invalid_geo_field() {
       "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
-        "indexedDocuments": 1
+        "indexedDocuments": 0
       },
       "error": {
         "message": "Could not find longitude in the document with the id: `11`. Was expecting a `_geo.lng` field.",
@@ -1389,7 +1389,7 @@ async fn add_documents_invalid_geo_field() {
       "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
-        "indexedDocuments": 1
+        "indexedDocuments": 0
       },
       "error": {
         "message": "Could not find latitude in the document with the id: `11`. Was expecting a `_geo.lat` field.",
@@ -1426,7 +1426,7 @@ async fn add_documents_invalid_geo_field() {
       "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
-        "indexedDocuments": 1
+        "indexedDocuments": 0
       },
       "error": {
         "message": "Could not parse latitude nor longitude in the document with the id: `11`. Was expecting finite numbers but instead got `\"doggo\"` and `\"doggo\"`.",
@@ -1463,7 +1463,7 @@ async fn add_documents_invalid_geo_field() {
       "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
-        "indexedDocuments": 1
+        "indexedDocuments": 0
       },
       "error": {
         "message": "The `_geo` field in the document with the id: `11` contains the following unexpected fields: `{\"doggo\":\"are the best\"}`.",
