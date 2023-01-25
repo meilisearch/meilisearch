@@ -53,8 +53,8 @@ jobs:
         os: [macos-12, windows-2022]
     steps:
     - uses: actions/checkout@v3
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2.2.0
+#     - name: Cache dependencies
+#       uses: Swatinem/rust-cache@v2.2.0
     - name: Run cargo check without any default features
       uses: actions-rs/cargo@v1
       with:
