@@ -105,7 +105,7 @@ Thank you for your support!
 
 Meilisearch is, and will always be, open-source! If you want to contribute to the project, please take a look at [our contribution guidelines](CONTRIBUTING.md).
 
-## 📦 Technical information
+## 📦 Versioning
 
 Meilisearch releases and their associated binaries are available [in this GitHub page](https://github.com/meilisearch/meilisearch/releases).
 
