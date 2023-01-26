@@ -107,7 +107,8 @@ Meilisearch is, and will always be, open-source! If you want to contribute to th
 
 ## 📦 Technical information
 
-More information about technical details related to the Meilisearch project:
-- The releases of Meilisearch and their associated binaries are available [in this GitHub section](https://github.com/meilisearch/meilisearch/releases).
-- We versionize the Meilisearch binaries following the [SemVer conventions](https://semver.org/), and we also provide our detailed [versioning policy](https://github.com/meilisearch/engine-team/blob/main/resources/versioning-policy.md).
-- The crates in this repository are not currently available on [crates.io](https://crates.io/) and do not follow [SemVer conventions](https://semver.org).
+Meilisearch releases and their associated binaries are available [in this GitHub page](https://github.com/meilisearch/meilisearch/releases).
+
+The binaries are versioned following [SemVer conventions](https://semver.org/). To know more, read our [versioning policy](https://github.com/meilisearch/engine-team/blob/main/resources/versioning-policy.md).
+
+Differently from the binaries, crates in this repository are not currently available on [crates.io](https://crates.io/) and do not follow [SemVer conventions](https://semver.org).
