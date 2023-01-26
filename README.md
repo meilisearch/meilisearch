@@ -105,8 +105,6 @@ Thank you for your support!
 
 Meilisearch is, and will always be, open-source! If you want to contribute to the project, please take a look at [our contribution guidelines](CONTRIBUTING.md).
 
-We are looking forward to review your contribution! ❤️
-
 ## 📦 Technical information
 
 More information about technical details related to the Meilisearch project:
