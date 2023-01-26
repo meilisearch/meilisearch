@@ -103,7 +103,7 @@ Thank you for your support!
 
 ## 👩‍💻 Contributing
 
-Meilisearch is and always will be open-source! If you want to contribute to the project, please take a look at this [guidelines](CONTRIBUTING.md).
+Meilisearch is, and will always be, open-source! If you want to contribute to the project, please take a look at [our contribution guidelines](CONTRIBUTING.md).
 
 We are looking forward to review your contribution! ❤️
 
