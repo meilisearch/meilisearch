@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Read, Seek};
 
 use fxhash::FxHashMap;
 use heed::RoTxn;
@@ -510,7 +510,7 @@ impl<'a, 'i> Transform<'a, 'i> {
 
         let mut original_documents = writer.into_inner()?;
         // We then extract the file and reset the seek to be able to read it again.
-        original_documents.seek(SeekFrom::Start(0))?;
+        original_documents.rewind()?;
 
         // We create a final writer to write the new documents in order from the sorter.
         let mut writer = create_writer(
@@ -522,7 +522,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         // into this writer, extract the file and reset the seek to be able to read it again.
         self.flattened_sorter.write_into_stream_writer(&mut writer)?;
         let mut flattened_documents = writer.into_inner()?;
-        flattened_documents.seek(SeekFrom::Start(0))?;
+        flattened_documents.rewind()?;
 
         let mut new_external_documents_ids_builder: Vec<_> =
             self.new_external_documents_ids_builder.into_iter().collect();
@@ -650,10 +650,10 @@ impl<'a, 'i> Transform<'a, 'i> {
         // Once we have written all the documents, we extract
         // the file and reset the seek to be able to read it again.
         let mut original_documents = original_writer.into_inner()?;
-        original_documents.seek(SeekFrom::Start(0))?;
+        original_documents.rewind()?;
 
         let mut flattened_documents = flattened_writer.into_inner()?;
-        flattened_documents.seek(SeekFrom::Start(0))?;
+        flattened_documents.rewind()?;
 
         let output = TransformOutput {
             primary_key,
