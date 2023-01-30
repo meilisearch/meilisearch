@@ -116,7 +116,7 @@ Steps to create a prototype:
 3. Push the tag: `git push origin prototype-X-Y`
 4. Check the [Docker CI](https://github.com/meilisearch/meilisearch/actions/workflows/publish-docker-images.yml) is now running.
 
-⚙️ Once the CI has finished to run (~1h30), a Docker image named `prototype-X-Y` will be available on [DockerHub](https://hub.docker.com/repository/docker/getmeili/meilisearch/general). People can use it with the following command: `docker run -p 7700:7700 getmeili/meilisearch:prototype-X-Y`.
+⚙️ Once the CI has finished to run (~1h30), a Docker image named `prototype-X-Y` will be available on [DockerHub](https://hub.docker.com/repository/docker/getmeili/meilisearch/general). People can use it with the following command: `docker run -p 7700:7700 -v $(pwd)/meili_data:/meili_data getmeili/meilisearch:prototype-X-Y`. More information about [how to run Meilisearch with Docher](https://docs.meilisearch.com/learn/cookbooks/docker.html#download-meilisearch-with-docker).
 However, no binaries will be created. If the users do not use Docker, they can go to the `prototype-X-Y` tag in the Meilisearch repository and compile from the source code.
 
 ⚠️ When sharing a prototype with users, prevent them from using it in production. Prototypes are only for test purposes.
