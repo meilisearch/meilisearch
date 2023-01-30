@@ -474,10 +474,10 @@ fn make_document(
     Ok(document)
 }
 
-fn format_fields<'a, A: AsRef<[u8]>>(
+fn format_fields<A: AsRef<[u8]>>(
     document: &Document,
     field_ids_map: &FieldsIdsMap,
-    builder: &MatcherBuilder<'a, A>,
+    builder: &MatcherBuilder<'_, A>,
     formatted_options: &BTreeMap<FieldId, FormatOptions>,
     compute_matches: bool,
     displayable_ids: &BTreeSet<FieldId>,
@@ -522,9 +522,9 @@ fn format_fields<'a, A: AsRef<[u8]>>(
     Ok((matches_position, document))
 }
 
-fn format_value<'a, A: AsRef<[u8]>>(
+fn format_value<A: AsRef<[u8]>>(
     value: Value,
-    builder: &MatcherBuilder<'a, A>,
+    builder: &MatcherBuilder<'_, A>,
     format_options: Option<FormatOptions>,
     infos: &mut Vec<MatchBounds>,
     compute_matches: bool,
