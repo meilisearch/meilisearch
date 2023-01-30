@@ -104,7 +104,7 @@ The full Meilisearch release process is described in [this guide](https://github
 Depending on the developed feature, you might need to provide a prototyped version of Meilisearch to make it easier to test by the users.
 
 The prototype name must follow this convention: `prototype-X-Y` where
-- `X` is the feature name
+- `X` is the feature name formatted in `kebab-case`
 - `Y` is the version of the prototype, starting from `0`.
 
 Example: `prototype-auto-resize-0`.
