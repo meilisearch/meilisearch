@@ -596,4 +596,216 @@ mod tests {
 
         milli_snap!(format!("{map:?}"), "candidates_0_5_000", @"825f23a4090d05756f46176987b7d992");
     }
+
+    #[test]
+    fn facet_stats() {
+        let mut index = TempIndex::new_with_map_size(4096 * 10_000);
+        index.index_documents_config.autogenerate_docids = true;
+
+        index
+            .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
+            .unwrap();
+
+        let facet_values = (0..1000).into_iter().collect::<Vec<_>>();
+
+        let mut documents = vec![];
+        for i in 0..1000 {
+            let document = serde_json::json!({
+                "colour": facet_values[i % 1000],
+            })
+            .as_object()
+            .unwrap()
+            .clone();
+            documents.push(document);
+        }
+
+        let documents = documents_batch_reader_from_objects(documents);
+
+        index.add_documents(documents).unwrap();
+
+        let txn = index.read_txn().unwrap();
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .compute_stats()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), "no_candidates", @"{}");
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .candidates((0..1000).into_iter().collect())
+            .compute_stats()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), "candidates_0_1000", @r###"{"colour": (0.0, 999.0)}"###);
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .candidates((217..777).into_iter().collect())
+            .compute_stats()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), "candidates_217_777", @r###"{"colour": (217.0, 776.0)}"###);
+    }
+
+    #[test]
+    fn facet_stats_array() {
+        let mut index = TempIndex::new_with_map_size(4096 * 10_000);
+        index.index_documents_config.autogenerate_docids = true;
+
+        index
+            .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
+            .unwrap();
+
+        let facet_values = (0..1000).into_iter().collect::<Vec<_>>();
+
+        let mut documents = vec![];
+        for i in 0..1000 {
+            let document = serde_json::json!({
+                "colour": [facet_values[i % 1000], facet_values[i % 1000] + 1000],
+            })
+            .as_object()
+            .unwrap()
+            .clone();
+            documents.push(document);
+        }
+
+        let documents = documents_batch_reader_from_objects(documents);
+
+        index.add_documents(documents).unwrap();
+
+        let txn = index.read_txn().unwrap();
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .compute_stats()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), "no_candidates", @"{}");
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .candidates((0..1000).into_iter().collect())
+            .compute_stats()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), "candidates_0_1000", @r###"{"colour": (0.0, 1999.0)}"###);
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .candidates((217..777).into_iter().collect())
+            .compute_stats()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), "candidates_217_777", @r###"{"colour": (217.0, 1776.0)}"###);
+    }
+
+    #[test]
+    fn facet_stats_mixed_array() {
+        let mut index = TempIndex::new_with_map_size(4096 * 10_000);
+        index.index_documents_config.autogenerate_docids = true;
+
+        index
+            .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
+            .unwrap();
+
+        let facet_values = (0..1000).into_iter().collect::<Vec<_>>();
+
+        let mut documents = vec![];
+        for i in 0..1000 {
+            let document = serde_json::json!({
+                "colour": [facet_values[i % 1000], format!("{}", facet_values[i % 1000] + 1000)],
+            })
+            .as_object()
+            .unwrap()
+            .clone();
+            documents.push(document);
+        }
+
+        let documents = documents_batch_reader_from_objects(documents);
+
+        index.add_documents(documents).unwrap();
+
+        let txn = index.read_txn().unwrap();
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .compute_stats()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), "no_candidates", @"{}");
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .candidates((0..1000).into_iter().collect())
+            .compute_stats()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), "candidates_0_1000", @r###"{"colour": (0.0, 999.0)}"###);
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .candidates((217..777).into_iter().collect())
+            .compute_stats()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), "candidates_217_777", @r###"{"colour": (217.0, 776.0)}"###);
+    }
+
+    #[test]
+    fn facet_mixed_values() {
+        let mut index = TempIndex::new_with_map_size(4096 * 10_000);
+        index.index_documents_config.autogenerate_docids = true;
+
+        index
+            .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
+            .unwrap();
+
+        let facet_values = (0..1000).into_iter().collect::<Vec<_>>();
+
+        let mut documents = vec![];
+        for i in 0..1000 {
+            let document = if i % 2 == 0 {
+                serde_json::json!({
+                    "colour": [facet_values[i % 1000], facet_values[i % 1000] + 1000],
+                })
+            } else {
+                serde_json::json!({
+                    "colour": format!("{}", facet_values[i % 1000] + 10000),
+                })
+            };
+            let document = document.as_object().unwrap().clone();
+            documents.push(document);
+        }
+
+        let documents = documents_batch_reader_from_objects(documents);
+
+        index.add_documents(documents).unwrap();
+
+        let txn = index.read_txn().unwrap();
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .compute_stats()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), "no_candidates", @"{}");
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .candidates((0..1000).into_iter().collect())
+            .compute_stats()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), "candidates_0_1000", @r###"{"colour": (0.0, 1998.0)}"###);
+
+        let map = FacetDistribution::new(&txn, &index)
+            .facets(std::iter::once("colour"))
+            .candidates((217..777).into_iter().collect())
+            .compute_stats()
+            .unwrap();
+
+        milli_snap!(format!("{map:?}"), "candidates_217_777", @r###"{"colour": (218.0, 1776.0)}"###);
+    }
 }
