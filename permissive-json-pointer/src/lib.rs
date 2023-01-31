@@ -72,9 +72,9 @@ pub fn map_leaf_values<'a>(
     map_leaf_values_in_object(value, &selectors, "", &mut mapper);
 }
 
-pub fn map_leaf_values_in_object<'a>(
+pub fn map_leaf_values_in_object(
     value: &mut Map<String, Value>,
-    selectors: &[&'a str],
+    selectors: &[&str],
     base_key: &str,
     mapper: &mut impl FnMut(&str, &mut Value),
 ) {
