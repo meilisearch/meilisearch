@@ -65,6 +65,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
+          args: -- --allow clippy::uninlined_format_args
 
   fmt:
     name: Run Rustfmt
