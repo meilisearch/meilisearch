@@ -109,7 +109,8 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all-targets -- --deny warnings
+          # allow unlined_format_args https://github.com/rust-lang/rust-clippy/issues/10087
+          args: --all-targets -- --deny warnings --allow clippy::uninlined_format_args
 
   fmt:
     name: Run Rustfmt
