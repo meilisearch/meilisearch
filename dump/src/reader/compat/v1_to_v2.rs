@@ -266,7 +266,7 @@ impl From<v1::settings::SettingsUpdate> for v2::Settings<v2::Unchecked> {
             ranking_rules
                 .into_iter()
                 // filter out the WordsPosition ranking rule that exists in v1 but not v2
-                .filter_map(|ranking_rule| Option::<v2::settings::Criterion>::from(ranking_rule))
+                .filter_map(Option::<v2::settings::Criterion>::from)
                 .map(|criterion| criterion.to_string())
                 .collect()
         });
@@ -348,7 +348,7 @@ pub(crate) mod test {
         // tasks
         let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
-        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"ad6245d98d1a8e30535f3339a9a8d223");
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"2298010973ee98cf4670787314176a3a");
         assert_eq!(update_files.len(), 9);
         assert!(update_files[..].iter().all(|u| u.is_none())); // no update file in dumps v1
 

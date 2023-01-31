@@ -237,13 +237,13 @@ impl FromStr for AscDesc {
                 "desc" => Ok(AscDesc::Desc(field_name.to_string())),
                 _ => Err(()),
             }
-        } else if text.starts_with("asc(") && text.ends_with(")") {
+        } else if text.starts_with("asc(") && text.ends_with(')') {
             Ok(AscDesc::Asc(
-                text.strip_prefix("asc(").unwrap().strip_suffix(")").unwrap().to_string(),
+                text.strip_prefix("asc(").unwrap().strip_suffix(')').unwrap().to_string(),
             ))
-        } else if text.starts_with("desc(") && text.ends_with(")") {
+        } else if text.starts_with("desc(") && text.ends_with(')') {
             Ok(AscDesc::Desc(
-                text.strip_prefix("desc(").unwrap().strip_suffix(")").unwrap().to_string(),
+                text.strip_prefix("desc(").unwrap().strip_suffix(')').unwrap().to_string(),
             ))
         } else {
             Err(())
