@@ -348,10 +348,10 @@ impl Index {
     /* external documents ids */
 
     /// Writes the external documents ids and internal ids (i.e. `u32`).
-    pub(crate) fn put_external_documents_ids<'a>(
+    pub(crate) fn put_external_documents_ids(
         &self,
         wtxn: &mut RwTxn,
-        external_documents_ids: &ExternalDocumentsIds<'a>,
+        external_documents_ids: &ExternalDocumentsIds<'_>,
     ) -> heed::Result<()> {
         let ExternalDocumentsIds { hard, soft, .. } = external_documents_ids;
         let hard = hard.as_fst().as_bytes();
@@ -426,7 +426,7 @@ impl Index {
     }
 
     /// Returns the `rtree` which associates coordinates to documents ids.
-    pub fn geo_rtree<'t>(&self, rtxn: &'t RoTxn) -> Result<Option<RTree<GeoPoint>>> {
+    pub fn geo_rtree(&self, rtxn: &'_ RoTxn) -> Result<Option<RTree<GeoPoint>>> {
         match self
             .main
             .get::<_, Str, SerdeBincode<RTree<GeoPoint>>>(rtxn, main_key::GEO_RTREE_KEY)?
