@@ -960,9 +960,9 @@ impl IndexScheduler {
     ///
     /// ## Return
     /// The list of processed tasks.
-    fn apply_index_operation<'txn, 'i>(
+    fn apply_index_operation<'i>(
         &self,
-        index_wtxn: &'txn mut RwTxn<'i, '_>,
+        index_wtxn: &mut RwTxn<'i, '_>,
         index: &'i Index,
         operation: IndexOperation,
     ) -> Result<Vec<Task>> {
