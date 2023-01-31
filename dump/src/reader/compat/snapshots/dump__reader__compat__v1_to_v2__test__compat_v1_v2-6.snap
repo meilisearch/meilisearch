@@ -13,13 +13,17 @@ expression: movies.settings().unwrap()
     "genres",
     "id"
   ],
+  "sortableAttributes": [
+    "genres",
+    "id"
+  ],
   "rankingRules": [
     "typo",
     "words",
     "proximity",
     "attribute",
     "exactness",
-    "asc(release_date)"
+    "release_date:asc"
   ],
   "stopWords": [],
   "synonyms": {},

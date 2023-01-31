@@ -1,6 +1,6 @@
 ---
 source: dump/src/reader/mod.rs
-expression: movies.settings().unwrap()
+expression: spells.settings().unwrap()
 ---
 {
   "displayedAttributes": [
@@ -9,21 +9,15 @@ expression: movies.settings().unwrap()
   "searchableAttributes": [
     "*"
   ],
-  "filterableAttributes": [
-    "genres",
-    "id"
-  ],
-  "sortableAttributes": [
-    "genres",
-    "id"
-  ],
+  "filterableAttributes": [],
+  "sortableAttributes": [],
   "rankingRules": [
-    "typo",
     "words",
+    "typo",
     "proximity",
     "attribute",
-    "exactness",
-    "release_date:asc"
+    "sort",
+    "exactness"
   ],
   "stopWords": [],
   "synonyms": {},

@@ -14,12 +14,11 @@ expression: movies.settings().unwrap()
     "id"
   ],
   "sortableAttributes": [
-    "genres",
-    "id"
+    "release_date"
   ],
   "rankingRules": [
-    "typo",
     "words",
+    "typo",
     "proximity",
     "attribute",
     "exactness",
