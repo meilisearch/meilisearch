@@ -182,15 +182,15 @@ impl<'t> Criterion for Proximity<'t> {
     }
 }
 
-fn resolve_candidates<'t>(
-    ctx: &'t dyn Context,
+fn resolve_candidates(
+    ctx: &dyn Context,
     query_tree: &Operation,
     proximity: u8,
     cache: &mut Cache,
     wdcache: &mut WordDerivationsCache,
 ) -> Result<RoaringBitmap> {
-    fn resolve_operation<'t>(
-        ctx: &'t dyn Context,
+    fn resolve_operation(
+        ctx: &dyn Context,
         query_tree: &Operation,
         proximity: u8,
         cache: &mut Cache,
@@ -243,8 +243,8 @@ fn resolve_candidates<'t>(
         Ok(result)
     }
 
-    fn mdfs_pair<'t>(
-        ctx: &'t dyn Context,
+    fn mdfs_pair(
+        ctx: &dyn Context,
         left: &Operation,
         right: &Operation,
         proximity: u8,
@@ -298,8 +298,8 @@ fn resolve_candidates<'t>(
         Ok(output)
     }
 
-    fn mdfs<'t>(
-        ctx: &'t dyn Context,
+    fn mdfs(
+        ctx: &dyn Context,
         branches: &[Operation],
         proximity: u8,
         cache: &mut Cache,
