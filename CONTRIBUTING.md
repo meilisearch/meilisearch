@@ -99,6 +99,30 @@ _[Read more about this](https://github.com/meilisearch/integration-guides/blob/m
 
 The full Meilisearch release process is described in [this guide](https://github.com/meilisearch/engine-team/blob/main/resources/meilisearch-release.md). Please follow it carefully before doing any release.
 
+### How to publish a prototype
+
+Depending on the developed feature, you might need to provide a prototyped version of Meilisearch to make it easier to test by the users.
+
+The prototype name must follow this convention: `prototype-X-Y` where
+- `X` is the feature name formatted in `kebab-case`
+- `Y` is the version of the prototype, starting from `0`.
+
+Example: `prototype-auto-resize-0`.
+
+Steps to create a prototype:
+
+1. In your terminal, go to the last commit of your branch (the one you want to provide as a prototype).
+2. Create a tag following the convention: `git tag prototype-X-Y`
+3. Push the tag: `git push origin prototype-X-Y`
+4. Check the [Docker CI](https://github.com/meilisearch/meilisearch/actions/workflows/publish-docker-images.yml) is now running.
+
+🐳 Once the CI has finished to run (~1h30), a Docker image named `prototype-X-Y` will be available on [DockerHub](https://hub.docker.com/repository/docker/getmeili/meilisearch/general). People can use it with the following command: `docker run -p 7700:7700 -v $(pwd)/meili_data:/meili_data getmeili/meilisearch:prototype-X-Y`. <br>
+More information about [how to run Meilisearch with Docker](https://docs.meilisearch.com/learn/cookbooks/docker.html#download-meilisearch-with-docker).
+
+⚙️ However, no binaries will be created. If the users do not use Docker, they can go to the `prototype-X-Y` tag in the Meilisearch repository and compile from the source code.
+
+⚠️ When sharing a prototype with users, prevent them from using it in production. Prototypes are only for test purposes.
+
 ### Release assets
 
 For each release, the following assets are created:
