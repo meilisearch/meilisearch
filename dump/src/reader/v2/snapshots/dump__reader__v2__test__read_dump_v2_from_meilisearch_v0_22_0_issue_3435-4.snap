@@ -1,5 +1,5 @@
 ---
-source: dump/src/reader/compat/v1_to_v2.rs
+source: dump/src/reader/v2/mod.rs
 expression: products.settings().unwrap()
 ---
 {
@@ -12,10 +12,11 @@ expression: products.settings().unwrap()
   "filterableAttributes": [],
   "sortableAttributes": [],
   "rankingRules": [
-    "typo",
     "words",
+    "typo",
     "proximity",
     "attribute",
+    "sort",
     "exactness"
   ],
   "stopWords": [],

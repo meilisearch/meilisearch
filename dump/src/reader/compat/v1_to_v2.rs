@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::str::FromStr;
 
 use super::v2_to_v3::CompatV2ToV3;
@@ -102,14 +101,15 @@ impl CompatIndexV1ToV2 {
 
 impl From<v1::settings::Settings> for v2::Settings<v2::Unchecked> {
     fn from(source: v1::settings::Settings) -> Self {
-        let displayed_attributes = source
-            .displayed_attributes
-            .map(|opt| opt.map(|displayed_attributes| displayed_attributes.into_iter().collect()));
-        let attributes_for_faceting = source.attributes_for_faceting.map(|opt| {
-            opt.map(|attributes_for_faceting| attributes_for_faceting.into_iter().collect())
-        });
-        let ranking_rules = source.ranking_rules.map(|opt| {
-            opt.map(|ranking_rules| {
+        Self {
+            displayed_attributes: option_to_setting(source.displayed_attributes)
+                .map(|displayed| displayed.into_iter().collect()),
+            searchable_attributes: option_to_setting(source.searchable_attributes),
+            filterable_attributes: option_to_setting(source.attributes_for_faceting.clone())
+                .map(|filterable| filterable.into_iter().collect()),
+            sortable_attributes: option_to_setting(source.attributes_for_faceting)
+                .map(|sortable| sortable.into_iter().collect()),
+            ranking_rules: option_to_setting(source.ranking_rules).map(|ranking_rules| {
                 ranking_rules
                     .into_iter()
                     .filter_map(|ranking_rule| {
@@ -119,23 +119,30 @@ impl From<v1::settings::Settings> for v2::Settings<v2::Unchecked> {
                                     ranking_rule.into();
                                 criterion.as_ref().map(ToString::to_string)
                             }
-                            Err(()) => Some(ranking_rule),
+                            Err(()) => {
+                                log::warn!(
+                                    "Could not import the following ranking rule: `{}`.",
+                                    ranking_rule
+                                );
+                                None
+                            }
                         }
                     })
                     .collect()
-            })
-        });
-
-        Self {
-            displayed_attributes,
-            searchable_attributes: source.searchable_attributes,
-            filterable_attributes: attributes_for_faceting,
-            ranking_rules,
-            stop_words: source.stop_words,
-            synonyms: source.synonyms,
-            distinct_attribute: source.distinct_attribute,
+            }),
+            stop_words: option_to_setting(source.stop_words),
+            synonyms: option_to_setting(source.synonyms),
+            distinct_attribute: option_to_setting(source.distinct_attribute),
             _kind: std::marker::PhantomData,
         }
+    }
+}
+
+fn option_to_setting<T>(opt: Option<Option<T>>) -> v2::Setting<T> {
+    match opt {
+        Some(Some(t)) => v2::Setting::Set(t),
+        None => v2::Setting::NotSet,
+        Some(None) => v2::Setting::Reset,
     }
 }
 
@@ -251,38 +258,27 @@ impl From<v1::update::UpdateType> for Option<v2::updates::UpdateMeta> {
 
 impl From<v1::settings::SettingsUpdate> for v2::Settings<v2::Unchecked> {
     fn from(source: v1::settings::SettingsUpdate) -> Self {
-        let displayed_attributes: Option<Option<BTreeSet<String>>> =
-            source.displayed_attributes.into();
-
-        let attributes_for_faceting: Option<Option<Vec<String>>> =
-            source.attributes_for_faceting.into();
-
-        let ranking_rules: Option<Option<Vec<v1::settings::RankingRule>>> =
-            source.ranking_rules.into();
+        let ranking_rules = v2::Setting::from(source.ranking_rules);
 
         // go from the concrete types of v1 (RankingRule) to the concrete type of v2 (Criterion),
         // and then back to string as this is what the settings manipulate
-        let ranking_rules = ranking_rules.map(|opt| {
-            opt.map(|ranking_rules| {
-                ranking_rules
-                    .into_iter()
-                    // filter out the WordsPosition ranking rule that exists in v1 but not v2
-                    .filter_map(|ranking_rule| {
-                        Option::<v2::settings::Criterion>::from(ranking_rule)
-                    })
-                    .map(|criterion| criterion.to_string())
-                    .collect()
-            })
+        let ranking_rules = ranking_rules.map(|ranking_rules| {
+            ranking_rules
+                .into_iter()
+                // filter out the WordsPosition ranking rule that exists in v1 but not v2
+                .filter_map(|ranking_rule| Option::<v2::settings::Criterion>::from(ranking_rule))
+                .map(|criterion| criterion.to_string())
+                .collect()
         });
 
         Self {
-            displayed_attributes: displayed_attributes.map(|opt| {
-                opt.map(|displayed_attributes| displayed_attributes.into_iter().collect())
-            }),
+            displayed_attributes: v2::Setting::from(source.displayed_attributes)
+                .map(|displayed_attributes| displayed_attributes.into_iter().collect()),
             searchable_attributes: source.searchable_attributes.into(),
-            filterable_attributes: attributes_for_faceting.map(|opt| {
-                opt.map(|attributes_for_faceting| attributes_for_faceting.into_iter().collect())
-            }),
+            filterable_attributes: v2::Setting::from(source.attributes_for_faceting.clone())
+                .map(|attributes_for_faceting| attributes_for_faceting.into_iter().collect()),
+            sortable_attributes: v2::Setting::from(source.attributes_for_faceting)
+                .map(|attributes_for_faceting| attributes_for_faceting.into_iter().collect()),
             ranking_rules,
             stop_words: source.stop_words.into(),
             synonyms: source.synonyms.into(),
@@ -314,12 +310,12 @@ impl From<v1::settings::RankingRule> for Option<v2::settings::Criterion> {
     }
 }
 
-impl<T> From<v1::settings::UpdateState<T>> for Option<Option<T>> {
+impl<T> From<v1::settings::UpdateState<T>> for v2::Setting<T> {
     fn from(source: v1::settings::UpdateState<T>) -> Self {
         match source {
-            v1::settings::UpdateState::Update(new_value) => Some(Some(new_value)),
-            v1::settings::UpdateState::Clear => Some(None),
-            v1::settings::UpdateState::Nothing => None,
+            v1::settings::UpdateState::Update(new_value) => v2::Setting::Set(new_value),
+            v1::settings::UpdateState::Clear => v2::Setting::Reset,
+            v1::settings::UpdateState::Nothing => v2::Setting::NotSet,
         }
     }
 }
