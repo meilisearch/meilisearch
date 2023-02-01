@@ -219,7 +219,7 @@ fn facet_ordered_set_based<'t>(
         candidates,
     )?;
 
-    Ok(Box::new(number_iter.chain(string_iter)))
+    Ok(Box::new(number_iter.chain(string_iter).map(|res| res.map(|(doc_ids, _)| doc_ids))))
 }
 
 /// Returns an iterator over groups of the given candidates in ascending or descending order.
