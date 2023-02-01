@@ -198,7 +198,7 @@ fn facet_ordered_iterative<'t>(
 }
 
 fn facet_extreme_value<'t>(
-    mut extreme_it: Box<dyn Iterator<Item = heed::Result<(RoaringBitmap, &[u8])>> + 't>,
+    mut extreme_it: impl Iterator<Item = heed::Result<(RoaringBitmap, &'t [u8])>> + 't,
 ) -> Result<Option<f64>> {
     let extreme_value =
         if let Some(extreme_value) = extreme_it.next() { extreme_value } else { return Ok(None) };
@@ -236,21 +236,22 @@ fn facet_ordered_set_based<'t>(
     is_ascending: bool,
     candidates: RoaringBitmap,
 ) -> Result<Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>> {
-    let make_iter = if is_ascending { ascending_facet_sort } else { descending_facet_sort };
+    let number_db =
+        index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>();
+    let string_db =
+        index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>();
 
-    let number_iter = make_iter(
-        rtxn,
-        index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
-        field_id,
-        candidates.clone(),
-    )?;
+    let (number_iter, string_iter) = if is_ascending {
+        let number_iter = ascending_facet_sort(rtxn, number_db, field_id, candidates.clone())?;
+        let string_iter = ascending_facet_sort(rtxn, string_db, field_id, candidates)?;
 
-    let string_iter = make_iter(
-        rtxn,
-        index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
-        field_id,
-        candidates,
-    )?;
+        (itertools::Either::Left(number_iter), itertools::Either::Left(string_iter))
+    } else {
+        let number_iter = descending_facet_sort(rtxn, number_db, field_id, candidates.clone())?;
+        let string_iter = descending_facet_sort(rtxn, string_db, field_id, candidates)?;
+
+        (itertools::Either::Right(number_iter), itertools::Either::Right(string_iter))
+    };
 
     Ok(Box::new(number_iter.chain(string_iter).map(|res| res.map(|(doc_ids, _)| doc_ids))))
 }
