@@ -666,14 +666,14 @@ dependencies = [
 [[package]]
 name = "charabia"
 version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b57f9571f611796ea38e5a9c12e5ce37476f70397b032757f8dfe0c7b9bc5637"
+source = "git+https://github.com/meilisearch/charabia?branch=fix-script-lang-serialization#c5efba56d433ff783e162009e020baba322afde0"
 dependencies = [
  "cow-utils",
  "csv",
  "deunicode",
  "fst",
  "jieba-rs",
+ "kvariants",
  "lindera",
  "once_cell",
  "pinyin",
@@ -2072,6 +2072,16 @@ dependencies = [
  "serde",
  "serde_json",
  "simple_asn1",
+]
+
+[[package]]
+name = "kvariants"
+version = "0.1.0"
+source = "git+https://github.com/meilisearch/charabia?branch=fix-script-lang-serialization#c5efba56d433ff783e162009e020baba322afde0"
+dependencies = [
+ "csv",
+ "once_cell",
+ "serde",
 ]
 
 [[package]]
