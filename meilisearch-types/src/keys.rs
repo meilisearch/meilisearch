@@ -13,7 +13,6 @@ use uuid::Uuid;
 use crate::error::deserr_codes::*;
 use crate::error::{unwrap_any, Code, DeserrError, ErrorCode, TakeErrorMessage};
 use crate::index_uid_pattern::{IndexUidPattern, IndexUidPatternFormatError};
-use crate::star_or::StarOr;
 
 pub type KeyId = Uuid;
 

@@ -26,6 +26,11 @@ impl IndexUidPattern {
         IndexUidPattern::from_str("*").unwrap()
     }
 
+    /// Returns `true` if it matches any index.
+    pub fn matches_all(&self) -> bool {
+        self.0 == "*"
+    }
+
     /// Returns `true` if the pattern matches a specific index name.
     pub fn is_exact(&self) -> bool {
         !self.0.ends_with('*')

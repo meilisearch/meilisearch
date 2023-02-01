@@ -199,6 +199,9 @@ pub mod policies {
             token: &str,
             index: Option<&str>,
         ) -> Option<AuthFilter> {
+            // Tenant token will always define an index.
+            let index = index?;
+
             // Only search action can be accessed by a tenant token.
             if A != actions::SEARCH {
                 return None;
@@ -206,7 +209,7 @@ pub mod policies {
 
             let uid = extract_key_id(token)?;
             // check if parent key is authorized to do the action.
-            if auth.is_key_authorized(uid, Action::Search, index).ok()? {
+            if auth.is_key_authorized(uid, Action::Search, Some(index)).ok()? {
                 // Check if tenant token is valid.
                 let key = auth.generate_key(uid)?;
                 let data = decode::<Claims>(
@@ -217,10 +220,8 @@ pub mod policies {
                 .ok()?;
 
                 // Check index access if an index restriction is provided.
-                if let Some(index) = index {
-                    if !data.claims.search_rules.is_index_authorized(index) {
-                        return None;
-                    }
+                if !data.claims.search_rules.is_index_authorized(index) {
+                    return None;
                 }
 
                 // Check if token is expired.
@@ -230,10 +231,10 @@ pub mod policies {
                     }
                 }
 
-                match auth.get_key_filters(uid, Some(data.claims.search_rules)) {
-                    Ok(auth) if auth.search_rules.is_index_authorized() => Some(auth),
+                return match auth.get_key_filters(uid, Some(data.claims.search_rules)) {
+                    Ok(auth) if auth.search_rules.is_index_authorized(index) => Some(auth),
                     _ => None,
-                }
+                };
             }
 
             None

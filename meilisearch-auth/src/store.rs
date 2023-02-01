@@ -14,7 +14,6 @@ use meilisearch_types::keys::KeyId;
 use meilisearch_types::milli;
 use meilisearch_types::milli::heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
 use meilisearch_types::milli::heed::{Database, Env, EnvOpenOptions, RwTxn};
-use meilisearch_types::star_or::StarOr;
 use sha2::Sha256;
 use time::OffsetDateTime;
 use uuid::fmt::Hyphenated;
@@ -126,7 +125,7 @@ impl HeedAuthStore {
             }
         }
 
-        let no_index_restriction = key.indexes.contains(&StarOr::Star);
+        let no_index_restriction = key.indexes.iter().any(|p| p.matches_all());
         for action in actions {
             if no_index_restriction {
                 // If there is no index restriction we put None.

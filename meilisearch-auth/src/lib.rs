@@ -3,7 +3,6 @@ pub mod error;
 mod store;
 
 use std::collections::{HashMap, HashSet};
-use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -11,7 +10,6 @@ use error::{AuthControllerError, Result};
 use maplit::hashset;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::keys::{Action, CreateApiKey, Key, PatchApiKey};
-use meilisearch_types::star_or::StarOr;
 use serde::{Deserialize, Serialize};
 pub use store::open_auth_store_env;
 use store::{generate_key_as_hexa, HeedAuthStore};
@@ -192,7 +190,7 @@ impl SearchRules {
 
     pub fn get_index_search_rules(&self, index: &str) -> Option<IndexSearchRules> {
         match self {
-            Self::Set(set) => {
+            Self::Set(_) => {
                 if self.is_index_authorized(index) {
                     Some(IndexSearchRules::default())
                 } else {
