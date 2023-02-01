@@ -1206,6 +1206,26 @@ impl Index {
         let doc_ids = self.script_language_docids.get(rtxn, key)?;
         Ok(doc_ids.map(|ids| ids - soft_deleted_documents))
     }
+
+    pub fn script_language(&self, rtxn: &RoTxn) -> heed::Result<HashMap<Script, Vec<Language>>> {
+        let soft_deleted_documents = self.soft_deleted_documents_ids(rtxn)?;
+
+        let mut script_language: HashMap<Script, Vec<Language>> = HashMap::new();
+        for sl in self.script_language_docids.iter(rtxn)? {
+            let ((script, language), docids) = sl?;
+
+            // keep only Languages that contains at least 1 document.
+            if !soft_deleted_documents.is_superset(&docids) {
+                if let Some(languages) = script_language.get_mut(&script) {
+                    (*languages).push(language);
+                } else {
+                    script_language.insert(script, vec![language]);
+                }
+            }
+        }
+
+        Ok(script_language)
+    }
 }
 
 #[cfg(test)]

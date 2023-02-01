@@ -152,6 +152,11 @@ impl<'a> Search<'a> {
                     tokbuilder.stop_words(stop_words);
                 }
 
+                let script_lang_map = self.index.script_language(self.rtxn)?;
+                if !script_lang_map.is_empty() {
+                    tokbuilder.allow_list(&script_lang_map);
+                }
+
                 let tokenizer = tokbuilder.build();
                 let tokens = tokenizer.tokenize(query);
                 builder
