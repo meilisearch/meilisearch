@@ -14,7 +14,8 @@ impl<'a> heed::BytesDecode<'a> for ScriptLanguageCodec {
         let script = str::from_utf8(s_bytes).ok()?;
         let script_name = Script::from_name(script);
         let lan = str::from_utf8(l_bytes).ok()?;
-        let lan_name = Language::from_name(lan);
+        // skip '\0' byte between the two strings.
+        let lan_name = Language::from_name(&lan[1..]);
 
         Some((script_name, lan_name))
     }
