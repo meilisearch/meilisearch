@@ -34,15 +34,20 @@ pub fn ascending_facet_sort<'t>(
     db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
     candidates: RoaringBitmap,
-) -> Result<Box<dyn Iterator<Item = Result<(RoaringBitmap, &'t [u8])>> + 't>> {
+) -> Result<impl Iterator<Item = Result<(RoaringBitmap, &'t [u8])>> + 't> {
     let highest_level = get_highest_level(rtxn, db, field_id)?;
     if let Some(first_bound) = get_first_facet_value::<ByteSliceRefCodec>(rtxn, db, field_id)? {
         let first_key = FacetGroupKey { field_id, level: highest_level, left_bound: first_bound };
         let iter = db.range(rtxn, &(first_key..)).unwrap().take(usize::MAX);
 
-        Ok(Box::new(AscendingFacetSort { rtxn, db, field_id, stack: vec![(candidates, iter)] }))
+        Ok(itertools::Either::Left(AscendingFacetSort {
+            rtxn,
+            db,
+            field_id,
+            stack: vec![(candidates, iter)],
+        }))
     } else {
-        Ok(Box::new(std::iter::empty()))
+        Ok(itertools::Either::Right(std::iter::empty()))
     }
 }
 
