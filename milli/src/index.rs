@@ -19,8 +19,7 @@ use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
     FieldIdCodec, OrderedF64Codec,
 };
-use crate::heed_codec::StrRefCodec;
-use crate::heed_codec::ScriptLanguageCodec;
+use crate::heed_codec::{ScriptLanguageCodec, StrRefCodec};
 use crate::{
     default_criteria, BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec, Criterion,
     DocumentId, ExternalDocumentsIds, FacetDistribution, FieldDistribution, FieldId,
@@ -154,7 +153,7 @@ impl Index {
     ) -> Result<Index> {
         use db_name::*;
 
-        options.max_dbs(18);
+        options.max_dbs(19);
         unsafe { options.flag(Flags::MdbAlwaysFreePages) };
 
         let env = options.open(path)?;

@@ -23,4 +23,3 @@ pub use self::roaring_bitmap_length::{
 pub use self::script_language_codec::ScriptLanguageCodec;
 pub use self::str_beu32_codec::StrBEU32Codec;
 pub use self::str_str_u8_codec::{U8StrStrCodec, UncheckedU8StrStrCodec};
-pub use self::script_language_codec::ScriptLanguageCodec;

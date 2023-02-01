@@ -1184,8 +1184,9 @@ mod tests {
         stats_should_not_return_deleted_documents_(DeletionStrategy::AlwaysSoft);
     }
 
-    #[test]
-    fn stored_detected_script_and_language_should_not_return_deleted_documents() {
+    fn stored_detected_script_and_language_should_not_return_deleted_documents_(
+        deletion_strategy: DeletionStrategy,
+    ) {
         use charabia::{Language, Script};
         let index = TempIndex::new();
         let mut wtxn = index.write_txn().unwrap();
@@ -1202,14 +1203,32 @@ mod tests {
             ]))
             .unwrap();
 
-        delete_documents(&mut wtxn, &index, &["1"]);
+        let key_cmn = (Script::Cj, Language::Cmn);
+        let cj_cmn_docs =
+            index.script_language_documents_ids(&wtxn, &key_cmn).unwrap().unwrap_or_default();
+        let mut expected_cj_cmn_docids = RoaringBitmap::new();
+        expected_cj_cmn_docids.push(1);
+        expected_cj_cmn_docids.push(5);
+        assert_eq!(cj_cmn_docs, expected_cj_cmn_docids);
+
+        delete_documents(&mut wtxn, &index, &["1"], deletion_strategy);
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
-        let key_cmn = (Script::Cj, Language::Cmn);
-        let cj_cmn_docs = index.script_language_documents_ids(&rtxn, &key_cmn).unwrap().unwrap();
+        let cj_cmn_docs =
+            index.script_language_documents_ids(&rtxn, &key_cmn).unwrap().unwrap_or_default();
         let mut expected_cj_cmn_docids = RoaringBitmap::new();
         expected_cj_cmn_docids.push(5);
         assert_eq!(cj_cmn_docs, expected_cj_cmn_docids);
+    }
+
+    #[test]
+    fn stored_detected_script_and_language_should_not_return_deleted_documents() {
+        stored_detected_script_and_language_should_not_return_deleted_documents_(
+            DeletionStrategy::AlwaysHard,
+        );
+        stored_detected_script_and_language_should_not_return_deleted_documents_(
+            DeletionStrategy::AlwaysSoft,
+        );
     }
 }
