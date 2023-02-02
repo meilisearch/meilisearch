@@ -431,12 +431,16 @@ impl<'a> Filter<'a> {
 
                     let geo_lng_token =
                         Token::new(top_left_point[1].original_span(), Some("_geo.lng".to_string()));
-                    let min_lng_token =
-                        Token::new(top_left_point[1].original_span(), Some("-180.0".to_string()));
-                    let max_lng_token =
-                        Token::new(top_left_point[1].original_span(), Some("180.0".to_string()));
-
                     let selected_lng = if top_left[1] > bottom_right[1] {
+                        let min_lng_token = Token::new(
+                            top_left_point[1].original_span(),
+                            Some("-180.0".to_string()),
+                        );
+                        let max_lng_token = Token::new(
+                            top_left_point[1].original_span(),
+                            Some("180.0".to_string()),
+                        );
+
                         let condition_left = FilterCondition::Condition {
                             fid: geo_lng_token.clone(),
                             op: Condition::Between {
