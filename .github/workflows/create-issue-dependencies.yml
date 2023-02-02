@@ -15,9 +15,13 @@ jobs:
         github_token: ${{ secrets.MEILI_BOT_GH_PAT }}
         title: Upgrade dependencies
         body: |
-          We need to update the dependencies of the Meilisearch repository, and, if possible, the dependencies of all the engine-team repositories that Meilisearch depends on (charabia, heed...).
+          This issue is about updating Meilisearch dependencies:
+          - [ ] Cargo toml dependencies of Meilisearch; but also the main engine-team repositories that Meilisearch depends on (charabia, heed...)
+          - [ ] If new Rust versions has been release, update the Rust version in the Clippy job of this [GitHub Action file](./.github/workflows/rust.yml)
 
-          ⚠️ This issue should only be done at the beginning of the sprint!
+          ⚠️ To avoid last minute bugs, this issue should only be done at the beginning of the sprint!
+
+          The GitHub action dependencies are managed by [Dependabot](./.github/dependabot.yml)
         labels: |
           dependencies
           maintenance
