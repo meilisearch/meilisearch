@@ -27,8 +27,19 @@ jobs:
       run: |
         apt-get update && apt-get install -y curl
         apt-get install build-essential -y
-    - uses: actions-rs/toolchain@v1
+    - name: Run test with Rust nightly
+      uses: actions-rs/toolchain@v1
       with:
+        profile: minimal
+        toolchain: nightly
+        override: true
+      on:
+          schedule:
+            - cron: '0 0 * * *' # Run daily at midnight (UTC)
+    - name: Run test with Rust stable
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
         toolchain: stable
         override: true
     # Disable cache due to disk space issues with Windows workers in CI
