@@ -71,7 +71,7 @@ const MAX_FILTER_DEPTH: usize = 200;
 #[derive(Debug, Clone, Eq)]
 pub struct Token<'a> {
     /// The token in the original input, it should be used when possible.
-    pub span: Span<'a>,
+    span: Span<'a>,
     /// If you need to modify the original input you can use the `value` field
     /// to store your modified input.
     value: Option<String>,
@@ -98,6 +98,11 @@ impl<'a> Token<'a> {
 
     pub fn as_external_error(&self, error: impl std::error::Error) -> Error<'a> {
         Error::new_from_external(self.span, error)
+    }
+
+    /// Returns a copy of the span this token was created with.
+    pub fn original_span(&self) -> Span<'a> {
+        self.span
     }
 
     pub fn parse_finite_float(&self) -> Result<f64, Error> {
