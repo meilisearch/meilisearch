@@ -1,6 +1,7 @@
 name: Create issue to upgrade dependencies
 on:
   schedule:
+    # Run the first of the month, every 3 month
     - cron: '0 0 1 */3 *'
   workflow_dispatch:
 
