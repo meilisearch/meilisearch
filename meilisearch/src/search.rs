@@ -144,14 +144,17 @@ pub fn perform_search(
     }
 
     let is_finite_pagination = query.is_finite_pagination();
+    let has_facet_distribution =
+        if let Some(facets) = query.facets.as_deref() { !facets.is_empty() } else { false };
+
+    search.exhaustive_number_hits(is_finite_pagination || has_facet_distribution);
+
     search.terms_matching_strategy(query.matching_strategy.into());
 
     let max_total_hits = index
         .pagination_max_total_hits(&rtxn)
         .map_err(milli::Error::from)?
         .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
-
-    search.exhaustive_number_hits(is_finite_pagination);
 
     // compute the offset on the limit depending on the pagination mode.
     let (offset, limit) = if is_finite_pagination {
