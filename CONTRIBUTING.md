@@ -52,6 +52,23 @@ cargo test
 
 This command will be triggered to each PR as a requirement for merging it.
 
+#### Snapshot-based tests
+
+We are using [insta](https://insta.rs) to perform snapshot-based testing.
+We recommend using the insta tooling (such as `cargo-insta`) to update the snapshots if they change following a PR.
+
+New tests should use insta where possible rather than manual `assert` statements.
+
+Furthermore, we provide some macros on top of insta, notably a way to use snapshot hashes instead of inline snapshots, saving a lot of space in the repository.
+
+To effectively debug snapshot-based hashes, we recommend you export the `MEILI_TEST_FULL_SNAPS` environment variable so that snapshot are fully created locally:
+
+```
+export MEILI_TEST_FULL_SNAPS=true # add this to your .bashrc, .zshrc, ...
+```
+
+#### Test troubleshooting
+
 If you get a "Too many open files" error you might want to increase the open file limit using this command:
 
 ```bash
