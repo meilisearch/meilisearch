@@ -133,8 +133,8 @@ pub fn print_launch_resume(
             .map(|config_file_path| config_file_path.display().to_string())
             .unwrap_or_else(|| "none".to_string())
     );
-    eprintln!("Database path:\t\t{:?}", opt.db_path);
-    eprintln!("Server listening on:\t\"{}://{}\"", protocol, opt.http_addr);
+    eprintln!("TEST path:\t\t{:?}", opt.db_path);
+    eprintln!("TEST listening on:\t\"{}://{}\"", protocol, opt.http_addr);
     eprintln!("Environment:\t\t{:?}", opt.env);
     eprintln!("Commit SHA:\t\t{:?}", commit_sha.to_string());
     eprintln!("Commit date:\t\t{:?}", commit_date.to_string());
