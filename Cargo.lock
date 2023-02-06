@@ -415,7 +415,7 @@ dependencies = [
  "criterion",
  "csv",
  "flate2",
- "milli 1.0.0",
+ "milli",
  "mimalloc",
  "rand",
  "rand_chacha",
@@ -1424,15 +1424,6 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "0.41.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.41.1#758b4acea7cecd689650bee65949b49cf09ddaa3"
-dependencies = [
- "nom",
- "nom_locate",
-]
-
-[[package]]
-name = "filter-parser"
 version = "1.0.0"
 dependencies = [
  "insta",
@@ -1449,14 +1440,6 @@ dependencies = [
  "crc32fast",
  "libz-sys",
  "miniz_oxide",
-]
-
-[[package]]
-name = "flatten-serde-json"
-version = "0.41.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.41.1#758b4acea7cecd689650bee65949b49cf09ddaa3"
-dependencies = [
- "serde_json",
 ]
 
 [[package]]
@@ -2085,14 +2068,6 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "0.41.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.41.1#758b4acea7cecd689650bee65949b49cf09ddaa3"
-dependencies = [
- "serde_json",
-]
-
-[[package]]
-name = "json-depth-checker"
 version = "1.0.0"
 dependencies = [
  "criterion",
@@ -2603,7 +2578,7 @@ dependencies = [
  "insta",
  "meili-snap",
  "memmap2",
- "milli 0.41.1",
+ "milli",
  "roaring",
  "serde",
  "serde-cs",
@@ -2642,52 +2617,6 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "0.41.1"
-source = "git+https://github.com/meilisearch/milli.git?tag=v0.41.1#758b4acea7cecd689650bee65949b49cf09ddaa3"
-dependencies = [
- "bimap",
- "bincode",
- "bstr 1.1.0",
- "byteorder",
- "charabia",
- "concat-arrays",
- "crossbeam-channel",
- "csv",
- "deserr 0.3.0",
- "either",
- "filter-parser 0.41.1",
- "flatten-serde-json 0.41.1",
- "fst",
- "fxhash",
- "geoutils",
- "grenad",
- "heed",
- "itertools",
- "json-depth-checker 0.41.1",
- "levenshtein_automata",
- "log",
- "logging_timer",
- "memmap2",
- "obkv",
- "once_cell",
- "ordered-float",
- "rayon",
- "roaring",
- "rstar",
- "serde",
- "serde_json",
- "slice-group-by",
- "smallstr",
- "smallvec",
- "smartstring",
- "tempfile",
- "thiserror",
- "time",
- "uuid 1.2.2",
-]
-
-[[package]]
-name = "milli"
 version = "1.0.0"
 dependencies = [
  "big_s",
@@ -2701,8 +2630,8 @@ dependencies = [
  "csv",
  "deserr 0.1.4",
  "either",
- "filter-parser 1.0.0",
- "flatten-serde-json 1.0.0",
+ "filter-parser",
+ "flatten-serde-json",
  "fst",
  "fuzzcheck",
  "fxhash",
@@ -2711,7 +2640,7 @@ dependencies = [
  "heed",
  "insta",
  "itertools",
- "json-depth-checker 1.0.0",
+ "json-depth-checker",
  "levenshtein_automata",
  "log",
  "logging_timer",
