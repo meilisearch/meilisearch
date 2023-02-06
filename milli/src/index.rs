@@ -1583,7 +1583,7 @@ pub(crate) mod tests {
             .unwrap();
         insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[4]>");
 
-        // the requests that doesn't make sense
+        // the requests that don't make sense
 
         // try to wrap around the latitude
         let error = search
