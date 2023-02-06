@@ -1,0 +1,273 @@
+use meili_snap::{json_string, snapshot};
+use serde_json::json;
+
+use super::{DOCUMENTS, NESTED_DOCUMENTS};
+use crate::common::Server;
+
+#[actix_rt::test]
+async fn search_empty_list() {
+    let server = Server::new().await;
+
+    let (response, code) = server.search(json!([])).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response), @"[]");
+}
+
+#[actix_rt::test]
+async fn search_json_object() {
+    let server = Server::new().await;
+
+    let (response, code) = server.search(json!({})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type: expected an array, but found an object: `{}`",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn simple_search_single_index() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(0).await;
+
+    let (response, code) = server
+        .search(json!([
+        {"indexUid" : "test", "q": "glass"},
+        {"indexUid": "test", "q": "captain"},
+        ]))
+        .await;
+    snapshot!(code, @"200 OK");
+    insta::assert_json_snapshot!(response, { "[].processingTimeMs" => "[time]" }, @r###"
+    [
+      {
+        "indexUid": "test",
+        "hits": [
+          {
+            "title": "Glass",
+            "id": "450465"
+          }
+        ],
+        "query": "glass",
+        "processingTimeMs": "[time]",
+        "limit": 20,
+        "offset": 0,
+        "estimatedTotalHits": 1
+      },
+      {
+        "indexUid": "test",
+        "hits": [
+          {
+            "title": "Captain Marvel",
+            "id": "299537"
+          }
+        ],
+        "query": "captain",
+        "processingTimeMs": "[time]",
+        "limit": 20,
+        "offset": 0,
+        "estimatedTotalHits": 1
+      }
+    ]
+    "###);
+}
+
+#[actix_rt::test]
+async fn simple_search_two_indexes() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(0).await;
+
+    let index = server.index("nested");
+    let documents = NESTED_DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(1).await;
+
+    let (response, code) = server
+        .search(json!([
+        {"indexUid" : "test", "q": "glass"},
+        {"indexUid": "nested", "q": "pesti"},
+        ]))
+        .await;
+    snapshot!(code, @"200 OK");
+    insta::assert_json_snapshot!(response, { "[].processingTimeMs" => "[time]" }, @r###"
+    [
+      {
+        "indexUid": "test",
+        "hits": [
+          {
+            "title": "Glass",
+            "id": "450465"
+          }
+        ],
+        "query": "glass",
+        "processingTimeMs": "[time]",
+        "limit": 20,
+        "offset": 0,
+        "estimatedTotalHits": 1
+      },
+      {
+        "indexUid": "nested",
+        "hits": [
+          {
+            "id": 852,
+            "father": "jean",
+            "mother": "michelle",
+            "doggos": [
+              {
+                "name": "bobby",
+                "age": 2
+              },
+              {
+                "name": "buddy",
+                "age": 4
+              }
+            ],
+            "cattos": "pesti"
+          },
+          {
+            "id": 654,
+            "father": "pierre",
+            "mother": "sabine",
+            "doggos": [
+              {
+                "name": "gros bill",
+                "age": 8
+              }
+            ],
+            "cattos": [
+              "simba",
+              "pestiféré"
+            ]
+          }
+        ],
+        "query": "pesti",
+        "processingTimeMs": "[time]",
+        "limit": 20,
+        "offset": 0,
+        "estimatedTotalHits": 2
+      }
+    ]
+    "###);
+}
+
+#[actix_rt::test]
+async fn search_one_index_doesnt_exist() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(0).await;
+
+    let (response, code) = server
+        .search(json!([
+        {"indexUid" : "test", "q": "glass"},
+        {"indexUid": "nested", "q": "pesti"},
+        ]))
+        .await;
+    snapshot!(code, @"404 Not Found");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Index `nested` not found.",
+      "code": "index_not_found",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#index_not_found"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn search_multiple_indexes_dont_exist() {
+    let server = Server::new().await;
+
+    let (response, code) = server
+        .search(json!([
+        {"indexUid" : "test", "q": "glass"},
+        {"indexUid": "nested", "q": "pesti"},
+        ]))
+        .await;
+    snapshot!(code, @"404 Not Found");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Index `test` not found.",
+      "code": "index_not_found",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#index_not_found"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn search_one_query_error() {
+    let server = Server::new().await;
+
+    let index = server.index("test");
+
+    let documents = DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(0).await;
+
+    let index = server.index("nested");
+    let documents = NESTED_DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(1).await;
+
+    let (response, code) = server
+        .search(json!([
+        {"indexUid" : "test", "q": "glass", "facets": ["title"]},
+        {"indexUid": "nested", "q": "pesti"},
+        ]))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid facet distribution, this index does not have configured filterable attributes.",
+      "code": "invalid_search_facets",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn search_multiple_query_errors() {
+    let server = Server::new().await;
+
+    let index = server.index("test");
+
+    let documents = DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(0).await;
+
+    let index = server.index("nested");
+    let documents = NESTED_DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(1).await;
+
+    let (response, code) = server
+        .search(json!([
+        {"indexUid" : "test", "q": "glass", "facets": ["title"]},
+        {"indexUid": "nested", "q": "pesti", "facets": ["doggos"]},
+        ]))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid facet distribution, this index does not have configured filterable attributes.",
+      "code": "invalid_search_facets",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+    }
+    "###);
+}
