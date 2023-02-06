@@ -52,9 +52,6 @@ jobs:
       - name: Set build-args for Docker buildx
         id: build-metadata
         run: |
-          # Define ownership
-          git config --global --add safe.directory /home/meili/actions-runner/_work/meilisearch/meilisearch
-
           # Extract commit date
           commit_date=$(git show -s --format=%cd --date=iso-strict ${{ github.sha }})
 
