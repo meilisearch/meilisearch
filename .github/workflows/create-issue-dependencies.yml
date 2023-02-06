@@ -1,6 +1,7 @@
 name: Create issue to upgrade dependencies
 on:
   schedule:
+    # Run the first of the month, every 3 month
     - cron: '0 0 1 */3 *'
   workflow_dispatch:
 
@@ -15,9 +16,13 @@ jobs:
         github_token: ${{ secrets.MEILI_BOT_GH_PAT }}
         title: Upgrade dependencies
         body: |
-          We need to update the dependencies of the Meilisearch repository, and, if possible, the dependencies of all the engine-team repositories that Meilisearch depends on (charabia, heed...).
+          This issue is about updating Meilisearch dependencies:
+          - [ ] Cargo toml dependencies of Meilisearch; but also the main engine-team repositories that Meilisearch depends on (charabia, heed...)
+          - [ ] If new Rust versions have been released, update the Rust version in the Clippy job of this [GitHub Action file](./.github/workflows/rust.yml)
 
-          ⚠️ This issue should only be done at the beginning of the sprint!
+          ⚠️ To avoid last minute bugs, this issue should only be done at the beginning of the sprint!
+
+          The GitHub action dependencies are managed by [Dependabot](./.github/dependabot.yml)
         labels: |
           dependencies
           maintenance
