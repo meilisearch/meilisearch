@@ -619,7 +619,7 @@ mod tests {
             "Attribute `_geo` is not filterable. This index does not have configured filterable attributes."
         ));
 
-        let filter = Filter::from_str("_geoBoundingBox((42, 150), (30, 10))").unwrap().unwrap();
+        let filter = Filter::from_str("_geoBoundingBox([42, 150], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().starts_with(
             "Attribute `_geo` is not filterable. This index does not have configured filterable attributes."
@@ -647,7 +647,7 @@ mod tests {
             "Attribute `_geo` is not filterable. Available filterable attributes are: `title`."
         ));
 
-        let filter = Filter::from_str("_geoBoundingBox((42, 150), (30, 10))").unwrap().unwrap();
+        let filter = Filter::from_str("_geoBoundingBox([42, 150], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().starts_with(
             "Attribute `_geo` is not filterable. Available filterable attributes are: `title`."
@@ -819,7 +819,7 @@ mod tests {
 
         // geoboundingbox top left coord have a bad latitude
         let filter =
-            Filter::from_str("_geoBoundingBox((-90.0000001, 150), (30, 10))").unwrap().unwrap();
+            Filter::from_str("_geoBoundingBox([-90.0000001, 150], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(
             error.to_string().starts_with(
@@ -831,7 +831,7 @@ mod tests {
 
         // geoboundingbox top left coord have a bad latitude
         let filter =
-            Filter::from_str("_geoBoundingBox((90.0000001, 150), (30, 10))").unwrap().unwrap();
+            Filter::from_str("_geoBoundingBox([90.0000001, 150], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(
             error.to_string().starts_with(
@@ -843,7 +843,7 @@ mod tests {
 
         // geoboundingbox bottom right coord have a bad latitude
         let filter =
-            Filter::from_str("_geoBoundingBox((30, 10), (-90.0000001, 150))").unwrap().unwrap();
+            Filter::from_str("_geoBoundingBox([30, 10], [-90.0000001, 150])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().contains(
             "Bad latitude `-90.0000001`. Latitude must be contained between -90 and 90 degrees."
@@ -851,7 +851,7 @@ mod tests {
 
         // geoboundingbox bottom right coord have a bad latitude
         let filter =
-            Filter::from_str("_geoBoundingBox((30, 10), (90.0000001, 150))").unwrap().unwrap();
+            Filter::from_str("_geoBoundingBox([30, 10], [90.0000001, 150])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().contains(
             "Bad latitude `90.0000001`. Latitude must be contained between -90 and 90 degrees."
@@ -859,7 +859,7 @@ mod tests {
 
         // geoboundingbox top left coord have a bad longitude
         let filter =
-            Filter::from_str("_geoBoundingBox((-10, 180.000001), (30, 10))").unwrap().unwrap();
+            Filter::from_str("_geoBoundingBox([-10, 180.000001], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().contains(
             "Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees."
@@ -867,7 +867,7 @@ mod tests {
 
         // geoboundingbox top left coord have a bad longitude
         let filter =
-            Filter::from_str("_geoBoundingBox((-10, -180.000001), (30, 10))").unwrap().unwrap();
+            Filter::from_str("_geoBoundingBox([-10, -180.000001], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().contains(
             "Bad longitude `-180.000001`. Longitude must be contained between -180 and 180 degrees."
@@ -875,7 +875,7 @@ mod tests {
 
         // geoboundingbox bottom right coord have a bad longitude
         let filter =
-            Filter::from_str("_geoBoundingBox((30, 10), (-10, -180.000001))").unwrap().unwrap();
+            Filter::from_str("_geoBoundingBox([30, 10], [-10, -180.000001])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().contains(
             "Bad longitude `-180.000001`. Longitude must be contained between -180 and 180 degrees."
@@ -883,7 +883,7 @@ mod tests {
 
         // geoboundingbox bottom right coord have a bad longitude
         let filter =
-            Filter::from_str("_geoBoundingBox((30, 10), (-10, 180.000001))").unwrap().unwrap();
+            Filter::from_str("_geoBoundingBox([30, 10], [-10, 180.000001])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().contains(
             "Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees."

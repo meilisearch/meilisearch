@@ -161,7 +161,7 @@ mod tests {
             ("_geoRadius(42, 75, 59):asc", ReservedNameForFilter { name: S("_geoRadius") }),
             ("_geoBoundingBox:asc", ReservedNameForFilter { name: S("_geoBoundingBox") }),
             (
-                "_geoBoundingBox((42, 75), (75, 59)):asc",
+                "_geoBoundingBox([42, 75], [75, 59]):asc",
                 ReservedNameForFilter { name: S("_geoBoundingBox") },
             ),
         ];

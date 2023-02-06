@@ -156,10 +156,10 @@ impl<'a> Display for Error<'a> {
                 writeln!(f, "The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`.")?
             }
             ErrorKind::GeoBoundingBox => {
-                writeln!(f, "The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox((latitude, longitude), (latitude, longitude))`.")?
+                writeln!(f, "The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.")?
             }
             ErrorKind::ReservedGeo(name) => {
-                writeln!(f, "`{}` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance), or _geoBoundingBox((latitude, longitude), (latitude, longitude)) built-in rules to filter on `_geo` coordinates.", name.escape_debug())?
+                writeln!(f, "`{}` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance), or _geoBoundingBox([latitude, longitude], [latitude, longitude]) built-in rules to filter on `_geo` coordinates.", name.escape_debug())?
             }
             ErrorKind::MisusedGeoRadius => {
                 writeln!(f, "The `_geoRadius` filter is an operation and can't be used as a value.")?

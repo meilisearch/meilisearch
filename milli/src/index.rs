@@ -1529,63 +1529,63 @@ pub(crate) mod tests {
 
         // exact match a document
         let search_result = search
-            .filter(Filter::from_str("_geoBoundingBox((0, 0), (0, 0))").unwrap().unwrap())
+            .filter(Filter::from_str("_geoBoundingBox([0, 0], [0, 0])").unwrap().unwrap())
             .execute()
             .unwrap();
         insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0]>");
 
         // match a document in the middle of the rectangle
         let search_result = search
-            .filter(Filter::from_str("_geoBoundingBox((10, -10), (-10, 10))").unwrap().unwrap())
+            .filter(Filter::from_str("_geoBoundingBox([10, -10], [-10, 10])").unwrap().unwrap())
             .execute()
             .unwrap();
         insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0]>");
 
         // select everything
         let search_result = search
-            .filter(Filter::from_str("_geoBoundingBox((90, -180), (-90, 180))").unwrap().unwrap())
+            .filter(Filter::from_str("_geoBoundingBox([90, -180], [-90, 180])").unwrap().unwrap())
             .execute()
             .unwrap();
         insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0, 1, 2, 3, 4]>");
 
         // go on the edge of the longitude
         let search_result = search
-            .filter(Filter::from_str("_geoBoundingBox((0, 180), (0, -170))").unwrap().unwrap())
+            .filter(Filter::from_str("_geoBoundingBox([0, 180], [0, -170])").unwrap().unwrap())
             .execute()
             .unwrap();
         insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[1]>");
 
         // go on the other edge of the longitude
         let search_result = search
-            .filter(Filter::from_str("_geoBoundingBox((0, 170), (0, -180))").unwrap().unwrap())
+            .filter(Filter::from_str("_geoBoundingBox([0, 170], [0, -180])").unwrap().unwrap())
             .execute()
             .unwrap();
         insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[2]>");
 
         // wrap around the longitude
         let search_result = search
-            .filter(Filter::from_str("_geoBoundingBox((0, 170), (0, -170))").unwrap().unwrap())
+            .filter(Filter::from_str("_geoBoundingBox([0, 170], [0, -170])").unwrap().unwrap())
             .execute()
             .unwrap();
         insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[1, 2]>");
 
         // go on the edge of the latitude
         let search_result = search
-            .filter(Filter::from_str("_geoBoundingBox((90, 0), (80, 0))").unwrap().unwrap())
+            .filter(Filter::from_str("_geoBoundingBox([90, 0], [80, 0])").unwrap().unwrap())
             .execute()
             .unwrap();
         insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[3]>");
 
         // go on the edge of the latitude
         let search_result = search
-            .filter(Filter::from_str("_geoBoundingBox((-80, 0), (-90, 0))").unwrap().unwrap())
+            .filter(Filter::from_str("_geoBoundingBox([-80, 0], [-90, 0])").unwrap().unwrap())
             .execute()
             .unwrap();
         insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[4]>");
 
         // try to wrap around the latitude
         let search_result = search
-            .filter(Filter::from_str("_geoBoundingBox((-80, 0), (80, 0))").unwrap().unwrap())
+            .filter(Filter::from_str("_geoBoundingBox([-80, 0], [80, 0])").unwrap().unwrap())
             .execute()
             .unwrap();
         insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[]>");
@@ -1593,7 +1593,7 @@ pub(crate) mod tests {
         // the request that doesn't make sense
         // send a top latitude lower than the bottow latitude
         let search_result = search
-            .filter(Filter::from_str("_geoBoundingBox((-10, 0), (10, 0))").unwrap().unwrap())
+            .filter(Filter::from_str("_geoBoundingBox([-10, 0], [10, 0])").unwrap().unwrap())
             .execute()
             .unwrap();
         insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[]>");

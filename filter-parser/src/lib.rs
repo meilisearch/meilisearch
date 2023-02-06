@@ -18,7 +18,7 @@
 //! doubleQuoted   = "\"" .* all but double quotes "\""
 //! word           = (alphanumeric | _ | - | .)+
 //! geoRadius      = "_geoRadius(" WS* float WS* "," WS* float WS* "," float WS* ")"
-//! geoBoundingBox = "_geoBoundingBox((" WS * float WS* "," WS* float WS* "), (" WS* float WS* "," WS* float WS* ")")
+//! geoBoundingBox = "_geoBoundingBox([" WS * float WS* "," WS* float WS* "], [" WS* float WS* "," WS* float WS* "]")
 //! ```
 //!
 //! Other BNF grammar used to handle some specific errors:
@@ -337,7 +337,7 @@ fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
     Ok((input, res))
 }
 
-/// geoBoundingBox      = WS* "_geoBoundingBox((float WS* "," WS* float WS* "), (float WS* "," WS* float WS* ")")
+/// geoBoundingBox      = WS* "_geoBoundingBox([float WS* "," WS* float WS* "], [float WS* "," WS* float WS* "]")
 /// If we parse `_geoBoundingBox` we MUST parse the rest of the expression.
 fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
     // we want to allow space BEFORE the _geoBoundingBox but not after
@@ -348,7 +348,7 @@ fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
             char('('),
             separated_list1(
                 tag(","),
-                ws(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
+                ws(delimited(char('['), separated_list1(tag(","), ws(recognize_float)), char(']'))),
             ),
             char(')'),
         )),
@@ -515,9 +515,9 @@ pub mod tests {
         insta::assert_display_snapshot!(p("_geoRadius(12,13,14)"), @"_geoRadius({12}, {13}, {14})");
 
         // Test geo bounding box
-        insta::assert_display_snapshot!(p("_geoBoundingBox((12, 13), (14, 15))"), @"_geoBoundingBox(({12}, {13}), ({14}, {15}))");
-        insta::assert_display_snapshot!(p("NOT _geoBoundingBox((12, 13), (14, 15))"), @"NOT (_geoBoundingBox(({12}, {13}), ({14}, {15})))");
-        insta::assert_display_snapshot!(p("_geoBoundingBox((12,13),(14,15))"), @"_geoBoundingBox(({12}, {13}), ({14}, {15}))");
+        insta::assert_display_snapshot!(p("_geoBoundingBox([12, 13], [14, 15])"), @"_geoBoundingBox([{12}, {13}], [{14}, {15}])");
+        insta::assert_display_snapshot!(p("NOT _geoBoundingBox([12, 13], [14, 15])"), @"NOT (_geoBoundingBox([{12}, {13}], [{14}, {15}]))");
+        insta::assert_display_snapshot!(p("_geoBoundingBox([12,13],[14,15])"), @"_geoBoundingBox([{12}, {13}], [{14}, {15}])");
 
         // Test OR + AND
         insta::assert_display_snapshot!(p("channel = ponce AND 'dog race' != 'bernese mountain'"), @"AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ]");
@@ -606,27 +606,27 @@ pub mod tests {
         "###);
 
         insta::assert_display_snapshot!(p("_geoBoundingBox"), @r###"
-        The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox((latitude, longitude), (latitude, longitude))`.
+        The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.
         1:16 _geoBoundingBox
         "###);
 
         insta::assert_display_snapshot!(p("_geoBoundingBox = 12"), @r###"
-        The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox((latitude, longitude), (latitude, longitude))`.
+        The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.
         1:21 _geoBoundingBox = 12
         "###);
 
         insta::assert_display_snapshot!(p("_geoBoundingBox(1.0, 1.0)"), @r###"
-        The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox((latitude, longitude), (latitude, longitude))`.
+        The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.
         1:26 _geoBoundingBox(1.0, 1.0)
         "###);
 
         insta::assert_display_snapshot!(p("_geoPoint(12, 13, 14)"), @r###"
-        `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance), or _geoBoundingBox((latitude, longitude), (latitude, longitude)) built-in rules to filter on `_geo` coordinates.
+        `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance), or _geoBoundingBox([latitude, longitude], [latitude, longitude]) built-in rules to filter on `_geo` coordinates.
         1:22 _geoPoint(12, 13, 14)
         "###);
 
         insta::assert_display_snapshot!(p("position <= _geoPoint(12, 13, 14)"), @r###"
-        `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance), or _geoBoundingBox((latitude, longitude), (latitude, longitude)) built-in rules to filter on `_geo` coordinates.
+        `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance), or _geoBoundingBox([latitude, longitude], [latitude, longitude]) built-in rules to filter on `_geo` coordinates.
         13:34 position <= _geoPoint(12, 13, 14)
         "###);
 
@@ -783,7 +783,7 @@ impl<'a> std::fmt::Display for FilterCondition<'a> {
             FilterCondition::GeoBoundingBox { top_left_point, bottom_right_point } => {
                 write!(
                     f,
-                    "_geoBoundingBox(({}, {}), ({}, {}))",
+                    "_geoBoundingBox([{}, {}], [{}, {}])",
                     top_left_point[0],
                     top_left_point[1],
                     bottom_right_point[0],
