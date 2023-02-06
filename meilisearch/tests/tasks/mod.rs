@@ -19,7 +19,7 @@ async fn error_get_unexisting_task_status() {
         "message": "Task `1` not found.",
         "code": "task_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#task-not-found"
+        "link": "https://docs.meilisearch.com/errors#task_not_found"
     });
 
     assert_eq!(response, expected_response);
@@ -115,7 +115,7 @@ async fn list_tasks_status_filtered() {
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
 
-    let (response, code) = index.filtered_tasks(&[], &["succeeded"]).await;
+    let (response, code) = index.filtered_tasks(&[], &["succeeded"], &[]).await;
     assert_eq!(code, 200, "{}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 1);
 
@@ -126,7 +126,7 @@ async fn list_tasks_status_filtered() {
 
     index.wait_task(1).await;
 
-    let (response, code) = index.filtered_tasks(&[], &["succeeded"]).await;
+    let (response, code) = index.filtered_tasks(&[], &["succeeded"], &[]).await;
     assert_eq!(code, 200, "{}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 }
@@ -141,14 +141,29 @@ async fn list_tasks_type_filtered() {
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
 
-    let (response, code) = index.filtered_tasks(&["indexCreation"], &[]).await;
+    let (response, code) = index.filtered_tasks(&["indexCreation"], &[], &[]).await;
     assert_eq!(code, 200, "{}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 1);
 
     let (response, code) =
-        index.filtered_tasks(&["indexCreation", "documentAdditionOrUpdate"], &[]).await;
+        index.filtered_tasks(&["indexCreation", "documentAdditionOrUpdate"], &[], &[]).await;
     assert_eq!(code, 200, "{}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
+}
+
+#[actix_rt::test]
+async fn list_tasks_invalid_canceled_by_filter() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    index.create(None).await;
+    index.wait_task(0).await;
+    index
+        .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
+        .await;
+
+    let (response, code) = index.filtered_tasks(&[], &[], &["0"]).await;
+    assert_eq!(code, 200, "{}", response);
+    assert_eq!(response["results"].as_array().unwrap().len(), 0);
 }
 
 #[actix_rt::test]
@@ -161,7 +176,7 @@ async fn list_tasks_status_and_type_filtered() {
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
 
-    let (response, code) = index.filtered_tasks(&["indexCreation"], &["failed"]).await;
+    let (response, code) = index.filtered_tasks(&["indexCreation"], &["failed"], &[]).await;
     assert_eq!(code, 200, "{}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 0);
 
@@ -169,6 +184,7 @@ async fn list_tasks_status_and_type_filtered() {
         .filtered_tasks(
             &["indexCreation", "documentAdditionOrUpdate"],
             &["succeeded", "processing", "enqueued"],
+            &[],
         )
         .await;
     assert_eq!(code, 200, "{}", response);
@@ -179,47 +195,47 @@ async fn list_tasks_status_and_type_filtered() {
 async fn get_task_filter_error() {
     let server = Server::new().await;
 
-    let (response, code) = server.tasks_filter(json!( { "lol": "pied" })).await;
+    let (response, code) = server.tasks_filter("lol=pied").await;
     assert_eq!(code, 400, "{}", response);
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Json deserialize error: unknown field `lol`, expected one of `limit`, `from`, `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt` at ``.",
+      "message": "Unknown parameter `lol`: expected one of `limit`, `from`, `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad-request"
+      "link": "https://docs.meilisearch.com/errors#bad_request"
     }
     "###);
 
-    let (response, code) = server.tasks_filter(json!( { "uids": "pied" })).await;
+    let (response, code) = server.tasks_filter("uids=pied").await;
     assert_eq!(code, 400, "{}", response);
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "invalid digit found in string at `.uids`.",
+      "message": "Invalid value in parameter `uids`: could not parse `pied` as a positive integer",
       "code": "invalid_task_uids",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
+      "link": "https://docs.meilisearch.com/errors#invalid_task_uids"
     }
     "###);
 
-    let (response, code) = server.tasks_filter(json!( { "from": "pied" })).await;
+    let (response, code) = server.tasks_filter("from=pied").await;
     assert_eq!(code, 400, "{}", response);
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "invalid digit found in string at `.from`.",
+      "message": "Invalid value in parameter `from`: could not parse `pied` as a positive integer",
       "code": "invalid_task_from",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-task-from"
+      "link": "https://docs.meilisearch.com/errors#invalid_task_from"
     }
     "###);
 
-    let (response, code) = server.tasks_filter(json!( { "beforeStartedAt": "pied" })).await;
+    let (response, code) = server.tasks_filter("beforeStartedAt=pied").await;
     assert_eq!(code, 400, "{}", response);
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "`pied` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format. at `.beforeStartedAt`.",
+      "message": "Invalid value in parameter `beforeStartedAt`: `pied` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
       "code": "invalid_task_before_started_at",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-task-before-started-at"
+      "link": "https://docs.meilisearch.com/errors#invalid_task_before_started_at"
     }
     "###);
 }
@@ -228,36 +244,36 @@ async fn get_task_filter_error() {
 async fn delete_task_filter_error() {
     let server = Server::new().await;
 
-    let (response, code) = server.delete_tasks(json!(null)).await;
+    let (response, code) = server.delete_tasks("").await;
     assert_eq!(code, 400, "{}", response);
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Query parameters to filter the tasks to delete are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
+      "message": "Query parameters to filter the tasks to delete are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
       "code": "missing_task_filters",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing-task-filters"
+      "link": "https://docs.meilisearch.com/errors#missing_task_filters"
     }
     "###);
 
-    let (response, code) = server.delete_tasks(json!({ "lol": "pied" })).await;
+    let (response, code) = server.delete_tasks("lol=pied").await;
     assert_eq!(code, 400, "{}", response);
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Json deserialize error: unknown field `lol`, expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt` at ``.",
+      "message": "Unknown parameter `lol`: expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad-request"
+      "link": "https://docs.meilisearch.com/errors#bad_request"
     }
     "###);
 
-    let (response, code) = server.delete_tasks(json!({ "uids": "pied" })).await;
+    let (response, code) = server.delete_tasks("uids=pied").await;
     assert_eq!(code, 400, "{}", response);
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "invalid digit found in string at `.uids`.",
+      "message": "Invalid value in parameter `uids`: could not parse `pied` as a positive integer",
       "code": "invalid_task_uids",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
+      "link": "https://docs.meilisearch.com/errors#invalid_task_uids"
     }
     "###);
 }
@@ -266,36 +282,36 @@ async fn delete_task_filter_error() {
 async fn cancel_task_filter_error() {
     let server = Server::new().await;
 
-    let (response, code) = server.cancel_tasks(json!(null)).await;
+    let (response, code) = server.cancel_tasks("").await;
     assert_eq!(code, 400, "{}", response);
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
+      "message": "Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
       "code": "missing_task_filters",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing-task-filters"
+      "link": "https://docs.meilisearch.com/errors#missing_task_filters"
     }
     "###);
 
-    let (response, code) = server.cancel_tasks(json!({ "lol": "pied" })).await;
+    let (response, code) = server.cancel_tasks("lol=pied").await;
     assert_eq!(code, 400, "{}", response);
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Json deserialize error: unknown field `lol`, expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt` at ``.",
+      "message": "Unknown parameter `lol`: expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad-request"
+      "link": "https://docs.meilisearch.com/errors#bad_request"
     }
     "###);
 
-    let (response, code) = server.cancel_tasks(json!({ "uids": "pied" })).await;
+    let (response, code) = server.cancel_tasks("uids=pied").await;
     assert_eq!(code, 400, "{}", response);
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "invalid digit found in string at `.uids`.",
+      "message": "Invalid value in parameter `uids`: could not parse `pied` as a positive integer",
       "code": "invalid_task_uids",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
+      "link": "https://docs.meilisearch.com/errors#invalid_task_uids"
     }
     "###);
 }
@@ -350,7 +366,7 @@ async fn test_summarized_document_addition_or_update() {
     index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), None).await;
     index.wait_task(0).await;
     let (task, _) = index.get_task(0).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -374,7 +390,7 @@ async fn test_summarized_document_addition_or_update() {
     index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), Some("id")).await;
     index.wait_task(1).await;
     let (task, _) = index.get_task(1).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -403,7 +419,7 @@ async fn test_summarized_delete_batch() {
     index.delete_batch(vec![1, 2, 3]).await;
     index.wait_task(0).await;
     let (task, _) = index.get_task(0).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -420,7 +436,7 @@ async fn test_summarized_delete_batch() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-not-found"
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -433,7 +449,7 @@ async fn test_summarized_delete_batch() {
     index.delete_batch(vec![42]).await;
     index.wait_task(2).await;
     let (task, _) = index.get_task(2).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -462,7 +478,7 @@ async fn test_summarized_delete_document() {
     index.delete_document(1).await;
     index.wait_task(0).await;
     let (task, _) = index.get_task(0).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -479,7 +495,7 @@ async fn test_summarized_delete_document() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-not-found"
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -492,7 +508,7 @@ async fn test_summarized_delete_document() {
     index.delete_document(42).await;
     index.wait_task(2).await;
     let (task, _) = index.get_task(2).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -523,17 +539,17 @@ async fn test_summarized_settings_update() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "`custom` ranking rule is invalid. Valid ranking rules are words, typo, sort, proximity, attribute, exactness and custom ranking rules. at `.rankingRules[0]`.",
+      "message": "Invalid value at `.rankingRules[0]`: `custom` ranking rule is invalid. Valid ranking rules are words, typo, sort, proximity, attribute, exactness and custom ranking rules.",
       "code": "invalid_settings_ranking_rules",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-ranking-rules"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_ranking_rules"
     }
     "###);
 
     index.update_settings(json!({ "displayedAttributes": ["doggos", "name"], "filterableAttributes": ["age", "nb_paw_pads"], "sortableAttributes": ["iq"] })).await;
     index.wait_task(0).await;
     let (task, _) = index.get_task(0).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -571,7 +587,7 @@ async fn test_summarized_index_creation() {
     index.create(None).await;
     index.wait_task(0).await;
     let (task, _) = index.get_task(0).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -594,7 +610,7 @@ async fn test_summarized_index_creation() {
     index.create(Some("doggos")).await;
     index.wait_task(1).await;
     let (task, _) = index.get_task(1).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -610,7 +626,7 @@ async fn test_summarized_index_creation() {
         "message": "Index `test` already exists.",
         "code": "index_already_exists",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-already-exists"
+        "link": "https://docs.meilisearch.com/errors#index_already_exists"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -627,7 +643,7 @@ async fn test_summarized_index_deletion() {
     index.delete().await;
     index.wait_task(0).await;
     let (task, _) = index.get_task(0).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -643,7 +659,7 @@ async fn test_summarized_index_deletion() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-not-found"
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -657,7 +673,7 @@ async fn test_summarized_index_deletion() {
     index.delete().await;
     index.wait_task(2).await;
     let (task, _) = index.get_task(2).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -681,7 +697,7 @@ async fn test_summarized_index_deletion() {
     index.delete().await;
     index.wait_task(2).await;
     let (task, _) = index.get_task(2).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -710,7 +726,7 @@ async fn test_summarized_index_update() {
     index.update(None).await;
     index.wait_task(0).await;
     let (task, _) = index.get_task(0).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -726,7 +742,7 @@ async fn test_summarized_index_update() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-not-found"
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -738,7 +754,7 @@ async fn test_summarized_index_update() {
     index.update(Some("bones")).await;
     index.wait_task(1).await;
     let (task, _) = index.get_task(1).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -754,7 +770,7 @@ async fn test_summarized_index_update() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-not-found"
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -769,7 +785,7 @@ async fn test_summarized_index_update() {
     index.update(None).await;
     index.wait_task(3).await;
     let (task, _) = index.get_task(3).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -792,7 +808,7 @@ async fn test_summarized_index_update() {
     index.update(Some("bones")).await;
     index.wait_task(4).await;
     let (task, _) = index.get_task(4).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -823,7 +839,7 @@ async fn test_summarized_index_swap() {
         .await;
     server.wait_task(0).await;
     let (task, _) = server.get_task(0).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -844,9 +860,9 @@ async fn test_summarized_index_swap() {
       },
       "error": {
         "message": "Indexes `cattos`, `doggos` not found.",
-        "code": "invalid_swap_indexes",
+        "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-swap-indexes"
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -864,7 +880,7 @@ async fn test_summarized_index_swap() {
         .await;
     server.wait_task(3).await;
     let (task, _) = server.get_task(3).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -899,10 +915,10 @@ async fn test_summarized_task_cancelation() {
     // to avoid being flaky we're only going to cancel an already finished task :(
     index.create(None).await;
     index.wait_task(0).await;
-    server.cancel_tasks(json!({ "uids": [0] })).await;
+    server.cancel_tasks("uids=0").await;
     index.wait_task(1).await;
     let (task, _) = index.get_task(1).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -932,10 +948,10 @@ async fn test_summarized_task_deletion() {
     // to avoid being flaky we're only going to delete an already finished task :(
     index.create(None).await;
     index.wait_task(0).await;
-    server.delete_tasks(json!({ "uids": [0] })).await;
+    server.delete_tasks("uids=0").await;
     index.wait_task(1).await;
     let (task, _) = index.get_task(1).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {
@@ -964,7 +980,7 @@ async fn test_summarized_dump_creation() {
     server.create_dump().await;
     server.wait_task(0).await;
     let (task, _) = server.get_task(0).await;
-    assert_json_snapshot!(task, 
+    assert_json_snapshot!(task,
         { ".details.dumpUid" => "[dumpUid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r###"
     {

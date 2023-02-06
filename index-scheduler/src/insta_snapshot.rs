@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
@@ -92,7 +93,9 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
 
 pub fn snapshot_file_store(file_store: &file_store::FileStore) -> String {
     let mut snap = String::new();
-    for uuid in file_store.__all_uuids() {
+    // we store the uuid in a `BTreeSet` to keep them ordered.
+    let all_uuids = file_store.all_uuids().unwrap().collect::<Result<BTreeSet<_>, _>>().unwrap();
+    for uuid in all_uuids {
         snap.push_str(&format!("{uuid}\n"));
     }
     snap

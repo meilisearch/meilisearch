@@ -1,5 +1,6 @@
 mod api_keys;
 mod authorization;
+mod errors;
 mod payload;
 mod tenant_token;
 
@@ -16,7 +17,7 @@ impl Server {
     /// Fetch and use the default admin key for nexts http requests.
     pub async fn use_admin_key(&mut self, master_key: impl AsRef<str>) {
         self.use_api_key(master_key);
-        let (response, code) = self.list_api_keys().await;
+        let (response, code) = self.list_api_keys("").await;
         assert_eq!(200, code, "{:?}", response);
         let admin_key = &response["results"][1]["key"];
         self.use_api_key(admin_key.as_str().unwrap());
@@ -37,8 +38,8 @@ impl Server {
         self.service.patch(url, content).await
     }
 
-    pub async fn list_api_keys(&self) -> (Value, StatusCode) {
-        let url = "/keys";
+    pub async fn list_api_keys(&self, params: &str) -> (Value, StatusCode) {
+        let url = format!("/keys{params}");
         self.service.get(url).await
     }
 

@@ -3,7 +3,6 @@ use std::cmp::Reverse;
 use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
 use std::fs::create_dir_all;
-use std::ops::Deref;
 use std::path::Path;
 use std::str;
 use std::sync::Arc;
@@ -59,6 +58,11 @@ impl HeedAuthStore {
         let action_keyid_index_expiration =
             env.create_database(Some(KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME))?;
         Ok(Self { env, keys, action_keyid_index_expiration, should_close_on_drop: true })
+    }
+
+    /// Return the size in bytes of database
+    pub fn size(&self) -> Result<u64> {
+        Ok(self.env.real_disk_size()?)
     }
 
     pub fn set_drop_on_close(&mut self, v: bool) {
@@ -135,7 +139,7 @@ impl HeedAuthStore {
                 for index in key.indexes.iter() {
                     db.put(
                         &mut wtxn,
-                        &(&uid, &action, Some(index.deref().as_bytes())),
+                        &(&uid, &action, Some(index.to_string().as_bytes())),
                         &key.expires_at,
                     )?;
                 }

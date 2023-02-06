@@ -2,7 +2,7 @@ use actix_web as aweb;
 use aweb::error::{JsonPayloadError, QueryPayloadError};
 use meilisearch_types::document_formats::{DocumentFormatError, PayloadType};
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
-use meilisearch_types::index_uid::IndexUidFormatError;
+use meilisearch_types::index_uid::{IndexUid, IndexUidFormatError};
 use serde_json::Value;
 use tokio::task::JoinError;
 
@@ -24,10 +24,10 @@ pub enum MeilisearchHttpError {
     MissingPayload(PayloadType),
     #[error("The provided payload reached the size limit.")]
     PayloadTooLarge,
-    #[error("Two indexes must be given for each swap. The list `{:?}` contains {} indexes.",
-        .0, .0.len()
+    #[error("Two indexes must be given for each swap. The list `[{}]` contains {} indexes.",
+        .0.iter().map(|uid| format!("\"{uid}\"")).collect::<Vec<_>>().join(", "), .0.len()
     )]
-    SwapIndexPayloadWrongLength(Vec<String>),
+    SwapIndexPayloadWrongLength(Vec<IndexUid>),
     #[error(transparent)]
     IndexUid(#[from] IndexUidFormatError),
     #[error(transparent)]

@@ -10,6 +10,7 @@ expression: spells.settings().unwrap()
     "*"
   ],
   "filterableAttributes": [],
+  "sortableAttributes": [],
   "rankingRules": [
     "typo",
     "words",

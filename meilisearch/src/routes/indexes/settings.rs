@@ -2,7 +2,8 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::IndexScheduler;
 use log::debug;
-use meilisearch_types::error::{DeserrError, ResponseError};
+use meilisearch_types::deserr::DeserrJsonError;
+use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::settings::{settings, RankingRuleView, Settings, Unchecked};
 use meilisearch_types::tasks::KindWithContent;
@@ -40,12 +41,14 @@ macro_rules! make_setting_route {
                 >,
                 index_uid: web::Path<String>,
             ) -> Result<HttpResponse, ResponseError> {
+                let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
                 let new_settings = Settings { $attr: Setting::Reset.into(), ..Default::default() };
 
                 let allow_index_creation = index_scheduler.filters().allow_index_creation;
-                let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
+
                 let task = KindWithContent::SettingsUpdate {
-                    index_uid,
+                    index_uid: index_uid.to_string(),
                     new_settings: Box::new(new_settings),
                     is_deletion: true,
                     allow_index_creation,
@@ -69,6 +72,8 @@ macro_rules! make_setting_route {
                 req: HttpRequest,
                 $analytics_var: web::Data<dyn Analytics>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
+                let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
                 let body = body.into_inner();
 
                 $analytics(&body, &req);
@@ -82,9 +87,9 @@ macro_rules! make_setting_route {
                 };
 
                 let allow_index_creation = index_scheduler.filters().allow_index_creation;
-                let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
+
                 let task = KindWithContent::SettingsUpdate {
-                    index_uid,
+                    index_uid: index_uid.to_string(),
                     new_settings: Box::new(new_settings),
                     is_deletion: false,
                     allow_index_creation,
@@ -105,6 +110,8 @@ macro_rules! make_setting_route {
                 >,
                 index_uid: actix_web::web::Path<String>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
+                let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
                 let index = index_scheduler.index(&index_uid)?;
                 let rtxn = index.read_txn()?;
                 let settings = settings(&index, &rtxn)?;
@@ -130,7 +137,7 @@ make_setting_route!(
     "/filterable-attributes",
     put,
     std::collections::BTreeSet<String>,
-    meilisearch_types::error::DeserrError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsFilterableAttributes,
     >,
     filterable_attributes,
@@ -156,7 +163,7 @@ make_setting_route!(
     "/sortable-attributes",
     put,
     std::collections::BTreeSet<String>,
-    meilisearch_types::error::DeserrError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsSortableAttributes,
     >,
     sortable_attributes,
@@ -182,7 +189,7 @@ make_setting_route!(
     "/displayed-attributes",
     put,
     Vec<String>,
-    meilisearch_types::error::DeserrError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsDisplayedAttributes,
     >,
     displayed_attributes,
@@ -208,7 +215,7 @@ make_setting_route!(
     "/typo-tolerance",
     patch,
     meilisearch_types::settings::TypoSettings,
-    meilisearch_types::error::DeserrError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsTypoTolerance,
     >,
     typo_tolerance,
@@ -253,7 +260,7 @@ make_setting_route!(
     "/searchable-attributes",
     put,
     Vec<String>,
-    meilisearch_types::error::DeserrError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsSearchableAttributes,
     >,
     searchable_attributes,
@@ -279,7 +286,7 @@ make_setting_route!(
     "/stop-words",
     put,
     std::collections::BTreeSet<String>,
-    meilisearch_types::error::DeserrError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsStopWords,
     >,
     stop_words,
@@ -304,7 +311,7 @@ make_setting_route!(
     "/synonyms",
     put,
     std::collections::BTreeMap<String, Vec<String>>,
-    meilisearch_types::error::DeserrError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsSynonyms,
     >,
     synonyms,
@@ -329,7 +336,7 @@ make_setting_route!(
     "/distinct-attribute",
     put,
     String,
-    meilisearch_types::error::DeserrError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsDistinctAttribute,
     >,
     distinct_attribute,
@@ -353,7 +360,7 @@ make_setting_route!(
     "/ranking-rules",
     put,
     Vec<meilisearch_types::settings::RankingRuleView>,
-    meilisearch_types::error::DeserrError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsRankingRules,
     >,
     ranking_rules,
@@ -384,7 +391,7 @@ make_setting_route!(
     "/faceting",
     patch,
     meilisearch_types::settings::FacetingSettings,
-    meilisearch_types::error::DeserrError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsFaceting,
     >,
     faceting,
@@ -409,7 +416,7 @@ make_setting_route!(
     "/pagination",
     patch,
     meilisearch_types::settings::PaginationSettings,
-    meilisearch_types::error::DeserrError<
+    meilisearch_types::deserr::DeserrJsonError<
         meilisearch_types::error::deserr_codes::InvalidSettingsPagination,
     >,
     pagination,
@@ -461,10 +468,12 @@ generate_configure!(
 pub async fn update_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    body: ValidatedJson<Settings<Unchecked>, DeserrError>,
+    body: ValidatedJson<Settings<Unchecked>, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
     let new_settings = body.into_inner();
 
     analytics.publish(
@@ -570,6 +579,8 @@ pub async fn get_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
     let index = index_scheduler.index(&index_uid)?;
     let rtxn = index.read_txn()?;
     let new_settings = settings(&index, &rtxn)?;
@@ -581,6 +592,8 @@ pub async fn delete_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
     let new_settings = Settings::cleared().into_unchecked();
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation;

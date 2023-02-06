@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::fs::File as StdFile;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
@@ -11,10 +10,14 @@ const UPDATE_FILES_PATH: &str = "updates/updates_files";
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("Could not parse file name as utf-8")]
+    CouldNotParseFileNameAsUtf8,
     #[error(transparent)]
     IoError(#[from] std::io::Error),
     #[error(transparent)]
     PersistError(#[from] tempfile::PersistError),
+    #[error(transparent)]
+    UuidError(#[from] uuid::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -33,13 +36,11 @@ impl DerefMut for File {
     }
 }
 
-#[cfg_attr(test, faux::create)]
 #[derive(Clone, Debug)]
 pub struct FileStore {
     path: PathBuf,
 }
 
-#[cfg(not(test))]
 impl FileStore {
     pub fn new(path: impl AsRef<Path>) -> Result<FileStore> {
         let path = path.as_ref().to_path_buf();
@@ -48,7 +49,6 @@ impl FileStore {
     }
 }
 
-#[cfg_attr(test, faux::methods)]
 impl FileStore {
     /// Creates a new temporary update file.
     /// A call to `persist` is needed to persist the file in the database.
@@ -94,7 +94,17 @@ impl FileStore {
         Ok(())
     }
 
-    pub fn get_size(&self, uuid: Uuid) -> Result<u64> {
+    /// Compute the size of all the updates contained in the file store.
+    pub fn compute_total_size(&self) -> Result<u64> {
+        let mut total = 0;
+        for uuid in self.all_uuids()? {
+            total += self.compute_size(uuid?).unwrap_or_default();
+        }
+        Ok(total)
+    }
+
+    /// Compute the size of one update
+    pub fn compute_size(&self, uuid: Uuid) -> Result<u64> {
         Ok(self.get_update(uuid)?.metadata()?.len())
     }
 
@@ -105,17 +115,12 @@ impl FileStore {
     }
 
     /// List the Uuids of the files in the FileStore
-    ///
-    /// This function is meant to be used by tests only.
-    #[doc(hidden)]
-    pub fn __all_uuids(&self) -> BTreeSet<Uuid> {
-        let mut uuids = BTreeSet::new();
-        for entry in self.path.read_dir().unwrap() {
-            let entry = entry.unwrap();
-            let uuid = Uuid::from_str(entry.file_name().to_str().unwrap()).unwrap();
-            uuids.insert(uuid);
-        }
-        uuids
+    pub fn all_uuids(&self) -> Result<impl Iterator<Item = Result<Uuid>>> {
+        Ok(self.path.read_dir()?.map(|entry| {
+            Ok(Uuid::from_str(
+                entry?.file_name().to_str().ok_or(Error::CouldNotParseFileNameAsUtf8)?,
+            )?)
+        }))
     }
 }
 

@@ -2,8 +2,10 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::DeserializeFromValue;
 use index_scheduler::IndexScheduler;
+use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::InvalidSwapIndexes;
-use meilisearch_types::error::{DeserrError, ResponseError};
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use serde_json::json;
 
@@ -20,15 +22,15 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 #[derive(DeserializeFromValue, Debug, Clone, PartialEq, Eq)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SwapIndexesPayload {
-    #[deserr(error = DeserrError<InvalidSwapIndexes>)]
-    indexes: Vec<String>,
+    #[deserr(error = DeserrJsonError<InvalidSwapIndexes>, missing_field_error = DeserrJsonError::missing_swap_indexes)]
+    indexes: Vec<IndexUid>,
 }
 
 pub async fn swap_indexes(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_SWAP }>, Data<IndexScheduler>>,
-    params: ValidatedJson<Vec<SwapIndexesPayload>, DeserrError>,
+    params: ValidatedJson<Vec<SwapIndexesPayload>, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -44,6 +46,7 @@ pub async fn swap_indexes(
 
     let mut swaps = vec![];
     for SwapIndexesPayload { indexes } in params.into_iter() {
+        // TODO: switch to deserr
         let (lhs, rhs) = match indexes.as_slice() {
             [lhs, rhs] => (lhs, rhs),
             _ => {
@@ -53,7 +56,7 @@ pub async fn swap_indexes(
         if !search_rules.is_index_authorized(lhs) || !search_rules.is_index_authorized(rhs) {
             return Err(AuthenticationError::InvalidToken.into());
         }
-        swaps.push(IndexSwap { indexes: (lhs.clone(), rhs.clone()) });
+        swaps.push(IndexSwap { indexes: (lhs.to_string(), rhs.to_string()) });
     }
 
     let task = KindWithContent::IndexSwap { swaps };

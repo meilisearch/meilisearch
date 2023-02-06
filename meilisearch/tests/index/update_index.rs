@@ -98,7 +98,7 @@ async fn error_update_existing_primary_key() {
         "message": "Index already has a primary key: `id`.",
         "code": "index_primary_key_already_exists",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-primary-key-already-exists"
+        "link": "https://docs.meilisearch.com/errors#index_primary_key_already_exists"
     });
 
     assert_eq!(response["error"], expected_response);
@@ -117,7 +117,7 @@ async fn error_update_unexisting_index() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-not-found"
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
     });
 
     assert_eq!(response["error"], expected_response);

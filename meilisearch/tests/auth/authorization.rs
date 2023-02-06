@@ -73,7 +73,7 @@ static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
     json!({"message": "The provided API key is invalid.",
         "code": "invalid_api_key",
         "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#invalid-api-key"
+        "link": "https://docs.meilisearch.com/errors#invalid_api_key"
     })
 });
 
@@ -520,7 +520,7 @@ async fn error_creating_index_without_action() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-not-found"
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
     });
 
     // try to create a index via add documents route

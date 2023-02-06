@@ -205,7 +205,7 @@ async fn error_add_api_key_no_header() {
       "message": "The Authorization header is missing. It must use the bearer authorization method.",
       "code": "missing_authorization_header",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+      "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
     }
     "###);
 }
@@ -228,7 +228,7 @@ async fn error_add_api_key_bad_key() {
       "message": "The provided API key is invalid.",
       "code": "invalid_api_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
     }
     "###);
 }
@@ -248,10 +248,10 @@ async fn error_add_api_key_missing_parameter() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "Json deserialize error: missing field `indexes` at ``",
-      "code": "bad_request",
+      "message": "Missing field `indexes`",
+      "code": "missing_api_key_indexes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad-request"
+      "link": "https://docs.meilisearch.com/errors#missing_api_key_indexes"
     }
     "###);
 
@@ -265,10 +265,10 @@ async fn error_add_api_key_missing_parameter() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "Json deserialize error: missing field `actions` at ``",
-      "code": "bad_request",
+      "message": "Missing field `actions`",
+      "code": "missing_api_key_actions",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad-request"
+      "link": "https://docs.meilisearch.com/errors#missing_api_key_actions"
     }
     "###);
 
@@ -279,22 +279,13 @@ async fn error_add_api_key_missing_parameter() {
         "actions": ["documents.add"],
     });
     let (response, code) = server.add_api_key(content).await;
-    meili_snap::snapshot!(code, @"201 Created");
+    meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
     {
-      "name": null,
-      "description": "Indexing API key",
-      "key": "[ignored]",
-      "uid": "[ignored]",
-      "actions": [
-        "documents.add"
-      ],
-      "indexes": [
-        "products"
-      ],
-      "expiresAt": null,
-      "createdAt": "[ignored]",
-      "updatedAt": "[ignored]"
+      "message": "Missing field `expiresAt`",
+      "code": "missing_api_key_expires_at",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_api_key_expires_at"
     }
     "###);
 }
@@ -314,10 +305,10 @@ async fn error_add_api_key_invalid_parameters_description() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "invalid type: Map `{\"name\":\"products\"}`, expected a String at `.description`.",
+      "message": "Invalid value type at `.description`: expected a string, but found an object: `{\"name\":\"products\"}`",
       "code": "invalid_api_key_description",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-api-key-description"
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key_description"
     }
     "###);
 }
@@ -337,10 +328,10 @@ async fn error_add_api_key_invalid_parameters_name() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "invalid type: Map `{\"name\":\"products\"}`, expected a String at `.name`.",
+      "message": "Invalid value type at `.name`: expected a string, but found an object: `{\"name\":\"products\"}`",
       "code": "invalid_api_key_name",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-api-key-name"
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key_name"
     }
     "###);
 }
@@ -360,10 +351,10 @@ async fn error_add_api_key_invalid_parameters_indexes() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "invalid type: Map `{\"name\":\"products\"}`, expected a Sequence at `.indexes`.",
+      "message": "Invalid value type at `.indexes`: expected an array, but found an object: `{\"name\":\"products\"}`",
       "code": "invalid_api_key_indexes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-api-key-indexes"
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key_indexes"
     }
     "###);
 }
@@ -386,10 +377,10 @@ async fn error_add_api_key_invalid_index_uids() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "`invalid index # / \\name with spaces` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_). at `.indexes[0]`.",
+      "message": "Invalid value at `.indexes[0]`: `invalid index # / \\name with spaces` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
       "code": "invalid_api_key_indexes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-api-key-indexes"
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key_indexes"
     }
     "###);
 }
@@ -411,10 +402,10 @@ async fn error_add_api_key_invalid_parameters_actions() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "invalid type: Map `{\"name\":\"products\"}`, expected a Sequence at `.actions`.",
+      "message": "Invalid value type at `.actions`: expected an array, but found an object: `{\"name\":\"products\"}`",
       "code": "invalid_api_key_actions",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-api-key-actions"
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key_actions"
     }
     "###);
 
@@ -431,10 +422,10 @@ async fn error_add_api_key_invalid_parameters_actions() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "Json deserialize error: unknown value `doc.add`, expected one of `*`, `search`, `documents.*`, `documents.add`, `documents.get`, `documents.delete`, `indexes.*`, `indexes.create`, `indexes.get`, `indexes.update`, `indexes.delete`, `indexes.swap`, `tasks.*`, `tasks.cancel`, `tasks.delete`, `tasks.get`, `settings.*`, `settings.get`, `settings.update`, `stats.*`, `stats.get`, `metrics.*`, `metrics.get`, `dumps.*`, `dumps.create`, `version`, `keys.create`, `keys.get`, `keys.update`, `keys.delete` at `.actions[0]`.",
+      "message": "Unknown value `doc.add` at `.actions[0]`: expected one of `*`, `search`, `documents.*`, `documents.add`, `documents.get`, `documents.delete`, `indexes.*`, `indexes.create`, `indexes.get`, `indexes.update`, `indexes.delete`, `indexes.swap`, `tasks.*`, `tasks.cancel`, `tasks.delete`, `tasks.get`, `settings.*`, `settings.get`, `settings.update`, `stats.*`, `stats.get`, `metrics.*`, `metrics.get`, `dumps.*`, `dumps.create`, `version`, `keys.create`, `keys.get`, `keys.update`, `keys.delete`",
       "code": "invalid_api_key_actions",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-api-key-actions"
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key_actions"
     }
     "###);
 }
@@ -455,10 +446,10 @@ async fn error_add_api_key_invalid_parameters_expires_at() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "invalid type: Map `{\"name\":\"products\"}`, expected a String at `.expiresAt`.",
+      "message": "Invalid value type at `.expiresAt`: expected a string, but found an object: `{\"name\":\"products\"}`",
       "code": "invalid_api_key_expires_at",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-api-key-expires-at"
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key_expires_at"
     }
     "###);
 }
@@ -478,10 +469,10 @@ async fn error_add_api_key_invalid_parameters_expires_at_in_the_past() {
 
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "`2010-11-13T00:00:00Z` is not a valid date. It should follow the RFC 3339 format to represents a date or datetime in the future or specified as a null value. e.g. 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM:SS'.\n at `.expiresAt`.",
+      "message": "Invalid value at `.expiresAt`: `2010-11-13T00:00:00Z` is not a valid date. It should follow the RFC 3339 format to represents a date or datetime in the future or specified as a null value. e.g. 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM:SS'.\n",
       "code": "invalid_api_key_expires_at",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-api-key-expires-at"
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key_expires_at"
     }
     "###);
     meili_snap::snapshot!(code, @"400 Bad Request");
@@ -503,10 +494,10 @@ async fn error_add_api_key_invalid_parameters_uid() {
 
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "invalid length: expected length 32 for simple format, found 13 at `.uid`.",
+      "message": "Invalid value at `.uid`: invalid length: expected length 32 for simple format, found 13",
       "code": "invalid_api_key_uid",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-api-key-uid"
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key_uid"
     }
     "###);
     meili_snap::snapshot!(code, @"400 Bad Request");
@@ -551,7 +542,7 @@ async fn error_add_api_key_parameters_uid_already_exist() {
       "message": "`uid` field value `4bc0887a-0e41-4f3b-935d-0c451dcee9c8` is already an existing API key.",
       "code": "api_key_already_exists",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#api-key-already-exists"
+      "link": "https://docs.meilisearch.com/errors#api_key_already_exists"
     }
     "###);
     meili_snap::snapshot!(code, @"409 Conflict");
@@ -697,7 +688,7 @@ async fn error_get_api_key_no_header() {
       "message": "The Authorization header is missing. It must use the bearer authorization method.",
       "code": "missing_authorization_header",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+      "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
     }
     "###);
     meili_snap::snapshot!(code, @"401 Unauthorized");
@@ -716,7 +707,7 @@ async fn error_get_api_key_bad_key() {
       "message": "The provided API key is invalid.",
       "code": "invalid_api_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
     }
     "###);
     meili_snap::snapshot!(code, @"403 Forbidden");
@@ -735,7 +726,7 @@ async fn error_get_api_key_not_found() {
       "message": "API key `d0552b41d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4` not found.",
       "code": "api_key_not_found",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#api-key-not-found"
+      "link": "https://docs.meilisearch.com/errors#api_key_not_found"
     }
     "###);
     meili_snap::snapshot!(code, @"404 Not Found");
@@ -799,7 +790,7 @@ async fn list_api_keys() {
     "###);
     meili_snap::snapshot!(code, @"201 Created");
 
-    let (response, code) = server.list_api_keys().await;
+    let (response, code) = server.list_api_keys("").await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".results[].createdAt" => "[ignored]", ".results[].updatedAt" => "[ignored]", ".results[].uid" => "[ignored]", ".results[].key" => "[ignored]" }), @r###"
     {
       "results": [
@@ -873,13 +864,13 @@ async fn list_api_keys() {
 async fn error_list_api_keys_no_header() {
     let server = Server::new_auth().await;
 
-    let (response, code) = server.list_api_keys().await;
+    let (response, code) = server.list_api_keys("").await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
       "message": "The Authorization header is missing. It must use the bearer authorization method.",
       "code": "missing_authorization_header",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+      "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
     }
     "###);
     meili_snap::snapshot!(code, @"401 Unauthorized");
@@ -890,13 +881,13 @@ async fn error_list_api_keys_bad_key() {
     let mut server = Server::new_auth().await;
     server.use_api_key("d4000bd7225f77d1eb22cc706ed36772bbc36767c016a27f76def7537b68600d");
 
-    let (response, code) = server.list_api_keys().await;
+    let (response, code) = server.list_api_keys("").await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
       "message": "The provided API key is invalid.",
       "code": "invalid_api_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
     }
     "###);
     meili_snap::snapshot!(code, @"403 Forbidden");
@@ -973,7 +964,7 @@ async fn delete_api_key() {
       "message": "[ignored]",
       "code": "api_key_not_found",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#api-key-not-found"
+      "link": "https://docs.meilisearch.com/errors#api_key_not_found"
     }
     "###);
     meili_snap::snapshot!(code, @"404 Not Found");
@@ -992,7 +983,7 @@ async fn error_delete_api_key_no_header() {
       "message": "The Authorization header is missing. It must use the bearer authorization method.",
       "code": "missing_authorization_header",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+      "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
     }
     "###);
     meili_snap::snapshot!(code, @"401 Unauthorized");
@@ -1011,7 +1002,7 @@ async fn error_delete_api_key_bad_key() {
       "message": "The provided API key is invalid.",
       "code": "invalid_api_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
     }
     "###);
     meili_snap::snapshot!(code, @"403 Forbidden");
@@ -1030,7 +1021,7 @@ async fn error_delete_api_key_not_found() {
       "message": "API key `d0552b41d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4` not found.",
       "code": "api_key_not_found",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#api-key-not-found"
+      "link": "https://docs.meilisearch.com/errors#api_key_not_found"
     }
     "###);
     meili_snap::snapshot!(code, @"404 Not Found");
@@ -1089,14 +1080,14 @@ async fn patch_api_key_description() {
 
     let uid = response["uid"].as_str().unwrap();
 
-    // Add a description
-    let content = json!({ "description": "Indexing API key" });
+    // Add a description and a name
+    let content = json!({ "description": "Indexing API key", "name": "bob" });
 
     thread::sleep(time::Duration::new(1, 0));
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
     {
-      "name": null,
+      "name": "bob",
       "description": "Indexing API key",
       "key": "[ignored]",
       "uid": "[ignored]",
@@ -1128,7 +1119,7 @@ async fn patch_api_key_description() {
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
     {
-      "name": null,
+      "name": "bob",
       "description": "Product API key",
       "key": "[ignored]",
       "uid": "[ignored]",
@@ -1160,7 +1151,7 @@ async fn patch_api_key_description() {
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
     {
-      "name": null,
+      "name": "bob",
       "description": null,
       "key": "[ignored]",
       "uid": "[ignored]",
@@ -1242,15 +1233,15 @@ async fn patch_api_key_name() {
     let created_at = response["createdAt"].as_str().unwrap();
     let updated_at = response["updatedAt"].as_str().unwrap();
 
-    // Add a name
-    let content = json!({ "name": "Indexing API key" });
+    // Add a name and description
+    let content = json!({ "name": "Indexing API key", "description": "The doggoscription" });
 
     thread::sleep(time::Duration::new(1, 0));
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
     {
       "name": "Indexing API key",
-      "description": null,
+      "description": "The doggoscription",
       "key": "[ignored]",
       "uid": "[ignored]",
       "actions": [
@@ -1285,7 +1276,7 @@ async fn patch_api_key_name() {
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
     {
       "name": "Product API key",
-      "description": null,
+      "description": "The doggoscription",
       "key": "[ignored]",
       "uid": "[ignored]",
       "actions": [
@@ -1311,13 +1302,13 @@ async fn patch_api_key_name() {
     meili_snap::snapshot!(code, @"200 OK");
 
     // Remove the name
-    let content = json!({ "name": serde_json::Value::Null });
+    let content = json!({ "name": null });
 
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]", ".uid" => "[ignored]", ".key" => "[ignored]" }), @r###"
     {
       "name": null,
-      "description": null,
+      "description": "The doggoscription",
       "key": "[ignored]",
       "uid": "[ignored]",
       "actions": [
@@ -1403,10 +1394,10 @@ async fn error_patch_api_key_indexes() {
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "Json deserialize error: unknown field `indexes`, expected one of `description`, `name` at ``.",
+      "message": "Immutable field `indexes`: expected one of `description`, `name`",
       "code": "immutable_api_key_indexes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#immutable-api-key-indexes"
+      "link": "https://docs.meilisearch.com/errors#immutable_api_key_indexes"
     }
     "###);
     meili_snap::snapshot!(code, @"400 Bad Request");
@@ -1480,10 +1471,10 @@ async fn error_patch_api_key_actions() {
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "Json deserialize error: unknown field `actions`, expected one of `description`, `name` at ``.",
+      "message": "Immutable field `actions`: expected one of `description`, `name`",
       "code": "immutable_api_key_actions",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#immutable-api-key-actions"
+      "link": "https://docs.meilisearch.com/errors#immutable_api_key_actions"
     }
     "###);
     meili_snap::snapshot!(code, @"400 Bad Request");
@@ -1549,10 +1540,10 @@ async fn error_patch_api_key_expiration_date() {
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "Json deserialize error: unknown field `expiresAt`, expected one of `description`, `name` at ``.",
+      "message": "Immutable field `expiresAt`: expected one of `description`, `name`",
       "code": "immutable_api_key_expires_at",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#immutable-api-key-expires-at"
+      "link": "https://docs.meilisearch.com/errors#immutable_api_key_expires_at"
     }
     "###);
     meili_snap::snapshot!(code, @"400 Bad Request");
@@ -1574,7 +1565,7 @@ async fn error_patch_api_key_no_header() {
       "message": "The Authorization header is missing. It must use the bearer authorization method.",
       "code": "missing_authorization_header",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+      "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
     }
     "###);
     meili_snap::snapshot!(code, @"401 Unauthorized");
@@ -1597,7 +1588,7 @@ async fn error_patch_api_key_bad_key() {
       "message": "The provided API key is invalid.",
       "code": "invalid_api_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
     }
     "###);
     meili_snap::snapshot!(code, @"403 Forbidden");
@@ -1620,7 +1611,7 @@ async fn error_patch_api_key_not_found() {
       "message": "API key `d0552b41d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4` not found.",
       "code": "api_key_not_found",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#api-key-not-found"
+      "link": "https://docs.meilisearch.com/errors#api_key_not_found"
     }
     "###);
     meili_snap::snapshot!(code, @"404 Not Found");
@@ -1670,10 +1661,10 @@ async fn error_patch_api_key_indexes_invalid_parameters() {
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "invalid type: Integer `13`, expected a String at `.description`.",
+      "message": "Invalid value type at `.description`: expected a string, but found a positive integer: `13`",
       "code": "invalid_api_key_description",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-api-key-description"
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key_description"
     }
     "###);
     meili_snap::snapshot!(code, @"400 Bad Request");
@@ -1686,10 +1677,10 @@ async fn error_patch_api_key_indexes_invalid_parameters() {
     let (response, code) = server.patch_api_key(&uid, content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "invalid type: Integer `13`, expected a String at `.name`.",
+      "message": "Invalid value type at `.name`: expected a string, but found a positive integer: `13`",
       "code": "invalid_api_key_name",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-api-key-name"
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key_name"
     }
     "###);
     meili_snap::snapshot!(code, @"400 Bad Request");
@@ -1705,7 +1696,7 @@ async fn error_access_api_key_routes_no_master_key_set() {
       "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
       "code": "missing_master_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#missing-master-key"
+      "link": "https://docs.meilisearch.com/errors#missing_master_key"
     }
     "###);
     meili_snap::snapshot!(code, @"401 Unauthorized");
@@ -1716,7 +1707,7 @@ async fn error_access_api_key_routes_no_master_key_set() {
       "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
       "code": "missing_master_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#missing-master-key"
+      "link": "https://docs.meilisearch.com/errors#missing_master_key"
     }
     "###);
     meili_snap::snapshot!(code, @"401 Unauthorized");
@@ -1727,18 +1718,18 @@ async fn error_access_api_key_routes_no_master_key_set() {
       "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
       "code": "missing_master_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#missing-master-key"
+      "link": "https://docs.meilisearch.com/errors#missing_master_key"
     }
     "###);
     meili_snap::snapshot!(code, @"401 Unauthorized");
 
-    let (response, code) = server.list_api_keys().await;
+    let (response, code) = server.list_api_keys("").await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
       "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
       "code": "missing_master_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#missing-master-key"
+      "link": "https://docs.meilisearch.com/errors#missing_master_key"
     }
     "###);
     meili_snap::snapshot!(code, @"401 Unauthorized");
@@ -1751,7 +1742,7 @@ async fn error_access_api_key_routes_no_master_key_set() {
       "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
       "code": "missing_master_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#missing-master-key"
+      "link": "https://docs.meilisearch.com/errors#missing_master_key"
     }
     "###);
     meili_snap::snapshot!(code, @"401 Unauthorized");
@@ -1762,7 +1753,7 @@ async fn error_access_api_key_routes_no_master_key_set() {
       "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
       "code": "missing_master_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#missing-master-key"
+      "link": "https://docs.meilisearch.com/errors#missing_master_key"
     }
     "###);
     meili_snap::snapshot!(code, @"401 Unauthorized");
@@ -1773,18 +1764,18 @@ async fn error_access_api_key_routes_no_master_key_set() {
       "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
       "code": "missing_master_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#missing-master-key"
+      "link": "https://docs.meilisearch.com/errors#missing_master_key"
     }
     "###);
     meili_snap::snapshot!(code, @"401 Unauthorized");
 
-    let (response, code) = server.list_api_keys().await;
+    let (response, code) = server.list_api_keys("").await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
       "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
       "code": "missing_master_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#missing-master-key"
+      "link": "https://docs.meilisearch.com/errors#missing_master_key"
     }
     "###);
     meili_snap::snapshot!(code, @"401 Unauthorized");
