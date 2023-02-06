@@ -3,6 +3,7 @@
 
 mod errors;
 mod formatted;
+mod multi;
 mod pagination;
 
 use once_cell::sync::Lazy;
