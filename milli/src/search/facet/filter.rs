@@ -294,7 +294,7 @@ impl<'a> Filter<'a> {
                         Ok(RoaringBitmap::new())
                     }
                 } else {
-                    match fid.lexeme() {
+                    match fid.value() {
                         attribute @ "_geo" => {
                             Err(fid.as_external_error(FilterError::BadGeo(attribute)))?
                         }
@@ -412,6 +412,12 @@ impl<'a> Filter<'a> {
                             .as_external_error(FilterError::BadGeoLng(bottom_right[1])))?;
                     }
 
+                    // Instead of writing a custom `GeoBoundingBox` filter we're simply going to re-use the range
+                    // filter to create the following filter;
+                    // `_geo.lat {top_left[0]} TO {bottom_right[0]} AND _geo.lng {top_left[1]} TO {bottom_right[1]}`
+                    // As we can see, we need to use a bunch of tokens that doesn't exists in the original filter,
+                    // thus we're going to create tokens that points to a random spans but contains our text.
+
                     let geo_lat_token =
                         Token::new(top_left_point[0].original_span(), Some("_geo.lat".to_string()));
 
@@ -432,6 +438,11 @@ impl<'a> Filter<'a> {
                     let geo_lng_token =
                         Token::new(top_left_point[1].original_span(), Some("_geo.lng".to_string()));
                     let selected_lng = if top_left[1] > bottom_right[1] {
+                        // In this case the bounding box is wrapping around the earth (going from 180 to -180).
+                        // We need to update the lng part of the filter from;
+                        // `_geo.lng {top_left[1]} TO {bottom_right[1]}` to
+                        // `_geo.lng {top_left[1]} TO 180 AND _geo.lng -180 TO {bottom_right[1]}`
+
                         let min_lng_token = Token::new(
                             top_left_point[1].original_span(),
                             Some("-180.0".to_string()),

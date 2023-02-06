@@ -88,10 +88,15 @@ impl<'a> Token<'a> {
         Self { span, value }
     }
 
+    /// Returns the string contained in the span of the `Token`.
+    /// This is only useful in the tests. You should always use
+    /// the value.
+    #[cfg(test)]
     pub fn lexeme(&self) -> &str {
         &self.span
     }
 
+    /// Return the string contained in the token.
     pub fn value(&self) -> &str {
         self.value.as_ref().map_or(&self.span, |value| value)
     }
