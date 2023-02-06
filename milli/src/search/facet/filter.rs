@@ -415,8 +415,8 @@ impl<'a> Filter<'a> {
                     // Instead of writing a custom `GeoBoundingBox` filter we're simply going to re-use the range
                     // filter to create the following filter;
                     // `_geo.lat {top_left[0]} TO {bottom_right[0]} AND _geo.lng {top_left[1]} TO {bottom_right[1]}`
-                    // As we can see, we need to use a bunch of tokens that doesn't exists in the original filter,
-                    // thus we're going to create tokens that points to a random spans but contains our text.
+                    // As we can see, we need to use a bunch of tokens that don't exist in the original filter,
+                    // thus we're going to create tokens that point to a random span but contain our text.
 
                     let geo_lat_token =
                         Token::new(top_left_point[0].original_span(), Some("_geo.lat".to_string()));
