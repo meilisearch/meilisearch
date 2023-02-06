@@ -1583,20 +1583,27 @@ pub(crate) mod tests {
             .unwrap();
         insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[4]>");
 
+        // the requests that doesn't make sense
+
         // try to wrap around the latitude
-        let search_result = search
+        let error = search
             .filter(Filter::from_str("_geoBoundingBox([-80, 0], [80, 0])").unwrap().unwrap())
             .execute()
-            .unwrap();
-        insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[]>");
+            .unwrap_err();
+        insta::assert_display_snapshot!(error, @r###"
+        The top latitude `-80` is below the bottom latitude `80`.
+        32:33 _geoBoundingBox([-80, 0], [80, 0])
+        "###);
 
-        // the request that doesn't make sense
         // send a top latitude lower than the bottow latitude
-        let search_result = search
+        let error = search
             .filter(Filter::from_str("_geoBoundingBox([-10, 0], [10, 0])").unwrap().unwrap())
             .execute()
-            .unwrap();
-        insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[]>");
+            .unwrap_err();
+        insta::assert_display_snapshot!(error, @r###"
+        The top latitude `-10` is below the bottom latitude `10`.
+        32:33 _geoBoundingBox([-10, 0], [10, 0])
+        "###);
     }
 
     #[test]

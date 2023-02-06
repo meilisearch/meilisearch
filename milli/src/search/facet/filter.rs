@@ -27,6 +27,7 @@ enum FilterError<'a> {
     BadGeo(&'a str),
     BadGeoLat(f64),
     BadGeoLng(f64),
+    BadGeoBoundingBoxTopIsBelowBottom(f64, f64),
     Reserved(&'a str),
     TooDeep,
 }
@@ -62,7 +63,8 @@ impl<'a> Display for FilterError<'a> {
                 "`{}` is a reserved keyword and thus can't be used as a filter expression.",
                 keyword
             ),
-            Self::BadGeo(keyword) => write!(f, "`{}` is a reserved keyword and thus can't be used as a filter expression. Use the _geoRadius(latitude, longitude, distance) built-in rule to filter on _geo field coordinates.", keyword),
+            Self::BadGeo(keyword) => write!(f, "`{}` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` field coordinates.", keyword),
+            Self::BadGeoBoundingBoxTopIsBelowBottom(top, bottom) => write!(f, "The top latitude `{top}` is below the bottom latitude `{bottom}`."),
             Self::BadGeoLat(lat) => write!(f, "Bad latitude `{}`. Latitude must be contained between -90 and 90 degrees. ", lat),
             Self::BadGeoLng(lng) => write!(f, "Bad longitude `{}`. Longitude must be contained between -180 and 180 degrees. ", lng),
         }
@@ -410,6 +412,14 @@ impl<'a> Filter<'a> {
                     if !(-180.0..=180.0).contains(&bottom_right[1]) {
                         return Err(bottom_right_point[1]
                             .as_external_error(FilterError::BadGeoLng(bottom_right[1])))?;
+                    }
+                    if top_left[0] < bottom_right[0] {
+                        return Err(bottom_right_point[1].as_external_error(
+                            FilterError::BadGeoBoundingBoxTopIsBelowBottom(
+                                top_left[0],
+                                bottom_right[0],
+                            ),
+                        ))?;
                     }
 
                     // Instead of writing a custom `GeoBoundingBox` filter we're simply going to re-use the range
