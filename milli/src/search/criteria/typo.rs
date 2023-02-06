@@ -240,14 +240,14 @@ fn alterate_query_tree(
 }
 
 fn resolve_candidates(
-    ctx: &'_ dyn Context,
+    ctx: &dyn Context,
     query_tree: &Operation,
     number_typos: u8,
     cache: &mut HashMap<(Operation, u8), RoaringBitmap>,
     wdcache: &mut WordDerivationsCache,
 ) -> Result<RoaringBitmap> {
     fn resolve_operation(
-        ctx: &'_ dyn Context,
+        ctx: &dyn Context,
         query_tree: &Operation,
         number_typos: u8,
         cache: &mut HashMap<(Operation, u8), RoaringBitmap>,
@@ -277,7 +277,7 @@ fn resolve_candidates(
     }
 
     fn mdfs(
-        ctx: &'_ dyn Context,
+        ctx: &dyn Context,
         branches: &[Operation],
         mana: u8,
         cache: &mut HashMap<(Operation, u8), RoaringBitmap>,
