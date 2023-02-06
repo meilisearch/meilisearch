@@ -25,6 +25,8 @@ jobs:
     - uses: actions/checkout@v3
     - name: Install needed dependencies
       run: |
+        pip3 install apt-mirror-updater
+        apt-mirror-updater --auto-change-mirror
         apt-get update && apt-get install -y curl
         apt-get install build-essential -y
     - uses: actions-rs/toolchain@v1
