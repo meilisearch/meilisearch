@@ -18,6 +18,7 @@
 //! doubleQuoted   = "\"" .* all but double quotes "\""
 //! word           = (alphanumeric | _ | - | .)+
 //! geoRadius      = "_geoRadius(" WS* float WS* "," WS* float WS* "," float WS* ")"
+//! geoBoundingBox = "_geoBoundingBox([" WS * float WS* "," WS* float WS* "], [" WS* float WS* "," WS* float WS* "]")
 //! ```
 //!
 //! Other BNF grammar used to handle some specific errors:
@@ -87,10 +88,15 @@ impl<'a> Token<'a> {
         Self { span, value }
     }
 
+    /// Returns the string contained in the span of the `Token`.
+    /// This is only useful in the tests. You should always use
+    /// the value.
+    #[cfg(test)]
     pub fn lexeme(&self) -> &str {
         &self.span
     }
 
+    /// Return the string contained in the token.
     pub fn value(&self) -> &str {
         self.value.as_ref().map_or(&self.span, |value| value)
     }
@@ -99,8 +105,13 @@ impl<'a> Token<'a> {
         Error::new_from_external(self.span, error)
     }
 
+    /// Returns a copy of the span this token was created with.
+    pub fn original_span(&self) -> Span<'a> {
+        self.span
+    }
+
     pub fn parse_finite_float(&self) -> Result<f64, Error> {
-        let value: f64 = self.span.parse().map_err(|e| self.as_external_error(e))?;
+        let value: f64 = self.value().parse().map_err(|e| self.as_external_error(e))?;
         if value.is_finite() {
             Ok(value)
         } else {
@@ -130,6 +141,7 @@ pub enum FilterCondition<'a> {
     Or(Vec<Self>),
     And(Vec<Self>),
     GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a> },
+    GeoBoundingBox { top_left_point: [Token<'a>; 2], bottom_right_point: [Token<'a>; 2] },
 }
 
 impl<'a> FilterCondition<'a> {
@@ -310,17 +322,48 @@ fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
         // if we were able to parse `_geoRadius` and can't parse the rest of the input we return a failure
         cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
     )(input)
-    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::Geo)));
+    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::GeoRadius)));
 
     let (input, args) = parsed?;
 
     if args.len() != 3 {
-        return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::Geo)));
+        return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::GeoRadius)));
     }
 
     let res = FilterCondition::GeoLowerThan {
         point: [args[0].into(), args[1].into()],
         radius: args[2].into(),
+    };
+    Ok((input, res))
+}
+
+/// geoBoundingBox      = WS* "_geoBoundingBox([float WS* "," WS* float WS* "], [float WS* "," WS* float WS* "]")
+/// If we parse `_geoBoundingBox` we MUST parse the rest of the expression.
+fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
+    // we want to allow space BEFORE the _geoBoundingBox but not after
+    let parsed = preceded(
+        tuple((multispace0, word_exact("_geoBoundingBox"))),
+        // if we were able to parse `_geoBoundingBox` and can't parse the rest of the input we return a failure
+        cut(delimited(
+            char('('),
+            separated_list1(
+                tag(","),
+                ws(delimited(char('['), separated_list1(tag(","), ws(recognize_float)), char(']'))),
+            ),
+            char(')'),
+        )),
+    )(input)
+    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::GeoBoundingBox)));
+
+    let (input, args) = parsed?;
+
+    if args.len() != 2 || args[0].len() != 2 || args[1].len() != 2 {
+        return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::GeoBoundingBox)));
+    }
+
+    let res = FilterCondition::GeoBoundingBox {
+        top_left_point: [args[0][0].into(), args[0][1].into()],
+        bottom_right_point: [args[1][0].into(), args[1][1].into()],
     };
     Ok((input, res))
 }
@@ -367,6 +410,7 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
             }),
         ),
         parse_geo_radius,
+        parse_geo_bounding_box,
         parse_in,
         parse_not_in,
         parse_condition,
@@ -468,6 +512,12 @@ pub mod tests {
         // Test geo radius
         insta::assert_display_snapshot!(p("_geoRadius(12, 13, 14)"), @"_geoRadius({12}, {13}, {14})");
         insta::assert_display_snapshot!(p("NOT _geoRadius(12, 13, 14)"), @"NOT (_geoRadius({12}, {13}, {14}))");
+        insta::assert_display_snapshot!(p("_geoRadius(12,13,14)"), @"_geoRadius({12}, {13}, {14})");
+
+        // Test geo bounding box
+        insta::assert_display_snapshot!(p("_geoBoundingBox([12, 13], [14, 15])"), @"_geoBoundingBox([{12}, {13}], [{14}, {15}])");
+        insta::assert_display_snapshot!(p("NOT _geoBoundingBox([12, 13], [14, 15])"), @"NOT (_geoBoundingBox([{12}, {13}], [{14}, {15}]))");
+        insta::assert_display_snapshot!(p("_geoBoundingBox([12,13],[14,15])"), @"_geoBoundingBox([{12}, {13}], [{14}, {15}])");
 
         // Test OR + AND
         insta::assert_display_snapshot!(p("channel = ponce AND 'dog race' != 'bernese mountain'"), @"AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ]");
@@ -512,7 +562,7 @@ pub mod tests {
 
         insta::assert_display_snapshot!(p("channel =    "), @r###"
         Was expecting a value but instead got nothing.
-        14:14 channel =    
+        14:14 channel =
         "###);
 
         insta::assert_display_snapshot!(p("channel = 🐻"), @r###"
@@ -526,7 +576,7 @@ pub mod tests {
         "###);
 
         insta::assert_display_snapshot!(p("'OR'"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `\'OR\'`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `_geoRadius`, or `_geoBoundingBox` at `\'OR\'`.
         1:5 'OR'
         "###);
 
@@ -536,12 +586,12 @@ pub mod tests {
         "###);
 
         insta::assert_display_snapshot!(p("channel Ponce"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `channel Ponce`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `_geoRadius`, or `_geoBoundingBox` at `channel Ponce`.
         1:14 channel Ponce
         "###);
 
         insta::assert_display_snapshot!(p("channel = Ponce OR"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` but instead got nothing.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `_geoRadius`, or `_geoBoundingBox` but instead got nothing.
         19:19 channel = Ponce OR
         "###);
 
@@ -555,13 +605,28 @@ pub mod tests {
         1:16 _geoRadius = 12
         "###);
 
+        insta::assert_display_snapshot!(p("_geoBoundingBox"), @r###"
+        The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.
+        1:16 _geoBoundingBox
+        "###);
+
+        insta::assert_display_snapshot!(p("_geoBoundingBox = 12"), @r###"
+        The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.
+        1:21 _geoBoundingBox = 12
+        "###);
+
+        insta::assert_display_snapshot!(p("_geoBoundingBox(1.0, 1.0)"), @r###"
+        The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.
+        1:26 _geoBoundingBox(1.0, 1.0)
+        "###);
+
         insta::assert_display_snapshot!(p("_geoPoint(12, 13, 14)"), @r###"
-        `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance) built-in rule to filter on `_geo` coordinates.
+        `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance), or _geoBoundingBox([latitude, longitude], [latitude, longitude]) built-in rules to filter on `_geo` coordinates.
         1:22 _geoPoint(12, 13, 14)
         "###);
 
         insta::assert_display_snapshot!(p("position <= _geoPoint(12, 13, 14)"), @r###"
-        `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance) built-in rule to filter on `_geo` coordinates.
+        `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance), or _geoBoundingBox([latitude, longitude], [latitude, longitude]) built-in rules to filter on `_geo` coordinates.
         13:34 position <= _geoPoint(12, 13, 14)
         "###);
 
@@ -591,12 +656,12 @@ pub mod tests {
         "###);
 
         insta::assert_display_snapshot!(p("colour NOT EXIST"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `colour NOT EXIST`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `_geoRadius`, or `_geoBoundingBox` at `colour NOT EXIST`.
         1:17 colour NOT EXIST
         "###);
 
         insta::assert_display_snapshot!(p("subscribers 100 TO1000"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, or `_geoRadius` at `subscribers 100 TO1000`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `_geoRadius`, or `_geoBoundingBox` at `subscribers 100 TO1000`.
         1:23 subscribers 100 TO1000
         "###);
 
@@ -714,6 +779,16 @@ impl<'a> std::fmt::Display for FilterCondition<'a> {
             }
             FilterCondition::GeoLowerThan { point, radius } => {
                 write!(f, "_geoRadius({}, {}, {})", point[0], point[1], radius)
+            }
+            FilterCondition::GeoBoundingBox { top_left_point, bottom_right_point } => {
+                write!(
+                    f,
+                    "_geoBoundingBox([{}, {}], [{}, {}])",
+                    top_left_point[0],
+                    top_left_point[1],
+                    bottom_right_point[0],
+                    bottom_right_point[1]
+                )
             }
         }
     }

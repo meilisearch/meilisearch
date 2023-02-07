@@ -1206,7 +1206,7 @@ pub(crate) mod tests {
         self, DeleteDocuments, DeletionStrategy, IndexDocuments, IndexDocumentsConfig,
         IndexDocumentsMethod, IndexerConfig, Settings,
     };
-    use crate::{db_snap, obkv_to_json, Index, Search, SearchResult};
+    use crate::{db_snap, obkv_to_json, Filter, Index, Search, SearchResult};
 
     pub(crate) struct TempIndex {
         pub inner: Index,
@@ -1502,6 +1502,108 @@ pub(crate) mod tests {
 
         let user_defined = index.user_defined_searchable_fields(&rtxn).unwrap().unwrap();
         assert_eq!(user_defined, &["doggo", "name"]);
+    }
+
+    #[test]
+    fn test_basic_geo_bounding_box() {
+        let index = TempIndex::new();
+
+        index
+            .update_settings(|settings| {
+                settings.set_filterable_fields(hashset! { S("_geo") });
+            })
+            .unwrap();
+        index
+            .add_documents(documents!([
+                { "id": 0, "_geo": { "lat": 0, "lng": 0 } },
+                { "id": 1, "_geo": { "lat": 0, "lng": -175 } },
+                { "id": 2, "_geo": { "lat": 0, "lng": 175 } },
+                { "id": 3, "_geo": { "lat": 85, "lng": 0 } },
+                { "id": 4, "_geo": { "lat": -85, "lng": 0 } },
+            ]))
+            .unwrap();
+
+        // ensure we get the right real searchable fields + user defined searchable fields
+        let rtxn = index.read_txn().unwrap();
+        let mut search = index.search(&rtxn);
+
+        // exact match a document
+        let search_result = search
+            .filter(Filter::from_str("_geoBoundingBox([0, 0], [0, 0])").unwrap().unwrap())
+            .execute()
+            .unwrap();
+        insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0]>");
+
+        // match a document in the middle of the rectangle
+        let search_result = search
+            .filter(Filter::from_str("_geoBoundingBox([10, -10], [-10, 10])").unwrap().unwrap())
+            .execute()
+            .unwrap();
+        insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0]>");
+
+        // select everything
+        let search_result = search
+            .filter(Filter::from_str("_geoBoundingBox([90, -180], [-90, 180])").unwrap().unwrap())
+            .execute()
+            .unwrap();
+        insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0, 1, 2, 3, 4]>");
+
+        // go on the edge of the longitude
+        let search_result = search
+            .filter(Filter::from_str("_geoBoundingBox([0, 180], [0, -170])").unwrap().unwrap())
+            .execute()
+            .unwrap();
+        insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[1]>");
+
+        // go on the other edge of the longitude
+        let search_result = search
+            .filter(Filter::from_str("_geoBoundingBox([0, 170], [0, -180])").unwrap().unwrap())
+            .execute()
+            .unwrap();
+        insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[2]>");
+
+        // wrap around the longitude
+        let search_result = search
+            .filter(Filter::from_str("_geoBoundingBox([0, 170], [0, -170])").unwrap().unwrap())
+            .execute()
+            .unwrap();
+        insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[1, 2]>");
+
+        // go on the edge of the latitude
+        let search_result = search
+            .filter(Filter::from_str("_geoBoundingBox([90, 0], [80, 0])").unwrap().unwrap())
+            .execute()
+            .unwrap();
+        insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[3]>");
+
+        // go on the edge of the latitude
+        let search_result = search
+            .filter(Filter::from_str("_geoBoundingBox([-80, 0], [-90, 0])").unwrap().unwrap())
+            .execute()
+            .unwrap();
+        insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[4]>");
+
+        // the requests that don't make sense
+
+        // try to wrap around the latitude
+        let error = search
+            .filter(Filter::from_str("_geoBoundingBox([-80, 0], [80, 0])").unwrap().unwrap())
+            .execute()
+            .unwrap_err();
+        insta::assert_display_snapshot!(error, @r###"
+        The top latitude `-80` is below the bottom latitude `80`.
+        32:33 _geoBoundingBox([-80, 0], [80, 0])
+        "###);
+
+        // send a top latitude lower than the bottow latitude
+        let error = search
+            .filter(Filter::from_str("_geoBoundingBox([-10, 0], [10, 0])").unwrap().unwrap())
+            .execute()
+            .unwrap_err();
+        insta::assert_display_snapshot!(error, @r###"
+        The top latitude `-10` is below the bottom latitude `10`.
+        32:33 _geoBoundingBox([-10, 0], [10, 0])
+        "###);
     }
 
     #[test]

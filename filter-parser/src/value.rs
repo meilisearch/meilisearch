@@ -6,7 +6,10 @@ use nom::sequence::{delimited, terminated};
 use nom::{InputIter, InputLength, InputTake, Slice};
 
 use crate::error::{ExpectedValueKind, NomErrorExt};
-use crate::{parse_geo_point, parse_geo_radius, Error, ErrorKind, IResult, Span, Token};
+use crate::{
+    parse_geo_bounding_box, parse_geo_point, parse_geo_radius, Error, ErrorKind, IResult, Span,
+    Token,
+};
 
 /// This function goes through all characters in the [Span] if it finds any escaped character (`\`).
 /// It generates a new string with all `\` removed from the [Span].
@@ -91,11 +94,31 @@ pub fn parse_value(input: Span) -> IResult<Token> {
         }
     }
     match parse_geo_radius(input) {
-        Ok(_) => return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::MisusedGeo))),
+        Ok(_) => {
+            return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::MisusedGeoRadius)))
+        }
         // if we encountered a failure it means the user badly wrote a _geoRadius filter.
-        // But instead of showing him how to fix his syntax we are going to tell him he should not use this filter as a value.
+        // But instead of showing them how to fix his syntax we are going to tell them they should not use this filter as a value.
         Err(e) if e.is_failure() => {
-            return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::MisusedGeo)))
+            return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::MisusedGeoRadius)))
+        }
+        _ => (),
+    }
+
+    match parse_geo_bounding_box(input) {
+        Ok(_) => {
+            return Err(nom::Err::Failure(Error::new_from_kind(
+                input,
+                ErrorKind::MisusedGeoBoundingBox,
+            )))
+        }
+        // if we encountered a failure it means the user badly wrote a _geoBoundingBox filter.
+        // But instead of showing them how to fix his syntax we are going to tell them they should not use this filter as a value.
+        Err(e) if e.is_failure() => {
+            return Err(nom::Err::Failure(Error::new_from_kind(
+                input,
+                ErrorKind::MisusedGeoBoundingBox,
+            )))
         }
         _ => (),
     }
@@ -155,7 +178,7 @@ fn is_syntax_component(c: char) -> bool {
 }
 
 fn is_keyword(s: &str) -> bool {
-    matches!(s, "AND" | "OR" | "IN" | "NOT" | "TO" | "EXISTS" | "_geoRadius")
+    matches!(s, "AND" | "OR" | "IN" | "NOT" | "TO" | "EXISTS" | "_geoRadius" | "_geoBoundingBox")
 }
 
 #[cfg(test)]
