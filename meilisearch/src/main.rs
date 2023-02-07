@@ -8,7 +8,7 @@ use actix_web::web::Data;
 use actix_web::HttpServer;
 use index_scheduler::IndexScheduler;
 use meilisearch::analytics::Analytics;
-use meilisearch::{analytics, create_app, setup_meilisearch, Opt};
+use meilisearch::{analytics, create_app, prototype_name, setup_meilisearch, Opt};
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
@@ -137,6 +137,9 @@ pub fn print_launch_resume(
     eprintln!("Commit SHA:\t\t{:?}", commit_sha.to_string());
     eprintln!("Commit date:\t\t{:?}", commit_date.to_string());
     eprintln!("Package version:\t{:?}", env!("CARGO_PKG_VERSION").to_string());
+    if let Some(prototype) = prototype_name() {
+        eprintln!("Prototype:\t\t{:?}", prototype);
+    }
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     {

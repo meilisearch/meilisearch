@@ -427,3 +427,35 @@ pub fn configure_metrics_route(config: &mut web::ServiceConfig, enable_metrics_r
         );
     }
 }
+
+/// Parses the output of
+/// [`VERGEN_GIT_SEMVER_LIGHTWEIGHT`](https://docs.rs/vergen/latest/vergen/struct.Git.html#instructions)
+///  as a prototype name.
+///
+/// Returns `Some(prototype_name)` if the following conditions are met on this value:
+///
+/// 1. starts with `prototype-`,
+/// 2. does not end with `dirty-`,
+/// 3. ends with `-<some_number>`,
+/// 4. does not end with `<some_number>-<some_number>`.
+///
+/// Otherwise, returns `None`.
+pub fn prototype_name() -> Option<&'static str> {
+    let prototype: &'static str = option_env!("VERGEN_GIT_SEMVER_LIGHTWEIGHT")?;
+
+    if prototype.ends_with("-dirty") {
+        return None;
+    }
+
+    if !prototype.starts_with("prototype-") {
+        return None;
+    }
+
+    let mut rsplit_prototype = prototype.rsplit('-');
+    // last component MUST be a number
+    rsplit_prototype.next()?.parse::<u64>().ok()?;
+    // before than last component SHALL NOT be a number
+    rsplit_prototype.next()?.parse::<u64>().err()?;
+
+    Some(prototype)
+}
