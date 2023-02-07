@@ -25,7 +25,7 @@ tar = "0.4.38"
 tempfile = "3.3.0"
 thiserror = "1.0.30"
 time = { version = "0.3.7", features = ["serde-well-known", "formatting", "parsing", "macros"] }
-tokio = "1.0"
+tokio = "1.24"
 uuid = { version = "1.1.2", features = ["serde", "v4"] }
 
 [dev-dependencies]
