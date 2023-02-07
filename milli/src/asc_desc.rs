@@ -7,14 +7,15 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::error::is_reserved_keyword;
+use crate::search::facet::ParseGeoError;
 use crate::{CriterionError, Error, UserError};
 
 /// This error type is never supposed to be shown to the end user.
 /// You must always cast it to a sort error or a criterion error.
 #[derive(Debug)]
 pub enum AscDescError {
-    InvalidLatitude,
-    InvalidLongitude,
+    InvalidLatitude(ParseGeoError),
+    InvalidLongitude(ParseGeoError),
     InvalidSyntax { name: String },
     ReservedKeyword { name: String },
 }
@@ -22,11 +23,11 @@ pub enum AscDescError {
 impl fmt::Display for AscDescError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::InvalidLatitude => {
-                write!(f, "Latitude must be contained between -90 and 90 degrees.",)
+            Self::InvalidLatitude(error) => {
+                write!(f, "{error}",)
             }
-            Self::InvalidLongitude => {
-                write!(f, "Longitude must be contained between -180 and 180 degrees.",)
+            Self::InvalidLongitude(error) => {
+                write!(f, "{error}",)
             }
             Self::InvalidSyntax { name } => {
                 write!(f, "Invalid syntax for the asc/desc parameter: expected expression ending by `:asc` or `:desc`, found `{}`.", name)
@@ -45,7 +46,7 @@ impl fmt::Display for AscDescError {
 impl From<AscDescError> for CriterionError {
     fn from(error: AscDescError) -> Self {
         match error {
-            AscDescError::InvalidLatitude | AscDescError::InvalidLongitude => {
+            AscDescError::InvalidLatitude(_) | AscDescError::InvalidLongitude(_) => {
                 CriterionError::ReservedNameForSort { name: "_geoPoint".to_string() }
             }
             AscDescError::InvalidSyntax { name } => CriterionError::InvalidName { name },
@@ -85,9 +86,9 @@ impl FromStr for Member {
                             .map_err(|_| AscDescError::ReservedKeyword { name: text.to_string() })
                     })?;
                 if !(-90.0..=90.0).contains(&lat) {
-                    return Err(AscDescError::InvalidLatitude)?;
+                    return Err(AscDescError::InvalidLatitude(ParseGeoError::BadGeoLat(lat)))?;
                 } else if !(-180.0..=180.0).contains(&lng) {
-                    return Err(AscDescError::InvalidLongitude)?;
+                    return Err(AscDescError::InvalidLongitude(ParseGeoError::BadGeoLng(lng)))?;
                 }
                 Ok(Member::Geo([lat, lng]))
             }
@@ -162,10 +163,10 @@ impl FromStr for AscDesc {
 
 #[derive(Error, Debug)]
 pub enum SortError {
-    #[error("{}", AscDescError::InvalidLatitude)]
-    InvalidLatitude,
-    #[error("{}", AscDescError::InvalidLongitude)]
-    InvalidLongitude,
+    #[error("{}", error)]
+    InvalidLatitude { error: ParseGeoError },
+    #[error("{}", error)]
+    InvalidLongitude { error: ParseGeoError },
     #[error("Invalid syntax for the geo parameter: expected expression formated like \
                     `_geoPoint(latitude, longitude)` and ending by `:asc` or `:desc`, found `{name}`.")]
     BadGeoPointUsage { name: String },
@@ -184,8 +185,8 @@ pub enum SortError {
 impl From<AscDescError> for SortError {
     fn from(error: AscDescError) -> Self {
         match error {
-            AscDescError::InvalidLatitude => SortError::InvalidLatitude,
-            AscDescError::InvalidLongitude => SortError::InvalidLongitude,
+            AscDescError::InvalidLatitude(error) => SortError::InvalidLatitude { error },
+            AscDescError::InvalidLongitude(error) => SortError::InvalidLongitude { error },
             AscDescError::InvalidSyntax { name } => SortError::InvalidName { name },
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoPoint") => {
                 SortError::BadGeoPointUsage { name }
@@ -277,11 +278,11 @@ mod tests {
             ),
             ("_geoPoint(35, 85, 75):asc", ReservedKeyword { name: S("_geoPoint(35, 85, 75)") }),
             ("_geoPoint(18):asc", ReservedKeyword { name: S("_geoPoint(18)") }),
-            ("_geoPoint(200, 200):asc", InvalidLatitude),
-            ("_geoPoint(90.000001, 0):asc", InvalidLatitude),
-            ("_geoPoint(0, -180.000001):desc", InvalidLongitude),
-            ("_geoPoint(159.256, 130):asc", InvalidLatitude),
-            ("_geoPoint(12, -2021):desc", InvalidLongitude),
+            ("_geoPoint(200, 200):asc", InvalidLatitude(ParseGeoError::BadGeoLat(200.))),
+            ("_geoPoint(90.000001, 0):asc", InvalidLatitude(ParseGeoError::BadGeoLat(90.000001))),
+            ("_geoPoint(0, -180.000001):desc", InvalidLongitude(ParseGeoError::BadGeoLng(-180.000001))),
+            ("_geoPoint(159.256, 130):asc", InvalidLatitude(ParseGeoError::BadGeoLat(159.256))),
+            ("_geoPoint(12, -2021):desc", InvalidLongitude(ParseGeoError::BadGeoLng(-2021.))),
         ];
 
         for (req, expected_error) in invalid_req {
