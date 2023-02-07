@@ -11,8 +11,9 @@ use milli::update::Setting;
 use milli::{Criterion, CriterionError, Index, DEFAULT_VALUES_PER_FACET};
 use serde::{Deserialize, Serialize, Serializer};
 
+use crate::deserr::DeserrJsonError;
 use crate::error::deserr_codes::*;
-use crate::error::{unwrap_any, DeserrError};
+use crate::error::unwrap_any;
 
 /// The maximimum number of results that the engine
 /// will be able to return in one search call.
@@ -66,26 +67,31 @@ fn validate_min_word_size_for_typo_setting<E: DeserializeError>(
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, DeserializeFromValue)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-#[deserr(deny_unknown_fields, rename_all = camelCase, validate = validate_min_word_size_for_typo_setting -> DeserrError<InvalidMinWordLengthForTypo>)]
+#[deserr(deny_unknown_fields, rename_all = camelCase, validate = validate_min_word_size_for_typo_setting -> DeserrJsonError<InvalidSettingsTypoTolerance>)]
 pub struct MinWordSizeTyposSetting {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
     pub one_typo: Setting<u8>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
     pub two_typos: Setting<u8>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, DeserializeFromValue)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-#[deserr(deny_unknown_fields, rename_all = camelCase, where_predicate = __Deserr_E: deserr::MergeWithError<DeserrError<InvalidMinWordLengthForTypo>>)]
+#[deserr(deny_unknown_fields, rename_all = camelCase, where_predicate = __Deserr_E: deserr::MergeWithError<DeserrJsonError<InvalidSettingsTypoTolerance>>)]
 pub struct TypoSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
     pub enabled: Setting<bool>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(error = DeserrError<InvalidMinWordLengthForTypo>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsTypoTolerance>)]
     pub min_word_size_for_typos: Setting<MinWordSizeTyposSetting>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
     pub disable_on_words: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
     pub disable_on_attributes: Setting<BTreeSet<String>>,
 }
 
@@ -94,6 +100,7 @@ pub struct TypoSettings {
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct FacetingSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
     pub max_values_per_facet: Setting<usize>,
 }
 
@@ -102,10 +109,11 @@ pub struct FacetingSettings {
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct PaginationSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
     pub max_total_hits: Setting<usize>,
 }
 
-impl MergeWithError<milli::CriterionError> for DeserrError<InvalidSettingsRankingRules> {
+impl MergeWithError<milli::CriterionError> for DeserrJsonError<InvalidSettingsRankingRules> {
     fn merge(
         _self_: Option<Self>,
         other: milli::CriterionError,
@@ -128,14 +136,14 @@ impl MergeWithError<milli::CriterionError> for DeserrError<InvalidSettingsRankin
     rename_all = "camelCase",
     bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'static>")
 )]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct Settings<T> {
     #[serde(
         default,
         serialize_with = "serialize_with_wildcard",
         skip_serializing_if = "Setting::is_not_set"
     )]
-    #[deserr(error = DeserrError<InvalidSettingsDisplayedAttributes>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsDisplayedAttributes>)]
     pub displayed_attributes: Setting<Vec<String>>,
 
     #[serde(
@@ -143,35 +151,35 @@ pub struct Settings<T> {
         serialize_with = "serialize_with_wildcard",
         skip_serializing_if = "Setting::is_not_set"
     )]
-    #[deserr(error = DeserrError<InvalidSettingsSearchableAttributes>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsSearchableAttributes>)]
     pub searchable_attributes: Setting<Vec<String>>,
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(error = DeserrError<InvalidSettingsFilterableAttributes>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsFilterableAttributes>)]
     pub filterable_attributes: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(error = DeserrError<InvalidSettingsSortableAttributes>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsSortableAttributes>)]
     pub sortable_attributes: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(error = DeserrError<InvalidSettingsRankingRules>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsRankingRules>)]
     pub ranking_rules: Setting<Vec<RankingRuleView>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(error = DeserrError<InvalidSettingsStopWords>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsStopWords>)]
     pub stop_words: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(error = DeserrError<InvalidSettingsSynonyms>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsSynonyms>)]
     pub synonyms: Setting<BTreeMap<String, Vec<String>>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(error = DeserrError<InvalidSettingsDistinctAttribute>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsDistinctAttribute>)]
     pub distinct_attribute: Setting<String>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(error = DeserrError<InvalidSettingsTypoTolerance>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsTypoTolerance>)]
     pub typo_tolerance: Setting<TypoSettings>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(error = DeserrError<InvalidSettingsFaceting>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsFaceting>)]
     pub faceting: Setting<FacetingSettings>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(error = DeserrError<InvalidSettingsPagination>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsPagination>)]
     pub pagination: Setting<PaginationSettings>,
 
     #[serde(skip)]

@@ -41,6 +41,7 @@ use super::Document;
 use crate::{IndexMetadata, Result, Version};
 
 pub type Settings<T> = settings::Settings<T>;
+pub type Setting<T> = settings::Setting<T>;
 pub type Checked = settings::Checked;
 pub type Unchecked = settings::Unchecked;
 
@@ -290,6 +291,83 @@ pub(crate) mod test {
         let documents = movies2.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
         assert_eq!(documents.len(), 0);
         meili_snap::snapshot_hash!(format!("{:#?}", documents), @"d751713988987e9331980363e24189ce");
+
+        // spells
+        insta::assert_json_snapshot!(spells.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        {
+          "uid": "dnd_spells",
+          "primaryKey": "index",
+          "createdAt": "[now]",
+          "updatedAt": "[now]"
+        }
+        "###);
+
+        insta::assert_json_snapshot!(spells.settings().unwrap());
+        let documents = spells.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        assert_eq!(documents.len(), 10);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"235016433dd04262c7f2da01d1e808ce");
+    }
+
+    #[test]
+    fn read_dump_v2_from_meilisearch_v0_22_0_issue_3435() {
+        let dump = File::open("tests/assets/v2-v0.22.0.dump").unwrap();
+        let dir = TempDir::new().unwrap();
+        let mut dump = BufReader::new(dump);
+        let gz = GzDecoder::new(&mut dump);
+        let mut archive = tar::Archive::new(gz);
+        archive.unpack(dir.path()).unwrap();
+
+        let mut dump = V2Reader::open(dir).unwrap();
+
+        // top level infos
+        insta::assert_display_snapshot!(dump.date().unwrap(), @"2023-01-30 16:26:09.247261 +00:00:00");
+
+        // tasks
+        let tasks = dump.tasks().collect::<Result<Vec<_>>>().unwrap();
+        let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"aca8ba13046272664eb3ea2da3031633");
+        assert_eq!(update_files.len(), 8);
+        assert!(update_files[0..].iter().all(|u| u.is_none())); // everything has already been processed
+
+        // indexes
+        let mut indexes = dump.indexes().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        // the index are not ordered in any way by default
+        indexes.sort_by_key(|index| index.metadata().uid.to_string());
+
+        let mut products = indexes.pop().unwrap();
+        let mut movies = indexes.pop().unwrap();
+        let mut spells = indexes.pop().unwrap();
+        assert!(indexes.is_empty());
+
+        // products
+        insta::assert_json_snapshot!(products.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        {
+          "uid": "products",
+          "primaryKey": "sku",
+          "createdAt": "[now]",
+          "updatedAt": "[now]"
+        }
+        "###);
+
+        insta::assert_json_snapshot!(products.settings().unwrap());
+        let documents = products.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        assert_eq!(documents.len(), 10);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"548284a84de510f71e88e6cdea495cf5");
+
+        // movies
+        insta::assert_json_snapshot!(movies.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        {
+          "uid": "movies",
+          "primaryKey": "id",
+          "createdAt": "[now]",
+          "updatedAt": "[now]"
+        }
+        "###);
+
+        insta::assert_json_snapshot!(movies.settings().unwrap());
+        let documents = movies.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        assert_eq!(documents.len(), 10);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"0227598af846e574139ee0b80e03a720");
 
         // spells
         insta::assert_json_snapshot!(spells.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"

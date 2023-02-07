@@ -63,6 +63,11 @@ impl Index<'_> {
         self.service.post_encoded("/indexes", body, self.encoder).await
     }
 
+    pub async fn update_raw(&self, body: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}", urlencode(self.uid.as_ref()));
+        self.service.patch_encoded(url, body, self.encoder).await
+    }
+
     pub async fn update(&self, primary_key: Option<&str>) -> (Value, StatusCode) {
         let body = json!({
             "primaryKey": primary_key,
@@ -132,13 +137,21 @@ impl Index<'_> {
         self.service.get(url).await
     }
 
-    pub async fn filtered_tasks(&self, types: &[&str], statuses: &[&str]) -> (Value, StatusCode) {
+    pub async fn filtered_tasks(
+        &self,
+        types: &[&str],
+        statuses: &[&str],
+        canceled_by: &[&str],
+    ) -> (Value, StatusCode) {
         let mut url = format!("/tasks?indexUids={}", self.uid);
         if !types.is_empty() {
             let _ = write!(url, "&types={}", types.join(","));
         }
         if !statuses.is_empty() {
             let _ = write!(url, "&statuses={}", statuses.join(","));
+        }
+        if !canceled_by.is_empty() {
+            let _ = write!(url, "&canceledBy={}", canceled_by.join(","));
         }
         self.service.get(url).await
     }
@@ -152,6 +165,11 @@ impl Index<'_> {
         if let Some(fields) = options.and_then(|o| o.fields) {
             let _ = write!(url, "?fields={}", fields.join(","));
         }
+        self.service.get(url).await
+    }
+
+    pub async fn get_all_documents_raw(&self, options: &str) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/documents{}", urlencode(self.uid.as_ref()), options);
         self.service.get(url).await
     }
 
@@ -185,6 +203,11 @@ impl Index<'_> {
     pub async fn delete_batch(&self, ids: Vec<u64>) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/documents/delete-batch", urlencode(self.uid.as_ref()));
         self.service.post_encoded(url, serde_json::to_value(&ids).unwrap(), self.encoder).await
+    }
+
+    pub async fn delete_batch_raw(&self, body: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/documents/delete-batch", urlencode(self.uid.as_ref()));
+        self.service.post_encoded(url, body, self.encoder).await
     }
 
     pub async fn settings(&self) -> (Value, StatusCode) {
@@ -289,8 +312,8 @@ impl Index<'_> {
             eprintln!("Error with post search");
             resume_unwind(e);
         }
-
-        let (response, code) = self.search_get(query).await;
+        let query = yaup::to_string(&query).unwrap();
+        let (response, code) = self.search_get(&query).await;
         if let Err(e) = catch_unwind(move || test(response, code)) {
             eprintln!("Error with get search");
             resume_unwind(e);
@@ -302,9 +325,8 @@ impl Index<'_> {
         self.service.post_encoded(url, query, self.encoder).await
     }
 
-    pub async fn search_get(&self, query: Value) -> (Value, StatusCode) {
-        let params = yaup::to_string(&query).unwrap();
-        let url = format!("/indexes/{}/search?{}", urlencode(self.uid.as_ref()), params);
+    pub async fn search_get(&self, query: &str) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/search?{}", urlencode(self.uid.as_ref()), query);
         self.service.get(url).await
     }
 

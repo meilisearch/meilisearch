@@ -12,7 +12,7 @@ byteorder = "1.4.3"
 charabia = { version = "0.7.0", default-features = false }
 concat-arrays = "0.1.2"
 crossbeam-channel = "0.5.6"
-deserr = "0.1.4"
+deserr = "0.3.0"
 either = "1.8.0"
 flatten-serde-json = { path = "../flatten-serde-json" }
 fst = "0.4.7"

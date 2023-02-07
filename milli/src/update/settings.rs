@@ -37,9 +37,6 @@ where
             _ => T::deserialize_from_value(value, location).map(Setting::Set),
         }
     }
-    fn default() -> Option<Self> {
-        Some(Self::NotSet)
-    }
 }
 
 impl<T> Default for Setting<T> {

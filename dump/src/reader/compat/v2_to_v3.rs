@@ -361,28 +361,29 @@ impl From<String> for v3::Code {
     }
 }
 
-fn option_to_setting<T>(opt: Option<Option<T>>) -> v3::Setting<T> {
-    match opt {
-        Some(Some(t)) => v3::Setting::Set(t),
-        None => v3::Setting::NotSet,
-        Some(None) => v3::Setting::Reset,
+impl<A> From<v2::Setting<A>> for v3::Setting<A> {
+    fn from(setting: v2::Setting<A>) -> Self {
+        match setting {
+            v2::settings::Setting::Set(a) => v3::settings::Setting::Set(a),
+            v2::settings::Setting::Reset => v3::settings::Setting::Reset,
+            v2::settings::Setting::NotSet => v3::settings::Setting::NotSet,
+        }
     }
 }
 
 impl<T> From<v2::Settings<T>> for v3::Settings<v3::Unchecked> {
     fn from(settings: v2::Settings<T>) -> Self {
         v3::Settings {
-            displayed_attributes: option_to_setting(settings.displayed_attributes),
-            searchable_attributes: option_to_setting(settings.searchable_attributes),
-            filterable_attributes: option_to_setting(settings.filterable_attributes)
-                .map(|f| f.into_iter().collect()),
-            sortable_attributes: v3::Setting::NotSet,
-            ranking_rules: option_to_setting(settings.ranking_rules).map(|criteria| {
+            displayed_attributes: settings.displayed_attributes.into(),
+            searchable_attributes: settings.searchable_attributes.into(),
+            filterable_attributes: settings.filterable_attributes.into(),
+            sortable_attributes: settings.sortable_attributes.into(),
+            ranking_rules: v3::Setting::from(settings.ranking_rules).map(|criteria| {
                 criteria.into_iter().map(|criterion| patch_ranking_rules(&criterion)).collect()
             }),
-            stop_words: option_to_setting(settings.stop_words),
-            synonyms: option_to_setting(settings.synonyms),
-            distinct_attribute: option_to_setting(settings.distinct_attribute),
+            stop_words: settings.stop_words.into(),
+            synonyms: settings.synonyms.into(),
+            distinct_attribute: settings.distinct_attribute.into(),
             _kind: std::marker::PhantomData,
         }
     }
@@ -394,6 +395,7 @@ fn patch_ranking_rules(ranking_rule: &str) -> String {
         Ok(v2::settings::Criterion::Typo) => String::from("typo"),
         Ok(v2::settings::Criterion::Proximity) => String::from("proximity"),
         Ok(v2::settings::Criterion::Attribute) => String::from("attribute"),
+        Ok(v2::settings::Criterion::Sort) => String::from("sort"),
         Ok(v2::settings::Criterion::Exactness) => String::from("exactness"),
         Ok(v2::settings::Criterion::Asc(name)) => format!("{name}:asc"),
         Ok(v2::settings::Criterion::Desc(name)) => format!("{name}:desc"),

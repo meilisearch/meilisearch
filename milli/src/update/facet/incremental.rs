@@ -159,7 +159,7 @@ impl FacetsUpdateIncrementalInner {
     /// See documentation of `insert_in_level`
     fn insert_in_level_0(
         &self,
-        txn: &'_ mut RwTxn,
+        txn: &mut RwTxn,
         field_id: u16,
         facet_value: &[u8],
         docids: &RoaringBitmap,
@@ -213,7 +213,7 @@ impl FacetsUpdateIncrementalInner {
     /// of the parent node should be incremented.
     fn insert_in_level(
         &self,
-        txn: &'_ mut RwTxn,
+        txn: &mut RwTxn,
         field_id: u16,
         level: u8,
         facet_value: &[u8],
@@ -350,7 +350,7 @@ impl FacetsUpdateIncrementalInner {
     /// Insert the given facet value and corresponding document ids in the database.
     pub fn insert(
         &self,
-        txn: &'_ mut RwTxn,
+        txn: &mut RwTxn,
         field_id: u16,
         facet_value: &[u8],
         docids: &RoaringBitmap,
@@ -472,7 +472,7 @@ impl FacetsUpdateIncrementalInner {
     /// its left bound as well.
     fn delete_in_level(
         &self,
-        txn: &'_ mut RwTxn,
+        txn: &mut RwTxn,
         field_id: u16,
         level: u8,
         facet_value: &[u8],
@@ -531,7 +531,7 @@ impl FacetsUpdateIncrementalInner {
 
     fn delete_in_level_0(
         &self,
-        txn: &'_ mut RwTxn,
+        txn: &mut RwTxn,
         field_id: u16,
         facet_value: &[u8],
         docids: &RoaringBitmap,
@@ -559,7 +559,7 @@ impl FacetsUpdateIncrementalInner {
 
     pub fn delete(
         &self,
-        txn: &'_ mut RwTxn,
+        txn: &mut RwTxn,
         field_id: u16,
         facet_value: &[u8],
         docids: &RoaringBitmap,

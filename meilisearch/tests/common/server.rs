@@ -95,8 +95,16 @@ impl Server {
         self.index_with_encoder(uid, Encoder::Plain)
     }
 
+    pub async fn create_index(&self, body: Value) -> (Value, StatusCode) {
+        self.service.post("/indexes", body).await
+    }
+
     pub fn index_with_encoder(&self, uid: impl AsRef<str>, encoder: Encoder) -> Index<'_> {
         Index { uid: uid.as_ref().to_string(), service: &self.service, encoder }
+    }
+
+    pub async fn list_indexes_raw(&self, parameters: &str) -> (Value, StatusCode) {
+        self.service.get(format!("/indexes{parameters}")).await
     }
 
     pub async fn list_indexes(
@@ -132,8 +140,8 @@ impl Server {
         self.service.get("/tasks").await
     }
 
-    pub async fn tasks_filter(&self, filter: Value) -> (Value, StatusCode) {
-        self.service.get(format!("/tasks?{}", yaup::to_string(&filter).unwrap())).await
+    pub async fn tasks_filter(&self, filter: &str) -> (Value, StatusCode) {
+        self.service.get(format!("/tasks?{}", filter)).await
     }
 
     pub async fn get_dump_status(&self, uid: &str) -> (Value, StatusCode) {
@@ -148,14 +156,12 @@ impl Server {
         self.service.post("/swap-indexes", value).await
     }
 
-    pub async fn cancel_tasks(&self, value: Value) -> (Value, StatusCode) {
-        self.service
-            .post(format!("/tasks/cancel?{}", yaup::to_string(&value).unwrap()), json!(null))
-            .await
+    pub async fn cancel_tasks(&self, value: &str) -> (Value, StatusCode) {
+        self.service.post(format!("/tasks/cancel?{}", value), json!(null)).await
     }
 
-    pub async fn delete_tasks(&self, value: Value) -> (Value, StatusCode) {
-        self.service.delete(format!("/tasks?{}", yaup::to_string(&value).unwrap())).await
+    pub async fn delete_tasks(&self, value: &str) -> (Value, StatusCode) {
+        self.service.delete(format!("/tasks?{}", value)).await
     }
 
     pub async fn wait_task(&self, update_id: u64) -> Value {

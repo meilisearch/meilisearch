@@ -2,17 +2,15 @@ use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
+use deserr::DeserializeFromValue;
 
 use crate::error::{Code, ErrorCode};
 
 /// An index uid is composed of only ascii alphanumeric characters, - and _, between 1 and 400
 /// bytes long
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "test-traits", derive(proptest_derive::Arbitrary))]
-pub struct IndexUid(
-    #[cfg_attr(feature = "test-traits", proptest(regex("[a-zA-Z0-9_-]{1,400}")))] String,
-);
+#[derive(Debug, Clone, PartialEq, Eq, DeserializeFromValue)]
+#[deserr(from(String) = IndexUid::try_from -> IndexUidFormatError)]
+pub struct IndexUid(String);
 
 impl IndexUid {
     pub fn new_unchecked(s: impl AsRef<str>) -> Self {
@@ -26,6 +24,12 @@ impl IndexUid {
     /// Return a reference over the inner str.
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+impl fmt::Display for IndexUid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
     }
 }
 
