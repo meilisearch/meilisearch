@@ -22,7 +22,7 @@ pub struct Filter<'a> {
 }
 
 #[derive(Debug)]
-enum ParseGeoError {
+pub enum ParseGeoError {
     BadGeo(String),
     BadGeoLat(f64),
     BadGeoLng(f64),
