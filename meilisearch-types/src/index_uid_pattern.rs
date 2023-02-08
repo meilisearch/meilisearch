@@ -69,6 +69,7 @@ impl TryFrom<String> for IndexUidPattern {
 
     fn try_from(uid: String) -> Result<Self, Self::Error> {
         let result = match uid.strip_suffix('*') {
+            Some("") => Ok(IndexUidPattern(uid)),
             Some(prefix) => IndexUid::from_str(prefix).map(|_| IndexUidPattern(uid)),
             None => IndexUid::try_from(uid).map(IndexUid::into_inner).map(IndexUidPattern),
         };

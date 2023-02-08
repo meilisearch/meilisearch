@@ -386,7 +386,7 @@ async fn error_add_api_key_invalid_index_uids() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "`invalid index # / \\name with spaces` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_). at `.indexes[0]`.",
+      "message": "`invalid index # / \\name with spaces` is not a valid index uid pattern. Index uid patterns can be an integer or a string containing only alphanumeric characters, hyphens (-), underscores (_), and optionally end with a star (*). at `.indexes[0]`.",
       "code": "invalid_api_key_indexes",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid-api-key-indexes"
