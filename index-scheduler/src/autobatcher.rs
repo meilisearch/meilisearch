@@ -278,36 +278,36 @@ impl BatchKind {
                 K::DocumentImport { .. } | K::Settings { .. },
             ) => Break(this),
             (
-                BatchKind::DocumentOperation { method: _, allow_index_creation: _, primary_key: _, operation_ids: mut ids },
+                BatchKind::DocumentOperation { method: _, allow_index_creation: _, primary_key: _, mut operation_ids },
                 K::DocumentClear,
             ) => {
-                ids.push(id);
-                Continue(BatchKind::DocumentClear { ids })
+                operation_ids.push(id);
+                Continue(BatchKind::DocumentClear { ids: operation_ids })
             }
 
             // we can autobatch the same kind of document additions / updates
             (
-                BatchKind::DocumentOperation { method: ReplaceDocuments, allow_index_creation, primary_key: _, operation_ids: mut import_ids },
+                BatchKind::DocumentOperation { method: ReplaceDocuments, allow_index_creation, primary_key: _, mut operation_ids },
                 K::DocumentImport { method: ReplaceDocuments, primary_key: pk, .. },
             ) => {
-                import_ids.push(id);
+                operation_ids.push(id);
                 Continue(BatchKind::DocumentOperation {
                     method: ReplaceDocuments,
                     allow_index_creation,
-                    operation_ids: import_ids,
+                    operation_ids,
                     primary_key: pk,
                 })
             }
             (
-                BatchKind::DocumentOperation { method: UpdateDocuments, allow_index_creation, primary_key: _, operation_ids: mut import_ids },
+                BatchKind::DocumentOperation { method: UpdateDocuments, allow_index_creation, primary_key: _, mut operation_ids },
                 K::DocumentImport { method: UpdateDocuments, primary_key: pk, .. },
             ) => {
-                import_ids.push(id);
+                operation_ids.push(id);
                 Continue(BatchKind::DocumentOperation {
                     method: UpdateDocuments,
                     allow_index_creation,
                     primary_key: pk,
-                    operation_ids: import_ids,
+                    operation_ids,
                 })
             }
             (
@@ -331,14 +331,14 @@ impl BatchKind {
             ) => Break(this),
 
             (
-                BatchKind::DocumentOperation { method, allow_index_creation, primary_key, operation_ids: import_ids },
+                BatchKind::DocumentOperation { method, allow_index_creation, primary_key, operation_ids },
                 K::Settings { .. },
             ) => Continue(BatchKind::SettingsAndDocumentOperation {
                 settings_ids: vec![id],
                 method,
                 allow_index_creation,
                 primary_key,
-                operation_ids: import_ids,
+                operation_ids,
             }),
 
             (BatchKind::DocumentDeletion { mut deletion_ids }, K::DocumentClear) => {
@@ -426,41 +426,41 @@ impl BatchKind {
                 })
             }
             (
-                BatchKind::SettingsAndDocumentOperation { settings_ids, method: _, operation_ids: mut other, allow_index_creation, primary_key: _ },
+                BatchKind::SettingsAndDocumentOperation { settings_ids, method: _, mut operation_ids, allow_index_creation, primary_key: _ },
                 K::DocumentClear,
             ) => {
-                other.push(id);
+                operation_ids.push(id);
                 Continue(BatchKind::ClearAndSettings {
                     settings_ids,
-                    other,
+                    other: operation_ids,
                     allow_index_creation,
                 })
             }
 
             (
-                BatchKind::SettingsAndDocumentOperation { settings_ids, method: ReplaceDocuments, operation_ids: mut import_ids, allow_index_creation, primary_key: _},
+                BatchKind::SettingsAndDocumentOperation { settings_ids, method: ReplaceDocuments, mut operation_ids, allow_index_creation, primary_key: _},
                 K::DocumentImport { method: ReplaceDocuments, primary_key: pk2, .. },
             ) => {
-                import_ids.push(id);
+                operation_ids.push(id);
                 Continue(BatchKind::SettingsAndDocumentOperation {
                     settings_ids,
                     method: ReplaceDocuments,
                     allow_index_creation,
                         primary_key: pk2,
-                    operation_ids: import_ids,
+                    operation_ids,
                 })
             }
             (
-                BatchKind::SettingsAndDocumentOperation { settings_ids, method: UpdateDocuments, allow_index_creation, primary_key: _, operation_ids: mut import_ids },
+                BatchKind::SettingsAndDocumentOperation { settings_ids, method: UpdateDocuments, allow_index_creation, primary_key: _, mut operation_ids },
                 K::DocumentImport { method: UpdateDocuments, primary_key: pk2, .. },
             ) => {
-                import_ids.push(id);
+                operation_ids.push(id);
                 Continue(BatchKind::SettingsAndDocumentOperation {
                     settings_ids,
                     method: UpdateDocuments,
                     allow_index_creation,
                     primary_key: pk2,
-                    operation_ids: import_ids,
+                    operation_ids,
                 })
             }
             // But we can't batch a settings and a doc op with another doc op
@@ -470,7 +470,7 @@ impl BatchKind {
                 K::DocumentDeletion | K::DocumentImport { .. },
             ) => Break(this),
             (
-                BatchKind::SettingsAndDocumentOperation { mut settings_ids, method, allow_index_creation,primary_key, operation_ids: import_ids },
+                BatchKind::SettingsAndDocumentOperation { mut settings_ids, method, allow_index_creation,primary_key, operation_ids },
                 K::Settings { .. },
             ) => {
                 settings_ids.push(id);
@@ -479,7 +479,7 @@ impl BatchKind {
                     method,
                     allow_index_creation,
                     primary_key,
-                    operation_ids: import_ids,
+                    operation_ids,
                 })
             }
             (
