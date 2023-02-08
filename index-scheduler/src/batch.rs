@@ -206,7 +206,7 @@ impl IndexScheduler {
                 },
                 must_create_index,
             })),
-            BatchKind::DocumentImport { method, import_ids, .. } => {
+            BatchKind::DocumentOperation { method, operation_ids: import_ids, .. } => {
                 let tasks = self.get_existing_tasks(rtxn, import_ids)?;
                 let primary_key = match &tasks[0].kind {
                     KindWithContent::DocumentAdditionOrUpdate { primary_key, .. } => {
@@ -322,12 +322,12 @@ impl IndexScheduler {
                     must_create_index,
                 }))
             }
-            BatchKind::SettingsAndDocumentImport {
+            BatchKind::SettingsAndDocumentOperation {
                 settings_ids,
                 method,
                 allow_index_creation,
                 primary_key,
-                import_ids,
+                operation_ids: import_ids,
             } => {
                 let settings = self.create_next_batch_index(
                     rtxn,
@@ -339,11 +339,11 @@ impl IndexScheduler {
                 let document_import = self.create_next_batch_index(
                     rtxn,
                     index_uid.clone(),
-                    BatchKind::DocumentImport {
+                    BatchKind::DocumentOperation {
                         method,
                         allow_index_creation,
                         primary_key,
-                        import_ids,
+                        operation_ids: import_ids,
                     },
                     must_create_index,
                 )?;
