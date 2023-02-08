@@ -23,6 +23,8 @@ use crate::routes::tasks::TasksFilterQuery;
 pub type SegmentAnalytics = mock_analytics::MockAnalytics;
 #[cfg(any(debug_assertions, not(feature = "analytics")))]
 pub type SearchAggregator = mock_analytics::SearchAggregator;
+#[cfg(any(debug_assertions, not(feature = "analytics")))]
+pub type MultiSearchAggregator = mock_analytics::MultiSearchAggregator;
 
 // if we are in release mode and the feature analytics was enabled
 // we use the real analytics
@@ -30,6 +32,8 @@ pub type SearchAggregator = mock_analytics::SearchAggregator;
 pub type SegmentAnalytics = segment_analytics::SegmentAnalytics;
 #[cfg(all(not(debug_assertions), feature = "analytics"))]
 pub type SearchAggregator = segment_analytics::SearchAggregator;
+#[cfg(all(not(debug_assertions), feature = "analytics"))]
+pub type MultiSearchAggregator = segment_analytics::MultiSearchAggregator;
 
 /// The Meilisearch config dir:
 /// `~/.config/Meilisearch` on *NIX or *BSD.
@@ -73,6 +77,9 @@ pub trait Analytics: Sync + Send {
 
     /// This method should be called to aggregate a post search
     fn post_search(&self, aggregate: SearchAggregator);
+
+    /// This method should be called to aggregate a post array of searches
+    fn post_multi_search(&self, aggregate: MultiSearchAggregator);
 
     // this method should be called to aggregate a add documents request
     fn add_documents(
