@@ -28,8 +28,7 @@ use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
 use meilisearch_types::milli::heed::CompactionOption;
 use meilisearch_types::milli::update::{
-    DocumentAdditionResult, DocumentDeletionResult, IndexDocumentsConfig, IndexDocumentsMethod,
-    Settings as MilliSettings,
+    DocumentDeletionResult, IndexDocumentsConfig, IndexDocumentsMethod, Settings as MilliSettings,
 };
 use meilisearch_types::milli::{self, BEU32};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
@@ -90,12 +89,6 @@ pub(crate) enum Batch {
 pub(crate) enum DocumentOperation {
     Add(Uuid),
     Delete(Vec<String>),
-}
-
-#[derive(Debug)]
-pub(crate) enum DocumentOperationResult {
-    Add(DocumentAdditionResult),
-    Delete(DocumentDeletionResult),
 }
 
 /// A [batch](Batch) that combines multiple tasks operating on an index.
@@ -1012,7 +1005,7 @@ impl IndexScheduler {
                 index_uid: _,
                 primary_key,
                 method,
-                documents_counts,
+                documents_counts: _,
                 operations,
                 mut tasks,
             } => {

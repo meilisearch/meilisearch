@@ -57,21 +57,6 @@ pub fn keep_latest_obkv<'a>(_key: &[u8], obkvs: &[Cow<'a, [u8]>]) -> Result<Cow<
     Ok(obkvs.last().unwrap().clone())
 }
 
-/// Merge all the obks in the order we see them.
-pub fn merge_obkvs<'a>(_key: &[u8], obkvs: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
-    Ok(obkvs
-        .iter()
-        .cloned()
-        .reduce(|acc, current| {
-            let first = obkv::KvReader::new(&acc);
-            let second = obkv::KvReader::new(&current);
-            let mut buffer = Vec::new();
-            merge_two_obkvs(first, second, &mut buffer);
-            Cow::from(buffer)
-        })
-        .unwrap())
-}
-
 pub fn merge_two_obkvs(base: obkv::KvReaderU16, update: obkv::KvReaderU16, buffer: &mut Vec<u8>) {
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};

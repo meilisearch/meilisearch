@@ -12,9 +12,7 @@ use roaring::RoaringBitmap;
 use serde_json::Value;
 use smartstring::SmartString;
 
-use super::helpers::{
-    create_sorter, create_writer, keep_latest_obkv, merge_obkvs, merge_two_obkvs, MergeFn,
-};
+use super::helpers::{create_sorter, create_writer, keep_latest_obkv, merge_two_obkvs, MergeFn};
 use super::{IndexDocumentsMethod, IndexerConfig};
 use crate::documents::{DocumentsBatchIndex, EnrichedDocument, EnrichedDocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};

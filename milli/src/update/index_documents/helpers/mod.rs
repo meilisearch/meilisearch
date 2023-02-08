@@ -13,7 +13,7 @@ pub use grenad_helpers::{
     GrenadParameters, MergeableReader,
 };
 pub use merge_functions::{
-    concat_u32s_array, keep_first, keep_latest_obkv, merge_cbo_roaring_bitmaps, merge_obkvs,
+    concat_u32s_array, keep_first, keep_latest_obkv, merge_cbo_roaring_bitmaps,
     merge_roaring_bitmaps, merge_two_obkvs, roaring_bitmap_from_u32s_array,
     serialize_roaring_bitmap, MergeFn,
 };
