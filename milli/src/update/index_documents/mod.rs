@@ -2104,4 +2104,48 @@ mod tests {
         {"id":3,"name":"bob","age":25}
         "###);
     }
+
+    #[test]
+    fn delete_the_same_document_multiple_time() {
+        let index = TempIndex::new();
+        let mut wtxn = index.write_txn().unwrap();
+        let builder = IndexDocuments::new(
+            &mut wtxn,
+            &index,
+            &index.indexer_config,
+            index.index_documents_config.clone(),
+            |_| (),
+            || false,
+        )
+        .unwrap();
+
+        let (builder, removed) =
+            builder.remove_documents(vec![S("1"), S("2"), S("1"), S("2")]).unwrap();
+        insta::assert_display_snapshot!(removed.unwrap(), @"0");
+
+        let documents = documents!([
+            { "id": 1, "doggo": "kevin" },
+            { "id": 2, "doggo": { "name": "jean", "age": 20 } },
+            { "id": 3, "name": "bob", "age": 25 },
+        ]);
+        let (builder, added) = builder.add_documents(documents).unwrap();
+        insta::assert_display_snapshot!(added.unwrap(), @"3");
+
+        let (builder, removed) =
+            builder.remove_documents(vec![S("1"), S("2"), S("1"), S("2")]).unwrap();
+        insta::assert_display_snapshot!(removed.unwrap(), @"2");
+
+        let addition = builder.execute().unwrap();
+        insta::assert_debug_snapshot!(addition, @r###"
+        DocumentAdditionResult {
+            indexed_documents: 3,
+            number_of_documents: 1,
+        }
+        "###);
+        wtxn.commit().unwrap();
+
+        db_snap!(index, documents, @r###"
+        {"id":3,"name":"bob","age":25}
+        "###);
+    }
 }
