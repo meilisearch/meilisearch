@@ -1680,6 +1680,100 @@ mod tests {
     }
 
     #[test]
+    fn document_addition_and_document_deletion() {
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        let content = r#"[
+            { "id": 1, "doggo": "jean bob" },
+            { "id": 2, "catto": "jorts" },
+            { "id": 3, "doggo": "bork" }
+        ]"#;
+
+        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
+        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        file.persist().unwrap();
+        index_scheduler
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: Some(S("id")),
+                method: ReplaceDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: true,
+            })
+            .unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
+        index_scheduler
+            .register(KindWithContent::DocumentDeletion {
+                index_uid: S("doggos"),
+                documents_ids: vec![S("1"), S("2")],
+            })
+            .unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
+
+        handle.advance_one_successful_batch(); // The addition AND deletion should've been batched together
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_processing_the_batch");
+
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
+    }
+
+    #[test]
+    fn document_deletion_and_document_addition() {
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+        index_scheduler
+            .register(KindWithContent::DocumentDeletion {
+                index_uid: S("doggos"),
+                documents_ids: vec![S("1"), S("2")],
+            })
+            .unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
+
+        let content = r#"[
+            { "id": 1, "doggo": "jean bob" },
+            { "id": 2, "catto": "jorts" },
+            { "id": 3, "doggo": "bork" }
+        ]"#;
+
+        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
+        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        file.persist().unwrap();
+        index_scheduler
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: Some(S("id")),
+                method: ReplaceDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: true,
+            })
+            .unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
+
+        handle.advance_one_successful_batch(); // The deletion AND addition should've been batched together
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_processing_the_batch");
+
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
+    }
+
+    #[test]
     fn do_not_batch_task_of_different_indexes() {
         let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
         let index_names = ["doggos", "cattos", "girafos"];
