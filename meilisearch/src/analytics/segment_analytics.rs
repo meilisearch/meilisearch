@@ -30,7 +30,7 @@ use crate::routes::indexes::documents::UpdateDocumentsQuery;
 use crate::routes::tasks::TasksFilterQuery;
 use crate::routes::{create_all_stats, Stats};
 use crate::search::{
-    SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    SearchQuery, SearchQueryWithIndex, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
     DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
 };
 use crate::Opt;
@@ -68,6 +68,7 @@ pub enum AnalyticsMsg {
     BatchMessage(Track),
     AggregateGetSearch(SearchAggregator),
     AggregatePostSearch(SearchAggregator),
+    AggregatePostMultiSearch(MultiSearchAggregator),
     AggregateAddDocuments(DocumentsAggregator),
     AggregateDeleteDocuments(DocumentsDeletionAggregator),
     AggregateUpdateDocuments(DocumentsAggregator),
@@ -133,6 +134,7 @@ impl SegmentAnalytics {
             opt: opt.clone(),
             batcher,
             post_search_aggregator: SearchAggregator::default(),
+            post_multi_search_aggregator: MultiSearchAggregator::default(),
             get_search_aggregator: SearchAggregator::default(),
             add_documents_aggregator: DocumentsAggregator::default(),
             delete_documents_aggregator: DocumentsDeletionAggregator::default(),
@@ -172,6 +174,10 @@ impl super::Analytics for SegmentAnalytics {
 
     fn post_search(&self, aggregate: SearchAggregator) {
         let _ = self.sender.try_send(AnalyticsMsg::AggregatePostSearch(aggregate));
+    }
+
+    fn post_multi_search(&self, aggregate: MultiSearchAggregator) {
+        let _ = self.sender.try_send(AnalyticsMsg::AggregatePostMultiSearch(aggregate));
     }
 
     fn add_documents(
@@ -324,6 +330,7 @@ pub struct Segment {
     batcher: AutoBatcher,
     get_search_aggregator: SearchAggregator,
     post_search_aggregator: SearchAggregator,
+    post_multi_search_aggregator: MultiSearchAggregator,
     add_documents_aggregator: DocumentsAggregator,
     delete_documents_aggregator: DocumentsDeletionAggregator,
     update_documents_aggregator: DocumentsAggregator,
@@ -381,6 +388,7 @@ impl Segment {
                         Some(AnalyticsMsg::BatchMessage(msg)) => drop(self.batcher.push(msg).await),
                         Some(AnalyticsMsg::AggregateGetSearch(agreg)) => self.get_search_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregatePostSearch(agreg)) => self.post_search_aggregator.aggregate(agreg),
+                        Some(AnalyticsMsg::AggregatePostMultiSearch(agreg)) => self.post_multi_search_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregateAddDocuments(agreg)) => self.add_documents_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregateDeleteDocuments(agreg)) => self.delete_documents_aggregator.aggregate(agreg),
                         Some(AnalyticsMsg::AggregateUpdateDocuments(agreg)) => self.update_documents_aggregator.aggregate(agreg),
@@ -426,6 +434,8 @@ impl Segment {
             .into_event(&self.user, "Documents Searched GET");
         let post_search = std::mem::take(&mut self.post_search_aggregator)
             .into_event(&self.user, "Documents Searched POST");
+        let post_multi_search = std::mem::take(&mut self.post_multi_search_aggregator)
+            .into_event(&self.user, "Documents Searched By Array of Queries POST");
         let add_documents = std::mem::take(&mut self.add_documents_aggregator)
             .into_event(&self.user, "Documents Added");
         let delete_documents = std::mem::take(&mut self.delete_documents_aggregator)
@@ -442,6 +452,9 @@ impl Segment {
         }
         if let Some(post_search) = post_search {
             let _ = self.batcher.push(post_search).await;
+        }
+        if let Some(post_multi_search) = post_multi_search {
+            let _ = self.batcher.push(post_multi_search).await;
         }
         if let Some(add_documents) = add_documents {
             let _ = self.batcher.push(add_documents).await;
@@ -702,6 +715,117 @@ impl SearchAggregator {
                 },
                 "matching_strategy": {
                     "most_used_strategy": self.matching_strategy.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
+                }
+            });
+
+            Some(Track {
+                timestamp: self.timestamp,
+                user: user.clone(),
+                event: event_name.to_string(),
+                properties,
+                ..Default::default()
+            })
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct MultiSearchAggregator {
+    timestamp: Option<OffsetDateTime>,
+
+    // requests
+    total_received: usize,
+    total_succeeded: usize,
+
+    // sum of the number of distinct indexes in each single request, use with total_received to compute an avg
+    total_distinct_index_count: usize,
+    // number of queries with a single index, use with total_received to compute a proportion
+    total_single_index: usize,
+
+    // sum of the number of search queries in the requests, use with total_received to compute an average
+    total_search_count: usize,
+
+    // context
+    user_agents: HashSet<String>,
+}
+
+impl MultiSearchAggregator {
+    pub fn from_queries(query: &[SearchQueryWithIndex], request: &HttpRequest) -> Self {
+        let timestamp = Some(OffsetDateTime::now_utc());
+
+        let user_agents = extract_user_agents(request).into_iter().collect();
+
+        let distinct_indexes: HashSet<_> = query.iter().map(|query| &query.index_uid).collect();
+
+        Self {
+            timestamp,
+            total_received: 1,
+            total_succeeded: 0,
+            total_distinct_index_count: distinct_indexes.len(),
+            total_single_index: if distinct_indexes.len() == 1 { 1 } else { 0 },
+            total_search_count: query.len(),
+            user_agents,
+        }
+    }
+
+    pub fn succeed(&mut self) {
+        self.total_succeeded = self.total_succeeded.saturating_add(1);
+    }
+
+    pub fn aggregate(&mut self, other: Self) {
+        // write the aggregate in a way that will cause a compilation error if a field is added.
+
+        // get ownership of self, replacing it by a default value.
+        let this = std::mem::take(self);
+
+        let timestamp = this.timestamp.or(other.timestamp);
+        let total_received = this.total_received.saturating_add(other.total_received);
+        let total_succeeded = this.total_succeeded.saturating_add(other.total_succeeded);
+        let total_distinct_index_count =
+            this.total_distinct_index_count.saturating_add(other.total_distinct_index_count);
+        let total_single_index = this.total_single_index.saturating_add(other.total_single_index);
+        let total_search_count = this.total_search_count.saturating_add(other.total_search_count);
+        let mut user_agents = this.user_agents;
+
+        for user_agent in other.user_agents.into_iter() {
+            user_agents.insert(user_agent);
+        }
+
+        // need all fields or compile error
+        let mut aggregated = Self {
+            timestamp,
+            total_received,
+            total_succeeded,
+            total_distinct_index_count,
+            total_single_index,
+            total_search_count,
+            user_agents,
+            // do not add _ or ..Default::default() here
+        };
+
+        // replace the default self with the aggregated value
+        std::mem::swap(self, &mut aggregated);
+    }
+
+    pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
+        if self.total_received == 0 {
+            None
+        } else {
+            let properties = json!({
+                "user-agent": self.user_agents,
+                "requests": {
+                    "total_succeeded": self.total_succeeded,
+                    "total_failed": self.total_received.saturating_sub(self.total_succeeded), // just to be sure we never panics
+                    "total_received": self.total_received,
+                },
+                "indexes": {
+                    "total_single_index": self.total_single_index,
+                    "total_distinct_index_count": self.total_distinct_index_count,
+                    "avg_distinct_index_count": (self.total_distinct_index_count as f64) / (self.total_received as f64), // not 0 else returned early
+                },
+                "searches": {
+                    "total_search_count": self.total_search_count,
+                    "avg_search_count": (self.total_search_count as f64) / (self.total_received as f64),
                 }
             });
 

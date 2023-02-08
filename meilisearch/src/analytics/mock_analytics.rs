@@ -26,6 +26,18 @@ impl SearchAggregator {
     pub fn succeed(&mut self, _: &dyn Any) {}
 }
 
+#[derive(Default)]
+pub struct MultiSearchAggregator;
+
+#[allow(dead_code)]
+impl MultiSearchAggregator {
+    pub fn from_queries(_: &dyn Any, _: &dyn Any) -> Self {
+        Self::default()
+    }
+
+    pub fn succeed(&mut self) {}
+}
+
 impl MockAnalytics {
     #[allow(clippy::new_ret_no_self)]
     pub fn new(opt: &Opt) -> Arc<dyn Analytics> {
@@ -43,6 +55,7 @@ impl Analytics for MockAnalytics {
     fn publish(&self, _event_name: String, _send: Value, _request: Option<&HttpRequest>) {}
     fn get_search(&self, _aggregate: super::SearchAggregator) {}
     fn post_search(&self, _aggregate: super::SearchAggregator) {}
+    fn post_multi_search(&self, _aggregate: super::MultiSearchAggregator) {}
     fn add_documents(
         &self,
         _documents_query: &UpdateDocumentsQuery,
