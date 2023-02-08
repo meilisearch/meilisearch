@@ -159,9 +159,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         FA: Fn() -> bool + Sync,
     {
         let (mut cursor, fields_index) = reader.into_cursor_and_fields_index();
-
         let external_documents_ids = self.index.external_documents_ids(wtxn)?;
-
         let mapping = create_fields_mapping(&mut self.fields_ids_map, &fields_index)?;
 
         let primary_key = cursor.primary_key().to_string();
@@ -320,6 +318,64 @@ impl<'a, 'i> Transform<'a, 'i> {
         // Now that we have a valid sorter that contains the user id and the obkv we
         // give it to the last transforming function which returns the TransformOutput.
         Ok(documents_count)
+    }
+
+    /// The counter part of `read_documents` that removes documents that may have been inserted into the transform previously.
+    pub fn remove_documents<FA>(
+        &mut self,
+        mut to_remove: Vec<String>,
+        wtxn: &mut heed::RwTxn,
+        should_abort: FA,
+    ) -> Result<usize>
+    where
+        FA: Fn() -> bool + Sync,
+    {
+        // there may be duplicates in the documents to remove.
+        to_remove.sort_unstable();
+        to_remove.dedup();
+
+        let external_documents_ids = self.index.external_documents_ids(wtxn)?;
+
+        let mut documents_deleted = 0;
+        for to_remove in to_remove {
+            if should_abort() {
+                return Err(Error::InternalError(InternalError::AbortedIndexation));
+            }
+
+            match self.new_external_documents_ids_builder.entry((*to_remove).into()) {
+                // if the document was added in a previous iteration of the transform we make it as deleted in the sorters.
+                Entry::Occupied(entry) => {
+                    let doc_id = *entry.get() as u32;
+                    self.original_sorter
+                        .insert(doc_id.to_be_bytes(), &[Operation::Deletion as u8])?;
+                    self.flattened_sorter
+                        .insert(doc_id.to_be_bytes(), &[Operation::Deletion as u8])?;
+
+                    // we must NOT update the list of replaced_documents_ids
+                    // Either:
+                    // 1. It's already in it and there is nothing to do
+                    // 2. It wasn't in it because the document was created by a previous batch and since
+                    //    we're removing it there is nothing to do.
+                    self.new_documents_ids.remove(doc_id);
+                    entry.remove_entry();
+                }
+                Entry::Vacant(entry) => {
+                    // If the document was already in the db we mark it as a `to_delete` document.
+                    // It'll be deleted later. We don't need to push anything to the sorters.
+                    if let Some(docid) = external_documents_ids.get(entry.key()) {
+                        self.replaced_documents_ids.insert(docid);
+                    } else {
+                        // if the document is nowehere to be found, there is nothing to do and we must NOT
+                        // increment the count of documents_deleted
+                        continue;
+                    }
+                }
+            };
+
+            documents_deleted += 1;
+        }
+
+        Ok(documents_deleted)
     }
 
     // Flatten a document from the fields ids map contained in self and insert the new
