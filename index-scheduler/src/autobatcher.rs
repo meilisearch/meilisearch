@@ -345,10 +345,11 @@ impl BatchKind {
                 deletion_ids.push(id);
                 Continue(BatchKind::DocumentClear { ids: deletion_ids })
             }
+            // we can autobatch the deletion and import if the index already exists
             (
                 BatchKind::DocumentDeletion { mut deletion_ids },
                 K::DocumentImport { method, allow_index_creation, primary_key }
-            ) => {
+            ) if index_already_exists => {
                 deletion_ids.push(id);
 
                 Continue(BatchKind::DocumentOperation {
@@ -357,6 +358,27 @@ impl BatchKind {
                     primary_key,
                     operation_ids: deletion_ids,
                 })
+            }
+            // we can autobatch the deletion and import if both can't create an index
+            (
+                BatchKind::DocumentDeletion { mut deletion_ids },
+                K::DocumentImport { method, allow_index_creation, primary_key }
+            ) if !allow_index_creation => {
+                deletion_ids.push(id);
+
+                Continue(BatchKind::DocumentOperation {
+                    method,
+                    allow_index_creation,
+                    primary_key,
+                    operation_ids: deletion_ids,
+                })
+            }
+            // we can't autobatch a deletion and an import if the index does not exists but would be created by an addition
+            (
+                this @ BatchKind::DocumentDeletion { .. },
+                K::DocumentImport { .. }
+            ) => {
+                Break(this)
             }
             (BatchKind::DocumentDeletion { mut deletion_ids }, K::DocumentDeletion) => {
                 deletion_ids.push(id);
@@ -678,12 +700,8 @@ mod tests {
         debug_snapshot!(autobatch_from(true, None, [doc_del(), doc_imp(UpdateDocuments, true, Some("catto"))]), @r###"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: true, primary_key: Some("catto"), operation_ids: [0, 1] }, false))"###);
         debug_snapshot!(autobatch_from(true, None, [doc_del(), doc_imp(ReplaceDocuments, false, Some("catto"))]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: Some("catto"), operation_ids: [0, 1] }, false))"###);
         debug_snapshot!(autobatch_from(true, None, [doc_del(), doc_imp(UpdateDocuments, false, Some("catto"))]), @r###"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: false, primary_key: Some("catto"), operation_ids: [0, 1] }, false))"###);
-        debug_snapshot!(autobatch_from(false, None, [doc_del(), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0, 1] }, false))");
-        debug_snapshot!(autobatch_from(false, None, [doc_del(), doc_imp(UpdateDocuments, true, None)]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0, 1] }, false))");
         debug_snapshot!(autobatch_from(false, None, [doc_del(), doc_imp(ReplaceDocuments, false, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0, 1] }, false))");
         debug_snapshot!(autobatch_from(false, None, [doc_del(), doc_imp(UpdateDocuments, false, None)]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0, 1] }, false))");
-        debug_snapshot!(autobatch_from(false, None, [doc_del(), doc_imp(ReplaceDocuments, true, Some("catto"))]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("catto"), operation_ids: [0, 1] }, false))"###);
-        debug_snapshot!(autobatch_from(false, None, [doc_del(), doc_imp(UpdateDocuments, true, Some("catto"))]), @r###"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: true, primary_key: Some("catto"), operation_ids: [0, 1] }, false))"###);
         debug_snapshot!(autobatch_from(false, None, [doc_del(), doc_imp(ReplaceDocuments, false, Some("catto"))]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: Some("catto"), operation_ids: [0, 1] }, false))"###);
         debug_snapshot!(autobatch_from(false, None, [doc_del(), doc_imp(UpdateDocuments, false, Some("catto"))]), @r###"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: false, primary_key: Some("catto"), operation_ids: [0, 1] }, false))"###);
     }
@@ -863,6 +881,12 @@ mod tests {
         debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments, false, None), doc_imp(ReplaceDocuments, false, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0, 1] }, false))");
         debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments, true, None), settings(true)]), @"Some((SettingsAndDocumentOperation { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
         debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments, false, None), settings(true)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0] }, false))");
+
+        // batch deletion and addition
+        debug_snapshot!(autobatch_from(false, None, [doc_del(), doc_imp(ReplaceDocuments, true, Some("catto"))]), @"Some((DocumentDeletion { deletion_ids: [0] }, false))");
+        debug_snapshot!(autobatch_from(false, None, [doc_del(), doc_imp(UpdateDocuments, true, Some("catto"))]), @"Some((DocumentDeletion { deletion_ids: [0] }, false))");
+        debug_snapshot!(autobatch_from(false, None, [doc_del(), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentDeletion { deletion_ids: [0] }, false))");
+        debug_snapshot!(autobatch_from(false, None, [doc_del(), doc_imp(UpdateDocuments, true, None)]), @"Some((DocumentDeletion { deletion_ids: [0] }, false))");
     }
 
     #[test]
