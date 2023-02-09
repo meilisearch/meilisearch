@@ -290,6 +290,8 @@ mod index_map {
 
         /// Attempts to delete and index.
         ///
+        ///  `end_deletion` must be called just after.
+        ///
         /// # Status table
         ///
         /// | Previous Status | New Status | Return value |
@@ -312,7 +314,9 @@ mod index_map {
             }
         }
 
-        /// Marks that an index finished deletion.
+        /// Marks that an index deletion finished.
+        ///
+        /// Must be used after calling `start_deletion`.
         ///
         /// # Status table
         ///
