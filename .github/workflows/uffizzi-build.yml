@@ -14,6 +14,26 @@ jobs:
       - name: checkout
         uses: actions/checkout@v3
 
+      - run: sudo apt-get install musl-tools
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          target: x86_64-unknown-linux-musl
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2.2.0
+
+      - name: Run cargo check without any default features
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --target x86_64-unknown-linux-musl --release 
+      
+      - name: Remove dockerignore so we can use the target folder in our docker build
+        run: rm -f .dockerignore
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
 

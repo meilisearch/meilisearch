@@ -82,7 +82,7 @@ jobs:
     name: Use Remote Workflow to Preview on Uffizzi
     needs:
       - cache-compose-file
-    uses: UffizziCloud/preview-action/.github/workflows/reusable.yaml@desc
+    uses: UffizziCloud/preview-action/.github/workflows/reusable.yaml@v2
     with:
       # If this workflow was triggered by a PR close event, cache-key will be an empty string
       # and this reusable workflow will delete the preview deployment.
@@ -95,8 +95,8 @@ jobs:
         `meilisearch` command. You should be able to access this instance of meilisearch running in
         the preview from the link Meilisearch Endpoint link given below.
          
-        Web Terminal Endpoint : ${{ needs.cache-compose-file.outputs.expected-url }}
-        Meilisearch Endpoint : ${{ needs.cache-compose-file.outputs.expected-url }}/meilisearch
+        Web Terminal Endpoint : <uffizzi-url>
+        Meilisearch Endpoint : <uffizzi-url>/meilisearch
     permissions:
       contents: read
       pull-requests: write
