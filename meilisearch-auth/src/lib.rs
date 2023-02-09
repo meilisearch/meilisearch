@@ -214,8 +214,7 @@ impl SearchRules {
                 map.iter()
                     .filter(|(pattern, _)| pattern.matches_str(index))
                     .max_by_key(|(pattern, _)| (pattern.is_exact(), pattern.len()))
-                    .map(|(_, rule)| rule.clone())
-                    .flatten()
+                    .and_then(|(_, rule)| rule.clone())
             }
         }
     }

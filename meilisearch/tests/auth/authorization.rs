@@ -445,7 +445,7 @@ async fn access_authorized_index_patterns() {
 
     // use created key.
     let key = response["key"].as_str().unwrap();
-    server.use_api_key(&key);
+    server.use_api_key(key);
 
     // refer to products_1 and products with modified api key.
     let index_1 = server.index("products_1");
@@ -515,7 +515,7 @@ async fn raise_error_non_authorized_index_patterns() {
 
     // use created key.
     let key = response["key"].as_str().unwrap();
-    server.use_api_key(&key);
+    server.use_api_key(key);
 
     // refer to products_1 and products_2 with modified api key.
     let product_1_index = server.index("products_1");
@@ -582,7 +582,7 @@ async fn pattern_indexes() {
     let (response, code) = server.add_api_key(content).await;
     assert_eq!(201, code, "{:?}", &response);
     let key = response["key"].as_str().expect("Key is not string");
-    server.use_api_key(&key);
+    server.use_api_key(key);
 
     // Create Index products_1 using generated api key
     let products_1 = server.index("products_1");
@@ -859,7 +859,7 @@ async fn lazy_create_index_from_pattern() {
 
         // use created key.
         let key = response["key"].as_str().unwrap();
-        server.use_api_key(&key);
+        server.use_api_key(key);
 
         // try to create a index via add documents route
         let index = server.index("products_1");
