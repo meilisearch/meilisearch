@@ -45,6 +45,33 @@ use option::ScheduleSnapshot;
 
 use crate::error::MeilisearchHttpError;
 
+/// Default number of simultaneously opened indexes,
+/// lower for Windows that dedicates a smaller virtual address space to processes.
+///
+/// The value was chosen this way:
+///
+/// - Windows provides a small virtual address space of about 10TiB to processes.
+/// - The chosen value allows for indexes to reach a safe size of 1TiB.
+/// - This can accomodate an unlimited number of indexes as long as they stay below 1TiB size.
+#[cfg(windows)]
+const DEFAULT_INDEX_COUNT: usize = 10;
+/// Default number of simultaneously opened indexes.
+///
+/// The higher, the better for avoiding reopening indexes.
+///
+/// The value was chosen this way:
+///
+/// - Opening an index consumes a file descriptor.
+/// - The default on many unices is about 256 file descriptors for a process.
+/// - 100 is a little bit less than half this value.
+///
+/// In the future, this value could be computed from the dynamic number of allowed file descriptors for the current process.
+///
+/// On Unices, this value is largely irrelevant to virtual address space, because due to index resizing the indexes should take virtual memory in the same ballpark
+/// as their disk size and it is unlikely for a user to have a sum of index weighing 128TB on a single Meilisearch node.
+#[cfg(not(windows))]
+const DEFAULT_INDEX_COUNT: usize = 100;
+
 /// Check if a db is empty. It does not provide any information on the
 /// validity of the data in it.
 /// We consider a database as non empty when it's a non empty directory.
@@ -209,7 +236,7 @@ fn open_or_create_database_unchecked(
             indexer_config: (&opt.indexer_options).try_into()?,
             autobatching_enabled: true,
             index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().get_bytes() as usize,
-            index_count: 20,
+            index_count: DEFAULT_INDEX_COUNT,
         })?)
     };
 
