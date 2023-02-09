@@ -116,13 +116,12 @@ mod index_map {
         /// After the index is physically closed, the in memory map must still be updated to take this into account.
         /// To do so, a `ReopenableIndex` is returned, that can be used to either definitely close or definitely open
         /// the index without waiting anymore.
-        pub fn wait_timeout(self, timeout: Duration) -> ReopenableIndex {
-            self.closing_event.wait_timeout(timeout);
-            ReopenableIndex {
+        pub fn wait_timeout(self, timeout: Duration) -> Option<ReopenableIndex> {
+            self.closing_event.wait_timeout(timeout).then_some(ReopenableIndex {
                 uuid: self.uuid,
                 map_size: self.map_size,
                 generation: self.generation,
-            }
+            })
         }
     }
 
@@ -505,7 +504,11 @@ impl IndexMapper {
                     if tries >= 100 {
                         panic!("Too many attempts to close index {name} prior to deletion.")
                     }
-                    let reopen = reopen.wait_timeout(Duration::from_secs(6));
+                    let reopen = if let Some(reopen) = reopen.wait_timeout(Duration::from_secs(6)) {
+                        reopen
+                    } else {
+                        continue;
+                    };
                     reopen.close(&mut self.index_map.write().unwrap());
                     continue;
                 }
@@ -585,7 +588,11 @@ impl IndexMapper {
                 Available(index) => break index,
                 Closing(reopen) => {
                     // Avoiding deadlocks: no lock taken while doing this operation.
-                    let reopen = reopen.wait_timeout(Duration::from_secs(6));
+                    let reopen = if let Some(reopen) = reopen.wait_timeout(Duration::from_secs(6)) {
+                        reopen
+                    } else {
+                        continue;
+                    };
                     let index_path = self.base_path.join(uuid.to_string());
                     // take the lock to reopen the environment.
                     reopen.reopen(&mut self.index_map.write().unwrap(), &index_path)?;
