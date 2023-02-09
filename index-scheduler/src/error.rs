@@ -100,9 +100,9 @@ pub enum Error {
     InvalidIndexUid { index_uid: String },
     #[error("Task `{0}` not found.")]
     TaskNotFound(TaskId),
-    #[error("Query parameters to filter the tasks to delete are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.")]
+    #[error("Query parameters to filter the tasks to delete are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.")]
     TaskDeletionWithEmptyQuery,
-    #[error("Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.")]
+    #[error("Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.")]
     TaskCancelationWithEmptyQuery,
 
     #[error(transparent)]
@@ -141,8 +141,8 @@ impl ErrorCode for Error {
             Error::IndexAlreadyExists(_) => Code::IndexAlreadyExists,
             Error::SwapDuplicateIndexesFound(_) => Code::InvalidSwapDuplicateIndexFound,
             Error::SwapDuplicateIndexFound(_) => Code::InvalidSwapDuplicateIndexFound,
-            Error::SwapIndexNotFound(_) => Code::InvalidSwapIndexes,
-            Error::SwapIndexesNotFound(_) => Code::InvalidSwapIndexes,
+            Error::SwapIndexNotFound(_) => Code::IndexNotFound,
+            Error::SwapIndexesNotFound(_) => Code::IndexNotFound,
             Error::InvalidTaskDate { field, .. } => (*field).into(),
             Error::InvalidTaskUids { .. } => Code::InvalidTaskUids,
             Error::InvalidTaskStatuses { .. } => Code::InvalidTaskStatuses,

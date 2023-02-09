@@ -68,7 +68,7 @@ Install one of our SDKs in your project for seamless integration between Meilise
 
 Take a look at the complete [Meilisearch integration list](https://docs.meilisearch.com/learn/what_is_meilisearch/sdks.html).
 
-![Logos belonging to different languages and frameworks supported by Meilisearch, including React, Ruby on Rails, Go, Rust, and PHP](assets/integrations.png)
+[![Logos belonging to different languages and frameworks supported by Meilisearch, including React, Ruby on Rails, Go, Rust, and PHP](assets/integrations.png)](https://docs.meilisearch.com/learn/what_is_meilisearch/sdks.html)
 
 ## ⚙️ Advanced usage
 
@@ -101,6 +101,14 @@ Meilisearch is a search engine created by [Meili](https://www.welcometothejungle
 
 Thank you for your support!
 
-## 📦 Internal crates and their versioning
+## 👩‍💻 Contributing
 
-The crates in this repository are not currently available on crates.io and do not follow [semver conventions](https://semver.org). However, the Meilisearch search engine is well versioned, and releases follow the semver conventions.
+Meilisearch is, and will always be, open-source! If you want to contribute to the project, please take a look at [our contribution guidelines](CONTRIBUTING.md).
+
+## 📦 Versioning
+
+Meilisearch releases and their associated binaries are available [in this GitHub page](https://github.com/meilisearch/meilisearch/releases).
+
+The binaries are versioned following [SemVer conventions](https://semver.org/). To know more, read our [versioning policy](https://github.com/meilisearch/engine-team/blob/main/resources/versioning-policy.md).
+
+Differently from the binaries, crates in this repository are not currently available on [crates.io](https://crates.io/) and do not follow [SemVer conventions](https://semver.org).

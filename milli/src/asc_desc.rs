@@ -55,6 +55,9 @@ impl From<AscDescError> for CriterionError {
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoRadius") => {
                 CriterionError::ReservedNameForFilter { name: "_geoRadius".to_string() }
             }
+            AscDescError::ReservedKeyword { name } if name.starts_with("_geoBoundingBox") => {
+                CriterionError::ReservedNameForFilter { name: "_geoBoundingBox".to_string() }
+            }
             AscDescError::ReservedKeyword { name } => CriterionError::ReservedName { name },
         }
     }
@@ -89,7 +92,10 @@ impl FromStr for Member {
                 Ok(Member::Geo([lat, lng]))
             }
             None => {
-                if is_reserved_keyword(text) || text.starts_with("_geoRadius(") {
+                if is_reserved_keyword(text)
+                    || text.starts_with("_geoRadius(")
+                    || text.starts_with("_geoBoundingBox(")
+                {
                     return Err(AscDescError::ReservedKeyword { name: text.to_string() })?;
                 }
                 Ok(Member::Field(text.to_string()))
@@ -189,6 +195,9 @@ impl From<AscDescError> for SortError {
             }
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoRadius") => {
                 SortError::ReservedNameForFilter { name: String::from("_geoRadius") }
+            }
+            AscDescError::ReservedKeyword { name } if name.starts_with("_geoBoundingBox") => {
+                SortError::ReservedNameForFilter { name: String::from("_geoBoundingBox") }
             }
             AscDescError::ReservedKeyword { name } => SortError::ReservedName { name },
         }

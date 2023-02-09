@@ -348,10 +348,10 @@ impl Index {
     /* external documents ids */
 
     /// Writes the external documents ids and internal ids (i.e. `u32`).
-    pub(crate) fn put_external_documents_ids<'a>(
+    pub(crate) fn put_external_documents_ids(
         &self,
         wtxn: &mut RwTxn,
-        external_documents_ids: &ExternalDocumentsIds<'a>,
+        external_documents_ids: &ExternalDocumentsIds<'_>,
     ) -> heed::Result<()> {
         let ExternalDocumentsIds { hard, soft, .. } = external_documents_ids;
         let hard = hard.as_fst().as_bytes();
@@ -426,7 +426,7 @@ impl Index {
     }
 
     /// Returns the `rtree` which associates coordinates to documents ids.
-    pub fn geo_rtree<'t>(&self, rtxn: &'t RoTxn) -> Result<Option<RTree<GeoPoint>>> {
+    pub fn geo_rtree(&self, rtxn: &RoTxn) -> Result<Option<RTree<GeoPoint>>> {
         match self
             .main
             .get::<_, Str, SerdeBincode<RTree<GeoPoint>>>(rtxn, main_key::GEO_RTREE_KEY)?
@@ -1206,7 +1206,7 @@ pub(crate) mod tests {
         self, DeleteDocuments, DeletionStrategy, IndexDocuments, IndexDocumentsConfig,
         IndexDocumentsMethod, IndexerConfig, Settings,
     };
-    use crate::{db_snap, obkv_to_json, Index, Search, SearchResult};
+    use crate::{db_snap, obkv_to_json, Filter, Index, Search, SearchResult};
 
     pub(crate) struct TempIndex {
         pub inner: Index,
@@ -1502,6 +1502,108 @@ pub(crate) mod tests {
 
         let user_defined = index.user_defined_searchable_fields(&rtxn).unwrap().unwrap();
         assert_eq!(user_defined, &["doggo", "name"]);
+    }
+
+    #[test]
+    fn test_basic_geo_bounding_box() {
+        let index = TempIndex::new();
+
+        index
+            .update_settings(|settings| {
+                settings.set_filterable_fields(hashset! { S("_geo") });
+            })
+            .unwrap();
+        index
+            .add_documents(documents!([
+                { "id": 0, "_geo": { "lat": 0, "lng": 0 } },
+                { "id": 1, "_geo": { "lat": 0, "lng": -175 } },
+                { "id": 2, "_geo": { "lat": 0, "lng": 175 } },
+                { "id": 3, "_geo": { "lat": 85, "lng": 0 } },
+                { "id": 4, "_geo": { "lat": -85, "lng": 0 } },
+            ]))
+            .unwrap();
+
+        // ensure we get the right real searchable fields + user defined searchable fields
+        let rtxn = index.read_txn().unwrap();
+        let mut search = index.search(&rtxn);
+
+        // exact match a document
+        let search_result = search
+            .filter(Filter::from_str("_geoBoundingBox([0, 0], [0, 0])").unwrap().unwrap())
+            .execute()
+            .unwrap();
+        insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0]>");
+
+        // match a document in the middle of the rectangle
+        let search_result = search
+            .filter(Filter::from_str("_geoBoundingBox([10, -10], [-10, 10])").unwrap().unwrap())
+            .execute()
+            .unwrap();
+        insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0]>");
+
+        // select everything
+        let search_result = search
+            .filter(Filter::from_str("_geoBoundingBox([90, -180], [-90, 180])").unwrap().unwrap())
+            .execute()
+            .unwrap();
+        insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0, 1, 2, 3, 4]>");
+
+        // go on the edge of the longitude
+        let search_result = search
+            .filter(Filter::from_str("_geoBoundingBox([0, 180], [0, -170])").unwrap().unwrap())
+            .execute()
+            .unwrap();
+        insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[1]>");
+
+        // go on the other edge of the longitude
+        let search_result = search
+            .filter(Filter::from_str("_geoBoundingBox([0, 170], [0, -180])").unwrap().unwrap())
+            .execute()
+            .unwrap();
+        insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[2]>");
+
+        // wrap around the longitude
+        let search_result = search
+            .filter(Filter::from_str("_geoBoundingBox([0, 170], [0, -170])").unwrap().unwrap())
+            .execute()
+            .unwrap();
+        insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[1, 2]>");
+
+        // go on the edge of the latitude
+        let search_result = search
+            .filter(Filter::from_str("_geoBoundingBox([90, 0], [80, 0])").unwrap().unwrap())
+            .execute()
+            .unwrap();
+        insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[3]>");
+
+        // go on the edge of the latitude
+        let search_result = search
+            .filter(Filter::from_str("_geoBoundingBox([-80, 0], [-90, 0])").unwrap().unwrap())
+            .execute()
+            .unwrap();
+        insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[4]>");
+
+        // the requests that don't make sense
+
+        // try to wrap around the latitude
+        let error = search
+            .filter(Filter::from_str("_geoBoundingBox([-80, 0], [80, 0])").unwrap().unwrap())
+            .execute()
+            .unwrap_err();
+        insta::assert_display_snapshot!(error, @r###"
+        The top latitude `-80` is below the bottom latitude `80`.
+        32:33 _geoBoundingBox([-80, 0], [80, 0])
+        "###);
+
+        // send a top latitude lower than the bottow latitude
+        let error = search
+            .filter(Filter::from_str("_geoBoundingBox([-10, 0], [10, 0])").unwrap().unwrap())
+            .execute()
+            .unwrap_err();
+        insta::assert_display_snapshot!(error, @r###"
+        The top latitude `-10` is below the bottom latitude `10`.
+        32:33 _geoBoundingBox([-10, 0], [10, 0])
+        "###);
     }
 
     #[test]
@@ -2291,5 +2393,70 @@ pub(crate) mod tests {
             let id = obkv.get(primary_key_id).unwrap();
             assert!(all_ids.insert(id));
         }
+    }
+
+    #[test]
+    fn bug_3007() {
+        // https://github.com/meilisearch/meilisearch/issues/3007
+
+        use crate::error::{GeoError, UserError};
+        let index = TempIndex::new();
+
+        // Given is an index with a geo field NOT contained in the sortable_fields of the settings
+        index
+            .update_settings(|settings| {
+                settings.set_primary_key("id".to_string());
+                settings.set_filterable_fields(HashSet::from(["_geo".to_string()]));
+            })
+            .unwrap();
+
+        // happy path
+        index.add_documents(documents!({ "id" : 5, "_geo": {"lat": 12.0, "lng": 11.0}})).unwrap();
+
+        db_snap!(index, geo_faceted_documents_ids);
+
+        // both are unparseable, we expect GeoError::BadLatitudeAndLongitude
+        let err1 = index
+            .add_documents(
+                documents!({ "id" : 6, "_geo": {"lat": "unparseable", "lng": "unparseable"}}),
+            )
+            .unwrap_err();
+        assert!(matches!(
+            err1,
+            Error::UserError(UserError::InvalidGeoField(GeoError::BadLatitudeAndLongitude { .. }))
+        ));
+
+        db_snap!(index, geo_faceted_documents_ids); // ensure that no more document was inserted
+    }
+
+    #[test]
+    fn unexpected_extra_fields_in_geo_field() {
+        let index = TempIndex::new();
+
+        index
+            .update_settings(|settings| {
+                settings.set_primary_key("id".to_string());
+                settings.set_filterable_fields(HashSet::from(["_geo".to_string()]));
+            })
+            .unwrap();
+
+        let err = index
+            .add_documents(
+                documents!({ "id" : "doggo", "_geo": { "lat": 1, "lng": 2, "doggo": "are the best" }}),
+            )
+            .unwrap_err();
+        insta::assert_display_snapshot!(err, @r###"The `_geo` field in the document with the id: `"\"doggo\""` contains the following unexpected fields: `{"doggo":"are the best"}`."###);
+
+        db_snap!(index, geo_faceted_documents_ids); // ensure that no documents were inserted
+
+        // multiple fields and complex values
+        let err = index
+            .add_documents(
+                documents!({ "id" : "doggo", "_geo": { "lat": 1, "lng": 2, "doggo": "are the best", "and": { "all": ["cats", { "are": "beautiful" } ] } } }),
+            )
+            .unwrap_err();
+        insta::assert_display_snapshot!(err, @r###"The `_geo` field in the document with the id: `"\"doggo\""` contains the following unexpected fields: `{"and":{"all":["cats",{"are":"beautiful"}]},"doggo":"are the best"}`."###);
+
+        db_snap!(index, geo_faceted_documents_ids); // ensure that no documents were inserted
     }
 }

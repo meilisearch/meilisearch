@@ -1,6 +1,7 @@
 use actix_web::http::header::ContentType;
 use actix_web::test;
 use http::header::ACCEPT_ENCODING;
+use meili_snap::{json_string, snapshot};
 use serde_json::{json, Value};
 
 use crate::common::encoder::Encoder;
@@ -176,7 +177,7 @@ async fn error_create_existing_index() {
         "message": "Index `test` already exists.",
         "code": "index_already_exists",
         "type": "invalid_request",
-        "link":"https://docs.meilisearch.com/errors#index-already-exists"
+        "link":"https://docs.meilisearch.com/errors#index_already_exists"
     });
 
     assert_eq!(response["error"], expected_response);
@@ -188,13 +189,13 @@ async fn error_create_with_invalid_index_uid() {
     let index = server.index("test test#!");
     let (response, code) = index.create(None).await;
 
-    let expected_response = json!({
-        "message": "`test test#!` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
-        "code": "invalid_index_uid",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-index-uid"
-    });
-
-    assert_eq!(response, expected_response);
-    assert_eq!(code, 400);
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value at `.uid`: `test test#!` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+      "code": "invalid_index_uid",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
+    }
+    "###);
 }

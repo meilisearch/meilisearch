@@ -159,6 +159,11 @@ mod tests {
             ("_geoPoint(42, 75):asc", ReservedNameForSort { name: S("_geoPoint") }),
             ("_geoRadius:asc", ReservedNameForFilter { name: S("_geoRadius") }),
             ("_geoRadius(42, 75, 59):asc", ReservedNameForFilter { name: S("_geoRadius") }),
+            ("_geoBoundingBox:asc", ReservedNameForFilter { name: S("_geoBoundingBox") }),
+            (
+                "_geoBoundingBox([42, 75], [75, 59]):asc",
+                ReservedNameForFilter { name: S("_geoBoundingBox") },
+            ),
         ];
 
         for (input, expected) in invalid_criteria {

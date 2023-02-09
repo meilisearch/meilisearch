@@ -157,9 +157,9 @@ impl FacetsUpdateIncrementalInner {
     ///
     /// ## Return
     /// See documentation of `insert_in_level`
-    fn insert_in_level_0<'t>(
+    fn insert_in_level_0(
         &self,
-        txn: &'t mut RwTxn,
+        txn: &mut RwTxn,
         field_id: u16,
         facet_value: &[u8],
         docids: &RoaringBitmap,
@@ -211,9 +211,9 @@ impl FacetsUpdateIncrementalInner {
     /// - `InsertionResult::Insert` means that inserting the `facet_value` into the `level` resulted
     /// in the addition of a new key in that level, and that therefore the number of children
     /// of the parent node should be incremented.
-    fn insert_in_level<'t>(
+    fn insert_in_level(
         &self,
-        txn: &'t mut RwTxn,
+        txn: &mut RwTxn,
         field_id: u16,
         level: u8,
         facet_value: &[u8],
@@ -348,9 +348,9 @@ impl FacetsUpdateIncrementalInner {
     }
 
     /// Insert the given facet value and corresponding document ids in the database.
-    pub fn insert<'t>(
+    pub fn insert(
         &self,
-        txn: &'t mut RwTxn,
+        txn: &mut RwTxn,
         field_id: u16,
         facet_value: &[u8],
         docids: &RoaringBitmap,
@@ -470,9 +470,9 @@ impl FacetsUpdateIncrementalInner {
     /// in level 1, the key with the left bound `3` had to be changed to the next facet value (e.g. 4).
     /// In that case `DeletionResult::Reduce` is returned. The parent of the reduced key may need to adjust
     /// its left bound as well.
-    fn delete_in_level<'t>(
+    fn delete_in_level(
         &self,
-        txn: &'t mut RwTxn,
+        txn: &mut RwTxn,
         field_id: u16,
         level: u8,
         facet_value: &[u8],
@@ -529,9 +529,9 @@ impl FacetsUpdateIncrementalInner {
         }
     }
 
-    fn delete_in_level_0<'t>(
+    fn delete_in_level_0(
         &self,
-        txn: &'t mut RwTxn,
+        txn: &mut RwTxn,
         field_id: u16,
         facet_value: &[u8],
         docids: &RoaringBitmap,
@@ -557,9 +557,9 @@ impl FacetsUpdateIncrementalInner {
         }
     }
 
-    pub fn delete<'t>(
+    pub fn delete(
         &self,
-        txn: &'t mut RwTxn,
+        txn: &mut RwTxn,
         field_id: u16,
         facet_value: &[u8],
         docids: &RoaringBitmap,

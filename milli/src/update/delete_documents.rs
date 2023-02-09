@@ -574,9 +574,9 @@ fn remove_from_word_docids(
     Ok(())
 }
 
-fn remove_docids_from_field_id_docid_facet_value<'i, 'a>(
-    index: &'i Index,
-    wtxn: &'a mut heed::RwTxn,
+fn remove_docids_from_field_id_docid_facet_value(
+    index: &Index,
+    wtxn: &mut heed::RwTxn,
     facet_type: FacetType,
     field_id: FieldId,
     to_remove: &RoaringBitmap,

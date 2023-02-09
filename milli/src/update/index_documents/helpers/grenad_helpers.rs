@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::fs::File;
-use std::io::{self, Seek, SeekFrom};
+use std::io::{self, Seek};
 use std::time::Instant;
 
 use grenad::{CompressionType, Sorter};
@@ -66,7 +66,7 @@ pub fn sorter_into_reader(
 
 pub fn writer_into_reader(writer: grenad::Writer<File>) -> Result<grenad::Reader<File>> {
     let mut file = writer.into_inner()?;
-    file.seek(SeekFrom::Start(0))?;
+    file.rewind()?;
     grenad::Reader::new(file).map_err(Into::into)
 }
 

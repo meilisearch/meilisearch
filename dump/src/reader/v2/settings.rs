@@ -1,35 +1,33 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::Display;
+use std::fmt;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
-use once_cell::sync::Lazy;
-use regex::Regex;
 use serde::{Deserialize, Deserializer};
 
 #[cfg(test)]
 fn serialize_with_wildcard<S>(
-    field: &Option<Option<Vec<String>>>,
+    field: &Setting<Vec<String>>,
     s: S,
 ) -> std::result::Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {
-    let wildcard = vec!["*".to_string()];
-    s.serialize_some(&field.as_ref().map(|o| o.as_ref().unwrap_or(&wildcard)))
-}
+    use serde::Serialize;
 
-fn deserialize_some<'de, T, D>(deserializer: D) -> std::result::Result<Option<T>, D::Error>
-where
-    T: Deserialize<'de>,
-    D: Deserializer<'de>,
-{
-    Deserialize::deserialize(deserializer).map(Some)
+    let wildcard = vec!["*".to_string()];
+    match field {
+        Setting::Set(value) => Some(value),
+        Setting::Reset => Some(&wildcard),
+        Setting::NotSet => None,
+    }
+    .serialize(s)
 }
 
 #[derive(Clone, Default, Debug)]
 #[cfg_attr(test, derive(serde::Serialize))]
 pub struct Checked;
+
 #[derive(Clone, Default, Debug, Deserialize)]
 #[cfg_attr(test, derive(serde::Serialize))]
 pub struct Unchecked;
@@ -42,75 +40,54 @@ pub struct Unchecked;
 pub struct Settings<T> {
     #[serde(
         default,
-        deserialize_with = "deserialize_some",
         serialize_with = "serialize_with_wildcard",
-        skip_serializing_if = "Option::is_none"
+        skip_serializing_if = "Setting::is_not_set"
     )]
-    pub displayed_attributes: Option<Option<Vec<String>>>,
+    pub displayed_attributes: Setting<Vec<String>>,
 
     #[serde(
         default,
-        deserialize_with = "deserialize_some",
         serialize_with = "serialize_with_wildcard",
-        skip_serializing_if = "Option::is_none"
+        skip_serializing_if = "Setting::is_not_set"
     )]
-    pub searchable_attributes: Option<Option<Vec<String>>>,
+    pub searchable_attributes: Setting<Vec<String>>,
 
-    #[serde(
-        default,
-        deserialize_with = "deserialize_some",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub filterable_attributes: Option<Option<BTreeSet<String>>>,
-
-    #[serde(
-        default,
-        deserialize_with = "deserialize_some",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub ranking_rules: Option<Option<Vec<String>>>,
-    #[serde(
-        default,
-        deserialize_with = "deserialize_some",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub stop_words: Option<Option<BTreeSet<String>>>,
-    #[serde(
-        default,
-        deserialize_with = "deserialize_some",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub synonyms: Option<Option<BTreeMap<String, Vec<String>>>>,
-    #[serde(
-        default,
-        deserialize_with = "deserialize_some",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub distinct_attribute: Option<Option<String>>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub filterable_attributes: Setting<BTreeSet<String>>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub sortable_attributes: Setting<BTreeSet<String>>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub ranking_rules: Setting<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub stop_words: Setting<BTreeSet<String>>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub synonyms: Setting<BTreeMap<String, Vec<String>>>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    pub distinct_attribute: Setting<String>,
 
     #[serde(skip)]
     pub _kind: PhantomData<T>,
 }
 
 impl Settings<Unchecked> {
-    pub fn check(mut self) -> Settings<Checked> {
-        let displayed_attributes = match self.displayed_attributes.take() {
-            Some(Some(fields)) => {
+    pub fn check(self) -> Settings<Checked> {
+        let displayed_attributes = match self.displayed_attributes {
+            Setting::Set(fields) => {
                 if fields.iter().any(|f| f == "*") {
-                    Some(None)
+                    Setting::Reset
                 } else {
-                    Some(Some(fields))
+                    Setting::Set(fields)
                 }
             }
             otherwise => otherwise,
         };
 
-        let searchable_attributes = match self.searchable_attributes.take() {
-            Some(Some(fields)) => {
+        let searchable_attributes = match self.searchable_attributes {
+            Setting::Set(fields) => {
                 if fields.iter().any(|f| f == "*") {
-                    Some(None)
+                    Setting::Reset
                 } else {
-                    Some(Some(fields))
+                    Setting::Set(fields)
                 }
             }
             otherwise => otherwise,
@@ -120,6 +97,7 @@ impl Settings<Unchecked> {
             displayed_attributes,
             searchable_attributes,
             filterable_attributes: self.filterable_attributes,
+            sortable_attributes: self.sortable_attributes,
             ranking_rules: self.ranking_rules,
             stop_words: self.stop_words,
             synonyms: self.synonyms,
@@ -129,10 +107,61 @@ impl Settings<Unchecked> {
     }
 }
 
-static ASC_DESC_REGEX: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"(asc|desc)\(([\w_-]+)\)"#).unwrap());
+#[derive(Debug, Clone, PartialEq)]
+pub enum Setting<T> {
+    Set(T),
+    Reset,
+    NotSet,
+}
 
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+impl<T> Default for Setting<T> {
+    fn default() -> Self {
+        Self::NotSet
+    }
+}
+
+impl<T> Setting<T> {
+    pub const fn is_not_set(&self) -> bool {
+        matches!(self, Self::NotSet)
+    }
+
+    pub fn map<A>(self, f: fn(T) -> A) -> Setting<A> {
+        match self {
+            Setting::Set(a) => Setting::Set(f(a)),
+            Setting::Reset => Setting::Reset,
+            Setting::NotSet => Setting::NotSet,
+        }
+    }
+}
+
+#[cfg(test)]
+impl<T: serde::Serialize> serde::Serialize for Setting<T> {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::Set(value) => Some(value),
+            // Usually not_set isn't serialized by setting skip_serializing_if field attribute
+            Self::NotSet | Self::Reset => None,
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for Setting<T> {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Deserialize::deserialize(deserializer).map(|x| match x {
+            Some(x) => Self::Set(x),
+            None => Self::Reset, // Reset is forced by sending null value
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Criterion {
     /// Sorted by decreasing number of matched query terms.
     /// Query words at the front of an attribute is considered better than if it was at the back.
@@ -142,8 +171,11 @@ pub enum Criterion {
     /// Sorted by increasing distance between matched query terms.
     Proximity,
     /// Documents with quey words contained in more important
-    /// attributes are considred better.
+    /// attributes are considered better.
     Attribute,
+    /// Dynamically sort at query time the documents. None, one or multiple Asc/Desc sortable
+    /// attributes can be used in place of this criterion at query time.
+    Sort,
     /// Sorted by the similarity of the matched words with the query words.
     Exactness,
     /// Sorted by the increasing value of the field specified.
@@ -152,40 +184,86 @@ pub enum Criterion {
     Desc(String),
 }
 
-impl FromStr for Criterion {
-    type Err = ();
-
-    fn from_str(txt: &str) -> Result<Criterion, Self::Err> {
-        match txt {
-            "words" => Ok(Criterion::Words),
-            "typo" => Ok(Criterion::Typo),
-            "proximity" => Ok(Criterion::Proximity),
-            "attribute" => Ok(Criterion::Attribute),
-            "exactness" => Ok(Criterion::Exactness),
-            text => {
-                let caps = ASC_DESC_REGEX.captures(text).ok_or(())?;
-                let order = caps.get(1).unwrap().as_str();
-                let field_name = caps.get(2).unwrap().as_str();
-                match order {
-                    "asc" => Ok(Criterion::Asc(field_name.to_string())),
-                    "desc" => Ok(Criterion::Desc(field_name.to_string())),
-                    _text => Err(()),
-                }
-            }
+impl Criterion {
+    /// Returns the field name parameter of this criterion.
+    pub fn field_name(&self) -> Option<&str> {
+        match self {
+            Criterion::Asc(name) | Criterion::Desc(name) => Some(name),
+            _otherwise => None,
         }
     }
 }
 
-impl Display for Criterion {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl FromStr for Criterion {
+    // since we're not going to show the custom error message we can override the
+    // error type.
+    type Err = ();
+
+    fn from_str(text: &str) -> Result<Criterion, Self::Err> {
+        match text {
+            "words" => Ok(Criterion::Words),
+            "typo" => Ok(Criterion::Typo),
+            "proximity" => Ok(Criterion::Proximity),
+            "attribute" => Ok(Criterion::Attribute),
+            "sort" => Ok(Criterion::Sort),
+            "exactness" => Ok(Criterion::Exactness),
+            text => match AscDesc::from_str(text) {
+                Ok(AscDesc::Asc(field)) => Ok(Criterion::Asc(field)),
+                Ok(AscDesc::Desc(field)) => Ok(Criterion::Desc(field)),
+                Err(_) => Err(()),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+pub enum AscDesc {
+    Asc(String),
+    Desc(String),
+}
+
+impl FromStr for AscDesc {
+    type Err = ();
+
+    // since we don't know if this comes from the old or new syntax we need to check
+    // for both syntax.
+    // WARN: this code doesn't come from the original meilisearch v0.22.0 but was
+    // written specifically to be able to import the dump of meilisearch v0.21.0 AND
+    // meilisearch v0.22.0.
+    fn from_str(text: &str) -> Result<AscDesc, Self::Err> {
+        if let Some((field_name, asc_desc)) = text.rsplit_once(':') {
+            match asc_desc {
+                "asc" => Ok(AscDesc::Asc(field_name.to_string())),
+                "desc" => Ok(AscDesc::Desc(field_name.to_string())),
+                _ => Err(()),
+            }
+        } else if text.starts_with("asc(") && text.ends_with(')') {
+            Ok(AscDesc::Asc(
+                text.strip_prefix("asc(").unwrap().strip_suffix(')').unwrap().to_string(),
+            ))
+        } else if text.starts_with("desc(") && text.ends_with(')') {
+            Ok(AscDesc::Desc(
+                text.strip_prefix("desc(").unwrap().strip_suffix(')').unwrap().to_string(),
+            ))
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl fmt::Display for Criterion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Criterion::*;
+
         match self {
-            Criterion::Words => write!(f, "words"),
-            Criterion::Typo => write!(f, "typo"),
-            Criterion::Proximity => write!(f, "proximity"),
-            Criterion::Attribute => write!(f, "attribute"),
-            Criterion::Exactness => write!(f, "exactness"),
-            Criterion::Asc(field_name) => write!(f, "asc({})", field_name),
-            Criterion::Desc(field_name) => write!(f, "desc({})", field_name),
+            Words => f.write_str("words"),
+            Typo => f.write_str("typo"),
+            Proximity => f.write_str("proximity"),
+            Attribute => f.write_str("attribute"),
+            Sort => f.write_str("sort"),
+            Exactness => f.write_str("exactness"),
+            Asc(attr) => write!(f, "{}:asc", attr),
+            Desc(attr) => write!(f, "{}:desc", attr),
         }
     }
 }

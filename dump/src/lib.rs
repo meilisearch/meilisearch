@@ -198,7 +198,7 @@ impl From<KindWithContent> for KindDump {
 #[cfg(test)]
 pub(crate) mod test {
     use std::fs::File;
-    use std::io::{Seek, SeekFrom};
+    use std::io::Seek;
     use std::str::FromStr;
 
     use big_s::S;
@@ -409,7 +409,7 @@ pub(crate) mod test {
         // create the dump
         let mut file = tempfile::tempfile().unwrap();
         dump.persist_to(&mut file).unwrap();
-        file.seek(SeekFrom::Start(0)).unwrap();
+        file.rewind().unwrap();
 
         file
     }

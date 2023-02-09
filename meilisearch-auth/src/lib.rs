@@ -10,6 +10,7 @@ use error::{AuthControllerError, Result};
 use maplit::hashset;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::keys::{Action, CreateApiKey, Key, PatchApiKey};
+use meilisearch_types::milli::update::Setting;
 use serde::{Deserialize, Serialize};
 pub use store::open_auth_store_env;
 use store::{generate_key_as_hexa, HeedAuthStore};
@@ -33,6 +34,11 @@ impl AuthController {
         Ok(Self { store: Arc::new(store), master_key: master_key.clone() })
     }
 
+    /// Return the size of the `AuthController` database in bytes.
+    pub fn size(&self) -> Result<u64> {
+        self.store.size()
+    }
+
     pub fn create_key(&self, create_key: CreateApiKey) -> Result<Key> {
         match self.store.get_api_key(create_key.uid)? {
             Some(_) => Err(AuthControllerError::ApiKeyAlreadyExists(create_key.uid.to_string())),
@@ -42,8 +48,14 @@ impl AuthController {
 
     pub fn update_key(&self, uid: Uuid, patch: PatchApiKey) -> Result<Key> {
         let mut key = self.get_key(uid)?;
-        key.description = patch.description;
-        key.name = patch.name;
+        match patch.description {
+            Setting::NotSet => (),
+            description => key.description = description.set(),
+        };
+        match patch.name {
+            Setting::NotSet => (),
+            name => key.name = name.set(),
+        };
         key.updated_at = OffsetDateTime::now_utc();
         self.store.put_api_key(key)
     }

@@ -5,7 +5,6 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(feature = "test-traits", derive(proptest_derive::Arbitrary))]
 #[cfg_attr(test, derive(serde::Serialize))]
 pub struct ResponseError {
     #[serde(skip)]

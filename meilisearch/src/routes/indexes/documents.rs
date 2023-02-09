@@ -1,5 +1,4 @@
 use std::io::ErrorKind;
-use std::num::ParseIntError;
 
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;
@@ -9,25 +8,25 @@ use deserr::DeserializeFromValue;
 use futures::StreamExt;
 use index_scheduler::IndexScheduler;
 use log::debug;
+use meilisearch_types::deserr::query_params::Param;
+use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
 use meilisearch_types::error::deserr_codes::*;
-use meilisearch_types::error::{DeserrError, ResponseError, TakeErrorMessage};
+use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
-use meilisearch_types::star_or::StarOr;
+use meilisearch_types::star_or::OptionStarOrList;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::{milli, Document, Index};
 use mime::Mime;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
-use serde_cs::vec::CS;
 use serde_json::Value;
 use tempfile::tempfile;
 use tokio::fs::File;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
 
-use super::search::parse_usize_take_error_message;
 use crate::analytics::{Analytics, DocumentDeletionKind};
 use crate::error::MeilisearchHttpError;
 use crate::error::PayloadError::ReceivePayload;
@@ -36,7 +35,7 @@ use crate::extractors::authentication::GuardedData;
 use crate::extractors::payload::Payload;
 use crate::extractors::query_parameters::QueryParameter;
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::{fold_star_or, PaginationView, SummarizedTaskView};
+use crate::routes::{PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]
@@ -81,23 +80,26 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-#[derive(Deserialize, Debug, DeserializeFromValue)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[derive(Debug, DeserializeFromValue)]
+#[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct GetDocument {
-    #[deserr(error = DeserrError<InvalidDocumentFields>)]
-    fields: Option<CS<StarOr<String>>>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
+    fields: OptionStarOrList<String>,
 }
 
 pub async fn get_document(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
-    path: web::Path<DocumentParam>,
-    params: QueryParameter<GetDocument, DeserrError>,
+    document_param: web::Path<DocumentParam>,
+    params: QueryParameter<GetDocument, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
-    let GetDocument { fields } = params.into_inner();
-    let attributes_to_retrieve = fields.and_then(fold_star_or);
+    let DocumentParam { index_uid, document_id } = document_param.into_inner();
+    let index_uid = IndexUid::try_from(index_uid)?;
 
-    let index = index_scheduler.index(&path.index_uid)?;
-    let document = retrieve_document(&index, &path.document_id, attributes_to_retrieve)?;
+    let GetDocument { fields } = params.into_inner();
+    let attributes_to_retrieve = fields.merge_star_and_none();
+
+    let index = index_scheduler.index(&index_uid)?;
+    let document = retrieve_document(&index, &document_id, attributes_to_retrieve)?;
     debug!("returns: {:?}", document);
     Ok(HttpResponse::Ok().json(document))
 }
@@ -108,60 +110,68 @@ pub async fn delete_document(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    let DocumentParam { index_uid, document_id } = path.into_inner();
+    let index_uid = IndexUid::try_from(index_uid)?;
+
     analytics.delete_documents(DocumentDeletionKind::PerDocumentId, &req);
 
-    let DocumentParam { document_id, index_uid } = path.into_inner();
-    let task = KindWithContent::DocumentDeletion { index_uid, documents_ids: vec![document_id] };
+    let task = KindWithContent::DocumentDeletion {
+        index_uid: index_uid.to_string(),
+        documents_ids: vec![document_id],
+    };
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
 }
 
-#[derive(Deserialize, Debug, DeserializeFromValue)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[derive(Debug, DeserializeFromValue)]
+#[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct BrowseQuery {
-    #[deserr(error = DeserrError<InvalidDocumentFields>, default, from(&String) = parse_usize_take_error_message -> TakeErrorMessage<ParseIntError>)]
-    offset: usize,
-    #[deserr(error = DeserrError<InvalidDocumentLimit>, default = crate::routes::PAGINATION_DEFAULT_LIMIT(), from(&String) = parse_usize_take_error_message -> TakeErrorMessage<ParseIntError>)]
-    limit: usize,
-    #[deserr(error = DeserrError<InvalidDocumentLimit>)]
-    fields: Option<CS<StarOr<String>>>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentOffset>)]
+    offset: Param<usize>,
+    #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidDocumentLimit>)]
+    limit: Param<usize>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
+    fields: OptionStarOrList<String>,
 }
 
 pub async fn get_all_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    params: QueryParameter<BrowseQuery, DeserrError>,
+    params: QueryParameter<BrowseQuery, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     debug!("called with params: {:?}", params);
     let BrowseQuery { limit, offset, fields } = params.into_inner();
-    let attributes_to_retrieve = fields.and_then(fold_star_or);
+    let attributes_to_retrieve = fields.merge_star_and_none();
 
     let index = index_scheduler.index(&index_uid)?;
-    let (total, documents) = retrieve_documents(&index, offset, limit, attributes_to_retrieve)?;
+    let (total, documents) = retrieve_documents(&index, offset.0, limit.0, attributes_to_retrieve)?;
 
-    let ret = PaginationView::new(offset, limit, total as usize, documents);
+    let ret = PaginationView::new(offset.0, limit.0, total as usize, documents);
 
     debug!("returns: {:?}", ret);
     Ok(HttpResponse::Ok().json(ret))
 }
 
 #[derive(Deserialize, Debug, DeserializeFromValue)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct UpdateDocumentsQuery {
-    #[deserr(error = DeserrError<InvalidIndexPrimaryKey>)]
+    #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
     pub primary_key: Option<String>,
 }
 
 pub async fn add_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    params: QueryParameter<UpdateDocumentsQuery, DeserrError>,
+    params: QueryParameter<UpdateDocumentsQuery, DeserrJsonError>,
     body: Payload,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
     debug!("called with params: {:?}", params);
     let params = params.into_inner();
 
@@ -171,7 +181,7 @@ pub async fn add_documents(
     let task = document_addition(
         extract_mime_type(&req)?,
         index_scheduler,
-        index_uid.into_inner(),
+        index_uid,
         params.primary_key,
         body,
         IndexDocumentsMethod::ReplaceDocuments,
@@ -184,14 +194,15 @@ pub async fn add_documents(
 
 pub async fn update_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
-    path: web::Path<String>,
-    params: QueryParameter<UpdateDocumentsQuery, DeserrError>,
+    index_uid: web::Path<String>,
+    params: QueryParameter<UpdateDocumentsQuery, DeserrJsonError>,
     body: Payload,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
     debug!("called with params: {:?}", params);
-    let index_uid = path.into_inner();
 
     analytics.update_documents(&params, index_scheduler.index(&index_uid).is_err(), &req);
 
@@ -213,7 +224,7 @@ pub async fn update_documents(
 async fn document_addition(
     mime_type: Option<Mime>,
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
-    index_uid: String,
+    index_uid: IndexUid,
     primary_key: Option<String>,
     mut body: Payload,
     method: IndexDocumentsMethod,
@@ -233,9 +244,6 @@ async fn document_addition(
             return Err(MeilisearchHttpError::MissingContentType(ACCEPTED_CONTENT_TYPE.clone()))
         }
     };
-
-    // is your indexUid valid?
-    let index_uid = IndexUid::try_from(index_uid)?.into_inner();
 
     let (uuid, mut update_file) = index_scheduler.create_update_file()?;
 
@@ -312,7 +320,7 @@ async fn document_addition(
         documents_count,
         primary_key,
         allow_index_creation,
-        index_uid,
+        index_uid: index_uid.to_string(),
     };
 
     let scheduler = index_scheduler.clone();
@@ -330,12 +338,13 @@ async fn document_addition(
 
 pub async fn delete_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
-    path: web::Path<String>,
+    index_uid: web::Path<String>,
     body: web::Json<Vec<Value>>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", body);
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     analytics.delete_documents(DocumentDeletionKind::PerBatch, &req);
 
@@ -345,7 +354,7 @@ pub async fn delete_documents(
         .collect();
 
     let task =
-        KindWithContent::DocumentDeletion { index_uid: path.into_inner(), documents_ids: ids };
+        KindWithContent::DocumentDeletion { index_uid: index_uid.to_string(), documents_ids: ids };
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
@@ -355,13 +364,14 @@ pub async fn delete_documents(
 
 pub async fn clear_all_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
-    path: web::Path<String>,
+    index_uid: web::Path<String>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     analytics.delete_documents(DocumentDeletionKind::ClearAll, &req);
 
-    let task = KindWithContent::DocumentClear { index_uid: path.into_inner() };
+    let task = KindWithContent::DocumentClear { index_uid: index_uid.to_string() };
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 

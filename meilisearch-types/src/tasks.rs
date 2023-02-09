@@ -1,3 +1,4 @@
+use core::fmt;
 use std::collections::HashSet;
 use std::fmt::{Display, Write};
 use std::str::FromStr;
@@ -9,7 +10,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
-use crate::error::{Code, ResponseError};
+use crate::error::ResponseError;
 use crate::keys::Key;
 use crate::settings::{Settings, Unchecked};
 use crate::InstanceUid;
@@ -332,7 +333,7 @@ impl Display for Status {
 }
 
 impl FromStr for Status {
-    type Err = ResponseError;
+    type Err = ParseTaskStatusError;
 
     fn from_str(status: &str) -> Result<Self, Self::Err> {
         if status.eq_ignore_ascii_case("enqueued") {
@@ -346,20 +347,27 @@ impl FromStr for Status {
         } else if status.eq_ignore_ascii_case("canceled") {
             Ok(Status::Canceled)
         } else {
-            Err(ResponseError::from_msg(
-                format!(
-                    "`{}` is not a status. Available status are {}.",
-                    status,
-                    enum_iterator::all::<Status>()
-                        .map(|s| format!("`{s}`"))
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                ),
-                Code::BadRequest,
-            ))
+            Err(ParseTaskStatusError(status.to_owned()))
         }
     }
 }
+
+#[derive(Debug)]
+pub struct ParseTaskStatusError(pub String);
+impl fmt::Display for ParseTaskStatusError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "`{}` is not a valid task status. Available statuses are {}.",
+            self.0,
+            enum_iterator::all::<Status>()
+                .map(|s| format!("`{s}`"))
+                .collect::<Vec<String>>()
+                .join(", ")
+        )
+    }
+}
+impl std::error::Error for ParseTaskStatusError {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence)]
 #[serde(rename_all = "camelCase")]
@@ -412,7 +420,7 @@ impl Display for Kind {
     }
 }
 impl FromStr for Kind {
-    type Err = ResponseError;
+    type Err = ParseTaskKindError;
 
     fn from_str(kind: &str) -> Result<Self, Self::Err> {
         if kind.eq_ignore_ascii_case("indexCreation") {
@@ -438,24 +446,31 @@ impl FromStr for Kind {
         } else if kind.eq_ignore_ascii_case("snapshotCreation") {
             Ok(Kind::SnapshotCreation)
         } else {
-            Err(ResponseError::from_msg(
-                format!(
-                    "`{}` is not a type. Available types are {}.",
-                    kind,
-                    enum_iterator::all::<Kind>()
-                        .map(|k| format!(
-                            "`{}`",
-                            // by default serde is going to insert `"` around the value.
-                            serde_json::to_string(&k).unwrap().trim_matches('"')
-                        ))
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                ),
-                Code::BadRequest,
-            ))
+            Err(ParseTaskKindError(kind.to_owned()))
         }
     }
 }
+
+#[derive(Debug)]
+pub struct ParseTaskKindError(pub String);
+impl fmt::Display for ParseTaskKindError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "`{}` is not a valid task type. Available types are {}.",
+            self.0,
+            enum_iterator::all::<Kind>()
+                .map(|k| format!(
+                    "`{}`",
+                    // by default serde is going to insert `"` around the value.
+                    serde_json::to_string(&k).unwrap().trim_matches('"')
+                ))
+                .collect::<Vec<String>>()
+                .join(", ")
+        )
+    }
+}
+impl std::error::Error for ParseTaskKindError {}
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum Details {

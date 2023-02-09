@@ -1,0 +1,21 @@
+---
+source: index-scheduler/src/lib.rs
+---
+[
+  {
+    "paw": 2,
+    "doggo": "jean bob"
+  },
+  {
+    "paw": 3,
+    "doggo": "jean bob"
+  },
+  {
+    "paw": 4,
+    "doggo": "jean bob"
+  },
+  {
+    "paw": 5,
+    "doggo": "jean bob"
+  }
+]

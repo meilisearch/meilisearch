@@ -31,8 +31,9 @@ jobs:
       with:
         toolchain: stable
         override: true
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2.2.0
+    # Disable cache due to disk space issues with Windows workers in CI
+    # - name: Cache dependencies
+    #   uses: Swatinem/rust-cache@v2.2.0
     - name: Run cargo check without any default features
       uses: actions-rs/cargo@v1
       with:
@@ -53,8 +54,8 @@ jobs:
         os: [macos-12, windows-2022]
     steps:
     - uses: actions/checkout@v3
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2.2.0
+#     - name: Cache dependencies
+#       uses: Swatinem/rust-cache@v2.2.0
     - name: Run cargo check without any default features
       uses: actions-rs/cargo@v1
       with:
@@ -83,8 +84,8 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.2.0
+      # - name: Cache dependencies
+      #   uses: Swatinem/rust-cache@v2.2.0
       - name: Run tests in debug
         uses: actions-rs/cargo@v1
         with:
@@ -99,16 +100,17 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: stable
+          toolchain: 1.67.0
           override: true
           components: clippy
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.2.0
+      # - name: Cache dependencies
+      #   uses: Swatinem/rust-cache@v2.2.0
       - name: Run cargo clippy
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all-targets -- --deny warnings
+          # allow unlined_format_args https://github.com/rust-lang/rust-clippy/issues/10087
+          args: --all-targets -- --deny warnings --allow clippy::uninlined_format_args
 
   fmt:
     name: Run Rustfmt
@@ -121,8 +123,8 @@ jobs:
           toolchain: nightly
           override: true
           components: rustfmt
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.2.0
+      # - name: Cache dependencies
+      #   uses: Swatinem/rust-cache@v2.2.0
       - name: Run cargo fmt
         # Since we never ran the `build.rs` script in the benchmark directory we are missing one auto-generated import file.
         # Since we want to trigger (and fail) this action as fast as possible, instead of building the benchmark crate

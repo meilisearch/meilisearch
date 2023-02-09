@@ -98,14 +98,14 @@ async fn import_dump_v1_movie_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         settings,
-        json!({ "displayedAttributes": ["genres", "id", "overview", "poster", "release_date", "title"], "searchableAttributes": ["title", "overview"], "filterableAttributes": ["genres"], "sortableAttributes": [], "rankingRules": ["typo", "words", "proximity", "attribute", "exactness"], "stopWords": ["of", "the"], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": { "oneTypo": 5, "twoTypos": 9 }, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100 }, "pagination": { "maxTotalHits": 1000 } })
+        json!({ "displayedAttributes": ["genres", "id", "overview", "poster", "release_date", "title"], "searchableAttributes": ["title", "overview"], "filterableAttributes": ["genres"], "sortableAttributes": ["genres"], "rankingRules": ["typo", "words", "proximity", "attribute", "exactness"], "stopWords": ["of", "the"], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": { "oneTypo": 5, "twoTypos": 9 }, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100 }, "pagination": { "maxTotalHits": 1000 } })
     );
 
     let (tasks, code) = index.list_tasks().await;
     assert_eq!(code, 200);
     assert_eq!(
         tasks,
-        json!({ "results": [{ "uid": 1, "indexUid": "indexUID", "status": "succeeded", "type": "settingsUpdate", "canceledBy": null, "details": { "displayedAttributes": ["genres", "id", "overview", "poster", "release_date", "title"], "searchableAttributes": ["title", "overview"], "filterableAttributes": ["genres"], "stopWords": ["of", "the"] }, "error": null, "duration": "PT7.288826907S", "enqueuedAt": "2021-09-08T09:34:40.882977Z", "startedAt": "2021-09-08T09:34:40.883073093Z", "finishedAt": "2021-09-08T09:34:48.1719Z"}, { "uid": 0, "indexUid": "indexUID", "status": "succeeded", "type": "documentAdditionOrUpdate", "canceledBy": null, "details": { "receivedDocuments": 0, "indexedDocuments": 31968 }, "error": null, "duration": "PT9.090735774S", "enqueuedAt": "2021-09-08T09:34:16.036101Z", "startedAt": "2021-09-08T09:34:16.261191226Z", "finishedAt": "2021-09-08T09:34:25.351927Z" }], "limit": 20, "from": 1, "next": null })
+        json!({ "results": [{ "uid": 1, "indexUid": "indexUID", "status": "succeeded", "type": "settingsUpdate", "canceledBy": null, "details": { "displayedAttributes": ["genres", "id", "overview", "poster", "release_date", "title"], "searchableAttributes": ["title", "overview"], "filterableAttributes": ["genres"], "sortableAttributes": ["genres"], "stopWords": ["of", "the"] }, "error": null, "duration": "PT7.288826907S", "enqueuedAt": "2021-09-08T09:34:40.882977Z", "startedAt": "2021-09-08T09:34:40.883073093Z", "finishedAt": "2021-09-08T09:34:48.1719Z"}, { "uid": 0, "indexUid": "indexUID", "status": "succeeded", "type": "documentAdditionOrUpdate", "canceledBy": null, "details": { "receivedDocuments": 0, "indexedDocuments": 31968 }, "error": null, "duration": "PT9.090735774S", "enqueuedAt": "2021-09-08T09:34:16.036101Z", "startedAt": "2021-09-08T09:34:16.261191226Z", "finishedAt": "2021-09-08T09:34:25.351927Z" }], "limit": 20, "from": 1, "next": null })
     );
 
     // finally we're just going to check that we can still get a few documents by id
@@ -161,7 +161,7 @@ async fn import_dump_v1_rubygems_with_settings() {
     assert_eq!(code, 200);
     assert_eq!(
         settings,
-        json!({"displayedAttributes": ["description", "id", "name", "summary", "total_downloads", "version"], "searchableAttributes": ["name", "summary"], "filterableAttributes": ["version"], "sortableAttributes": [], "rankingRules": ["typo", "words", "fame:desc", "proximity", "attribute", "exactness", "total_downloads:desc"], "stopWords": [], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100 }, "pagination": { "maxTotalHits": 1000 }})
+        json!({"displayedAttributes": ["description", "id", "name", "summary", "total_downloads", "version"], "searchableAttributes": ["name", "summary"], "filterableAttributes": ["version"], "sortableAttributes": ["version"], "rankingRules": ["typo", "words", "fame:desc", "proximity", "attribute", "exactness", "total_downloads:desc"], "stopWords": [], "synonyms": {}, "distinctAttribute": null, "typoTolerance": {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": [] }, "faceting": { "maxValuesPerFacet": 100 }, "pagination": { "maxTotalHits": 1000 }})
     );
 
     let (tasks, code) = index.list_tasks().await;
@@ -811,7 +811,7 @@ async fn import_dump_v5() {
     assert_eq!(code, 200);
     assert_eq!(stats, expected_stats);
 
-    let (keys, code) = server.list_api_keys().await;
+    let (keys, code) = server.list_api_keys("").await;
     assert_eq!(code, 200);
     let key = &keys["results"][0];
 

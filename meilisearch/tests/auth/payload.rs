@@ -37,7 +37,7 @@ async fn error_api_key_bad_content_types() {
     );
     assert_eq!(response["code"], "invalid_content_type");
     assert_eq!(response["type"], "invalid_request");
-    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#invalid-content-type");
+    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#invalid_content_type");
 
     // patch
     let req = test::TestRequest::patch()
@@ -59,7 +59,7 @@ async fn error_api_key_bad_content_types() {
     );
     assert_eq!(response["code"], "invalid_content_type");
     assert_eq!(response["type"], "invalid_request");
-    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#invalid-content-type");
+    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#invalid_content_type");
 }
 
 #[actix_rt::test]
@@ -96,7 +96,7 @@ async fn error_api_key_empty_content_types() {
     );
     assert_eq!(response["code"], "invalid_content_type");
     assert_eq!(response["type"], "invalid_request");
-    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#invalid-content-type");
+    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#invalid_content_type");
 
     // patch
     let req = test::TestRequest::patch()
@@ -118,7 +118,7 @@ async fn error_api_key_empty_content_types() {
     );
     assert_eq!(response["code"], "invalid_content_type");
     assert_eq!(response["type"], "invalid_request");
-    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#invalid-content-type");
+    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#invalid_content_type");
 }
 
 #[actix_rt::test]
@@ -154,7 +154,7 @@ async fn error_api_key_missing_content_types() {
     );
     assert_eq!(response["code"], "missing_content_type");
     assert_eq!(response["type"], "invalid_request");
-    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#missing-content-type");
+    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#missing_content_type");
 
     // patch
     let req = test::TestRequest::patch()
@@ -175,7 +175,7 @@ async fn error_api_key_missing_content_types() {
     );
     assert_eq!(response["code"], "missing_content_type");
     assert_eq!(response["type"], "invalid_request");
-    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#missing-content-type");
+    assert_eq!(response["link"], "https://docs.meilisearch.com/errors#missing_content_type");
 }
 
 #[actix_rt::test]
@@ -200,7 +200,7 @@ async fn error_api_key_empty_payload() {
     assert_eq!(status_code, 400);
     assert_eq!(response["code"], json!("missing_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing-payload"));
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing_payload"));
     assert_eq!(response["message"], json!(r#"A json payload is missing."#));
 
     // patch
@@ -217,7 +217,7 @@ async fn error_api_key_empty_payload() {
     assert_eq!(status_code, 400);
     assert_eq!(response["code"], json!("missing_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing-payload"));
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#missing_payload"));
     assert_eq!(response["message"], json!(r#"A json payload is missing."#));
 }
 
@@ -243,7 +243,7 @@ async fn error_api_key_malformed_payload() {
     assert_eq!(status_code, 400);
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed-payload"));
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
     assert_eq!(
         response["message"],
         json!(
@@ -265,7 +265,7 @@ async fn error_api_key_malformed_payload() {
     assert_eq!(status_code, 400);
     assert_eq!(response["code"], json!("malformed_payload"));
     assert_eq!(response["type"], json!("invalid_request"));
-    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed-payload"));
+    assert_eq!(response["link"], json!("https://docs.meilisearch.com/errors#malformed_payload"));
     assert_eq!(
         response["message"],
         json!(
