@@ -86,7 +86,7 @@ pub fn create_app(
                 analytics.clone(),
             )
         })
-        .configure(routes::configure)
+        .configure(|s|routes::configure(s, &opt))
         .configure(|s| dashboard(s, enable_dashboard));
     #[cfg(feature = "metrics")]
     let app = app.configure(|s| configure_metrics_route(s, opt.enable_metrics_route));

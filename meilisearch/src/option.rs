@@ -301,6 +301,12 @@ pub struct Opt {
     /// Format must be TOML.
     #[clap(long)]
     pub config_file_path: Option<PathBuf>,
+
+    /// Instead of hosting meili's own static assets (the mini-dashboard), use a custom directory to host files.
+    /// Use this if you want to customize the front-end.
+    #[clap(long)]
+    #[serde(default)]
+    pub custom_static_files: Option<PathBuf>,
 }
 
 impl Opt {
@@ -386,6 +392,7 @@ impl Opt {
             no_analytics,
             #[cfg(feature = "metrics")]
             enable_metrics_route,
+            custom_static_files: _,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
         export_to_env_if_not_present(MEILI_HTTP_ADDR, http_addr);

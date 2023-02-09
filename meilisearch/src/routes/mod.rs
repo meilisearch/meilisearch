@@ -23,7 +23,7 @@ pub mod indexes;
 mod swap_indexes;
 pub mod tasks;
 
-pub fn configure(cfg: &mut web::ServiceConfig) {
+pub fn configure(cfg: &mut web::ServiceConfig, opt: &crate::Opt) {
     cfg.service(web::scope("/tasks").configure(tasks::configure))
         .service(web::resource("/health").route(web::get().to(get_health)))
         .service(web::scope("/keys").configure(api_key::configure))
@@ -32,6 +32,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::resource("/version").route(web::get().to(get_version)))
         .service(web::scope("/indexes").configure(indexes::configure))
         .service(web::scope("/swap-indexes").configure(swap_indexes::configure));
+    if let Some(path) = &opt.custom_static_files {
+        cfg.service(actix_files::Files::new("/", path).index_file("index.html").show_files_listing());
+    }
 }
 
 const PAGINATION_DEFAULT_LIMIT: usize = 20;
