@@ -62,7 +62,7 @@ pub struct IndexMapper {
 
 mod index_map {
     /// the map size to use when we don't succeed in reading it in indexes.
-    const DEFAULT_MAP_SIZE: usize = 10_737_418_240; // 10 GiB
+    const DEFAULT_MAP_SIZE: usize = 10 * 1024 * 1024 * 1024; // 10 GiB
 
     use std::collections::BTreeMap;
     use std::path::Path;
