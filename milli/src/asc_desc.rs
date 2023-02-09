@@ -14,19 +14,21 @@ use crate::{CriterionError, Error, UserError};
 /// You must always cast it to a sort error or a criterion error.
 #[derive(Debug)]
 pub enum AscDescError {
-    InvalidLatitude(ParseGeoError),
-    InvalidLongitude(ParseGeoError),
+    GeoError(ParseGeoError),
     InvalidSyntax { name: String },
     ReservedKeyword { name: String },
+}
+
+impl From<ParseGeoError> for AscDescError {
+    fn from(geo_error: ParseGeoError) -> Self {
+        AscDescError::GeoError(geo_error)
+    }
 }
 
 impl fmt::Display for AscDescError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::InvalidLatitude(error) => {
-                write!(f, "{error}",)
-            }
-            Self::InvalidLongitude(error) => {
+            Self::GeoError(error) => {
                 write!(f, "{error}",)
             }
             Self::InvalidSyntax { name } => {
@@ -46,7 +48,7 @@ impl fmt::Display for AscDescError {
 impl From<AscDescError> for CriterionError {
     fn from(error: AscDescError) -> Self {
         match error {
-            AscDescError::InvalidLatitude(_) | AscDescError::InvalidLongitude(_) => {
+            AscDescError::GeoError(_) => {
                 CriterionError::ReservedNameForSort { name: "_geoPoint".to_string() }
             }
             AscDescError::InvalidSyntax { name } => CriterionError::InvalidName { name },
@@ -86,9 +88,9 @@ impl FromStr for Member {
                             .map_err(|_| AscDescError::ReservedKeyword { name: text.to_string() })
                     })?;
                 if !(-90.0..=90.0).contains(&lat) {
-                    return Err(AscDescError::InvalidLatitude(ParseGeoError::BadGeoLat(lat)))?;
+                    return Err(ParseGeoError::BadGeoLat(lat))?;
                 } else if !(-180.0..=180.0).contains(&lng) {
-                    return Err(AscDescError::InvalidLongitude(ParseGeoError::BadGeoLng(lng)))?;
+                    return Err(ParseGeoError::BadGeoLng(lng))?;
                 }
                 Ok(Member::Geo([lat, lng]))
             }
@@ -164,9 +166,7 @@ impl FromStr for AscDesc {
 #[derive(Error, Debug)]
 pub enum SortError {
     #[error("{}", error)]
-    InvalidLatitude { error: ParseGeoError },
-    #[error("{}", error)]
-    InvalidLongitude { error: ParseGeoError },
+    ParseGeoError { error: ParseGeoError },
     #[error("Invalid syntax for the geo parameter: expected expression formated like \
                     `_geoPoint(latitude, longitude)` and ending by `:asc` or `:desc`, found `{name}`.")]
     BadGeoPointUsage { name: String },
@@ -185,8 +185,7 @@ pub enum SortError {
 impl From<AscDescError> for SortError {
     fn from(error: AscDescError) -> Self {
         match error {
-            AscDescError::InvalidLatitude(error) => SortError::InvalidLatitude { error },
-            AscDescError::InvalidLongitude(error) => SortError::InvalidLongitude { error },
+            AscDescError::GeoError(error) => SortError::ParseGeoError { error },
             AscDescError::InvalidSyntax { name } => SortError::InvalidName { name },
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoPoint") => {
                 SortError::BadGeoPointUsage { name }
@@ -278,14 +277,11 @@ mod tests {
             ),
             ("_geoPoint(35, 85, 75):asc", ReservedKeyword { name: S("_geoPoint(35, 85, 75)") }),
             ("_geoPoint(18):asc", ReservedKeyword { name: S("_geoPoint(18)") }),
-            ("_geoPoint(200, 200):asc", InvalidLatitude(ParseGeoError::BadGeoLat(200.))),
-            ("_geoPoint(90.000001, 0):asc", InvalidLatitude(ParseGeoError::BadGeoLat(90.000001))),
-            (
-                "_geoPoint(0, -180.000001):desc",
-                InvalidLongitude(ParseGeoError::BadGeoLng(-180.000001)),
-            ),
-            ("_geoPoint(159.256, 130):asc", InvalidLatitude(ParseGeoError::BadGeoLat(159.256))),
-            ("_geoPoint(12, -2021):desc", InvalidLongitude(ParseGeoError::BadGeoLng(-2021.))),
+            ("_geoPoint(200, 200):asc", GeoError(ParseGeoError::BadGeoLat(200.))),
+            ("_geoPoint(90.000001, 0):asc", GeoError(ParseGeoError::BadGeoLat(90.000001))),
+            ("_geoPoint(0, -180.000001):desc", GeoError(ParseGeoError::BadGeoLng(-180.000001))),
+            ("_geoPoint(159.256, 130):asc", GeoError(ParseGeoError::BadGeoLat(159.256))),
+            ("_geoPoint(12, -2021):desc", GeoError(ParseGeoError::BadGeoLng(-2021.))),
         ];
 
         for (req, expected_error) in invalid_req {
