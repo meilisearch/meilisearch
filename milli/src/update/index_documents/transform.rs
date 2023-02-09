@@ -345,9 +345,9 @@ impl<'a, 'i> Transform<'a, 'i> {
                 Entry::Occupied(entry) => {
                     let doc_id = *entry.get() as u32;
                     self.original_sorter
-                        .insert(doc_id.to_be_bytes(), &[Operation::Deletion as u8])?;
+                        .insert(doc_id.to_be_bytes(), [Operation::Deletion as u8])?;
                     self.flattened_sorter
-                        .insert(doc_id.to_be_bytes(), &[Operation::Deletion as u8])?;
+                        .insert(doc_id.to_be_bytes(), [Operation::Deletion as u8])?;
 
                     // we must NOT update the list of replaced_documents_ids
                     // Either:
