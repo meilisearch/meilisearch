@@ -280,7 +280,10 @@ mod tests {
             ("_geoPoint(18):asc", ReservedKeyword { name: S("_geoPoint(18)") }),
             ("_geoPoint(200, 200):asc", InvalidLatitude(ParseGeoError::BadGeoLat(200.))),
             ("_geoPoint(90.000001, 0):asc", InvalidLatitude(ParseGeoError::BadGeoLat(90.000001))),
-            ("_geoPoint(0, -180.000001):desc", InvalidLongitude(ParseGeoError::BadGeoLng(-180.000001))),
+            (
+                "_geoPoint(0, -180.000001):desc",
+                InvalidLongitude(ParseGeoError::BadGeoLng(-180.000001)),
+            ),
             ("_geoPoint(159.256, 130):asc", InvalidLatitude(ParseGeoError::BadGeoLat(159.256))),
             ("_geoPoint(12, -2021):desc", InvalidLongitude(ParseGeoError::BadGeoLng(-2021.))),
         ];
