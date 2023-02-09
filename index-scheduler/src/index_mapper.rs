@@ -94,9 +94,21 @@ mod index_map {
         /// A map of indexes that are not available for queries, either because they are being deleted
         /// or because they are being closed.
         ///
-        /// If they are being deleted, the UUID point to `None`.
+        /// If they are being deleted, the UUID points to `None`.
         unavailable: BTreeMap<Uuid, Option<ClosingIndex>>,
 
+        /// A monotonically increasing generation number, used to differentiate between multiple successive index closing requests.
+        ///
+        /// Because multiple readers could be waiting on an index to close, the following could theoretically happen:
+        ///
+        /// 1. Multiple readers wait for the index closing to occur.
+        /// 2. One of them "wins the race", takes the lock and then removes the index that finished closing from the map.
+        /// 3. The index is reopened, but must be closed again (such as being resized again).
+        /// 4. One reader that "lost the race" in (2) wakes up and tries to take the lock and remove the index from the map.
+        ///
+        /// In that situation, the index may or may not have finished closing. The `generation` field allows to remember which
+        /// closing request was made, so the reader that "lost the race" has the old generation and will need to wait again for the index
+        /// to close.
         generation: usize,
     }
 
@@ -239,8 +251,16 @@ mod index_map {
             Ok(index)
         }
 
+        /// Increases the current generation. See documentation for this field.
+        ///
+        /// In the unlikely event that the 2^64 generations would have been exhausted, we simply wrap-around.
+        ///
+        /// For this to cause an issue, one should be able to stop a reader in time after it got a `ReopenableIndex` and before it takes the lock
+        /// to remove it from the unavailable map, and keep the reader in this frozen state for 2^64 closing of other indexes.
+        ///
+        /// This seems overwhelmingly impossible to achieve in practice.
         fn next_generation(&mut self) -> usize {
-            self.generation = self.generation.checked_add(1).unwrap();
+            self.generation = self.generation.wrapping_add(1);
             self.generation
         }
 
