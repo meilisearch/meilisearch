@@ -4,8 +4,6 @@ fn main() {
     let mut config = Config::default();
     // allow using non-annotated tags
     *config.git_mut().semver_kind_mut() = SemverKind::Lightweight;
-    // add -dirty suffix when we're not right on the tag
-    *config.git_mut().semver_dirty_mut() = Some("-dirty");
 
     if let Err(e) = vergen(config) {
         println!("cargo:warning=vergen: {}", e);
