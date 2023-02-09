@@ -1758,8 +1758,13 @@ mod tests {
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
 
-        handle.advance_one_successful_batch(); // The deletion AND addition should've been batched together
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_processing_the_batch");
+        // The deletion should have failed because it can't create an index
+        handle.advance_one_failed_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_failing_the_deletion");
+
+        // The addition should works
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_last_successful_addition");
 
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();

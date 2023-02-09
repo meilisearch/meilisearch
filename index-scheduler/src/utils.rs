@@ -439,20 +439,23 @@ impl IndexScheduler {
                         provided_ids: received_document_ids,
                         deleted_documents,
                     } => {
-                        if let Some(deleted_documents) = deleted_documents {
-                            assert_eq!(status, Status::Succeeded);
-                            assert!(deleted_documents <= received_document_ids as u64);
-                            assert_eq!(kind.as_kind(), Kind::DocumentDeletion);
+                        assert_eq!(kind.as_kind(), Kind::DocumentDeletion);
+                        let KindWithContent::DocumentDeletion {
+                            ref index_uid,
+                            ref documents_ids,
+                        } = kind else { unreachable!() };
+                        assert_eq!(&task_index_uid.unwrap(), index_uid);
 
-                            match &kind {
-                                KindWithContent::DocumentDeletion { index_uid, documents_ids } => {
-                                    assert_eq!(&task_index_uid.unwrap(), index_uid);
-                                    assert!(documents_ids.len() >= received_document_ids);
-                                }
-                                _ => panic!(),
+                        match status {
+                            Status::Enqueued | Status::Processing => (),
+                            Status::Succeeded => {
+                                assert!(deleted_documents.unwrap() <= received_document_ids as u64);
+                                assert!(documents_ids.len() == received_document_ids);
                             }
-                        } else {
-                            assert_ne!(status, Status::Succeeded);
+                            Status::Failed | Status::Canceled => {
+                                assert!(deleted_documents == Some(0));
+                                assert!(documents_ids.len() == received_document_ids);
+                            }
                         }
                     }
                     Details::ClearAll { deleted_documents } => {
