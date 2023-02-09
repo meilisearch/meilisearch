@@ -136,7 +136,7 @@ pub fn print_launch_resume(
     eprintln!("TEST path:\t\t{:?}", opt.db_path);
     eprintln!("TEST listening on:\t\"{}://{}\"", protocol, opt.http_addr);
     eprintln!("TEST2:\t\t{:?}", opt.env);
-    eprintln!("Commit SHA:\t\t{:?}", commit_sha.to_string());
+    eprintln!("TEST3\t\t{:?}", commit_sha.to_string());
     eprintln!("Commit date:\t\t{:?}", commit_date.to_string());
     eprintln!("Package version:\t{:?}", env!("CARGO_PKG_VERSION").to_string());
 
