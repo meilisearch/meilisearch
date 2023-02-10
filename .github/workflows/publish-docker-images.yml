@@ -92,6 +92,7 @@ jobs:
           build-args: |
             COMMIT_SHA=${{ github.sha }}
             COMMIT_DATE=${{ steps.build-metadata.outputs.date }}
+            GIT_TAG=$(printf "%q" ${{ github.ref_name }})
 
       # /!\ Don't touch this without checking with Cloud team
       - name: Send CI information to Cloud team
