@@ -1,3 +1,5 @@
+.idea/
+.vscode/
 /target
 **/*.csv
 **/*.json_lines
