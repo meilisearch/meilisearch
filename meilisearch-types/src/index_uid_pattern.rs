@@ -4,7 +4,7 @@ use std::fmt;
 use std::ops::Deref;
 use std::str::FromStr;
 
-use deserr::DeserializeFromValue;
+use deserr::Deserr;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Code, ErrorCode};
@@ -12,8 +12,8 @@ use crate::index_uid::{IndexUid, IndexUidFormatError};
 
 /// An index uid pattern is composed of only ascii alphanumeric characters, - and _, between 1 and 400
 /// bytes long and optionally ending with a *.
-#[derive(Serialize, Deserialize, DeserializeFromValue, Debug, Clone, PartialEq, Eq, Hash)]
-#[deserr(from(&String) = FromStr::from_str -> IndexUidPatternFormatError)]
+#[derive(Serialize, Deserialize, Deserr, Debug, Clone, PartialEq, Eq, Hash)]
+#[deserr(try_from(&String) = FromStr::from_str -> IndexUidPatternFormatError)]
 pub struct IndexUidPattern(String);
 
 impl IndexUidPattern {

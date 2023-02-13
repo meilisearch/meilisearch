@@ -1,6 +1,6 @@
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use deserr::DeserializeFromValue;
+use deserr::Deserr;
 use index_scheduler::{IndexScheduler, Query, TaskId};
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::DeserrQueryParamError;
@@ -162,7 +162,7 @@ impl From<Details> for DetailsView {
     }
 }
 
-#[derive(Debug, DeserializeFromValue)]
+#[derive(Debug, Deserr)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct TasksFilterQuery {
     #[deserr(default = Param(DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidTaskLimit>)]
@@ -181,19 +181,20 @@ pub struct TasksFilterQuery {
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexUid>)]
     pub index_uids: OptionStarOrList<IndexUid>,
 
-    #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterEnqueuedAt>, from(OptionStarOr<String>) = deserialize_date_after -> InvalidTaskDateError)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterEnqueuedAt>, try_from(OptionStarOr<String>) = deserialize_date_after -> InvalidTaskDateError)]
     pub after_enqueued_at: OptionStarOr<OffsetDateTime>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeEnqueuedAt>, from(OptionStarOr<String>) = deserialize_date_before -> InvalidTaskDateError)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeEnqueuedAt>, try_from(OptionStarOr<String>) = deserialize_date_before -> InvalidTaskDateError)]
     pub before_enqueued_at: OptionStarOr<OffsetDateTime>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterStartedAt>, from(OptionStarOr<String>) = deserialize_date_after -> InvalidTaskDateError)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterStartedAt>, try_from(OptionStarOr<String>) = deserialize_date_after -> InvalidTaskDateError)]
     pub after_started_at: OptionStarOr<OffsetDateTime>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeStartedAt>, from(OptionStarOr<String>) = deserialize_date_before -> InvalidTaskDateError)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeStartedAt>, try_from(OptionStarOr<String>) = deserialize_date_before -> InvalidTaskDateError)]
     pub before_started_at: OptionStarOr<OffsetDateTime>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterFinishedAt>, from(OptionStarOr<String>) = deserialize_date_after -> InvalidTaskDateError)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterFinishedAt>, try_from(OptionStarOr<String>) = deserialize_date_after -> InvalidTaskDateError)]
     pub after_finished_at: OptionStarOr<OffsetDateTime>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeFinishedAt>, from(OptionStarOr<String>) = deserialize_date_before -> InvalidTaskDateError)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeFinishedAt>, try_from(OptionStarOr<String>) = deserialize_date_before -> InvalidTaskDateError)]
     pub before_finished_at: OptionStarOr<OffsetDateTime>,
 }
+
 impl TasksFilterQuery {
     fn into_query(self) -> Query {
         Query {
@@ -235,7 +236,7 @@ impl TaskDeletionOrCancelationQuery {
     }
 }
 
-#[derive(Debug, DeserializeFromValue)]
+#[derive(Debug, Deserr)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct TaskDeletionOrCancelationQuery {
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskUids>)]
@@ -249,19 +250,20 @@ pub struct TaskDeletionOrCancelationQuery {
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexUid>)]
     pub index_uids: OptionStarOrList<IndexUid>,
 
-    #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterEnqueuedAt>, from(OptionStarOr<String>) = deserialize_date_after -> InvalidTaskDateError)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterEnqueuedAt>, try_from(OptionStarOr<String>) = deserialize_date_after -> InvalidTaskDateError)]
     pub after_enqueued_at: OptionStarOr<OffsetDateTime>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeEnqueuedAt>, from(OptionStarOr<String>) = deserialize_date_before -> InvalidTaskDateError)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeEnqueuedAt>, try_from(OptionStarOr<String>) = deserialize_date_before -> InvalidTaskDateError)]
     pub before_enqueued_at: OptionStarOr<OffsetDateTime>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterStartedAt>, from(OptionStarOr<String>) = deserialize_date_after -> InvalidTaskDateError)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterStartedAt>, try_from(OptionStarOr<String>) = deserialize_date_after -> InvalidTaskDateError)]
     pub after_started_at: OptionStarOr<OffsetDateTime>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeStartedAt>, from(OptionStarOr<String>) = deserialize_date_before -> InvalidTaskDateError)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeStartedAt>, try_from(OptionStarOr<String>) = deserialize_date_before -> InvalidTaskDateError)]
     pub before_started_at: OptionStarOr<OffsetDateTime>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterFinishedAt>, from(OptionStarOr<String>) = deserialize_date_after -> InvalidTaskDateError)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterFinishedAt>, try_from(OptionStarOr<String>) = deserialize_date_after -> InvalidTaskDateError)]
     pub after_finished_at: OptionStarOr<OffsetDateTime>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeFinishedAt>, from(OptionStarOr<String>) = deserialize_date_before -> InvalidTaskDateError)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeFinishedAt>, try_from(OptionStarOr<String>) = deserialize_date_before -> InvalidTaskDateError)]
     pub before_finished_at: OptionStarOr<OffsetDateTime>,
 }
+
 impl TaskDeletionOrCancelationQuery {
     fn into_query(self) -> Query {
         Query {
@@ -498,7 +500,7 @@ pub fn deserialize_date_before(
 
 #[cfg(test)]
 mod tests {
-    use deserr::DeserializeFromValue;
+    use deserr::Deserr;
     use meili_snap::snapshot;
     use meilisearch_types::deserr::DeserrQueryParamError;
     use meilisearch_types::error::{Code, ResponseError};
@@ -507,7 +509,7 @@ mod tests {
 
     fn deserr_query_params<T>(j: &str) -> Result<T, ResponseError>
     where
-        T: DeserializeFromValue<DeserrQueryParamError>,
+        T: Deserr<DeserrQueryParamError>,
     {
         let value = serde_urlencoded::from_str::<serde_json::Value>(j)
             .map_err(|e| ResponseError::from_msg(e.to_string(), Code::BadRequest))?;

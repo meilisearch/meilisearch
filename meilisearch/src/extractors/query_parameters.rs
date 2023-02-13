@@ -6,7 +6,7 @@ use std::{fmt, ops};
 use actix_http::Payload;
 use actix_utils::future::{err, ok, Ready};
 use actix_web::{FromRequest, HttpRequest};
-use deserr::{DeserializeError, DeserializeFromValue};
+use deserr::{DeserializeError, Deserr};
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -21,7 +21,7 @@ impl<T, E> QueryParameter<T, E> {
 
 impl<T, E> QueryParameter<T, E>
 where
-    T: DeserializeFromValue<E>,
+    T: Deserr<E>,
     E: DeserializeError + ErrorCode + std::error::Error + 'static,
 {
     pub fn from_query(query_str: &str) -> Result<Self, actix_web::Error> {
@@ -57,7 +57,7 @@ impl<T: fmt::Display, E> fmt::Display for QueryParameter<T, E> {
 
 impl<T, E> FromRequest for QueryParameter<T, E>
 where
-    T: DeserializeFromValue<E>,
+    T: Deserr<E>,
     E: DeserializeError + ErrorCode + std::error::Error + 'static,
 {
     type Error = actix_web::Error;

@@ -382,10 +382,12 @@ impl ErrorCode for io::Error {
 }
 
 /// Unwrap a result, either its Ok or Err value.
-pub fn unwrap_any<T>(any: Result<T, T>) -> T {
+pub fn unwrap_any<T>(any: std::ops::ControlFlow<T, T>) -> T {
+    use std::ops::ControlFlow::*;
+
     match any {
-        Ok(any) => any,
-        Err(any) => any,
+        Continue(any) => any,
+        Break(any) => any,
     }
 }
 

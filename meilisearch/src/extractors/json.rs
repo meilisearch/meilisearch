@@ -7,7 +7,7 @@ use std::task::{Context, Poll};
 use actix_web::dev::Payload;
 use actix_web::web::Json;
 use actix_web::{FromRequest, HttpRequest};
-use deserr::{DeserializeError, DeserializeFromValue};
+use deserr::{DeserializeError, Deserr};
 use futures::ready;
 use meilisearch_types::error::{ErrorCode, ResponseError};
 
@@ -33,7 +33,7 @@ impl<T, E> ValidatedJson<T, E> {
 impl<T, E> FromRequest for ValidatedJson<T, E>
 where
     E: DeserializeError + ErrorCode + std::error::Error + 'static,
-    T: DeserializeFromValue<E>,
+    T: Deserr<E>,
 {
     type Error = actix_web::Error;
     type Future = ValidatedJsonExtractFut<T, E>;
@@ -54,7 +54,7 @@ pub struct ValidatedJsonExtractFut<T, E> {
 
 impl<T, E> Future for ValidatedJsonExtractFut<T, E>
 where
-    T: DeserializeFromValue<E>,
+    T: Deserr<E>,
     E: DeserializeError + ErrorCode + std::error::Error + 'static,
 {
     type Output = Result<ValidatedJson<T, E>, actix_web::Error>;

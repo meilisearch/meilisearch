@@ -1,8 +1,9 @@
 use std::fmt;
 use std::marker::PhantomData;
+use std::ops::ControlFlow;
 use std::str::FromStr;
 
-use deserr::{DeserializeError, DeserializeFromValue, MergeWithError, ValueKind};
+use deserr::{DeserializeError, Deserr, MergeWithError, ValueKind};
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -111,7 +112,7 @@ where
     }
 }
 
-impl<T, E> DeserializeFromValue<E> for StarOr<T>
+impl<T, E> Deserr<E> for StarOr<T>
 where
     T: FromStr,
     E: DeserializeError + MergeWithError<T::Err>,
@@ -191,7 +192,7 @@ where
     }
 }
 
-impl<T, E> DeserializeFromValue<E> for OptionStarOr<T>
+impl<T, E> Deserr<E> for OptionStarOr<T>
 where
     E: DeserializeError + MergeWithError<T::Err>,
     T: FromQueryParameter,
@@ -271,7 +272,7 @@ impl<T> OptionStarOrList<T> {
     }
 }
 
-impl<T, E> DeserializeFromValue<E> for OptionStarOrList<T>
+impl<T, E> Deserr<E> for OptionStarOrList<T>
 where
     E: DeserializeError + MergeWithError<T::Err>,
     T: FromQueryParameter,
@@ -299,7 +300,10 @@ where
                             Err(e) => {
                                 let location =
                                     if len_cs > 1 { location.push_index(i) } else { location };
-                                error = Some(E::merge(error, e, location)?);
+                                error = match E::merge(error, e, location) {
+                                    ControlFlow::Continue(e) => Some(e),
+                                    ControlFlow::Break(e) => return Err(e),
+                                };
                             }
                         }
                     }

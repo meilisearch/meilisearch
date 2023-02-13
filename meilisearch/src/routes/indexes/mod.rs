@@ -2,7 +2,7 @@ use std::convert::Infallible;
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use deserr::{DeserializeError, DeserializeFromValue, ValuePointerRef};
+use deserr::{DeserializeError, Deserr, ValuePointerRef};
 use index_scheduler::IndexScheduler;
 use log::debug;
 use meilisearch_types::deserr::error_messages::immutable_field_error;
@@ -73,7 +73,7 @@ impl IndexView {
     }
 }
 
-#[derive(DeserializeFromValue, Debug, Clone, Copy)]
+#[derive(Deserr, Debug, Clone, Copy)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct ListIndexes {
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexOffset>)]
@@ -105,7 +105,7 @@ pub async fn list_indexes(
     Ok(HttpResponse::Ok().json(ret))
 }
 
-#[derive(DeserializeFromValue, Debug)]
+#[derive(Deserr, Debug)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct IndexCreateRequest {
     #[deserr(error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
@@ -157,7 +157,7 @@ fn deny_immutable_fields_index(
     }
 }
 
-#[derive(DeserializeFromValue, Debug)]
+#[derive(Deserr, Debug)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_index)]
 pub struct UpdateIndexRequest {
     #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]

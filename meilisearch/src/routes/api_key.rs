@@ -1,7 +1,7 @@
 use std::str;
 
 use actix_web::{web, HttpRequest, HttpResponse};
-use deserr::DeserializeFromValue;
+use deserr::Deserr;
 use meilisearch_auth::error::AuthControllerError;
 use meilisearch_auth::AuthController;
 use meilisearch_types::deserr::query_params::Param;
@@ -51,7 +51,7 @@ pub async fn create_api_key(
     Ok(HttpResponse::Created().json(res))
 }
 
-#[derive(DeserializeFromValue, Debug, Clone, Copy)]
+#[derive(Deserr, Debug, Clone, Copy)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct ListApiKeys {
     #[deserr(default, error = DeserrQueryParamError<InvalidApiKeyOffset>)]

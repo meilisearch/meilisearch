@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::result::Result as StdResult;
 
 use charabia::{Tokenizer, TokenizerBuilder};
-use deserr::{DeserializeError, DeserializeFromValue};
+use deserr::{DeserializeError, Deserr};
 use itertools::Itertools;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use time::OffsetDateTime;
@@ -23,9 +23,9 @@ pub enum Setting<T> {
     NotSet,
 }
 
-impl<T, E> DeserializeFromValue<E> for Setting<T>
+impl<T, E> Deserr<E> for Setting<T>
 where
-    T: DeserializeFromValue<E>,
+    T: Deserr<E>,
     E: DeserializeError,
 {
     fn deserialize_from_value<V: deserr::IntoValue>(

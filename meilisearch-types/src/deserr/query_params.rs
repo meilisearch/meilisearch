@@ -15,7 +15,7 @@ use std::convert::Infallible;
 use std::ops::Deref;
 use std::str::FromStr;
 
-use deserr::{DeserializeError, DeserializeFromValue, MergeWithError, ValueKind};
+use deserr::{DeserializeError, Deserr, MergeWithError, ValueKind};
 
 use super::{DeserrParseBoolError, DeserrParseIntError};
 use crate::error::unwrap_any;
@@ -38,7 +38,7 @@ impl<T> Deref for Param<T> {
     }
 }
 
-impl<T, E> DeserializeFromValue<E> for Param<T>
+impl<T, E> Deserr<E> for Param<T>
 where
     E: DeserializeError + MergeWithError<T::Err>,
     T: FromQueryParameter,

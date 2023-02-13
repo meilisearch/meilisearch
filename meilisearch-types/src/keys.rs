@@ -2,7 +2,7 @@ use std::convert::Infallible;
 use std::hash::Hash;
 use std::str::FromStr;
 
-use deserr::{DeserializeError, DeserializeFromValue, MergeWithError, ValuePointerRef};
+use deserr::{DeserializeError, Deserr, MergeWithError, ValuePointerRef};
 use enum_iterator::Sequence;
 use milli::update::Setting;
 use serde::{Deserialize, Serialize};
@@ -24,7 +24,7 @@ impl<C: Default + ErrorCode> MergeWithError<IndexUidPatternFormatError> for Dese
         _self_: Option<Self>,
         other: IndexUidPatternFormatError,
         merge_location: deserr::ValuePointerRef,
-    ) -> std::result::Result<Self, Self> {
+    ) -> std::ops::ControlFlow<Self, Self> {
         DeserrError::error::<Infallible>(
             None,
             deserr::ErrorKind::Unexpected { msg: other.to_string() },
@@ -33,20 +33,20 @@ impl<C: Default + ErrorCode> MergeWithError<IndexUidPatternFormatError> for Dese
     }
 }
 
-#[derive(Debug, DeserializeFromValue)]
+#[derive(Debug, Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct CreateApiKey {
     #[deserr(default, error = DeserrJsonError<InvalidApiKeyDescription>)]
     pub description: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidApiKeyName>)]
     pub name: Option<String>,
-    #[deserr(default = Uuid::new_v4(), error = DeserrJsonError<InvalidApiKeyUid>, from(&String) = Uuid::from_str -> uuid::Error)]
+    #[deserr(default = Uuid::new_v4(), error = DeserrJsonError<InvalidApiKeyUid>, try_from(&String) = Uuid::from_str -> uuid::Error)]
     pub uid: KeyId,
     #[deserr(error = DeserrJsonError<InvalidApiKeyActions>, missing_field_error = DeserrJsonError::missing_api_key_actions)]
     pub actions: Vec<Action>,
     #[deserr(error = DeserrJsonError<InvalidApiKeyIndexes>, missing_field_error = DeserrJsonError::missing_api_key_indexes)]
     pub indexes: Vec<IndexUidPattern>,
-    #[deserr(error = DeserrJsonError<InvalidApiKeyExpiresAt>, from(Option<String>) = parse_expiration_date -> ParseOffsetDateTimeError, missing_field_error = DeserrJsonError::missing_api_key_expires_at)]
+    #[deserr(error = DeserrJsonError<InvalidApiKeyExpiresAt>, try_from(Option<String>) = parse_expiration_date -> ParseOffsetDateTimeError, missing_field_error = DeserrJsonError::missing_api_key_expires_at)]
     pub expires_at: Option<OffsetDateTime>,
 }
 
@@ -87,7 +87,7 @@ fn deny_immutable_fields_api_key(
     }
 }
 
-#[derive(Debug, DeserializeFromValue)]
+#[derive(Debug, Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_api_key)]
 pub struct PatchApiKey {
     #[deserr(default, error = DeserrJsonError<InvalidApiKeyDescription>)]
@@ -182,9 +182,7 @@ fn parse_expiration_date(
     }
 }
 
-#[derive(
-    Copy, Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Hash, Sequence, DeserializeFromValue,
-)]
+#[derive(Copy, Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Hash, Sequence, Deserr)]
 #[repr(u8)]
 pub enum Action {
     #[serde(rename = "*")]

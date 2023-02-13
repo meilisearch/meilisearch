@@ -1,6 +1,7 @@
 use std::convert::Infallible;
 use std::fmt;
 use std::marker::PhantomData;
+use std::ops::ControlFlow;
 
 use deserr::{DeserializeError, MergeWithError, ValuePointerRef};
 
@@ -64,8 +65,8 @@ impl<Format, C1: Default + ErrorCode, C2: Default + ErrorCode>
         _self_: Option<Self>,
         other: DeserrError<Format, C2>,
         _merge_location: ValuePointerRef,
-    ) -> Result<Self, Self> {
-        Err(DeserrError { msg: other.msg, code: other.code, _phantom: PhantomData })
+    ) -> ControlFlow<Self, Self> {
+        ControlFlow::Break(DeserrError { msg: other.msg, code: other.code, _phantom: PhantomData })
     }
 }
 
@@ -74,7 +75,7 @@ impl<Format, C: Default + ErrorCode> MergeWithError<Infallible> for DeserrError<
         _self_: Option<Self>,
         _other: Infallible,
         _merge_location: ValuePointerRef,
-    ) -> Result<Self, Self> {
+    ) -> ControlFlow<Self, Self> {
         unreachable!()
     }
 }
@@ -112,7 +113,7 @@ macro_rules! merge_with_error_impl_take_error_message {
                 _self_: Option<Self>,
                 other: $err_type,
                 merge_location: ValuePointerRef,
-            ) -> Result<Self, Self> {
+            ) -> ControlFlow<Self, Self> {
                 DeserrError::<Format, C>::error::<Infallible>(
                     None,
                     deserr::ErrorKind::Unexpected { msg: other.to_string() },

@@ -4,7 +4,7 @@ use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use bstr::ByteSlice;
-use deserr::DeserializeFromValue;
+use deserr::Deserr;
 use futures::StreamExt;
 use index_scheduler::IndexScheduler;
 use log::debug;
@@ -80,7 +80,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-#[derive(Debug, DeserializeFromValue)]
+#[derive(Debug, Deserr)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct GetDocument {
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
@@ -125,7 +125,7 @@ pub async fn delete_document(
     Ok(HttpResponse::Accepted().json(task))
 }
 
-#[derive(Debug, DeserializeFromValue)]
+#[derive(Debug, Deserr)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct BrowseQuery {
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentOffset>)]
@@ -155,7 +155,7 @@ pub async fn get_all_documents(
     Ok(HttpResponse::Ok().json(ret))
 }
 
-#[derive(Deserialize, Debug, DeserializeFromValue)]
+#[derive(Deserialize, Debug, Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct UpdateDocumentsQuery {
     #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]

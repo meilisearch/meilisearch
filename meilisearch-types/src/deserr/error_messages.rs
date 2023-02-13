@@ -6,6 +6,8 @@ We try to:
 2. Use the correct terms depending on the format of the request (json/query param)
 3. Categorise the type of the error (e.g. missing field, wrong value type, unexpected error, etc.)
  */
+use std::ops::ControlFlow;
+
 use deserr::{ErrorKind, IntoValue, ValueKind, ValuePointerRef};
 
 use super::{DeserrJsonError, DeserrQueryParamError};
@@ -129,7 +131,7 @@ impl<C: Default + ErrorCode> deserr::DeserializeError for DeserrJsonError<C> {
         _self_: Option<Self>,
         error: deserr::ErrorKind<V>,
         location: ValuePointerRef,
-    ) -> Result<Self, Self> {
+    ) -> ControlFlow<Self, Self> {
         let mut message = String::new();
 
         message.push_str(&match error {
@@ -175,7 +177,7 @@ impl<C: Default + ErrorCode> deserr::DeserializeError for DeserrJsonError<C> {
             }
         });
 
-        Err(DeserrJsonError::new(message, C::default().error_code()))
+        ControlFlow::Break(DeserrJsonError::new(message, C::default().error_code()))
     }
 }
 
@@ -222,7 +224,7 @@ impl<C: Default + ErrorCode> deserr::DeserializeError for DeserrQueryParamError<
         _self_: Option<Self>,
         error: deserr::ErrorKind<V>,
         location: ValuePointerRef,
-    ) -> Result<Self, Self> {
+    ) -> ControlFlow<Self, Self> {
         let mut message = String::new();
 
         message.push_str(&match error {
@@ -268,7 +270,7 @@ impl<C: Default + ErrorCode> deserr::DeserializeError for DeserrQueryParamError<
             }
         });
 
-        Err(DeserrQueryParamError::new(message, C::default().error_code()))
+        ControlFlow::Break(DeserrQueryParamError::new(message, C::default().error_code()))
     }
 }
 
