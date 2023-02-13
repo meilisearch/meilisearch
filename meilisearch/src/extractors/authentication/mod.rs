@@ -199,7 +199,7 @@ pub mod policies {
             token: &str,
             index: Option<&str>,
         ) -> Option<AuthFilter> {
-            // Tenant token will always define an index.
+            // A tenant token only has access to the search route which always defines an index.
             let index = index?;
 
             // Only search action can be accessed by a tenant token.
