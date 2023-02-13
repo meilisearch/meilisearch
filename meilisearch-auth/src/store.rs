@@ -5,6 +5,7 @@ use std::convert::{TryFrom, TryInto};
 use std::fs::create_dir_all;
 use std::path::Path;
 use std::str;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use hmac::{Hmac, Mac};
@@ -18,7 +19,7 @@ use time::OffsetDateTime;
 use uuid::fmt::Hyphenated;
 use uuid::Uuid;
 
-use super::error::Result;
+use super::error::{AuthControllerError, Result};
 use super::{Action, Key};
 
 const AUTH_STORE_SIZE: usize = 1_073_741_824; //1GiB
@@ -225,9 +226,9 @@ impl HeedAuthStore {
                 for result in self.action_keyid_index_expiration.prefix_iter(&rtxn, &tuple)? {
                     let ((_, _, index_uid_pattern), expiration) = result?;
                     if let Some((pattern, index)) = index_uid_pattern.zip(index) {
-                        let index_uid_pattern = str::from_utf8(pattern)?.to_string();
-                        // TODO I shouldn't unwrap here but rather return an internal error
-                        let pattern = IndexUidPattern::try_from(index_uid_pattern).unwrap();
+                        let index_uid_pattern = str::from_utf8(pattern)?;
+                        let pattern = IndexUidPattern::from_str(index_uid_pattern)
+                            .map_err(|e| AuthControllerError::Internal(Box::new(e)))?;
                         if pattern.matches_str(index) {
                             return Ok(Some(expiration));
                         }
