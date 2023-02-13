@@ -165,7 +165,7 @@ impl FromStr for AscDesc {
 
 #[derive(Error, Debug)]
 pub enum SortError {
-    #[error("{}", error)]
+    #[error(transparent)]
     ParseGeoError { error: ParseGeoError },
     #[error("Invalid syntax for the geo parameter: expected expression formated like \
                     `_geoPoint(latitude, longitude)` and ending by `:asc` or `:desc`, found `{name}`.")]
