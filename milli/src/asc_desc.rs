@@ -12,10 +12,13 @@ use crate::{CriterionError, Error, UserError};
 
 /// This error type is never supposed to be shown to the end user.
 /// You must always cast it to a sort error or a criterion error.
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum AscDescError {
+    #[error(transparent)]
     GeoError(ParseGeoError),
+    #[error("Invalid syntax for the asc/desc parameter: expected expression ending by `:asc` or `:desc`, found `{name}`.")]
     InvalidSyntax { name: String },
+    #[error("`{name}` is a reserved keyword and thus can't be used as a asc/desc rule.")]
     ReservedKeyword { name: String },
 }
 
@@ -25,25 +28,6 @@ impl From<ParseGeoError> for AscDescError {
     }
 }
 
-impl fmt::Display for AscDescError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::GeoError(error) => {
-                write!(f, "{error}",)
-            }
-            Self::InvalidSyntax { name } => {
-                write!(f, "Invalid syntax for the asc/desc parameter: expected expression ending by `:asc` or `:desc`, found `{}`.", name)
-            }
-            Self::ReservedKeyword { name } => {
-                write!(
-                    f,
-                    "`{}` is a reserved keyword and thus can't be used as a asc/desc rule.",
-                    name
-                )
-            }
-        }
-    }
-}
 
 impl From<AscDescError> for CriterionError {
     fn from(error: AscDescError) -> Self {
