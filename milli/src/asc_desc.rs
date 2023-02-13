@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::error::is_reserved_keyword;
-use crate::search::facet::ParseGeoError;
+use crate::search::facet::BadGeoError;
 use crate::{CriterionError, Error, UserError};
 
 /// This error type is never supposed to be shown to the end user.
@@ -15,15 +15,15 @@ use crate::{CriterionError, Error, UserError};
 #[derive(Error, Debug)]
 pub enum AscDescError {
     #[error(transparent)]
-    GeoError(ParseGeoError),
+    GeoError(BadGeoError),
     #[error("Invalid syntax for the asc/desc parameter: expected expression ending by `:asc` or `:desc`, found `{name}`.")]
     InvalidSyntax { name: String },
     #[error("`{name}` is a reserved keyword and thus can't be used as a asc/desc rule.")]
     ReservedKeyword { name: String },
 }
 
-impl From<ParseGeoError> for AscDescError {
-    fn from(geo_error: ParseGeoError) -> Self {
+impl From<BadGeoError> for AscDescError {
+    fn from(geo_error: BadGeoError) -> Self {
         AscDescError::GeoError(geo_error)
     }
 }
@@ -72,9 +72,9 @@ impl FromStr for Member {
                             .map_err(|_| AscDescError::ReservedKeyword { name: text.to_string() })
                     })?;
                 if !(-90.0..=90.0).contains(&lat) {
-                    return Err(ParseGeoError::BadGeoLat(lat))?;
+                    return Err(BadGeoError::Lat(lat))?;
                 } else if !(-180.0..=180.0).contains(&lng) {
-                    return Err(ParseGeoError::BadGeoLng(lng))?;
+                    return Err(BadGeoError::Lng(lng))?;
                 }
                 Ok(Member::Geo([lat, lng]))
             }
@@ -150,7 +150,7 @@ impl FromStr for AscDesc {
 #[derive(Error, Debug)]
 pub enum SortError {
     #[error(transparent)]
-    ParseGeoError { error: ParseGeoError },
+    ParseGeoError { error: BadGeoError },
     #[error("Invalid syntax for the geo parameter: expected expression formated like \
                     `_geoPoint(latitude, longitude)` and ending by `:asc` or `:desc`, found `{name}`.")]
     BadGeoPointUsage { name: String },
@@ -261,11 +261,11 @@ mod tests {
             ),
             ("_geoPoint(35, 85, 75):asc", ReservedKeyword { name: S("_geoPoint(35, 85, 75)") }),
             ("_geoPoint(18):asc", ReservedKeyword { name: S("_geoPoint(18)") }),
-            ("_geoPoint(200, 200):asc", GeoError(ParseGeoError::BadGeoLat(200.))),
-            ("_geoPoint(90.000001, 0):asc", GeoError(ParseGeoError::BadGeoLat(90.000001))),
-            ("_geoPoint(0, -180.000001):desc", GeoError(ParseGeoError::BadGeoLng(-180.000001))),
-            ("_geoPoint(159.256, 130):asc", GeoError(ParseGeoError::BadGeoLat(159.256))),
-            ("_geoPoint(12, -2021):desc", GeoError(ParseGeoError::BadGeoLng(-2021.))),
+            ("_geoPoint(200, 200):asc", GeoError(BadGeoError::Lat(200.))),
+            ("_geoPoint(90.000001, 0):asc", GeoError(BadGeoError::Lat(90.000001))),
+            ("_geoPoint(0, -180.000001):desc", GeoError(BadGeoError::Lng(-180.000001))),
+            ("_geoPoint(159.256, 130):asc", GeoError(BadGeoError::Lat(159.256))),
+            ("_geoPoint(12, -2021):desc", GeoError(BadGeoError::Lng(-2021.))),
         ];
 
         for (req, expected_error) in invalid_req {

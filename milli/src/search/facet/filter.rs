@@ -22,26 +22,26 @@ pub struct Filter<'a> {
 }
 
 #[derive(Debug)]
-pub enum ParseGeoError {
-    BadGeoLat(f64),
-    BadGeoLng(f64),
-    BadGeoBoundingBoxTopIsBelowBottom(f64, f64),
+pub enum BadGeoError {
+    Lat(f64),
+    Lng(f64),
+    BoundingBoxTopIsBelowBottom(f64, f64),
 }
 
-impl std::error::Error for ParseGeoError {}
+impl std::error::Error for BadGeoError {}
 
-impl Display for ParseGeoError {
+impl Display for BadGeoError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::BadGeoBoundingBoxTopIsBelowBottom(top, bottom) => {
+            Self::BoundingBoxTopIsBelowBottom(top, bottom) => {
                 write!(f, "The top latitude `{top}` is below the bottom latitude `{bottom}`.")
             }
-            Self::BadGeoLat(lat) => write!(
+            Self::Lat(lat) => write!(
                 f,
                 "Bad latitude `{}`. Latitude must be contained between -90 and 90 degrees. ",
                 lat
             ),
-            Self::BadGeoLng(lng) => write!(
+            Self::Lng(lng) => write!(
                 f,
                 "Bad longitude `{}`. Longitude must be contained between -180 and 180 degrees. ",
                 lng
@@ -53,15 +53,15 @@ impl Display for ParseGeoError {
 #[derive(Debug)]
 enum FilterError<'a> {
     AttributeNotFilterable { attribute: &'a str, filterable_fields: HashSet<String> },
-    ParseGeoError(ParseGeoError),
+    ParseGeoError(BadGeoError),
     ReservedGeo(&'a str),
     Reserved(&'a str),
     TooDeep,
 }
 impl<'a> std::error::Error for FilterError<'a> {}
 
-impl<'a> From<ParseGeoError> for FilterError<'a> {
-    fn from(geo_error: ParseGeoError) -> Self {
+impl<'a> From<BadGeoError> for FilterError<'a> {
+    fn from(geo_error: BadGeoError) -> Self {
         FilterError::ParseGeoError(geo_error)
     }
 }
@@ -390,12 +390,12 @@ impl<'a> Filter<'a> {
                         [point[0].parse_finite_float()?, point[1].parse_finite_float()?];
                     if !(-90.0..=90.0).contains(&base_point[0]) {
                         return Err(
-                            point[0].as_external_error(ParseGeoError::BadGeoLat(base_point[0]))
+                            point[0].as_external_error(BadGeoError::Lat(base_point[0]))
                         )?;
                     }
                     if !(-180.0..=180.0).contains(&base_point[1]) {
                         return Err(
-                            point[1].as_external_error(ParseGeoError::BadGeoLng(base_point[1]))
+                            point[1].as_external_error(BadGeoError::Lng(base_point[1]))
                         )?;
                     }
                     let radius = radius.parse_finite_float()?;
@@ -435,23 +435,23 @@ impl<'a> Filter<'a> {
                     ];
                     if !(-90.0..=90.0).contains(&top_left[0]) {
                         return Err(top_left_point[0]
-                            .as_external_error(ParseGeoError::BadGeoLat(top_left[0])))?;
+                            .as_external_error(BadGeoError::Lat(top_left[0])))?;
                     }
                     if !(-180.0..=180.0).contains(&top_left[1]) {
                         return Err(top_left_point[1]
-                            .as_external_error(ParseGeoError::BadGeoLng(top_left[1])))?;
+                            .as_external_error(BadGeoError::Lng(top_left[1])))?;
                     }
                     if !(-90.0..=90.0).contains(&bottom_right[0]) {
                         return Err(bottom_right_point[0]
-                            .as_external_error(ParseGeoError::BadGeoLat(bottom_right[0])))?;
+                            .as_external_error(BadGeoError::Lat(bottom_right[0])))?;
                     }
                     if !(-180.0..=180.0).contains(&bottom_right[1]) {
                         return Err(bottom_right_point[1]
-                            .as_external_error(ParseGeoError::BadGeoLng(bottom_right[1])))?;
+                            .as_external_error(BadGeoError::Lng(bottom_right[1])))?;
                     }
                     if top_left[0] < bottom_right[0] {
                         return Err(bottom_right_point[1].as_external_error(
-                            ParseGeoError::BadGeoBoundingBoxTopIsBelowBottom(
+                            BadGeoError::BoundingBoxTopIsBelowBottom(
                                 top_left[0],
                                 bottom_right[0],
                             ),
