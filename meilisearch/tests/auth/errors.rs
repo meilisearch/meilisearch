@@ -138,7 +138,7 @@ async fn create_api_key_bad_expires_at() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Unknown field `expires_at`: expected one of `description`, `name`, `uid`, `actions`, `indexes`, `expiresAt`",
+      "message": "Unknown field `expires_at`: did you mean `expiresAt`? expected one of `description`, `name`, `uid`, `actions`, `indexes`, `expiresAt`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
@@ -150,7 +150,7 @@ async fn create_api_key_bad_expires_at() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Unknown field `expires_at`: expected one of `description`, `name`, `uid`, `actions`, `indexes`, `expiresAt`",
+      "message": "Unknown field `expires_at`: did you mean `expiresAt`? expected one of `description`, `name`, `uid`, `actions`, `indexes`, `expiresAt`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"

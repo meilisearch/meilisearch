@@ -3,9 +3,10 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::ops::ControlFlow;
 
-use deserr::{DeserializeError, MergeWithError, ValuePointerRef};
+use deserr::errors::{JsonError, QueryParamError};
+use deserr::{take_cf_content, DeserializeError, IntoValue, MergeWithError, ValuePointerRef};
 
-use crate::error::deserr_codes::{self, *};
+use crate::error::deserr_codes::*;
 use crate::error::{
     unwrap_any, Code, DeserrParseBoolError, DeserrParseIntError, ErrorCode, InvalidTaskDateError,
     ParseOffsetDateTimeError,
@@ -13,7 +14,6 @@ use crate::error::{
 use crate::index_uid::IndexUidFormatError;
 use crate::tasks::{ParseTaskKindError, ParseTaskStatusError};
 
-pub mod error_messages;
 pub mod query_params;
 
 /// Marker type for the Json format
@@ -21,8 +21,8 @@ pub struct DeserrJson;
 /// Marker type for the Query Parameter format
 pub struct DeserrQueryParam;
 
-pub type DeserrJsonError<C = deserr_codes::BadRequest> = DeserrError<DeserrJson, C>;
-pub type DeserrQueryParamError<C = deserr_codes::BadRequest> = DeserrError<DeserrQueryParam, C>;
+pub type DeserrJsonError<C = BadRequest> = DeserrError<DeserrJson, C>;
+pub type DeserrQueryParamError<C = BadRequest> = DeserrError<DeserrQueryParam, C>;
 
 /// A request deserialization error.
 ///
@@ -78,6 +78,45 @@ impl<Format, C: Default + ErrorCode> MergeWithError<Infallible> for DeserrError<
     ) -> ControlFlow<Self, Self> {
         unreachable!()
     }
+}
+
+impl<C: Default + ErrorCode> DeserializeError for DeserrJsonError<C> {
+    fn error<V: IntoValue>(
+        _self_: Option<Self>,
+        error: deserr::ErrorKind<V>,
+        location: ValuePointerRef,
+    ) -> ControlFlow<Self, Self> {
+        ControlFlow::Break(DeserrJsonError::new(
+            take_cf_content(JsonError::error(None, error, location)).to_string(),
+            C::default().error_code(),
+        ))
+    }
+}
+
+impl<C: Default + ErrorCode> DeserializeError for DeserrQueryParamError<C> {
+    fn error<V: IntoValue>(
+        _self_: Option<Self>,
+        error: deserr::ErrorKind<V>,
+        location: ValuePointerRef,
+    ) -> ControlFlow<Self, Self> {
+        ControlFlow::Break(DeserrQueryParamError::new(
+            take_cf_content(QueryParamError::error(None, error, location)).to_string(),
+            C::default().error_code(),
+        ))
+    }
+}
+
+pub fn immutable_field_error(field: &str, accepted: &[&str], code: Code) -> DeserrJsonError {
+    let msg = format!(
+        "Immutable field `{field}`: expected one of {}",
+        accepted
+            .iter()
+            .map(|accepted| format!("`{}`", accepted))
+            .collect::<Vec<String>>()
+            .join(", ")
+    );
+
+    DeserrJsonError::new(msg, code)
 }
 
 // Implement a convenience function to build a `missing_field` error
