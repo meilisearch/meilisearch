@@ -4,9 +4,9 @@ use actix_web::dev::{self, Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::http::header;
 use actix_web::{Error, HttpResponse};
 use futures_util::future::LocalBoxFuture;
-use meilisearch_auth::actions;
 use meilisearch_lib::MeiliSearch;
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::keys::actions;
 use prometheus::{Encoder, HistogramTimer, TextEncoder};
 
 use crate::extractors::authentication::policies::ActionPolicy;
