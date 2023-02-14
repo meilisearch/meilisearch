@@ -784,14 +784,13 @@ impl<'a, 'i> Transform<'a, 'i> {
 fn merge_obkvs_and_operations<'a>(_key: &[u8], obkvs: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
     // [add, add, delete, add, add]
     // we can ignore everything that happened before the last delete.
-    let starting_position = obkvs
-        .iter()
-        .rposition(|obkv| obkv[0] == Operation::Deletion as u8)
-        .unwrap_or(0);
+    let starting_position =
+        obkvs.iter().rposition(|obkv| obkv[0] == Operation::Deletion as u8).unwrap_or(0);
 
     // [add, add, delete]
     // if the last operation was a deletion then we simply return the deletion
-    if starting_position == obkvs.len() {
+    if starting_position == obkvs.len() - 1 && obkvs.last().unwrap()[0] == Operation::Deletion as u8
+    {
         return Ok(obkvs[obkvs.len() - 1].clone());
     }
     let mut buffer = Vec::new();
@@ -834,5 +833,47 @@ impl TransformOutput {
             .filter(|&field| crate::is_faceted(field, &user_defined_facets))
             .map(|field| field.to_string())
             .collect())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn merge_obkvs() {
+        let mut doc_0 = Vec::new();
+        let mut kv_writer = KvWriter::new(&mut doc_0);
+        kv_writer.insert(0_u8, [0]).unwrap();
+        kv_writer.finish().unwrap();
+        doc_0.insert(0, Operation::Addition as u8);
+
+        let ret = merge_obkvs_and_operations(&[], &[Cow::from(doc_0.as_slice())]).unwrap();
+        assert_eq!(*ret, doc_0);
+
+        let ret = merge_obkvs_and_operations(
+            &[],
+            &[Cow::from([Operation::Deletion as u8].as_slice()), Cow::from(doc_0.as_slice())],
+        )
+        .unwrap();
+        assert_eq!(*ret, doc_0);
+
+        let ret = merge_obkvs_and_operations(
+            &[],
+            &[Cow::from(doc_0.as_slice()), Cow::from([Operation::Deletion as u8].as_slice())],
+        )
+        .unwrap();
+        assert_eq!(*ret, [Operation::Deletion as u8]);
+
+        let ret = merge_obkvs_and_operations(
+            &[],
+            &[
+                Cow::from([Operation::Addition as u8, 1].as_slice()),
+                Cow::from([Operation::Deletion as u8].as_slice()),
+                Cow::from(doc_0.as_slice()),
+            ],
+        )
+        .unwrap();
+        assert_eq!(*ret, doc_0);
     }
 }
