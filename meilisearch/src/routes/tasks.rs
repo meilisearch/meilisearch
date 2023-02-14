@@ -1,5 +1,6 @@
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
+use deserr::actix_web::AwebQueryParameter;
 use deserr::Deserr;
 use index_scheduler::{IndexScheduler, Query, TaskId};
 use meilisearch_types::deserr::query_params::Param;
@@ -23,7 +24,6 @@ use super::SummarizedTaskView;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
-use crate::extractors::query_parameters::QueryParameter;
 use crate::extractors::sequential_extractor::SeqHandler;
 
 const DEFAULT_LIMIT: u32 = 20;
@@ -286,7 +286,7 @@ impl TaskDeletionOrCancelationQuery {
 
 async fn cancel_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_CANCEL }>, Data<IndexScheduler>>,
-    params: QueryParameter<TaskDeletionOrCancelationQuery, DeserrQueryParamError>,
+    params: AwebQueryParameter<TaskDeletionOrCancelationQuery, DeserrQueryParamError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -332,7 +332,7 @@ async fn cancel_tasks(
 
 async fn delete_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_DELETE }>, Data<IndexScheduler>>,
-    params: QueryParameter<TaskDeletionOrCancelationQuery, DeserrQueryParamError>,
+    params: AwebQueryParameter<TaskDeletionOrCancelationQuery, DeserrQueryParamError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -385,7 +385,7 @@ pub struct AllTasks {
 
 async fn get_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, Data<IndexScheduler>>,
-    params: QueryParameter<TasksFilterQuery, DeserrQueryParamError>,
+    params: AwebQueryParameter<TasksFilterQuery, DeserrQueryParamError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {

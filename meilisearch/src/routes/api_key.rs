@@ -1,6 +1,7 @@
 use std::str;
 
 use actix_web::{web, HttpRequest, HttpResponse};
+use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::Deserr;
 use meilisearch_auth::error::AuthControllerError;
 use meilisearch_auth::AuthController;
@@ -16,8 +17,6 @@ use uuid::Uuid;
 use super::PAGINATION_DEFAULT_LIMIT;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
-use crate::extractors::json::ValidatedJson;
-use crate::extractors::query_parameters::QueryParameter;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::Pagination;
 
@@ -37,7 +36,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 pub async fn create_api_key(
     auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_CREATE }>, AuthController>,
-    body: ValidatedJson<CreateApiKey, DeserrJsonError>,
+    body: AwebJson<CreateApiKey, DeserrJsonError>,
     _req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
     let v = body.into_inner();
@@ -68,7 +67,7 @@ impl ListApiKeys {
 
 pub async fn list_api_keys(
     auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_GET }>, AuthController>,
-    list_api_keys: QueryParameter<ListApiKeys, DeserrQueryParamError>,
+    list_api_keys: AwebQueryParameter<ListApiKeys, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
     let paginate = list_api_keys.into_inner().as_pagination();
     let page_view = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
@@ -105,7 +104,7 @@ pub async fn get_api_key(
 
 pub async fn patch_api_key(
     auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_UPDATE }>, AuthController>,
-    body: ValidatedJson<PatchApiKey, DeserrJsonError>,
+    body: AwebJson<PatchApiKey, DeserrJsonError>,
     path: web::Path<AuthParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let key = path.into_inner().key;

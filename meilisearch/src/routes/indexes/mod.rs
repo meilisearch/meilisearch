@@ -2,6 +2,7 @@ use std::convert::Infallible;
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
+use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::{DeserializeError, Deserr, ValuePointerRef};
 use index_scheduler::IndexScheduler;
 use log::debug;
@@ -20,8 +21,6 @@ use super::{Pagination, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
-use crate::extractors::json::ValidatedJson;
-use crate::extractors::query_parameters::QueryParameter;
 use crate::extractors::sequential_extractor::SeqHandler;
 
 pub mod documents;
@@ -88,7 +87,7 @@ impl ListIndexes {
 
 pub async fn list_indexes(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, Data<IndexScheduler>>,
-    paginate: QueryParameter<ListIndexes, DeserrQueryParamError>,
+    paginate: AwebQueryParameter<ListIndexes, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
     let search_rules = &index_scheduler.filters().search_rules;
     let indexes: Vec<_> = index_scheduler.indexes()?;
@@ -115,7 +114,7 @@ pub struct IndexCreateRequest {
 
 pub async fn create_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_CREATE }>, Data<IndexScheduler>>,
-    body: ValidatedJson<IndexCreateRequest, DeserrJsonError>,
+    body: AwebJson<IndexCreateRequest, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -180,7 +179,7 @@ pub async fn get_index(
 pub async fn update_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    body: ValidatedJson<UpdateIndexRequest, DeserrJsonError>,
+    body: AwebJson<UpdateIndexRequest, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {

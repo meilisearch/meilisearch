@@ -127,7 +127,7 @@ macro_rules! make_error_codes {
         }
         impl Code {
             /// return the HTTP status code associated with the `Code`
-            fn http(&self) -> StatusCode {
+            pub fn http(&self) -> StatusCode {
                 match self {
                     $(
                         Code::$code_ident => StatusCode::$status

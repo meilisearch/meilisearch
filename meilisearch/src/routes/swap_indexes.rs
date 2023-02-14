@@ -1,5 +1,6 @@
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
+use deserr::actix_web::AwebJson;
 use deserr::Deserr;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
@@ -14,7 +15,6 @@ use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
-use crate::extractors::json::ValidatedJson;
 use crate::extractors::sequential_extractor::SeqHandler;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -30,7 +30,7 @@ pub struct SwapIndexesPayload {
 
 pub async fn swap_indexes(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_SWAP }>, Data<IndexScheduler>>,
-    params: ValidatedJson<Vec<SwapIndexesPayload>, DeserrJsonError>,
+    params: AwebJson<Vec<SwapIndexesPayload>, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {

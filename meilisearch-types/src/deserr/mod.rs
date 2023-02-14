@@ -38,6 +38,7 @@ impl<Format, C: Default + ErrorCode> DeserrError<Format, C> {
         Self { msg, code, _phantom: PhantomData }
     }
 }
+
 impl<Format, C: Default + ErrorCode> std::fmt::Debug for DeserrError<Format, C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DeserrError").field("msg", &self.msg).field("code", &self.code).finish()
@@ -47,6 +48,16 @@ impl<Format, C: Default + ErrorCode> std::fmt::Debug for DeserrError<Format, C> 
 impl<Format, C: Default + ErrorCode> std::fmt::Display for DeserrError<Format, C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.msg)
+    }
+}
+
+impl<F, C: Default + ErrorCode> actix_web::ResponseError for DeserrError<F, C> {
+    fn status_code(&self) -> actix_web::http::StatusCode {
+        self.code.http()
+    }
+
+    fn error_response(&self) -> actix_web::HttpResponse<actix_web::body::BoxBody> {
+        crate::error::ResponseError::from_msg(self.msg.to_string(), self.code).error_response()
     }
 }
 
