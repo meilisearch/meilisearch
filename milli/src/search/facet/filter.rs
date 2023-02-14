@@ -22,16 +22,49 @@ pub struct Filter<'a> {
 }
 
 #[derive(Debug)]
+pub enum BadGeoError {
+    Lat(f64),
+    Lng(f64),
+    BoundingBoxTopIsBelowBottom(f64, f64),
+}
+
+impl std::error::Error for BadGeoError {}
+
+impl Display for BadGeoError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::BoundingBoxTopIsBelowBottom(top, bottom) => {
+                write!(f, "The top latitude `{top}` is below the bottom latitude `{bottom}`.")
+            }
+            Self::Lat(lat) => write!(
+                f,
+                "Bad latitude `{}`. Latitude must be contained between -90 and 90 degrees. ",
+                lat
+            ),
+            Self::Lng(lng) => write!(
+                f,
+                "Bad longitude `{}`. Longitude must be contained between -180 and 180 degrees. ",
+                lng
+            ),
+        }
+    }
+}
+
+#[derive(Debug)]
 enum FilterError<'a> {
     AttributeNotFilterable { attribute: &'a str, filterable_fields: HashSet<String> },
-    BadGeo(&'a str),
-    BadGeoLat(f64),
-    BadGeoLng(f64),
-    BadGeoBoundingBoxTopIsBelowBottom(f64, f64),
+    ParseGeoError(BadGeoError),
+    ReservedGeo(&'a str),
     Reserved(&'a str),
     TooDeep,
 }
 impl<'a> std::error::Error for FilterError<'a> {}
+
+impl<'a> From<BadGeoError> for FilterError<'a> {
+    fn from(geo_error: BadGeoError) -> Self {
+        FilterError::ParseGeoError(geo_error)
+    }
+}
 
 impl<'a> Display for FilterError<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -44,7 +77,11 @@ impl<'a> Display for FilterError<'a> {
                         attribute,
                     )
                 } else {
-                    let filterables_list = filterable_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(" ");
+                    let filterables_list = filterable_fields
+                        .iter()
+                        .map(AsRef::as_ref)
+                        .collect::<Vec<&str>>()
+                        .join(" ");
 
                     write!(
                         f,
@@ -53,20 +90,19 @@ impl<'a> Display for FilterError<'a> {
                         filterables_list,
                     )
                 }
-            },
-            Self::TooDeep => write!(f,
+            }
+            Self::TooDeep => write!(
+                f,
                 "Too many filter conditions, can't process more than {} filters.",
                 MAX_FILTER_DEPTH
             ),
+            Self::ReservedGeo(keyword) => write!(f, "`{}` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` field coordinates.", keyword),
             Self::Reserved(keyword) => write!(
                 f,
                 "`{}` is a reserved keyword and thus can't be used as a filter expression.",
                 keyword
             ),
-            Self::BadGeo(keyword) => write!(f, "`{}` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` field coordinates.", keyword),
-            Self::BadGeoBoundingBoxTopIsBelowBottom(top, bottom) => write!(f, "The top latitude `{top}` is below the bottom latitude `{bottom}`."),
-            Self::BadGeoLat(lat) => write!(f, "Bad latitude `{}`. Latitude must be contained between -90 and 90 degrees. ", lat),
-            Self::BadGeoLng(lng) => write!(f, "Bad longitude `{}`. Longitude must be contained between -180 and 180 degrees. ", lng),
+            Self::ParseGeoError(error) => write!(f, "{}", error),
         }
     }
 }
@@ -298,10 +334,10 @@ impl<'a> Filter<'a> {
                 } else {
                     match fid.value() {
                         attribute @ "_geo" => {
-                            Err(fid.as_external_error(FilterError::BadGeo(attribute)))?
+                            Err(fid.as_external_error(FilterError::ReservedGeo(attribute)))?
                         }
                         attribute if attribute.starts_with("_geoPoint(") => {
-                            Err(fid.as_external_error(FilterError::BadGeo("_geoPoint")))?
+                            Err(fid.as_external_error(FilterError::ReservedGeo("_geoPoint")))?
                         }
                         attribute @ "_geoDistance" => {
                             Err(fid.as_external_error(FilterError::Reserved(attribute)))?
@@ -353,14 +389,10 @@ impl<'a> Filter<'a> {
                     let base_point: [f64; 2] =
                         [point[0].parse_finite_float()?, point[1].parse_finite_float()?];
                     if !(-90.0..=90.0).contains(&base_point[0]) {
-                        return Err(
-                            point[0].as_external_error(FilterError::BadGeoLat(base_point[0]))
-                        )?;
+                        return Err(point[0].as_external_error(BadGeoError::Lat(base_point[0])))?;
                     }
                     if !(-180.0..=180.0).contains(&base_point[1]) {
-                        return Err(
-                            point[1].as_external_error(FilterError::BadGeoLng(base_point[1]))
-                        )?;
+                        return Err(point[1].as_external_error(BadGeoError::Lng(base_point[1])))?;
                     }
                     let radius = radius.parse_finite_float()?;
                     let rtree = match index.geo_rtree(rtxn)? {
@@ -398,27 +430,26 @@ impl<'a> Filter<'a> {
                         bottom_right_point[1].parse_finite_float()?,
                     ];
                     if !(-90.0..=90.0).contains(&top_left[0]) {
-                        return Err(top_left_point[0]
-                            .as_external_error(FilterError::BadGeoLat(top_left[0])))?;
+                        return Err(
+                            top_left_point[0].as_external_error(BadGeoError::Lat(top_left[0]))
+                        )?;
                     }
                     if !(-180.0..=180.0).contains(&top_left[1]) {
-                        return Err(top_left_point[1]
-                            .as_external_error(FilterError::BadGeoLng(top_left[1])))?;
+                        return Err(
+                            top_left_point[1].as_external_error(BadGeoError::Lng(top_left[1]))
+                        )?;
                     }
                     if !(-90.0..=90.0).contains(&bottom_right[0]) {
                         return Err(bottom_right_point[0]
-                            .as_external_error(FilterError::BadGeoLat(bottom_right[0])))?;
+                            .as_external_error(BadGeoError::Lat(bottom_right[0])))?;
                     }
                     if !(-180.0..=180.0).contains(&bottom_right[1]) {
                         return Err(bottom_right_point[1]
-                            .as_external_error(FilterError::BadGeoLng(bottom_right[1])))?;
+                            .as_external_error(BadGeoError::Lng(bottom_right[1])))?;
                     }
                     if top_left[0] < bottom_right[0] {
                         return Err(bottom_right_point[1].as_external_error(
-                            FilterError::BadGeoBoundingBoxTopIsBelowBottom(
-                                top_left[0],
-                                bottom_right[0],
-                            ),
+                            BadGeoError::BoundingBoxTopIsBelowBottom(top_left[0], bottom_right[0]),
                         ))?;
                     }
 
