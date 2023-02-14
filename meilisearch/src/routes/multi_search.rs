@@ -37,7 +37,7 @@ pub async fn search_with_post(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let queries = params.into_inner();
+    let queries = params.into_inner().queries;
 
     let mut multi_aggregate = MultiSearchAggregator::from_queries(&queries, &req);
 
@@ -60,7 +60,10 @@ pub async fn search_with_post(
                 let search_result =
                     tokio::task::spawn_blocking(move || perform_search(&index, query)).await?;
 
-                search_results.push(SearchResultWithIndex { index_uid, result: search_result? });
+                search_results.push(SearchResultWithIndex {
+                    index_uid: index_uid.into_inner(),
+                    result: search_result?,
+                });
             }
             Ok(search_results)
         }

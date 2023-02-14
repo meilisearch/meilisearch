@@ -8,6 +8,7 @@ use either::Either;
 use meilisearch_auth::IndexSearchRules;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::TokenizerBuilder;
@@ -82,7 +83,8 @@ impl SearchQuery {
 #[derive(Debug, deserr::DeserializeFromValue)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQueryWithIndex {
-    pub index_uid: String,
+    #[deserr(error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
+    pub index_uid: IndexUid,
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
@@ -120,7 +122,7 @@ pub struct SearchQueryWithIndex {
 }
 
 impl SearchQueryWithIndex {
-    pub fn into_index_query(self) -> (String, SearchQuery) {
+    pub fn into_index_query(self) -> (IndexUid, SearchQuery) {
         let SearchQueryWithIndex {
             index_uid,
             q,
