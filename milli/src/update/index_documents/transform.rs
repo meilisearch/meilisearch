@@ -797,18 +797,19 @@ fn merge_obkvs_and_operations<'a>(_key: &[u8], obkvs: &[Cow<'a, [u8]>]) -> Resul
 
     // (add, add, delete) [add, add]
     // in the other case, no deletion will be encountered during the merge
-    Ok(obkvs[starting_position..]
-        .iter()
-        .cloned()
-        .reduce(|acc, current| {
-            let first = obkv::KvReader::new(&acc[1..]);
+    let mut ret =
+        obkvs[starting_position..].iter().cloned().fold(Vec::new(), |mut acc, current| {
+            let first = obkv::KvReader::new(&acc);
             let second = obkv::KvReader::new(&current[1..]);
             merge_two_obkvs(first, second, &mut buffer);
-            // TODO: do this only once at the end
-            buffer.insert(0, Operation::Addition as u8);
-            Cow::from(buffer.clone())
-        })
-        .unwrap())
+
+            // we want the result of the merge into our accumulator
+            std::mem::swap(&mut acc, &mut buffer);
+            acc
+        });
+
+    ret.insert(0, Operation::Addition as u8);
+    Ok(Cow::from(ret))
 }
 
 /// Drops all the value of type `U` in vec, and reuses the allocation to create a `Vec<T>`.
