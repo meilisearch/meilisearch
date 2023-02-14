@@ -786,9 +786,8 @@ fn merge_obkvs_and_operations<'a>(_key: &[u8], obkvs: &[Cow<'a, [u8]>]) -> Resul
     // we can ignore everything that happened before the last delete.
     let starting_position = obkvs
         .iter()
-        .rev()
-        .position(|obkv| obkv[0] == Operation::Deletion as u8)
-        .map_or(0, |pos| obkvs.len() - pos);
+        .rposition(|obkv| obkv[0] == Operation::Deletion as u8)
+        .unwrap_or(0);
 
     // [add, add, delete]
     // if the last operation was a deletion then we simply return the deletion
