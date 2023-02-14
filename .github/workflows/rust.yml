@@ -2,6 +2,9 @@ name: Rust
 
 on:
   workflow_dispatch:
+  schedule:
+    # Everyday at 5:00am
+    - cron: '0 5 * * *'
   pull_request:
   push:
     # trying and staging branches are for Bors config
@@ -27,9 +30,17 @@ jobs:
       run: |
         apt-get update && apt-get install -y curl
         apt-get install build-essential -y
-    - uses: actions-rs/toolchain@v1
+    - name: Run test with Rust stable
+      if: github.event_name != 'schedule'
+      uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
+        override: true
+    - name: Run test with Rust nightly
+      if: github.event_name == 'schedule'
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
         override: true
     # Disable cache due to disk space issues with Windows workers in CI
     # - name: Cache dependencies
