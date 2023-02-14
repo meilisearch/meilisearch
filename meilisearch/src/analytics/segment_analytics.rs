@@ -755,7 +755,8 @@ impl MultiSearchAggregator {
 
         let user_agents = extract_user_agents(request).into_iter().collect();
 
-        let distinct_indexes: HashSet<_> = query.iter().map(|query| &query.index_uid).collect();
+        let distinct_indexes: HashSet<_> =
+            query.iter().map(|query| query.index_uid.as_str()).collect();
 
         Self {
             timestamp,
