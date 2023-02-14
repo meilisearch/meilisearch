@@ -28,7 +28,6 @@ impl From<BadGeoError> for AscDescError {
     }
 }
 
-
 impl From<AscDescError> for CriterionError {
     fn from(error: AscDescError) -> Self {
         match error {

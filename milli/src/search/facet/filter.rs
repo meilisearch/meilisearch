@@ -389,14 +389,10 @@ impl<'a> Filter<'a> {
                     let base_point: [f64; 2] =
                         [point[0].parse_finite_float()?, point[1].parse_finite_float()?];
                     if !(-90.0..=90.0).contains(&base_point[0]) {
-                        return Err(
-                            point[0].as_external_error(BadGeoError::Lat(base_point[0]))
-                        )?;
+                        return Err(point[0].as_external_error(BadGeoError::Lat(base_point[0])))?;
                     }
                     if !(-180.0..=180.0).contains(&base_point[1]) {
-                        return Err(
-                            point[1].as_external_error(BadGeoError::Lng(base_point[1]))
-                        )?;
+                        return Err(point[1].as_external_error(BadGeoError::Lng(base_point[1])))?;
                     }
                     let radius = radius.parse_finite_float()?;
                     let rtree = match index.geo_rtree(rtxn)? {
@@ -434,12 +430,14 @@ impl<'a> Filter<'a> {
                         bottom_right_point[1].parse_finite_float()?,
                     ];
                     if !(-90.0..=90.0).contains(&top_left[0]) {
-                        return Err(top_left_point[0]
-                            .as_external_error(BadGeoError::Lat(top_left[0])))?;
+                        return Err(
+                            top_left_point[0].as_external_error(BadGeoError::Lat(top_left[0]))
+                        )?;
                     }
                     if !(-180.0..=180.0).contains(&top_left[1]) {
-                        return Err(top_left_point[1]
-                            .as_external_error(BadGeoError::Lng(top_left[1])))?;
+                        return Err(
+                            top_left_point[1].as_external_error(BadGeoError::Lng(top_left[1]))
+                        )?;
                     }
                     if !(-90.0..=90.0).contains(&bottom_right[0]) {
                         return Err(bottom_right_point[0]
@@ -451,10 +449,7 @@ impl<'a> Filter<'a> {
                     }
                     if top_left[0] < bottom_right[0] {
                         return Err(bottom_right_point[1].as_external_error(
-                            BadGeoError::BoundingBoxTopIsBelowBottom(
-                                top_left[0],
-                                bottom_right[0],
-                            ),
+                            BadGeoError::BoundingBoxTopIsBelowBottom(top_left[0], bottom_right[0]),
                         ))?;
                     }
 
