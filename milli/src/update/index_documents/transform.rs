@@ -50,8 +50,12 @@ pub struct Transform<'a, 'i> {
     pub index_documents_method: IndexDocumentsMethod,
     available_documents_ids: AvailableDocumentsIds,
 
+    // Both grenad follows the same format:
+    // key | value
+    // u32 | 1 byte for the Operation byte, the rest is the obkv of the document stored
     original_sorter: grenad::Sorter<MergeFn>,
     flattened_sorter: grenad::Sorter<MergeFn>,
+
     replaced_documents_ids: RoaringBitmap,
     new_documents_ids: RoaringBitmap,
     // To increase the cache locality and decrease the heap usage we use compact smartstring.
@@ -59,6 +63,8 @@ pub struct Transform<'a, 'i> {
     documents_count: usize,
 }
 
+/// This enum is specific to the grenad sorter stored in the transform.
+/// It's used as the first byte of the grenads and tells you if the document id was an addition or a deletion.
 #[repr(u8)]
 enum Operation {
     Addition,
