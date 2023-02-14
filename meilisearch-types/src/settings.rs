@@ -14,7 +14,6 @@ use serde::{Deserialize, Serialize, Serializer};
 
 use crate::deserr::DeserrJsonError;
 use crate::error::deserr_codes::*;
-use crate::error::unwrap_any;
 
 /// The maximimum number of results that the engine
 /// will be able to return in one search call.
@@ -60,7 +59,7 @@ fn validate_min_word_size_for_typo_setting<E: DeserializeError>(
 ) -> Result<MinWordSizeTyposSetting, E> {
     if let (Setting::Set(one), Setting::Set(two)) = (s.one_typo, s.two_typos) {
         if one > two {
-            return Err(unwrap_any(E::error::<Infallible>(None, ErrorKind::Unexpected { msg: format!("`minWordSizeForTypos` setting is invalid. `oneTypo` and `twoTypos` fields should be between `0` and `255`, and `twoTypos` should be greater or equals to `oneTypo` but found `oneTypo: {one}` and twoTypos: {two}`.") }, location)));
+            return Err(deserr::take_cf_content(E::error::<Infallible>(None, ErrorKind::Unexpected { msg: format!("`minWordSizeForTypos` setting is invalid. `oneTypo` and `twoTypos` fields should be between `0` and `255`, and `twoTypos` should be greater or equals to `oneTypo` but found `oneTypo: {one}` and twoTypos: {two}`.") }, location)));
         }
     }
     Ok(s)

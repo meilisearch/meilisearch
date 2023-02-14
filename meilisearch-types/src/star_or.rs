@@ -8,7 +8,6 @@ use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::deserr::query_params::FromQueryParameter;
-use crate::error::unwrap_any;
 
 /// A type that tries to match either a star (*) or
 /// any other thing that implements `FromStr`.
@@ -128,11 +127,11 @@ where
                 } else {
                     match T::from_str(&v) {
                         Ok(parsed) => Ok(StarOr::Other(parsed)),
-                        Err(e) => Err(unwrap_any(E::merge(None, e, location))),
+                        Err(e) => Err(deserr::take_cf_content(E::merge(None, e, location))),
                     }
                 }
             }
-            _ => Err(unwrap_any(E::error::<V>(
+            _ => Err(deserr::take_cf_content(E::error::<V>(
                 None,
                 deserr::ErrorKind::IncorrectValueKind {
                     actual: value,
@@ -206,10 +205,10 @@ where
                 "*" => Ok(OptionStarOr::Star),
                 s => match T::from_query_param(s) {
                     Ok(x) => Ok(OptionStarOr::Other(x)),
-                    Err(e) => Err(unwrap_any(E::merge(None, e, location))),
+                    Err(e) => Err(deserr::take_cf_content(E::merge(None, e, location))),
                 },
             },
-            _ => Err(unwrap_any(E::error::<V>(
+            _ => Err(deserr::take_cf_content(E::error::<V>(
                 None,
                 deserr::ErrorKind::IncorrectValueKind {
                     actual: value,
@@ -318,7 +317,7 @@ where
                     Ok(OptionStarOrList::List(els))
                 }
             }
-            _ => Err(unwrap_any(E::error::<V>(
+            _ => Err(deserr::take_cf_content(E::error::<V>(
                 None,
                 deserr::ErrorKind::IncorrectValueKind {
                     actual: value,

@@ -381,16 +381,6 @@ impl ErrorCode for io::Error {
     }
 }
 
-/// Unwrap a result, either its Ok or Err value.
-pub fn unwrap_any<T>(any: std::ops::ControlFlow<T, T>) -> T {
-    use std::ops::ControlFlow::*;
-
-    match any {
-        Continue(any) => any,
-        Break(any) => any,
-    }
-}
-
 /// Deserialization when `deserr` cannot parse an API key date.
 #[derive(Debug)]
 pub struct ParseOffsetDateTimeError(pub String);

@@ -9,7 +9,7 @@ use log::debug;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{immutable_field_error, DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::deserr_codes::*;
-use meilisearch_types::error::{unwrap_any, Code, ResponseError};
+use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::{self, FieldDistribution, Index};
 use meilisearch_types::tasks::KindWithContent;
@@ -147,7 +147,7 @@ fn deny_immutable_fields_index(
         "uid" => immutable_field_error(field, accepted, Code::ImmutableIndexUid),
         "createdAt" => immutable_field_error(field, accepted, Code::ImmutableIndexCreatedAt),
         "updatedAt" => immutable_field_error(field, accepted, Code::ImmutableIndexUpdatedAt),
-        _ => unwrap_any(DeserrJsonError::<BadRequest>::error::<Infallible>(
+        _ => deserr::take_cf_content(DeserrJsonError::<BadRequest>::error::<Infallible>(
             None,
             deserr::ErrorKind::UnknownKey { key: field, accepted },
             location,

@@ -8,7 +8,7 @@ use deserr::{take_cf_content, DeserializeError, IntoValue, MergeWithError, Value
 
 use crate::error::deserr_codes::*;
 use crate::error::{
-    unwrap_any, Code, DeserrParseBoolError, DeserrParseIntError, ErrorCode, InvalidTaskDateError,
+    Code, DeserrParseBoolError, DeserrParseIntError, ErrorCode, InvalidTaskDateError,
     ParseOffsetDateTimeError,
 };
 use crate::index_uid::IndexUidFormatError;
@@ -135,7 +135,7 @@ macro_rules! make_missing_field_convenience_builder {
     ($err_code:ident, $fn_name:ident) => {
         impl DeserrJsonError<$err_code> {
             pub fn $fn_name(field: &str, location: ValuePointerRef) -> Self {
-                let x = unwrap_any(Self::error::<Infallible>(
+                let x = deserr::take_cf_content(Self::error::<Infallible>(
                     None,
                     deserr::ErrorKind::MissingField { field },
                     location,

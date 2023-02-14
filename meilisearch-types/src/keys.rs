@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use crate::deserr::{immutable_field_error, DeserrError, DeserrJsonError};
 use crate::error::deserr_codes::*;
-use crate::error::{unwrap_any, Code, ErrorCode, ParseOffsetDateTimeError};
+use crate::error::{Code, ErrorCode, ParseOffsetDateTimeError};
 use crate::index_uid_pattern::{IndexUidPattern, IndexUidPatternFormatError};
 
 pub type KeyId = Uuid;
@@ -78,7 +78,7 @@ fn deny_immutable_fields_api_key(
         "expiresAt" => immutable_field_error(field, accepted, Code::ImmutableApiKeyExpiresAt),
         "createdAt" => immutable_field_error(field, accepted, Code::ImmutableApiKeyCreatedAt),
         "updatedAt" => immutable_field_error(field, accepted, Code::ImmutableApiKeyUpdatedAt),
-        _ => unwrap_any(DeserrJsonError::<BadRequest>::error::<Infallible>(
+        _ => deserr::take_cf_content(DeserrJsonError::<BadRequest>::error::<Infallible>(
             None,
             deserr::ErrorKind::UnknownKey { key: field, accepted },
             location,
