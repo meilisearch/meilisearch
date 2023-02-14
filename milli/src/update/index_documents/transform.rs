@@ -223,10 +223,13 @@ impl<'a, 'i> Transform<'a, 'i> {
                 Entry::Occupied(entry) => *entry.get() as u32,
                 Entry::Vacant(entry) => {
                     // If the document was already in the db we mark it as a replaced document.
-                    // It'll be deleted later. We keep its original docid to insert it in the grenad.
+                    // It'll be deleted later.
                     if let Some(docid) = external_documents_ids.get(entry.key()) {
-                        self.replaced_documents_ids.insert(docid);
-                        original_docid = Some(docid);
+                        // If it was already in the list of replaced documents it means it was deleted
+                        // by the remove_document method. We should starts as if it never existed.
+                        if self.replaced_documents_ids.insert(docid) {
+                            original_docid = Some(docid);
+                        }
                     }
                     let docid = self
                         .available_documents_ids
