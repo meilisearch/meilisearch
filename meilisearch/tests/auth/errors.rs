@@ -120,7 +120,7 @@ async fn create_api_key_bad_indexes() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid value at `.indexes[0]`: `good doggo` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+      "message": "Invalid value at `.indexes[0]`: `good doggo` is not a valid index uid pattern. Index uid patterns can be an integer or a string containing only alphanumeric characters, hyphens (-), underscores (_), and optionally end with a star (*).",
       "code": "invalid_api_key_indexes",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_api_key_indexes"

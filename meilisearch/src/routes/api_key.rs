@@ -59,6 +59,7 @@ pub struct ListApiKeys {
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidApiKeyLimit>)]
     pub limit: Param<usize>,
 }
+
 impl ListApiKeys {
     fn as_pagination(self) -> Pagination {
         Pagination { offset: self.offset.0, limit: self.limit.0 }

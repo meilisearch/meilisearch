@@ -181,10 +181,8 @@ impl CompatV5ToV6 {
                     .indexes
                     .into_iter()
                     .map(|index| match index {
-                        v5::StarOr::Star => v6::StarOr::Star,
-                        v5::StarOr::Other(uid) => {
-                            v6::StarOr::Other(v6::IndexUid::new_unchecked(uid.as_str()))
-                        }
+                        v5::StarOr::Star => v6::IndexUidPattern::all(),
+                        v5::StarOr::Other(uid) => v6::IndexUidPattern::new_unchecked(uid.as_str()),
                     })
                     .collect(),
                 expires_at: key.expires_at,

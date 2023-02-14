@@ -7,6 +7,7 @@ edition = "2021"
 base64 = "0.13.1"
 enum-iterator = "1.1.3"
 hmac = "0.12.1"
+maplit = "1.0.2"
 meilisearch-types = { path = "../meilisearch-types" }
 rand = "0.8.5"
 roaring = { version = "0.10.0", features = ["serde"] }

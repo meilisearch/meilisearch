@@ -7,9 +7,10 @@ use std::path::Path;
 use std::sync::Arc;
 
 use error::{AuthControllerError, Result};
+use maplit::hashset;
+use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::keys::{Action, CreateApiKey, Key, PatchApiKey};
 use meilisearch_types::milli::update::Setting;
-use meilisearch_types::star_or::StarOr;
 use serde::{Deserialize, Serialize};
 pub use store::open_auth_store_env;
 use store::{generate_key_as_hexa, HeedAuthStore};
@@ -85,29 +86,12 @@ impl AuthController {
         search_rules: Option<SearchRules>,
     ) -> Result<AuthFilter> {
         let mut filters = AuthFilter::default();
-        let key = self
-            .store
-            .get_api_key(uid)?
-            .ok_or_else(|| AuthControllerError::ApiKeyNotFound(uid.to_string()))?;
+        let key = self.get_key(uid)?;
 
-        if !key.indexes.iter().any(|i| i == &StarOr::Star) {
-            filters.search_rules = match search_rules {
-                // Intersect search_rules with parent key authorized indexes.
-                Some(search_rules) => SearchRules::Map(
-                    key.indexes
-                        .into_iter()
-                        .filter_map(|index| {
-                            search_rules.get_index_search_rules(&format!("{index}")).map(
-                                |index_search_rules| (index.to_string(), Some(index_search_rules)),
-                            )
-                        })
-                        .collect(),
-                ),
-                None => SearchRules::Set(key.indexes.into_iter().map(|x| x.to_string()).collect()),
-            };
-        } else if let Some(search_rules) = search_rules {
-            filters.search_rules = search_rules;
-        }
+        filters.search_rules = match search_rules {
+            Some(search_rules) => search_rules,
+            None => SearchRules::Set(key.indexes.into_iter().collect()),
+        };
 
         filters.allow_index_creation = self.is_key_authorized(uid, Action::IndexesAdd, None)?;
 
@@ -150,9 +134,7 @@ impl AuthController {
             .get_expiration_date(uid, action, None)?
             .or(match index {
                 // else check if the key has access to the requested index.
-                Some(index) => {
-                    self.store.get_expiration_date(uid, action, Some(index.as_bytes()))?
-                }
+                Some(index) => self.store.get_expiration_date(uid, action, Some(index))?,
                 // or to any index if no index has been requested.
                 None => self.store.prefix_first_expiration_date(uid, action)?,
             }) {
@@ -192,42 +174,54 @@ impl Default for AuthFilter {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(untagged)]
 pub enum SearchRules {
-    Set(HashSet<String>),
-    Map(HashMap<String, Option<IndexSearchRules>>),
+    Set(HashSet<IndexUidPattern>),
+    Map(HashMap<IndexUidPattern, Option<IndexSearchRules>>),
 }
 
 impl Default for SearchRules {
     fn default() -> Self {
-        Self::Set(Some("*".to_string()).into_iter().collect())
+        Self::Set(hashset! { IndexUidPattern::all() })
     }
 }
 
 impl SearchRules {
     pub fn is_index_authorized(&self, index: &str) -> bool {
         match self {
-            Self::Set(set) => set.contains("*") || set.contains(index),
-            Self::Map(map) => map.contains_key("*") || map.contains_key(index),
+            Self::Set(set) => {
+                set.contains("*")
+                    || set.contains(index)
+                    || set.iter().any(|pattern| pattern.matches_str(index))
+            }
+            Self::Map(map) => {
+                map.contains_key("*")
+                    || map.contains_key(index)
+                    || map.keys().any(|pattern| pattern.matches_str(index))
+            }
         }
     }
 
     pub fn get_index_search_rules(&self, index: &str) -> Option<IndexSearchRules> {
         match self {
-            Self::Set(set) => {
-                if set.contains("*") || set.contains(index) {
+            Self::Set(_) => {
+                if self.is_index_authorized(index) {
                     Some(IndexSearchRules::default())
                 } else {
                     None
                 }
             }
             Self::Map(map) => {
-                map.get(index).or_else(|| map.get("*")).map(|isr| isr.clone().unwrap_or_default())
+                // We must take the most retrictive rule of this index uid patterns set of rules.
+                map.iter()
+                    .filter(|(pattern, _)| pattern.matches_str(index))
+                    .max_by_key(|(pattern, _)| (pattern.is_exact(), pattern.len()))
+                    .and_then(|(_, rule)| rule.clone())
             }
         }
     }
 
     /// Return the list of indexes such that `self.is_index_authorized(index) == true`,
     /// or `None` if all indexes satisfy this condition.
-    pub fn authorized_indexes(&self) -> Option<Vec<String>> {
+    pub fn authorized_indexes(&self) -> Option<Vec<IndexUidPattern>> {
         match self {
             SearchRules::Set(set) => {
                 if set.contains("*") {
@@ -248,7 +242,7 @@ impl SearchRules {
 }
 
 impl IntoIterator for SearchRules {
-    type Item = (String, IndexSearchRules);
+    type Item = (IndexUidPattern, IndexSearchRules);
     type IntoIter = Box<dyn Iterator<Item = Self::Item>>;
 
     fn into_iter(self) -> Self::IntoIter {

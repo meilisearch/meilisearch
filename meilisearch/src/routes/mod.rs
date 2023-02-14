@@ -17,6 +17,8 @@ use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 
+const PAGINATION_DEFAULT_LIMIT: usize = 20;
+
 mod api_key;
 mod dump;
 pub mod indexes;
@@ -33,8 +35,6 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/indexes").configure(indexes::configure))
         .service(web::scope("/swap-indexes").configure(swap_indexes::configure));
 }
-
-const PAGINATION_DEFAULT_LIMIT: usize = 20;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -59,6 +59,7 @@ impl From<Task> for SummarizedTaskView {
         }
     }
 }
+
 pub struct Pagination {
     pub offset: usize,
     pub limit: usize,

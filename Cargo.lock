@@ -2527,6 +2527,7 @@ dependencies = [
  "base64 0.13.1",
  "enum-iterator",
  "hmac",
+ "maplit",
  "meilisearch-types",
  "rand",
  "roaring",

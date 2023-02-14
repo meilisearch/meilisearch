@@ -82,6 +82,11 @@ static ACCEPTED_KEYS: Lazy<Vec<Value>> = Lazy::new(|| {
             "actions": ["search"],
             "expiresAt": (OffsetDateTime::now_utc() + Duration::days(1)).format(&Rfc3339).unwrap()
         }),
+        json!({
+            "indexes": ["sal*", "prod*"],
+            "actions": ["search"],
+            "expiresAt": (OffsetDateTime::now_utc() + Duration::days(1)).format(&Rfc3339).unwrap()
+        }),
     ]
 });
 
@@ -101,6 +106,11 @@ static REFUSED_KEYS: Lazy<Vec<Value>> = Lazy::new(|| {
         // bad index
         json!({
             "indexes": ["products"],
+            "actions": ["*"],
+            "expiresAt": (OffsetDateTime::now_utc() + Duration::days(1)).format(&Rfc3339).unwrap()
+        }),
+        json!({
+            "indexes": ["prod*", "p*"],
             "actions": ["*"],
             "expiresAt": (OffsetDateTime::now_utc() + Duration::days(1)).format(&Rfc3339).unwrap()
         }),
@@ -245,6 +255,10 @@ async fn search_authorized_simple_token() {
             "searchRules" => json!(["sales"]),
             "exp" => Value::Null
         },
+        hashmap! {
+            "searchRules" => json!(["sa*"]),
+            "exp" => Value::Null
+        },
     ];
 
     compute_authorized_search!(tenant_tokens, {}, 5);
@@ -351,11 +365,19 @@ async fn filter_search_authorized_filter_token() {
             }),
             "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
+        hashmap! {
+            "searchRules" => json!({
+                "*": {},
+                "sal*": {"filter": ["color = blue"]}
+            }),
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
+        },
     ];
 
     compute_authorized_search!(tenant_tokens, "color = yellow", 1);
 }
 
+/// Tests that those Tenant Token are incompatible with the REFUSED_KEYS defined above.
 #[actix_rt::test]
 async fn error_search_token_forbidden_parent_key() {
     let tenant_tokens = vec![
@@ -381,6 +403,10 @@ async fn error_search_token_forbidden_parent_key() {
         },
         hashmap! {
             "searchRules" => json!(["sales"]),
+            "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
+        },
+        hashmap! {
+            "searchRules" => json!(["sali*", "s*", "sales*"]),
             "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
         },
     ];
