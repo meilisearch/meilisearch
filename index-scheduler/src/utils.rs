@@ -440,10 +440,16 @@ impl IndexScheduler {
                         deleted_documents,
                     } => {
                         assert_eq!(kind.as_kind(), Kind::DocumentDeletion);
-                        let KindWithContent::DocumentDeletion {
-                            ref index_uid,
-                            ref documents_ids,
-                        } = kind else { unreachable!() };
+                        let (index_uid, documents_ids) =
+                            if let KindWithContent::DocumentDeletion {
+                                ref index_uid,
+                                ref documents_ids,
+                            } = kind
+                            {
+                                (index_uid, documents_ids)
+                            } else {
+                                unreachable!()
+                            };
                         assert_eq!(&task_index_uid.unwrap(), index_uid);
 
                         match status {

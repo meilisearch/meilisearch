@@ -1060,9 +1060,17 @@ impl IndexScheduler {
                             let (new_builder, user_result) = builder.add_documents(reader)?;
                             builder = new_builder;
 
-                            let Some(Details::DocumentAdditionOrUpdate { received_documents, .. }) = task.details
-                            // In the case of a `documentAdditionOrUpdate` the details MUST be set
-                            else { unreachable!(); };
+                            let received_documents =
+                                if let Some(Details::DocumentAdditionOrUpdate {
+                                    received_documents,
+                                    ..
+                                }) = task.details
+                                {
+                                    received_documents
+                                } else {
+                                    // In the case of a `documentAdditionOrUpdate` the details MUST be set
+                                    unreachable!();
+                                };
 
                             match user_result {
                                 Ok(count) => {
@@ -1087,9 +1095,15 @@ impl IndexScheduler {
                                 builder.remove_documents(document_ids)?;
                             builder = new_builder;
 
-                            let Some(Details::DocumentDeletion { provided_ids, .. }) = task.details
-                            // In the case of a `documentAdditionOrUpdate` the details MUST be set
-                            else { unreachable!(); };
+                            let provided_ids =
+                                if let Some(Details::DocumentDeletion { provided_ids, .. }) =
+                                    task.details
+                                {
+                                    provided_ids
+                                } else {
+                                    // In the case of a `documentAdditionOrUpdate` the details MUST be set
+                                    unreachable!();
+                                };
 
                             match user_result {
                                 Ok(count) => {
