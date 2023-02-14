@@ -8,9 +8,13 @@ use crate::common::Server;
 async fn search_empty_list() {
     let server = Server::new().await;
 
-    let (response, code) = server.search(json!([])).await;
+    let (response, code) = server.search(json!({"queries": []})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @"[]");
+    snapshot!(json_string!(response), @r###"
+    {
+      "results": []
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -21,7 +25,23 @@ async fn search_json_object() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid value type: expected an array, but found an object: `{}`",
+      "message": "Missing field `queries`",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn search_json_array() {
+    let server = Server::new().await;
+
+    let (response, code) = server.search(json!([])).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type: expected an object, but found an array: `[]`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
@@ -39,13 +59,13 @@ async fn simple_search_single_index() {
     index.wait_task(0).await;
 
     let (response, code) = server
-        .search(json!([
+        .search(json!({"queries": [
         {"indexUid" : "test", "q": "glass"},
         {"indexUid": "test", "q": "captain"},
-        ]))
+        ]}))
         .await;
     snapshot!(code, @"200 OK");
-    insta::assert_json_snapshot!(response, { "[].processingTimeMs" => "[time]" }, @r###"
+    insta::assert_json_snapshot!(response["results"], { "[].processingTimeMs" => "[time]" }, @r###"
     [
       {
         "indexUid": "test",
@@ -80,6 +100,56 @@ async fn simple_search_single_index() {
 }
 
 #[actix_rt::test]
+async fn simple_search_missing_index_uid() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(0).await;
+
+    let (response, code) = server
+        .search(json!({"queries": [
+        {"q": "glass"},
+        ]}))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Missing field `indexUid` inside `.queries[0]`",
+      "code": "missing_index_uid",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_index_uid"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn simple_search_illegal_index_uid() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(0).await;
+
+    let (response, code) = server
+        .search(json!({"queries": [
+        {"indexUid": "hé", "q": "glass"},
+        ]}))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    insta::assert_json_snapshot!(response, @r###"
+    {
+      "message": "Invalid value at `.queries[0].indexUid`: `hé` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_).",
+      "code": "invalid_index_uid",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn simple_search_two_indexes() {
     let server = Server::new().await;
     let index = server.index("test");
@@ -94,13 +164,13 @@ async fn simple_search_two_indexes() {
     index.wait_task(1).await;
 
     let (response, code) = server
-        .search(json!([
+        .search(json!({"queries": [
         {"indexUid" : "test", "q": "glass"},
         {"indexUid": "nested", "q": "pesti"},
-        ]))
+        ]}))
         .await;
     snapshot!(code, @"200 OK");
-    insta::assert_json_snapshot!(response, { "[].processingTimeMs" => "[time]" }, @r###"
+    insta::assert_json_snapshot!(response["results"], { "[].processingTimeMs" => "[time]" }, @r###"
     [
       {
         "indexUid": "test",
@@ -171,10 +241,10 @@ async fn search_one_index_doesnt_exist() {
     index.wait_task(0).await;
 
     let (response, code) = server
-        .search(json!([
+        .search(json!({"queries": [
         {"indexUid" : "test", "q": "glass"},
         {"indexUid": "nested", "q": "pesti"},
-        ]))
+        ]}))
         .await;
     snapshot!(code, @"404 Not Found");
     snapshot!(json_string!(response), @r###"
@@ -192,10 +262,10 @@ async fn search_multiple_indexes_dont_exist() {
     let server = Server::new().await;
 
     let (response, code) = server
-        .search(json!([
+        .search(json!({"queries": [
         {"indexUid" : "test", "q": "glass"},
         {"indexUid": "nested", "q": "pesti"},
-        ]))
+        ]}))
         .await;
     snapshot!(code, @"404 Not Found");
     snapshot!(json_string!(response), @r###"
@@ -224,10 +294,10 @@ async fn search_one_query_error() {
     index.wait_task(1).await;
 
     let (response, code) = server
-        .search(json!([
+        .search(json!({"queries": [
         {"indexUid" : "test", "q": "glass", "facets": ["title"]},
         {"indexUid": "nested", "q": "pesti"},
-        ]))
+        ]}))
         .await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
@@ -256,10 +326,10 @@ async fn search_multiple_query_errors() {
     index.wait_task(1).await;
 
     let (response, code) = server
-        .search(json!([
+        .search(json!({"queries": [
         {"indexUid" : "test", "q": "glass", "facets": ["title"]},
         {"indexUid": "nested", "q": "pesti", "facets": ["doggos"]},
-        ]))
+        ]}))
         .await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
