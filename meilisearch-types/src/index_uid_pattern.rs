@@ -119,7 +119,6 @@ impl Error for IndexUidPatternFormatError {}
 
 impl ErrorCode for IndexUidPatternFormatError {
     fn error_code(&self) -> Code {
-        // TODO should I return a new error code?
         Code::InvalidIndexUid
     }
 }
