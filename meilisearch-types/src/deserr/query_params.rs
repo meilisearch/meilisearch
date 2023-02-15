@@ -15,10 +15,9 @@ use std::convert::Infallible;
 use std::ops::Deref;
 use std::str::FromStr;
 
-use deserr::{DeserializeError, DeserializeFromValue, MergeWithError, ValueKind};
+use deserr::{DeserializeError, Deserr, MergeWithError, ValueKind};
 
 use super::{DeserrParseBoolError, DeserrParseIntError};
-use crate::error::unwrap_any;
 use crate::index_uid::IndexUid;
 use crate::tasks::{Kind, Status};
 
@@ -38,7 +37,7 @@ impl<T> Deref for Param<T> {
     }
 }
 
-impl<T, E> DeserializeFromValue<E> for Param<T>
+impl<T, E> Deserr<E> for Param<T>
 where
     E: DeserializeError + MergeWithError<T::Err>,
     T: FromQueryParameter,
@@ -50,9 +49,9 @@ where
         match value {
             deserr::Value::String(s) => match T::from_query_param(&s) {
                 Ok(x) => Ok(Param(x)),
-                Err(e) => Err(unwrap_any(E::merge(None, e, location))),
+                Err(e) => Err(deserr::take_cf_content(E::merge(None, e, location))),
             },
-            _ => Err(unwrap_any(E::error(
+            _ => Err(deserr::take_cf_content(E::error(
                 None,
                 deserr::ErrorKind::IncorrectValueKind {
                     actual: value,

@@ -127,7 +127,7 @@ macro_rules! make_error_codes {
         }
         impl Code {
             /// return the HTTP status code associated with the `Code`
-            fn http(&self) -> StatusCode {
+            pub fn http(&self) -> StatusCode {
                 match self {
                     $(
                         Code::$code_ident => StatusCode::$status
@@ -378,14 +378,6 @@ impl ErrorCode for io::Error {
             Some(28) => Code::NoSpaceLeftOnDevice,
             _ => Code::Internal,
         }
-    }
-}
-
-/// Unwrap a result, either its Ok or Err value.
-pub fn unwrap_any<T>(any: Result<T, T>) -> T {
-    match any {
-        Ok(any) => any,
-        Err(any) => any,
     }
 }
 

@@ -1,13 +1,13 @@
 use std::fmt;
 use std::marker::PhantomData;
+use std::ops::ControlFlow;
 use std::str::FromStr;
 
-use deserr::{DeserializeError, DeserializeFromValue, MergeWithError, ValueKind};
+use deserr::{DeserializeError, Deserr, MergeWithError, ValueKind};
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::deserr::query_params::FromQueryParameter;
-use crate::error::unwrap_any;
 
 /// A type that tries to match either a star (*) or
 /// any other thing that implements `FromStr`.
@@ -111,7 +111,7 @@ where
     }
 }
 
-impl<T, E> DeserializeFromValue<E> for StarOr<T>
+impl<T, E> Deserr<E> for StarOr<T>
 where
     T: FromStr,
     E: DeserializeError + MergeWithError<T::Err>,
@@ -127,11 +127,11 @@ where
                 } else {
                     match T::from_str(&v) {
                         Ok(parsed) => Ok(StarOr::Other(parsed)),
-                        Err(e) => Err(unwrap_any(E::merge(None, e, location))),
+                        Err(e) => Err(deserr::take_cf_content(E::merge(None, e, location))),
                     }
                 }
             }
-            _ => Err(unwrap_any(E::error::<V>(
+            _ => Err(deserr::take_cf_content(E::error::<V>(
                 None,
                 deserr::ErrorKind::IncorrectValueKind {
                     actual: value,
@@ -191,7 +191,7 @@ where
     }
 }
 
-impl<T, E> DeserializeFromValue<E> for OptionStarOr<T>
+impl<T, E> Deserr<E> for OptionStarOr<T>
 where
     E: DeserializeError + MergeWithError<T::Err>,
     T: FromQueryParameter,
@@ -205,10 +205,10 @@ where
                 "*" => Ok(OptionStarOr::Star),
                 s => match T::from_query_param(s) {
                     Ok(x) => Ok(OptionStarOr::Other(x)),
-                    Err(e) => Err(unwrap_any(E::merge(None, e, location))),
+                    Err(e) => Err(deserr::take_cf_content(E::merge(None, e, location))),
                 },
             },
-            _ => Err(unwrap_any(E::error::<V>(
+            _ => Err(deserr::take_cf_content(E::error::<V>(
                 None,
                 deserr::ErrorKind::IncorrectValueKind {
                     actual: value,
@@ -271,7 +271,7 @@ impl<T> OptionStarOrList<T> {
     }
 }
 
-impl<T, E> DeserializeFromValue<E> for OptionStarOrList<T>
+impl<T, E> Deserr<E> for OptionStarOrList<T>
 where
     E: DeserializeError + MergeWithError<T::Err>,
     T: FromQueryParameter,
@@ -299,7 +299,10 @@ where
                             Err(e) => {
                                 let location =
                                     if len_cs > 1 { location.push_index(i) } else { location };
-                                error = Some(E::merge(error, e, location)?);
+                                error = match E::merge(error, e, location) {
+                                    ControlFlow::Continue(e) => Some(e),
+                                    ControlFlow::Break(e) => return Err(e),
+                                };
                             }
                         }
                     }
@@ -314,7 +317,7 @@ where
                     Ok(OptionStarOrList::List(els))
                 }
             }
-            _ => Err(unwrap_any(E::error::<V>(
+            _ => Err(deserr::take_cf_content(E::error::<V>(
                 None,
                 deserr::ErrorKind::IncorrectValueKind {
                     actual: value,

@@ -1,5 +1,6 @@
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
+use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use index_scheduler::IndexScheduler;
 use log::debug;
 use meilisearch_auth::IndexSearchRules;
@@ -14,8 +15,6 @@ use serde_json::Value;
 use crate::analytics::{Analytics, SearchAggregator};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
-use crate::extractors::json::ValidatedJson;
-use crate::extractors::query_parameters::QueryParameter;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::search::{
     perform_search, MatchingStrategy, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
@@ -31,7 +30,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-#[derive(Debug, deserr::DeserializeFromValue)]
+#[derive(Debug, deserr::Deserr)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchQ>)]
@@ -150,7 +149,7 @@ fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 pub async fn search_with_url_query(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    params: QueryParameter<SearchQueryGet, DeserrQueryParamError>,
+    params: AwebQueryParameter<SearchQueryGet, DeserrQueryParamError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -184,7 +183,7 @@ pub async fn search_with_url_query(
 pub async fn search_with_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    params: ValidatedJson<SearchQuery, DeserrJsonError>,
+    params: AwebJson<SearchQuery, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {

@@ -4,7 +4,8 @@ use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use bstr::ByteSlice;
-use deserr::DeserializeFromValue;
+use deserr::actix_web::AwebQueryParameter;
+use deserr::Deserr;
 use futures::StreamExt;
 use index_scheduler::IndexScheduler;
 use log::debug;
@@ -33,7 +34,6 @@ use crate::error::PayloadError::ReceivePayload;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::payload::Payload;
-use crate::extractors::query_parameters::QueryParameter;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::{PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
 
@@ -80,7 +80,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-#[derive(Debug, DeserializeFromValue)]
+#[derive(Debug, Deserr)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct GetDocument {
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
@@ -90,7 +90,7 @@ pub struct GetDocument {
 pub async fn get_document(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     document_param: web::Path<DocumentParam>,
-    params: QueryParameter<GetDocument, DeserrQueryParamError>,
+    params: AwebQueryParameter<GetDocument, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
     let DocumentParam { index_uid, document_id } = document_param.into_inner();
     let index_uid = IndexUid::try_from(index_uid)?;
@@ -125,7 +125,7 @@ pub async fn delete_document(
     Ok(HttpResponse::Accepted().json(task))
 }
 
-#[derive(Debug, DeserializeFromValue)]
+#[derive(Debug, Deserr)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct BrowseQuery {
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentOffset>)]
@@ -139,7 +139,7 @@ pub struct BrowseQuery {
 pub async fn get_all_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    params: QueryParameter<BrowseQuery, DeserrQueryParamError>,
+    params: AwebQueryParameter<BrowseQuery, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     debug!("called with params: {:?}", params);
@@ -155,7 +155,7 @@ pub async fn get_all_documents(
     Ok(HttpResponse::Ok().json(ret))
 }
 
-#[derive(Deserialize, Debug, DeserializeFromValue)]
+#[derive(Deserialize, Debug, Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct UpdateDocumentsQuery {
     #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
@@ -165,7 +165,7 @@ pub struct UpdateDocumentsQuery {
 pub async fn add_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    params: QueryParameter<UpdateDocumentsQuery, DeserrJsonError>,
+    params: AwebQueryParameter<UpdateDocumentsQuery, DeserrJsonError>,
     body: Payload,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
@@ -195,7 +195,7 @@ pub async fn add_documents(
 pub async fn update_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    params: QueryParameter<UpdateDocumentsQuery, DeserrJsonError>,
+    params: AwebQueryParameter<UpdateDocumentsQuery, DeserrJsonError>,
     body: Payload,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,

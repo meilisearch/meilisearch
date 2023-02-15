@@ -2,14 +2,14 @@ use std::convert::Infallible;
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use deserr::{DeserializeError, DeserializeFromValue, ValuePointerRef};
+use deserr::actix_web::{AwebJson, AwebQueryParameter};
+use deserr::{DeserializeError, Deserr, ValuePointerRef};
 use index_scheduler::IndexScheduler;
 use log::debug;
-use meilisearch_types::deserr::error_messages::immutable_field_error;
 use meilisearch_types::deserr::query_params::Param;
-use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
+use meilisearch_types::deserr::{immutable_field_error, DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::deserr_codes::*;
-use meilisearch_types::error::{unwrap_any, Code, ResponseError};
+use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::{self, FieldDistribution, Index};
 use meilisearch_types::tasks::KindWithContent;
@@ -21,8 +21,6 @@ use super::{Pagination, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
-use crate::extractors::json::ValidatedJson;
-use crate::extractors::query_parameters::QueryParameter;
 use crate::extractors::sequential_extractor::SeqHandler;
 
 pub mod documents;
@@ -73,7 +71,7 @@ impl IndexView {
     }
 }
 
-#[derive(DeserializeFromValue, Debug, Clone, Copy)]
+#[derive(Deserr, Debug, Clone, Copy)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct ListIndexes {
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexOffset>)]
@@ -89,7 +87,7 @@ impl ListIndexes {
 
 pub async fn list_indexes(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, Data<IndexScheduler>>,
-    paginate: QueryParameter<ListIndexes, DeserrQueryParamError>,
+    paginate: AwebQueryParameter<ListIndexes, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
     let search_rules = &index_scheduler.filters().search_rules;
     let indexes: Vec<_> = index_scheduler.indexes()?;
@@ -105,7 +103,7 @@ pub async fn list_indexes(
     Ok(HttpResponse::Ok().json(ret))
 }
 
-#[derive(DeserializeFromValue, Debug)]
+#[derive(Deserr, Debug)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct IndexCreateRequest {
     #[deserr(error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
@@ -116,7 +114,7 @@ pub struct IndexCreateRequest {
 
 pub async fn create_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_CREATE }>, Data<IndexScheduler>>,
-    body: ValidatedJson<IndexCreateRequest, DeserrJsonError>,
+    body: AwebJson<IndexCreateRequest, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -149,7 +147,7 @@ fn deny_immutable_fields_index(
         "uid" => immutable_field_error(field, accepted, Code::ImmutableIndexUid),
         "createdAt" => immutable_field_error(field, accepted, Code::ImmutableIndexCreatedAt),
         "updatedAt" => immutable_field_error(field, accepted, Code::ImmutableIndexUpdatedAt),
-        _ => unwrap_any(DeserrJsonError::<BadRequest>::error::<Infallible>(
+        _ => deserr::take_cf_content(DeserrJsonError::<BadRequest>::error::<Infallible>(
             None,
             deserr::ErrorKind::UnknownKey { key: field, accepted },
             location,
@@ -157,7 +155,7 @@ fn deny_immutable_fields_index(
     }
 }
 
-#[derive(DeserializeFromValue, Debug)]
+#[derive(Deserr, Debug)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_index)]
 pub struct UpdateIndexRequest {
     #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
@@ -181,7 +179,7 @@ pub async fn get_index(
 pub async fn update_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    body: ValidatedJson<UpdateIndexRequest, DeserrJsonError>,
+    body: AwebJson<UpdateIndexRequest, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {

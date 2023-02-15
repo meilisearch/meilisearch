@@ -1,5 +1,6 @@
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
+use deserr::actix_web::AwebJson;
 use index_scheduler::IndexScheduler;
 use log::debug;
 use meilisearch_types::deserr::DeserrJsonError;
@@ -12,7 +13,6 @@ use serde_json::json;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
-use crate::extractors::json::ValidatedJson;
 use crate::routes::SummarizedTaskView;
 
 #[macro_export]
@@ -68,7 +68,7 @@ macro_rules! make_setting_route {
                     Data<IndexScheduler>,
                 >,
                 index_uid: actix_web::web::Path<String>,
-                body: $crate::routes::indexes::ValidatedJson<Option<$type>, $err_ty>,
+                body: deserr::actix_web::AwebJson<Option<$type>, $err_ty>,
                 req: HttpRequest,
                 $analytics_var: web::Data<dyn Analytics>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
@@ -468,7 +468,7 @@ generate_configure!(
 pub async fn update_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    body: ValidatedJson<Settings<Unchecked>, DeserrJsonError>,
+    body: AwebJson<Settings<Unchecked>, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
