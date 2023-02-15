@@ -16,6 +16,15 @@ members = [
     "benchmarks"
 ]
 
+[workspace.package]
+version = "1.0.0"
+authors = ["Quentin de Quelen <quentin@dequelen.me>", "Clément Renault <clement@meilisearch.com>"]
+description = "Meilisearch HTTP server"
+homepage = "https://meilisearch.com"
+readme = "README.md"
+edition = "2021"
+license = "MIT"
+
 [profile.release]
 codegen-units = 1
 

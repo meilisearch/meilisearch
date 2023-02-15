@@ -1,10 +1,14 @@
 [package]
-authors = ["Quentin de Quelen <quentin@dequelen.me>", "Clément Renault <clement@meilisearch.com>"]
-description = "Meilisearch HTTP server"
-edition = "2021"
-license = "MIT"
 name = "meilisearch"
-version = "1.0.0"
+publish = false
+
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+homepage.workspace = true
+readme.workspace = true
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
 actix-cors = "0.6.3"
@@ -90,7 +94,7 @@ yaup = "0.2.1"
 
 [build-dependencies]
 anyhow = { version = "1.0.65", optional = true }
-cargo_toml = { version = "0.13.0", optional = true }
+cargo_toml = { version = "0.14.0", optional = true }
 hex = { version = "0.4.3", optional = true }
 reqwest = { version = "0.11.12", features = ["blocking", "rustls-tls"], default-features = false, optional = true }
 sha-1 = { version = "0.10.0", optional = true }
