@@ -367,11 +367,20 @@ impl IndexScheduler {
         std::fs::create_dir_all(&options.dumps_path)?;
 
         let task_db_size = clamp_to_page_size(options.task_db_size);
-        let budget = IndexBudget {
+        let budget = if options.indexer_config.skip_index_budget {
+            IndexBudget {
                 map_size: options.index_base_map_size,
                 index_count: options.index_count,
                 task_db_size,
-            };
+            }
+        } else {
+            Self::index_budget(
+                &options.tasks_path,
+                options.index_base_map_size,
+                task_db_size,
+                options.index_count,
+            )
+        };
 
         let env = heed::EnvOpenOptions::new()
             .max_dbs(10)
@@ -1232,6 +1241,8 @@ mod tests {
             let tempdir = TempDir::new().unwrap();
             let (sender, receiver) = crossbeam::channel::bounded(0);
 
+            let indexer_config = IndexerConfig { skip_index_budget: true, ..Default::default() };
+
             let options = IndexSchedulerOptions {
                 version_file_path: tempdir.path().join(VERSION_FILE_NAME),
                 auth_path: tempdir.path().join("auth"),
@@ -1244,7 +1255,7 @@ mod tests {
                 index_base_map_size: 1000 * 1000, // 1 MB, we don't use MiB on purpose.
                 index_growth_amount: 1000 * 1000, // 1 MB
                 index_count: 5,
-                indexer_config: IndexerConfig::default(),
+                indexer_config,
                 autobatching_enabled,
             };
 
