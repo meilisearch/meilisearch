@@ -123,7 +123,7 @@ impl<'t> Criterion for Attribute<'t> {
                             None => {
                                 return Ok(Some(CriterionResult {
                                     query_tree: Some(query_tree),
-                                    candidates: Some(RoaringBitmap::new()),
+                                    candidates: Some(allowed_candidates),
                                     filtered_candidates: None,
                                     initial_candidates: Some(self.initial_candidates.take()),
                                 }));
