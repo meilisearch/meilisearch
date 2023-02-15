@@ -4,7 +4,7 @@ description = "Meilisearch HTTP server"
 edition = "2021"
 license = "MIT"
 name = "meilisearch"
-version = "1.0.0"
+version = "1.0.1"
 
 [dependencies]
 actix-cors = "0.6.3"
