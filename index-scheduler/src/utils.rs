@@ -529,3 +529,37 @@ impl IndexScheduler {
         }
     }
 }
+
+pub fn dichotomic_search(start_point: usize, mut is_good: impl FnMut(usize) -> bool) -> usize {
+    let mut biggest_good = None;
+    let mut smallest_bad = None;
+    let mut current = start_point;
+    loop {
+        let is_good = is_good(current);
+
+        (biggest_good, smallest_bad, current) = match (biggest_good, smallest_bad, is_good) {
+            (None, None, false) => (None, Some(current), current / 2),
+            (None, None, true) => (Some(current), None, current * 2),
+            (None, Some(smallest_bad), true) => {
+                (Some(current), Some(smallest_bad), (current + smallest_bad) / 2)
+            }
+            (None, Some(_), false) => (None, Some(current), current / 2),
+            (Some(_), None, true) => (Some(current), None, current * 2),
+            (Some(biggest_good), None, false) => {
+                (Some(biggest_good), Some(current), (biggest_good + current) / 2)
+            }
+            (Some(_), Some(smallest_bad), true) => {
+                (Some(current), Some(smallest_bad), (smallest_bad + current) / 2)
+            }
+            (Some(biggest_good), Some(_), false) => {
+                (Some(biggest_good), Some(current), (biggest_good + current) / 2)
+            }
+        };
+        if current == 0 {
+            return current;
+        }
+        if smallest_bad.is_some() && biggest_good.is_some() && biggest_good >= Some(current) {
+            return current;
+        }
+    }
+}
