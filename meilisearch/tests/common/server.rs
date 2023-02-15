@@ -205,6 +205,7 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
         indexer_options: IndexerOpts {
             // memory has to be unlimited because several meilisearch are running in test context.
             max_indexing_memory: MaxMemory::unlimited(),
+            skip_index_budget: true,
             ..Parser::parse_from(None as Option<&str>)
         },
         #[cfg(feature = "metrics")]
