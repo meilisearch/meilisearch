@@ -67,7 +67,7 @@ const DEFAULT_LOG_EVERY_N: usize = 100_000;
 // Each environment (index and task-db) is taking space in the virtual address space.
 // When creating a new environment, it starts its life with 10GiB of virtual address space.
 // It is then later resized if needs be.
-pub const INDEX_SIZE: u64 = 10 * 1024 * 1024 * 1024; // 10 GiB
+pub const INDEX_SIZE: u64 = 2 * 1024 * 1024 * 1024 * 1024; // 2 TiB
 pub const TASK_DB_SIZE: u64 = 10 * 1024 * 1024 * 1024; // 10 GiB
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
