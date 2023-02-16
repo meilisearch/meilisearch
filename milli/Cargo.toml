@@ -24,20 +24,20 @@ json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
 memmap2 = "0.5.8"
 obkv = "0.2.0"
-once_cell = "1.17.0"
+once_cell = "1.17.1"
 ordered-float = "3.4.0"
 rayon = "1.6.1"
 roaring = "0.10.1"
 rstar = { version = "0.9.3", features = ["serde"] }
 serde = { version = "1.0.152", features = ["derive"] }
-serde_json = { version = "1.0.92", features = ["preserve_order"] }
+serde_json = { version = "1.0.93", features = ["preserve_order"] }
 slice-group-by = "0.3.0"
 smallstr =  { version = "0.3.0", features = ["serde"] }
 smallvec = "1.10.0"
 smartstring = "1.0.1"
 tempfile = "3.3.0"
 thiserror = "1.0.38"
-time = { version = "0.3.17", features = ["serde-well-known", "formatting", "parsing", "macros"] }
+time = { version = "0.3.18", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 uuid = { version = "1.3.0", features = ["v4"] }
 
 filter-parser = { path = "../filter-parser" }
@@ -48,11 +48,11 @@ itertools = "0.10.5"
 # logging
 log = "0.4.17"
 logging_timer = "1.1.0"
-csv = "1.1.6"
+csv = "1.2.0"
 
 [dev-dependencies]
 big_s = "1.0.2"
-insta = "1.26.0"
+insta = "1.28.0"
 maplit = "1.0.2"
 md5 = "0.7.0"
 rand = {version = "0.8.5", features = ["small_rng"] }

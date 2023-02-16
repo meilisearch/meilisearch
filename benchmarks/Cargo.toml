@@ -6,10 +6,10 @@ publish = false
 
 [dependencies]
 anyhow = "1.0.69"
-csv = "1.1.6"
+csv = "1.2.0"
 milli = { path = "../milli", default-features = false }
 mimalloc = { version = "0.1.34", default-features = false }
-serde_json = { version = "1.0.92", features = ["preserve_order"] }
+serde_json = { version = "1.0.93", features = ["preserve_order"] }
 
 [dev-dependencies]
 criterion = { version = "0.4.0", features = ["html_reports"] }
