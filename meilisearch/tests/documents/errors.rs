@@ -298,8 +298,9 @@ async fn replace_documents_bad_csv_delimiter() {
     }
     "###);
 
-    let (response, code) =
-        index.raw_add_documents("", Some("application/json"), &format!("?csvDelimiter={}", encode("🍰"))).await;
+    let (response, code) = index
+        .raw_add_documents("", Some("application/json"), &format!("?csvDelimiter={}", encode("🍰")))
+        .await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -340,8 +341,13 @@ async fn update_documents_bad_csv_delimiter() {
     }
     "###);
 
-    let (response, code) =
-        index.raw_update_documents("", Some("application/json"), &format!("?csvDelimiter={}", encode("🍰"))).await;
+    let (response, code) = index
+        .raw_update_documents(
+            "",
+            Some("application/json"),
+            &format!("?csvDelimiter={}", encode("🍰")),
+        )
+        .await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {

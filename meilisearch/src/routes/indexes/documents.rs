@@ -239,6 +239,7 @@ pub async fn update_documents(
     Ok(HttpResponse::Accepted().json(task))
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn document_addition(
     mime_type: Option<Mime>,
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
