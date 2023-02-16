@@ -10,10 +10,10 @@ use futures::StreamExt;
 use index_scheduler::IndexScheduler;
 use log::debug;
 use meilisearch_types::deserr::query_params::Param;
-use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
+use meilisearch_types::deserr::DeserrQueryParamError;
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
 use meilisearch_types::error::deserr_codes::*;
-use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
@@ -67,7 +67,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
             .route(web::get().to(SeqHandler(get_all_documents)))
-            .route(web::post().to(SeqHandler(add_documents)))
+            .route(web::post().to(SeqHandler(replace_documents)))
             .route(web::put().to(SeqHandler(update_documents)))
             .route(web::delete().to(SeqHandler(clear_all_documents))),
     )
@@ -156,16 +156,31 @@ pub async fn get_all_documents(
 }
 
 #[derive(Deserialize, Debug, Deserr)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct UpdateDocumentsQuery {
-    #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidIndexPrimaryKey>)]
     pub primary_key: Option<String>,
+    #[deserr(default, try_from(char) = from_char_csv_delimiter -> DeserrQueryParamError<InvalidIndexCsvDelimiter>, error = DeserrQueryParamError<InvalidIndexCsvDelimiter>)]
+    pub csv_delimiter: Option<u8>,
 }
 
-pub async fn add_documents(
+fn from_char_csv_delimiter(
+    c: char,
+) -> Result<Option<u8>, DeserrQueryParamError<InvalidIndexCsvDelimiter>> {
+    if c.is_ascii() {
+        Ok(Some(c as u8))
+    } else {
+        Err(DeserrQueryParamError::new(
+            format!("csv delimiter must be an ascii character. Found: `{}`", c),
+            Code::InvalidIndexCsvDelimiter,
+        ))
+    }
+}
+
+pub async fn replace_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    params: AwebQueryParameter<UpdateDocumentsQuery, DeserrJsonError>,
+    params: AwebQueryParameter<UpdateDocumentsQuery, DeserrQueryParamError>,
     body: Payload,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
@@ -183,6 +198,7 @@ pub async fn add_documents(
         index_scheduler,
         index_uid,
         params.primary_key,
+        params.csv_delimiter,
         body,
         IndexDocumentsMethod::ReplaceDocuments,
         allow_index_creation,
@@ -195,7 +211,7 @@ pub async fn add_documents(
 pub async fn update_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    params: AwebQueryParameter<UpdateDocumentsQuery, DeserrJsonError>,
+    params: AwebQueryParameter<UpdateDocumentsQuery, DeserrQueryParamError>,
     body: Payload,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
@@ -203,6 +219,7 @@ pub async fn update_documents(
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     debug!("called with params: {:?}", params);
+    let params = params.into_inner();
 
     analytics.update_documents(&params, index_scheduler.index(&index_uid).is_err(), &req);
 
@@ -211,7 +228,8 @@ pub async fn update_documents(
         extract_mime_type(&req)?,
         index_scheduler,
         index_uid,
-        params.into_inner().primary_key,
+        params.primary_key,
+        params.csv_delimiter,
         body,
         IndexDocumentsMethod::UpdateDocuments,
         allow_index_creation,
@@ -226,21 +244,37 @@ async fn document_addition(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ADD }>, Data<IndexScheduler>>,
     index_uid: IndexUid,
     primary_key: Option<String>,
+    csv_delimiter: Option<u8>,
     mut body: Payload,
     method: IndexDocumentsMethod,
     allow_index_creation: bool,
 ) -> Result<SummarizedTaskView, MeilisearchHttpError> {
-    let format = match mime_type.as_ref().map(|m| (m.type_().as_str(), m.subtype().as_str())) {
-        Some(("application", "json")) => PayloadType::Json,
-        Some(("application", "x-ndjson")) => PayloadType::Ndjson,
-        Some(("text", "csv")) => PayloadType::Csv,
-        Some((type_, subtype)) => {
+    let format = match (
+        mime_type.as_ref().map(|m| (m.type_().as_str(), m.subtype().as_str())),
+        csv_delimiter,
+    ) {
+        (Some(("application", "json")), None) => PayloadType::Json,
+        (Some(("application", "x-ndjson")), None) => PayloadType::Ndjson,
+        (Some(("text", "csv")), None) => PayloadType::Csv(b','),
+        (Some(("text", "csv")), Some(delimiter)) => PayloadType::Csv(delimiter),
+
+        (Some(("application", "json")), Some(_)) => {
+            return Err(MeilisearchHttpError::CsvDelimiterWithWrongContentType(String::from(
+                "application/json",
+            )))
+        }
+        (Some(("application", "x-ndjson")), Some(_)) => {
+            return Err(MeilisearchHttpError::CsvDelimiterWithWrongContentType(String::from(
+                "application/x-ndjson",
+            )))
+        }
+        (Some((type_, subtype)), _) => {
             return Err(MeilisearchHttpError::InvalidContentType(
                 format!("{}/{}", type_, subtype),
                 ACCEPTED_CONTENT_TYPE.clone(),
             ))
         }
-        None => {
+        (None, _) => {
             return Err(MeilisearchHttpError::MissingContentType(ACCEPTED_CONTENT_TYPE.clone()))
         }
     };
@@ -285,7 +319,7 @@ async fn document_addition(
     let documents_count = tokio::task::spawn_blocking(move || {
         let documents_count = match format {
             PayloadType::Json => read_json(&read_file, update_file.as_file_mut())?,
-            PayloadType::Csv => read_csv(&read_file, update_file.as_file_mut())?,
+            PayloadType::Csv(delim) => read_csv(&read_file, update_file.as_file_mut(), delim)?,
             PayloadType::Ndjson => read_ndjson(&read_file, update_file.as_file_mut())?,
         };
         // we NEED to persist the file here because we moved the `udpate_file` in another task.

@@ -11,6 +11,8 @@ pub enum MeilisearchHttpError {
     #[error("A Content-Type header is missing. Accepted values for the Content-Type header are: {}",
             .0.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", "))]
     MissingContentType(Vec<String>),
+    #[error("The Content-Type `{0}` does not support the use of a csv delimiter. The csv delimiter can only be used with the Content-Type `text/csv`.")]
+    CsvDelimiterWithWrongContentType(String),
     #[error(
         "The Content-Type `{0}` is invalid. Accepted values for the Content-Type header are: {}",
         .1.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
@@ -52,6 +54,7 @@ impl ErrorCode for MeilisearchHttpError {
     fn error_code(&self) -> Code {
         match self {
             MeilisearchHttpError::MissingContentType(_) => Code::MissingContentType,
+            MeilisearchHttpError::CsvDelimiterWithWrongContentType(_) => Code::InvalidContentType,
             MeilisearchHttpError::MissingPayload(_) => Code::MissingPayload,
             MeilisearchHttpError::InvalidContentType(_, _) => Code::InvalidContentType,
             MeilisearchHttpError::DocumentNotFound(_) => Code::DocumentNotFound,
