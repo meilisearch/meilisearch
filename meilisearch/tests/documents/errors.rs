@@ -1,5 +1,6 @@
 use meili_snap::*;
 use serde_json::json;
+use urlencoding::encode;
 
 use crate::common::Server;
 
@@ -94,6 +95,320 @@ async fn delete_documents_batch() {
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn replace_documents_missing_payload() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.raw_add_documents("", Some("application/json"), "").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "A json payload is missing.",
+      "code": "missing_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_payload"
+    }
+    "###);
+
+    let (response, code) = index.raw_add_documents("", Some("application/x-ndjson"), "").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "A ndjson payload is missing.",
+      "code": "missing_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_payload"
+    }
+    "###);
+
+    let (response, code) = index.raw_add_documents("", Some("text/csv"), "").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "A csv payload is missing.",
+      "code": "missing_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_payload"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn update_documents_missing_payload() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.raw_update_documents("", Some("application/json"), "").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "A json payload is missing.",
+      "code": "missing_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_payload"
+    }
+    "###);
+
+    let (response, code) = index.raw_update_documents("", Some("application/x-ndjson"), "").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "A ndjson payload is missing.",
+      "code": "missing_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_payload"
+    }
+    "###);
+
+    let (response, code) = index.raw_update_documents("", Some("text/csv"), "").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "A csv payload is missing.",
+      "code": "missing_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_payload"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn replace_documents_missing_content_type() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.raw_add_documents("", None, "").await;
+    snapshot!(code, @"415 Unsupported Media Type");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "A Content-Type header is missing. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`",
+      "code": "missing_content_type",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_content_type"
+    }
+    "###);
+
+    // even with a csv delimiter specified this error is triggered first
+    let (response, code) = index.raw_add_documents("", None, "?csvDelimiter=;").await;
+    snapshot!(code, @"415 Unsupported Media Type");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "A Content-Type header is missing. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`",
+      "code": "missing_content_type",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_content_type"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn update_documents_missing_content_type() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.raw_update_documents("", None, "").await;
+    snapshot!(code, @"415 Unsupported Media Type");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "A Content-Type header is missing. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`",
+      "code": "missing_content_type",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_content_type"
+    }
+    "###);
+
+    // even with a csv delimiter specified this error is triggered first
+    let (response, code) = index.raw_update_documents("", None, "?csvDelimiter=;").await;
+    snapshot!(code, @"415 Unsupported Media Type");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "A Content-Type header is missing. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`",
+      "code": "missing_content_type",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_content_type"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn replace_documents_bad_content_type() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.raw_add_documents("", Some("doggo"), "").await;
+    snapshot!(code, @"415 Unsupported Media Type");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "The Content-Type `doggo` is invalid. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`",
+      "code": "invalid_content_type",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_content_type"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn update_documents_bad_content_type() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index.raw_update_documents("", Some("doggo"), "").await;
+    snapshot!(code, @"415 Unsupported Media Type");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "The Content-Type `doggo` is invalid. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`",
+      "code": "invalid_content_type",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_content_type"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn replace_documents_bad_csv_delimiter() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) =
+        index.raw_add_documents("", Some("application/json"), "?csvDelimiter").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value in parameter `csvDelimiter`: expected a string of one character, but found an empty string",
+      "code": "invalid_index_csv_delimiter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_index_csv_delimiter"
+    }
+    "###);
+
+    let (response, code) =
+        index.raw_add_documents("", Some("application/json"), "?csvDelimiter=doggo").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value in parameter `csvDelimiter`: expected a string of one character, but found the following string of 5 characters: `doggo`",
+      "code": "invalid_index_csv_delimiter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_index_csv_delimiter"
+    }
+    "###);
+
+    let (response, code) =
+        index.raw_add_documents("", Some("application/json"), &format!("?csvDelimiter={}", encode("🍰"))).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "csv delimiter must be an ascii character. Found: `🍰`",
+      "code": "invalid_index_csv_delimiter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_index_csv_delimiter"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn update_documents_bad_csv_delimiter() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) =
+        index.raw_update_documents("", Some("application/json"), "?csvDelimiter").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value in parameter `csvDelimiter`: expected a string of one character, but found an empty string",
+      "code": "invalid_index_csv_delimiter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_index_csv_delimiter"
+    }
+    "###);
+
+    let (response, code) =
+        index.raw_update_documents("", Some("application/json"), "?csvDelimiter=doggo").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value in parameter `csvDelimiter`: expected a string of one character, but found the following string of 5 characters: `doggo`",
+      "code": "invalid_index_csv_delimiter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_index_csv_delimiter"
+    }
+    "###);
+
+    let (response, code) =
+        index.raw_update_documents("", Some("application/json"), &format!("?csvDelimiter={}", encode("🍰"))).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "csv delimiter must be an ascii character. Found: `🍰`",
+      "code": "invalid_index_csv_delimiter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_index_csv_delimiter"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn replace_documents_csv_delimiter_with_bad_content_type() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) =
+        index.raw_add_documents("", Some("application/json"), "?csvDelimiter=a").await;
+    snapshot!(code, @"415 Unsupported Media Type");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "The Content-Type `application/json` does not support the use of a csv delimiter. The csv delimiter can only be used with the Content-Type `text/csv`.",
+      "code": "invalid_content_type",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_content_type"
+    }
+    "###);
+
+    let (response, code) =
+        index.raw_add_documents("", Some("application/x-ndjson"), "?csvDelimiter=a").await;
+    snapshot!(code, @"415 Unsupported Media Type");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "The Content-Type `application/x-ndjson` does not support the use of a csv delimiter. The csv delimiter can only be used with the Content-Type `text/csv`.",
+      "code": "invalid_content_type",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_content_type"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn update_documents_csv_delimiter_with_bad_content_type() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) =
+        index.raw_update_documents("", Some("application/json"), "?csvDelimiter=a").await;
+    snapshot!(code, @"415 Unsupported Media Type");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "The Content-Type `application/json` does not support the use of a csv delimiter. The csv delimiter can only be used with the Content-Type `text/csv`.",
+      "code": "invalid_content_type",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_content_type"
+    }
+    "###);
+
+    let (response, code) =
+        index.raw_update_documents("", Some("application/x-ndjson"), "?csvDelimiter=a").await;
+    snapshot!(code, @"415 Unsupported Media Type");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "The Content-Type `application/x-ndjson` does not support the use of a csv delimiter. The csv delimiter can only be used with the Content-Type `text/csv`.",
+      "code": "invalid_content_type",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_content_type"
     }
     "###);
 }
