@@ -10,6 +10,8 @@ readme.workspace = true
 edition.workspace = true
 license.workspace = true
 
+default-run = "meilisearch"
+
 [dependencies]
 actix-cors = "0.6.3"
 actix-http = { version = "3.2.2", default-features = false, features = ["compress-brotli", "compress-gzip", "rustls"] }
