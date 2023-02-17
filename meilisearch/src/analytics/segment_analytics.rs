@@ -249,6 +249,7 @@ impl From<Opt> for Infos {
         // to add analytics when we add a field in the Opt.
         // Thus we must not insert `..` at the end.
         let Opt {
+            enable_metrics_route: _,
             db_path,
             http_addr,
             master_key: _,

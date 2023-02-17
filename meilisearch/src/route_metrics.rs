@@ -2,21 +2,26 @@ use std::future::{ready, Ready};
 
 use actix_web::dev::{self, Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::http::header;
+use actix_web::web::Data;
 use actix_web::{Error, HttpResponse};
 use futures_util::future::LocalBoxFuture;
-use meilisearch_lib::MeiliSearch;
+use index_scheduler::IndexScheduler;
+use meilisearch_auth::AuthController;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use prometheus::{Encoder, HistogramTimer, TextEncoder};
 
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
+use crate::routes::create_all_stats;
 
 pub async fn get_metrics(
-    meilisearch: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, MeiliSearch>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, Data<IndexScheduler>>,
+    auth_controller: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, AuthController>,
 ) -> Result<HttpResponse, ResponseError> {
-    let search_rules = &meilisearch.filters().search_rules;
-    let response = meilisearch.get_all_stats(search_rules).await?;
+    let search_rules = &index_scheduler.filters().search_rules;
+    let response =
+        create_all_stats((*index_scheduler).clone(), (*auth_controller).clone(), search_rules)?;
 
     crate::metrics::MEILISEARCH_DB_SIZE_BYTES.set(response.database_size as i64);
     crate::metrics::MEILISEARCH_INDEX_COUNT.set(response.indexes.len() as i64);
