@@ -1,10 +1,16 @@
 [package]
 name = "flatten-serde-json"
-version = "1.0.0"
-edition = "2021"
 description = "Flatten serde-json objects like elastic search"
 readme = "README.md"
 publish = false
+
+version.workspace = true
+authors.workspace = true
+# description.workspace = true
+homepage.workspace = true
+# readme.workspace = true
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
 serde_json = "1.0"

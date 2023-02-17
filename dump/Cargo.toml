@@ -1,7 +1,14 @@
 [package]
 name = "dump"
-version = "1.0.0"
-edition = "2021"
+publish = false
+
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+edition.workspace = true
+homepage.workspace = true
+readme.workspace = true
+license.workspace = true
 
 [dependencies]
 anyhow = "1.0.65"

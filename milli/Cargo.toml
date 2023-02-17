@@ -1,8 +1,15 @@
 [package]
 name = "milli"
-version = "1.0.0"
-authors = ["Kerollmops <clement@meilisearch.com>"]
 edition = "2018"
+publish = false
+
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+homepage.workspace = true
+readme.workspace = true
+# edition.workspace = true
+license.workspace = true
 
 [dependencies]
 bimap = { version = "0.6.2", features = ["serde"] }
