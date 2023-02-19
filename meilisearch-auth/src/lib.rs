@@ -158,7 +158,7 @@ impl AuthController {
 pub struct AuthFilter {
     search_rules: Option<SearchRules>,
     key_authorized_indexes: SearchRules,
-    pub allow_index_creation: bool,
+    allow_index_creation: bool,
 }
 
 impl Default for AuthFilter {
@@ -172,6 +172,11 @@ impl Default for AuthFilter {
 }
 
 impl AuthFilter {
+    #[inline]
+    pub fn allow_index_creation(&self) -> bool {
+        self.allow_index_creation
+    }
+
     pub fn with_allowed_indexes(allowed_indexes: HashSet<IndexUidPattern>) -> Self {
         Self {
             search_rules: None,

@@ -45,7 +45,7 @@ macro_rules! make_setting_route {
 
                 let new_settings = Settings { $attr: Setting::Reset.into(), ..Default::default() };
 
-                let allow_index_creation = index_scheduler.filters().allow_index_creation;
+                let allow_index_creation = index_scheduler.filters().allow_index_creation();
 
                 let task = KindWithContent::SettingsUpdate {
                     index_uid: index_uid.to_string(),
@@ -86,7 +86,7 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
 
-                let allow_index_creation = index_scheduler.filters().allow_index_creation;
+                let allow_index_creation = index_scheduler.filters().allow_index_creation();
 
                 let task = KindWithContent::SettingsUpdate {
                     index_uid: index_uid.to_string(),
@@ -560,7 +560,7 @@ pub async fn update_all(
         Some(&req),
     );
 
-    let allow_index_creation = index_scheduler.filters().allow_index_creation;
+    let allow_index_creation = index_scheduler.filters().allow_index_creation();
     let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
     let task = KindWithContent::SettingsUpdate {
         index_uid,
@@ -596,7 +596,7 @@ pub async fn delete_all(
 
     let new_settings = Settings::cleared().into_unchecked();
 
-    let allow_index_creation = index_scheduler.filters().allow_index_creation;
+    let allow_index_creation = index_scheduler.filters().allow_index_creation();
     let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
     let task = KindWithContent::SettingsUpdate {
         index_uid,
