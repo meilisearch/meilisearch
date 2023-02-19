@@ -192,7 +192,7 @@ pub async fn replace_documents(
 
     analytics.add_documents(&params, index_scheduler.index(&index_uid).is_err(), &req);
 
-    let allow_index_creation = index_scheduler.filters().allow_index_creation;
+    let allow_index_creation = index_scheduler.filters().allow_index_creation();
     let task = document_addition(
         extract_mime_type(&req)?,
         index_scheduler,
@@ -223,7 +223,7 @@ pub async fn update_documents(
 
     analytics.update_documents(&params, index_scheduler.index(&index_uid).is_err(), &req);
 
-    let allow_index_creation = index_scheduler.filters().allow_index_creation;
+    let allow_index_creation = index_scheduler.filters().allow_index_creation();
     let task = document_addition(
         extract_mime_type(&req)?,
         index_scheduler,
