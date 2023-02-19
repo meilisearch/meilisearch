@@ -255,7 +255,7 @@ pub fn create_all_stats(
     let mut database_size = 0;
     let processing_task = index_scheduler.get_tasks_from_authorized_indexes(
         Query { statuses: Some(vec![Status::Processing]), limit: Some(1), ..Query::default() },
-        filters.authorized_indexes(),
+        filters,
     )?;
     // accumulate the size of each indexes
     let processing_index = processing_task.first().and_then(|task| task.index_uid());
