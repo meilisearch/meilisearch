@@ -85,19 +85,13 @@ impl AuthController {
         uid: Uuid,
         search_rules: Option<SearchRules>,
     ) -> Result<AuthFilter> {
-        let mut filters = AuthFilter::default();
         let key = self.get_key(uid)?;
 
-        filters.key_authorized_indexes = SearchRules::Set(key.indexes.into_iter().collect());
+        let key_authorized_indexes = SearchRules::Set(key.indexes.into_iter().collect());
 
-        filters.search_rules = match search_rules {
-            Some(search_rules) => search_rules,
-            None => filters.key_authorized_indexes.clone(),
-        };
+        let allow_index_creation = self.is_key_authorized(uid, Action::IndexesAdd, None)?;
 
-        filters.allow_index_creation = self.is_key_authorized(uid, Action::IndexesAdd, None)?;
-
-        Ok(filters)
+        Ok(AuthFilter { search_rules, key_authorized_indexes, allow_index_creation })
     }
 
     pub fn list_keys(&self) -> Result<Vec<Key>> {
@@ -162,7 +156,7 @@ impl AuthController {
 }
 
 pub struct AuthFilter {
-    search_rules: SearchRules,
+    search_rules: Option<SearchRules>,
     key_authorized_indexes: SearchRules,
     pub allow_index_creation: bool,
 }
@@ -170,7 +164,7 @@ pub struct AuthFilter {
 impl Default for AuthFilter {
     fn default() -> Self {
         Self {
-            search_rules: SearchRules::default(),
+            search_rules: None,
             key_authorized_indexes: SearchRules::default(),
             allow_index_creation: true,
         }
@@ -180,7 +174,7 @@ impl Default for AuthFilter {
 impl AuthFilter {
     pub fn with_allowed_indexes(allowed_indexes: HashSet<IndexUidPattern>) -> Self {
         Self {
-            search_rules: SearchRules::Set(allowed_indexes.clone()),
+            search_rules: None,
             key_authorized_indexes: SearchRules::Set(allowed_indexes),
             allow_index_creation: false,
         }
@@ -188,19 +182,28 @@ impl AuthFilter {
 
     pub fn all_indexes_authorized(&self) -> bool {
         self.key_authorized_indexes.all_indexes_authorized()
-            && self.search_rules.all_indexes_authorized()
+            && self
+                .search_rules
+                .as_ref()
+                .map(|search_rules| search_rules.all_indexes_authorized())
+                .unwrap_or(true)
     }
 
     pub fn is_index_authorized(&self, index: &str) -> bool {
         self.key_authorized_indexes.is_index_authorized(index)
-            && self.search_rules.is_index_authorized(index)
+            && self
+                .search_rules
+                .as_ref()
+                .map(|search_rules| search_rules.is_index_authorized(index))
+                .unwrap_or(true)
     }
 
     pub fn get_index_search_rules(&self, index: &str) -> Option<IndexSearchRules> {
         if !self.is_index_authorized(index) {
             return None;
         }
-        self.search_rules.get_index_search_rules(index)
+        let search_rules = self.search_rules.as_ref().unwrap_or(&self.key_authorized_indexes);
+        search_rules.get_index_search_rules(index)
     }
 }
 
