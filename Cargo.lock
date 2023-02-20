@@ -1113,9 +1113,9 @@ dependencies = [
 
 [[package]]
 name = "deserr"
-version = "0.4.1"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6eee2844f21cf7fb5693aae1fb8f1658127acfdb2fc072167d68a9152584ae64"
+checksum = "c71c14985c842bf1e520b1ebcd22daff6aeece32f510e11f063cecf9b308c04b"
 dependencies = [
  "actix-http",
  "actix-utils",
@@ -1130,9 +1130,9 @@ dependencies = [
 
 [[package]]
 name = "deserr-internal"
-version = "0.4.1"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c27246f8ca9eeba9dd70d614b664dc43b529251ed7bd9e633131010d340da4b9"
+checksum = "cae1c51b191528c9e4e5d6cff671de94f61fcda1c206cc891251e0cf438c941a"
 dependencies = [
  "convert_case 0.5.0",
  "proc-macro2",
