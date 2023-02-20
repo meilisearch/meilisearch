@@ -404,15 +404,19 @@ impl IndexScheduler {
                     Details::DocumentAdditionOrUpdate { received_documents, indexed_documents } => {
                         assert_eq!(kind.as_kind(), Kind::DocumentAdditionOrUpdate);
                         match indexed_documents {
-                            Some(0) => assert_ne!(status, Status::Enqueued),
                             Some(indexed_documents) => {
-                                assert_eq!(status, Status::Succeeded);
-                                assert!(indexed_documents <= received_documents);
+                                assert!(matches!(
+                                    status,
+                                    Status::Succeeded | Status::Failed | Status::Canceled
+                                ));
+                                match status {
+                                    Status::Succeeded => assert!(indexed_documents <= received_documents),
+                                    Status::Failed | Status::Canceled => assert_eq!(indexed_documents, 0),
+                                    status => panic!("DocumentAddition can't have an indexed_document set if it's {}", status),
+                                }
                             }
                             None => {
-                                assert_ne!(status, Status::Succeeded);
-                                assert_ne!(status, Status::Canceled);
-                                assert_ne!(status, Status::Failed);
+                                assert!(matches!(status, Status::Enqueued | Status::Processing))
                             }
                         }
                     }
@@ -435,20 +439,29 @@ impl IndexScheduler {
                         provided_ids: received_document_ids,
                         deleted_documents,
                     } => {
-                        if let Some(deleted_documents) = deleted_documents {
-                            assert_eq!(status, Status::Succeeded);
-                            assert!(deleted_documents <= received_document_ids as u64);
-                            assert_eq!(kind.as_kind(), Kind::DocumentDeletion);
+                        assert_eq!(kind.as_kind(), Kind::DocumentDeletion);
+                        let (index_uid, documents_ids) =
+                            if let KindWithContent::DocumentDeletion {
+                                ref index_uid,
+                                ref documents_ids,
+                            } = kind
+                            {
+                                (index_uid, documents_ids)
+                            } else {
+                                unreachable!()
+                            };
+                        assert_eq!(&task_index_uid.unwrap(), index_uid);
 
-                            match &kind {
-                                KindWithContent::DocumentDeletion { index_uid, documents_ids } => {
-                                    assert_eq!(&task_index_uid.unwrap(), index_uid);
-                                    assert!(documents_ids.len() >= received_document_ids);
-                                }
-                                _ => panic!(),
+                        match status {
+                            Status::Enqueued | Status::Processing => (),
+                            Status::Succeeded => {
+                                assert!(deleted_documents.unwrap() <= received_document_ids as u64);
+                                assert!(documents_ids.len() == received_document_ids);
                             }
-                        } else {
-                            assert_ne!(status, Status::Succeeded);
+                            Status::Failed | Status::Canceled => {
+                                assert!(deleted_documents == Some(0));
+                                assert!(documents_ids.len() == received_document_ids);
+                            }
                         }
                     }
                     Details::ClearAll { deleted_documents } => {
@@ -504,10 +517,21 @@ impl IndexScheduler {
             if let KindWithContent::DocumentAdditionOrUpdate { content_file, .. } = kind {
                 match status {
                     Status::Enqueued | Status::Processing => {
-                        assert!(self.file_store.__all_uuids().contains(&content_file));
+                        assert!(self
+                            .file_store
+                            .all_uuids()
+                            .unwrap()
+                            .any(|uuid| uuid.as_ref().unwrap() == &content_file),
+                            "Could not find uuid `{content_file}` in the file_store. Available uuids are {:?}.",
+                            self.file_store.all_uuids().unwrap().collect::<std::result::Result<Vec<_>, file_store::Error>>().unwrap(),
+                        );
                     }
                     Status::Succeeded | Status::Failed | Status::Canceled => {
-                        assert!(!self.file_store.__all_uuids().contains(&content_file));
+                        assert!(self
+                            .file_store
+                            .all_uuids()
+                            .unwrap()
+                            .all(|uuid| uuid.as_ref().unwrap() != &content_file));
                     }
                 }
             }

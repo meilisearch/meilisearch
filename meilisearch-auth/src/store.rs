@@ -3,23 +3,23 @@ use std::cmp::Reverse;
 use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
 use std::fs::create_dir_all;
-use std::ops::Deref;
 use std::path::Path;
 use std::str;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use hmac::{Hmac, Mac};
+use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::keys::KeyId;
 use meilisearch_types::milli;
 use meilisearch_types::milli::heed::types::{ByteSlice, DecodeIgnore, SerdeJson};
 use meilisearch_types::milli::heed::{Database, Env, EnvOpenOptions, RwTxn};
-use meilisearch_types::star_or::StarOr;
 use sha2::Sha256;
 use time::OffsetDateTime;
 use uuid::fmt::Hyphenated;
 use uuid::Uuid;
 
-use super::error::Result;
+use super::error::{AuthControllerError, Result};
 use super::{Action, Key};
 
 const AUTH_STORE_SIZE: usize = 1_073_741_824; //1GiB
@@ -59,6 +59,11 @@ impl HeedAuthStore {
         let action_keyid_index_expiration =
             env.create_database(Some(KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME))?;
         Ok(Self { env, keys, action_keyid_index_expiration, should_close_on_drop: true })
+    }
+
+    /// Return the size in bytes of database
+    pub fn size(&self) -> Result<u64> {
+        Ok(self.env.real_disk_size()?)
     }
 
     pub fn set_drop_on_close(&mut self, v: bool) {
@@ -125,7 +130,7 @@ impl HeedAuthStore {
             }
         }
 
-        let no_index_restriction = key.indexes.contains(&StarOr::Star);
+        let no_index_restriction = key.indexes.iter().any(|p| p.matches_all());
         for action in actions {
             if no_index_restriction {
                 // If there is no index restriction we put None.
@@ -135,7 +140,7 @@ impl HeedAuthStore {
                 for index in key.indexes.iter() {
                     db.put(
                         &mut wtxn,
-                        &(&uid, &action, Some(index.deref().as_bytes())),
+                        &(&uid, &action, Some(index.to_string().as_bytes())),
                         &key.expires_at,
                     )?;
                 }
@@ -210,11 +215,28 @@ impl HeedAuthStore {
         &self,
         uid: Uuid,
         action: Action,
-        index: Option<&[u8]>,
+        index: Option<&str>,
     ) -> Result<Option<Option<OffsetDateTime>>> {
         let rtxn = self.env.read_txn()?;
-        let tuple = (&uid, &action, index);
-        Ok(self.action_keyid_index_expiration.get(&rtxn, &tuple)?)
+        let tuple = (&uid, &action, index.map(|s| s.as_bytes()));
+        match self.action_keyid_index_expiration.get(&rtxn, &tuple)? {
+            Some(expiration) => Ok(Some(expiration)),
+            None => {
+                let tuple = (&uid, &action, None);
+                for result in self.action_keyid_index_expiration.prefix_iter(&rtxn, &tuple)? {
+                    let ((_, _, index_uid_pattern), expiration) = result?;
+                    if let Some((pattern, index)) = index_uid_pattern.zip(index) {
+                        let index_uid_pattern = str::from_utf8(pattern)?;
+                        let pattern = IndexUidPattern::from_str(index_uid_pattern)
+                            .map_err(|e| AuthControllerError::Internal(Box::new(e)))?;
+                        if pattern.matches_str(index) {
+                            return Ok(Some(expiration));
+                        }
+                    }
+                }
+                Ok(None)
+            }
+        }
     }
 
     pub fn prefix_first_expiration_date(

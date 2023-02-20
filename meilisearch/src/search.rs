@@ -3,10 +3,10 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 use std::time::Instant;
 
-use deserr::DeserializeFromValue;
+use deserr::Deserr;
 use either::Either;
+use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
-use meilisearch_types::error::DeserrError;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::TokenizerBuilder;
@@ -15,7 +15,7 @@ use milli::{
     SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::{json, Value};
 
 use crate::error::MeilisearchHttpError;
@@ -29,42 +29,42 @@ pub const DEFAULT_CROP_MARKER: fn() -> String = || "…".to_string();
 pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, DeserializeFromValue)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserr)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQuery {
-    #[deserr(error = DeserrError<InvalidSearchQ>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
-    #[deserr(error = DeserrError<InvalidSearchOffset>, default = DEFAULT_SEARCH_OFFSET())]
+    #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
-    #[deserr(error = DeserrError<InvalidSearchLimit>, default = DEFAULT_SEARCH_LIMIT())]
+    #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
     pub limit: usize,
-    #[deserr(error = DeserrError<InvalidSearchPage>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
     pub page: Option<usize>,
-    #[deserr(error = DeserrError<InvalidSearchHitsPerPage>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchHitsPerPage>)]
     pub hits_per_page: Option<usize>,
-    #[deserr(error = DeserrError<InvalidSearchAttributesToRetrieve>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
-    #[deserr(error = DeserrError<InvalidSearchAttributesToCrop>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
     pub attributes_to_crop: Option<Vec<String>>,
-    #[deserr(error = DeserrError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
     pub crop_length: usize,
-    #[deserr(error = DeserrError<InvalidSearchAttributesToHighlight>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
     pub attributes_to_highlight: Option<HashSet<String>>,
-    #[deserr(error = DeserrError<InvalidSearchShowMatchesPosition>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>, default)]
     pub show_matches_position: bool,
-    #[deserr(error = DeserrError<InvalidSearchFilter>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
-    #[deserr(error = DeserrError<InvalidSearchSort>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
     pub sort: Option<Vec<String>>,
-    #[deserr(error = DeserrError<InvalidSearchFacets>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
-    #[deserr(error = DeserrError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
     pub highlight_pre_tag: String,
-    #[deserr(error = DeserrError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
     pub highlight_post_tag: String,
-    #[deserr(error = DeserrError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
     pub crop_marker: String,
-    #[deserr(error = DeserrError<InvalidSearchMatchingStrategy>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
     pub matching_strategy: MatchingStrategy,
 }
 
@@ -74,9 +74,8 @@ impl SearchQuery {
     }
 }
 
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq, DeserializeFromValue)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserr)]
 #[deserr(rename_all = camelCase)]
-#[serde(rename_all = "camelCase")]
 pub enum MatchingStrategy {
     /// Remove query words from last to first
     Last,
@@ -474,10 +473,10 @@ fn make_document(
     Ok(document)
 }
 
-fn format_fields<'a, A: AsRef<[u8]>>(
+fn format_fields<A: AsRef<[u8]>>(
     document: &Document,
     field_ids_map: &FieldsIdsMap,
-    builder: &MatcherBuilder<'a, A>,
+    builder: &MatcherBuilder<'_, A>,
     formatted_options: &BTreeMap<FieldId, FormatOptions>,
     compute_matches: bool,
     displayable_ids: &BTreeSet<FieldId>,
@@ -522,9 +521,9 @@ fn format_fields<'a, A: AsRef<[u8]>>(
     Ok((matches_position, document))
 }
 
-fn format_value<'a, A: AsRef<[u8]>>(
+fn format_value<A: AsRef<[u8]>>(
     value: Value,
-    builder: &MatcherBuilder<'a, A>,
+    builder: &MatcherBuilder<'_, A>,
     format_options: Option<FormatOptions>,
     infos: &mut Vec<MatchBounds>,
     compute_matches: bool,

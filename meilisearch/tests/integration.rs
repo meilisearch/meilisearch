@@ -8,6 +8,7 @@ mod search;
 mod settings;
 mod snapshot;
 mod stats;
+mod swap_indexes;
 mod tasks;
 
 // Tests are isolated by features in different modules to allow better readability, test

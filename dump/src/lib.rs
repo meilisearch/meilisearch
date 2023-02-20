@@ -198,17 +198,16 @@ impl From<KindWithContent> for KindDump {
 #[cfg(test)]
 pub(crate) mod test {
     use std::fs::File;
-    use std::io::{Seek, SeekFrom};
+    use std::io::Seek;
     use std::str::FromStr;
 
     use big_s::S;
     use maplit::btreeset;
-    use meilisearch_types::index_uid::IndexUid;
+    use meilisearch_types::index_uid_pattern::IndexUidPattern;
     use meilisearch_types::keys::{Action, Key};
     use meilisearch_types::milli::update::Setting;
     use meilisearch_types::milli::{self};
     use meilisearch_types::settings::{Checked, Settings};
-    use meilisearch_types::star_or::StarOr;
     use meilisearch_types::tasks::{Details, Status};
     use serde_json::{json, Map, Value};
     use time::macros::datetime;
@@ -341,7 +340,7 @@ pub(crate) mod test {
                 name: Some(S("doggos_key")),
                 uid: Uuid::from_str("9f8a34da-b6b2-42f0-939b-dbd4c3448655").unwrap(),
                 actions: vec![Action::DocumentsAll],
-                indexes: vec![StarOr::Other(IndexUid::from_str("doggos").unwrap())],
+                indexes: vec![IndexUidPattern::from_str("doggos").unwrap()],
                 expires_at: Some(datetime!(4130-03-14 12:21 UTC)),
                 created_at: datetime!(1960-11-15 0:00 UTC),
                 updated_at: datetime!(2022-11-10 0:00 UTC),
@@ -351,7 +350,7 @@ pub(crate) mod test {
                 name: Some(S("master_key")),
                 uid: Uuid::from_str("4622f717-1c00-47bb-a494-39d76a49b591").unwrap(),
                 actions: vec![Action::All],
-                indexes: vec![StarOr::Star],
+                indexes: vec![IndexUidPattern::all()],
                 expires_at: None,
                 created_at: datetime!(0000-01-01 00:01 UTC),
                 updated_at: datetime!(1964-05-04 17:25 UTC),
@@ -410,7 +409,7 @@ pub(crate) mod test {
         // create the dump
         let mut file = tempfile::tempfile().unwrap();
         dump.persist_to(&mut file).unwrap();
-        file.seek(SeekFrom::Start(0)).unwrap();
+        file.rewind().unwrap();
 
         file
     }

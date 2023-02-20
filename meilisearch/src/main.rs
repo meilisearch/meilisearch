@@ -1,4 +1,5 @@
 use std::env;
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -7,8 +8,9 @@ use actix_web::web::Data;
 use actix_web::HttpServer;
 use index_scheduler::IndexScheduler;
 use meilisearch::analytics::Analytics;
-use meilisearch::{analytics, create_app, setup_meilisearch, Opt};
+use meilisearch::{analytics, create_app, prototype_name, setup_meilisearch, Opt};
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
+use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -32,24 +34,19 @@ async fn main() -> anyhow::Result<()> {
     match (opt.env.as_ref(), &opt.master_key) {
         ("production", Some(master_key)) if master_key.len() < MASTER_KEY_MIN_SIZE => {
             anyhow::bail!(
-                "In production mode, the master key must be of at least {MASTER_KEY_MIN_SIZE} bytes, but the provided key is only {} bytes long
+                "The master key must be at least {MASTER_KEY_MIN_SIZE} bytes in a production environment. The provided key is only {} bytes.
 
-We generated a secure master key for you (you can safely copy this token):
-
->> export MEILI_MASTER_KEY={} <<",
+{}",
                 master_key.len(),
-                generate_master_key(),
+                generated_master_key_message(),
             )
         }
         ("production", None) => {
             anyhow::bail!(
-                "In production mode, you must provide a master key to secure your instance. It can be specified via the MEILI_MASTER_KEY environment variable or the --master-key launch option.
+                "You must provide a master key to secure your instance in a production environment. It can be specified via the MEILI_MASTER_KEY environment variable or the --master-key launch option.
 
-We generated a secure master key for you (you can safely copy this token):
-
->> export MEILI_MASTER_KEY={} <<
-",
-                generate_master_key()
+{}",
+                generated_master_key_message()
             )
         }
         // No error; continue
@@ -60,7 +57,8 @@ We generated a secure master key for you (you can safely copy this token):
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     let analytics = if !opt.no_analytics {
-        analytics::SegmentAnalytics::new(&opt, index_scheduler.clone()).await
+        analytics::SegmentAnalytics::new(&opt, index_scheduler.clone(), auth_controller.clone())
+            .await
     } else {
         analytics::MockAnalytics::new(&opt)
     };
@@ -139,6 +137,9 @@ pub fn print_launch_resume(
     eprintln!("Commit SHA:\t\t{:?}", commit_sha.to_string());
     eprintln!("Commit date:\t\t{:?}", commit_date.to_string());
     eprintln!("Package version:\t{:?}", env!("CARGO_PKG_VERSION").to_string());
+    if let Some(prototype) = prototype_name() {
+        eprintln!("Prototype:\t\t{:?}", prototype);
+    }
 
     #[cfg(all(not(debug_assertions), feature = "analytics"))]
     {
@@ -147,7 +148,7 @@ pub fn print_launch_resume(
                 "
 Thank you for using Meilisearch!
 
-We collect anonymized analytics to improve our product and your experience. To learn more, including how to turn off analytics, visit our dedicated documentation page: https://docs.meilisearch.com/learn/what_is_meilisearch/telemetry.html
+\nWe collect anonymized analytics to improve our product and your experience. To learn more, including how to turn off analytics, visit our dedicated documentation page: https://docs.meilisearch.com/learn/what_is_meilisearch/telemetry.html
 
 Anonymous telemetry:\t\"Enabled\""
             );
@@ -170,16 +171,10 @@ Anonymous telemetry:\t\"Enabled\""
             eprintln!("A master key has been set. Requests to Meilisearch won't be authorized unless you provide an authentication key.");
 
             if master_key.len() < MASTER_KEY_MIN_SIZE {
-                eprintln!();
-                log::warn!("The provided master key is too short (< {MASTER_KEY_MIN_SIZE} bytes)");
-                eprintln!("A master key of at least {MASTER_KEY_MIN_SIZE} bytes will be required when switching to the production environment.");
+                print_master_key_too_short_warning()
             }
         }
-        ("development", None) => {
-            log::warn!("No master key found; The server will accept unidentified requests");
-            eprintln!("If you need some protection in development mode, please export a key:\n\nexport MEILI_MASTER_KEY={}", generate_master_key());
-            eprintln!("\nA master key of at least {MASTER_KEY_MIN_SIZE} bytes will be required when switching to the production environment.");
-        }
+        ("development", None) => print_missing_master_key_warning(),
         // unreachable because Opt::try_build above would have failed already if any other value had been produced
         _ => unreachable!(),
     }
@@ -189,4 +184,68 @@ Anonymous telemetry:\t\"Enabled\""
     eprintln!("Source code:\t\thttps://github.com/meilisearch/meilisearch");
     eprintln!("Contact:\t\thttps://docs.meilisearch.com/resources/contact.html");
     eprintln!();
+}
+
+const WARNING_BG_COLOR: Option<Color> = Some(Color::Ansi256(178));
+const WARNING_FG_COLOR: Option<Color> = Some(Color::Ansi256(0));
+
+fn print_master_key_too_short_warning() {
+    let choice =
+        if atty::is(atty::Stream::Stderr) { ColorChoice::Auto } else { ColorChoice::Never };
+    let mut stderr = StandardStream::stderr(choice);
+    stderr
+        .set_color(
+            ColorSpec::new().set_bg(WARNING_BG_COLOR).set_fg(WARNING_FG_COLOR).set_bold(true),
+        )
+        .unwrap();
+    writeln!(stderr, "\n").unwrap();
+    writeln!(
+        stderr,
+        " Meilisearch started with a master key considered unsafe for use in a production environment.
+
+ A master key of at least {MASTER_KEY_MIN_SIZE} bytes will be required when switching to a production environment."
+    )
+    .unwrap();
+    stderr.reset().unwrap();
+    writeln!(stderr).unwrap();
+
+    eprintln!("\n{}", generated_master_key_message());
+    eprintln!(
+        "\nRestart Meilisearch with the argument above to use this new and secure master key."
+    )
+}
+
+fn print_missing_master_key_warning() {
+    let choice =
+        if atty::is(atty::Stream::Stderr) { ColorChoice::Auto } else { ColorChoice::Never };
+    let mut stderr = StandardStream::stderr(choice);
+    stderr
+        .set_color(
+            ColorSpec::new().set_bg(WARNING_BG_COLOR).set_fg(WARNING_FG_COLOR).set_bold(true),
+        )
+        .unwrap();
+    writeln!(stderr, "\n").unwrap();
+    writeln!(
+    stderr,
+    " No master key was found. The server will accept unidentified requests.
+
+ A master key of at least {MASTER_KEY_MIN_SIZE} bytes will be required when switching to a production environment."
+)
+.unwrap();
+    stderr.reset().unwrap();
+    writeln!(stderr).unwrap();
+
+    eprintln!("\n{}", generated_master_key_message());
+    eprintln!(
+        "\nRestart Meilisearch with the argument above to use this new and secure master key."
+    )
+}
+
+fn generated_master_key_message() -> String {
+    format!(
+        "We generated a new secure master key for you (you can safely use this token):
+
+>> --master-key {} <<",
+        generate_master_key()
+    )
 }

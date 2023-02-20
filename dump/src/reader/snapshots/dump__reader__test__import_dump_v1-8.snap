@@ -13,6 +13,10 @@ expression: movies.settings().unwrap()
     "genres",
     "id"
   ],
+  "sortableAttributes": [
+    "genres",
+    "id"
+  ],
   "rankingRules": [
     "typo",
     "words",

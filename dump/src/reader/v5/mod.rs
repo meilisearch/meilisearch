@@ -33,7 +33,7 @@
 //!
 
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader, ErrorKind, Seek, SeekFrom};
+use std::io::{BufRead, BufReader, ErrorKind, Seek};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -178,7 +178,7 @@ impl V5Reader {
     }
 
     pub fn keys(&mut self) -> Result<Box<dyn Iterator<Item = Result<Key>> + '_>> {
-        self.keys.seek(SeekFrom::Start(0))?;
+        self.keys.rewind()?;
         Ok(Box::new(
             (&mut self.keys).lines().map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) }),
         ))

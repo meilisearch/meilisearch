@@ -1,13 +1,12 @@
 use std::collections::BTreeMap;
-use std::str::FromStr;
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::{IndexScheduler, Query};
 use log::debug;
-use meilisearch_types::error::{ResponseError, TakeErrorMessage};
+use meilisearch_auth::AuthController;
+use meilisearch_types::error::ResponseError;
 use meilisearch_types::settings::{Settings, Unchecked};
-use meilisearch_types::star_or::StarOr;
 use meilisearch_types::tasks::{Kind, Status, Task, TaskId};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -17,6 +16,8 @@ use self::indexes::IndexStats;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
+
+const PAGINATION_DEFAULT_LIMIT: usize = 20;
 
 mod api_key;
 mod dump;
@@ -34,38 +35,6 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/indexes").configure(indexes::configure))
         .service(web::scope("/swap-indexes").configure(swap_indexes::configure));
 }
-
-/// Extracts the raw values from the `StarOr` types and
-/// return None if a `StarOr::Star` is encountered.
-pub fn fold_star_or<T, O>(content: impl IntoIterator<Item = StarOr<T>>) -> Option<O>
-where
-    O: FromIterator<T>,
-{
-    content
-        .into_iter()
-        .map(|value| match value {
-            StarOr::Star => None,
-            StarOr::Other(val) => Some(val),
-        })
-        .collect()
-}
-
-pub fn from_string_to_option<T, E>(input: &str) -> Result<Option<T>, E>
-where
-    T: FromStr<Err = E>,
-{
-    Ok(Some(input.parse()?))
-}
-pub fn from_string_to_option_take_error_message<T, E>(
-    input: &str,
-) -> Result<Option<T>, TakeErrorMessage<E>>
-where
-    T: FromStr<Err = E>,
-{
-    Ok(Some(input.parse().map_err(TakeErrorMessage)?))
-}
-
-const PAGINATION_DEFAULT_LIMIT: fn() -> usize = || 20;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -90,6 +59,7 @@ impl From<Task> for SummarizedTaskView {
         }
     }
 }
+
 pub struct Pagination {
     pub offset: usize,
     pub limit: usize,
@@ -262,13 +232,15 @@ pub struct Stats {
 
 async fn get_stats(
     index_scheduler: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<IndexScheduler>>,
+    auth_controller: GuardedData<ActionPolicy<{ actions::STATS_GET }>, AuthController>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     analytics.publish("Stats Seen".to_string(), json!({ "per_index_uid": false }), Some(&req));
     let search_rules = &index_scheduler.filters().search_rules;
 
-    let stats = create_all_stats((*index_scheduler).clone(), search_rules)?;
+    let stats =
+        create_all_stats((*index_scheduler).clone(), (*auth_controller).clone(), search_rules)?;
 
     debug!("returns: {:?}", stats);
     Ok(HttpResponse::Ok().json(stats))
@@ -276,6 +248,7 @@ async fn get_stats(
 
 pub fn create_all_stats(
     index_scheduler: Data<IndexScheduler>,
+    auth_controller: AuthController,
     search_rules: &meilisearch_auth::SearchRules,
 ) -> Result<Stats, ResponseError> {
     let mut last_task: Option<OffsetDateTime> = None;
@@ -285,6 +258,7 @@ pub fn create_all_stats(
         Query { statuses: Some(vec![Status::Processing]), limit: Some(1), ..Query::default() },
         search_rules.authorized_indexes(),
     )?;
+    // accumulate the size of each indexes
     let processing_index = processing_task.first().and_then(|task| task.index_uid());
     for (name, index) in index_scheduler.indexes()? {
         if !search_rules.is_index_authorized(&name) {
@@ -305,6 +279,11 @@ pub fn create_all_stats(
 
         indexes.insert(name, stats);
     }
+
+    database_size += index_scheduler.size()?;
+    database_size += auth_controller.size()?;
+    database_size += index_scheduler.compute_update_file_size()?;
+
     let stats = Stats { database_size, last_update: last_task, indexes };
     Ok(stats)
 }

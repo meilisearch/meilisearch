@@ -4,7 +4,7 @@ use heed::types::{ByteSlice, DecodeIgnore};
 use heed::{BytesDecode, RoTxn};
 
 pub use self::facet_distribution::{FacetDistribution, DEFAULT_VALUES_PER_FACET};
-pub use self::filter::Filter;
+pub use self::filter::{BadGeoError, Filter};
 use crate::heed_codec::facet::{FacetGroupKeyCodec, FacetGroupValueCodec};
 use crate::heed_codec::ByteSliceRefCodec;
 mod facet_distribution;

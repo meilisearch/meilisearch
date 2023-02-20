@@ -181,10 +181,8 @@ impl CompatV5ToV6 {
                     .indexes
                     .into_iter()
                     .map(|index| match index {
-                        v5::StarOr::Star => v6::StarOr::Star,
-                        v5::StarOr::Other(uid) => {
-                            v6::StarOr::Other(v6::IndexUid::new_unchecked(uid.as_str()))
-                        }
+                        v5::StarOr::Star => v6::IndexUidPattern::all(),
+                        v5::StarOr::Other(uid) => v6::IndexUidPattern::new_unchecked(uid.as_str()),
                     })
                     .collect(),
                 expires_at: key.expires_at,
@@ -260,7 +258,7 @@ impl From<v5::ResponseError> for v6::ResponseError {
             "index_already_exists" => v6::Code::IndexAlreadyExists,
             "index_not_found" => v6::Code::IndexNotFound,
             "invalid_index_uid" => v6::Code::InvalidIndexUid,
-            "invalid_min_word_length_for_typo" => v6::Code::InvalidMinWordLengthForTypo,
+            "invalid_min_word_length_for_typo" => v6::Code::InvalidSettingsTypoTolerance,
             "invalid_state" => v6::Code::InvalidState,
             "primary_key_inference_failed" => v6::Code::IndexPrimaryKeyNoCandidateFound,
             "index_primary_key_already_exists" => v6::Code::IndexPrimaryKeyAlreadyExists,
@@ -439,7 +437,7 @@ pub(crate) mod test {
         // tasks
         let tasks = dump.tasks().unwrap().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
-        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"10c673c97f053830aa659876d7aa0b53");
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"41f91d3a94911b2735ec41b07540df5c");
         assert_eq!(update_files.len(), 22);
         assert!(update_files[0].is_none()); // the dump creation
         assert!(update_files[1].is_some()); // the enqueued document addition

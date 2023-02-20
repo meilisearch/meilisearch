@@ -43,6 +43,7 @@ use file_store::FileStore;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{self, Database, Env, RoTxn};
+use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::milli;
 use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::update::IndexerConfig;
@@ -422,12 +423,12 @@ impl IndexScheduler {
                 #[cfg(test)]
                 run.breakpoint(Breakpoint::Init);
 
-                loop {
-                    run.wake_up.wait();
+                run.wake_up.wait();
 
+                loop {
                     match run.tick() {
-                        Ok(0) => (),
-                        Ok(_) => run.wake_up.signal(),
+                        Ok(TickOutcome::TickAgain(_)) => (),
+                        Ok(TickOutcome::WaitForSignal) => run.wake_up.wait(),
                         Err(e) => {
                             log::error!("{}", e);
                             // Wait one second when an irrecoverable error occurs.
@@ -440,7 +441,6 @@ impl IndexScheduler {
                             ) {
                                 std::thread::sleep(Duration::from_secs(1));
                             }
-                            run.wake_up.signal();
                         }
                     }
                 }
@@ -450,6 +450,10 @@ impl IndexScheduler {
 
     pub fn indexer_config(&self) -> &IndexerConfig {
         &self.index_mapper.indexer_config
+    }
+
+    pub fn size(&self) -> Result<u64> {
+        Ok(self.env.real_disk_size()?)
     }
 
     /// Return the index corresponding to the name.
@@ -502,12 +506,21 @@ impl IndexScheduler {
         }
 
         if let Some(canceled_by) = &query.canceled_by {
+            let mut all_canceled_tasks = RoaringBitmap::new();
             for cancel_task_uid in canceled_by {
                 if let Some(canceled_by_uid) =
                     self.canceled_by.get(rtxn, &BEU32::new(*cancel_task_uid))?
                 {
-                    tasks &= canceled_by_uid;
+                    all_canceled_tasks |= canceled_by_uid;
                 }
+            }
+
+            // if the canceled_by has been specified but no task
+            // matches then we prefer matching zero than all tasks.
+            if all_canceled_tasks.is_empty() {
+                return Ok(RoaringBitmap::new());
+            } else {
+                tasks &= all_canceled_tasks;
             }
         }
 
@@ -617,7 +630,7 @@ impl IndexScheduler {
         &self,
         rtxn: &RoTxn,
         query: &Query,
-        authorized_indexes: &Option<Vec<String>>,
+        authorized_indexes: &Option<Vec<IndexUidPattern>>,
     ) -> Result<RoaringBitmap> {
         let mut tasks = self.get_task_ids(rtxn, query)?;
 
@@ -635,7 +648,7 @@ impl IndexScheduler {
             let all_indexes_iter = self.index_tasks.iter(rtxn)?;
             for result in all_indexes_iter {
                 let (index, index_tasks) = result?;
-                if !authorized_indexes.contains(&index.to_owned()) {
+                if !authorized_indexes.iter().any(|p| p.matches_str(index)) {
                     tasks -= index_tasks;
                 }
             }
@@ -655,7 +668,7 @@ impl IndexScheduler {
     pub fn get_tasks_from_authorized_indexes(
         &self,
         query: Query,
-        authorized_indexes: Option<Vec<String>>,
+        authorized_indexes: Option<Vec<IndexUidPattern>>,
     ) -> Result<Vec<Task>> {
         let rtxn = self.env.read_txn()?;
 
@@ -751,8 +764,8 @@ impl IndexScheduler {
         Ok(task)
     }
 
-    /// Register a new task comming from a dump in the scheduler.
-    /// By takinig a mutable ref we're pretty sure no one will ever import a dump while actix is running.
+    /// Register a new task coming from a dump in the scheduler.
+    /// By taking a mutable ref we're pretty sure no one will ever import a dump while actix is running.
     pub fn register_dumped_task(
         &mut self,
         task: TaskDump,
@@ -889,6 +902,11 @@ impl IndexScheduler {
         Ok(self.file_store.new_update_with_uuid(uuid)?)
     }
 
+    /// The size on disk taken by all the updates files contained in the `IndexScheduler`, in bytes.
+    pub fn compute_update_file_size(&self) -> Result<u64> {
+        Ok(self.file_store.compute_total_size()?)
+    }
+
     /// Delete a file from the index scheduler.
     ///
     /// Counterpart to the [`create_update_file`](IndexScheduler::create_update_file) method.
@@ -908,7 +926,7 @@ impl IndexScheduler {
     /// 5. Reset the in-memory list of processed tasks.
     ///
     /// Returns the number of processed tasks.
-    fn tick(&self) -> Result<usize> {
+    fn tick(&self) -> Result<TickOutcome> {
         #[cfg(test)]
         {
             *self.run_loop_iteration.write().unwrap() += 1;
@@ -919,8 +937,9 @@ impl IndexScheduler {
         let batch =
             match self.create_next_batch(&rtxn).map_err(|e| Error::CreateBatch(Box::new(e)))? {
                 Some(batch) => batch,
-                None => return Ok(0),
+                None => return Ok(TickOutcome::WaitForSignal),
             };
+        let index_uid = batch.index_uid().map(ToOwned::to_owned);
         drop(rtxn);
 
         // 1. store the starting date with the bitmap of processing tasks.
@@ -991,7 +1010,23 @@ impl IndexScheduler {
                 // the `started_at` date times and `processings` of the current processing tasks.
                 // This date time is used by the task cancelation to store the right `started_at`
                 // date in the task on disk.
-                return Ok(0);
+                return Ok(TickOutcome::TickAgain(0));
+            }
+            // If an index said it was full, we need to:
+            // 1. identify which index is full
+            // 2. close the associated environment
+            // 3. resize it
+            // 4. re-schedule tasks
+            Err(Error::Milli(milli::Error::UserError(
+                milli::UserError::MaxDatabaseSizeReached,
+            ))) if index_uid.is_some() => {
+                // fixme: add index_uid to match to avoid the unwrap
+                let index_uid = index_uid.unwrap();
+                // fixme: handle error more gracefully? not sure when this could happen
+                self.index_mapper.resize_index(&wtxn, &index_uid)?;
+                wtxn.abort().map_err(Error::HeedTransaction)?;
+
+                return Ok(TickOutcome::TickAgain(0));
             }
             // In case of a failure we must get back and patch all the tasks with the error.
             Err(err) => {
@@ -1031,7 +1066,7 @@ impl IndexScheduler {
         #[cfg(test)]
         self.breakpoint(Breakpoint::AfterProcessing);
 
-        Ok(processed_tasks)
+        Ok(TickOutcome::TickAgain(processed_tasks))
     }
 
     pub(crate) fn delete_persisted_task_data(&self, task: &Task) -> Result<()> {
@@ -1064,6 +1099,16 @@ impl IndexScheduler {
         // By crashing with `unwrap`, we kill the run loop.
         self.test_breakpoint_sdr.send((b, true)).unwrap();
     }
+}
+
+/// The outcome of calling the [`IndexScheduler::tick`] function.
+pub enum TickOutcome {
+    /// The scheduler should immediately attempt another `tick`.
+    ///
+    /// The `usize` field contains the number of processed tasks.
+    TickAgain(usize),
+    /// The scheduler should wait for an external signal before attempting another `tick`.
+    WaitForSignal,
 }
 
 #[cfg(test)]
@@ -1662,6 +1707,105 @@ mod tests {
     }
 
     #[test]
+    fn document_addition_and_document_deletion() {
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        let content = r#"[
+            { "id": 1, "doggo": "jean bob" },
+            { "id": 2, "catto": "jorts" },
+            { "id": 3, "doggo": "bork" }
+        ]"#;
+
+        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
+        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        file.persist().unwrap();
+        index_scheduler
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: Some(S("id")),
+                method: ReplaceDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: true,
+            })
+            .unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
+        index_scheduler
+            .register(KindWithContent::DocumentDeletion {
+                index_uid: S("doggos"),
+                documents_ids: vec![S("1"), S("2")],
+            })
+            .unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
+
+        handle.advance_one_successful_batch(); // The addition AND deletion should've been batched together
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_processing_the_batch");
+
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
+    }
+
+    #[test]
+    fn document_deletion_and_document_addition() {
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+        index_scheduler
+            .register(KindWithContent::DocumentDeletion {
+                index_uid: S("doggos"),
+                documents_ids: vec![S("1"), S("2")],
+            })
+            .unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
+
+        let content = r#"[
+            { "id": 1, "doggo": "jean bob" },
+            { "id": 2, "catto": "jorts" },
+            { "id": 3, "doggo": "bork" }
+        ]"#;
+
+        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
+        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        file.persist().unwrap();
+        index_scheduler
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: Some(S("id")),
+                method: ReplaceDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: true,
+            })
+            .unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
+
+        // The deletion should have failed because it can't create an index
+        handle.advance_one_failed_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_failing_the_deletion");
+
+        // The addition should works
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_last_successful_addition");
+
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
+    }
+
+    #[test]
     fn do_not_batch_task_of_different_indexes() {
         let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
         let index_names = ["doggos", "cattos", "girafos"];
@@ -1991,7 +2135,7 @@ mod tests {
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
-        snapshot!(serde_json::to_string_pretty(&documents).unwrap());
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
 
     #[test]
@@ -2038,7 +2182,7 @@ mod tests {
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
-        snapshot!(serde_json::to_string_pretty(&documents).unwrap());
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
 
     #[test]
@@ -2090,7 +2234,7 @@ mod tests {
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
-        snapshot!(serde_json::to_string_pretty(&documents).unwrap());
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
 
     #[test]
@@ -2141,7 +2285,7 @@ mod tests {
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
-        snapshot!(serde_json::to_string_pretty(&documents).unwrap());
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
 
     #[test]
@@ -2192,7 +2336,7 @@ mod tests {
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
-        snapshot!(serde_json::to_string_pretty(&documents).unwrap());
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
 
     #[macro_export]
@@ -2503,7 +2647,11 @@ mod tests {
 
         let query = Query { index_uids: Some(vec!["catto".to_owned()]), ..Default::default() };
         let tasks = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &Some(vec!["doggo".to_owned()]))
+            .get_task_ids_from_authorized_indexes(
+                &rtxn,
+                &query,
+                &Some(vec![IndexUidPattern::new_unchecked("doggo")]),
+            )
             .unwrap();
         // we have asked for only the tasks associated with catto, but are only authorized to retrieve the tasks
         // associated with doggo -> empty result
@@ -2511,7 +2659,11 @@ mod tests {
 
         let query = Query::default();
         let tasks = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &Some(vec!["doggo".to_owned()]))
+            .get_task_ids_from_authorized_indexes(
+                &rtxn,
+                &query,
+                &Some(vec![IndexUidPattern::new_unchecked("doggo")]),
+            )
             .unwrap();
         // we asked for all the tasks, but we are only authorized to retrieve the doggo tasks
         // -> only the index creation of doggo should be returned
@@ -2522,7 +2674,10 @@ mod tests {
             .get_task_ids_from_authorized_indexes(
                 &rtxn,
                 &query,
-                &Some(vec!["catto".to_owned(), "doggo".to_owned()]),
+                &Some(vec![
+                    IndexUidPattern::new_unchecked("catto"),
+                    IndexUidPattern::new_unchecked("doggo"),
+                ]),
             )
             .unwrap();
         // we asked for all the tasks, but we are only authorized to retrieve the doggo and catto tasks
@@ -2570,7 +2725,11 @@ mod tests {
 
         let query = Query { canceled_by: Some(vec![task_cancelation.uid]), ..Query::default() };
         let tasks = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &Some(vec!["doggo".to_string()]))
+            .get_task_ids_from_authorized_indexes(
+                &rtxn,
+                &query,
+                &Some(vec![IndexUidPattern::new_unchecked("doggo")]),
+            )
             .unwrap();
         // Return only 1 because the user is not authorized to see task 2
         snapshot!(snapshot_bitmap(&tasks), @"[1,]");
@@ -2831,7 +2990,7 @@ mod tests {
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
-        snapshot!(serde_json::to_string_pretty(&documents).unwrap());
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
 
     #[test]
@@ -2894,7 +3053,7 @@ mod tests {
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
-        snapshot!(serde_json::to_string_pretty(&documents).unwrap());
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
 
     #[test]
@@ -2954,7 +3113,7 @@ mod tests {
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
-        snapshot!(serde_json::to_string_pretty(&documents).unwrap());
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
 
     #[test]
@@ -3011,7 +3170,361 @@ mod tests {
             .unwrap()
             .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
             .collect::<Vec<_>>();
-        snapshot!(serde_json::to_string_pretty(&documents).unwrap());
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
+    }
+
+    #[test]
+    fn test_document_addition_with_multiple_primary_key() {
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        for (id, primary_key) in ["id", "bork", "bloup"].iter().enumerate() {
+            let content = format!(
+                r#"{{
+                    "id": {id},
+                    "doggo": "jean bob"
+                }}"#,
+            );
+            let (uuid, mut file) =
+                index_scheduler.create_update_file_with_uuid(id as u128).unwrap();
+            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            assert_eq!(documents_count, 1);
+            file.persist().unwrap();
+
+            index_scheduler
+                .register(KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S(primary_key)),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                })
+                .unwrap();
+            index_scheduler.assert_internally_consistent();
+        }
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_the_3_tasks");
+
+        // A first batch should be processed with only the first documentAddition.
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "only_first_task_succeed");
+
+        // The second batch should fail.
+        handle.advance_one_failed_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_task_fails");
+
+        // The second batch should fail.
+        handle.advance_one_failed_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "third_task_fails");
+
+        // Is the primary key still what we expect?
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
+        snapshot!(primary_key, @"id");
+
+        // Is the document still the one we expect?.
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
+    }
+
+    #[test]
+    fn test_document_addition_with_multiple_primary_key_batch_wrong_key() {
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        for (id, primary_key) in ["id", "bork", "bork"].iter().enumerate() {
+            let content = format!(
+                r#"{{
+                    "id": {id},
+                    "doggo": "jean bob"
+                }}"#,
+            );
+            let (uuid, mut file) =
+                index_scheduler.create_update_file_with_uuid(id as u128).unwrap();
+            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            assert_eq!(documents_count, 1);
+            file.persist().unwrap();
+
+            index_scheduler
+                .register(KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S(primary_key)),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                })
+                .unwrap();
+            index_scheduler.assert_internally_consistent();
+        }
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_the_3_tasks");
+
+        // A first batch should be processed with only the first documentAddition.
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "only_first_task_succeed");
+
+        // The second batch should fail and contains two tasks.
+        handle.advance_one_failed_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_and_third_tasks_fails");
+
+        // Is the primary key still what we expect?
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
+        snapshot!(primary_key, @"id");
+
+        // Is the document still the one we expect?.
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
+    }
+
+    #[test]
+    fn test_document_addition_with_bad_primary_key() {
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        for (id, primary_key) in ["bork", "bork", "id", "bork", "id"].iter().enumerate() {
+            let content = format!(
+                r#"{{
+                    "id": {id},
+                    "doggo": "jean bob"
+                }}"#,
+            );
+            let (uuid, mut file) =
+                index_scheduler.create_update_file_with_uuid(id as u128).unwrap();
+            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            assert_eq!(documents_count, 1);
+            file.persist().unwrap();
+
+            index_scheduler
+                .register(KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S(primary_key)),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                })
+                .unwrap();
+            index_scheduler.assert_internally_consistent();
+        }
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_the_5_tasks");
+
+        // A first batch should be processed with only the first two documentAddition.
+        // it should fails because the documents don't contains any `bork` field.
+        // NOTE: it's marked as successful because the batch didn't fails, it's the individual tasks that failed.
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "first_and_second_task_fails");
+
+        // The primary key should be set to none since we failed the batch.
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let primary_key = index.primary_key(&rtxn).unwrap();
+        snapshot!(primary_key.is_none(), @"true");
+
+        // The second batch should succeed and only contains one task.
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "third_task_succeeds");
+
+        // The primary key should be set to `id` since this batch succeeded.
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
+        snapshot!(primary_key, @"id");
+
+        // We're trying to `bork` again, but now there is already a primary key set for this index.
+        handle.advance_one_failed_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "fourth_task_fails");
+
+        // Finally the last task should succeed since its primary key is the same as the valid one.
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "fifth_task_succeeds");
+
+        // Is the primary key still what we expect?
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
+        snapshot!(primary_key, @"id");
+
+        // Is the document still the one we expect?.
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
+    }
+
+    #[test]
+    fn test_document_addition_with_set_and_null_primary_key() {
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        for (id, primary_key) in
+            [None, Some("bork"), Some("paw"), None, None, Some("paw")].into_iter().enumerate()
+        {
+            let content = format!(
+                r#"{{
+                    "paw": {id},
+                    "doggo": "jean bob"
+                }}"#,
+            );
+            let (uuid, mut file) =
+                index_scheduler.create_update_file_with_uuid(id as u128).unwrap();
+            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            assert_eq!(documents_count, 1);
+            file.persist().unwrap();
+
+            index_scheduler
+                .register(KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: primary_key.map(|pk| pk.to_string()),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                })
+                .unwrap();
+            index_scheduler.assert_internally_consistent();
+        }
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_the_6_tasks");
+
+        // A first batch should contains only one task that fails because we can't infer the primary key.
+        // NOTE: it's marked as successful because the batch didn't fails, it's the individual tasks that failed.
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "first_task_fails");
+
+        // The second batch should contains only one task that fails because we bork is not a valid primary key.
+        // NOTE: it's marked as successful because the batch didn't fails, it's the individual tasks that failed.
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_task_fails");
+
+        // No primary key should be set at this point.
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let primary_key = index.primary_key(&rtxn).unwrap();
+        snapshot!(primary_key.is_none(), @"true");
+
+        // The third batch should succeed and only contains one task.
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "third_task_succeeds");
+
+        // The primary key should be set to `id` since this batch succeeded.
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
+        snapshot!(primary_key, @"paw");
+
+        // We should be able to batch together the next two tasks that don't specify any primary key
+        // + the last task that matches the current primary-key. Everything should succeed.
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_other_tasks_succeeds");
+
+        // Is the primary key still what we expect?
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
+        snapshot!(primary_key, @"paw");
+
+        // Is the document still the one we expect?.
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
+    }
+
+    #[test]
+    fn test_document_addition_with_set_and_null_primary_key_inference_works() {
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        for (id, primary_key) in [None, Some("bork"), Some("doggoid"), None, None, Some("doggoid")]
+            .into_iter()
+            .enumerate()
+        {
+            let content = format!(
+                r#"{{
+                    "doggoid": {id},
+                    "doggo": "jean bob"
+                }}"#,
+            );
+            let (uuid, mut file) =
+                index_scheduler.create_update_file_with_uuid(id as u128).unwrap();
+            let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+            assert_eq!(documents_count, 1);
+            file.persist().unwrap();
+
+            index_scheduler
+                .register(KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: primary_key.map(|pk| pk.to_string()),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                })
+                .unwrap();
+            index_scheduler.assert_internally_consistent();
+        }
+
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_the_6_tasks");
+
+        // A first batch should contains only one task that succeed and sets the primary key to `doggoid`.
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "first_task_succeed");
+
+        // Checking the primary key.
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let primary_key = index.primary_key(&rtxn).unwrap();
+        snapshot!(primary_key.is_none(), @"false");
+
+        // The second batch should contains only one task that fails because it tries to update the primary key to `bork`.
+        handle.advance_one_failed_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_task_fails");
+
+        // The third batch should succeed and only contains one task.
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "third_task_succeeds");
+
+        // We should be able to batch together the next two tasks that don't specify any primary key
+        // + the last task that matches the current primary-key. Everything should succeed.
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_other_tasks_succeeds");
+
+        // Is the primary key still what we expect?
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
+        snapshot!(primary_key, @"doggoid");
+
+        // Is the document still the one we expect?.
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
 
     #[test]

@@ -29,7 +29,7 @@ jobs:
         run: |
           raw_new_version=$(echo $NEW_VERSION | cut -d 'v' -f 2)
           new_string="version = \"$raw_new_version\""
-          sd '^version = "\d+.\d+.\w+"$' "$new_string" */Cargo.toml
+          sd '^version = "\d+.\d+.\w+"$' "$new_string" Cargo.toml
       - name: Build Meilisearch to update Cargo.lock
         run: cargo build
       - name: Commit and push the changes to the ${{ env.NEW_BRANCH }} branch

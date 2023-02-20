@@ -201,7 +201,7 @@ pub(crate) mod test {
         // tasks
         let tasks = dump.tasks().unwrap().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
-        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"10c673c97f053830aa659876d7aa0b53");
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"41f91d3a94911b2735ec41b07540df5c");
         assert_eq!(update_files.len(), 22);
         assert!(update_files[0].is_none()); // the dump creation
         assert!(update_files[1].is_some()); // the enqueued document addition
@@ -279,7 +279,7 @@ pub(crate) mod test {
         // tasks
         let tasks = dump.tasks().unwrap().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
-        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"12eca43d5d1e1f334200eb4df653b0c9");
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"c2445ddd1785528b80f2ba534d3bd00c");
         assert_eq!(update_files.len(), 10);
         assert!(update_files[0].is_some()); // the enqueued document addition
         assert!(update_files[1..].iter().all(|u| u.is_none())); // everything already processed
@@ -356,7 +356,7 @@ pub(crate) mod test {
         // tasks
         let tasks = dump.tasks().unwrap().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
-        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"2f51c6345fabccf47b18c82bad618ffe");
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"cd12efd308fe3ed226356a727ab42ed3");
         assert_eq!(update_files.len(), 10);
         assert!(update_files[0].is_some()); // the enqueued document addition
         assert!(update_files[1..].iter().all(|u| u.is_none())); // everything already processed
@@ -449,7 +449,7 @@ pub(crate) mod test {
         // tasks
         let tasks = dump.tasks().unwrap().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
-        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"b27292d0bb86d4b4dd1b375a46b33890");
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"bc616290adfe7d09a624cf6065ca9069");
         assert_eq!(update_files.len(), 9);
         assert!(update_files[0].is_some()); // the enqueued document addition
         assert!(update_files[1..].iter().all(|u| u.is_none())); // everything already processed
@@ -531,6 +531,82 @@ pub(crate) mod test {
     }
 
     #[test]
+    fn import_dump_v2_from_meilisearch_v0_22_0_issue_3435() {
+        let dump = File::open("tests/assets/v2-v0.22.0.dump").unwrap();
+        let mut dump = DumpReader::open(dump).unwrap();
+
+        // top level infos
+        insta::assert_display_snapshot!(dump.date().unwrap(), @"2023-01-30 16:26:09.247261 +00:00:00");
+        assert_eq!(dump.instance_uid().unwrap(), None);
+
+        // tasks
+        let tasks = dump.tasks().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"2db37756d8af1fb7623436b76e8956a6");
+        assert_eq!(update_files.len(), 8);
+        assert!(update_files[0..].iter().all(|u| u.is_none())); // everything already processed
+
+        // keys
+        let keys = dump.keys().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        meili_snap::snapshot_hash!(meili_snap::json_string!(keys), @"d751713988987e9331980363e24189ce");
+
+        // indexes
+        let mut indexes = dump.indexes().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        // the index are not ordered in any way by default
+        indexes.sort_by_key(|index| index.metadata().uid.to_string());
+
+        let mut products = indexes.pop().unwrap();
+        let mut movies = indexes.pop().unwrap();
+        let mut spells = indexes.pop().unwrap();
+        assert!(indexes.is_empty());
+
+        // products
+        insta::assert_json_snapshot!(products.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        {
+          "uid": "products",
+          "primaryKey": "sku",
+          "createdAt": "[now]",
+          "updatedAt": "[now]"
+        }
+        "###);
+
+        insta::assert_json_snapshot!(products.settings().unwrap());
+        let documents = products.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        assert_eq!(documents.len(), 10);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"548284a84de510f71e88e6cdea495cf5");
+
+        // movies
+        insta::assert_json_snapshot!(movies.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        {
+          "uid": "movies",
+          "primaryKey": "id",
+          "createdAt": "[now]",
+          "updatedAt": "[now]"
+        }
+        "###);
+
+        insta::assert_json_snapshot!(movies.settings().unwrap());
+        let documents = movies.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        assert_eq!(documents.len(), 10);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"0227598af846e574139ee0b80e03a720");
+
+        // spells
+        insta::assert_json_snapshot!(spells.metadata(), { ".createdAt" => "[now]", ".updatedAt" => "[now]" }, @r###"
+        {
+          "uid": "dnd_spells",
+          "primaryKey": "index",
+          "createdAt": "[now]",
+          "updatedAt": "[now]"
+        }
+        "###);
+
+        insta::assert_json_snapshot!(spells.settings().unwrap());
+        let documents = spells.documents().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        assert_eq!(documents.len(), 10);
+        meili_snap::snapshot_hash!(format!("{:#?}", documents), @"235016433dd04262c7f2da01d1e808ce");
+    }
+
+    #[test]
     fn import_dump_v1() {
         let dump = File::open("tests/assets/v1.dump").unwrap();
         let mut dump = DumpReader::open(dump).unwrap();
@@ -542,7 +618,7 @@ pub(crate) mod test {
         // tasks
         let tasks = dump.tasks().unwrap().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
-        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"9725ccfceea3f8d5846c44006c9e1e7b");
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"8df6eab075a44b3c1af6b726f9fd9a43");
         assert_eq!(update_files.len(), 9);
         assert!(update_files[..].iter().all(|u| u.is_none())); // no update file in dump v1
 

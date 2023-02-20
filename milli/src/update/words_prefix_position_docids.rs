@@ -140,15 +140,19 @@ impl<'t, 'u, 'i> WordPrefixPositionDocids<'t, 'u, 'i> {
 
         // We remove all the entries that are no more required in this word prefix position
         // docids database.
-        let mut iter =
-            self.index.word_prefix_position_docids.iter_mut(self.wtxn)?.lazily_decode_data();
-        while let Some(((prefix, _), _)) = iter.next().transpose()? {
-            if del_prefix_fst_words.contains(prefix.as_bytes()) {
-                unsafe { iter.del_current()? };
+        // We also avoid iterating over the whole `word_prefix_position_docids` database if we know in
+        // advance that the `if del_prefix_fst_words.contains(prefix.as_bytes()) {` condition below
+        // will always be false (i.e. if `del_prefix_fst_words` is empty).
+        if !del_prefix_fst_words.is_empty() {
+            let mut iter =
+                self.index.word_prefix_position_docids.iter_mut(self.wtxn)?.lazily_decode_data();
+            while let Some(((prefix, _), _)) = iter.next().transpose()? {
+                if del_prefix_fst_words.contains(prefix.as_bytes()) {
+                    unsafe { iter.del_current()? };
+                }
             }
+            drop(iter);
         }
-
-        drop(iter);
 
         // We finally write all the word prefix position docids into the LMDB database.
         sorter_into_lmdb_database(

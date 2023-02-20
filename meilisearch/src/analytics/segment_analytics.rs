@@ -9,7 +9,7 @@ use actix_web::HttpRequest;
 use byte_unit::Byte;
 use http::header::CONTENT_TYPE;
 use index_scheduler::IndexScheduler;
-use meilisearch_auth::SearchRules;
+use meilisearch_auth::{AuthController, SearchRules};
 use meilisearch_types::InstanceUid;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -82,7 +82,11 @@ pub struct SegmentAnalytics {
 }
 
 impl SegmentAnalytics {
-    pub async fn new(opt: &Opt, index_scheduler: Arc<IndexScheduler>) -> Arc<dyn Analytics> {
+    pub async fn new(
+        opt: &Opt,
+        index_scheduler: Arc<IndexScheduler>,
+        auth_controller: AuthController,
+    ) -> Arc<dyn Analytics> {
         let instance_uid = super::find_user_id(&opt.db_path);
         let first_time_run = instance_uid.is_none();
         let instance_uid = instance_uid.unwrap_or_else(|| Uuid::new_v4());
@@ -136,7 +140,7 @@ impl SegmentAnalytics {
             get_tasks_aggregator: TasksAggregator::default(),
             health_aggregator: HealthAggregator::default(),
         });
-        tokio::spawn(segment.run(index_scheduler.clone()));
+        tokio::spawn(segment.run(index_scheduler.clone(), auth_controller.clone()));
 
         let this = Self { instance_uid, sender, user: user.clone() };
 
@@ -361,7 +365,7 @@ impl Segment {
         })
     }
 
-    async fn run(mut self, index_scheduler: Arc<IndexScheduler>) {
+    async fn run(mut self, index_scheduler: Arc<IndexScheduler>, auth_controller: AuthController) {
         const INTERVAL: Duration = Duration::from_secs(60 * 60); // one hour
                                                                  // The first batch must be sent after one hour.
         let mut interval =
@@ -370,7 +374,7 @@ impl Segment {
         loop {
             select! {
                 _ = interval.tick() => {
-                    self.tick(index_scheduler.clone()).await;
+                    self.tick(index_scheduler.clone(), auth_controller.clone()).await;
                 },
                 msg = self.inbox.recv() => {
                     match msg {
@@ -389,14 +393,27 @@ impl Segment {
         }
     }
 
-    async fn tick(&mut self, index_scheduler: Arc<IndexScheduler>) {
-        if let Ok(stats) = create_all_stats(index_scheduler.into(), &SearchRules::default()) {
+    async fn tick(
+        &mut self,
+        index_scheduler: Arc<IndexScheduler>,
+        auth_controller: AuthController,
+    ) {
+        if let Ok(stats) =
+            create_all_stats(index_scheduler.into(), auth_controller, &SearchRules::default())
+        {
+            // Replace the version number with the prototype name if any.
+            let version = if let Some(prototype) = crate::prototype_name() {
+                prototype
+            } else {
+                env!("CARGO_PKG_VERSION")
+            };
+
             let _ = self
                 .batcher
                 .push(Identify {
                     context: Some(json!({
                         "app": {
-                            "version": env!("CARGO_PKG_VERSION").to_string(),
+                            "version": version.to_string(),
                         },
                     })),
                     user: self.user.clone(),

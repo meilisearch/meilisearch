@@ -84,7 +84,7 @@ jobs:
             type=raw,value=latest,enable=${{ steps.check-tag-format.outputs.stable == 'true' && steps.check-tag-format.outputs.latest == 'true' }}
 
       - name: Build and push
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v4
         with:
           push: true
           platforms: linux/amd64,linux/arm64
@@ -92,6 +92,7 @@ jobs:
           build-args: |
             COMMIT_SHA=${{ github.sha }}
             COMMIT_DATE=${{ steps.build-metadata.outputs.date }}
+            GIT_TAG=${{ github.ref_name }}
 
       # /!\ Don't touch this without checking with Cloud team
       - name: Send CI information to Cloud team

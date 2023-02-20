@@ -12,10 +12,10 @@ async fn settings_bad_displayed_attributes() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Sequence at `.displayedAttributes`.",
+      "message": "Invalid value type at `.displayedAttributes`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_displayed_attributes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-displayed-attributes"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_displayed_attributes"
     }
     "###);
 
@@ -23,10 +23,10 @@ async fn settings_bad_displayed_attributes() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Sequence at ``.",
+      "message": "Invalid value type: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_displayed_attributes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-displayed-attributes"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_displayed_attributes"
     }
     "###);
 }
@@ -40,10 +40,10 @@ async fn settings_bad_searchable_attributes() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Sequence at `.searchableAttributes`.",
+      "message": "Invalid value type at `.searchableAttributes`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_searchable_attributes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-searchable-attributes"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_searchable_attributes"
     }
     "###);
 
@@ -51,10 +51,10 @@ async fn settings_bad_searchable_attributes() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Sequence at ``.",
+      "message": "Invalid value type: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_searchable_attributes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-searchable-attributes"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_searchable_attributes"
     }
     "###);
 }
@@ -68,10 +68,10 @@ async fn settings_bad_filterable_attributes() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Sequence at `.filterableAttributes`.",
+      "message": "Invalid value type at `.filterableAttributes`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_filterable_attributes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-filterable-attributes"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_filterable_attributes"
     }
     "###);
 
@@ -79,10 +79,10 @@ async fn settings_bad_filterable_attributes() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Sequence at ``.",
+      "message": "Invalid value type: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_filterable_attributes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-filterable-attributes"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_filterable_attributes"
     }
     "###);
 }
@@ -96,10 +96,10 @@ async fn settings_bad_sortable_attributes() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Sequence at `.sortableAttributes`.",
+      "message": "Invalid value type at `.sortableAttributes`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_sortable_attributes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-sortable-attributes"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_sortable_attributes"
     }
     "###);
 
@@ -107,10 +107,10 @@ async fn settings_bad_sortable_attributes() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Sequence at ``.",
+      "message": "Invalid value type: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_sortable_attributes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-sortable-attributes"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_sortable_attributes"
     }
     "###);
 }
@@ -124,10 +124,10 @@ async fn settings_bad_ranking_rules() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Sequence at `.rankingRules`.",
+      "message": "Invalid value type at `.rankingRules`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_ranking_rules",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-ranking-rules"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_ranking_rules"
     }
     "###);
 
@@ -135,10 +135,10 @@ async fn settings_bad_ranking_rules() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Sequence at ``.",
+      "message": "Invalid value type: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_ranking_rules",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-ranking-rules"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_ranking_rules"
     }
     "###);
 }
@@ -152,10 +152,10 @@ async fn settings_bad_stop_words() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Sequence at `.stopWords`.",
+      "message": "Invalid value type at `.stopWords`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_stop_words",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-stop-words"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_stop_words"
     }
     "###);
 
@@ -163,10 +163,10 @@ async fn settings_bad_stop_words() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Sequence at ``.",
+      "message": "Invalid value type: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_stop_words",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-stop-words"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_stop_words"
     }
     "###);
 }
@@ -180,10 +180,10 @@ async fn settings_bad_synonyms() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Map at `.synonyms`.",
+      "message": "Invalid value type at `.synonyms`: expected an object, but found a string: `\"doggo\"`",
       "code": "invalid_settings_synonyms",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-synonyms"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_synonyms"
     }
     "###);
 
@@ -191,10 +191,10 @@ async fn settings_bad_synonyms() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Map at ``.",
+      "message": "Invalid value type: expected an object, but found a string: `\"doggo\"`",
       "code": "invalid_settings_synonyms",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-synonyms"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_synonyms"
     }
     "###);
 }
@@ -208,10 +208,10 @@ async fn settings_bad_distinct_attribute() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: Sequence `[\"doggo\"]`, expected a String at `.distinctAttribute`.",
+      "message": "Invalid value type at `.distinctAttribute`: expected a string, but found an array: `[\"doggo\"]`",
       "code": "invalid_settings_distinct_attribute",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-distinct-attribute"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_distinct_attribute"
     }
     "###);
 
@@ -219,10 +219,10 @@ async fn settings_bad_distinct_attribute() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: Sequence `[\"doggo\"]`, expected a String at ``.",
+      "message": "Invalid value type: expected a string, but found an array: `[\"doggo\"]`",
       "code": "invalid_settings_distinct_attribute",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-distinct-attribute"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_distinct_attribute"
     }
     "###);
 }
@@ -236,10 +236,22 @@ async fn settings_bad_typo_tolerance() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Map at `.typoTolerance`.",
+      "message": "Invalid value type at `.typoTolerance`: expected an object, but found a string: `\"doggo\"`",
       "code": "invalid_settings_typo_tolerance",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-typo-tolerance"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_typo_tolerance"
+    }
+    "###);
+
+    let (response, code) =
+        index.update_settings(json!({ "typoTolerance": { "minWordSizeForTypos": "doggo" }})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.typoTolerance.minWordSizeForTypos`: expected an object, but found a string: `\"doggo\"`",
+      "code": "invalid_settings_typo_tolerance",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_typo_tolerance"
     }
     "###);
 
@@ -247,10 +259,25 @@ async fn settings_bad_typo_tolerance() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Map at ``.",
+      "message": "Invalid value type: expected an object, but found a string: `\"doggo\"`",
       "code": "invalid_settings_typo_tolerance",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-typo-tolerance"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_typo_tolerance"
+    }
+    "###);
+
+    let (response, code) = index
+        .update_settings_typo_tolerance(
+            json!({ "typoTolerance": { "minWordSizeForTypos": "doggo" }}),
+        )
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Unknown field `typoTolerance`: expected one of `enabled`, `minWordSizeForTypos`, `disableOnWords`, `disableOnAttributes`",
+      "code": "invalid_settings_typo_tolerance",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_typo_tolerance"
     }
     "###);
 }
@@ -264,10 +291,10 @@ async fn settings_bad_faceting() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Map at `.faceting`.",
+      "message": "Invalid value type at `.faceting`: expected an object, but found a string: `\"doggo\"`",
       "code": "invalid_settings_faceting",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-faceting"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_faceting"
     }
     "###);
 
@@ -275,10 +302,10 @@ async fn settings_bad_faceting() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Map at ``.",
+      "message": "Invalid value type: expected an object, but found a string: `\"doggo\"`",
       "code": "invalid_settings_faceting",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-faceting"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_faceting"
     }
     "###);
 }
@@ -292,10 +319,10 @@ async fn settings_bad_pagination() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Map at `.pagination`.",
+      "message": "Invalid value type at `.pagination`: expected an object, but found a string: `\"doggo\"`",
       "code": "invalid_settings_pagination",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-pagination"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_pagination"
     }
     "###);
 
@@ -303,10 +330,10 @@ async fn settings_bad_pagination() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "invalid type: String `\"doggo\"`, expected a Map at ``.",
+      "message": "Invalid value type: expected an object, but found a string: `\"doggo\"`",
       "code": "invalid_settings_pagination",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-settings-pagination"
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_pagination"
     }
     "###);
 }

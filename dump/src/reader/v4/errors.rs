@@ -5,10 +5,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(feature = "test-traits", derive(proptest_derive::Arbitrary))]
 pub struct ResponseError {
     #[serde(skip)]
-    #[cfg_attr(feature = "test-traits", proptest(strategy = "strategy::status_code_strategy()"))]
     pub code: StatusCode,
     pub message: String,
     #[serde(rename = "code")]

@@ -3,16 +3,17 @@ use std::convert::Infallible;
 use std::fmt;
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
+use std::ops::ControlFlow;
 use std::str::FromStr;
 
-use deserr::{DeserializeError, DeserializeFromValue, ErrorKind, MergeWithError, ValuePointerRef};
+use deserr::{DeserializeError, Deserr, ErrorKind, MergeWithError, ValuePointerRef};
 use fst::IntoStreamer;
 use milli::update::Setting;
 use milli::{Criterion, CriterionError, Index, DEFAULT_VALUES_PER_FACET};
 use serde::{Deserialize, Serialize, Serializer};
 
+use crate::deserr::DeserrJsonError;
 use crate::error::deserr_codes::*;
-use crate::error::{unwrap_any, DeserrError};
 
 /// The maximimum number of results that the engine
 /// will be able to return in one search call.
@@ -40,7 +41,7 @@ pub struct Checked;
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Unchecked;
 
-impl<E> DeserializeFromValue<E> for Unchecked
+impl<E> Deserr<E> for Unchecked
 where
     E: DeserializeError,
 {
@@ -58,59 +59,66 @@ fn validate_min_word_size_for_typo_setting<E: DeserializeError>(
 ) -> Result<MinWordSizeTyposSetting, E> {
     if let (Setting::Set(one), Setting::Set(two)) = (s.one_typo, s.two_typos) {
         if one > two {
-            return Err(unwrap_any(E::error::<Infallible>(None, ErrorKind::Unexpected { msg: format!("`minWordSizeForTypos` setting is invalid. `oneTypo` and `twoTypos` fields should be between `0` and `255`, and `twoTypos` should be greater or equals to `oneTypo` but found `oneTypo: {one}` and twoTypos: {two}`.") }, location)));
+            return Err(deserr::take_cf_content(E::error::<Infallible>(None, ErrorKind::Unexpected { msg: format!("`minWordSizeForTypos` setting is invalid. `oneTypo` and `twoTypos` fields should be between `0` and `255`, and `twoTypos` should be greater or equals to `oneTypo` but found `oneTypo: {one}` and twoTypos: {two}`.") }, location)));
         }
     }
     Ok(s)
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, DeserializeFromValue)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-#[deserr(deny_unknown_fields, rename_all = camelCase, validate = validate_min_word_size_for_typo_setting -> DeserrError<InvalidMinWordLengthForTypo>)]
+#[deserr(deny_unknown_fields, rename_all = camelCase, validate = validate_min_word_size_for_typo_setting -> DeserrJsonError<InvalidSettingsTypoTolerance>)]
 pub struct MinWordSizeTyposSetting {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
     pub one_typo: Setting<u8>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
     pub two_typos: Setting<u8>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, DeserializeFromValue)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-#[deserr(deny_unknown_fields, rename_all = camelCase, where_predicate = __Deserr_E: deserr::MergeWithError<DeserrError<InvalidMinWordLengthForTypo>>)]
+#[deserr(deny_unknown_fields, rename_all = camelCase, where_predicate = __Deserr_E: deserr::MergeWithError<DeserrJsonError<InvalidSettingsTypoTolerance>>)]
 pub struct TypoSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
     pub enabled: Setting<bool>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(error = DeserrError<InvalidMinWordLengthForTypo>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsTypoTolerance>)]
     pub min_word_size_for_typos: Setting<MinWordSizeTyposSetting>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
     pub disable_on_words: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
     pub disable_on_attributes: Setting<BTreeSet<String>>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, DeserializeFromValue)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct FacetingSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
     pub max_values_per_facet: Setting<usize>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, DeserializeFromValue)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct PaginationSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
     pub max_total_hits: Setting<usize>,
 }
 
-impl MergeWithError<milli::CriterionError> for DeserrError<InvalidSettingsRankingRules> {
+impl MergeWithError<milli::CriterionError> for DeserrJsonError<InvalidSettingsRankingRules> {
     fn merge(
         _self_: Option<Self>,
         other: milli::CriterionError,
         merge_location: ValuePointerRef,
-    ) -> Result<Self, Self> {
+    ) -> ControlFlow<Self, Self> {
         Self::error::<Infallible>(
             None,
             ErrorKind::Unexpected { msg: other.to_string() },
@@ -122,20 +130,20 @@ impl MergeWithError<milli::CriterionError> for DeserrError<InvalidSettingsRankin
 /// Holds all the settings for an index. `T` can either be `Checked` if they represents settings
 /// whose validity is guaranteed, or `Unchecked` if they need to be validated. In the later case, a
 /// call to `check` will return a `Settings<Checked>` from a `Settings<Unchecked>`.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, DeserializeFromValue)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]
 #[serde(
     deny_unknown_fields,
     rename_all = "camelCase",
     bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'static>")
 )]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct Settings<T> {
     #[serde(
         default,
         serialize_with = "serialize_with_wildcard",
         skip_serializing_if = "Setting::is_not_set"
     )]
-    #[deserr(error = DeserrError<InvalidSettingsDisplayedAttributes>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsDisplayedAttributes>)]
     pub displayed_attributes: Setting<Vec<String>>,
 
     #[serde(
@@ -143,35 +151,35 @@ pub struct Settings<T> {
         serialize_with = "serialize_with_wildcard",
         skip_serializing_if = "Setting::is_not_set"
     )]
-    #[deserr(error = DeserrError<InvalidSettingsSearchableAttributes>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsSearchableAttributes>)]
     pub searchable_attributes: Setting<Vec<String>>,
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(error = DeserrError<InvalidSettingsFilterableAttributes>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsFilterableAttributes>)]
     pub filterable_attributes: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(error = DeserrError<InvalidSettingsSortableAttributes>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsSortableAttributes>)]
     pub sortable_attributes: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(error = DeserrError<InvalidSettingsRankingRules>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsRankingRules>)]
     pub ranking_rules: Setting<Vec<RankingRuleView>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(error = DeserrError<InvalidSettingsStopWords>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsStopWords>)]
     pub stop_words: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(error = DeserrError<InvalidSettingsSynonyms>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsSynonyms>)]
     pub synonyms: Setting<BTreeMap<String, Vec<String>>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(error = DeserrError<InvalidSettingsDistinctAttribute>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsDistinctAttribute>)]
     pub distinct_attribute: Setting<String>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(error = DeserrError<InvalidSettingsTypoTolerance>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsTypoTolerance>)]
     pub typo_tolerance: Setting<TypoSettings>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(error = DeserrError<InvalidSettingsFaceting>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsFaceting>)]
     pub faceting: Setting<FacetingSettings>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(error = DeserrError<InvalidSettingsPagination>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsPagination>)]
     pub pagination: Setting<PaginationSettings>,
 
     #[serde(skip)]
@@ -501,8 +509,8 @@ pub fn settings(
     })
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, DeserializeFromValue)]
-#[deserr(from(&String) = FromStr::from_str -> CriterionError)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserr)]
+#[deserr(try_from(&String) = FromStr::from_str -> CriterionError)]
 pub enum RankingRuleView {
     /// Sorted by decreasing number of matched query terms.
     /// Query words at the front of an attribute is considered better than if it was at the back.

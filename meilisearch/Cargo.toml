@@ -1,10 +1,16 @@
 [package]
-authors = ["Quentin de Quelen <quentin@dequelen.me>", "Clément Renault <clement@meilisearch.com>"]
-description = "Meilisearch HTTP server"
-edition = "2021"
-license = "MIT"
 name = "meilisearch"
-version = "1.0.0"
+publish = false
+
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+homepage.workspace = true
+readme.workspace = true
+edition.workspace = true
+license.workspace = true
+
+default-run = "meilisearch"
 
 [dependencies]
 actix-cors = "0.6.3"
@@ -19,7 +25,7 @@ byte-unit = { version = "4.0.14", default-features = false, features = ["std", "
 bytes = "1.2.1"
 clap = { version = "4.0.9", features = ["derive", "env"] }
 crossbeam-channel = "0.5.6"
-deserr = "0.1.4"
+deserr = "0.4.1"
 dump = { path = "../dump" }
 either = "1.8.0"
 env_logger = "0.9.1"
@@ -55,7 +61,6 @@ rustls = "0.20.6"
 rustls-pemfile = "1.0.1"
 segment = { version = "0.2.1", optional = true }
 serde = { version = "1.0.145", features = ["derive"] }
-serde-cs = "0.2.4"
 serde_json = { version = "1.0.85", features = ["preserve_order"] }
 sha2 = "0.10.6"
 siphasher = "0.3.10"
@@ -66,7 +71,7 @@ tar = "0.4.38"
 tempfile = "3.3.0"
 thiserror = "1.0.37"
 time = { version = "0.3.15", features = ["serde-well-known", "formatting", "parsing", "macros"] }
-tokio = { version = "1.21.2", features = ["full"] }
+tokio = { version = "1.24.2", features = ["full"] }
 tokio-stream = "0.1.10"
 toml = "0.5.9"
 uuid = { version = "1.1.2", features = ["serde", "v4"] }
@@ -74,6 +79,8 @@ walkdir = "2.3.2"
 yaup = "0.2.0"
 serde_urlencoded = "0.7.1"
 actix-utils = "3.0.1"
+atty = "0.2.14"
+termcolor = "1.1.3"
 
 [dev-dependencies]
 actix-rt = "2.7.0"
@@ -89,7 +96,7 @@ yaup = "0.2.1"
 
 [build-dependencies]
 anyhow = { version = "1.0.65", optional = true }
-cargo_toml = { version = "0.13.0", optional = true }
+cargo_toml = { version = "0.14.0", optional = true }
 hex = { version = "0.4.3", optional = true }
 reqwest = { version = "0.11.12", features = ["blocking", "rustls-tls"], default-features = false, optional = true }
 sha-1 = { version = "0.10.0", optional = true }
@@ -109,5 +116,5 @@ japanese = ["meilisearch-types/japanese"]
 thai = ["meilisearch-types/thai"]
 
 [package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.5/build.zip"
-sha1 = "6fe959b78511b32e9ff857fd9fd31740633b9fce"
+assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.6/build.zip"
+sha1 = "dce0aba16bceab5549edf9f01de89858800f7422"

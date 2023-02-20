@@ -1,28 +1,29 @@
 use std::convert::Infallible;
-use std::fmt::Display;
 use std::hash::Hash;
+use std::str::FromStr;
 
-use deserr::{DeserializeError, DeserializeFromValue, MergeWithError, ValuePointerRef};
+use deserr::{DeserializeError, Deserr, MergeWithError, ValuePointerRef};
 use enum_iterator::Sequence;
+use milli::update::Setting;
 use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
 use time::macros::{format_description, time};
 use time::{Date, OffsetDateTime, PrimitiveDateTime};
 use uuid::Uuid;
 
+use crate::deserr::{immutable_field_error, DeserrError, DeserrJsonError};
 use crate::error::deserr_codes::*;
-use crate::error::{unwrap_any, Code, DeserrError, ErrorCode, TakeErrorMessage};
-use crate::index_uid::{IndexUid, IndexUidFormatError};
-use crate::star_or::StarOr;
+use crate::error::{Code, ErrorCode, ParseOffsetDateTimeError};
+use crate::index_uid_pattern::{IndexUidPattern, IndexUidPatternFormatError};
 
 pub type KeyId = Uuid;
 
-impl<C: Default + ErrorCode> MergeWithError<IndexUidFormatError> for DeserrError<C> {
+impl<C: Default + ErrorCode> MergeWithError<IndexUidPatternFormatError> for DeserrJsonError<C> {
     fn merge(
         _self_: Option<Self>,
-        other: IndexUidFormatError,
+        other: IndexUidPatternFormatError,
         merge_location: deserr::ValuePointerRef,
-    ) -> std::result::Result<Self, Self> {
+    ) -> std::ops::ControlFlow<Self, Self> {
         DeserrError::error::<Infallible>(
             None,
             deserr::ErrorKind::Unexpected { msg: other.to_string() },
@@ -31,26 +32,23 @@ impl<C: Default + ErrorCode> MergeWithError<IndexUidFormatError> for DeserrError
     }
 }
 
-fn parse_uuid_from_str(s: &str) -> Result<Uuid, TakeErrorMessage<uuid::Error>> {
-    Uuid::parse_str(s).map_err(TakeErrorMessage)
-}
-
-#[derive(Debug, DeserializeFromValue)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields)]
+#[derive(Debug, Deserr)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct CreateApiKey {
-    #[deserr(error = DeserrError<InvalidApiKeyDescription>)]
+    #[deserr(default, error = DeserrJsonError<InvalidApiKeyDescription>)]
     pub description: Option<String>,
-    #[deserr(error = DeserrError<InvalidApiKeyName>)]
+    #[deserr(default, error = DeserrJsonError<InvalidApiKeyName>)]
     pub name: Option<String>,
-    #[deserr(default = Uuid::new_v4(), error = DeserrError<InvalidApiKeyUid>, from(&String) = parse_uuid_from_str -> TakeErrorMessage<uuid::Error>)]
+    #[deserr(default = Uuid::new_v4(), error = DeserrJsonError<InvalidApiKeyUid>, try_from(&String) = Uuid::from_str -> uuid::Error)]
     pub uid: KeyId,
-    #[deserr(error = DeserrError<InvalidApiKeyActions>)]
+    #[deserr(error = DeserrJsonError<InvalidApiKeyActions>, missing_field_error = DeserrJsonError::missing_api_key_actions)]
     pub actions: Vec<Action>,
-    #[deserr(error = DeserrError<InvalidApiKeyIndexes>)]
-    pub indexes: Vec<StarOr<IndexUid>>,
-    #[deserr(error = DeserrError<InvalidApiKeyExpiresAt>, default = None, from(&String) = parse_expiration_date -> TakeErrorMessage<ParseOffsetDateTimeError>)]
+    #[deserr(error = DeserrJsonError<InvalidApiKeyIndexes>, missing_field_error = DeserrJsonError::missing_api_key_indexes)]
+    pub indexes: Vec<IndexUidPattern>,
+    #[deserr(error = DeserrJsonError<InvalidApiKeyExpiresAt>, try_from(Option<String>) = parse_expiration_date -> ParseOffsetDateTimeError, missing_field_error = DeserrJsonError::missing_api_key_expires_at)]
     pub expires_at: Option<OffsetDateTime>,
 }
+
 impl CreateApiKey {
     pub fn to_key(self) -> Key {
         let CreateApiKey { description, name, uid, actions, indexes, expires_at } = self;
@@ -72,32 +70,29 @@ fn deny_immutable_fields_api_key(
     field: &str,
     accepted: &[&str],
     location: ValuePointerRef,
-) -> DeserrError {
-    let mut error = unwrap_any(DeserrError::<BadRequest>::error::<Infallible>(
-        None,
-        deserr::ErrorKind::UnknownKey { key: field, accepted },
-        location,
-    ));
-
-    error.code = match field {
-        "uid" => Code::ImmutableApiKeyUid,
-        "actions" => Code::ImmutableApiKeyActions,
-        "indexes" => Code::ImmutableApiKeyIndexes,
-        "expiresAt" => Code::ImmutableApiKeyExpiresAt,
-        "createdAt" => Code::ImmutableApiKeyCreatedAt,
-        "updatedAt" => Code::ImmutableApiKeyUpdatedAt,
-        _ => Code::BadRequest,
-    };
-    error
+) -> DeserrJsonError {
+    match field {
+        "uid" => immutable_field_error(field, accepted, Code::ImmutableApiKeyUid),
+        "actions" => immutable_field_error(field, accepted, Code::ImmutableApiKeyActions),
+        "indexes" => immutable_field_error(field, accepted, Code::ImmutableApiKeyIndexes),
+        "expiresAt" => immutable_field_error(field, accepted, Code::ImmutableApiKeyExpiresAt),
+        "createdAt" => immutable_field_error(field, accepted, Code::ImmutableApiKeyCreatedAt),
+        "updatedAt" => immutable_field_error(field, accepted, Code::ImmutableApiKeyUpdatedAt),
+        _ => deserr::take_cf_content(DeserrJsonError::<BadRequest>::error::<Infallible>(
+            None,
+            deserr::ErrorKind::UnknownKey { key: field, accepted },
+            location,
+        )),
+    }
 }
 
-#[derive(Debug, DeserializeFromValue)]
-#[deserr(error = DeserrError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_api_key)]
+#[derive(Debug, Deserr)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_api_key)]
 pub struct PatchApiKey {
-    #[deserr(error = DeserrError<InvalidApiKeyDescription>)]
-    pub description: Option<String>,
-    #[deserr(error = DeserrError<InvalidApiKeyName>)]
-    pub name: Option<String>,
+    #[deserr(default, error = DeserrJsonError<InvalidApiKeyDescription>)]
+    pub description: Setting<String>,
+    #[deserr(default, error = DeserrJsonError<InvalidApiKeyName>)]
+    pub name: Setting<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -108,7 +103,7 @@ pub struct Key {
     pub name: Option<String>,
     pub uid: KeyId,
     pub actions: Vec<Action>,
-    pub indexes: Vec<StarOr<IndexUid>>,
+    pub indexes: Vec<IndexUidPattern>,
     #[serde(with = "time::serde::rfc3339::option")]
     pub expires_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339")]
@@ -126,7 +121,7 @@ impl Key {
             description: Some("Use it for anything that is not a search operation. Caution! Do not expose it on a public frontend".to_string()),
             uid,
             actions: vec![Action::All],
-            indexes: vec![StarOr::Star],
+            indexes: vec![IndexUidPattern::all()],
             expires_at: None,
             created_at: now,
             updated_at: now,
@@ -141,7 +136,7 @@ impl Key {
             description: Some("Use it to search from the frontend".to_string()),
             uid,
             actions: vec![Action::Search],
-            indexes: vec![StarOr::Star],
+            indexes: vec![IndexUidPattern::all()],
             expires_at: None,
             created_at: now,
             updated_at: now,
@@ -149,52 +144,44 @@ impl Key {
     }
 }
 
-#[derive(Debug)]
-pub struct ParseOffsetDateTimeError(String);
-impl Display for ParseOffsetDateTimeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "`{original}` is not a valid date. It should follow the RFC 3339 format to represents a date or datetime in the future or specified as a null value. e.g. 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM:SS'.", original = self.0)
-    }
-}
-impl std::error::Error for ParseOffsetDateTimeError {}
-
 fn parse_expiration_date(
-    string: &str,
-) -> std::result::Result<Option<OffsetDateTime>, TakeErrorMessage<ParseOffsetDateTimeError>> {
-    let datetime = if let Ok(datetime) = OffsetDateTime::parse(string, &Rfc3339) {
+    string: Option<String>,
+) -> std::result::Result<Option<OffsetDateTime>, ParseOffsetDateTimeError> {
+    let Some(string) = string else {
+        return Ok(None)
+    };
+    let datetime = if let Ok(datetime) = OffsetDateTime::parse(&string, &Rfc3339) {
         datetime
     } else if let Ok(primitive_datetime) = PrimitiveDateTime::parse(
-        string,
+        &string,
         format_description!(
             "[year repr:full base:calendar]-[month repr:numerical]-[day]T[hour]:[minute]:[second]"
         ),
     ) {
         primitive_datetime.assume_utc()
     } else if let Ok(primitive_datetime) = PrimitiveDateTime::parse(
-        string,
+        &string,
         format_description!(
             "[year repr:full base:calendar]-[month repr:numerical]-[day] [hour]:[minute]:[second]"
         ),
     ) {
         primitive_datetime.assume_utc()
     } else if let Ok(date) = Date::parse(
-        string,
+        &string,
         format_description!("[year repr:full base:calendar]-[month repr:numerical]-[day]"),
     ) {
         PrimitiveDateTime::new(date, time!(00:00)).assume_utc()
     } else {
-        return Err(TakeErrorMessage(ParseOffsetDateTimeError(string.to_owned())));
+        return Err(ParseOffsetDateTimeError(string));
     };
     if datetime > OffsetDateTime::now_utc() {
         Ok(Some(datetime))
     } else {
-        Err(TakeErrorMessage(ParseOffsetDateTimeError(string.to_owned())))
+        Err(ParseOffsetDateTimeError(string))
     }
 }
 
-#[derive(
-    Copy, Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Hash, Sequence, DeserializeFromValue,
-)]
+#[derive(Copy, Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Hash, Sequence, Deserr)]
 #[repr(u8)]
 pub enum Action {
     #[serde(rename = "*")]

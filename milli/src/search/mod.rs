@@ -324,7 +324,7 @@ impl fmt::Debug for Search<'_> {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SearchResult {
     pub matching_words: MatchingWords,
     pub candidates: RoaringBitmap,
