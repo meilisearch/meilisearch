@@ -1028,6 +1028,53 @@ async fn error_document_field_limit_reached() {
 }
 
 #[actix_rt::test]
+async fn add_documents_with_geo_field() {
+    let server = Server::new().await;
+    let index = server.index("doggo");
+    index.update_settings(json!({"sortableAttributes": ["_geo"]})).await;
+
+    let documents = json!([
+        {
+            "id": "1",
+        },
+        {
+            "id": "2",
+            "_geo": null,
+        },
+        {
+            "id": "3",
+            "_geo": { "lat": 1, "lng": 1 },
+        },
+        {
+            "id": "4",
+            "_geo": { "lat": "1", "lng": "1" },
+        },
+    ]);
+
+    index.add_documents(documents, None).await;
+    let response = index.wait_task(1).await;
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 1,
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 4,
+        "indexedDocuments": 4
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn add_documents_invalid_geo_field() {
     let server = Server::new().await;
     let index = server.index("test");
