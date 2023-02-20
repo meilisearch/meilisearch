@@ -256,8 +256,8 @@ async fn document_addition(
     ) {
         (Some(("application", "json")), None) => PayloadType::Json,
         (Some(("application", "x-ndjson")), None) => PayloadType::Ndjson,
-        (Some(("text", "csv")), None) => PayloadType::Csv(b','),
-        (Some(("text", "csv")), Some(delimiter)) => PayloadType::Csv(delimiter),
+        (Some(("text", "csv")), None) => PayloadType::Csv { delimiter: b',' },
+        (Some(("text", "csv")), Some(delimiter)) => PayloadType::Csv { delimiter },
 
         (Some(("application", "json")), Some(_)) => {
             return Err(MeilisearchHttpError::CsvDelimiterWithWrongContentType(String::from(
@@ -320,7 +320,9 @@ async fn document_addition(
     let documents_count = tokio::task::spawn_blocking(move || {
         let documents_count = match format {
             PayloadType::Json => read_json(&read_file, update_file.as_file_mut())?,
-            PayloadType::Csv(delim) => read_csv(&read_file, update_file.as_file_mut(), delim)?,
+            PayloadType::Csv { delimiter } => {
+                read_csv(&read_file, update_file.as_file_mut(), delimiter)?
+            }
             PayloadType::Ndjson => read_ndjson(&read_file, update_file.as_file_mut())?,
         };
         // we NEED to persist the file here because we moved the `udpate_file` in another task.
