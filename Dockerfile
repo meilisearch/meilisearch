@@ -1,7 +1,5 @@
 # Compile
-FROM    rust:alpine3.16 AS compiler
-
-RUN     apk add -q --update-cache --no-cache build-base openssl-dev
+FROM    rust:bullseye AS compiler
 
 WORKDIR /meilisearch
 
@@ -13,20 +11,20 @@ ENV     RUSTFLAGS="-C target-feature=-crt-static"
 
 COPY    . .
 RUN     set -eux; \
-        apkArch="$(apk --print-arch)"; \
-        if [ "$apkArch" = "aarch64" ]; then \
+        arch="$(dpkg --print-architecture)"; \
+        if [ "$arch" = "aarch64" ]; then \
             export JEMALLOC_SYS_WITH_LG_PAGE=16; \
         fi && \
         cargo build --release
 
 # Run
-FROM    alpine:3.16
+FROM    debian:11.6
 
 ENV     MEILI_HTTP_ADDR 0.0.0.0:7700
 ENV     MEILI_SERVER_PROVIDER docker
 
-RUN     apk update --quiet \
-        && apk add -q --no-cache libgcc tini curl
+RUN     apt update -q \
+        && apt install -q -y tini
 
 # add meilisearch to the `/bin` so you can run it from anywhere and it's easy
 # to find.
