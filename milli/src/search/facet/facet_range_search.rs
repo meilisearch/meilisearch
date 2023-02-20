@@ -115,7 +115,7 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
 
     /// Recursive part of the algorithm for level > 0.
     ///
-    /// It works by visiting a slice of a level and checking whether the range asscociated
+    /// It works by visiting a slice of a level and checking whether the range associated
     /// with each visited element is contained within the bounds.
     ///
     /// 1. So long as the element's range is less than the left bound, we do nothing and keep iterating
@@ -257,25 +257,25 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
             let right_condition = match (self.right, rightmost_bound) {
                 (Bound::Included(right), Bound::Included(rightmost)) => {
                     // we need to stay within the bound ..=right
-                    // the element's range goes to ..=righmost
+                    // the element's range goes to ..=rightmost
                     // so the element fits entirely within the bound if rightmost <= right
                     rightmost <= right
                 }
                 (Bound::Included(right), Bound::Excluded(rightmost)) => {
                     // we need to stay within the bound ..=right
-                    // the element's range goes to ..righmost
+                    // the element's range goes to ..rightmost
                     // so the element fits entirely within the bound if rightmost <= right
                     rightmost <= right
                 }
                 (Bound::Excluded(right), Bound::Included(rightmost)) => {
                     // we need to stay within the bound ..right
-                    // the element's range goes to ..=righmost
+                    // the element's range goes to ..=rightmost
                     // so the element fits entirely within the bound if rightmost < right
                     rightmost < right
                 }
                 (Bound::Excluded(right), Bound::Excluded(rightmost)) => {
                     // we need to stay within the bound ..right
-                    // the element's range goes to ..righmost
+                    // the element's range goes to ..rightmost
                     // so the element fits entirely within the bound if rightmost <= right
                     rightmost <= right
                 }

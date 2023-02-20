@@ -32,8 +32,8 @@ impl fmt::Debug for MatchingWords {
 
 impl MatchingWords {
     pub fn new(mut matching_words: Vec<(Vec<Rc<MatchingWord>>, Vec<PrimitiveWordId>)>) -> Self {
-        // Sort word by len in DESC order prioritizing the longuest matches,
-        // in order to highlight the longuest part of the matched word.
+        // Sort word by len in DESC order prioritizing the longest matches,
+        // in order to highlight the longest part of the matched word.
         matching_words.sort_unstable_by_key(|(mw, _)| Reverse((mw.len(), mw[0].word.len())));
 
         Self { inner: matching_words }
@@ -77,7 +77,7 @@ impl<'a> Iterator for MatchesIter<'a, '_> {
     }
 }
 
-/// Id of a matching term corespounding to a word written by the end user.
+/// Id of a matching term corresponding to a word written by the end user.
 pub type PrimitiveWordId = u8;
 
 /// Structure used to match a specific term.
@@ -114,7 +114,7 @@ impl MatchingWord {
         Some(Self { dfa, word, typo, prefix })
     }
 
-    /// Returns the lenght in chars of the match in case of the token matches the term.
+    /// Returns the length in chars of the match in case of the token matches the term.
     pub fn match_token(&self, token: &Token) -> Option<usize> {
         match self.dfa.eval(token.lemma()) {
             Distance::Exact(t) if t <= self.typo => {
@@ -337,7 +337,7 @@ mod tests {
 
         for test in &tests {
             let length = bytes_to_highlight(test.text, test.query);
-            assert_eq!(length, test.length, r#"lenght between: "{}" "{}""#, test.query, test.text);
+            assert_eq!(length, test.length, r#"length between: "{}" "{}""#, test.query, test.text);
             assert!(
                 from_utf8(&test.query.as_bytes()[..length]).is_ok(),
                 r#"converting {}[..{}] to an utf8 str failed"#,

@@ -42,7 +42,7 @@ fn quoted_by(quote: char, input: Span) -> IResult<Token> {
                 )));
             }
         }
-        // if it was preceeded by a `\` or if it was anything else we can continue to advance
+        // if it was preceded by a `\` or if it was anything else we can continue to advance
     }
 
     Ok((

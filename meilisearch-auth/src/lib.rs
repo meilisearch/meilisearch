@@ -210,7 +210,7 @@ impl SearchRules {
                 }
             }
             Self::Map(map) => {
-                // We must take the most retrictive rule of this index uid patterns set of rules.
+                // We must take the most restrictive rule of this index uid patterns set of rules.
                 map.iter()
                     .filter(|(pattern, _)| pattern.matches_str(index))
                     .max_by_key(|(pattern, _)| (pattern.is_exact(), pattern.len()))

@@ -128,7 +128,7 @@ impl<'a> FacetDistribution<'a> {
         Ok(())
     }
 
-    /// There is too much documents, we use the facet levels to move throught
+    /// There is too much documents, we use the facet levels to move throughout
     /// the facet values, to find the candidates and values associated.
     fn facet_numbers_distribution_from_facet_levels(
         &self,
@@ -189,7 +189,7 @@ impl<'a> FacetDistribution<'a> {
         )
     }
 
-    /// Placeholder search, a.k.a. no candidates were specified. We iterate throught the
+    /// Placeholder search, a.k.a. no candidates were specified. We iterate throughout the
     /// facet values one by one and iterate on the facet level 0 for numbers.
     fn facet_values_from_raw_facet_database(
         &self,

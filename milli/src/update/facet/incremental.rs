@@ -25,7 +25,7 @@ enum DeletionResult {
     Remove { next: Option<Vec<u8>> },
 }
 
-/// Algorithm to incrementally insert and delete elememts into the
+/// Algorithm to incrementally insert and delete elements into the
 /// `facet_id_(string/f64)_docids` databases.
 ///
 /// Rhe `faceted_documents_ids` value in the main database of `Index`
@@ -1013,7 +1013,7 @@ mod tests {
 // fuzz tests
 #[cfg(all(test, fuzzing))]
 /**
-Fuzz test for the incremental indxer.
+Fuzz test for the incremental indexer.
 
 The fuzz test uses fuzzcheck, a coverage-guided fuzzer.
 See https://github.com/loiclec/fuzzcheck-rs and https://fuzzcheck.neocities.org

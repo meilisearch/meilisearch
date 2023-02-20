@@ -233,7 +233,7 @@ impl PrimaryKey<'_> {
     }
 
     /// Returns an `Iterator` that gives all the possible fields names the primary key
-    /// can have depending of the first level name and deepnes of the objects.
+    /// can have depending of the first level name and deepness of the objects.
     fn possible_level_names(&self) -> impl Iterator<Item = (&str, &str)> + '_ {
         let name = self.name();
         name.match_indices(PRIMARY_KEY_SPLIT_SYMBOL)

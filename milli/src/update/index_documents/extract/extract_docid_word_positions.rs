@@ -142,7 +142,7 @@ fn json_to_string<'a>(value: &'a Value, buffer: &'a mut String) -> Option<&'a st
 
 /// take an iterator on tokens and compute their relative position depending on separator kinds
 /// if it's an `Hard` separator we add an additional relative proximity of 8 between words,
-/// else we keep the standart proximity of 1 between words.
+/// else we keep the standard proximity of 1 between words.
 fn process_tokens<'a>(
     tokens: impl Iterator<Item = Token<'a>>,
 ) -> impl Iterator<Item = (usize, Token<'a>)> {

@@ -211,7 +211,7 @@ pub(crate) mod test {
     fn _create_directory_hierarchy(dir: &Path, depth: usize) -> String {
         let mut ret = String::new();
 
-        // the entries are not guarenteed to be returned in the same order thus we need to sort them.
+        // the entries are not guaranteed to be returned in the same order thus we need to sort them.
         let mut entries =
             fs::read_dir(dir).unwrap().collect::<std::result::Result<Vec<_>, _>>().unwrap();
 

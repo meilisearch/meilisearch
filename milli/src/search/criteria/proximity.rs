@@ -458,7 +458,7 @@ fn resolve_plane_sweep_candidates(
                 rightmost = p;
                 leftmost = q;
             } else {
-                // Ohterwise, let l = min{p,q}.
+                // Otherwise, let l = min{p,q}.
                 leftmost = if p.1 < q.1 { p } else { q };
             }
 
@@ -685,7 +685,7 @@ mod tests {
             .criterion_implementation_strategy(CriterionImplementationStrategy::OnlySetBased)
             .execute()
             .unwrap();
-        // Here searh results are degraded because `con` is in the prefix cache but it is too
+        // Here search results are degraded because `con` is in the prefix cache but it is too
         // long to be stored in the prefix proximity databases, and we don't want to iterate over
         // all of its word derivations
         insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1, 2, 3, 4, 5]");

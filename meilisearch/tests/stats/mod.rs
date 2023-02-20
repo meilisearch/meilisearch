@@ -16,7 +16,7 @@ async fn get_settings_unexisting_index() {
 }
 
 #[actix_rt::test]
-async fn test_healthyness() {
+async fn test_healthiness() {
     let server = Server::new().await;
 
     let (response, status_code) = server.service.get("/health").await;

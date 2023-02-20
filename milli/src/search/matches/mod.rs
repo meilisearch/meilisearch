@@ -11,7 +11,7 @@ const DEFAULT_CROP_MARKER: &str = "…";
 const DEFAULT_HIGHLIGHT_PREFIX: &str = "<em>";
 const DEFAULT_HIGHLIGHT_SUFFIX: &str = "</em>";
 
-/// Structure used to build a Matcher allowing to customize formating tags.
+/// Structure used to build a Matcher allowing to customize formatting tags.
 pub struct MatcherBuilder<'a, A> {
     matching_words: MatchingWords,
     tokenizer: Tokenizer<'a, 'a, A>,
@@ -101,7 +101,7 @@ pub struct MatchBounds {
     pub length: usize,
 }
 
-/// Structure used to analize a string, compute words that match,
+/// Structure used to analyze a string, compute words that match,
 /// and format the source string, returning a highlighted and cropped sub-string.
 pub struct Matcher<'t, 'm, A> {
     text: &'t str,
@@ -130,7 +130,7 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
             for (token_position, word_position, word) in words_positions {
                 partial = match partial.match_token(word) {
                     // token matches the partial match, but the match is not full,
-                    // we temporarly save the current token then we try to match the next one.
+                    // we temporarily save the current token then we try to match the next one.
                     Some(MatchType::Partial(partial)) => {
                         potential_matches.push((token_position, word_position, partial.char_len()));
                         partial
@@ -679,7 +679,7 @@ mod tests {
         // Test phrase propagation
         let text = "Natalie risk her future. Split The World is a book written by Emily Henry. I never read it.";
         let mut matcher = builder.build(text);
-        // should crop the phrase instead of croping around the match.
+        // should crop the phrase instead of cropping around the match.
         insta::assert_snapshot!(
             matcher.format(format_options),
             @"… Split The World is a book written by Emily Henry…"
@@ -712,7 +712,7 @@ mod tests {
             @"…void void void void void split the world void void"
         );
 
-        // Text containing matches with diferent density.
+        // Text containing matches with different density.
         let text = "split void the void void world void void void void void void void void void void split the world void void";
         let mut matcher = builder.build(text);
         // crop should return 10 last words with a marker at the start.

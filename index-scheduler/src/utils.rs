@@ -30,7 +30,7 @@ impl IndexScheduler {
     }
 
     /// Convert an iterator to a `Vec` of tasks. The tasks MUST exist or a
-    /// `CorruptedTaskQueue` error will be throwed.
+    /// `CorruptedTaskQueue` error will be thrown.
     pub(crate) fn get_existing_tasks(
         &self,
         rtxn: &RoTxn,

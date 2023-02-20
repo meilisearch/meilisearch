@@ -18,7 +18,7 @@ use crate::{CboRoaringBitmapCodec, DocumentId, FieldId, Result, BEU32, MAX_FACET
 
 /// Extracts the facet values of each faceted field of each document.
 ///
-/// Returns the generated grenad reader containing the docid the fid and the orginal value as key
+/// Returns the generated grenad reader containing the docid the fid and the original value as key
 /// and the normalized value as value extracted from the given chunk of documents.
 #[logging_timer::time]
 pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(

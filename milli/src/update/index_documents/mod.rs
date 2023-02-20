@@ -227,14 +227,14 @@ where
             Some(ref pool) => pool,
             #[cfg(not(test))]
             None => {
-                // We initialize a bakcup pool with the default
+                // We initialize a backup pool with the default
                 // settings if none have already been set.
                 backup_pool = rayon::ThreadPoolBuilder::new().build()?;
                 &backup_pool
             }
             #[cfg(test)]
             None => {
-                // We initialize a bakcup pool with the default
+                // We initialize a backup pool with the default
                 // settings if none have already been set.
                 backup_pool = rayon::ThreadPoolBuilder::new().num_threads(1).build()?;
                 &backup_pool
@@ -304,7 +304,7 @@ where
 
             let result = original_chunk_iter.and_then(|original_chunk| {
                 let flattened_chunk = flattened_chunk_iter?;
-                // extract all databases from the chunked obkv douments
+                // extract all databases from the chunked obkv documents
                 extract::data_from_obkv_documents(
                     original_chunk,
                     flattened_chunk,
@@ -324,7 +324,7 @@ where
                 let _ = lmdb_writer_sx.send(Err(e));
             }
 
-            // needs to be droped to avoid channel waiting lock.
+            // needs to be dropped to avoid channel waiting lock.
             drop(lmdb_writer_sx)
         });
 
@@ -1846,7 +1846,7 @@ mod tests {
     fn long_words_must_be_skipped() {
         let index = TempIndex::new();
 
-        // this is obviousy too long
+        // this is obviously too long
         let long_word = "lol".repeat(1000);
         let doc1 = documents! {[{
             "id": "1",
@@ -1864,7 +1864,7 @@ mod tests {
     fn long_facet_values_must_not_crash() {
         let index = TempIndex::new();
 
-        // this is obviousy too long
+        // this is obviously too long
         let long_word = "lol".repeat(1000);
         let doc1 = documents! {[{
             "id": "1",

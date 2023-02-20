@@ -95,7 +95,7 @@ pub enum PayloadError {
     MalformedPayload(serde_json::error::Error),
     #[error("A json payload is missing.")]
     MissingPayload,
-    #[error("Error while receiving the playload. `{0}`.")]
+    #[error("Error while receiving the payload. `{0}`.")]
     ReceivePayload(Box<dyn std::error::Error + Send + Sync + 'static>),
 }
 

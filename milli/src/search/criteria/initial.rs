@@ -6,7 +6,7 @@ use crate::search::query_tree::Operation;
 use crate::search::Distinct;
 use crate::Result;
 /// Initial is a mandatory criterion, it is always the first
-/// and is meant to initalize the CriterionResult used by the other criteria.
+/// and is meant to initialize the CriterionResult used by the other criteria.
 /// It behave like an [Once Iterator](https://doc.rust-lang.org/std/iter/struct.Once.html) and will return Some(CriterionResult) only one time.
 pub struct Initial<'t, D> {
     ctx: &'t dyn Context<'t>,

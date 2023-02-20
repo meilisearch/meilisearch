@@ -223,7 +223,7 @@ async fn error_api_key_empty_payload() {
 
 #[actix_rt::test]
 async fn error_api_key_malformed_payload() {
-    let content = r#"{"malormed": "payload""#;
+    let content = r#"{"malformed": "payload""#;
 
     let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");

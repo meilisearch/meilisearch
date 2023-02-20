@@ -345,7 +345,7 @@ mod tests {
     use crate::index::tests::TempIndex;
     use crate::{AscDesc, Criterion, Filter, Search, SearchResult};
 
-    // Note that in this test, only the iterative sort algorithms are used. Set the CANDIDATES_THESHOLD
+    // Note that in this test, only the iterative sort algorithms are used. Set the CANDIDATES_THRESHOLD
     // constant to 0 to ensure that the other sort algorithms are also correct.
     #[test]
     fn sort_criterion_placeholder() {
@@ -432,7 +432,7 @@ mod tests {
         assert_eq!(all_ids, documents_ids);
     }
 
-    // Note that in this test, only the iterative sort algorithms are used. Set the CANDIDATES_THESHOLD
+    // Note that in this test, only the iterative sort algorithms are used. Set the CANDIDATES_THRESHOLD
     // constant to 0 to ensure that the other sort algorithms are also correct.
     #[test]
     fn sort_criterion_non_placeholder() {

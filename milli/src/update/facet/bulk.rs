@@ -15,7 +15,7 @@ use crate::heed_codec::ByteSliceRefCodec;
 use crate::update::index_documents::{create_writer, valid_lmdb_key, writer_into_reader};
 use crate::{CboRoaringBitmapCodec, FieldId, Index, Result};
 
-/// Algorithm to insert elememts into the `facet_id_(string/f64)_docids` databases
+/// Algorithm to insert elements into the `facet_id_(string/f64)_docids` databases
 /// by rebuilding the database "from scratch".
 ///
 /// First, the new elements are inserted into the level 0 of the database. Then, the
@@ -318,7 +318,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
         // don't forget to insert the leftover elements into the writer as well
 
         // but only do so if the current number of elements to be inserted into this
-        // levelcould grow to the minimum level size
+        // level could grow to the minimum level size
 
         if !bitmaps.is_empty() && (cur_writer_len >= self.min_level_size as usize - 1) {
             // the length of bitmaps is between 0 and group_size
@@ -453,7 +453,7 @@ mod tests {
 
     #[test]
     fn bug_3165() {
-        // Indexing a number of facet values that falls within certains ranges (e.g. 22_540 qualifies)
+        // Indexing a number of facet values that falls within certain ranges (e.g. 22_540 qualifies)
         // would lead to a facet DB which was missing some levels.
         // That was because before writing a level into the database, we would
         // check that its size was higher than the minimum level size using

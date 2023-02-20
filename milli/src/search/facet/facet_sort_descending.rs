@@ -9,7 +9,7 @@ use crate::heed_codec::facet::{
 };
 use crate::heed_codec::ByteSliceRefCodec;
 
-/// See documentationg for [`ascending_facet_sort`](super::ascending_facet_sort).
+/// See documentation for [`ascending_facet_sort`](super::ascending_facet_sort).
 ///
 /// This function does the same thing, but in the opposite order.
 pub fn descending_facet_sort<'t>(
@@ -82,7 +82,7 @@ impl<'t> Iterator for DescendingFacetSort<'t> {
                     let starting_key_below =
                         FacetGroupKey { field_id, level: level - 1, left_bound };
 
-                    let end_key_kelow = match *right_bound {
+                    let end_key_below = match *right_bound {
                         Bound::Included(right) => Bound::Included(FacetGroupKey {
                             field_id,
                             level: level - 1,
@@ -100,7 +100,7 @@ impl<'t> Iterator for DescendingFacetSort<'t> {
                     let iter = match self
                         .db
                         .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>()
-                        .rev_range(self.rtxn, &(Bound::Included(starting_key_below), end_key_kelow))
+                        .rev_range(self.rtxn, &(Bound::Included(starting_key_below), end_key_below))
                     {
                         Ok(iter) => iter,
                         Err(e) => return Some(Err(e)),

@@ -112,7 +112,7 @@ impl<'a> Search<'a> {
         self
     }
 
-    /// Force the search to exhastivelly compute the number of candidates,
+    /// Force the search to exhaustively compute the number of candidates,
     /// this will increase the search time but allows finite pagination.
     pub fn exhaustive_number_hits(&mut self, exhaustive_number_hits: bool) -> &mut Search<'a> {
         self.exhaustive_number_hits = exhaustive_number_hits;
@@ -134,7 +134,7 @@ impl<'a> Search<'a> {
     }
 
     pub fn execute(&self) -> Result<SearchResult> {
-        // We create the query tree by spliting the query into tokens.
+        // We create the query tree by splitting the query into tokens.
         let before = Instant::now();
         let (query_tree, primitive_query, matching_words) = match self.query.as_ref() {
             Some(query) => {

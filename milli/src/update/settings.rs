@@ -1007,7 +1007,7 @@ mod tests {
         let SearchResult { documents_ids, .. } = index.search(&rtxn).execute().unwrap();
         let documents = index.documents(&rtxn, documents_ids).unwrap();
 
-        // Fetch the documents "age" field in the ordre in which the documents appear.
+        // Fetch the documents "age" field in the order in which the documents appear.
         let age_field_id = index.fields_ids_map(&rtxn).unwrap().id("age").unwrap();
         let iter = documents.into_iter().map(|(_, doc)| {
             let bytes = doc.get(age_field_id).unwrap();

@@ -13,7 +13,7 @@ We can combine the two tasks in a single batch:
 1. import documents X and Y
 
 Processing this batch is functionally equivalent to processing the two
-tasks individally, but should be much faster since we are only performing
+tasks individually, but should be much faster since we are only performing
 one indexing operation.
 */
 
@@ -565,7 +565,7 @@ impl IndexScheduler {
                         for content_uuid in canceled_tasks_content_uuids {
                             if let Err(error) = self.delete_update_file(content_uuid) {
                                 error!(
-                                    "We failed deleting the content file indentified as {}: {}",
+                                    "We failed deleting the content file identified as {}: {}",
                                     content_uuid, error
                                 )
                             }
@@ -857,7 +857,7 @@ impl IndexScheduler {
                 }()
                 .unwrap_or_default();
 
-                // The write transaction is directly owned and commited inside.
+                // The write transaction is directly owned and committed inside.
                 match self.index_mapper.delete_index(wtxn, &index_uid) {
                     Ok(()) => (),
                     Err(Error::IndexNotFound(_)) if index_has_been_created => (),
@@ -1201,7 +1201,7 @@ impl IndexScheduler {
         }
     }
 
-    /// Delete each given task from all the databases (if it is deleteable).
+    /// Delete each given task from all the databases (if it is deletable).
     ///
     /// Return the number of tasks that were actually deleted.
     fn delete_matched_tasks(&self, wtxn: &mut RwTxn, matched_tasks: &RoaringBitmap) -> Result<u64> {

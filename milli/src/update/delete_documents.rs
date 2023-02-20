@@ -524,7 +524,7 @@ fn remove_from_word_prefix_docids(
     let mut prefixes_to_delete = fst::SetBuilder::memory();
 
     // We iterate over the word prefix docids database and remove the deleted documents ids
-    // from every docids lists. We register the empty prefixes in an fst Set for futur deletion.
+    // from every docids lists. We register the empty prefixes in an fst Set for future deletion.
     let mut iter = db.iter_mut(txn)?;
     while let Some(result) = iter.next() {
         let (prefix, mut docids) = result?;

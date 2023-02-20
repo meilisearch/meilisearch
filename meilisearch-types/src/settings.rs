@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use crate::deserr::DeserrJsonError;
 use crate::error::deserr_codes::*;
 
-/// The maximimum number of results that the engine
+/// The maximum number of results that the engine
 /// will be able to return in one search call.
 pub const DEFAULT_PAGINATION_MAX_TOTAL_HITS: usize = 1000;
 

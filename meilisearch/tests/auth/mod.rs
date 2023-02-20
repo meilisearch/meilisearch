@@ -14,7 +14,7 @@ impl Server {
         self.service.api_key = Some(api_key.as_ref().to_string());
     }
 
-    /// Fetch and use the default admin key for nexts http requests.
+    /// Fetch and use the default admin key for next http requests.
     pub async fn use_admin_key(&mut self, master_key: impl AsRef<str>) {
         self.use_api_key(master_key);
         let (response, code) = self.list_api_keys("").await;

@@ -19,7 +19,7 @@ const DOCID_SIZE: usize = size_of::<DocumentId>();
 /// distinct attribute of the first document are retrieved. The document ids for these facet values
 /// are then retrieved and taken out of the the candidate and added to the excluded set. We take
 /// care to keep the document we are currently on, and remove it from the excluded list. The next
-/// iterations will never contain any occurence of a document with the same distinct value as a
+/// iterations will never contain any occurrence of a document with the same distinct value as a
 /// document from previous iterations.
 #[derive(Clone)]
 pub struct FacetDistinct<'a> {

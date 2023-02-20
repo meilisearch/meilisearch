@@ -618,7 +618,7 @@ mod tests {
 
         check_prefixes(&trie, &search_start, "unique", &["u", "un"]);
 
-        // NOTE: this should fail, because the search start is already beyong 'a'
+        // NOTE: this should fail, because the search start is already beyond 'a'
         let is_empty = trie.set_search_start("abba".as_bytes(), &mut search_start);
         assert!(!is_empty);
         // search start is reset

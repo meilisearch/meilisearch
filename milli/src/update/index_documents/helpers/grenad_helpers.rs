@@ -245,7 +245,7 @@ pub fn sorter_into_lmdb_database(
         }
     }
 
-    debug!("MTBL sorter writen in {:.02?}!", before.elapsed());
+    debug!("MTBL sorter written in {:.02?}!", before.elapsed());
     Ok(())
 }
 

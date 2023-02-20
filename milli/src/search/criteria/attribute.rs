@@ -525,7 +525,7 @@ fn initialize_linear_buckets(
             if !branch_rank.is_empty() {
                 branch_rank.sort_unstable();
                 // because several words in same query can't match all a the position 0,
-                // we substract the word index to the position.
+                // we subtract the word index to the position.
                 let branch_rank: u64 =
                     branch_rank.into_iter().enumerate().map(|(i, r)| r - i as u64).sum();
                 // here we do the means of the words of the branch

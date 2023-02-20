@@ -10,7 +10,7 @@ use roaring::RoaringBitmap;
 /// to determine the encoding used only by using the array of bytes length.
 pub const THRESHOLD: usize = 7;
 
-/// A conditionnal codec that either use the RoaringBitmap
+/// A conditional codec that either use the RoaringBitmap
 /// or a lighter ByteOrder en/decoding method.
 pub struct CboRoaringBitmapCodec;
 

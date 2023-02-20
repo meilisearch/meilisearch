@@ -284,7 +284,7 @@ where
             deserr::Value::String(s) => {
                 let mut error = None;
                 let mut is_star = false;
-                // CS::<String>::from_str is infaillible
+                // CS::<String>::from_str is infallible
                 let cs = serde_cs::vec::CS::<String>::from_str(&s).unwrap();
                 let len_cs = cs.0.len();
                 let mut els = vec![];

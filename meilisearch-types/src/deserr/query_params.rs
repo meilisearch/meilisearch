@@ -67,7 +67,7 @@ where
 ///
 /// This trait is functionally equivalent to `FromStr`.
 /// Having a separate trait trait allows us to return better
-/// deserializatio error messages.
+/// deserialization error messages.
 pub trait FromQueryParameter: Sized {
     type Err;
     fn from_query_param(p: &str) -> Result<Self, Self::Err>;

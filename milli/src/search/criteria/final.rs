@@ -41,7 +41,7 @@ impl<'t> Final<'t> {
         let excluded_candidates = &self.returned_candidates | excluded_candidates;
         let mut criterion_parameters = CriterionParameters {
             wdcache: &mut self.wdcache,
-            // returned_candidates is merged with excluded_candidates to avoid duplicas
+            // returned_candidates is merged with excluded_candidates to avoid duplicates
             excluded_candidates: &excluded_candidates,
         };
 

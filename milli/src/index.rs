@@ -949,7 +949,7 @@ impl Index {
 
     /* words prefixes fst */
 
-    /// Writes the FST which is the words prefixes dictionnary of the engine.
+    /// Writes the FST which is the words prefixes dictionary of the engine.
     pub(crate) fn put_words_prefixes_fst<A: AsRef<[u8]>>(
         &self,
         wtxn: &mut RwTxn,
@@ -962,7 +962,7 @@ impl Index {
         )
     }
 
-    /// Returns the FST which is the words prefixes dictionnary of the engine.
+    /// Returns the FST which is the words prefixes dictionary of the engine.
     pub fn words_prefixes_fst<'t>(&self, rtxn: &'t RoTxn) -> Result<fst::Set<Cow<'t, [u8]>>> {
         match self.main.get::<_, Str, ByteSlice>(rtxn, main_key::WORDS_PREFIXES_FST_KEY)? {
             Some(bytes) => Ok(fst::Set::new(bytes)?.map_data(Cow::Borrowed)?),
@@ -1595,7 +1595,7 @@ pub(crate) mod tests {
         32:33 _geoBoundingBox([-80, 0], [80, 0])
         "###);
 
-        // send a top latitude lower than the bottow latitude
+        // send a top latitude lower than the bottom latitude
         let error = search
             .filter(Filter::from_str("_geoBoundingBox([-10, 0], [10, 0])").unwrap().unwrap())
             .execute()

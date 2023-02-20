@@ -26,7 +26,7 @@ pub type DeserrQueryParamError<C = BadRequest> = DeserrError<DeserrQueryParam, C
 
 /// A request deserialization error.
 ///
-/// The first generic paramater is a marker type describing the format of the request: either json (e.g. [`DeserrJson`] or [`DeserrQueryParam`]).
+/// The first generic parameter is a marker type describing the format of the request: either json (e.g. [`DeserrJson`] or [`DeserrQueryParam`]).
 /// The second generic parameter is the default error code for the deserialization error, in case it is not given.
 pub struct DeserrError<Format, C: Default + ErrorCode> {
     pub msg: String,

@@ -22,7 +22,7 @@ impl<'t, 'u, 'i> WordsPrefixesFst<'t, 'u, 'i> {
 
     /// Set the number of words required to make a prefix be part of the words prefixes
     /// database. If a word prefix is supposed to match more than this number of words in the
-    /// dictionnary, therefore this prefix is added to the words prefixes datastructures.
+    /// dictionary, therefore this prefix is added to the words prefixes datastructures.
     ///
     /// Default value is 100. This value must be higher than 50 and will be clamped
     /// to this bound otherwise.
@@ -88,7 +88,7 @@ impl<'t, 'u, 'i> WordsPrefixesFst<'t, 'u, 'i> {
         builder.extend_stream(op.r#union())?;
         let prefix_fst = builder.into_set();
 
-        // Set the words prefixes FST in the dtabase.
+        // Set the words prefixes FST in the database.
         self.index.put_words_prefixes_fst(self.wtxn, &prefix_fst)?;
 
         Ok(())

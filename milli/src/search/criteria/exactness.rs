@@ -375,7 +375,7 @@ fn compute_combinations(
 /// For example, with the bitmaps `b0,b1,b2,b3`, this map should look like this
 /// ```text
 /// Map 0: (first iteration, contains all the combinations of 1 bitmap)
-///     // What follows are unions of intersection of bitmaps asscociated with the index of their last component
+///     // What follows are unions of intersection of bitmaps associated with the index of their last component
 ///     0: [b0]
 ///     1: [b1]
 ///     2: [b2]

@@ -7,10 +7,10 @@ use roaring::RoaringBitmap;
 
 use crate::{DocumentId, Result};
 
-/// A trait implemented by document interators that are returned by calls to `Distinct::distinct`.
+/// A trait implemented by document iterators that are returned by calls to `Distinct::distinct`.
 /// It provides a way to get back the ownership to the excluded set.
 pub trait DocIter: Iterator<Item = Result<DocumentId>> {
-    /// Returns ownership on the internal exluded set.
+    /// Returns ownership on the internal excluded set.
     fn into_excluded(self) -> RoaringBitmap;
 }
 

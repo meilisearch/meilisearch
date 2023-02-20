@@ -71,7 +71,7 @@ pub struct Query {
     pub limit: Option<u32>,
     /// The minimum [task id](`meilisearch_types::tasks::Task::uid`) to be matched
     pub from: Option<u32>,
-    /// The allowed [statuses](`meilisearch_types::tasks::Task::status`) of the matched tasls
+    /// The allowed [statuses](`meilisearch_types::tasks::Task::status`) of the matched tasks
     pub statuses: Option<Vec<Status>>,
     /// The allowed [kinds](meilisearch_types::tasks::Kind) of the matched tasks.
     ///
@@ -765,8 +765,8 @@ impl IndexScheduler {
         Ok(task)
     }
 
-    /// Register a new task comming from a dump in the scheduler.
-    /// By takinig a mutable ref we're pretty sure no one will ever import a dump while actix is running.
+    /// Register a new task coming from a dump in the scheduler.
+    /// By taking a mutable ref we're pretty sure no one will ever import a dump while actix is running.
     pub fn register_dumped_task(
         &mut self,
         task: TaskDump,
@@ -1390,7 +1390,7 @@ mod tests {
             assert_eq!(task.kind.as_kind(), k);
         }
 
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "everything_is_succesfully_registered");
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "everything_is_successfully_registered");
     }
 
     #[test]
@@ -1482,7 +1482,7 @@ mod tests {
     }
 
     #[test]
-    fn task_deletion_undeleteable() {
+    fn task_deletion_undeletable() {
         let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
@@ -1522,14 +1522,14 @@ mod tests {
 
         handle.advance_till([InsideProcessBatch, ProcessBatchSucceeded, AfterProcessing]);
         // after the task deletion is processed, no task should actually have been deleted,
-        // because the tasks with ids 0 and 1 were still "enqueued", and thus undeleteable
+        // because the tasks with ids 0 and 1 were still "enqueued", and thus undeletable
         // the "task deletion" task should be marked as "succeeded" and, in its details, the
         // number of deleted tasks should be 0
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "task_deletion_done");
     }
 
     #[test]
-    fn task_deletion_deleteable() {
+    fn task_deletion_deletable() {
         let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
@@ -2720,7 +2720,7 @@ mod tests {
         // We're going to autobatch multiple document addition that don't have
         // the right to create an index while there is no index currently.
         // Thus, everything should be batched together and a IndexDoesNotExists
-        // error should be throwed.
+        // error should be thrown.
         let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         for i in 0..10 {
@@ -2814,7 +2814,7 @@ mod tests {
         // We're going to autobatch multiple document addition that don't have
         // the right to create an index while there is already an index.
         // Thus, everything should be batched together and no error should be
-        // throwed.
+        // thrown.
         let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
         // Create the index.

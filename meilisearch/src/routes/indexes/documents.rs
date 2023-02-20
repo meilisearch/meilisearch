@@ -288,7 +288,7 @@ async fn document_addition(
             PayloadType::Csv => read_csv(&read_file, update_file.as_file_mut())?,
             PayloadType::Ndjson => read_ndjson(&read_file, update_file.as_file_mut())?,
         };
-        // we NEED to persist the file here because we moved the `udpate_file` in another task.
+        // we NEED to persist the file here because we moved the `update_file` in another task.
         update_file.persist()?;
         Ok(documents_count)
     })
