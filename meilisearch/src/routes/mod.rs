@@ -261,9 +261,9 @@ pub fn create_all_stats(
     )?;
     // accumulate the size of each indexes
     let processing_index = processing_task.first().and_then(|task| task.index_uid());
-    for (name, index) in index_scheduler.indexes()? {
-        if !filters.is_index_authorized(&name) {
-            continue;
+    index_scheduler.try_for_each_index(|name, index| {
+        if !filters.is_index_authorized(name) {
+            return Ok(());
         }
 
         database_size += index.on_disk_size()?;
@@ -278,8 +278,9 @@ pub fn create_all_stats(
         let updated_at = index.updated_at(&rtxn)?;
         last_task = last_task.map_or(Some(updated_at), |last| Some(last.max(updated_at)));
 
-        indexes.insert(name, stats);
-    }
+        indexes.insert(name.to_string(), stats);
+        Ok(())
+    })?;
 
     database_size += index_scheduler.size()?;
     database_size += auth_controller.size()?;

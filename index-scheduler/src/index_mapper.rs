@@ -682,15 +682,35 @@ impl IndexMapper {
         Ok(index)
     }
 
-    /// Return all indexes, may open them if they weren't already opened.
-    pub fn indexes(&self, rtxn: &RoTxn) -> Result<Vec<(String, Index)>> {
+    /// Attempts `f` for each index that exists in the index mapper.
+    ///
+    /// It is preferable to use this function rather than a loop that opens all indexes, as a way to avoid having all indexes opened,
+    /// which is unsupported in general.
+    ///
+    /// Since `f` is allowed to return a result, and `Index` is cloneable, it is still possible to wrongly build e.g. a vector of
+    /// all the indexes, but this function makes it harder and so less likely to do accidentally.
+    pub fn try_for_each_index<U, V>(
+        &self,
+        rtxn: &RoTxn,
+        mut f: impl FnMut(&str, &Index) -> Result<U>,
+    ) -> Result<V>
+    where
+        V: FromIterator<U>,
+    {
         self.index_mapping
             .iter(rtxn)?
-            .map(|ret| {
-                ret.map_err(Error::from).and_then(|(name, _)| {
-                    self.index(rtxn, name).map(|index| (name.to_string(), index))
-                })
+            .map(|res| {
+                res.map_err(Error::from)
+                    .and_then(|(name, _)| self.index(rtxn, name).and_then(|index| f(name, &index)))
             })
+            .collect()
+    }
+
+    /// Return the name of all indexes without opening them.
+    pub fn index_names(&self, rtxn: &RoTxn) -> Result<Vec<String>> {
+        self.index_mapping
+            .iter(rtxn)?
+            .map(|res| res.map_err(Error::from).map(|(name, _)| name.to_string()))
             .collect()
     }
 

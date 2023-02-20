@@ -541,15 +541,42 @@ impl IndexScheduler {
     ///
     /// * If the index wasn't opened before, the index will be opened.
     /// * If the index doesn't exist on disk, the `IndexNotFoundError` is thrown.
+    ///
+    /// ### Note
+    ///
+    /// As an `Index` requires a large swath of the virtual memory address space, correct usage of an `Index` does not
+    /// keep its handle for too long.
+    ///
+    /// Some configurations also can't reasonably open multiple indexes at once.
+    /// If you need to fetch information from or perform an action on all indexes,
+    /// see the `try_for_each_index` function.
     pub fn index(&self, name: &str) -> Result<Index> {
         let rtxn = self.env.read_txn()?;
         self.index_mapper.index(&rtxn, name)
     }
 
-    /// Return and open all the indexes.
-    pub fn indexes(&self) -> Result<Vec<(String, Index)>> {
+    /// Return the name of all indexes without opening them.
+    pub fn index_names(self) -> Result<Vec<String>> {
         let rtxn = self.env.read_txn()?;
-        self.index_mapper.indexes(&rtxn)
+        self.index_mapper.index_names(&rtxn)
+    }
+
+    /// Attempts `f` for each index that exists known to the index scheduler.
+    ///
+    /// It is preferable to use this function rather than a loop that opens all indexes, as a way to avoid having all indexes opened,
+    /// which is unsupported in general.
+    ///
+    /// Since `f` is allowed to return a result, and `Index` is cloneable, it is still possible to wrongly build e.g. a vector of
+    /// all the indexes, but this function makes it harder and so less likely to do accidentally.
+    ///
+    /// If many indexes exist, this operation can take time to complete (in the order of seconds for a 1000 of indexes) as it needs to open
+    /// all the indexes.
+    pub fn try_for_each_index<U, V>(&self, f: impl FnMut(&str, &Index) -> Result<U>) -> Result<V>
+    where
+        V: FromIterator<U>,
+    {
+        let rtxn = self.env.read_txn()?;
+        self.index_mapper.try_for_each_index(&rtxn, f)
     }
 
     /// Return the task ids matched by the given query from the index scheduler's point of view.
