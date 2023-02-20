@@ -6,6 +6,7 @@ use roaring::RoaringBitmap;
 
 use super::read_u32_ne_bytes;
 use crate::heed_codec::CboRoaringBitmapCodec;
+use crate::update::index_documents::transform::Operation;
 use crate::Result;
 
 pub type MergeFn = for<'a> fn(&[u8], &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>>;
@@ -57,21 +58,6 @@ pub fn keep_latest_obkv<'a>(_key: &[u8], obkvs: &[Cow<'a, [u8]>]) -> Result<Cow<
     Ok(obkvs.last().unwrap().clone())
 }
 
-/// Merge all the obks in the order we see them.
-pub fn merge_obkvs<'a>(_key: &[u8], obkvs: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
-    Ok(obkvs
-        .iter()
-        .cloned()
-        .reduce(|acc, current| {
-            let first = obkv::KvReader::new(&acc);
-            let second = obkv::KvReader::new(&current);
-            let mut buffer = Vec::new();
-            merge_two_obkvs(first, second, &mut buffer);
-            Cow::from(buffer)
-        })
-        .unwrap())
-}
-
 pub fn merge_two_obkvs(base: obkv::KvReaderU16, update: obkv::KvReaderU16, buffer: &mut Vec<u8>) {
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};
@@ -86,6 +72,41 @@ pub fn merge_two_obkvs(base: obkv::KvReaderU16, update: obkv::KvReaderU16, buffe
     }
 
     writer.finish().unwrap();
+}
+
+/// Merge all the obks in the order we see them.
+pub fn merge_obkvs_and_operations<'a>(
+    _key: &[u8],
+    obkvs: &[Cow<'a, [u8]>],
+) -> Result<Cow<'a, [u8]>> {
+    // [add, add, delete, add, add]
+    // we can ignore everything that happened before the last delete.
+    let starting_position =
+        obkvs.iter().rposition(|obkv| obkv[0] == Operation::Deletion as u8).unwrap_or(0);
+
+    // [add, add, delete]
+    // if the last operation was a deletion then we simply return the deletion
+    if starting_position == obkvs.len() - 1 && obkvs.last().unwrap()[0] == Operation::Deletion as u8
+    {
+        return Ok(obkvs[obkvs.len() - 1].clone());
+    }
+    let mut buffer = Vec::new();
+
+    // (add, add, delete) [add, add]
+    // in the other case, no deletion will be encountered during the merge
+    let mut ret =
+        obkvs[starting_position..].iter().cloned().fold(Vec::new(), |mut acc, current| {
+            let first = obkv::KvReader::new(&acc);
+            let second = obkv::KvReader::new(&current[1..]);
+            merge_two_obkvs(first, second, &mut buffer);
+
+            // we want the result of the merge into our accumulator
+            std::mem::swap(&mut acc, &mut buffer);
+            acc
+        });
+
+    ret.insert(0, Operation::Addition as u8);
+    Ok(Cow::from(ret))
 }
 
 pub fn merge_cbo_roaring_bitmaps<'a>(

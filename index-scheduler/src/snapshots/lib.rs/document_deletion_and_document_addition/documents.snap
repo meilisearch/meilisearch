@@ -1,0 +1,17 @@
+---
+source: index-scheduler/src/lib.rs
+---
+[
+  {
+    "id": 1,
+    "doggo": "jean bob"
+  },
+  {
+    "id": 2,
+    "catto": "jorts"
+  },
+  {
+    "id": 3,
+    "doggo": "bork"
+  }
+]
