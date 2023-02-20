@@ -9,7 +9,7 @@ use actix_web::HttpRequest;
 use byte_unit::Byte;
 use http::header::CONTENT_TYPE;
 use index_scheduler::IndexScheduler;
-use meilisearch_auth::{AuthController, SearchRules};
+use meilisearch_auth::{AuthController, AuthFilter};
 use meilisearch_types::InstanceUid;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -401,7 +401,7 @@ impl Segment {
         auth_controller: AuthController,
     ) {
         if let Ok(stats) =
-            create_all_stats(index_scheduler.into(), auth_controller, &SearchRules::default())
+            create_all_stats(index_scheduler.into(), auth_controller, &AuthFilter::default())
         {
             // Replace the version number with the prototype name if any.
             let version = if let Some(prototype) = crate::prototype_name() {
