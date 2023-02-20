@@ -89,11 +89,11 @@ pub async fn list_indexes(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, Data<IndexScheduler>>,
     paginate: AwebQueryParameter<ListIndexes, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
-    let search_rules = &index_scheduler.filters().search_rules;
+    let filters = index_scheduler.filters();
     let indexes: Vec<_> = index_scheduler.indexes()?;
     let indexes = indexes
         .into_iter()
-        .filter(|(name, _)| search_rules.is_index_authorized(name))
+        .filter(|(name, _)| filters.is_index_authorized(name))
         .map(|(name, index)| IndexView::new(name, &index))
         .collect::<Result<Vec<_>, _>>()?;
 
@@ -120,7 +120,8 @@ pub async fn create_index(
 ) -> Result<HttpResponse, ResponseError> {
     let IndexCreateRequest { primary_key, uid } = body.into_inner();
 
-    let allow_index_creation = index_scheduler.filters().search_rules.is_index_authorized(&uid);
+    // FIXME: allow_index_creation?
+    let allow_index_creation = index_scheduler.filters().is_index_authorized(&uid);
     if allow_index_creation {
         analytics.publish(
             "Index Created".to_string(),

@@ -319,7 +319,7 @@ async fn cancel_tasks(
     let tasks = index_scheduler.get_task_ids_from_authorized_indexes(
         &index_scheduler.read_txn()?,
         &query,
-        &index_scheduler.filters().search_rules.authorized_indexes(),
+        &index_scheduler.filters().authorized_indexes(),
     )?;
     let task_cancelation =
         KindWithContent::TaskCancelation { query: format!("?{}", req.query_string()), tasks };
@@ -364,7 +364,7 @@ async fn delete_tasks(
     let tasks = index_scheduler.get_task_ids_from_authorized_indexes(
         &index_scheduler.read_txn()?,
         &query,
-        &index_scheduler.filters().search_rules.authorized_indexes(),
+        &index_scheduler.filters().authorized_indexes(),
     )?;
     let task_deletion =
         KindWithContent::TaskDeletion { query: format!("?{}", req.query_string()), tasks };
@@ -398,10 +398,7 @@ async fn get_tasks(
     let query = params.into_query();
 
     let mut tasks_results: Vec<TaskView> = index_scheduler
-        .get_tasks_from_authorized_indexes(
-            query,
-            index_scheduler.filters().search_rules.authorized_indexes(),
-        )?
+        .get_tasks_from_authorized_indexes(query, index_scheduler.filters().authorized_indexes())?
         .into_iter()
         .map(|t| TaskView::from_task(&t))
         .collect();
@@ -440,10 +437,7 @@ async fn get_task(
     let query = index_scheduler::Query { uids: Some(vec![task_uid]), ..Query::default() };
 
     if let Some(task) = index_scheduler
-        .get_tasks_from_authorized_indexes(
-            query,
-            index_scheduler.filters().search_rules.authorized_indexes(),
-        )?
+        .get_tasks_from_authorized_indexes(query, index_scheduler.filters().authorized_indexes())?
         .first()
     {
         let task_view = TaskView::from_task(task);

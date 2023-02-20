@@ -237,10 +237,9 @@ async fn get_stats(
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     analytics.publish("Stats Seen".to_string(), json!({ "per_index_uid": false }), Some(&req));
-    let search_rules = &index_scheduler.filters().search_rules;
+    let filters = index_scheduler.filters();
 
-    let stats =
-        create_all_stats((*index_scheduler).clone(), (*auth_controller).clone(), search_rules)?;
+    let stats = create_all_stats((*index_scheduler).clone(), (*auth_controller).clone(), filters)?;
 
     debug!("returns: {:?}", stats);
     Ok(HttpResponse::Ok().json(stats))
@@ -249,19 +248,19 @@ async fn get_stats(
 pub fn create_all_stats(
     index_scheduler: Data<IndexScheduler>,
     auth_controller: AuthController,
-    search_rules: &meilisearch_auth::SearchRules,
+    filters: &meilisearch_auth::AuthFilter,
 ) -> Result<Stats, ResponseError> {
     let mut last_task: Option<OffsetDateTime> = None;
     let mut indexes = BTreeMap::new();
     let mut database_size = 0;
     let processing_task = index_scheduler.get_tasks_from_authorized_indexes(
         Query { statuses: Some(vec![Status::Processing]), limit: Some(1), ..Query::default() },
-        search_rules.authorized_indexes(),
+        filters.authorized_indexes(),
     )?;
     // accumulate the size of each indexes
     let processing_index = processing_task.first().and_then(|task| task.index_uid());
     for (name, index) in index_scheduler.indexes()? {
-        if !search_rules.is_index_authorized(&name) {
+        if !filters.is_index_authorized(&name) {
             continue;
         }
 

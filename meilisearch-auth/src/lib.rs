@@ -88,9 +88,11 @@ impl AuthController {
         let mut filters = AuthFilter::default();
         let key = self.get_key(uid)?;
 
+        filters.key_authorized_indexes = SearchRules::Set(key.indexes.into_iter().collect());
+
         filters.search_rules = match search_rules {
             Some(search_rules) => search_rules,
-            None => SearchRules::Set(key.indexes.into_iter().collect()),
+            None => filters.key_authorized_indexes.clone(),
         };
 
         filters.allow_index_creation = self.is_key_authorized(uid, Action::IndexesAdd, None)?;
@@ -160,13 +162,42 @@ impl AuthController {
 }
 
 pub struct AuthFilter {
-    pub search_rules: SearchRules,
+    search_rules: SearchRules,
+    key_authorized_indexes: SearchRules,
     pub allow_index_creation: bool,
 }
 
 impl Default for AuthFilter {
     fn default() -> Self {
-        Self { search_rules: SearchRules::default(), allow_index_creation: true }
+        Self {
+            search_rules: SearchRules::default(),
+            key_authorized_indexes: SearchRules::default(),
+            allow_index_creation: true,
+        }
+    }
+}
+
+impl AuthFilter {
+    pub fn is_index_authorized(&self, index: &str) -> bool {
+        self.key_authorized_indexes.is_index_authorized(index)
+            && self.search_rules.is_index_authorized(index)
+    }
+
+    pub fn get_index_search_rules(&self, index: &str) -> Option<IndexSearchRules> {
+        if !self.is_index_authorized(index) {
+            return None;
+        }
+        self.search_rules.get_index_search_rules(index)
+    }
+
+    /// Return the list of indexes such that `self.is_index_authorized(index) == true`,
+    /// or `None` if all indexes satisfy this condition.
+    ///
+    /// FIXME: this works only when there are no tenant tokens, otherwise it ignores the rules of the API key.
+    ///
+    /// It is better to use `is_index_authorized` when possible.
+    pub fn authorized_indexes(&self) -> Option<Vec<IndexUidPattern>> {
+        self.search_rules.authorized_indexes()
     }
 }
 
@@ -185,7 +216,7 @@ impl Default for SearchRules {
 }
 
 impl SearchRules {
-    pub fn is_index_authorized(&self, index: &str) -> bool {
+    fn is_index_authorized(&self, index: &str) -> bool {
         match self {
             Self::Set(set) => {
                 set.contains("*")
@@ -200,7 +231,7 @@ impl SearchRules {
         }
     }
 
-    pub fn get_index_search_rules(&self, index: &str) -> Option<IndexSearchRules> {
+    fn get_index_search_rules(&self, index: &str) -> Option<IndexSearchRules> {
         match self {
             Self::Set(_) => {
                 if self.is_index_authorized(index) {
@@ -221,7 +252,7 @@ impl SearchRules {
 
     /// Return the list of indexes such that `self.is_index_authorized(index) == true`,
     /// or `None` if all indexes satisfy this condition.
-    pub fn authorized_indexes(&self) -> Option<Vec<IndexUidPattern>> {
+    fn authorized_indexes(&self) -> Option<Vec<IndexUidPattern>> {
         match self {
             SearchRules::Set(set) => {
                 if set.contains("*") {
