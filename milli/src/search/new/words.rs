@@ -4,7 +4,7 @@ use heed::RoTxn;
 use roaring::RoaringBitmap;
 
 use super::db_cache::DatabaseCache;
-use super::resolve_query_graph::resolve_query_graph;
+use super::resolve_query_graph::{resolve_query_graph, NodeDocIdsCache};
 use super::{QueryGraph, QueryNode, RankingRule, RankingRuleOutput};
 use crate::{Index, Result, TermsMatchingStrategy};
 
@@ -14,6 +14,7 @@ pub struct Words {
     iterating: bool,
     positions_to_remove: Vec<i8>,
     terms_matching_strategy: TermsMatchingStrategy,
+    node_docids_cache: NodeDocIdsCache,
 }
 impl Words {
     pub fn new(terms_matching_strategy: TermsMatchingStrategy) -> Self {
@@ -23,6 +24,7 @@ impl Words {
             iterating: false,
             positions_to_remove: vec![],
             terms_matching_strategy,
+            node_docids_cache: <_>::default(),
         }
     }
 }
@@ -79,7 +81,14 @@ impl<'transaction> RankingRule<'transaction, QueryGraph> for Words {
         let Some(query_graph) = &mut self.query_graph else { panic!() };
         // let graphviz = query_graph.graphviz();
         // println!("\n===={graphviz}\n====");
-        let this_bucket = resolve_query_graph(index, txn, db_cache, query_graph, universe)?;
+        let this_bucket = resolve_query_graph(
+            index,
+            txn,
+            db_cache,
+            &mut self.node_docids_cache,
+            query_graph,
+            universe,
+        )?;
         // println!("WORDS: this bucket: {this_bucket:?}");
         let child_query_graph = query_graph.clone();
         // this_bucket is the one that must be returned now

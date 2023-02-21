@@ -4,7 +4,7 @@ use roaring::{MultiOps, RoaringBitmap};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use super::db_cache::DatabaseCache;
-use super::query_term::{QueryTerm, WordDerivations};
+use super::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
 use super::QueryGraph;
 use crate::{Index, Result, RoaringBitmapCodec};
 
@@ -13,13 +13,66 @@ use crate::{Index, Result, RoaringBitmapCodec};
 // TODO: reuse NodeDocidsCache in between calls to resolve_query_graph
 #[derive(Default)]
 pub struct NodeDocIdsCache {
-    pub cache: FxHashMap<usize, RoaringBitmap>,
+    pub cache: FxHashMap<u32, RoaringBitmap>,
+}
+impl NodeDocIdsCache {
+    fn get_docids<'cache, 'transaction>(
+        &'cache mut self,
+        index: &Index,
+        txn: &'transaction RoTxn,
+        db_cache: &mut DatabaseCache<'transaction>,
+        term: &QueryTerm,
+        node_idx: u32,
+    ) -> Result<&'cache RoaringBitmap> {
+        if self.cache.contains_key(&node_idx) {
+            return Ok(&self.cache[&node_idx]);
+        };
+        let docids = match term {
+            QueryTerm::Phrase(_) => {
+                todo!("resolve phrase")
+            }
+            QueryTerm::Word {
+                derivations:
+                    WordDerivations { original, zero_typo, one_typo, two_typos, use_prefix_db },
+            } => {
+                let derivations_docids = {
+                    let mut or_docids = vec![];
+                    for word in zero_typo.iter().chain(one_typo.iter()).chain(two_typos.iter()) {
+                        if let Some(word_docids) = db_cache.get_word_docids(index, txn, word)? {
+                            or_docids.push(word_docids);
+                        }
+                    }
+                    if *use_prefix_db {
+                        if let Some(prefix_docids) =
+                            db_cache.get_prefix_docids(index, txn, original.as_str())?
+                        {
+                            or_docids.push(prefix_docids);
+                        }
+                    }
+                    or_docids
+                };
+                let derivations_iter = derivations_docids
+                    .into_iter()
+                    .map(|slice| RoaringBitmapCodec::bytes_decode(slice).unwrap());
+                MultiOps::union(derivations_iter)
+                // TODO: if `or` is empty, register that somewhere, and immediately return an empty bitmap
+                // On the other hand, `or` *cannot* be empty, only its intersection with the universe can
+                //
+                // TODO: Or we don't do anything and accumulate all these operations in a tree of operations
+                // between frozen roaring bitmap that is resolved only at the very end
+            }
+        };
+        let _ = self.cache.insert(node_idx, docids);
+        let docids = &self.cache[&node_idx];
+        Ok(docids)
+    }
 }
 
 pub fn resolve_query_graph<'transaction>(
     index: &Index,
     txn: &'transaction RoTxn,
     db_cache: &mut DatabaseCache<'transaction>,
+    node_docids_cache: &mut NodeDocIdsCache,
     q: &QueryGraph,
     universe: &RoaringBitmap,
 ) -> Result<RoaringBitmap> {
@@ -30,7 +83,7 @@ pub fn resolve_query_graph<'transaction>(
 
     let mut nodes_resolved = RoaringBitmap::new();
     // TODO: should be given as an argument and kept between invocations of resolve query graph
-    let mut nodes_docids = vec![RoaringBitmap::new(); q.nodes.len()];
+    let mut path_nodes_docids = vec![RoaringBitmap::new(); q.nodes.len()];
 
     let mut next_nodes_to_visit = VecDeque::new();
     next_nodes_to_visit.push_front(q.root_node);
@@ -42,7 +95,7 @@ pub fn resolve_query_graph<'transaction>(
             continue;
         }
         // Take union of all predecessors
-        let predecessors_iter = predecessors.iter().map(|p| &nodes_docids[p as usize]);
+        let predecessors_iter = predecessors.iter().map(|p| &path_nodes_docids[p as usize]);
         let predecessors_docids = MultiOps::union(predecessors_iter);
 
         let n = &q.nodes[node as usize];
@@ -50,47 +103,12 @@ pub fn resolve_query_graph<'transaction>(
         let node_docids = match n {
             super::QueryNode::Term(located_term) => {
                 let term = &located_term.value;
-                match term {
-                    QueryTerm::Phrase(_) => todo!("resolve phrase"),
-                    QueryTerm::Word {
-                        derivations:
-                            WordDerivations { original, zero_typo, one_typo, two_typos, use_prefix_db },
-                    } => {
-                        let derivations_docids = {
-                            let mut or_docids = vec![];
-                            for word in
-                                zero_typo.iter().chain(one_typo.iter()).chain(two_typos.iter())
-                            {
-                                if let Some(word_docids) =
-                                    db_cache.get_word_docids(index, txn, word)?
-                                {
-                                    or_docids.push(word_docids);
-                                }
-                            }
-                            if *use_prefix_db {
-                                if let Some(prefix_docids) =
-                                    db_cache.get_prefix_docids(index, txn, original.as_str())?
-                                {
-                                    or_docids.push(prefix_docids);
-                                }
-                            }
-                            or_docids
-                        };
-                        let derivations_iter = derivations_docids
-                            .into_iter()
-                            .map(|slice| RoaringBitmapCodec::bytes_decode(slice).unwrap());
-                        let derivations_docids = MultiOps::union(derivations_iter);
-                        // TODO: if `or` is empty, register that somewhere, and immediately return an empty bitmap
-                        // On the other hand, `or` *cannot* be empty, only its intersection with the universe can
-                        //
-                        // TODO: Or we don't do anything and accumulate all these operations in a tree of operations
-                        // between frozen roaring bitmap that is resolved only at the very end
-                        predecessors_docids & derivations_docids
-                    }
-                }
+                let derivations_docids =
+                    node_docids_cache.get_docids(index, txn, db_cache, term, node)?;
+                predecessors_docids & derivations_docids
             }
             super::QueryNode::Deleted => {
-                todo!()
+                panic!()
             }
             super::QueryNode::Start => universe.clone(),
             super::QueryNode::End => {
@@ -98,7 +116,7 @@ pub fn resolve_query_graph<'transaction>(
             }
         };
         nodes_resolved.insert(node);
-        nodes_docids[node as usize] = node_docids;
+        path_nodes_docids[node as usize] = node_docids;
 
         for succ in q.edges[node as usize].successors.iter() {
             if !next_nodes_to_visit.contains(&succ) && !nodes_resolved.contains(succ) {
@@ -108,7 +126,7 @@ pub fn resolve_query_graph<'transaction>(
         // This is currently slow but could easily be implemented very efficiently
         for prec in q.edges[node as usize].predecessors.iter() {
             if q.edges[prec as usize].successors.is_subset(&nodes_resolved) {
-                nodes_docids[prec as usize].clear();
+                path_nodes_docids[prec as usize].clear();
             }
         }
         // println!("cached docids: {nodes_docids:?}");
@@ -125,6 +143,7 @@ mod tests {
     use crate::db_snap;
     use crate::index::tests::TempIndex;
     use crate::new::db_cache::DatabaseCache;
+    use crate::new::resolve_query_graph::NodeDocIdsCache;
     use crate::search::new::query_term::{word_derivations, LocatedQueryTerm};
     use crate::search::new::QueryGraph;
 
@@ -184,10 +203,18 @@ mod tests {
         .unwrap();
         let graph = QueryGraph::from_query(&index, &txn, &mut db_cache, query).unwrap();
         println!("{}", graph.graphviz());
-
+        let mut node_docids_cache = NodeDocIdsCache::default();
         let universe = index.documents_ids(&txn).unwrap();
         insta::assert_debug_snapshot!(universe, @"RoaringBitmap<[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]>");
-        let docids = resolve_query_graph(&index, &txn, &mut db_cache, &graph, &universe).unwrap();
+        let docids = resolve_query_graph(
+            &index,
+            &txn,
+            &mut db_cache,
+            &mut node_docids_cache,
+            &graph,
+            &universe,
+        )
+        .unwrap();
         insta::assert_debug_snapshot!(docids, @"RoaringBitmap<[8, 9, 11]>");
 
         // TODO: test with a reduced universe
