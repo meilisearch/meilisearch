@@ -18,18 +18,12 @@ use crate::{Index, Result};
 
 pub struct EdgeDocidsCache<G: RankingRuleGraphTrait> {
     pub cache: FxHashMap<u32, RoaringBitmap>,
-
-    // TODO: There is a big difference between `cache`, which is always valid, and
-    // `empty_path_prefixes`, which is only accurate for a particular universe
-    // ALSO, we should have a universe-specific `empty_edge` to use
-    // pub empty_path_prefixes: HashSet<Vec<u32>>,
     _phantom: PhantomData<G>,
 }
 impl<G: RankingRuleGraphTrait> Default for EdgeDocidsCache<G> {
     fn default() -> Self {
         Self {
             cache: Default::default(),
-            // empty_path_prefixes: Default::default(),
             _phantom: Default::default(),
         }
     }

@@ -46,8 +46,6 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                 }
             }
         }
-        // ranking_rule_graph.simplify();
-
         Ok(ranking_rule_graph)
     }
 }

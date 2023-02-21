@@ -1,13 +1,12 @@
+use std::collections::HashSet;
+use std::fmt;
 use std::fmt::Debug;
-use std::{collections::HashSet, fmt};
 
 use heed::RoTxn;
 use roaring::RoaringBitmap;
 
-use super::{
-    db_cache::DatabaseCache,
-    query_term::{LocatedQueryTerm, QueryTerm, WordDerivations},
-};
+use super::db_cache::DatabaseCache;
+use super::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
 use crate::{Index, Result};
 
 #[derive(Clone)]
@@ -20,8 +19,7 @@ pub enum QueryNode {
 
 #[derive(Debug, Clone)]
 pub struct Edges {
-    // TODO: use a tiny bitset instead
-    // something like a simple Vec<u8> where most queries will see a vector of one element
+    // TODO: use a tiny bitset instead, something like a simple Vec<u8> where most queries will see a vector of one element
     pub predecessors: RoaringBitmap,
     pub successors: RoaringBitmap,
 }
@@ -75,7 +73,6 @@ impl QueryGraph {
 
 impl QueryGraph {
     // TODO: return the list of all matching words here as well
-
     pub fn from_query<'transaction>(
         index: &Index,
         txn: &RoTxn,
@@ -94,9 +91,7 @@ impl QueryGraph {
         let (mut prev2, mut prev1, mut prev0): (Vec<u32>, Vec<u32>, Vec<u32>) =
             (vec![], vec![], vec![graph.root_node]);
 
-        // TODO: add all the word derivations found in the fst
-        // and add split words / support phrases
-
+        // TODO: split words / synonyms
         for length in 1..=query.len() {
             let query = &query[..length];
 
@@ -279,18 +274,6 @@ impl Debug for QueryNode {
     }
 }
 
-/*
-TODO:
-
-1. Find the minimum number of words to check to resolve the 10 query trees at once.
-    (e.g. just 0 | 01 | 012 )
-2. Simplify the query tree after removal of a node ✅
-3. Create the proximity graph ✅
-4. Assign different proximities for the ngrams ✅
-5. Walk the proximity graph, finding all the potential paths of weight N from START to END ✅
-(without checking the bitmaps)
-
-*/
 impl QueryGraph {
     pub fn graphviz(&self) -> String {
         let mut desc = String::new();
@@ -317,91 +300,9 @@ node [shape = "record"]
             for edge in self.edges[node].successors.iter() {
                 desc.push_str(&format!("{node} -> {edge};\n"));
             }
-            // for edge in self.edges[node].incoming.iter() {
-            //     desc.push_str(&format!("{node} -> {edge} [color = grey];\n"));
-            // }
         }
 
         desc.push('}');
         desc
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use charabia::Tokenize;
-
-    use super::{LocatedQueryTerm, QueryGraph, QueryNode};
-    use crate::index::tests::TempIndex;
-    use crate::new::db_cache::DatabaseCache;
-    use crate::search::new::query_term::word_derivations;
-
-    #[test]
-    fn build_graph() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.autogenerate_docids = true;
-        index
-            .update_settings(|s| {
-                s.set_searchable_fields(vec!["text".to_owned()]);
-            })
-            .unwrap();
-        index
-            .add_documents(documents!({
-                "text": "0 1 2 3 4 5 6 7 01 23 234 56 79 709 7356",
-            }))
-            .unwrap();
-
-        // let fst = fst::Set::from_iter(["01", "23", "234", "56"]).unwrap();
-        let txn = index.read_txn().unwrap();
-        let mut db_cache = DatabaseCache::default();
-
-        let fst = index.words_fst(&txn).unwrap();
-        let query = LocatedQueryTerm::from_query(
-            "0 no 1 2 3 4 5 6 7".tokenize(),
-            None,
-            |word, is_prefix| {
-                word_derivations(
-                    &index,
-                    &txn,
-                    word,
-                    if word.len() < 3 {
-                        0
-                    } else if word.len() < 6 {
-                        1
-                    } else {
-                        2
-                    },
-                    is_prefix,
-                    &fst,
-                )
-            },
-        )
-        .unwrap();
-
-        let graph = QueryGraph::from_query(&index, &txn, &mut db_cache, query).unwrap();
-        println!("{}", graph.graphviz());
-
-        // let positions_to_remove = vec![3, 6, 0, 4];
-        // for p in positions_to_remove {
-        //     graph.remove_words_at_position(p);
-        //     println!("{}", graph.graphviz());
-        // }
-
-        // let proximities = |w1: &str, w2: &str| -> Vec<i8> {
-        //     if matches!((w1, w2), ("56", "7")) {
-        //         vec![]
-        //     } else {
-        //         vec![1, 2]
-        //     }
-        // };
-
-        // let prox_graph = ProximityGraph::from_query_graph(graph, proximities);
-
-        // println!("{}", prox_graph.graphviz());
-    }
-}
-
-// fn remove_element_from_vector(v: &mut Vec<usize>, el: usize) {
-//     let position = v.iter().position(|&x| x == el).unwrap();
-//     v.swap_remove(position);
-// }

@@ -1,7 +1,8 @@
 use std::collections::hash_map::Entry;
 
 use fxhash::FxHashMap;
-use heed::{types::ByteSlice, RoTxn};
+use heed::types::ByteSlice;
+use heed::RoTxn;
 
 use crate::{Index, Result};
 
@@ -62,10 +63,7 @@ impl<'transaction> DatabaseCache<'transaction> {
         match self.word_pair_proximity_docids.entry(key.clone()) {
             Entry::Occupied(bitmap_ptr) => Ok(*bitmap_ptr.get()),
             Entry::Vacant(entry) => {
-                // Note that now, we really want to do a prefix iter over (w1, w2) to get all the possible proximities
-                // but oh well
-                //
-                // Actually, we shouldn'transaction greedily access this DB at all
+                // We shouldn't greedily access this DB at all
                 // a DB (w1, w2) -> [proximities] would be much better
                 // We could even have a DB that is (w1) -> set of words such that (w1, w2) are in proximity
                 // And if we worked with words encoded as integers, the set of words could be a roaring bitmap

@@ -1,20 +1,15 @@
 use heed::RoTxn;
 use roaring::RoaringBitmap;
 
-use crate::{
-    new::ranking_rule_graph::cheapest_paths::{self, Path},
-    Index, Result,
-};
-
-use super::{
-    db_cache::DatabaseCache,
-    ranking_rule_graph::{
-        cheapest_paths::KCheapestPathsState, edge_docids_cache::EdgeDocidsCache,
-        empty_paths_cache::EmptyPathsCache, paths_map::PathsMap, RankingRuleGraph,
-        RankingRuleGraphTrait,
-    },
-    QueryGraph, RankingRule, RankingRuleOutput,
-};
+use super::db_cache::DatabaseCache;
+use super::ranking_rule_graph::cheapest_paths::KCheapestPathsState;
+use super::ranking_rule_graph::edge_docids_cache::EdgeDocidsCache;
+use super::ranking_rule_graph::empty_paths_cache::EmptyPathsCache;
+use super::ranking_rule_graph::paths_map::PathsMap;
+use super::ranking_rule_graph::{RankingRuleGraph, RankingRuleGraphTrait};
+use super::{QueryGraph, RankingRule, RankingRuleOutput};
+use crate::new::ranking_rule_graph::cheapest_paths::{self, Path};
+use crate::{Index, Result};
 
 pub struct GraphBasedRankingRule<G: RankingRuleGraphTrait> {
     state: Option<GraphBasedRankingRuleState<G>>,
@@ -43,16 +38,8 @@ impl<'transaction, G: RankingRuleGraphTrait> RankingRule<'transaction, QueryGrap
         universe: &RoaringBitmap,
         query_graph: &QueryGraph,
     ) -> Result<()> {
-        // if let Some(state) = &mut self.state {
-        //     // TODO: update the previous state
-        //     // TODO: update the existing graph incrementally, based on a diff
-
-        // } else {
+        // TODO: update old state instead of starting from scratch
         let graph = RankingRuleGraph::build(index, txn, db_cache, query_graph.clone())?;
-        // println!("Initialized Proximity Ranking Rule.");
-        // println!("GRAPH:");
-        // let graphviz = graph.graphviz();
-        // println!("{graphviz}");
 
         let cheapest_paths_state = KCheapestPathsState::new(&graph);
         let state = GraphBasedRankingRuleState {
@@ -62,13 +49,7 @@ impl<'transaction, G: RankingRuleGraphTrait> RankingRule<'transaction, QueryGrap
             empty_paths_cache: <_>::default(),
         };
 
-        // let desc = state.graph.graphviz_with_path(
-        //     &state.cheapest_paths_state.as_ref().unwrap().kth_cheapest_path.clone(),
-        // );
-        // println!("Cheapest path: {desc}");
-
         self.state = Some(state);
-        // }
 
         Ok(())
     }
@@ -86,17 +67,9 @@ impl<'transaction, G: RankingRuleGraphTrait> RankingRule<'transaction, QueryGrap
         let Some(cheapest_paths_state) = state.cheapest_paths_state.take() else {
             return Ok(None);
         };
-        // println!("Proximity: Next Bucket");
 
         let mut paths = PathsMap::default();
 
-        // let desc = state.graph.dot_description_with_path(&cheapest_paths_state.kth_cheapest_path);
-        // println!("CHeapest Path: {desc}");
-        // TODO: when does it return None? -> when there is no cheapest path
-        // How to handle it? -> ... return all document ids from the universe?
-        //
-        // TODO: Give an empty_edge and empty_prefix argument to the
-        // compute_paths_of_next_lowest_cost function
         if let Some(next_cheapest_paths_state) = cheapest_paths_state
             .compute_paths_of_next_lowest_cost(
                 &mut state.graph,
@@ -107,31 +80,12 @@ impl<'transaction, G: RankingRuleGraphTrait> RankingRule<'transaction, QueryGrap
             state.cheapest_paths_state = Some(next_cheapest_paths_state);
         } else {
             state.cheapest_paths_state = None;
-            // If returns None if there are no longer any paths to compute
-            // BUT! paths_map may not be empty, and we need to compute the current bucket still
         }
 
-        // println!("PATHS: {}", paths.graphviz(&state.graph));
-
-        // paths.iterate(|path, cost| {
-        //     let desc = state.graph.graphviz_with_path(&Path { edges: path.clone(), cost: *cost });
-        //     println!("Path to resolve of cost {cost}: {desc}");
-        // });
-
-        // let desc = state.graph.dot_description_with_path(
-        //     &state.cheapest_paths_state.as_ref().unwrap().kth_cheapest_path.clone(),
-        // );
-        // println!("Cheapest path: {desc}");
-
-        // TODO: verify that this is correct
-        // If the paths are empty, we should probably return the universe?
-        // BUT! Is there a case where the paths are empty AND the universe is
-        // not empty?
         if paths.is_empty() {
             self.state = None;
             return Ok(None);
         }
-        // Here, log all the paths?
 
         let bucket = state.graph.resolve_paths(
             index,
@@ -142,10 +96,6 @@ impl<'transaction, G: RankingRuleGraphTrait> RankingRule<'transaction, QueryGrap
             universe,
             paths,
         )?;
-        // The call above also updated the graph such that it doesn't contain the empty edges anymore.
-        // println!("Resolved all the paths: {bucket:?} from universe {:?}", state.universe);
-        // let graphviz = state.graph.graphviz();
-        // println!("{graphviz}");
 
         let next_query_graph = state.graph.query_graph.clone();
 
@@ -160,7 +110,6 @@ impl<'transaction, G: RankingRuleGraphTrait> RankingRule<'transaction, QueryGrap
         _txn: &'transaction RoTxn,
         _db_cache: &mut DatabaseCache<'transaction>,
     ) {
-        // println!("PROXIMITY: end iteration");
         self.state = None;
     }
 }

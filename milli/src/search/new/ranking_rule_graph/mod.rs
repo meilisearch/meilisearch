@@ -5,7 +5,6 @@ pub mod empty_paths_cache;
 pub mod paths_map;
 pub mod proximity;
 pub mod resolve_paths;
-
 use std::collections::{BTreeSet, HashSet};
 use std::ops::ControlFlow;
 
@@ -86,22 +85,10 @@ pub struct RankingRuleGraph<G: RankingRuleGraphTrait> {
     pub node_edges: Vec<RoaringBitmap>,
 
     pub successors: Vec<RoaringBitmap>,
-    // to get the edges between two nodes:
+    // TODO: to get the edges between two nodes:
     // 1. get node_outgoing_edges[from]
     // 2. get node_incoming_edges[to]
     // 3. take intersection betweem the two
-
-    // TODO: node edges could be different I guess
-    // something like:
-    // pub node_edges: Vec<BitSet>
-    // where each index is the result of:
-    // the successor index in the top 16 bits, the edge index in the bottom 16 bits
-
-    // TODO:
-    // node_successors?
-
-    // pub removed_edges: HashSet<u32>,
-    // pub tmp_removed_edges: HashSet<u32>,
 }
 impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
     // Visit all edges between the two given nodes in order of increasing cost.
@@ -142,50 +129,6 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         }
         self.successors[from_node as usize] = new_successors_from_node;
     }
-    // pub fn remove_nodes(&mut self, nodes: &[usize]) {
-    //     for &node in nodes {
-    //         let edge_indices = &mut self.node_edges[node];
-    //         for edge_index in edge_indices.iter() {
-    //             self.all_edges[*edge_index] = None;
-    //         }
-    //         edge_indices.clear();
-
-    //         let preds = &self.query_graph.edges[node].incoming;
-    //         for pred in preds {
-    //             let edge_indices = &mut self.node_edges[*pred];
-    //             for edge_index in edge_indices.iter() {
-    //                 let edge_opt = &mut self.all_edges[*edge_index];
-    //                 let Some(edge) = edge_opt else { continue; };
-    //                 if edge.to_node == node {
-    //                     *edge_opt = None;
-    //                 }
-    //             }
-    //             panic!("remove nodes is incorrect at the moment");
-    //             edge_indices.clear();
-    //         }
-    //     }
-    //     self.query_graph.remove_nodes(nodes);
-    // }
-    // pub fn simplify(&mut self) {
-    //     loop {
-    //         let mut nodes_to_remove = vec![];
-    //         for (node_idx, node) in self.query_graph.nodes.iter().enumerate() {
-    //             if !matches!(node, QueryNode::End | QueryNode::Deleted)
-    //                 && self.node_edges[node_idx].is_empty()
-    //             {
-    //                 nodes_to_remove.push(node_idx);
-    //             }
-    //         }
-    //         if nodes_to_remove.is_empty() {
-    //             break;
-    //         } else {
-    //             self.remove_nodes(&nodes_to_remove);
-    //         }
-    //     }
-    // }
-    // fn is_removed_edge(&self, edge: u32) -> bool {
-    //     self.removed_edges.contains(&edge) || self.tmp_removed_edges.contains(&edge)
-    // }
 
     pub fn graphviz(&self) -> String {
         let mut desc = String::new();

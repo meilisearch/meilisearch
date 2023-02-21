@@ -1,12 +1,13 @@
 pub mod build;
 pub mod compute_docids;
 
+use heed::RoTxn;
+
 use super::{Edge, EdgeDetails, RankingRuleGraphTrait};
 use crate::new::db_cache::DatabaseCache;
 use crate::new::query_term::WordDerivations;
 use crate::new::QueryNode;
 use crate::{Index, Result};
-use heed::RoTxn;
 
 #[derive(Debug, Clone)]
 pub enum WordPair {

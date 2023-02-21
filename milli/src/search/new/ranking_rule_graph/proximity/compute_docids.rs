@@ -1,17 +1,17 @@
-use roaring::MultiOps;
+use heed::RoTxn;
+use roaring::{MultiOps, RoaringBitmap};
 
 use super::{ProximityEdge, WordPair};
 use crate::new::db_cache::DatabaseCache;
-use crate::CboRoaringBitmapCodec;
+use crate::{CboRoaringBitmapCodec, Result};
 
 pub fn compute_docids<'transaction>(
     index: &crate::Index,
-    txn: &'transaction heed::RoTxn,
+    txn: &'transaction RoTxn,
     db_cache: &mut DatabaseCache<'transaction>,
     edge: &ProximityEdge,
-) -> crate::Result<roaring::RoaringBitmap> {
+) -> Result<RoaringBitmap> {
     let ProximityEdge { pairs, proximity } = edge;
-    // TODO: we should know already which pair of words to look for
     let mut pair_docids = vec![];
     for pair in pairs.iter() {
         let bytes = match pair {
@@ -25,7 +25,6 @@ pub fn compute_docids<'transaction>(
             bytes.map(CboRoaringBitmapCodec::deserialize_from).transpose()?.unwrap_or_default();
         pair_docids.push(bitmap);
     }
-    pair_docids.sort_by_key(|rb| rb.len());
     let docids = MultiOps::union(pair_docids);
     Ok(docids)
 }

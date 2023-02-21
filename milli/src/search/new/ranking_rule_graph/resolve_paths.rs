@@ -68,14 +68,6 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
             }
             path_bitmaps.push(path_bitmap);
         }
-        let docids = MultiOps::union(path_bitmaps);
-        Ok(docids)
-        // for each path, translate it to an intersection of cached roaring bitmaps
-        // then do a union for all paths
-
-        // get the docids of the given paths in the proximity graph
-        // in the fastest possible way
-        // 1. roaring MultiOps (before we can do the Frozen+AST thing)
-        // 2. minimize number of operations
+        Ok(MultiOps::union(path_bitmaps))
     }
 }

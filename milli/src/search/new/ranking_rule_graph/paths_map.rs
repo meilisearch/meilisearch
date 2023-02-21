@@ -6,14 +6,13 @@ use std::hash::{Hash, Hasher};
 use roaring::RoaringBitmap;
 
 use super::cheapest_paths::Path;
-use super::{EdgeDetails, RankingRuleGraph, RankingRuleGraphTrait, Edge};
+use super::{Edge, EdgeDetails, RankingRuleGraph, RankingRuleGraphTrait};
 use crate::new::QueryNode;
-
 
 #[derive(Debug)]
 pub struct PathsMap<V> {
     nodes: Vec<(u32, PathsMap<V>)>,
-    value: Option<V>
+    value: Option<V>,
 }
 impl<V> Default for PathsMap<V> {
     fn default() -> Self {
@@ -73,11 +72,11 @@ impl<V> PathsMap<V> {
     }
     pub fn remove_first(&mut self) -> Option<(Vec<u32>, V)> {
         if self.is_empty() {
-            return None
+            return None;
         }
 
         let mut result = vec![];
-        let (_, value) = self.remove_first_rec(&mut result);    
+        let (_, value) = self.remove_first_rec(&mut result);
         Some((result, value))
     }
     pub fn iterate_rec(&self, cur: &mut Vec<u32>, visit: &mut impl FnMut(&Vec<u32>, &V)) {
@@ -85,7 +84,7 @@ impl<V> PathsMap<V> {
             visit(cur, value);
         }
         for (first_edge, rest) in self.nodes.iter() {
-            cur.push(*first_edge);    
+            cur.push(*first_edge);
             rest.iterate_rec(cur, visit);
             cur.pop();
         }
@@ -163,7 +162,7 @@ impl<V> PathsMap<V> {
         let [first_edge, remaining_prefix @ ..] = prefix else {
             return self.nodes.iter().map(|n| n.0).collect();
         };
-        for (edge, rest) in self.nodes.iter(){
+        for (edge, rest) in self.nodes.iter() {
             if edge == first_edge {
                 return rest.edge_indices_after_prefix(remaining_prefix);
             }
@@ -173,14 +172,12 @@ impl<V> PathsMap<V> {
 
     pub fn contains_prefix_of_path(&self, path: &[u32]) -> bool {
         if self.value.is_some() {
-            return true
+            return true;
         }
         match path {
-            [] => {
-                false
-            }
+            [] => false,
             [first_edge, remaining_path @ ..] => {
-                for (edge, rest) in self.nodes.iter(){
+                for (edge, rest) in self.nodes.iter() {
                     if edge == first_edge {
                         return rest.contains_prefix_of_path(remaining_path);
                     }
@@ -197,7 +194,12 @@ impl<V> PathsMap<V> {
         desc.push_str("\n}\n");
         desc
     }
-    fn graphviz_rec<G: RankingRuleGraphTrait>(&self, desc: &mut String, path_from: Vec<u64>, graph: &RankingRuleGraph<G>) {
+    fn graphviz_rec<G: RankingRuleGraphTrait>(
+        &self,
+        desc: &mut String,
+        path_from: Vec<u64>,
+        graph: &RankingRuleGraph<G>,
+    ) {
         let id_from = {
             let mut h = DefaultHasher::new();
             path_from.hash(&mut h);
@@ -227,7 +229,6 @@ impl<V> PathsMap<V> {
 }
 
 impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
-    
     pub fn graphviz_with_path(&self, path: &Path) -> String {
         let mut desc = String::new();
         desc.push_str("digraph G {\nrankdir = LR;\nnode [shape = \"record\"]\n");
@@ -248,11 +249,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         for (edge_idx, edge) in self.all_edges.iter().enumerate() {
             let Some(edge) = edge else { continue };
             let Edge { from_node, to_node, cost, details } = edge;
-            let color = if path.edges.contains(&(edge_idx as u32)) {
-                "red"
-            } else {
-                "green"
-            };
+            let color = if path.edges.contains(&(edge_idx as u32)) { "red" } else { "green" };
             match &edge.details {
                 EdgeDetails::Unconditional => {
                     desc.push_str(&format!(
@@ -272,158 +269,5 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
 
         desc.push('}');
         desc
-    }
-   
-}
-
-#[cfg(test)]
-mod tests {
-    use super::PathsMap;
-    use crate::db_snap;
-    use crate::index::tests::TempIndex;
-    use crate::new::db_cache::DatabaseCache;
-    use crate::new::ranking_rule_graph::cheapest_paths::KCheapestPathsState;
-    use crate::new::ranking_rule_graph::empty_paths_cache::EmptyPathsCache;
-    use crate::new::ranking_rule_graph::proximity::ProximityGraph;
-    use crate::new::ranking_rule_graph::RankingRuleGraph;
-    use crate::search::new::query_term::{word_derivations, LocatedQueryTerm};
-    use crate::search::new::QueryGraph;
-    use charabia::Tokenize;
-
-    #[test]
-    fn paths_tree() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.autogenerate_docids = true;
-        index
-            .update_settings(|s| {
-                s.set_searchable_fields(vec!["text".to_owned()]);
-            })
-            .unwrap();
-
-        index
-            .add_documents(documents!([
-                {
-                    "text": "0 1 2 3 4 5"
-                },
-                {
-                    "text": "0 a 1 b 2 3 4 5"
-                },
-                {
-                    "text": "0 a 1 b 3 a 4 b 5"
-                },
-                {
-                    "text": "0 a a 1 b 2 3 4 5"
-                },
-                {
-                    "text": "0 a a a a 1 b 3 45"
-                },
-            ]))
-            .unwrap();
-
-        db_snap!(index, word_pair_proximity_docids, @"679d1126b569b3e8b10dd937c3faedf9");
-
-        let txn = index.read_txn().unwrap();
-        let mut db_cache = DatabaseCache::default();
-        let fst = index.words_fst(&txn).unwrap();
-        let query =
-            LocatedQueryTerm::from_query("0 1 2 3 4 5".tokenize(), None, |word, is_prefix| {
-                word_derivations(&index, &txn, word, if word.len() < 3 {
-                    0
-                } else if word.len() < 6 {
-                    1
-                } else {
-                    2
-                },is_prefix, &fst)
-            })
-            .unwrap();
-        let graph = QueryGraph::from_query(&index, &txn, &mut db_cache, query).unwrap();
-        let empty_paths_cache = EmptyPathsCache::default();
-        let mut db_cache = DatabaseCache::default();
-
-        let mut prox_graph =
-            RankingRuleGraph::<ProximityGraph>::build(&index, &txn, &mut db_cache, graph).unwrap();
-
-        println!("{}", prox_graph.graphviz());
-
-        let mut state = KCheapestPathsState::new(&prox_graph).unwrap();
-
-        let mut path_tree = PathsMap::default();
-        while state.next_cost() <= 6 {
-            let next_state = state.compute_paths_of_next_lowest_cost(&mut prox_graph, &empty_paths_cache, &mut path_tree);
-            if let Some(next_state) = next_state {
-                state = next_state;
-            } else {
-                break;
-            }
-        }
-
-        let desc = path_tree.graphviz(&prox_graph);
-        println!("{desc}");
-
-        // let path = vec![u32 { from: 0, to: 2, edge_idx: 0 }, u32 { from: 2, to: 3, edge_idx: 0 }, u32 { from: 3, to: 4, edge_idx: 0 }, u32 { from: 4, to: 5, edge_idx: 0 }, u32 { from: 5, to: 8, edge_idx: 0 }, u32 { from: 8, to: 1, edge_idx: 0 }, u32 { from: 1, to: 10, edge_idx: 0 }];
-        // println!("{}", psath_tree.contains_prefix_of_path(&path));
-        
-
-        // let path =  vec![u32 { from: 0, to: 2, edge_idx: 0 }, u32 { from: 2, to: 3, edge_idx: 0 }, u32 { from: 3, to: 4, edge_idx: 0 }, u32 { from: 4, to: 5, edge_idx: 0 }, u32 { from: 5, to: 6, edge_idx: 0 }, u32 { from: 6, to: 7, edge_idx: 0 }, u32 { from: 7, to: 1, edge_idx: 0 }];
-
-
-        // path_tree.iterate(|path, cost| {
-        //     println!("cost {cost} for path: {path:?}");
-        // });
-
-        // path_tree.remove_forbidden_prefix(&[
-        //     u32 { from: 0, to: 2, edge_idx: 0 },
-        //     u32 { from: 2, to: 3, edge_idx: 2 },
-        // ]);
-        // let desc = path_tree.graphviz();
-        // println!("{desc}");
-
-        // path_tree.remove_forbidden_edge(&u32 { from: 5, to: 6, cost: 1 });
-
-        // let desc = path_tree.graphviz();
-        // println!("AFTER REMOVING 5-6 [1]:\n{desc}");
-
-        // path_tree.remove_forbidden_edge(&u32 { from: 3, to: 4, cost: 1 });
-
-        // let desc = path_tree.graphviz();
-        // println!("AFTER REMOVING 3-4 [1]:\n{desc}");
-
-        // let p = path_tree.remove_first();
-        // println!("PATH: {p:?}");
-        // let desc = path_tree.graphviz();
-        // println!("AFTER REMOVING: {desc}");
-
-        // let p = path_tree.remove_first();
-        // println!("PATH: {p:?}");
-        // let desc = path_tree.graphviz();
-        // println!("AFTER REMOVING: {desc}");
-
-        // path_tree.remove_all_containing_edge(&u32 { from: 5, to: 6, cost: 2 });
-
-        // let desc = path_tree.graphviz();
-        // println!("{desc}");
-
-        // let first_edges = path_tree.remove_first().unwrap();
-        // println!("{first_edges:?}");
-        // let desc = path_tree.graphviz();
-        // println!("{desc}");
-
-        // let first_edges = path_tree.remove_first().unwrap();
-        // println!("{first_edges:?}");
-        // let desc = path_tree.graphviz();
-        // println!("{desc}");
-
-        // let first_edges = path_tree.remove_first().unwrap();
-        // println!("{first_edges:?}");
-        // let desc = path_tree.graphviz();
-        // println!("{desc}");
-
-        // println!("{path_tree:?}");
-    }
-
-
-    #[test]
-    fn test_contains_prefix_of_path() {
-
     }
 }

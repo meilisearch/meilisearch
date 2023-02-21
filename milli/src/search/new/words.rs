@@ -79,8 +79,7 @@ impl<'transaction> RankingRule<'transaction, QueryGraph> for Words {
             return Ok(None);
         }
         let Some(query_graph) = &mut self.query_graph else { panic!() };
-        // let graphviz = query_graph.graphviz();
-        // println!("\n===={graphviz}\n====");
+
         let this_bucket = resolve_query_graph(
             index,
             txn,
@@ -89,10 +88,8 @@ impl<'transaction> RankingRule<'transaction, QueryGraph> for Words {
             query_graph,
             universe,
         )?;
-        // println!("WORDS: this bucket: {this_bucket:?}");
+
         let child_query_graph = query_graph.clone();
-        // this_bucket is the one that must be returned now
-        // self.cur_bucket is set to the next bucket
         // TODO: Check whether a position exists in the graph before removing it and
         // returning the next bucket.
         // while graph.does_not_contain(positions_to_remove.last()) { positions_to_remove.pop() }
@@ -117,42 +114,4 @@ impl<'transaction> RankingRule<'transaction, QueryGraph> for Words {
         self.exhausted = true;
         self.positions_to_remove = vec![];
     }
-}
-
-#[cfg(test)]
-mod tests {
-    // use charabia::Tokenize;
-    // use roaring::RoaringBitmap;
-
-    // use crate::{
-    //     index::tests::TempIndex,
-    //     search::{criteria::CriteriaBuilder, new::QueryGraphOrPlaceholder},
-    // };
-
-    // use super::Words;
-
-    // fn placeholder() {
-    //     let qt = QueryGraphOrPlaceholder::Placeholder;
-    //     let index = TempIndex::new();
-    //     let rtxn = index.read_txn().unwrap();
-
-    //     let query = "a beautiful summer house by the beach overlooking what seems";
-    //     // let mut builder = QueryTreeBuilder::new(&rtxn, &index).unwrap();
-    //     // let (qt, parts, matching_words) = builder.build(query.tokenize()).unwrap().unwrap();
-
-    //     // let cb = CriteriaBuilder::new(&rtxn, &index).unwrap();
-    //     // let x = cb
-    //     //     .build(
-    //     //         Some(qt),
-    //     //         Some(parts),
-    //     //         None,
-    //     //         None,
-    //     //         false,
-    //     //         None,
-    //     //         crate::CriterionImplementationStrategy::OnlySetBased,
-    //     //     )
-    //     //     .unwrap();
-
-    //     // let rr = Words::new(&index, &RoaringBitmap::from_sorted_iter(0..1000)).unwrap();
-    // }
 }

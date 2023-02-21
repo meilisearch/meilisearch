@@ -97,49 +97,10 @@ pub fn get_start_universe<'transaction>(
     query_graph: &QueryGraph,
     term_matching_strategy: TermsMatchingStrategy,
     // filters: Filters,
-    // mut distinct: Option<D>,
 ) -> Result<RoaringBitmap> {
-    // NOTE:
-    //
-    // There is a performance problem when using `distinct` + exhaustive number of hits,
-    // especially for search that yield many results (many ~= almost all of the
-    // dataset).
-    //
-    // We'll solve it later. Maybe there are smart ways to go about it.
-    //
-    // For example, if there are millions of possible values for the distinct attribute,
-    // then we could just look at the documents which share any distinct attribute with
-    // another one, and remove the later docids them from the universe.
-    // => NO! because we don't know which one to remove, only after the sorting is done can we know it
-    // => this kind of computation can be done, but only in the evaluation of the number
-    // of hits for the documents that aren't returned by the search.
-    //
-    // `Distinct` otherwise should always be computed during
-
+    // TODO: actually compute the universe from the query graph
     let universe = index.documents_ids(txn).unwrap();
-
-    // resolve the whole query tree to retrieve an exhaustive list of documents matching the query.
-    // NOTE: this is wrong
-    // Instead, we should only compute the documents corresponding to the last remaining
-    // word, 2-gram, and 3-gran.
-    // let candidates = resolve_query_graph(index, txn, db_cache, query_graph, &universe)?;
-
-    // Distinct should be lazy if placeholder?
-    //
-    // // because the initial_candidates should be an exhaustive count of the matching documents,
-    // // we precompute the distinct attributes.
-    // let initial_candidates = match &mut distinct {
-    //     Some(distinct) => {
-    //         let mut initial_candidates = RoaringBitmap::new();
-    //         for c in distinct.distinct(candidates.clone(), RoaringBitmap::new()) {
-    //             initial_candidates.insert(c?);
-    //         }
-    //         initial_candidates
-    //     }
-    //     None => candidates.clone(),
-    // };
-
-    Ok(/*candidates*/ universe)
+    Ok(universe)
 }
 
 pub fn execute_search<'transaction>(
@@ -306,43 +267,6 @@ mod tests {
         let primary_key = index.primary_key(&txn).unwrap().unwrap();
         let primary_key = index.fields_ids_map(&txn).unwrap().id(primary_key).unwrap();
 
-        loop {
-            let start = Instant::now();
-
-            let mut db_cache = DatabaseCache::default();
-
-            let query_graph = make_query_graph(
-                &index,
-                &txn,
-                &mut db_cache,
-                "released from prison by the government",
-            )
-            .unwrap();
-            // println!("{}", query_graph.graphviz());
-
-            // TODO: filters + maybe distinct attributes?
-            let universe = get_start_universe(
-                &index,
-                &txn,
-                &mut db_cache,
-                &query_graph,
-                TermsMatchingStrategy::Last,
-            )
-            .unwrap();
-            // println!("universe: {universe:?}");
-
-            let results = execute_search(
-                &index,
-                &txn,
-                &mut db_cache,
-                &universe,
-                &query_graph, /*  0, 20 */
-            )
-            .unwrap();
-
-            let elapsed = start.elapsed();
-            println!("{}us: {results:?}", elapsed.as_micros());
-        }
         let start = Instant::now();
 
         let mut db_cache = DatabaseCache::default();
@@ -350,7 +274,6 @@ mod tests {
         let query_graph =
             make_query_graph(&index, &txn, &mut db_cache, "released from prison by the government")
                 .unwrap();
-        // println!("{}", query_graph.graphviz());
 
         // TODO: filters + maybe distinct attributes?
         let universe = get_start_universe(
@@ -361,7 +284,6 @@ mod tests {
             TermsMatchingStrategy::Last,
         )
         .unwrap();
-        // println!("universe: {universe:?}");
 
         let results =
             execute_search(&index, &txn, &mut db_cache, &universe, &query_graph /*  0, 20 */)
@@ -396,7 +318,7 @@ mod tests {
         let start = Instant::now();
 
         let mut s = Search::new(&txn, &index);
-        s.query("released from prison by the government");
+        s.query("b b b b b b b b b b");
         s.terms_matching_strategy(TermsMatchingStrategy::Last);
         s.criterion_implementation_strategy(crate::CriterionImplementationStrategy::OnlySetBased);
         let docs = s.execute().unwrap();
@@ -414,29 +336,13 @@ mod tests {
         let index = Index::new(options, "data_movies").unwrap();
         let mut wtxn = index.write_txn().unwrap();
 
-        // let primary_key = "id";
-        // let searchable_fields = vec!["title", "overview"];
-        // let filterable_fields = vec!["release_date", "genres"];
-        // let sortable_fields = vec[];
-
         let config = IndexerConfig::default();
         let mut builder = Settings::new(&mut wtxn, &index, &config);
 
         builder.set_min_word_len_one_typo(5);
         builder.set_min_word_len_two_typos(100);
 
-        // builder.set_primary_key(primary_key.to_owned());
-
-        // let searchable_fields = searchable_fields.iter().map(|s| s.to_string()).collect();
-        // builder.set_searchable_fields(searchable_fields);
-
-        // let filterable_fields = filterable_fields.iter().map(|s| s.to_string()).collect();
-        // builder.set_filterable_fields(filterable_fields);
-
         builder.set_criteria(vec![Criterion::Words, Criterion::Proximity]);
-
-        // let sortable_fields = sortable_fields.iter().map(|s| s.to_string()).collect();
-        // builder.set_sortable_fields(sortable_fields);
 
         builder.execute(|_| (), || false).unwrap();
     }
@@ -452,7 +358,6 @@ mod tests {
         let primary_key = "id";
         let searchable_fields = vec!["title", "overview"];
         let filterable_fields = vec!["release_date", "genres"];
-        // let sortable_fields = vec[];
 
         let config = IndexerConfig::default();
         let mut builder = Settings::new(&mut wtxn, &index, &config);

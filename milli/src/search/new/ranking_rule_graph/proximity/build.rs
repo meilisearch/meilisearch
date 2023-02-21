@@ -1,5 +1,8 @@
 use std::collections::BTreeMap;
 
+use heed::RoTxn;
+use itertools::Itertools;
+
 use super::ProximityEdge;
 use crate::new::db_cache::DatabaseCache;
 use crate::new::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
@@ -7,8 +10,6 @@ use crate::new::ranking_rule_graph::proximity::WordPair;
 use crate::new::ranking_rule_graph::{Edge, EdgeDetails};
 use crate::new::QueryNode;
 use crate::{Index, Result};
-use heed::RoTxn;
-use itertools::Itertools;
 
 pub fn visit_from_node(from_node: &QueryNode) -> Result<Option<(WordDerivations, i8)>> {
     Ok(Some(match from_node {

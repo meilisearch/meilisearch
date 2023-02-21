@@ -17,10 +17,6 @@ use crate::{Index, Result};
 
 #[derive(Debug, Clone)]
 pub struct WordDerivations {
-    // TODO: should have a list for the words corresponding to the prefix as well!
-    // This is to implement the `exactness` ranking rule.
-    // However, we could also consider every term in `zero_typo` (except first one) to
-    // be words of that the original word is a prefix of
     pub original: String,
     pub zero_typo: Vec<String>,
     pub one_typo: Vec<String>,

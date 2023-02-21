@@ -3,10 +3,9 @@ use std::collections::{BTreeMap, HashSet};
 use itertools::Itertools;
 use roaring::RoaringBitmap;
 
-use super::{
-    empty_paths_cache::EmptyPathsCache, paths_map::PathsMap, Edge, RankingRuleGraph,
-    RankingRuleGraphTrait,
-};
+use super::empty_paths_cache::EmptyPathsCache;
+use super::paths_map::PathsMap;
+use super::{Edge, RankingRuleGraph, RankingRuleGraphTrait};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Path {

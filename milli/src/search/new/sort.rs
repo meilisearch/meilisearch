@@ -1,9 +1,10 @@
 use heed::RoTxn;
 use roaring::RoaringBitmap;
 
+use super::db_cache::DatabaseCache;
 use super::{
-    db_cache::DatabaseCache, RankingRule, RankingRuleOutput, RankingRuleOutputIter,
-    RankingRuleOutputIterWrapper, RankingRuleQueryTrait,
+    RankingRule, RankingRuleOutput, RankingRuleOutputIter, RankingRuleOutputIterWrapper,
+    RankingRuleQueryTrait,
 };
 use crate::{
     // facet::FacetType,
@@ -32,18 +33,6 @@ impl<'transaction, Query> Sort<'transaction, Query> {
     ) -> Result<Self> {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         let field_id = fields_ids_map.id(&field_name);
-
-        // TODO: What is this, why?
-        // let faceted_candidates = match field_id {
-        //     Some(field_id) => {
-        //         let number_faceted =
-        //             index.faceted_documents_ids(rtxn, field_id, FacetType::Number)?;
-        //         let string_faceted =
-        //             index.faceted_documents_ids(rtxn, field_id, FacetType::String)?;
-        //         number_faceted | string_faceted
-        //     }
-        //     None => RoaringBitmap::default(),
-        // };
 
         Ok(Self { field_id, is_ascending, iter: None })
     }

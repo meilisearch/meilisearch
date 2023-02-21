@@ -14,10 +14,8 @@ pub use query_graph::*;
 pub use ranking_rules::*;
 use roaring::RoaringBitmap;
 
-use self::{
-    db_cache::DatabaseCache,
-    query_term::{word_derivations, LocatedQueryTerm},
-};
+use self::db_cache::DatabaseCache;
+use self::query_term::{word_derivations, LocatedQueryTerm};
 use crate::{Index, Result};
 
 pub enum BitmapOrAllRef<'s> {
