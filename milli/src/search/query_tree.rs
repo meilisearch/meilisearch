@@ -487,48 +487,11 @@ fn create_query_tree(
     for _ in 0..=remove_count {
         let pos = match terms_matching_strategy {
             TermsMatchingStrategy::All => return ngrams(ctx, authorize_typos, &query, false),
-            TermsMatchingStrategy::Any => {
-                let operation = Operation::Or(
-                    true,
-                    vec![
-                        // branch allowing matching documents to contains any query word.
-                        ngrams(ctx, authorize_typos, &query, true)?,
-                        // branch forcing matching documents to contains all the query words,
-                        // keeping this documents of the top of the resulted list.
-                        ngrams(ctx, authorize_typos, &query, false)?,
-                    ],
-                );
-
-                return Ok(operation);
-            }
             TermsMatchingStrategy::Last => query
                 .iter()
                 .enumerate()
                 .filter(|(_, part)| !part.is_phrase())
                 .last()
-                .map(|(pos, _)| pos),
-            TermsMatchingStrategy::First => {
-                query.iter().enumerate().find(|(_, part)| !part.is_phrase()).map(|(pos, _)| pos)
-            }
-            TermsMatchingStrategy::Size => query
-                .iter()
-                .enumerate()
-                .filter(|(_, part)| !part.is_phrase())
-                .min_by_key(|(_, part)| match part {
-                    PrimitiveQueryPart::Word(s, _) => s.len(),
-                    _ => unreachable!(),
-                })
-                .map(|(pos, _)| pos),
-            TermsMatchingStrategy::Frequency => query
-                .iter()
-                .enumerate()
-                .filter(|(_, part)| !part.is_phrase())
-                .max_by_key(|(_, part)| match part {
-                    PrimitiveQueryPart::Word(s, _) => {
-                        ctx.word_documents_count(s).unwrap_or_default().unwrap_or(u64::max_value())
-                    }
-                    _ => unreachable!(),
-                })
                 .map(|(pos, _)| pos),
         };
 

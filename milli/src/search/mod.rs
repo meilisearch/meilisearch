@@ -36,6 +36,7 @@ mod distinct;
 pub mod facet;
 mod fst_utils;
 mod matches;
+pub mod new;
 mod query_tree;
 
 pub struct Search<'a> {
@@ -344,14 +345,6 @@ pub enum CriterionImplementationStrategy {
 pub enum TermsMatchingStrategy {
     // remove last word first
     Last,
-    // remove first word first
-    First,
-    // remove more frequent word first
-    Frequency,
-    // remove smallest word first
-    Size,
-    // only one of the word is mandatory
-    Any,
     // all words are mandatory
     All,
 }
