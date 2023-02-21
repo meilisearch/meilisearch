@@ -289,7 +289,7 @@ macro_rules! compute_authorized_single_search {
             for tenant_token in $tenant_tokens.iter() {
                 let web_token = generate_tenant_token(&uid, &key, tenant_token.clone());
                 server.use_api_key(&web_token);
-                let (response, code) = server.search(json!({"queries" : [{"indexUid": "sales", "filter": $filter}]})).await;
+                let (response, code) = server.multi_search(json!({"queries" : [{"indexUid": "sales", "filter": $filter}]})).await;
                 assert_eq!(
                     200, code,
                     "{} using tenant_token: {:?} generated with parent_key: {:?}",
@@ -343,7 +343,7 @@ macro_rules! compute_authorized_multiple_search {
             for tenant_token in $tenant_tokens.iter() {
                 let web_token = generate_tenant_token(&uid, &key, tenant_token.clone());
                 server.use_api_key(&web_token);
-                let (response, code) = server.search(json!({"queries" : [
+                let (response, code) = server.multi_search(json!({"queries" : [
                     {"indexUid": "sales", "filter": $filter1},
                     {"indexUid": "products", "filter": $filter2},
                 ]})).await;
@@ -407,7 +407,7 @@ macro_rules! compute_forbidden_single_search {
             for tenant_token in $tenant_tokens.iter() {
                 let web_token = generate_tenant_token(&uid, &key, tenant_token.clone());
                 server.use_api_key(&web_token);
-                let (response, code) = server.search(json!({"queries" : [{"indexUid": "sales"}]})).await;
+                let (response, code) = server.multi_search(json!({"queries" : [{"indexUid": "sales"}]})).await;
                 assert_eq!(
                     response,
                     INVALID_RESPONSE.clone(),
@@ -460,7 +460,7 @@ macro_rules! compute_forbidden_multiple_search {
             for tenant_token in $tenant_tokens.iter() {
                 let web_token = generate_tenant_token(&uid, &key, tenant_token.clone());
                 server.use_api_key(&web_token);
-                let (response, code) = server.search(json!({"queries" : [
+                let (response, code) = server.multi_search(json!({"queries" : [
                     {"indexUid": "sales"},
                     {"indexUid": "products"},
                 ]})).await;
@@ -1034,16 +1034,18 @@ async fn error_access_expired_parent_key() {
     server.use_api_key(&web_token);
 
     // test search request while parent_key is not expired
-    let (response, code) =
-        server.search(json!({"queries" : [{"indexUid": "sales"}, {"indexUid": "products"}]})).await;
+    let (response, code) = server
+        .multi_search(json!({"queries" : [{"indexUid": "sales"}, {"indexUid": "products"}]}))
+        .await;
     assert_ne!(response, INVALID_RESPONSE.clone());
     assert_ne!(code, 403);
 
     // wait until the key is expired.
     thread::sleep(time::Duration::new(1, 0));
 
-    let (response, code) =
-        server.search(json!({"queries" : [{"indexUid": "sales"}, {"indexUid": "products"}]})).await;
+    let (response, code) = server
+        .multi_search(json!({"queries" : [{"indexUid": "sales"}, {"indexUid": "products"}]}))
+        .await;
     assert_eq!(response, INVALID_RESPONSE.clone());
     assert_eq!(code, 403);
 }
@@ -1074,7 +1076,8 @@ async fn error_access_modified_token() {
     server.use_api_key(&web_token);
 
     // test search request while web_token is valid
-    let (response, code) = server.search(json!({"queries" : [{"indexUid": "products"}]})).await;
+    let (response, code) =
+        server.multi_search(json!({"queries" : [{"indexUid": "products"}]})).await;
     assert_ne!(response, INVALID_RESPONSE.clone());
     assert_ne!(code, 403);
 
@@ -1092,7 +1095,8 @@ async fn error_access_modified_token() {
     .join(".");
 
     server.use_api_key(&altered_token);
-    let (response, code) = server.search(json!({"queries" : [{"indexUid": "products"}]})).await;
+    let (response, code) =
+        server.multi_search(json!({"queries" : [{"indexUid": "products"}]})).await;
     assert_eq!(response, INVALID_RESPONSE.clone());
     assert_eq!(code, 403);
 }
