@@ -13,7 +13,9 @@ use crate::{Index, Result};
 pub enum WordPair {
     // TODO: add WordsSwapped and WordPrefixSwapped case
     Words { left: String, right: String },
+    WordsSwapped { left: String, right: String },
     WordPrefix { left: String, right_prefix: String },
+    WordPrefixSwapped { left: String, right_prefix: String },
 }
 
 pub struct ProximityEdge {
