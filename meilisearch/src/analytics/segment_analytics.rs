@@ -224,6 +224,7 @@ impl super::Analytics for SegmentAnalytics {
 #[derive(Debug, Clone, Serialize)]
 struct Infos {
     env: String,
+    experimental_enable_metrics: bool,
     db_path: bool,
     import_dump: bool,
     dump_dir: bool,
@@ -255,8 +256,8 @@ impl From<Opt> for Infos {
         // to add analytics when we add a field in the Opt.
         // Thus we must not insert `..` at the end.
         let Opt {
-            enable_metrics_route: _,
             db_path,
+            experimental_enable_metrics,
             http_addr,
             master_key: _,
             env,
@@ -297,6 +298,7 @@ impl From<Opt> for Infos {
         // We consider information sensible if it contains a path, an address, or a key.
         Self {
             env,
+            experimental_enable_metrics,
             db_path: db_path != PathBuf::from("./data.ms"),
             import_dump: import_dump.is_some(),
             dump_dir: dump_dir != PathBuf::from("dumps/"),
