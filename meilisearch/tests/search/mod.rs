@@ -148,6 +148,28 @@ async fn simple_search() {
         .await;
 }
 
+#[cfg(feature = "default")]
+#[actix_rt::test]
+async fn test_kanji_language_detection() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = json!([
+        { "id": 0, "title": "The quick (\"brown\") fox can't jump 32.3 feet, right? Brr, it's 29.3°F!" },
+        { "id": 1, "title": "東京のお寿司。" },
+        { "id": 2, "title": "הַשּׁוּעָל הַמָּהִיר (״הַחוּם״) לֹא יָכוֹל לִקְפֹּץ 9.94 מֶטְרִים, נָכוֹן? ברר, 1.5°C- בַּחוּץ!" }
+    ]);
+    index.add_documents(documents, None).await;
+    index.wait_task(0).await;
+
+    index
+        .search(json!({"q": "東京"}), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            assert_eq!(response["hits"].as_array().unwrap().len(), 1);
+        })
+        .await;
+}
+
 #[actix_rt::test]
 async fn search_multiple_params() {
     let server = Server::new().await;

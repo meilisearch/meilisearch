@@ -1906,6 +1906,33 @@ mod tests {
         index.add_documents(doc1).unwrap();
     }
 
+    #[cfg(feature = "default")]
+    #[test]
+    fn store_detected_script_and_language_per_document_during_indexing() {
+        use charabia::{Language, Script};
+        let index = TempIndex::new();
+        index
+            .add_documents(documents!([
+                { "id": 1, "title": "The quick (\"brown\") fox can't jump 32.3 feet, right? Brr, it's 29.3°F!" },
+                { "id": 2, "title": "人人生而自由﹐在尊嚴和權利上一律平等。他們賦有理性和良心﹐並應以兄弟關係的精神互相對待。" },
+                { "id": 3, "title": "הַשּׁוּעָל הַמָּהִיר (״הַחוּם״) לֹא יָכוֹל לִקְפֹּץ 9.94 מֶטְרִים, נָכוֹן? ברר, 1.5°C- בַּחוּץ!" },
+                { "id": 4, "title": "関西国際空港限定トートバッグ すもももももももものうち" },
+                { "id": 5, "title": "ภาษาไทยง่ายนิดเดียว" },
+                { "id": 6, "title": "The quick 在尊嚴和權利上一律平等。" },
+            ]))
+            .unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        let key_jpn = (Script::Cj, Language::Jpn);
+        let key_cmn = (Script::Cj, Language::Cmn);
+        let cj_jpn_docs = index.script_language_documents_ids(&rtxn, &key_jpn).unwrap().unwrap();
+        let cj_cmn_docs = index.script_language_documents_ids(&rtxn, &key_cmn).unwrap().unwrap();
+        let expected_cj_jpn_docids = [3].iter().collect();
+        assert_eq!(cj_jpn_docs, expected_cj_jpn_docids);
+        let expected_cj_cmn_docids = [1, 5].iter().collect();
+        assert_eq!(cj_cmn_docs, expected_cj_cmn_docids);
+    }
+
     #[test]
     fn add_and_delete_documents_in_single_transform() {
         let mut index = TempIndex::new();

@@ -1,9 +1,9 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::fs::File;
 use std::{io, mem, str};
 
-use charabia::{SeparatorKind, Token, TokenKind, TokenizerBuilder};
+use charabia::{Language, Script, SeparatorKind, Token, TokenKind, TokenizerBuilder};
 use roaring::RoaringBitmap;
 use serde_json::Value;
 
@@ -12,6 +12,8 @@ use crate::error::{InternalError, SerializationError};
 use crate::{
     absolute_from_relative_position, FieldId, Result, MAX_POSITION_PER_ATTRIBUTE, MAX_WORD_LENGTH,
 };
+
+pub type ScriptLanguageDocidsMap = HashMap<(Script, Language), RoaringBitmap>;
 
 /// Extracts the word and positions where this word appear and
 /// prefixes it by the document id.
@@ -25,12 +27,13 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     searchable_fields: &Option<HashSet<FieldId>>,
     stop_words: Option<&fst::Set<&[u8]>>,
     max_positions_per_attributes: Option<u32>,
-) -> Result<(RoaringBitmap, grenad::Reader<File>)> {
+) -> Result<(RoaringBitmap, grenad::Reader<File>, ScriptLanguageDocidsMap)> {
     let max_positions_per_attributes = max_positions_per_attributes
         .map_or(MAX_POSITION_PER_ATTRIBUTE, |max| max.min(MAX_POSITION_PER_ATTRIBUTE));
     let max_memory = indexer.max_memory_by_thread();
 
     let mut documents_ids = RoaringBitmap::new();
+    let mut script_language_pair = HashMap::new();
     let mut docid_word_positions_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
         concat_u32s_array,
@@ -70,6 +73,13 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
                         .take_while(|(p, _)| (*p as u32) < max_positions_per_attributes);
 
                     for (index, token) in tokens {
+                        if let Some(language) = token.language {
+                            let script = token.script;
+                            let entry = script_language_pair
+                                .entry((script, language))
+                                .or_insert_with(RoaringBitmap::new);
+                            entry.push(document_id);
+                        }
                         let token = token.lemma().trim();
                         if !token.is_empty() && token.len() <= MAX_WORD_LENGTH {
                             key_buffer.truncate(mem::size_of::<u32>());
@@ -88,7 +98,8 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         }
     }
 
-    sorter_into_reader(docid_word_positions_sorter, indexer).map(|reader| (documents_ids, reader))
+    sorter_into_reader(docid_word_positions_sorter, indexer)
+        .map(|reader| (documents_ids, reader, script_language_pair))
 }
 
 /// Transform a JSON value into a string that can be indexed.

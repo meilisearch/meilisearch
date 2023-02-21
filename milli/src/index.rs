@@ -4,6 +4,7 @@ use std::fs::File;
 use std::mem::size_of;
 use std::path::Path;
 
+use charabia::{Language, Script};
 use heed::flags::Flags;
 use heed::types::*;
 use heed::{CompactionOption, Database, PolyDatabase, RoTxn, RwTxn};
@@ -18,7 +19,7 @@ use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
     FieldIdCodec, OrderedF64Codec,
 };
-use crate::heed_codec::StrRefCodec;
+use crate::heed_codec::{ScriptLanguageCodec, StrRefCodec};
 use crate::{
     default_criteria, BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec, Criterion,
     DocumentId, ExternalDocumentsIds, FacetDistribution, FieldDistribution, FieldId,
@@ -83,6 +84,7 @@ pub mod db_name {
     pub const FIELD_ID_DOCID_FACET_F64S: &str = "field-id-docid-facet-f64s";
     pub const FIELD_ID_DOCID_FACET_STRINGS: &str = "field-id-docid-facet-strings";
     pub const DOCUMENTS: &str = "documents";
+    pub const SCRIPT_LANGUAGE_DOCIDS: &str = "script_language_docids";
 }
 
 #[derive(Clone)]
@@ -122,6 +124,9 @@ pub struct Index {
     /// Maps the position of a word prefix with all the docids where this prefix appears.
     pub word_prefix_position_docids: Database<StrBEU32Codec, CboRoaringBitmapCodec>,
 
+    /// Maps the script and language with all the docids that corresponds to it.
+    pub script_language_docids: Database<ScriptLanguageCodec, RoaringBitmapCodec>,
+
     /// Maps the facet field id and the docids for which this field exists
     pub facet_id_exists_docids: Database<FieldIdCodec, CboRoaringBitmapCodec>,
 
@@ -148,7 +153,7 @@ impl Index {
     ) -> Result<Index> {
         use db_name::*;
 
-        options.max_dbs(18);
+        options.max_dbs(19);
         unsafe { options.flag(Flags::MdbAlwaysFreePages) };
 
         let env = options.open(path)?;
@@ -159,6 +164,7 @@ impl Index {
         let exact_word_prefix_docids = env.create_database(Some(EXACT_WORD_PREFIX_DOCIDS))?;
         let docid_word_positions = env.create_database(Some(DOCID_WORD_POSITIONS))?;
         let word_pair_proximity_docids = env.create_database(Some(WORD_PAIR_PROXIMITY_DOCIDS))?;
+        let script_language_docids = env.create_database(Some(SCRIPT_LANGUAGE_DOCIDS))?;
         let word_prefix_pair_proximity_docids =
             env.create_database(Some(WORD_PREFIX_PAIR_PROXIMITY_DOCIDS))?;
         let prefix_word_pair_proximity_docids =
@@ -186,6 +192,7 @@ impl Index {
             exact_word_prefix_docids,
             docid_word_positions,
             word_pair_proximity_docids,
+            script_language_docids,
             word_prefix_pair_proximity_docids,
             prefix_word_pair_proximity_docids,
             word_position_docids,
@@ -1186,6 +1193,38 @@ impl Index {
 
     pub(crate) fn delete_pagination_max_total_hits(&self, txn: &mut RwTxn) -> heed::Result<bool> {
         self.main.delete::<_, Str>(txn, main_key::PAGINATION_MAX_TOTAL_HITS)
+    }
+
+    /* script  language docids */
+    /// Retrieve all the documents ids that correspond with (Script, Language) key, `None` if it is any.
+    pub fn script_language_documents_ids(
+        &self,
+        rtxn: &RoTxn,
+        key: &(Script, Language),
+    ) -> heed::Result<Option<RoaringBitmap>> {
+        let soft_deleted_documents = self.soft_deleted_documents_ids(rtxn)?;
+        let doc_ids = self.script_language_docids.get(rtxn, key)?;
+        Ok(doc_ids.map(|ids| ids - soft_deleted_documents))
+    }
+
+    pub fn script_language(&self, rtxn: &RoTxn) -> heed::Result<HashMap<Script, Vec<Language>>> {
+        let soft_deleted_documents = self.soft_deleted_documents_ids(rtxn)?;
+
+        let mut script_language: HashMap<Script, Vec<Language>> = HashMap::new();
+        for sl in self.script_language_docids.iter(rtxn)? {
+            let ((script, language), docids) = sl?;
+
+            // keep only Languages that contains at least 1 document.
+            if !soft_deleted_documents.is_superset(&docids) {
+                if let Some(languages) = script_language.get_mut(&script) {
+                    (*languages).push(language);
+                } else {
+                    script_language.insert(script, vec![language]);
+                }
+            }
+        }
+
+        Ok(script_language)
     }
 }
 
