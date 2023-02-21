@@ -224,8 +224,7 @@ pub(crate) fn write_typed_chunk_into_index(
                         let mut new_value_buffer = Vec::new();
                         serialize_roaring_bitmap(&value, &mut new_value_buffer)?;
                         merge_roaring_bitmaps(&new_value_buffer, &db_value_buffer, &mut buffer)?;
-                        let merged_db_values = RoaringBitmap::deserialize_from(&buffer[..])?;
-                        merged_db_values
+                        RoaringBitmap::deserialize_from(&buffer[..])?
                     }
                     None => value,
                 };

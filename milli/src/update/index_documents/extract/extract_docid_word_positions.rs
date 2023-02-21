@@ -13,6 +13,8 @@ use crate::{
     absolute_from_relative_position, FieldId, Result, MAX_POSITION_PER_ATTRIBUTE, MAX_WORD_LENGTH,
 };
 
+pub type ScriptLanguageDocidsMap = HashMap<(Script, Language), RoaringBitmap>;
+
 /// Extracts the word and positions where this word appear and
 /// prefixes it by the document id.
 ///
@@ -25,7 +27,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     searchable_fields: &Option<HashSet<FieldId>>,
     stop_words: Option<&fst::Set<&[u8]>>,
     max_positions_per_attributes: Option<u32>,
-) -> Result<(RoaringBitmap, grenad::Reader<File>, HashMap<(Script, Language), RoaringBitmap>)> {
+) -> Result<(RoaringBitmap, grenad::Reader<File>, ScriptLanguageDocidsMap)> {
     let max_positions_per_attributes = max_positions_per_attributes
         .map_or(MAX_POSITION_PER_ATTRIBUTE, |max| max.min(MAX_POSITION_PER_ATTRIBUTE));
     let max_memory = indexer.max_memory_by_thread();

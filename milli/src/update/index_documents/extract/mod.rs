@@ -260,7 +260,7 @@ fn send_and_extract_flattened_documents_data(
                 let (documents_ids, docid_word_positions_chunk, script_language_pair) =
                     extract_docid_word_positions(
                         flattened_documents_chunk.clone(),
-                        indexer.clone(),
+                        indexer,
                         searchable_fields,
                         stop_words.as_ref(),
                         max_positions_per_attributes,
