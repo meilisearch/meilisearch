@@ -395,6 +395,7 @@ pub fn validate_geo_from_json(id: &DocumentId, bytes: &[u8]) -> Result<StdResult
             (Some(_), None) => Ok(Err(MissingLongitude { document_id: debug_id() })),
             (None, None) => Ok(Err(MissingLatitudeAndLongitude { document_id: debug_id() })),
         },
+        Value::Null => Ok(Ok(())),
         value => Ok(Err(NotAnObject { document_id: debug_id(), value })),
     }
 }

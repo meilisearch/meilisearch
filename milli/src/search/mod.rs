@@ -152,6 +152,11 @@ impl<'a> Search<'a> {
                     tokbuilder.stop_words(stop_words);
                 }
 
+                let script_lang_map = self.index.script_language(self.rtxn)?;
+                if !script_lang_map.is_empty() {
+                    tokbuilder.allow_list(&script_lang_map);
+                }
+
                 let tokenizer = tokbuilder.build();
                 let tokens = tokenizer.tokenize(query);
                 builder
@@ -445,6 +450,28 @@ pub fn build_dfa(word: &str, typos: u8, is_prefix: bool) -> DFA {
 mod test {
     use super::*;
     use crate::index::tests::TempIndex;
+
+    #[cfg(feature = "default")]
+    #[test]
+    fn test_kanji_language_detection() {
+        let index = TempIndex::new();
+
+        index
+            .add_documents(documents!([
+                { "id": 0, "title": "The quick (\"brown\") fox can't jump 32.3 feet, right? Brr, it's 29.3°F!" },
+                { "id": 1, "title": "東京のお寿司。" },
+                { "id": 2, "title": "הַשּׁוּעָל הַמָּהִיר (״הַחוּם״) לֹא יָכוֹל לִקְפֹּץ 9.94 מֶטְרִים, נָכוֹן? ברר, 1.5°C- בַּחוּץ!" }
+            ]))
+            .unwrap();
+
+        let txn = index.write_txn().unwrap();
+        let mut search = Search::new(&txn, &index);
+
+        search.query("東京");
+        let SearchResult { documents_ids, .. } = search.execute().unwrap();
+
+        assert_eq!(documents_ids, vec![1]);
+    }
 
     #[test]
     fn test_is_authorized_typos() {

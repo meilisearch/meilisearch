@@ -34,17 +34,18 @@ impl Service {
         self.request(req).await
     }
 
-    /// Send a test post request from a text body, with a `content-type:application/json` header.
+    /// Send a test post request from a text body.
     pub async fn post_str(
         &self,
         url: impl AsRef<str>,
         body: impl AsRef<str>,
-        header: (&str, &str),
+        headers: Vec<(&str, &str)>,
     ) -> (Value, StatusCode) {
-        let req = test::TestRequest::post()
-            .uri(url.as_ref())
-            .set_payload(body.as_ref().to_string())
-            .insert_header(header);
+        let mut req =
+            test::TestRequest::post().uri(url.as_ref()).set_payload(body.as_ref().to_string());
+        for header in headers {
+            req = req.insert_header(header);
+        }
         self.request(req).await
     }
 
@@ -55,6 +56,21 @@ impl Service {
 
     pub async fn put(&self, url: impl AsRef<str>, body: Value) -> (Value, StatusCode) {
         self.put_encoded(url, body, Encoder::Plain).await
+    }
+
+    /// Send a test put request from a text body.
+    pub async fn put_str(
+        &self,
+        url: impl AsRef<str>,
+        body: impl AsRef<str>,
+        headers: Vec<(&str, &str)>,
+    ) -> (Value, StatusCode) {
+        let mut req =
+            test::TestRequest::put().uri(url.as_ref()).set_payload(body.as_ref().to_string());
+        for header in headers {
+            req = req.insert_header(header);
+        }
+        self.request(req).await
     }
 
     pub async fn put_encoded(

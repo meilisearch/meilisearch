@@ -13,9 +13,9 @@ pub use grenad_helpers::{
     GrenadParameters, MergeableReader,
 };
 pub use merge_functions::{
-    concat_u32s_array, keep_first, keep_latest_obkv, merge_cbo_roaring_bitmaps, merge_obkvs,
-    merge_roaring_bitmaps, merge_two_obkvs, roaring_bitmap_from_u32s_array,
-    serialize_roaring_bitmap, MergeFn,
+    concat_u32s_array, keep_first, keep_latest_obkv, merge_cbo_roaring_bitmaps,
+    merge_obkvs_and_operations, merge_roaring_bitmaps, merge_two_obkvs,
+    roaring_bitmap_from_u32s_array, serialize_roaring_bitmap, MergeFn,
 };
 
 use crate::MAX_WORD_LENGTH;

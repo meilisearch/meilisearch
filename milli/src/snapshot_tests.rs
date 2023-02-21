@@ -6,7 +6,7 @@ use roaring::RoaringBitmap;
 
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
-use crate::{make_db_snap_from_iter, ExternalDocumentsIds, Index};
+use crate::{make_db_snap_from_iter, obkv_to_json, ExternalDocumentsIds, Index};
 
 #[track_caller]
 pub fn default_db_snapshot_settings_for_test(name: Option<&str>) -> (insta::Settings, String) {
@@ -427,8 +427,26 @@ pub fn snap_settings(index: &Index) -> String {
     snap
 }
 
+pub fn snap_documents(index: &Index) -> String {
+    let mut snap = String::new();
+    let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let display = fields_ids_map.ids().collect::<Vec<_>>();
+
+    for document in index.all_documents(&rtxn).unwrap() {
+        let doc = obkv_to_json(&display, &fields_ids_map, document.unwrap().1).unwrap();
+        snap.push_str(&serde_json::to_string(&doc).unwrap());
+        snap.push('\n');
+    }
+
+    snap
+}
+
 #[macro_export]
 macro_rules! full_snap_of_db {
+    ($index:ident, documents) => {{
+        $crate::snapshot_tests::snap_documents(&$index)
+    }};
     ($index:ident, settings) => {{
         $crate::snapshot_tests::snap_settings(&$index)
     }};

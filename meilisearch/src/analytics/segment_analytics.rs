@@ -249,6 +249,8 @@ impl From<Opt> for Infos {
         // to add analytics when we add a field in the Opt.
         // Thus we must not insert `..` at the end.
         let Opt {
+            #[cfg(features = "metrics")]
+                enable_metrics_route: _,
             db_path,
             http_addr,
             master_key: _,
@@ -401,12 +403,19 @@ impl Segment {
         if let Ok(stats) =
             create_all_stats(index_scheduler.into(), auth_controller, &SearchRules::default())
         {
+            // Replace the version number with the prototype name if any.
+            let version = if let Some(prototype) = crate::prototype_name() {
+                prototype
+            } else {
+                env!("CARGO_PKG_VERSION")
+            };
+
             let _ = self
                 .batcher
                 .push(Identify {
                     context: Some(json!({
                         "app": {
-                            "version": env!("CARGO_PKG_VERSION").to_string(),
+                            "version": version.to_string(),
                         },
                     })),
                     user: self.user.clone(),

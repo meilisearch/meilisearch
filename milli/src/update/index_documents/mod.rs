@@ -79,6 +79,7 @@ pub struct IndexDocuments<'t, 'u, 'i, 'a, FP, FA> {
     progress: FP,
     should_abort: FA,
     added_documents: u64,
+    deleted_documents: u64,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -122,6 +123,7 @@ where
             wtxn,
             index,
             added_documents: 0,
+            deleted_documents: 0,
         })
     }
 
@@ -164,6 +166,30 @@ where
         self.added_documents += indexed_documents;
 
         Ok((self, Ok(indexed_documents)))
+    }
+
+    /// Remove a batch of documents from the current builder.
+    ///
+    /// Returns the number of documents deleted from the builder.
+    pub fn remove_documents(
+        mut self,
+        to_delete: Vec<String>,
+    ) -> Result<(Self, StdResult<u64, UserError>)> {
+        // Early return when there is no document to add
+        if to_delete.is_empty() {
+            return Ok((self, Ok(0)));
+        }
+
+        let deleted_documents = self
+            .transform
+            .as_mut()
+            .expect("Invalid document deletion state")
+            .remove_documents(to_delete, self.wtxn, &self.should_abort)?
+            as u64;
+
+        self.deleted_documents += deleted_documents;
+
+        Ok((self, Ok(deleted_documents)))
     }
 
     #[logging_timer::time("IndexDocuments::{}")]
@@ -1878,5 +1904,356 @@ mod tests {
             .unwrap();
 
         index.add_documents(doc1).unwrap();
+    }
+
+    #[cfg(feature = "default")]
+    #[test]
+    fn store_detected_script_and_language_per_document_during_indexing() {
+        use charabia::{Language, Script};
+        let index = TempIndex::new();
+        index
+            .add_documents(documents!([
+                { "id": 1, "title": "The quick (\"brown\") fox can't jump 32.3 feet, right? Brr, it's 29.3°F!" },
+                { "id": 2, "title": "人人生而自由﹐在尊嚴和權利上一律平等。他們賦有理性和良心﹐並應以兄弟關係的精神互相對待。" },
+                { "id": 3, "title": "הַשּׁוּעָל הַמָּהִיר (״הַחוּם״) לֹא יָכוֹל לִקְפֹּץ 9.94 מֶטְרִים, נָכוֹן? ברר, 1.5°C- בַּחוּץ!" },
+                { "id": 4, "title": "関西国際空港限定トートバッグ すもももももももものうち" },
+                { "id": 5, "title": "ภาษาไทยง่ายนิดเดียว" },
+                { "id": 6, "title": "The quick 在尊嚴和權利上一律平等。" },
+            ]))
+            .unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        let key_jpn = (Script::Cj, Language::Jpn);
+        let key_cmn = (Script::Cj, Language::Cmn);
+        let cj_jpn_docs = index.script_language_documents_ids(&rtxn, &key_jpn).unwrap().unwrap();
+        let cj_cmn_docs = index.script_language_documents_ids(&rtxn, &key_cmn).unwrap().unwrap();
+        let expected_cj_jpn_docids = [3].iter().collect();
+        assert_eq!(cj_jpn_docs, expected_cj_jpn_docids);
+        let expected_cj_cmn_docids = [1, 5].iter().collect();
+        assert_eq!(cj_cmn_docs, expected_cj_cmn_docids);
+    }
+
+    #[test]
+    fn add_and_delete_documents_in_single_transform() {
+        let mut index = TempIndex::new();
+        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
+
+        let mut wtxn = index.write_txn().unwrap();
+        let builder = IndexDocuments::new(
+            &mut wtxn,
+            &index,
+            &index.indexer_config,
+            index.index_documents_config.clone(),
+            |_| (),
+            || false,
+        )
+        .unwrap();
+
+        let documents = documents!([
+            { "id": 1, "doggo": "kevin" },
+            { "id": 2, "doggo": { "name": "bob", "age": 20 } },
+            { "id": 3, "name": "jean", "age": 25 },
+        ]);
+        let (builder, added) = builder.add_documents(documents).unwrap();
+        insta::assert_display_snapshot!(added.unwrap(), @"3");
+
+        let (builder, removed) = builder.remove_documents(vec![S("2")]).unwrap();
+        insta::assert_display_snapshot!(removed.unwrap(), @"1");
+
+        let addition = builder.execute().unwrap();
+        insta::assert_debug_snapshot!(addition, @r###"
+        DocumentAdditionResult {
+            indexed_documents: 3,
+            number_of_documents: 2,
+        }
+        "###);
+        wtxn.commit().unwrap();
+
+        db_snap!(index, documents, @r###"
+        {"id":1,"doggo":"kevin"}
+        {"id":3,"name":"jean","age":25}
+        "###);
+    }
+
+    #[test]
+    fn add_update_and_delete_documents_in_single_transform() {
+        let mut index = TempIndex::new();
+        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
+
+        let mut wtxn = index.write_txn().unwrap();
+        let builder = IndexDocuments::new(
+            &mut wtxn,
+            &index,
+            &index.indexer_config,
+            index.index_documents_config.clone(),
+            |_| (),
+            || false,
+        )
+        .unwrap();
+
+        let documents = documents!([
+            { "id": 1, "doggo": "kevin" },
+            { "id": 2, "doggo": { "name": "bob", "age": 20 } },
+            { "id": 3, "name": "jean", "age": 25 },
+        ]);
+        let (builder, added) = builder.add_documents(documents).unwrap();
+        insta::assert_display_snapshot!(added.unwrap(), @"3");
+
+        let documents = documents!([
+            { "id": 2, "catto": "jorts" },
+            { "id": 3, "legs": 4 },
+        ]);
+        let (builder, added) = builder.add_documents(documents).unwrap();
+        insta::assert_display_snapshot!(added.unwrap(), @"2");
+
+        let (builder, removed) = builder.remove_documents(vec![S("1"), S("2")]).unwrap();
+        insta::assert_display_snapshot!(removed.unwrap(), @"2");
+
+        let addition = builder.execute().unwrap();
+        insta::assert_debug_snapshot!(addition, @r###"
+        DocumentAdditionResult {
+            indexed_documents: 5,
+            number_of_documents: 1,
+        }
+        "###);
+        wtxn.commit().unwrap();
+
+        db_snap!(index, documents, @r###"
+        {"id":3,"name":"jean","age":25,"legs":4}
+        "###);
+    }
+
+    #[test]
+    fn add_document_and_in_another_transform_update_and_delete_documents() {
+        let mut index = TempIndex::new();
+        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
+
+        let mut wtxn = index.write_txn().unwrap();
+        let builder = IndexDocuments::new(
+            &mut wtxn,
+            &index,
+            &index.indexer_config,
+            index.index_documents_config.clone(),
+            |_| (),
+            || false,
+        )
+        .unwrap();
+
+        let documents = documents!([
+            { "id": 1, "doggo": "kevin" },
+            { "id": 2, "doggo": { "name": "bob", "age": 20 } },
+            { "id": 3, "name": "jean", "age": 25 },
+        ]);
+        let (builder, added) = builder.add_documents(documents).unwrap();
+        insta::assert_display_snapshot!(added.unwrap(), @"3");
+
+        let addition = builder.execute().unwrap();
+        insta::assert_debug_snapshot!(addition, @r###"
+        DocumentAdditionResult {
+            indexed_documents: 3,
+            number_of_documents: 3,
+        }
+        "###);
+        wtxn.commit().unwrap();
+
+        db_snap!(index, documents, @r###"
+        {"id":1,"doggo":"kevin"}
+        {"id":2,"doggo":{"name":"bob","age":20}}
+        {"id":3,"name":"jean","age":25}
+        "###);
+
+        // A first batch of documents has been inserted
+
+        let mut wtxn = index.write_txn().unwrap();
+        let builder = IndexDocuments::new(
+            &mut wtxn,
+            &index,
+            &index.indexer_config,
+            index.index_documents_config.clone(),
+            |_| (),
+            || false,
+        )
+        .unwrap();
+
+        let documents = documents!([
+            { "id": 2, "catto": "jorts" },
+            { "id": 3, "legs": 4 },
+        ]);
+        let (builder, added) = builder.add_documents(documents).unwrap();
+        insta::assert_display_snapshot!(added.unwrap(), @"2");
+
+        let (builder, removed) = builder.remove_documents(vec![S("1"), S("2")]).unwrap();
+        insta::assert_display_snapshot!(removed.unwrap(), @"2");
+
+        let addition = builder.execute().unwrap();
+        insta::assert_debug_snapshot!(addition, @r###"
+        DocumentAdditionResult {
+            indexed_documents: 2,
+            number_of_documents: 1,
+        }
+        "###);
+        wtxn.commit().unwrap();
+
+        db_snap!(index, documents, @r###"
+        {"id":3,"name":"jean","age":25,"legs":4}
+        "###);
+    }
+
+    #[test]
+    fn delete_document_and_then_add_documents_in_the_same_transform() {
+        let mut index = TempIndex::new();
+        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
+
+        let mut wtxn = index.write_txn().unwrap();
+        let builder = IndexDocuments::new(
+            &mut wtxn,
+            &index,
+            &index.indexer_config,
+            index.index_documents_config.clone(),
+            |_| (),
+            || false,
+        )
+        .unwrap();
+
+        let (builder, removed) = builder.remove_documents(vec![S("1"), S("2")]).unwrap();
+        insta::assert_display_snapshot!(removed.unwrap(), @"0");
+
+        let documents = documents!([
+            { "id": 2, "doggo": { "name": "jean", "age": 20 } },
+            { "id": 3, "name": "bob", "age": 25 },
+        ]);
+        let (builder, added) = builder.add_documents(documents).unwrap();
+        insta::assert_display_snapshot!(added.unwrap(), @"2");
+
+        let addition = builder.execute().unwrap();
+        insta::assert_debug_snapshot!(addition, @r###"
+        DocumentAdditionResult {
+            indexed_documents: 2,
+            number_of_documents: 2,
+        }
+        "###);
+        wtxn.commit().unwrap();
+
+        db_snap!(index, documents, @r###"
+        {"id":2,"doggo":{"name":"jean","age":20}}
+        {"id":3,"name":"bob","age":25}
+        "###);
+    }
+
+    #[test]
+    fn delete_the_same_document_multiple_time() {
+        let mut index = TempIndex::new();
+        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
+
+        let mut wtxn = index.write_txn().unwrap();
+        let builder = IndexDocuments::new(
+            &mut wtxn,
+            &index,
+            &index.indexer_config,
+            index.index_documents_config.clone(),
+            |_| (),
+            || false,
+        )
+        .unwrap();
+
+        let (builder, removed) =
+            builder.remove_documents(vec![S("1"), S("2"), S("1"), S("2")]).unwrap();
+        insta::assert_display_snapshot!(removed.unwrap(), @"0");
+
+        let documents = documents!([
+            { "id": 1, "doggo": "kevin" },
+            { "id": 2, "doggo": { "name": "jean", "age": 20 } },
+            { "id": 3, "name": "bob", "age": 25 },
+        ]);
+        let (builder, added) = builder.add_documents(documents).unwrap();
+        insta::assert_display_snapshot!(added.unwrap(), @"3");
+
+        let (builder, removed) =
+            builder.remove_documents(vec![S("1"), S("2"), S("1"), S("2")]).unwrap();
+        insta::assert_display_snapshot!(removed.unwrap(), @"2");
+
+        let addition = builder.execute().unwrap();
+        insta::assert_debug_snapshot!(addition, @r###"
+        DocumentAdditionResult {
+            indexed_documents: 3,
+            number_of_documents: 1,
+        }
+        "###);
+        wtxn.commit().unwrap();
+
+        db_snap!(index, documents, @r###"
+        {"id":3,"name":"bob","age":25}
+        "###);
+    }
+
+    #[test]
+    fn add_document_and_in_another_transform_delete_the_document_then_add_it_again() {
+        let mut index = TempIndex::new();
+        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
+
+        let mut wtxn = index.write_txn().unwrap();
+        let builder = IndexDocuments::new(
+            &mut wtxn,
+            &index,
+            &index.indexer_config,
+            index.index_documents_config.clone(),
+            |_| (),
+            || false,
+        )
+        .unwrap();
+
+        let documents = documents!([
+            { "id": 1, "doggo": "kevin" },
+        ]);
+        let (builder, added) = builder.add_documents(documents).unwrap();
+        insta::assert_display_snapshot!(added.unwrap(), @"1");
+
+        let addition = builder.execute().unwrap();
+        insta::assert_debug_snapshot!(addition, @r###"
+        DocumentAdditionResult {
+            indexed_documents: 1,
+            number_of_documents: 1,
+        }
+        "###);
+        wtxn.commit().unwrap();
+
+        db_snap!(index, documents, @r###"
+        {"id":1,"doggo":"kevin"}
+        "###);
+
+        // A first batch of documents has been inserted
+
+        let mut wtxn = index.write_txn().unwrap();
+        let builder = IndexDocuments::new(
+            &mut wtxn,
+            &index,
+            &index.indexer_config,
+            index.index_documents_config.clone(),
+            |_| (),
+            || false,
+        )
+        .unwrap();
+
+        let (builder, removed) = builder.remove_documents(vec![S("1")]).unwrap();
+        insta::assert_display_snapshot!(removed.unwrap(), @"1");
+
+        let documents = documents!([
+            { "id": 1, "catto": "jorts" },
+        ]);
+        let (builder, added) = builder.add_documents(documents).unwrap();
+        insta::assert_display_snapshot!(added.unwrap(), @"1");
+
+        let addition = builder.execute().unwrap();
+        insta::assert_debug_snapshot!(addition, @r###"
+        DocumentAdditionResult {
+            indexed_documents: 1,
+            number_of_documents: 1,
+        }
+        "###);
+        wtxn.commit().unwrap();
+
+        db_snap!(index, documents, @r###"
+        {"id":1,"catto":"jorts"}
+        "###);
     }
 }

@@ -216,6 +216,133 @@ async fn add_single_document_with_every_encoding() {
     }
 }
 
+#[actix_rt::test]
+async fn add_csv_document() {
+    let server = Server::new().await;
+    let index = server.index("pets");
+
+    let document = "#id,name,race
+0,jean,bernese mountain
+1,jorts,orange cat";
+
+    let (response, code) = index.raw_update_documents(document, Some("text/csv"), "").await;
+    snapshot!(code, @"202 Accepted");
+    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
+    {
+      "taskUid": 0,
+      "indexUid": "pets",
+      "status": "enqueued",
+      "type": "documentAdditionOrUpdate",
+      "enqueuedAt": "[date]"
+    }
+    "###);
+    let response = index.wait_task(response["taskUid"].as_u64().unwrap()).await;
+    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
+    {
+      "uid": 0,
+      "indexUid": "pets",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 2,
+        "indexedDocuments": 2
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let (documents, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "#id": "0",
+          "name": "jean",
+          "race": "bernese mountain"
+        },
+        {
+          "#id": "1",
+          "name": "jorts",
+          "race": "orange cat"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn add_csv_document_with_custom_delimiter() {
+    let server = Server::new().await;
+    let index = server.index("pets");
+
+    let document = "#id|name|race
+0|jean|bernese mountain
+1|jorts|orange cat";
+
+    let (response, code) =
+        index.raw_update_documents(document, Some("text/csv"), "?csvDelimiter=|").await;
+    snapshot!(code, @"202 Accepted");
+    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
+    {
+      "taskUid": 0,
+      "indexUid": "pets",
+      "status": "enqueued",
+      "type": "documentAdditionOrUpdate",
+      "enqueuedAt": "[date]"
+    }
+    "###);
+    let response = index.wait_task(response["taskUid"].as_u64().unwrap()).await;
+    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
+    {
+      "uid": 0,
+      "indexUid": "pets",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 2,
+        "indexedDocuments": 2
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let (documents, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "#id": "0",
+          "name": "jean",
+          "race": "bernese mountain"
+        },
+        {
+          "#id": "1",
+          "name": "jorts",
+          "race": "orange cat"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
+    }
+    "###);
+}
+
 /// any other content-type is must be refused
 #[actix_rt::test]
 async fn error_add_documents_test_bad_content_types() {
@@ -1025,6 +1152,53 @@ async fn error_document_field_limit_reached() {
     // Documents without a primary key are not accepted.
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @"");
+}
+
+#[actix_rt::test]
+async fn add_documents_with_geo_field() {
+    let server = Server::new().await;
+    let index = server.index("doggo");
+    index.update_settings(json!({"sortableAttributes": ["_geo"]})).await;
+
+    let documents = json!([
+        {
+            "id": "1",
+        },
+        {
+            "id": "2",
+            "_geo": null,
+        },
+        {
+            "id": "3",
+            "_geo": { "lat": 1, "lng": 1 },
+        },
+        {
+            "id": "4",
+            "_geo": { "lat": "1", "lng": "1" },
+        },
+    ]);
+
+    index.add_documents(documents, None).await;
+    let response = index.wait_task(1).await;
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 1,
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 4,
+        "indexedDocuments": 4
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
 }
 
 #[actix_rt::test]
