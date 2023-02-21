@@ -825,9 +825,13 @@ where
                     quoted = !quoted;
                 }
                 // if there is a quote or a hard separator we close the phrase.
-                if !phrase.is_empty() && (quote_count > 0 || separator_kind == SeparatorKind::Hard)
-                {
-                    primitive_query.push(PrimitiveQueryPart::Phrase(mem::take(&mut phrase)));
+                if quote_count > 0 || separator_kind == SeparatorKind::Hard {
+                    let phrase = mem::take(&mut phrase);
+
+                    // if the phrase only contains stop words, we don't keep it in the query.
+                    if phrase.iter().any(|w| w.is_some()) {
+                        primitive_query.push(PrimitiveQueryPart::Phrase(phrase));
+                    }
                 }
             }
             _ => (),
@@ -835,7 +839,7 @@ where
     }
 
     // If a quote is never closed, we consider all of the end of the query as a phrase.
-    if !phrase.is_empty() {
+    if phrase.iter().any(|w| w.is_some()) {
         primitive_query.push(PrimitiveQueryPart::Phrase(mem::take(&mut phrase)));
     }
 
