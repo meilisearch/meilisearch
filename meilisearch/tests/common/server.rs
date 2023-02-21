@@ -103,8 +103,8 @@ impl Server {
         Index { uid: uid.as_ref().to_string(), service: &self.service, encoder }
     }
 
-    pub async fn search(&self, queries: Value) -> (Value, StatusCode) {
-        self.service.post("/search", queries).await
+    pub async fn multi_search(&self, queries: Value) -> (Value, StatusCode) {
+        self.service.post("/multi-search", queries).await
     }
 
     pub async fn list_indexes_raw(&self, parameters: &str) -> (Value, StatusCode) {
