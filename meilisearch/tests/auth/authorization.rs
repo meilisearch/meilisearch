@@ -52,16 +52,13 @@ pub static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'
             ("GET",     "/stats") =>                                           hashset!{"stats.get", "stats.*", "*"},
             ("POST",    "/dumps") =>                                           hashset!{"dumps.create", "dumps.*", "*"},
             ("GET",     "/version") =>                                         hashset!{"version", "*"},
+            ("GET",     "/metrics") =>                                         hashset!{"metrics.get", "metrics.*", "*"},
             ("PATCH",   "/keys/mykey/") =>                                     hashset!{"keys.update", "*"},
             ("GET",     "/keys/mykey/") =>                                     hashset!{"keys.get", "*"},
             ("DELETE",  "/keys/mykey/") =>                                     hashset!{"keys.delete", "*"},
             ("POST",    "/keys") =>                                            hashset!{"keys.create", "*"},
             ("GET",     "/keys") =>                                            hashset!{"keys.get", "*"},
         };
-
-        if cfg!(feature = "metrics") {
-            authorizations.insert(("GET", "/metrics"), hashset! {"metrics.get", "metrics.*", "*"});
-        }
 
         authorizations
     });

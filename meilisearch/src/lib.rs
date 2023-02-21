@@ -4,14 +4,11 @@ pub mod error;
 pub mod analytics;
 #[macro_use]
 pub mod extractors;
+pub mod metrics;
+pub mod middleware;
 pub mod option;
 pub mod routes;
 pub mod search;
-
-#[cfg(feature = "metrics")]
-pub mod metrics;
-#[cfg(feature = "metrics")]
-pub mod route_metrics;
 
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
@@ -25,7 +22,7 @@ use actix_http::body::MessageBody;
 use actix_web::dev::{ServiceFactory, ServiceResponse};
 use actix_web::error::JsonPayloadError;
 use actix_web::web::Data;
-use actix_web::{middleware, web, HttpRequest};
+use actix_web::{web, HttpRequest};
 use analytics::Analytics;
 use anyhow::bail;
 use error::PayloadError;
@@ -86,14 +83,13 @@ pub fn create_app(
                 analytics.clone(),
             )
         })
-        .configure(routes::configure)
+        .configure(|cfg| routes::configure(cfg, opt.enable_metrics_route))
         .configure(|s| dashboard(s, enable_dashboard));
-    #[cfg(feature = "metrics")]
-    let app = app.configure(|s| configure_metrics_route(s, opt.enable_metrics_route));
 
-    #[cfg(feature = "metrics")]
-    let app =
-        app.wrap(middleware::Condition::new(opt.enable_metrics_route, route_metrics::RouteMetrics));
+    let app = app.wrap(actix_web::middleware::Condition::new(
+        opt.enable_metrics_route,
+        middleware::RouteMetrics,
+    ));
     app.wrap(
         Cors::default()
             .send_wildcard()
@@ -102,9 +98,9 @@ pub fn create_app(
             .allow_any_method()
             .max_age(86_400), // 24h
     )
-    .wrap(middleware::Logger::default())
-    .wrap(middleware::Compress::default())
-    .wrap(middleware::NormalizePath::new(middleware::TrailingSlash::Trim))
+    .wrap(actix_web::middleware::Logger::default())
+    .wrap(actix_web::middleware::Compress::default())
+    .wrap(actix_web::middleware::NormalizePath::new(actix_web::middleware::TrailingSlash::Trim))
 }
 
 enum OnFailure {
@@ -418,15 +414,6 @@ pub fn dashboard(config: &mut web::ServiceConfig, enable_frontend: bool) {
 #[cfg(not(feature = "mini-dashboard"))]
 pub fn dashboard(config: &mut web::ServiceConfig, _enable_frontend: bool) {
     config.service(web::resource("/").route(web::get().to(routes::running)));
-}
-
-#[cfg(feature = "metrics")]
-pub fn configure_metrics_route(config: &mut web::ServiceConfig, enable_metrics_route: bool) {
-    if enable_metrics_route {
-        config.service(
-            web::resource("/metrics").route(web::get().to(crate::route_metrics::get_metrics)),
-        );
-    }
 }
 
 /// Parses the output of

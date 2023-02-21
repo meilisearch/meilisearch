@@ -47,7 +47,6 @@ const MEILI_IGNORE_MISSING_DUMP: &str = "MEILI_IGNORE_MISSING_DUMP";
 const MEILI_IGNORE_DUMP_IF_DB_EXISTS: &str = "MEILI_IGNORE_DUMP_IF_DB_EXISTS";
 const MEILI_DUMP_DIR: &str = "MEILI_DUMP_DIR";
 const MEILI_LOG_LEVEL: &str = "MEILI_LOG_LEVEL";
-#[cfg(feature = "metrics")]
 const MEILI_ENABLE_METRICS_ROUTE: &str = "MEILI_ENABLE_METRICS_ROUTE";
 
 const DEFAULT_CONFIG_FILE_PATH: &str = "./config.toml";
@@ -288,7 +287,6 @@ pub struct Opt {
     pub log_level: LogLevel,
 
     /// Enables Prometheus metrics and /metrics route.
-    #[cfg(feature = "metrics")]
     #[clap(long, env = MEILI_ENABLE_METRICS_ROUTE)]
     #[serde(default)]
     pub enable_metrics_route: bool,
@@ -384,7 +382,6 @@ impl Opt {
             config_file_path: _,
             #[cfg(all(not(debug_assertions), feature = "analytics"))]
             no_analytics,
-            #[cfg(feature = "metrics")]
             enable_metrics_route,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
@@ -423,13 +420,7 @@ impl Opt {
 
         export_to_env_if_not_present(MEILI_DUMP_DIR, dump_dir);
         export_to_env_if_not_present(MEILI_LOG_LEVEL, log_level.to_string());
-        #[cfg(feature = "metrics")]
-        {
-            export_to_env_if_not_present(
-                MEILI_ENABLE_METRICS_ROUTE,
-                enable_metrics_route.to_string(),
-            );
-        }
+        export_to_env_if_not_present(MEILI_ENABLE_METRICS_ROUTE, enable_metrics_route.to_string());
         indexer_options.export_to_env();
     }
 

@@ -1,45 +1,11 @@
+//! Contains all the custom middleware used in meilisearch
+
 use std::future::{ready, Ready};
 
 use actix_web::dev::{self, Service, ServiceRequest, ServiceResponse, Transform};
-use actix_web::http::header;
-use actix_web::web::Data;
-use actix_web::{Error, HttpResponse};
+use actix_web::Error;
 use futures_util::future::LocalBoxFuture;
-use index_scheduler::IndexScheduler;
-use meilisearch_auth::AuthController;
-use meilisearch_types::error::ResponseError;
-use meilisearch_types::keys::actions;
-use prometheus::{Encoder, HistogramTimer, TextEncoder};
-
-use crate::extractors::authentication::policies::ActionPolicy;
-use crate::extractors::authentication::GuardedData;
-use crate::routes::create_all_stats;
-
-pub async fn get_metrics(
-    index_scheduler: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, Data<IndexScheduler>>,
-    auth_controller: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, AuthController>,
-) -> Result<HttpResponse, ResponseError> {
-    let search_rules = &index_scheduler.filters().search_rules;
-    let response =
-        create_all_stats((*index_scheduler).clone(), (*auth_controller).clone(), search_rules)?;
-
-    crate::metrics::MEILISEARCH_DB_SIZE_BYTES.set(response.database_size as i64);
-    crate::metrics::MEILISEARCH_INDEX_COUNT.set(response.indexes.len() as i64);
-
-    for (index, value) in response.indexes.iter() {
-        crate::metrics::MEILISEARCH_INDEX_DOCS_COUNT
-            .with_label_values(&[index])
-            .set(value.number_of_documents as i64);
-    }
-
-    let encoder = TextEncoder::new();
-    let mut buffer = vec![];
-    encoder.encode(&prometheus::gather(), &mut buffer).expect("Failed to encode metrics");
-
-    let response = String::from_utf8(buffer).expect("Failed to convert bytes to string");
-
-    Ok(HttpResponse::Ok().insert_header(header::ContentType(mime::TEXT_PLAIN)).body(response))
-}
+use prometheus::HistogramTimer;
 
 pub struct RouteMetrics;
 
