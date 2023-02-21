@@ -9,6 +9,12 @@ use crate::new::db_cache::DatabaseCache;
 use crate::new::BitmapOrAllRef;
 use crate::{Index, Result};
 
+// TODO: the cache should have a G::EdgeDetails as key
+// but then it means that we should have a quick way of
+// computing their hash and comparing them
+// which can be done...
+// by using a pointer (real, Rc, bumpalo, or in a vector)???
+
 pub struct EdgeDocidsCache<G: RankingRuleGraphTrait> {
     pub cache: HashMap<EdgeIndex, RoaringBitmap>,
 

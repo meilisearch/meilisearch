@@ -235,9 +235,9 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                 continue;
             }
             desc.push_str(&format!("{node_idx} [label = {:?}]", node));
-            if node_idx == self.query_graph.root_node {
+            if node_idx == self.query_graph.root_node.0 as usize {
                 desc.push_str("[color = blue]");
-            } else if node_idx == self.query_graph.end_node {
+            } else if node_idx == self.query_graph.end_node.0 as usize {
                 desc.push_str("[color = red]");
             }
             desc.push_str(";\n");
@@ -262,7 +262,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                     desc.push_str(&format!(
                         "{from_node} -> {to_node} [label = \"cost {cost} {edge_label}\", color = {color}];\n",
                         cost = edge.cost,
-                        edge_label = G::edge_details_dot_label(details),
+                        edge_label = G::graphviz_edge_details_label(details),
                     ));
                 }
             }

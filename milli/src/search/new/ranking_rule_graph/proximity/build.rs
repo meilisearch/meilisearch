@@ -51,11 +51,11 @@ pub fn visit_to_node<'transaction, 'from_data>(
     db_cache: &mut DatabaseCache<'transaction>,
     to_node: &QueryNode,
     from_node_data: &'from_data (WordDerivations, i8),
-) -> Result<Option<Vec<(u8, EdgeDetails<ProximityEdge>)>>> {
+) -> Result<Vec<(u8, EdgeDetails<ProximityEdge>)>> {
     let (derivations1, pos1) = from_node_data;
     let term2 = match &to_node {
-        QueryNode::End => return Ok(Some(vec![(0, EdgeDetails::Unconditional)])),
-        QueryNode::Deleted | QueryNode::Start => return Ok(None),
+        QueryNode::End => return Ok(vec![(0, EdgeDetails::Unconditional)]),
+        QueryNode::Deleted | QueryNode::Start => return Ok(vec![]),
         QueryNode::Term(term) => term,
     };
     let LocatedQueryTerm { value: value2, positions: pos2 } = term2;
@@ -86,7 +86,7 @@ pub fn visit_to_node<'transaction, 'from_data>(
         // We want to effectively ignore this pair of terms
         // Unconditionally walk through the edge without computing the docids
         // But also what should the cost be?
-        return Ok(Some(vec![(0, EdgeDetails::Unconditional)]));
+        return Ok(vec![(0, EdgeDetails::Unconditional)]);
     }
 
     let updb1 = derivations1.use_prefix_db;
@@ -161,5 +161,5 @@ pub fn visit_to_node<'transaction, 'from_data>(
         })
         .collect::<Vec<_>>();
     new_edges.push((8 + (ngram_len2 - 1) as u8, EdgeDetails::Unconditional));
-    Ok(Some(new_edges))
+    Ok(new_edges)
 }

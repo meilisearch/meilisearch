@@ -26,7 +26,7 @@ impl RankingRuleGraphTrait for ProximityGraph {
     type EdgeDetails = ProximityEdge;
     type BuildVisitedFromNode = (WordDerivations, i8);
 
-    fn edge_details_dot_label(edge: &Self::EdgeDetails) -> String {
+    fn graphviz_edge_details_label(edge: &Self::EdgeDetails) -> String {
         let ProximityEdge { pairs, proximity } = edge;
         format!(", prox {proximity}, {} pairs", pairs.len())
     }
@@ -55,7 +55,7 @@ impl RankingRuleGraphTrait for ProximityGraph {
         db_cache: &mut DatabaseCache<'transaction>,
         to_node: &QueryNode,
         from_node_data: &'from_data Self::BuildVisitedFromNode,
-    ) -> Result<Option<Vec<(u8, EdgeDetails<Self::EdgeDetails>)>>> {
+    ) -> Result<Vec<(u8, EdgeDetails<Self::EdgeDetails>)>> {
         build::visit_to_node(index, txn, db_cache, to_node, from_node_data)
     }
 }

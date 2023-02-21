@@ -1,7 +1,8 @@
-use std::collections::HashSet;
 use std::fmt::Debug;
+use std::{collections::HashSet, fmt};
 
 use heed::RoTxn;
+use roaring::RoaringBitmap;
 
 use super::{
     db_cache::DatabaseCache,
@@ -19,21 +20,31 @@ pub enum QueryNode {
 
 #[derive(Debug, Clone)]
 pub struct Edges {
-    pub incoming: HashSet<usize>,
-    pub outgoing: HashSet<usize>,
+    // TODO: use a tiny bitset instead
+    // something like a simple Vec<u8> where most queries will see a vector of one element
+    pub predecessors: RoaringBitmap,
+    pub successors: RoaringBitmap,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NodeIndex(pub u32);
+impl fmt::Display for NodeIndex {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct QueryGraph {
-    pub root_node: usize,
-    pub end_node: usize,
+    pub root_node: NodeIndex,
+    pub end_node: NodeIndex,
     pub nodes: Vec<QueryNode>,
     pub edges: Vec<Edges>,
 }
 
 fn _assert_sizes() {
     let _: [u8; 112] = [0; std::mem::size_of::<QueryNode>()];
-    let _: [u8; 96] = [0; std::mem::size_of::<Edges>()];
+    let _: [u8; 48] = [0; std::mem::size_of::<Edges>()];
 }
 
 impl Default for QueryGraph {
@@ -41,32 +52,32 @@ impl Default for QueryGraph {
     fn default() -> Self {
         let nodes = vec![QueryNode::Start, QueryNode::End];
         let edges = vec![
-            Edges { incoming: HashSet::new(), outgoing: HashSet::new() },
-            Edges { incoming: HashSet::new(), outgoing: HashSet::new() },
+            Edges { predecessors: RoaringBitmap::new(), successors: RoaringBitmap::new() },
+            Edges { predecessors: RoaringBitmap::new(), successors: RoaringBitmap::new() },
         ];
 
-        Self { root_node: 0, end_node: 1, nodes, edges }
+        Self { root_node: NodeIndex(0), end_node: NodeIndex(1), nodes, edges }
     }
 }
 
 impl QueryGraph {
-    fn connect_to_node(&mut self, from_nodes: &[usize], end_node: usize) {
+    fn connect_to_node(&mut self, from_nodes: &[NodeIndex], to_node: NodeIndex) {
         for &from_node in from_nodes {
-            self.edges[from_node].outgoing.insert(end_node);
-            self.edges[end_node].incoming.insert(from_node);
+            self.edges[from_node.0 as usize].successors.insert(to_node.0);
+            self.edges[to_node.0 as usize].predecessors.insert(from_node.0);
         }
     }
-    fn add_node(&mut self, from_nodes: &[usize], node: QueryNode) -> usize {
-        let new_node_idx = self.nodes.len();
+    fn add_node(&mut self, from_nodes: &[NodeIndex], node: QueryNode) -> NodeIndex {
+        let new_node_idx = self.nodes.len() as u32;
         self.nodes.push(node);
         self.edges.push(Edges {
-            incoming: from_nodes.iter().copied().collect(),
-            outgoing: HashSet::new(),
+            predecessors: from_nodes.iter().map(|x| x.0).collect(),
+            successors: RoaringBitmap::new(),
         });
         for from_node in from_nodes {
-            self.edges[*from_node].outgoing.insert(new_node_idx);
+            self.edges[from_node.0 as usize].successors.insert(new_node_idx);
         }
-        new_node_idx
+        NodeIndex(new_node_idx)
     }
 }
 
@@ -88,7 +99,7 @@ impl QueryGraph {
         let word_set = index.words_fst(txn)?;
         let mut graph = QueryGraph::default();
 
-        let (mut prev2, mut prev1, mut prev0): (Vec<usize>, Vec<usize>, Vec<usize>) =
+        let (mut prev2, mut prev1, mut prev0): (Vec<NodeIndex>, Vec<NodeIndex>, Vec<NodeIndex>) =
             (vec![], vec![], vec![graph.root_node]);
 
         // TODO: add all the word derivations found in the fst
@@ -162,38 +173,41 @@ impl QueryGraph {
 
         Ok(graph)
     }
-    pub fn remove_nodes(&mut self, nodes: &[usize]) {
+    pub fn remove_nodes(&mut self, nodes: &[NodeIndex]) {
         for &node in nodes {
-            self.nodes[node] = QueryNode::Deleted;
-            let edges = self.edges[node].clone();
-            for &pred in edges.incoming.iter() {
-                self.edges[pred].outgoing.remove(&node);
+            self.nodes[node.0 as usize] = QueryNode::Deleted;
+            let edges = self.edges[node.0 as usize].clone();
+            for pred in edges.predecessors.iter() {
+                self.edges[pred as usize].successors.remove(node.0);
             }
-            for succ in edges.outgoing {
-                self.edges[succ].incoming.remove(&node);
+            for succ in edges.successors {
+                self.edges[succ as usize].predecessors.remove(node.0);
             }
-            self.edges[node] = Edges { incoming: HashSet::new(), outgoing: HashSet::new() };
+            self.edges[node.0 as usize] =
+                Edges { predecessors: RoaringBitmap::new(), successors: RoaringBitmap::new() };
         }
     }
-    pub fn remove_nodes_keep_edges(&mut self, nodes: &[usize]) {
+    pub fn remove_nodes_keep_edges(&mut self, nodes: &[NodeIndex]) {
         for &node in nodes {
-            self.nodes[node] = QueryNode::Deleted;
-            let edges = self.edges[node].clone();
-            for &pred in edges.incoming.iter() {
-                self.edges[pred].outgoing.remove(&node);
-                self.edges[pred].outgoing.extend(edges.outgoing.iter());
+            self.nodes[node.0 as usize] = QueryNode::Deleted;
+            let edges = self.edges[node.0 as usize].clone();
+            for pred in edges.predecessors.iter() {
+                self.edges[pred as usize].successors.remove(node.0);
+                self.edges[pred as usize].successors |= &edges.successors;
             }
-            for succ in edges.outgoing {
-                self.edges[succ].incoming.remove(&node);
-                self.edges[succ].incoming.extend(edges.incoming.iter());
+            for succ in edges.successors {
+                self.edges[succ as usize].predecessors.remove(node.0);
+                self.edges[succ as usize].predecessors |= &edges.predecessors;
             }
-            self.edges[node] = Edges { incoming: HashSet::new(), outgoing: HashSet::new() };
+            self.edges[node.0 as usize] =
+                Edges { predecessors: RoaringBitmap::new(), successors: RoaringBitmap::new() };
         }
     }
     pub fn remove_words_at_position(&mut self, position: i8) {
         let mut nodes_to_remove_keeping_edges = vec![];
         let mut nodes_to_remove = vec![];
         for (node_idx, node) in self.nodes.iter().enumerate() {
+            let node_idx = NodeIndex(node_idx as u32);
             let QueryNode::Term(LocatedQueryTerm { value: _, positions }) = node else { continue };
             if positions.contains(&position) {
                 nodes_to_remove_keeping_edges.push(node_idx)
@@ -213,11 +227,11 @@ impl QueryGraph {
             let mut nodes_to_remove = vec![];
             for (node_idx, node) in self.nodes.iter().enumerate() {
                 if (!matches!(node, QueryNode::End | QueryNode::Deleted)
-                    && self.edges[node_idx].outgoing.is_empty())
+                    && self.edges[node_idx].successors.is_empty())
                     || (!matches!(node, QueryNode::Start | QueryNode::Deleted)
-                        && self.edges[node_idx].incoming.is_empty())
+                        && self.edges[node_idx].predecessors.is_empty())
                 {
-                    nodes_to_remove.push(node_idx);
+                    nodes_to_remove.push(NodeIndex(node_idx as u32));
                 }
             }
             if nodes_to_remove.is_empty() {
@@ -301,14 +315,14 @@ node [shape = "record"]
                 continue;
             }
             desc.push_str(&format!("{node} [label = {:?}]", &self.nodes[node],));
-            if node == self.root_node {
+            if node == self.root_node.0 as usize {
                 desc.push_str("[color = blue]");
-            } else if node == self.end_node {
+            } else if node == self.end_node.0 as usize {
                 desc.push_str("[color = red]");
             }
             desc.push_str(";\n");
 
-            for edge in self.edges[node].outgoing.iter() {
+            for edge in self.edges[node].successors.iter() {
                 desc.push_str(&format!("{node} -> {edge};\n"));
             }
             // for edge in self.edges[node].incoming.iter() {

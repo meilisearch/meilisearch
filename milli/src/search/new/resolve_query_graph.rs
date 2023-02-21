@@ -4,11 +4,12 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use super::db_cache::DatabaseCache;
 use super::query_term::{QueryTerm, WordDerivations};
-use super::QueryGraph;
+use super::{NodeIndex, QueryGraph};
 use crate::{Index, Result, RoaringBitmapCodec};
 
 // TODO: manual performance metrics: access to DB, bitmap deserializations/operations, etc.
 
+// TODO: reuse NodeDocidsCache in between calls to resolve_query_graph
 #[derive(Default)]
 pub struct NodeDocIdsCache {
     pub cache: HashMap<usize, RoaringBitmap>,
@@ -26,7 +27,7 @@ pub fn resolve_query_graph<'transaction>(
 
     // resolve_query_graph_rec(index, txn, q, q.root_node, &mut docids, &mut cache)?;
 
-    let mut nodes_resolved = HashSet::new();
+    let mut nodes_resolved = RoaringBitmap::new();
     // TODO: should be given as an argument and kept between invocations of resolve query graph
     let mut nodes_docids = vec![RoaringBitmap::new(); q.nodes.len()];
 
@@ -34,16 +35,16 @@ pub fn resolve_query_graph<'transaction>(
     next_nodes_to_visit.push_front(q.root_node);
 
     while let Some(node) = next_nodes_to_visit.pop_front() {
-        let predecessors = &q.edges[node].incoming;
+        let predecessors = &q.edges[node.0 as usize].predecessors;
         if !predecessors.is_subset(&nodes_resolved) {
             next_nodes_to_visit.push_back(node);
             continue;
         }
         // Take union of all predecessors
-        let predecessors_iter = predecessors.iter().map(|p| &nodes_docids[*p]);
+        let predecessors_iter = predecessors.iter().map(|p| &nodes_docids[p as usize]);
         let predecessors_docids = MultiOps::union(predecessors_iter);
 
-        let n = &q.nodes[node];
+        let n = &q.nodes[node.0 as usize];
         // println!("resolving {node} {n:?}, predecessors: {predecessors:?}, their docids: {predecessors_docids:?}");
         let node_docids = match n {
             super::QueryNode::Term(located_term) => {
@@ -95,18 +96,18 @@ pub fn resolve_query_graph<'transaction>(
                 return Ok(predecessors_docids);
             }
         };
-        nodes_resolved.insert(node);
-        nodes_docids[node] = node_docids;
+        nodes_resolved.insert(node.0);
+        nodes_docids[node.0 as usize] = node_docids;
 
-        for &succ in q.edges[node].outgoing.iter() {
-            if !next_nodes_to_visit.contains(&succ) && !nodes_resolved.contains(&succ) {
-                next_nodes_to_visit.push_back(succ);
+        for succ in q.edges[node.0 as usize].successors.iter() {
+            if !next_nodes_to_visit.contains(&NodeIndex(succ)) && !nodes_resolved.contains(succ) {
+                next_nodes_to_visit.push_back(NodeIndex(succ));
             }
         }
         // This is currently slow but could easily be implemented very efficiently
-        for &prec in q.edges[node].incoming.iter() {
-            if q.edges[prec].outgoing.is_subset(&nodes_resolved) {
-                nodes_docids[prec].clear();
+        for prec in q.edges[node.0 as usize].predecessors.iter() {
+            if q.edges[prec as usize].successors.is_subset(&nodes_resolved) {
+                nodes_docids[prec as usize].clear();
             }
         }
         // println!("cached docids: {nodes_docids:?}");

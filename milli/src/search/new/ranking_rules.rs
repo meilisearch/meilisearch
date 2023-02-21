@@ -36,15 +36,17 @@ impl<'transaction, Query> RankingRuleOutputIter<'transaction, Query>
 }
 
 pub trait RankingRuleQueryTrait: Sized + Clone + 'static {}
+
 #[derive(Clone)]
 pub struct PlaceholderQuery;
 impl RankingRuleQueryTrait for PlaceholderQuery {}
 impl RankingRuleQueryTrait for QueryGraph {}
 
 pub trait RankingRule<'transaction, Query: RankingRuleQueryTrait> {
-    // TODO: add an update_candidates function to deal with distinct
-    // attributes?
-
+    /// Prepare the ranking rule such that it can start iterating over its
+    /// buckets using [`next_bucket`](RankingRule::next_bucket).
+    ///
+    /// The given universe is the universe that will be given to [`next_bucket`](RankingRule::next_bucket).
     fn start_iteration(
         &mut self,
         index: &Index,
@@ -54,6 +56,13 @@ pub trait RankingRule<'transaction, Query: RankingRuleQueryTrait> {
         query: &Query,
     ) -> Result<()>;
 
+    /// Return the next bucket of this ranking rule.
+    ///
+    /// The returned candidates MUST be a subset of the given universe.
+    ///
+    /// The universe given as argument is either:
+    /// - a subset of the universe given to the previous call to [`next_bucket`](RankingRule::next_bucket); OR
+    /// - the universe given to [`start_iteration`](RankingRule::start_iteration)
     fn next_bucket(
         &mut self,
         index: &Index,
@@ -62,6 +71,8 @@ pub trait RankingRule<'transaction, Query: RankingRuleQueryTrait> {
         universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<Query>>>;
 
+    /// Finish iterating over the buckets, which yields control to the parent ranking rule
+    /// The next call to this ranking rule, if any, will be [`start_iteration`](RankingRule::start_iteration).
     fn end_iteration(
         &mut self,
         index: &Index,
@@ -72,7 +83,7 @@ pub trait RankingRule<'transaction, Query: RankingRuleQueryTrait> {
 
 #[derive(Debug)]
 pub struct RankingRuleOutput<Q> {
-    /// The query tree that must be used by the child ranking rule to fetch candidates.
+    /// The query corresponding to the current bucket for the child ranking rule
     pub query: Q,
     /// The allowed candidates for the child ranking rule
     pub candidates: RoaringBitmap,
@@ -151,7 +162,6 @@ pub fn execute_search<'transaction>(
     let ranking_rules_len = ranking_rules.len();
     ranking_rules[0].start_iteration(index, txn, db_cache, universe, query_graph)?;
 
-    // TODO: parent_candidates could be used only during debugging?
     let mut candidates = vec![RoaringBitmap::default(); ranking_rules_len];
     candidates[0] = universe.clone();
 
@@ -296,43 +306,43 @@ mod tests {
         let primary_key = index.primary_key(&txn).unwrap().unwrap();
         let primary_key = index.fields_ids_map(&txn).unwrap().id(primary_key).unwrap();
 
-        // loop {
-        //     let start = Instant::now();
+        loop {
+            let start = Instant::now();
 
-        //     let mut db_cache = DatabaseCache::default();
+            let mut db_cache = DatabaseCache::default();
 
-        //     let query_graph = make_query_graph(
-        //         &index,
-        //         &txn,
-        //         &mut db_cache,
-        //         "released from prison by the government",
-        //     )
-        //     .unwrap();
-        //     // println!("{}", query_graph.graphviz());
+            let query_graph = make_query_graph(
+                &index,
+                &txn,
+                &mut db_cache,
+                "released from prison by the government",
+            )
+            .unwrap();
+            // println!("{}", query_graph.graphviz());
 
-        //     // TODO: filters + maybe distinct attributes?
-        //     let universe = get_start_universe(
-        //         &index,
-        //         &txn,
-        //         &mut db_cache,
-        //         &query_graph,
-        //         TermsMatchingStrategy::Last,
-        //     )
-        //     .unwrap();
-        //     // println!("universe: {universe:?}");
+            // TODO: filters + maybe distinct attributes?
+            let universe = get_start_universe(
+                &index,
+                &txn,
+                &mut db_cache,
+                &query_graph,
+                TermsMatchingStrategy::Last,
+            )
+            .unwrap();
+            // println!("universe: {universe:?}");
 
-        //     let results = execute_search(
-        //         &index,
-        //         &txn,
-        //         &mut db_cache,
-        //         &universe,
-        //         &query_graph, /*  0, 20 */
-        //     )
-        //     .unwrap();
+            let results = execute_search(
+                &index,
+                &txn,
+                &mut db_cache,
+                &universe,
+                &query_graph, /*  0, 20 */
+            )
+            .unwrap();
 
-        //     let elapsed = start.elapsed();
-        //     println!("{}us: {results:?}", elapsed.as_micros());
-        // }
+            let elapsed = start.elapsed();
+            println!("{}us: {results:?}", elapsed.as_micros());
+        }
         let start = Instant::now();
 
         let mut db_cache = DatabaseCache::default();
@@ -388,7 +398,7 @@ mod tests {
         let mut s = Search::new(&txn, &index);
         s.query("released from prison by the government");
         s.terms_matching_strategy(TermsMatchingStrategy::Last);
-        // s.criterion_implementation_strategy(crate::CriterionImplementationStrategy::OnlySetBased);
+        s.criterion_implementation_strategy(crate::CriterionImplementationStrategy::OnlySetBased);
         let docs = s.execute().unwrap();
 
         let elapsed = start.elapsed();
@@ -431,7 +441,7 @@ mod tests {
         builder.execute(|_| (), || false).unwrap();
     }
 
-    // #[test]
+    #[test]
     fn _index_movies() {
         let mut options = EnvOpenOptions::new();
         options.map_size(100 * 1024 * 1024 * 1024); // 100 GB
@@ -446,20 +456,14 @@ mod tests {
 
         let config = IndexerConfig::default();
         let mut builder = Settings::new(&mut wtxn, &index, &config);
-
         builder.set_primary_key(primary_key.to_owned());
-
         let searchable_fields = searchable_fields.iter().map(|s| s.to_string()).collect();
         builder.set_searchable_fields(searchable_fields);
-
         let filterable_fields = filterable_fields.iter().map(|s| s.to_string()).collect();
         builder.set_filterable_fields(filterable_fields);
-
-        builder.set_criteria(vec![Criterion::Words]);
-
-        // let sortable_fields = sortable_fields.iter().map(|s| s.to_string()).collect();
-        // builder.set_sortable_fields(sortable_fields);
-
+        builder.set_min_word_len_one_typo(5);
+        builder.set_min_word_len_two_typos(100);
+        builder.set_criteria(vec![Criterion::Words, Criterion::Proximity]);
         builder.execute(|_| (), || false).unwrap();
 
         let config = IndexerConfig::default();
