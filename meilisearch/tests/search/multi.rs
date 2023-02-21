@@ -8,7 +8,7 @@ use crate::common::Server;
 async fn search_empty_list() {
     let server = Server::new().await;
 
-    let (response, code) = server.search(json!({"queries": []})).await;
+    let (response, code) = server.multi_search(json!({"queries": []})).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response), @r###"
     {
@@ -21,7 +21,7 @@ async fn search_empty_list() {
 async fn search_json_object() {
     let server = Server::new().await;
 
-    let (response, code) = server.search(json!({})).await;
+    let (response, code) = server.multi_search(json!({})).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -37,7 +37,7 @@ async fn search_json_object() {
 async fn search_json_array() {
     let server = Server::new().await;
 
-    let (response, code) = server.search(json!([])).await;
+    let (response, code) = server.multi_search(json!([])).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
@@ -59,7 +59,7 @@ async fn simple_search_single_index() {
     index.wait_task(0).await;
 
     let (response, code) = server
-        .search(json!({"queries": [
+        .multi_search(json!({"queries": [
         {"indexUid" : "test", "q": "glass"},
         {"indexUid": "test", "q": "captain"},
         ]}))
@@ -109,7 +109,7 @@ async fn simple_search_missing_index_uid() {
     index.wait_task(0).await;
 
     let (response, code) = server
-        .search(json!({"queries": [
+        .multi_search(json!({"queries": [
         {"q": "glass"},
         ]}))
         .await;
@@ -134,7 +134,7 @@ async fn simple_search_illegal_index_uid() {
     index.wait_task(0).await;
 
     let (response, code) = server
-        .search(json!({"queries": [
+        .multi_search(json!({"queries": [
         {"indexUid": "hé", "q": "glass"},
         ]}))
         .await;
@@ -164,7 +164,7 @@ async fn simple_search_two_indexes() {
     index.wait_task(1).await;
 
     let (response, code) = server
-        .search(json!({"queries": [
+        .multi_search(json!({"queries": [
         {"indexUid" : "test", "q": "glass"},
         {"indexUid": "nested", "q": "pesti"},
         ]}))
@@ -241,7 +241,7 @@ async fn search_one_index_doesnt_exist() {
     index.wait_task(0).await;
 
     let (response, code) = server
-        .search(json!({"queries": [
+        .multi_search(json!({"queries": [
         {"indexUid" : "test", "q": "glass"},
         {"indexUid": "nested", "q": "pesti"},
         ]}))
@@ -262,7 +262,7 @@ async fn search_multiple_indexes_dont_exist() {
     let server = Server::new().await;
 
     let (response, code) = server
-        .search(json!({"queries": [
+        .multi_search(json!({"queries": [
         {"indexUid" : "test", "q": "glass"},
         {"indexUid": "nested", "q": "pesti"},
         ]}))
@@ -294,7 +294,7 @@ async fn search_one_query_error() {
     index.wait_task(1).await;
 
     let (response, code) = server
-        .search(json!({"queries": [
+        .multi_search(json!({"queries": [
         {"indexUid" : "test", "q": "glass", "facets": ["title"]},
         {"indexUid": "nested", "q": "pesti"},
         ]}))
@@ -326,7 +326,7 @@ async fn search_multiple_query_errors() {
     index.wait_task(1).await;
 
     let (response, code) = server
-        .search(json!({"queries": [
+        .multi_search(json!({"queries": [
         {"indexUid" : "test", "q": "glass", "facets": ["title"]},
         {"indexUid": "nested", "q": "pesti", "facets": ["doggos"]},
         ]}))
