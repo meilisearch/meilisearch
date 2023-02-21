@@ -435,7 +435,7 @@ impl Segment {
         let post_search = std::mem::take(&mut self.post_search_aggregator)
             .into_event(&self.user, "Documents Searched POST");
         let post_multi_search = std::mem::take(&mut self.post_multi_search_aggregator)
-            .into_event(&self.user, "Documents Searched By Array of Queries POST");
+            .into_event(&self.user, "Documents Searched by Multi-Search POST");
         let add_documents = std::mem::take(&mut self.add_documents_aggregator)
             .into_event(&self.user, "Documents Added");
         let delete_documents = std::mem::take(&mut self.delete_documents_aggregator)
