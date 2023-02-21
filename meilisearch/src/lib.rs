@@ -92,7 +92,8 @@ pub fn create_app(
     let app = app.configure(|s| configure_metrics_route(s, opt.enable_metrics_route));
 
     #[cfg(feature = "metrics")]
-    let app = app.wrap(Condition::new(opt.enable_metrics_route, route_metrics::RouteMetrics));
+    let app =
+        app.wrap(middleware::Condition::new(opt.enable_metrics_route, route_metrics::RouteMetrics));
     app.wrap(
         Cors::default()
             .send_wildcard()
