@@ -1,11 +1,11 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
 
 use heed::RoTxn;
 use roaring::RoaringBitmap;
 
 use super::{Edge, RankingRuleGraph, RankingRuleGraphTrait};
 use crate::new::db_cache::DatabaseCache;
-use crate::new::{NodeIndex, QueryGraph};
+use crate::new::QueryGraph;
 use crate::{Index, Result};
 
 impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
@@ -36,8 +36,8 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                 edges.sort_by_key(|e| e.0);
                 for (cost, details) in edges {
                     ranking_rule_graph.all_edges.push(Some(Edge {
-                        from_node: NodeIndex(node_idx as u32),
-                        to_node: NodeIndex(successor_idx),
+                        from_node: node_idx as u32,
+                        to_node: successor_idx,
                         cost,
                         details,
                     }));

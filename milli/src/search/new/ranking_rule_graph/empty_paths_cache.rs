@@ -1,17 +1,18 @@
 use std::collections::HashSet;
 
-use super::{paths_map::PathsMap, EdgeIndex};
+use roaring::RoaringBitmap;
+
+use super::paths_map::PathsMap;
 
 #[derive(Default)]
 pub struct EmptyPathsCache {
-    pub empty_edges: HashSet<EdgeIndex>,
+    pub empty_edges: RoaringBitmap,
     pub empty_prefixes: PathsMap<()>,
 }
 impl EmptyPathsCache {
-    pub fn path_is_empty(&self, path: &[EdgeIndex]) -> bool {
+    pub fn path_is_empty(&self, path: &[u32]) -> bool {
         for edge in path {
-            // TODO: should be a bitmap intersection
-            if self.empty_edges.contains(edge) {
+            if self.empty_edges.contains(*edge) {
                 return true;
             }
         }

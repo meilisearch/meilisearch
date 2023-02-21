@@ -6,14 +6,14 @@ pub mod paths_map;
 pub mod proximity;
 pub mod resolve_paths;
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
 use std::ops::ControlFlow;
 
 use heed::RoTxn;
 use roaring::RoaringBitmap;
 
 use super::db_cache::DatabaseCache;
-use super::{NodeIndex, QueryGraph, QueryNode};
+use super::{QueryGraph, QueryNode};
 use crate::{Index, Result};
 
 #[derive(Debug, Clone)]
@@ -24,20 +24,17 @@ pub enum EdgeDetails<E> {
 
 #[derive(Debug, Clone)]
 pub struct Edge<E> {
-    from_node: NodeIndex,
-    to_node: NodeIndex,
+    from_node: u32,
+    to_node: u32,
     cost: u8,
     details: EdgeDetails<E>,
 }
 
 #[derive(Debug, Clone)]
 pub struct EdgePointer<'graph, E> {
-    pub index: EdgeIndex,
+    pub index: u32,
     pub edge: &'graph Edge<E>,
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct EdgeIndex(pub usize);
 
 pub trait RankingRuleGraphTrait {
     /// The details of an edge connecting two query nodes. These details
@@ -103,26 +100,22 @@ pub struct RankingRuleGraph<G: RankingRuleGraphTrait> {
     // TODO:
     // node_successors?
 
-    // pub removed_edges: HashSet<EdgeIndex>,
-    // pub tmp_removed_edges: HashSet<EdgeIndex>,
+    // pub removed_edges: HashSet<u32>,
+    // pub tmp_removed_edges: HashSet<u32>,
 }
 impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
-    pub fn get_edge(&self, edge_index: EdgeIndex) -> &Option<Edge<G::EdgeDetails>> {
-        &self.all_edges[edge_index.0]
-    }
-
     // Visit all edges between the two given nodes in order of increasing cost.
     pub fn visit_edges<'graph, O>(
         &'graph self,
-        from: NodeIndex,
-        to: NodeIndex,
-        mut visit: impl FnMut(EdgeIndex, &'graph Edge<G::EdgeDetails>) -> ControlFlow<O>,
+        from: u32,
+        to: u32,
+        mut visit: impl FnMut(u32, &'graph Edge<G::EdgeDetails>) -> ControlFlow<O>,
     ) -> Option<O> {
-        let from_edges = &self.node_edges[from.0 as usize];
+        let from_edges = &self.node_edges[from as usize];
         for edge_idx in from_edges {
             let edge = self.all_edges[edge_idx as usize].as_ref().unwrap();
             if edge.to_node == to {
-                let cf = visit(EdgeIndex(edge_idx as usize), edge);
+                let cf = visit(edge_idx, edge);
                 match cf {
                     ControlFlow::Continue(_) => continue,
                     ControlFlow::Break(o) => return Some(o),
@@ -133,21 +126,21 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         None
     }
 
-    fn remove_edge(&mut self, edge_index: EdgeIndex) {
-        let edge_opt = &mut self.all_edges[edge_index.0];
+    fn remove_edge(&mut self, edge_index: u32) {
+        let edge_opt = &mut self.all_edges[edge_index as usize];
         let Some(edge) = &edge_opt else { return };
         let (from_node, to_node) = (edge.from_node, edge.to_node);
         *edge_opt = None;
 
-        let from_node_edges = &mut self.node_edges[from_node.0 as usize];
-        from_node_edges.remove(edge_index.0 as u32);
+        let from_node_edges = &mut self.node_edges[from_node as usize];
+        from_node_edges.remove(edge_index);
 
         let mut new_successors_from_node = RoaringBitmap::new();
-        for edge in from_node_edges.iter() {
-            let Edge { to_node, .. } = &self.all_edges[edge as usize].as_ref().unwrap();
-            new_successors_from_node.insert(to_node.0);
+        for from_node_edge in from_node_edges.iter() {
+            let Edge { to_node, .. } = &self.all_edges[from_node_edge as usize].as_ref().unwrap();
+            new_successors_from_node.insert(*to_node);
         }
-        self.successors[from_node.0 as usize] = new_successors_from_node;
+        self.successors[from_node as usize] = new_successors_from_node;
     }
     // pub fn remove_nodes(&mut self, nodes: &[usize]) {
     //     for &node in nodes {
@@ -190,7 +183,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
     //         }
     //     }
     // }
-    // fn is_removed_edge(&self, edge: EdgeIndex) -> bool {
+    // fn is_removed_edge(&self, edge: u32) -> bool {
     //     self.removed_edges.contains(&edge) || self.tmp_removed_edges.contains(&edge)
     // }
 
@@ -203,9 +196,9 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                 continue;
             }
             desc.push_str(&format!("{node_idx} [label = {:?}]", node));
-            if node_idx == self.query_graph.root_node.0 as usize {
+            if node_idx == self.query_graph.root_node as usize {
                 desc.push_str("[color = blue]");
-            } else if node_idx == self.query_graph.end_node.0 as usize {
+            } else if node_idx == self.query_graph.end_node as usize {
                 desc.push_str("[color = red]");
             }
             desc.push_str(";\n");

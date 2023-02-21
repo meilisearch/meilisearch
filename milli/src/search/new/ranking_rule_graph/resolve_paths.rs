@@ -35,7 +35,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
             'edge_loop: for edge_index in edge_indexes {
                 processed_edges.push(edge_index);
                 let edge_docids =
-                    edge_docids_cache.get_edge_docids(index, txn, db_cache, &edge_index, self)?;
+                    edge_docids_cache.get_edge_docids(index, txn, db_cache, edge_index, self)?;
                 match edge_docids {
                     BitmapOrAllRef::Bitmap(edge_docids) => {
                         if edge_docids.is_disjoint(universe) {

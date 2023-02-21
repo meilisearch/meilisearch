@@ -1,17 +1,18 @@
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::hash_map::Entry;
 
+use fxhash::FxHashMap;
 use heed::{types::ByteSlice, RoTxn};
 
 use crate::{Index, Result};
 
 #[derive(Default)]
 pub struct DatabaseCache<'transaction> {
-    pub word_pair_proximity_docids: HashMap<(u8, String, String), Option<&'transaction [u8]>>,
+    pub word_pair_proximity_docids: FxHashMap<(u8, String, String), Option<&'transaction [u8]>>,
     pub word_prefix_pair_proximity_docids:
-        HashMap<(u8, String, String), Option<&'transaction [u8]>>,
-    pub word_docids: HashMap<String, Option<&'transaction [u8]>>,
-    pub exact_word_docids: HashMap<String, Option<&'transaction [u8]>>,
-    pub word_prefix_docids: HashMap<String, Option<&'transaction [u8]>>,
+        FxHashMap<(u8, String, String), Option<&'transaction [u8]>>,
+    pub word_docids: FxHashMap<String, Option<&'transaction [u8]>>,
+    pub exact_word_docids: FxHashMap<String, Option<&'transaction [u8]>>,
+    pub word_prefix_docids: FxHashMap<String, Option<&'transaction [u8]>>,
 }
 impl<'transaction> DatabaseCache<'transaction> {
     pub fn get_word_docids(

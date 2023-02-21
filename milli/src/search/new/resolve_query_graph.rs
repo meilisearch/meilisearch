@@ -1,10 +1,11 @@
+use fxhash::FxHashMap;
 use heed::{BytesDecode, RoTxn};
 use roaring::{MultiOps, RoaringBitmap};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use super::db_cache::DatabaseCache;
 use super::query_term::{QueryTerm, WordDerivations};
-use super::{NodeIndex, QueryGraph};
+use super::QueryGraph;
 use crate::{Index, Result, RoaringBitmapCodec};
 
 // TODO: manual performance metrics: access to DB, bitmap deserializations/operations, etc.
@@ -12,7 +13,7 @@ use crate::{Index, Result, RoaringBitmapCodec};
 // TODO: reuse NodeDocidsCache in between calls to resolve_query_graph
 #[derive(Default)]
 pub struct NodeDocIdsCache {
-    pub cache: HashMap<usize, RoaringBitmap>,
+    pub cache: FxHashMap<usize, RoaringBitmap>,
 }
 
 pub fn resolve_query_graph<'transaction>(
@@ -35,7 +36,7 @@ pub fn resolve_query_graph<'transaction>(
     next_nodes_to_visit.push_front(q.root_node);
 
     while let Some(node) = next_nodes_to_visit.pop_front() {
-        let predecessors = &q.edges[node.0 as usize].predecessors;
+        let predecessors = &q.edges[node as usize].predecessors;
         if !predecessors.is_subset(&nodes_resolved) {
             next_nodes_to_visit.push_back(node);
             continue;
@@ -44,7 +45,7 @@ pub fn resolve_query_graph<'transaction>(
         let predecessors_iter = predecessors.iter().map(|p| &nodes_docids[p as usize]);
         let predecessors_docids = MultiOps::union(predecessors_iter);
 
-        let n = &q.nodes[node.0 as usize];
+        let n = &q.nodes[node as usize];
         // println!("resolving {node} {n:?}, predecessors: {predecessors:?}, their docids: {predecessors_docids:?}");
         let node_docids = match n {
             super::QueryNode::Term(located_term) => {
@@ -96,16 +97,16 @@ pub fn resolve_query_graph<'transaction>(
                 return Ok(predecessors_docids);
             }
         };
-        nodes_resolved.insert(node.0);
-        nodes_docids[node.0 as usize] = node_docids;
+        nodes_resolved.insert(node);
+        nodes_docids[node as usize] = node_docids;
 
-        for succ in q.edges[node.0 as usize].successors.iter() {
-            if !next_nodes_to_visit.contains(&NodeIndex(succ)) && !nodes_resolved.contains(succ) {
-                next_nodes_to_visit.push_back(NodeIndex(succ));
+        for succ in q.edges[node as usize].successors.iter() {
+            if !next_nodes_to_visit.contains(&succ) && !nodes_resolved.contains(succ) {
+                next_nodes_to_visit.push_back(succ);
             }
         }
         // This is currently slow but could easily be implemented very efficiently
-        for prec in q.edges[node.0 as usize].predecessors.iter() {
+        for prec in q.edges[node as usize].predecessors.iter() {
             if q.edges[prec as usize].successors.is_subset(&nodes_resolved) {
                 nodes_docids[prec as usize].clear();
             }

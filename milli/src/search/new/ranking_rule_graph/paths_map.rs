@@ -3,14 +3,16 @@ use std::collections::HashSet;
 use std::fmt::Write;
 use std::hash::{Hash, Hasher};
 
+use roaring::RoaringBitmap;
+
 use super::cheapest_paths::Path;
-use super::{EdgeDetails, EdgeIndex, RankingRuleGraph, RankingRuleGraphTrait, Edge};
+use super::{EdgeDetails, RankingRuleGraph, RankingRuleGraphTrait, Edge};
 use crate::new::QueryNode;
 
 
 #[derive(Debug)]
 pub struct PathsMap<V> {
-    nodes: Vec<(EdgeIndex, PathsMap<V>)>,
+    nodes: Vec<(u32, PathsMap<V>)>,
     value: Option<V>
 }
 impl<V> Default for PathsMap<V> {
@@ -36,7 +38,7 @@ impl<V> PathsMap<V> {
         self.nodes.is_empty() && self.value.is_none()
     }
 
-    pub fn insert(&mut self, mut edges: impl Iterator<Item = EdgeIndex>, value: V) {
+    pub fn insert(&mut self, mut edges: impl Iterator<Item = u32>, value: V) {
         match edges.next() {
             None => {
                 self.value = Some(value);
@@ -54,7 +56,7 @@ impl<V> PathsMap<V> {
             }
         }
     }
-    fn remove_first_rec(&mut self, cur: &mut Vec<EdgeIndex>) -> (bool, V) {
+    fn remove_first_rec(&mut self, cur: &mut Vec<u32>) -> (bool, V) {
         let Some((first_edge, rest)) = self.nodes.first_mut() else { 
             // The PathsMap has to be correct by construction here, otherwise
             // the unwrap() will crash
@@ -69,7 +71,7 @@ impl<V> PathsMap<V> {
             (false, value)
         }
     }
-    pub fn remove_first(&mut self) -> Option<(Vec<EdgeIndex>, V)> {
+    pub fn remove_first(&mut self) -> Option<(Vec<u32>, V)> {
         if self.is_empty() {
             return None
         }
@@ -78,7 +80,7 @@ impl<V> PathsMap<V> {
         let (_, value) = self.remove_first_rec(&mut result);    
         Some((result, value))
     }
-    pub fn iterate_rec(&self, cur: &mut Vec<EdgeIndex>, visit: &mut impl FnMut(&Vec<EdgeIndex>, &V)) {
+    pub fn iterate_rec(&self, cur: &mut Vec<u32>, visit: &mut impl FnMut(&Vec<u32>, &V)) {
         if let Some(value) = &self.value {
             visit(cur, value);
         }
@@ -88,7 +90,7 @@ impl<V> PathsMap<V> {
             cur.pop();
         }
     }
-    pub fn iterate(&self, mut visit: impl FnMut(&Vec<EdgeIndex>, &V)) {
+    pub fn iterate(&self, mut visit: impl FnMut(&Vec<u32>, &V)) {
         self.iterate_rec(&mut vec![], &mut visit)
     }
 
@@ -97,10 +99,10 @@ impl<V> PathsMap<V> {
             self.remove_prefix(prefix);
         });
     }
-    pub fn remove_edges(&mut self, forbidden_edges: &HashSet<EdgeIndex>) {
+    pub fn remove_edges(&mut self, forbidden_edges: &RoaringBitmap) {
         let mut i = 0;
         while i < self.nodes.len() {
-            let should_remove = if forbidden_edges.contains(&self.nodes[i].0) {
+            let should_remove = if forbidden_edges.contains(self.nodes[i].0) {
                 true
             } else if !self.nodes[i].1.nodes.is_empty() {
                 self.nodes[i].1.remove_edges(forbidden_edges);
@@ -115,7 +117,7 @@ impl<V> PathsMap<V> {
             }
         }
     }
-    pub fn remove_edge(&mut self, forbidden_edge: &EdgeIndex) {
+    pub fn remove_edge(&mut self, forbidden_edge: &u32) {
         let mut i = 0;
         while i < self.nodes.len() {
             let should_remove = if &self.nodes[i].0 == forbidden_edge {
@@ -133,7 +135,7 @@ impl<V> PathsMap<V> {
             }
         }
     }
-    pub fn remove_prefix(&mut self, forbidden_prefix: &[EdgeIndex]) {
+    pub fn remove_prefix(&mut self, forbidden_prefix: &[u32]) {
         let [first_edge, remaining_prefix @ ..] = forbidden_prefix else {
             self.nodes.clear();
             self.value = None;
@@ -157,7 +159,7 @@ impl<V> PathsMap<V> {
         }
     }
 
-    pub fn edge_indices_after_prefix(&self, prefix: &[EdgeIndex]) -> Vec<EdgeIndex> {
+    pub fn edge_indices_after_prefix(&self, prefix: &[u32]) -> Vec<u32> {
         let [first_edge, remaining_prefix @ ..] = prefix else {
             return self.nodes.iter().map(|n| n.0).collect();
         };
@@ -169,7 +171,7 @@ impl<V> PathsMap<V> {
         vec![]
     }
 
-    pub fn contains_prefix_of_path(&self, path: &[EdgeIndex]) -> bool {
+    pub fn contains_prefix_of_path(&self, path: &[u32]) -> bool {
         if self.value.is_some() {
             return true
         }
@@ -202,7 +204,7 @@ impl<V> PathsMap<V> {
             h.finish()
         };
         for (edge_idx, rest) in self.nodes.iter() {
-            let Some(Edge { from_node, to_node, cost, details }) = graph.get_edge(*edge_idx).as_ref() else {
+            let Some(Edge { from_node, to_node, cost, details }) = graph.all_edges[*edge_idx as usize].as_ref() else {
                 continue;
             };
             let mut path_to = path_from.clone();
@@ -235,9 +237,9 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                 continue;
             }
             desc.push_str(&format!("{node_idx} [label = {:?}]", node));
-            if node_idx == self.query_graph.root_node.0 as usize {
+            if node_idx == self.query_graph.root_node as usize {
                 desc.push_str("[color = blue]");
-            } else if node_idx == self.query_graph.end_node.0 as usize {
+            } else if node_idx == self.query_graph.end_node as usize {
                 desc.push_str("[color = red]");
             }
             desc.push_str(";\n");
@@ -246,7 +248,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         for (edge_idx, edge) in self.all_edges.iter().enumerate() {
             let Some(edge) = edge else { continue };
             let Edge { from_node, to_node, cost, details } = edge;
-            let color = if path.edges.contains(&EdgeIndex(edge_idx)) {
+            let color = if path.edges.contains(&(edge_idx as u32)) {
                 "red"
             } else {
                 "green"
@@ -283,7 +285,7 @@ mod tests {
     use crate::new::ranking_rule_graph::cheapest_paths::KCheapestPathsState;
     use crate::new::ranking_rule_graph::empty_paths_cache::EmptyPathsCache;
     use crate::new::ranking_rule_graph::proximity::ProximityGraph;
-    use crate::new::ranking_rule_graph::{RankingRuleGraph, EdgeIndex};
+    use crate::new::ranking_rule_graph::RankingRuleGraph;
     use crate::search::new::query_term::{word_derivations, LocatedQueryTerm};
     use crate::search::new::QueryGraph;
     use charabia::Tokenize;
@@ -358,11 +360,11 @@ mod tests {
         let desc = path_tree.graphviz(&prox_graph);
         println!("{desc}");
 
-        // let path = vec![EdgeIndex { from: 0, to: 2, edge_idx: 0 }, EdgeIndex { from: 2, to: 3, edge_idx: 0 }, EdgeIndex { from: 3, to: 4, edge_idx: 0 }, EdgeIndex { from: 4, to: 5, edge_idx: 0 }, EdgeIndex { from: 5, to: 8, edge_idx: 0 }, EdgeIndex { from: 8, to: 1, edge_idx: 0 }, EdgeIndex { from: 1, to: 10, edge_idx: 0 }];
+        // let path = vec![u32 { from: 0, to: 2, edge_idx: 0 }, u32 { from: 2, to: 3, edge_idx: 0 }, u32 { from: 3, to: 4, edge_idx: 0 }, u32 { from: 4, to: 5, edge_idx: 0 }, u32 { from: 5, to: 8, edge_idx: 0 }, u32 { from: 8, to: 1, edge_idx: 0 }, u32 { from: 1, to: 10, edge_idx: 0 }];
         // println!("{}", psath_tree.contains_prefix_of_path(&path));
         
 
-        // let path =  vec![EdgeIndex { from: 0, to: 2, edge_idx: 0 }, EdgeIndex { from: 2, to: 3, edge_idx: 0 }, EdgeIndex { from: 3, to: 4, edge_idx: 0 }, EdgeIndex { from: 4, to: 5, edge_idx: 0 }, EdgeIndex { from: 5, to: 6, edge_idx: 0 }, EdgeIndex { from: 6, to: 7, edge_idx: 0 }, EdgeIndex { from: 7, to: 1, edge_idx: 0 }];
+        // let path =  vec![u32 { from: 0, to: 2, edge_idx: 0 }, u32 { from: 2, to: 3, edge_idx: 0 }, u32 { from: 3, to: 4, edge_idx: 0 }, u32 { from: 4, to: 5, edge_idx: 0 }, u32 { from: 5, to: 6, edge_idx: 0 }, u32 { from: 6, to: 7, edge_idx: 0 }, u32 { from: 7, to: 1, edge_idx: 0 }];
 
 
         // path_tree.iterate(|path, cost| {
@@ -370,18 +372,18 @@ mod tests {
         // });
 
         // path_tree.remove_forbidden_prefix(&[
-        //     EdgeIndex { from: 0, to: 2, edge_idx: 0 },
-        //     EdgeIndex { from: 2, to: 3, edge_idx: 2 },
+        //     u32 { from: 0, to: 2, edge_idx: 0 },
+        //     u32 { from: 2, to: 3, edge_idx: 2 },
         // ]);
         // let desc = path_tree.graphviz();
         // println!("{desc}");
 
-        // path_tree.remove_forbidden_edge(&EdgeIndex { from: 5, to: 6, cost: 1 });
+        // path_tree.remove_forbidden_edge(&u32 { from: 5, to: 6, cost: 1 });
 
         // let desc = path_tree.graphviz();
         // println!("AFTER REMOVING 5-6 [1]:\n{desc}");
 
-        // path_tree.remove_forbidden_edge(&EdgeIndex { from: 3, to: 4, cost: 1 });
+        // path_tree.remove_forbidden_edge(&u32 { from: 3, to: 4, cost: 1 });
 
         // let desc = path_tree.graphviz();
         // println!("AFTER REMOVING 3-4 [1]:\n{desc}");
@@ -396,7 +398,7 @@ mod tests {
         // let desc = path_tree.graphviz();
         // println!("AFTER REMOVING: {desc}");
 
-        // path_tree.remove_all_containing_edge(&EdgeIndex { from: 5, to: 6, cost: 2 });
+        // path_tree.remove_all_containing_edge(&u32 { from: 5, to: 6, cost: 2 });
 
         // let desc = path_tree.graphviz();
         // println!("{desc}");

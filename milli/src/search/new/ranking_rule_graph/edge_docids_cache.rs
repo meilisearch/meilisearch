@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
+use fxhash::FxHashMap;
 use heed::RoTxn;
 use roaring::RoaringBitmap;
 
-use super::{EdgeDetails, EdgeIndex, RankingRuleGraph, RankingRuleGraphTrait};
+use super::{EdgeDetails, RankingRuleGraph, RankingRuleGraphTrait};
 use crate::new::db_cache::DatabaseCache;
 use crate::new::BitmapOrAllRef;
 use crate::{Index, Result};
@@ -16,12 +17,12 @@ use crate::{Index, Result};
 // by using a pointer (real, Rc, bumpalo, or in a vector)???
 
 pub struct EdgeDocidsCache<G: RankingRuleGraphTrait> {
-    pub cache: HashMap<EdgeIndex, RoaringBitmap>,
+    pub cache: FxHashMap<u32, RoaringBitmap>,
 
     // TODO: There is a big difference between `cache`, which is always valid, and
     // `empty_path_prefixes`, which is only accurate for a particular universe
     // ALSO, we should have a universe-specific `empty_edge` to use
-    // pub empty_path_prefixes: HashSet<Vec<EdgeIndex>>,
+    // pub empty_path_prefixes: HashSet<Vec<u32>>,
     _phantom: PhantomData<G>,
 }
 impl<G: RankingRuleGraphTrait> Default for EdgeDocidsCache<G> {
@@ -39,21 +40,21 @@ impl<G: RankingRuleGraphTrait> EdgeDocidsCache<G> {
         index: &Index,
         txn: &'transaction RoTxn,
         db_cache: &mut DatabaseCache<'transaction>,
-        edge_index: &EdgeIndex,
+        edge_index: u32,
         graph: &RankingRuleGraph<G>,
     ) -> Result<BitmapOrAllRef<'s>> {
-        if self.cache.contains_key(edge_index) {
-            return Ok(BitmapOrAllRef::Bitmap(&self.cache[edge_index]));
+        if self.cache.contains_key(&edge_index) {
+            return Ok(BitmapOrAllRef::Bitmap(&self.cache[&edge_index]));
         }
-        let edge = graph.get_edge(*edge_index).as_ref().unwrap();
+        let edge = graph.all_edges[edge_index as usize].as_ref().unwrap();
 
         match &edge.details {
             EdgeDetails::Unconditional => Ok(BitmapOrAllRef::All),
             EdgeDetails::Data(details) => {
                 let docids = G::compute_docids(index, txn, db_cache, details)?;
 
-                let _ = self.cache.insert(*edge_index, docids);
-                let docids = &self.cache[edge_index];
+                let _ = self.cache.insert(edge_index, docids);
+                let docids = &self.cache[&edge_index];
                 Ok(BitmapOrAllRef::Bitmap(docids))
             }
         }
