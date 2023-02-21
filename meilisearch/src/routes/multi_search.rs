@@ -17,7 +17,7 @@ use crate::search::{
 };
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("").route(web::post().to(SeqHandler(search_with_post))));
+    cfg.service(web::resource("").route(web::post().to(SeqHandler(multi_search_with_post))));
 }
 
 #[derive(Serialize)]
@@ -31,7 +31,7 @@ pub struct SearchQueries {
     queries: Vec<SearchQueryWithIndex>,
 }
 
-pub async fn search_with_post(
+pub async fn multi_search_with_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     params: AwebJson<SearchQueries, DeserrJsonError>,
     req: HttpRequest,
