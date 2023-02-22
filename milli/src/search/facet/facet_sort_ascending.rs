@@ -34,15 +34,20 @@ pub fn ascending_facet_sort<'t>(
     db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
     candidates: RoaringBitmap,
-) -> Result<Box<dyn Iterator<Item = Result<RoaringBitmap>> + 't>> {
+) -> Result<impl Iterator<Item = Result<(RoaringBitmap, &'t [u8])>> + 't> {
     let highest_level = get_highest_level(rtxn, db, field_id)?;
     if let Some(first_bound) = get_first_facet_value::<ByteSliceRefCodec>(rtxn, db, field_id)? {
         let first_key = FacetGroupKey { field_id, level: highest_level, left_bound: first_bound };
         let iter = db.range(rtxn, &(first_key..)).unwrap().take(usize::MAX);
 
-        Ok(Box::new(AscendingFacetSort { rtxn, db, field_id, stack: vec![(candidates, iter)] }))
+        Ok(itertools::Either::Left(AscendingFacetSort {
+            rtxn,
+            db,
+            field_id,
+            stack: vec![(candidates, iter)],
+        }))
     } else {
-        Ok(Box::new(std::iter::empty()))
+        Ok(itertools::Either::Right(std::iter::empty()))
     }
 }
 
@@ -60,7 +65,7 @@ struct AscendingFacetSort<'t, 'e> {
 }
 
 impl<'t, 'e> Iterator for AscendingFacetSort<'t, 'e> {
-    type Item = Result<RoaringBitmap>;
+    type Item = Result<(RoaringBitmap, &'t [u8])>;
 
     fn next(&mut self) -> Option<Self::Item> {
         'outer: loop {
@@ -90,7 +95,8 @@ impl<'t, 'e> Iterator for AscendingFacetSort<'t, 'e> {
                     *documents_ids -= &bitmap;
 
                     if level == 0 {
-                        return Some(Ok(bitmap));
+                        // Since the level is 0, the left_bound is the exact value.
+                        return Some(Ok((bitmap, left_bound)));
                     }
                     let starting_key_below =
                         FacetGroupKey { field_id: self.field_id, level: level - 1, left_bound };
@@ -130,7 +136,7 @@ mod tests {
             let mut results = String::new();
             let iter = ascending_facet_sort(&txn, index.content, 0, candidates).unwrap();
             for el in iter {
-                let docids = el.unwrap();
+                let (docids, _) = el.unwrap();
                 results.push_str(&display_bitmap(&docids));
                 results.push('\n');
             }
@@ -152,7 +158,7 @@ mod tests {
             let mut results = String::new();
             let iter = ascending_facet_sort(&txn, index.content, 0, candidates.clone()).unwrap();
             for el in iter {
-                let docids = el.unwrap();
+                let (docids, _) = el.unwrap();
                 results.push_str(&display_bitmap(&docids));
                 results.push('\n');
             }
@@ -161,7 +167,7 @@ mod tests {
             let mut results = String::new();
             let iter = ascending_facet_sort(&txn, index.content, 1, candidates).unwrap();
             for el in iter {
-                let docids = el.unwrap();
+                let (docids, _) = el.unwrap();
                 results.push_str(&display_bitmap(&docids));
                 results.push('\n');
             }
@@ -183,7 +189,7 @@ mod tests {
             let mut results = String::new();
             let iter = ascending_facet_sort(&txn, index.content, 0, candidates.clone()).unwrap();
             for el in iter {
-                let docids = el.unwrap();
+                let (docids, _) = el.unwrap();
                 results.push_str(&display_bitmap(&docids));
                 results.push('\n');
             }
@@ -192,7 +198,7 @@ mod tests {
             let mut results = String::new();
             let iter = ascending_facet_sort(&txn, index.content, 1, candidates).unwrap();
             for el in iter {
-                let docids = el.unwrap();
+                let (docids, _) = el.unwrap();
                 results.push_str(&display_bitmap(&docids));
                 results.push('\n');
             }
@@ -214,7 +220,7 @@ mod tests {
             let mut results = String::new();
             let iter = ascending_facet_sort(&txn, index.content, 3, candidates.clone()).unwrap();
             for el in iter {
-                let docids = el.unwrap();
+                let (docids, _) = el.unwrap();
                 results.push_str(&display_bitmap(&docids));
                 results.push('\n');
             }

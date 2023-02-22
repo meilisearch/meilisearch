@@ -21,6 +21,7 @@ use crate::update::{MAX_LENGTH_FOR_PREFIX_PROXIMITY_DB, MAX_PROXIMITY_FOR_PREFIX
 use crate::{AscDesc as AscDescName, DocumentId, FieldId, Index, Member, Result};
 
 mod asc_desc;
+pub use asc_desc::{facet_max_value, facet_min_value};
 mod attribute;
 mod exactness;
 pub mod r#final;
