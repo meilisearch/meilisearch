@@ -116,10 +116,20 @@ impl FileStore {
 
     /// List the Uuids of the files in the FileStore
     pub fn all_uuids(&self) -> Result<impl Iterator<Item = Result<Uuid>>> {
-        Ok(self.path.read_dir()?.map(|entry| {
-            Ok(Uuid::from_str(
-                entry?.file_name().to_str().ok_or(Error::CouldNotParseFileNameAsUtf8)?,
-            )?)
+        Ok(self.path.read_dir()?.filter_map(|entry| {
+            let file_name = match entry {
+                Ok(entry) => entry.file_name(),
+                Err(e) => return Some(Err(e.into())),
+            };
+            let file_name = match file_name.to_str() {
+                Some(file_name) => file_name,
+                None => return Some(Err(Error::CouldNotParseFileNameAsUtf8)),
+            };
+            if file_name.starts_with('.') {
+                None
+            } else {
+                Some(Uuid::from_str(file_name).map_err(|e| e.into()))
+            }
         }))
     }
 }
@@ -133,5 +143,36 @@ impl File {
     pub fn persist(self) -> Result<()> {
         self.file.persist(&self.path)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::io::Write;
+
+    use tempfile::TempDir;
+
+    use super::*;
+
+    #[test]
+    fn all_uuids() {
+        let dir = TempDir::new().unwrap();
+        let fs = FileStore::new(dir.path()).unwrap();
+        let (uuid, mut file) = fs.new_update().unwrap();
+        file.write_all(b"Hello world").unwrap();
+        file.persist().unwrap();
+        let all_uuids = fs.all_uuids().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        assert_eq!(all_uuids, vec![uuid]);
+
+        let (uuid2, file) = fs.new_update().unwrap();
+        let all_uuids = fs.all_uuids().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        assert_eq!(all_uuids, vec![uuid]);
+
+        file.persist().unwrap();
+        let mut all_uuids = fs.all_uuids().unwrap().collect::<Result<Vec<_>>>().unwrap();
+        all_uuids.sort();
+        let mut expected = vec![uuid, uuid2];
+        expected.sort();
+        assert_eq!(all_uuids, expected);
     }
 }
