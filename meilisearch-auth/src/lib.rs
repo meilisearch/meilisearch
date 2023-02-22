@@ -173,8 +173,8 @@ impl Default for AuthFilter {
 
 impl AuthFilter {
     #[inline]
-    pub fn allow_index_creation(&self) -> bool {
-        self.allow_index_creation
+    pub fn allow_index_creation(&self, index: &str) -> bool {
+        self.allow_index_creation && self.is_index_authorized(index)
     }
 
     pub fn with_allowed_indexes(allowed_indexes: HashSet<IndexUidPattern>) -> Self {

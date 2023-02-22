@@ -120,8 +120,7 @@ pub async fn create_index(
 ) -> Result<HttpResponse, ResponseError> {
     let IndexCreateRequest { primary_key, uid } = body.into_inner();
 
-    // FIXME: allow_index_creation?
-    let allow_index_creation = index_scheduler.filters().is_index_authorized(&uid);
+    let allow_index_creation = index_scheduler.filters().allow_index_creation(&uid);
     if allow_index_creation {
         analytics.publish(
             "Index Created".to_string(),
