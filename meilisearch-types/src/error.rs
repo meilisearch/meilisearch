@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct ResponseError {
     #[serde(skip)]
-    code: StatusCode,
-    message: String,
+    pub code: StatusCode,
+    pub message: String,
     #[serde(rename = "code")]
     error_code: String,
     #[serde(rename = "type")]
