@@ -65,9 +65,10 @@ const MEILI_MAX_INDEXING_THREADS: &str = "MEILI_MAX_INDEXING_THREADS";
 const DEFAULT_LOG_EVERY_N: usize = 100_000;
 
 // Each environment (index and task-db) is taking space in the virtual address space.
-// When creating a new environment, it starts its life with 10GiB of virtual address space.
-// It is then later resized if needs be.
-pub const INDEX_SIZE: u64 = 10 * 1024 * 1024 * 1024; // 10 GiB
+// Ideally, indexes can occupy 2TiB each to avoid having to manually resize them.
+// The actual size of the virtual address space is computed at startup to determine how many 2TiB indexes can be
+// opened simultaneously.
+pub const INDEX_SIZE: u64 = 2 * 1024 * 1024 * 1024 * 1024; // 2 TiB
 pub const TASK_DB_SIZE: u64 = 10 * 1024 * 1024 * 1024; // 10 GiB
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]

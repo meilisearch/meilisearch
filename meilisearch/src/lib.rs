@@ -45,17 +45,22 @@ use option::ScheduleSnapshot;
 
 use crate::error::MeilisearchHttpError;
 
-/// Default number of simultaneously opened indexes,
-/// lower for Windows that dedicates a smaller virtual address space to processes.
+/// Default number of simultaneously opened indexes.
+///
+/// This value is used when dynamic computation of how many indexes can be opened at once was skipped (e.g., in tests).
+///
+/// Lower for Windows that dedicates a smaller virtual address space to processes.
 ///
 /// The value was chosen this way:
 ///
 /// - Windows provides a small virtual address space of about 10TiB to processes.
-/// - The chosen value allows for indexes to reach a safe size of 1TiB.
-/// - This can accomodate an unlimited number of indexes as long as they stay below 1TiB size.
+/// - The chosen value allows for indexes to use the default map size of 2TiB safely.
 #[cfg(windows)]
-const DEFAULT_INDEX_COUNT: usize = 10;
+const DEFAULT_INDEX_COUNT: usize = 4;
+
 /// Default number of simultaneously opened indexes.
+///
+/// This value is used when dynamic computation of how many indexes can be opened at once was skipped (e.g., in tests).
 ///
 /// The higher, the better for avoiding reopening indexes.
 ///
@@ -64,13 +69,9 @@ const DEFAULT_INDEX_COUNT: usize = 10;
 /// - Opening an index consumes a file descriptor.
 /// - The default on many unices is about 256 file descriptors for a process.
 /// - 100 is a little bit less than half this value.
-///
-/// In the future, this value could be computed from the dynamic number of allowed file descriptors for the current process.
-///
-/// On Unices, this value is largely irrelevant to virtual address space, because due to index resizing the indexes should take virtual memory in the same ballpark
-/// as their disk size and it is unlikely for a user to have a sum of index weighing 128TB on a single Meilisearch node.
+/// - The chosen value allows for indexes to use the default map size of 2TiB safely.
 #[cfg(not(windows))]
-const DEFAULT_INDEX_COUNT: usize = 100;
+const DEFAULT_INDEX_COUNT: usize = 20;
 
 /// Check if a db is empty. It does not provide any information on the
 /// validity of the data in it.
