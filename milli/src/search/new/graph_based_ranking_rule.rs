@@ -2,6 +2,7 @@ use heed::RoTxn;
 use roaring::RoaringBitmap;
 
 use super::db_cache::DatabaseCache;
+use super::logger::SearchLogger;
 use super::ranking_rule_graph::cheapest_paths::KCheapestPathsState;
 use super::ranking_rule_graph::edge_docids_cache::EdgeDocidsCache;
 use super::ranking_rule_graph::empty_paths_cache::EmptyPathsCache;
@@ -12,11 +13,12 @@ use crate::new::ranking_rule_graph::cheapest_paths::{self, Path};
 use crate::{Index, Result};
 
 pub struct GraphBasedRankingRule<G: RankingRuleGraphTrait> {
+    id: String,
     state: Option<GraphBasedRankingRuleState<G>>,
 }
-impl<G: RankingRuleGraphTrait> Default for GraphBasedRankingRule<G> {
-    fn default() -> Self {
-        Self { state: None }
+impl<G: RankingRuleGraphTrait> GraphBasedRankingRule<G> {
+    pub fn new(id: String) -> Self {
+        Self { id, state: None }
     }
 }
 
@@ -30,11 +32,15 @@ pub struct GraphBasedRankingRuleState<G: RankingRuleGraphTrait> {
 impl<'transaction, G: RankingRuleGraphTrait> RankingRule<'transaction, QueryGraph>
     for GraphBasedRankingRule<G>
 {
+    fn id(&self) -> String {
+        self.id.clone()
+    }
     fn start_iteration(
         &mut self,
         index: &Index,
         txn: &'transaction RoTxn,
         db_cache: &mut DatabaseCache<'transaction>,
+        logger: &mut dyn SearchLogger<QueryGraph>,
         universe: &RoaringBitmap,
         query_graph: &QueryGraph,
     ) -> Result<()> {
@@ -59,6 +65,7 @@ impl<'transaction, G: RankingRuleGraphTrait> RankingRule<'transaction, QueryGrap
         index: &Index,
         txn: &'transaction RoTxn,
         db_cache: &mut DatabaseCache<'transaction>,
+        logger: &mut dyn SearchLogger<QueryGraph>,
         universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<QueryGraph>>> {
         assert!(universe.len() > 1);
@@ -109,6 +116,7 @@ impl<'transaction, G: RankingRuleGraphTrait> RankingRule<'transaction, QueryGrap
         _index: &Index,
         _txn: &'transaction RoTxn,
         _db_cache: &mut DatabaseCache<'transaction>,
+        logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
         self.state = None;
     }

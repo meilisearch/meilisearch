@@ -1,0 +1,72 @@
+pub mod detailed;
+
+use roaring::RoaringBitmap;
+
+use super::{query_graph, QueryGraph, RankingRule, RankingRuleQueryTrait};
+
+pub struct DefaultSearchLogger;
+impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
+    fn initial_query(&mut self, query: &Q) {}
+
+    fn initial_universe(&mut self, universe: &RoaringBitmap) {}
+
+    fn ranking_rules(&mut self, rr: &[Box<dyn RankingRule<Q>>]) {}
+    fn start_iteration_ranking_rule<'transaction>(
+        &mut self,
+        ranking_rule_idx: usize,
+        ranking_rule: &dyn RankingRule<'transaction, Q>,
+        query: &Q,
+        universe: &RoaringBitmap,
+    ) {
+    }
+
+    fn next_bucket_ranking_rule<'transaction>(
+        &mut self,
+        ranking_rule_idx: usize,
+        ranking_rule: &dyn RankingRule<'transaction, Q>,
+        universe: &RoaringBitmap,
+    ) {
+    }
+
+    fn end_iteration_ranking_rule<'transaction>(
+        &mut self,
+        ranking_rule_idx: usize,
+        ranking_rule: &dyn RankingRule<'transaction, Q>,
+        universe: &RoaringBitmap,
+    ) {
+    }
+
+    fn add_to_results(&mut self, docids: &RoaringBitmap) {}
+
+    fn log_words_state(&mut self, query_graph: &Q) {}
+}
+
+pub trait SearchLogger<Q: RankingRuleQueryTrait> {
+    fn initial_query(&mut self, query: &Q);
+    fn initial_universe(&mut self, universe: &RoaringBitmap);
+
+    fn ranking_rules(&mut self, rr: &[Box<dyn RankingRule<Q>>]);
+
+    fn start_iteration_ranking_rule<'transaction>(
+        &mut self,
+        ranking_rule_idx: usize,
+        ranking_rule: &dyn RankingRule<'transaction, Q>,
+        query: &Q,
+        universe: &RoaringBitmap,
+    );
+    fn next_bucket_ranking_rule<'transaction>(
+        &mut self,
+        ranking_rule_idx: usize,
+        ranking_rule: &dyn RankingRule<'transaction, Q>,
+        universe: &RoaringBitmap,
+    );
+    fn end_iteration_ranking_rule<'transaction>(
+        &mut self,
+        ranking_rule_idx: usize,
+        ranking_rule: &dyn RankingRule<'transaction, Q>,
+        universe: &RoaringBitmap,
+    );
+    fn add_to_results(&mut self, docids: &RoaringBitmap);
+
+    fn log_words_state(&mut self, query_graph: &Q);
+}

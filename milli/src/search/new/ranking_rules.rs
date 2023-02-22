@@ -1,7 +1,10 @@
+use std::fmt::Display;
+
 use heed::RoTxn;
 use roaring::RoaringBitmap;
 
 use super::db_cache::DatabaseCache;
+use super::logger::SearchLogger;
 use super::resolve_query_graph::resolve_query_graph;
 use super::QueryGraph;
 use crate::new::graph_based_ranking_rule::GraphBasedRankingRule;
@@ -43,6 +46,8 @@ impl RankingRuleQueryTrait for PlaceholderQuery {}
 impl RankingRuleQueryTrait for QueryGraph {}
 
 pub trait RankingRule<'transaction, Query: RankingRuleQueryTrait> {
+    fn id(&self) -> String;
+
     /// Prepare the ranking rule such that it can start iterating over its
     /// buckets using [`next_bucket`](RankingRule::next_bucket).
     ///
@@ -52,6 +57,7 @@ pub trait RankingRule<'transaction, Query: RankingRuleQueryTrait> {
         index: &Index,
         txn: &'transaction RoTxn,
         db_cache: &mut DatabaseCache<'transaction>,
+        logger: &mut dyn SearchLogger<Query>,
         universe: &RoaringBitmap,
         query: &Query,
     ) -> Result<()>;
@@ -68,6 +74,7 @@ pub trait RankingRule<'transaction, Query: RankingRuleQueryTrait> {
         index: &Index,
         txn: &'transaction RoTxn,
         db_cache: &mut DatabaseCache<'transaction>,
+        logger: &mut dyn SearchLogger<Query>,
         universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<Query>>>;
 
@@ -78,6 +85,7 @@ pub trait RankingRule<'transaction, Query: RankingRuleQueryTrait> {
         index: &Index,
         txn: &'transaction RoTxn,
         db_cache: &mut DatabaseCache<'transaction>,
+        logger: &mut dyn SearchLogger<Query>,
     );
 }
 
@@ -110,28 +118,36 @@ pub fn execute_search<'transaction>(
     db_cache: &mut DatabaseCache<'transaction>,
     universe: &RoaringBitmap,
     query_graph: &QueryGraph,
+    logger: &mut dyn SearchLogger<QueryGraph>,
     // _from: usize,
     // _length: usize,
 ) -> Result<Vec<u32>> {
     let words = Words::new(TermsMatchingStrategy::Last);
     // let sort = Sort::new(index, txn, "sort1".to_owned(), true)?;
-    let proximity = GraphBasedRankingRule::<ProximityGraph>::default();
+    let proximity = GraphBasedRankingRule::<ProximityGraph>::new("proximity".to_owned());
     // TODO: ranking rules given as argument
     let mut ranking_rules: Vec<Box<dyn RankingRule<'transaction, QueryGraph>>> =
         vec![Box::new(words), Box::new(proximity) /*  Box::new(sort) */];
 
+    logger.ranking_rules(&ranking_rules);
+
     let ranking_rules_len = ranking_rules.len();
-    ranking_rules[0].start_iteration(index, txn, db_cache, universe, query_graph)?;
+    logger.start_iteration_ranking_rule(0, ranking_rules[0].as_ref(), query_graph, universe);
+    ranking_rules[0].start_iteration(index, txn, db_cache, logger, universe, query_graph)?;
 
     let mut candidates = vec![RoaringBitmap::default(); ranking_rules_len];
     candidates[0] = universe.clone();
 
     let mut cur_ranking_rule_index = 0;
-
     macro_rules! back {
         () => {
+            logger.end_iteration_ranking_rule(
+                cur_ranking_rule_index,
+                ranking_rules[cur_ranking_rule_index].as_ref(),
+                &candidates[cur_ranking_rule_index],
+            );
             candidates[cur_ranking_rule_index].clear();
-            ranking_rules[cur_ranking_rule_index].end_iteration(index, txn, db_cache);
+            ranking_rules[cur_ranking_rule_index].end_iteration(index, txn, db_cache, logger);
             if cur_ranking_rule_index == 0 {
                 break;
             } else {
@@ -146,11 +162,19 @@ pub fn execute_search<'transaction>(
         // The universe for this bucket is zero or one element, so we don't need to sort
         // anything, just extend the results and go back to the parent ranking rule.
         if candidates[cur_ranking_rule_index].len() <= 1 {
+            logger.add_to_results(&candidates[cur_ranking_rule_index]);
             results.extend(&candidates[cur_ranking_rule_index]);
             back!();
             continue;
         }
-        let Some(next_bucket) = ranking_rules[cur_ranking_rule_index].next_bucket(index, txn, db_cache, &candidates[cur_ranking_rule_index])? else {
+
+        logger.next_bucket_ranking_rule(
+            cur_ranking_rule_index,
+            ranking_rules[cur_ranking_rule_index].as_ref(),
+            &candidates[cur_ranking_rule_index],
+        );
+
+        let Some(next_bucket) = ranking_rules[cur_ranking_rule_index].next_bucket(index, txn, db_cache, logger, &candidates[cur_ranking_rule_index])? else {
             back!();
             continue;
         };
@@ -159,20 +183,29 @@ pub fn execute_search<'transaction>(
 
         if next_bucket.candidates.len() <= 1 {
             // Only zero or one candidate, no need to sort through the child ranking rule.
+            logger.add_to_results(&next_bucket.candidates);
             results.extend(next_bucket.candidates);
             continue;
         } else {
             // many candidates, give to next ranking rule, if any
             if cur_ranking_rule_index == ranking_rules_len - 1 {
                 // TODO: don't extend too much, up to the limit only
+                logger.add_to_results(&next_bucket.candidates);
                 results.extend(next_bucket.candidates);
             } else {
                 cur_ranking_rule_index += 1;
                 candidates[cur_ranking_rule_index] = next_bucket.candidates.clone();
+                logger.start_iteration_ranking_rule(
+                    cur_ranking_rule_index,
+                    ranking_rules[cur_ranking_rule_index].as_ref(),
+                    &next_bucket.query,
+                    &candidates[cur_ranking_rule_index],
+                );
                 ranking_rules[cur_ranking_rule_index].start_iteration(
                     index,
                     txn,
                     db_cache,
+                    logger,
                     &next_bucket.candidates,
                     &next_bucket.query,
                 )?;
@@ -195,6 +228,8 @@ mod tests {
     use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
     use crate::index::tests::TempIndex;
     use crate::new::db_cache::DatabaseCache;
+    use crate::new::logger::detailed::DetailedSearchLogger;
+    use crate::new::logger::{DefaultSearchLogger, SearchLogger};
     use crate::new::make_query_graph;
     use crate::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
     use crate::{Criterion, Index, Object, Search, TermsMatchingStrategy};
@@ -231,13 +266,14 @@ mod tests {
             ]))
             .unwrap();
         let txn = index.read_txn().unwrap();
-
+        let mut logger = DefaultSearchLogger;
         let mut db_cache = DatabaseCache::default();
 
         let query_graph =
             make_query_graph(&index, &txn, &mut db_cache, "the quick brown fox jumps over")
                 .unwrap();
         println!("{}", query_graph.graphviz());
+        logger.initial_query(&query_graph);
 
         // TODO: filters + maybe distinct attributes?
         let universe = get_start_universe(
@@ -250,9 +286,15 @@ mod tests {
         .unwrap();
         println!("universe: {universe:?}");
 
-        let results =
-            execute_search(&index, &txn, &mut db_cache, &universe, &query_graph /*  0, 20 */)
-                .unwrap();
+        let results = execute_search(
+            &index,
+            &txn,
+            &mut db_cache,
+            &universe,
+            &query_graph,
+            &mut logger, /*  0, 20 */
+        )
+        .unwrap();
         println!("{results:?}")
     }
 
@@ -285,9 +327,19 @@ mod tests {
         )
         .unwrap();
 
-        let results =
-            execute_search(&index, &txn, &mut db_cache, &universe, &query_graph /*  0, 20 */)
-                .unwrap();
+        let mut logger = DetailedSearchLogger::new("log");
+
+        let results = execute_search(
+            &index,
+            &txn,
+            &mut db_cache,
+            &universe,
+            &query_graph,
+            &mut logger, /*  0, 20 */
+        )
+        .unwrap();
+
+        logger.write_d2_description();
 
         let elapsed = start.elapsed();
 

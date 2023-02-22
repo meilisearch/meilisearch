@@ -4,6 +4,7 @@ use heed::RoTxn;
 use roaring::RoaringBitmap;
 
 use super::db_cache::DatabaseCache;
+use super::logger::SearchLogger;
 use super::resolve_query_graph::{resolve_query_graph, NodeDocIdsCache};
 use super::{QueryGraph, QueryNode, RankingRule, RankingRuleOutput};
 use crate::{Index, Result, TermsMatchingStrategy};
@@ -30,17 +31,23 @@ impl Words {
 }
 
 impl<'transaction> RankingRule<'transaction, QueryGraph> for Words {
+    fn id(&self) -> String {
+        "words".to_owned()
+    }
     fn start_iteration(
         &mut self,
         _index: &Index,
         _txn: &'transaction RoTxn,
         _db_cache: &mut DatabaseCache<'transaction>,
+        logger: &mut dyn SearchLogger<QueryGraph>,
         parent_candidates: &RoaringBitmap,
         parent_query_graph: &QueryGraph,
     ) -> Result<()> {
         // println!("Words: start iteration");
         self.exhausted = false;
         self.query_graph = Some(parent_query_graph.clone());
+
+        logger.log_words_state(parent_query_graph);
 
         // TODO: a phrase can contain many positions, but represents a single node.
         // That's a problem.
@@ -70,6 +77,7 @@ impl<'transaction> RankingRule<'transaction, QueryGraph> for Words {
         index: &Index,
         txn: &'transaction RoTxn,
         db_cache: &mut DatabaseCache<'transaction>,
+        logger: &mut dyn SearchLogger<QueryGraph>,
         universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<QueryGraph>>> {
         // println!("Words: next bucket");
@@ -99,6 +107,7 @@ impl<'transaction> RankingRule<'transaction, QueryGraph> for Words {
             let position_to_remove = self.positions_to_remove.pop().unwrap();
             query_graph.remove_words_at_position(position_to_remove);
         }
+        logger.log_words_state(query_graph);
 
         Ok(Some(RankingRuleOutput { query: child_query_graph, candidates: this_bucket }))
     }
@@ -108,6 +117,7 @@ impl<'transaction> RankingRule<'transaction, QueryGraph> for Words {
         _index: &Index,
         _txn: &'transaction RoTxn,
         _db_cache: &mut DatabaseCache<'transaction>,
+        _logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
         // println!("Words: end iteration");
         self.iterating = false;

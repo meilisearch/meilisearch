@@ -2,6 +2,7 @@ use heed::RoTxn;
 use roaring::RoaringBitmap;
 
 use super::db_cache::DatabaseCache;
+use super::logger::SearchLogger;
 use super::{
     RankingRule, RankingRuleOutput, RankingRuleOutputIter, RankingRuleOutputIterWrapper,
     RankingRuleQueryTrait,
@@ -20,6 +21,7 @@ use crate::{
 // (2) at the end, it should return all the remaining documents (this could be ensured at the trait level?)
 
 pub struct Sort<'transaction, Query> {
+    field_name: String,
     field_id: Option<FieldId>,
     is_ascending: bool,
     iter: Option<RankingRuleOutputIterWrapper<'transaction, Query>>,
@@ -34,18 +36,23 @@ impl<'transaction, Query> Sort<'transaction, Query> {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         let field_id = fields_ids_map.id(&field_name);
 
-        Ok(Self { field_id, is_ascending, iter: None })
+        Ok(Self { field_name, field_id, is_ascending, iter: None })
     }
 }
 
 impl<'transaction, Query: RankingRuleQueryTrait> RankingRule<'transaction, Query>
     for Sort<'transaction, Query>
 {
+    fn id(&self) -> String {
+        let Self { field_name, is_ascending, .. } = self;
+        format!("{field_name}:{}", if *is_ascending { "asc" } else { "desc " })
+    }
     fn start_iteration(
         &mut self,
         index: &Index,
         txn: &'transaction RoTxn,
         _db_cache: &mut DatabaseCache<'transaction>,
+        _logger: &mut dyn SearchLogger<Query>,
         parent_candidates: &RoaringBitmap,
         parent_query_graph: &Query,
     ) -> Result<()> {
@@ -89,6 +96,7 @@ impl<'transaction, Query: RankingRuleQueryTrait> RankingRule<'transaction, Query
         _index: &Index,
         _txn: &'transaction RoTxn,
         _db_cache: &mut DatabaseCache<'transaction>,
+        _logger: &mut dyn SearchLogger<Query>,
         _universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<Query>>> {
         let iter = self.iter.as_mut().unwrap();
@@ -101,6 +109,7 @@ impl<'transaction, Query: RankingRuleQueryTrait> RankingRule<'transaction, Query
         _index: &Index,
         _txn: &'transaction RoTxn,
         _db_cache: &mut DatabaseCache<'transaction>,
+        _logger: &mut dyn SearchLogger<Query>,
     ) {
         self.iter = None;
     }

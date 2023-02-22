@@ -1,5 +1,6 @@
 pub mod db_cache;
 pub mod graph_based_ranking_rule;
+pub mod logger;
 pub mod query_graph;
 pub mod query_term;
 pub mod ranking_rule_graph;
