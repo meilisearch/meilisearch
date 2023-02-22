@@ -485,6 +485,7 @@ pub struct SearchAggregator {
 
     // filter
     filter_with_geo_radius: bool,
+    filter_with_geo_bounding_box: bool,
     // every time a request has a filter, this field must be incremented by the number of terms it contains
     filter_sum_of_criteria_terms: usize,
     // every time a request has a filter, this field must be incremented by one
@@ -552,6 +553,7 @@ impl SearchAggregator {
 
             let stringified_filters = filter.to_string();
             ret.filter_with_geo_radius = stringified_filters.contains("_geoRadius(");
+            ret.filter_with_geo_bounding_box = stringified_filters.contains("_geoBoundingBox(");
             ret.filter_sum_of_criteria_terms = RE.split(&stringified_filters).count();
         }
 
@@ -611,6 +613,7 @@ impl SearchAggregator {
 
         // filter
         self.filter_with_geo_radius |= other.filter_with_geo_radius;
+        self.filter_with_geo_bounding_box |= other.filter_with_geo_bounding_box;
         self.filter_sum_of_criteria_terms =
             self.filter_sum_of_criteria_terms.saturating_add(other.filter_sum_of_criteria_terms);
         self.filter_total_number_of_criteria = self
@@ -678,6 +681,7 @@ impl SearchAggregator {
                 },
                 "filter": {
                    "with_geoRadius": self.filter_with_geo_radius,
+                   "with_geoBoundingBox": self.filter_with_geo_bounding_box,
                    "avg_criteria_number": format!("{:.2}", self.filter_sum_of_criteria_terms as f64 / self.filter_total_number_of_criteria as f64),
                    "most_used_syntax": self.used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
                 },
