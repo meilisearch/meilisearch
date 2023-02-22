@@ -243,9 +243,10 @@ pub fn perform_search(
         &displayed_ids,
     );
 
-    let tokenizer = TokenizerBuilder::default().build();
+    let mut tokenizer_buidler = TokenizerBuilder::default();
+    tokenizer_buidler.create_char_map(true);
 
-    let mut formatter_builder = MatcherBuilder::new(matching_words, tokenizer);
+    let mut formatter_builder = MatcherBuilder::new(matching_words, tokenizer_buidler.build());
     formatter_builder.crop_marker(query.crop_marker);
     formatter_builder.highlight_prefix(query.highlight_pre_tag);
     formatter_builder.highlight_suffix(query.highlight_post_tag);
