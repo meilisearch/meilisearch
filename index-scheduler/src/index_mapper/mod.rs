@@ -4,10 +4,11 @@ use std::time::Duration;
 use std::{fs, thread};
 
 use log::error;
-use meilisearch_types::heed::types::Str;
+use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn};
 use meilisearch_types::milli::update::IndexerConfig;
-use meilisearch_types::milli::Index;
+use meilisearch_types::milli::{FieldDistribution, Index};
+use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -19,6 +20,7 @@ use crate::{Error, Result};
 mod index_map;
 
 const INDEX_MAPPING: &str = "index-mapping";
+const INDEX_STATS: &str = "index-stats";
 
 /// Structure managing meilisearch's indexes.
 ///
@@ -52,6 +54,8 @@ pub struct IndexMapper {
 
     /// Map an index name with an index uuid currently available on disk.
     pub(crate) index_mapping: Database<Str, UuidCodec>,
+    /// Map an index name with the cached stats associated to the index.
+    pub(crate) index_stats: Database<Str, SerdeJson<IndexStats>>,
 
     /// Path to the folder where the LMDB environments of each index are.
     base_path: PathBuf,
@@ -76,6 +80,15 @@ pub enum IndexStatus {
     Available(Index),
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct IndexStats {
+    pub number_of_documents: u64,
+    pub database_size: u64,
+    pub field_distribution: FieldDistribution,
+    pub created_at: OffsetDateTime,
+    pub updated_at: OffsetDateTime,
+}
+
 impl IndexMapper {
     pub fn new(
         env: &Env,
@@ -88,6 +101,7 @@ impl IndexMapper {
         Ok(Self {
             index_map: Arc::new(RwLock::new(IndexMap::new(index_count))),
             index_mapping: env.create_database(Some(INDEX_MAPPING))?,
+            index_stats: env.create_database(Some(INDEX_STATS))?,
             base_path,
             index_base_map_size,
             index_growth_amount,
@@ -135,6 +149,7 @@ impl IndexMapper {
     /// Removes the index from the mapping table and the in-memory index map
     /// but keeps the associated tasks.
     pub fn delete_index(&self, mut wtxn: RwTxn, name: &str) -> Result<()> {
+        self.index_stats.delete(&mut wtxn, name)?;
         let uuid = self
             .index_mapping
             .get(&wtxn, name)?
@@ -357,6 +372,29 @@ impl IndexMapper {
         self.index_mapping.put(wtxn, lhs, &rhs_uuid)?;
         self.index_mapping.put(wtxn, rhs, &lhs_uuid)?;
 
+        Ok(())
+    }
+
+    /// Return the stored stats of an index.
+    pub fn stats_of(&self, rtxn: &RoTxn, index_uid: &str) -> Result<IndexStats> {
+        self.index_stats
+            .get(rtxn, index_uid)?
+            .ok_or_else(|| Error::IndexNotFound(index_uid.to_string()))
+    }
+
+    /// Return the stats of an index and write it in the index-mapper database.
+    pub fn compute_and_store_stats_of(&self, wtxn: &mut RwTxn, index_uid: &str) -> Result<()> {
+        let index = self.index(wtxn, index_uid)?;
+        let database_size = index.on_disk_size()?;
+        let rtxn = index.read_txn()?;
+        let stats = IndexStats {
+            number_of_documents: index.number_of_documents(&rtxn)?,
+            database_size,
+            field_distribution: index.field_distribution(&rtxn)?,
+            created_at: index.created_at(&rtxn)?,
+            updated_at: index.updated_at(&rtxn)?,
+        };
+        self.index_stats.put(wtxn, index_uid, &stats)?;
         Ok(())
     }
 

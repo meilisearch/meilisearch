@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
-use index_scheduler::{IndexScheduler, Query};
+use index_scheduler::IndexScheduler;
 use log::debug;
 use meilisearch_auth::AuthController;
 use meilisearch_types::error::ResponseError;
@@ -12,7 +12,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
 
-use self::indexes::IndexStats;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
@@ -234,7 +233,7 @@ pub struct Stats {
     pub database_size: u64,
     #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
     pub last_update: Option<OffsetDateTime>,
-    pub indexes: BTreeMap<String, IndexStats>,
+    pub indexes: BTreeMap<String, indexes::IndexStats>,
 }
 
 async fn get_stats(
@@ -260,32 +259,19 @@ pub fn create_all_stats(
     let mut last_task: Option<OffsetDateTime> = None;
     let mut indexes = BTreeMap::new();
     let mut database_size = 0;
-    let processing_task = index_scheduler.get_tasks_from_authorized_indexes(
-        Query { statuses: Some(vec![Status::Processing]), limit: Some(1), ..Query::default() },
-        filters,
-    )?;
+
     // accumulate the size of each indexes
-    let processing_index = processing_task.first().and_then(|task| task.index_uid());
-    index_scheduler.try_for_each_index(|name, index| {
-        if !filters.is_index_authorized(name) {
-            return Ok(());
+    for index_uid in index_scheduler.index_names()? {
+        if !filters.is_index_authorized(&index_uid) {
+            continue;
         }
 
-        database_size += index.on_disk_size()?;
-
-        let rtxn = index.read_txn()?;
-        let stats = IndexStats {
-            number_of_documents: index.number_of_documents(&rtxn)?,
-            is_indexing: processing_index.map_or(false, |index_name| name == index_name),
-            field_distribution: index.field_distribution(&rtxn)?,
-        };
-
-        let updated_at = index.updated_at(&rtxn)?;
-        last_task = last_task.map_or(Some(updated_at), |last| Some(last.max(updated_at)));
-
-        indexes.insert(name.to_string(), stats);
-        Ok(())
-    })?;
+        let stats = index_scheduler.index_stats(&index_uid)?;
+        last_task = last_task.map_or(Some(stats.inner_stats.updated_at), |last| {
+            Some(last.max(stats.inner_stats.updated_at))
+        });
+        indexes.insert(index_uid.to_string(), stats.into());
+    }
 
     database_size += index_scheduler.size()?;
     database_size += auth_controller.size()?;

@@ -44,10 +44,9 @@ use file_store::FileStore;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{self, Database, Env, RoTxn};
-use meilisearch_types::milli;
 use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::update::IndexerConfig;
-use meilisearch_types::milli::{CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
+use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use synchronoise::SignalEvent;
@@ -566,7 +565,7 @@ impl IndexScheduler {
     }
 
     /// Return the name of all indexes without opening them.
-    pub fn index_names(self) -> Result<Vec<String>> {
+    pub fn index_names(&self) -> Result<Vec<String>> {
         let rtxn = self.env.read_txn()?;
         self.index_mapper.index_names(&rtxn)
     }
@@ -1186,6 +1185,14 @@ impl IndexScheduler {
         Ok(TickOutcome::TickAgain(processed_tasks))
     }
 
+    pub fn index_stats(&self, index_uid: &str) -> Result<IndexStats> {
+        let is_indexing = self.is_index_processing(index_uid)?;
+        let rtxn = self.read_txn()?;
+        let index_stats = self.index_mapper.stats_of(&rtxn, index_uid)?;
+
+        Ok(IndexStats { is_indexing, inner_stats: index_stats })
+    }
+
     pub(crate) fn delete_persisted_task_data(&self, task: &Task) -> Result<()> {
         match task.content_uuid() {
             Some(content_file) => self.delete_update_file(content_file),
@@ -1236,6 +1243,12 @@ struct IndexBudget {
     index_count: usize,
     /// For very constrained systems we might need to reduce the base task_db_size so we can accept at least one index.
     task_db_size: usize,
+}
+
+#[derive(Debug)]
+pub struct IndexStats {
+    pub is_indexing: bool,
+    pub inner_stats: index_mapper::IndexStats,
 }
 
 #[cfg(test)]
