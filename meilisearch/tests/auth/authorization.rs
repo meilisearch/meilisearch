@@ -10,7 +10,7 @@ use crate::common::Server;
 
 pub static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'static str>>> =
     Lazy::new(|| {
-        let mut authorizations = hashmap! {
+        let authorizations = hashmap! {
             ("POST",    "/multi-search") =>                                    hashset!{"search", "*"},
             ("POST",    "/indexes/products/search") =>                         hashset!{"search", "*"},
             ("GET",     "/indexes/products/search") =>                         hashset!{"search", "*"},

@@ -22,6 +22,7 @@ pub async fn get_metrics(
     let response = create_all_stats(
         (*index_scheduler).clone(),
         (*auth_controller).clone(),
+        // we don't use the filters contained in the `ActionPolicy` because the metrics must have the right to access all the indexes.
         &AuthFilter::default(),
     )?;
 
