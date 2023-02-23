@@ -52,7 +52,7 @@ parking_lot = "0.12.1"
 permissive-json-pointer = { path = "../permissive-json-pointer" }
 pin-project-lite = "0.2.9"
 platform-dirs = "0.3.0"
-prometheus = { version = "0.13.2", features = ["process"], optional = true }
+prometheus = { version = "0.13.2", features = ["process"] }
 rand = "0.8.5"
 rayon = "1.5.3"
 regex = "1.6.0"
@@ -107,7 +107,6 @@ zip = { version = "0.6.2", optional = true }
 
 [features]
 default = ["analytics", "meilisearch-types/default", "mini-dashboard"]
-metrics = ["prometheus"]
 analytics = ["segment"]
 mini-dashboard = ["actix-web-static-files", "static-files", "anyhow", "cargo_toml", "hex", "reqwest", "sha-1", "tempfile", "zip"]
 chinese = ["meilisearch-types/chinese"]

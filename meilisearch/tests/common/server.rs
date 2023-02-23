@@ -208,8 +208,7 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
             skip_index_budget: true,
             ..Parser::parse_from(None as Option<&str>)
         },
-        #[cfg(feature = "metrics")]
-        enable_metrics_route: true,
+        experimental_enable_metrics: true,
         ..Parser::parse_from(None as Option<&str>)
     }
 }
