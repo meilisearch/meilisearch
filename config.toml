@@ -118,3 +118,13 @@ ssl_resumption = false
 ssl_tickets = false
 # Activates SSL tickets.
 # https://docs.meilisearch.com/learn/configuration/instance_options.html#ssl-tickets
+
+#############################
+### Experimental features ###
+#############################
+
+experimental-enable-metrics = false
+# Experimental metrics feature. For more information, see: <https://github.com/meilisearch/meilisearch/discussions/3518>
+# Enables the Prometheus metrics on the `GET /metrics` endpoint.
+
+
