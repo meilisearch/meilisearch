@@ -9,10 +9,10 @@ use super::cheapest_paths::Path;
 use super::{Edge, EdgeDetails, RankingRuleGraph, RankingRuleGraphTrait};
 use crate::new::QueryNode;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PathsMap<V> {
-    nodes: Vec<(u32, PathsMap<V>)>,
-    value: Option<V>,
+    pub nodes: Vec<(u32, PathsMap<V>)>,
+    pub value: Option<V>,
 }
 impl<V> Default for PathsMap<V> {
     fn default() -> Self {

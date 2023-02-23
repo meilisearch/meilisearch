@@ -1,8 +1,13 @@
+#[cfg(test)]
 pub mod detailed;
 
 use roaring::RoaringBitmap;
 
-use super::{query_graph, QueryGraph, RankingRule, RankingRuleQueryTrait};
+use super::{
+    query_graph,
+    ranking_rule_graph::{paths_map::PathsMap, proximity::ProximityGraph, RankingRuleGraph},
+    QueryGraph, RankingRule, RankingRuleQueryTrait,
+};
 
 pub struct DefaultSearchLogger;
 impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
@@ -39,6 +44,13 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
     fn add_to_results(&mut self, docids: &RoaringBitmap) {}
 
     fn log_words_state(&mut self, query_graph: &Q) {}
+
+    fn log_proximity_state(
+        &mut self,
+        query_graph: &RankingRuleGraph<ProximityGraph>,
+        paths_map: &PathsMap<u64>,
+    ) {
+    }
 }
 
 pub trait SearchLogger<Q: RankingRuleQueryTrait> {
@@ -69,4 +81,10 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
     fn add_to_results(&mut self, docids: &RoaringBitmap);
 
     fn log_words_state(&mut self, query_graph: &Q);
+
+    fn log_proximity_state(
+        &mut self,
+        query_graph: &RankingRuleGraph<ProximityGraph>,
+        paths: &PathsMap<u64>,
+    );
 }

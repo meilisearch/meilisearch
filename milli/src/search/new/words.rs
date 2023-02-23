@@ -47,8 +47,6 @@ impl<'transaction> RankingRule<'transaction, QueryGraph> for Words {
         self.exhausted = false;
         self.query_graph = Some(parent_query_graph.clone());
 
-        logger.log_words_state(parent_query_graph);
-
         // TODO: a phrase can contain many positions, but represents a single node.
         // That's a problem.
         let positions_to_remove = match self.terms_matching_strategy {
@@ -83,10 +81,13 @@ impl<'transaction> RankingRule<'transaction, QueryGraph> for Words {
         // println!("Words: next bucket");
         assert!(self.iterating);
         assert!(universe.len() > 1);
+
         if self.exhausted {
             return Ok(None);
         }
         let Some(query_graph) = &mut self.query_graph else { panic!() };
+
+        logger.log_words_state(query_graph);
 
         let this_bucket = resolve_query_graph(
             index,
@@ -107,7 +108,6 @@ impl<'transaction> RankingRule<'transaction, QueryGraph> for Words {
             let position_to_remove = self.positions_to_remove.pop().unwrap();
             query_graph.remove_words_at_position(position_to_remove);
         }
-        logger.log_words_state(query_graph);
 
         Ok(Some(RankingRuleOutput { query: child_query_graph, candidates: this_bucket }))
     }

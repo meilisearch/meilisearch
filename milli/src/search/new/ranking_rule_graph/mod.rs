@@ -11,7 +11,10 @@ use std::ops::ControlFlow;
 use heed::RoTxn;
 use roaring::RoaringBitmap;
 
+use self::paths_map::PathsMap;
+
 use super::db_cache::DatabaseCache;
+use super::logger::SearchLogger;
 use super::{QueryGraph, QueryNode};
 use crate::{Index, Result};
 
@@ -23,10 +26,10 @@ pub enum EdgeDetails<E> {
 
 #[derive(Debug, Clone)]
 pub struct Edge<E> {
-    from_node: u32,
-    to_node: u32,
-    cost: u8,
-    details: EdgeDetails<E>,
+    pub from_node: u32,
+    pub to_node: u32,
+    pub cost: u8,
+    pub details: EdgeDetails<E>,
 }
 
 #[derive(Debug, Clone)]
@@ -35,11 +38,11 @@ pub struct EdgePointer<'graph, E> {
     pub edge: &'graph Edge<E>,
 }
 
-pub trait RankingRuleGraphTrait {
+pub trait RankingRuleGraphTrait: Sized {
     /// The details of an edge connecting two query nodes. These details
     /// should be sufficient to compute the edge's cost and associated document ids
     /// in [`compute_docids`](RankingRuleGraphTrait).
-    type EdgeDetails: Sized;
+    type EdgeDetails: Sized + Clone;
 
     type BuildVisitedFromNode;
 
@@ -75,6 +78,12 @@ pub trait RankingRuleGraphTrait {
         to_node: &QueryNode,
         from_node_data: &'from_data Self::BuildVisitedFromNode,
     ) -> Result<Vec<(u8, EdgeDetails<Self::EdgeDetails>)>>;
+
+    fn log_state(
+        graph: &RankingRuleGraph<Self>,
+        paths: &PathsMap<u64>,
+        logger: &mut dyn SearchLogger<QueryGraph>,
+    );
 }
 
 pub struct RankingRuleGraph<G: RankingRuleGraphTrait> {
@@ -89,6 +98,16 @@ pub struct RankingRuleGraph<G: RankingRuleGraphTrait> {
     // 1. get node_outgoing_edges[from]
     // 2. get node_incoming_edges[to]
     // 3. take intersection betweem the two
+}
+impl<G: RankingRuleGraphTrait> Clone for RankingRuleGraph<G> {
+    fn clone(&self) -> Self {
+        Self {
+            query_graph: self.query_graph.clone(),
+            all_edges: self.all_edges.clone(),
+            node_edges: self.node_edges.clone(),
+            successors: self.successors.clone(),
+        }
+    }
 }
 impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
     // Visit all edges between the two given nodes in order of increasing cost.

@@ -270,8 +270,7 @@ mod tests {
         let mut db_cache = DatabaseCache::default();
 
         let query_graph =
-            make_query_graph(&index, &txn, &mut db_cache, "the quick brown fox jumps over")
-                .unwrap();
+            make_query_graph(&index, &txn, &mut db_cache, "b b b b b b b b b b").unwrap();
         println!("{}", query_graph.graphviz());
         logger.initial_query(&query_graph);
 
@@ -314,8 +313,7 @@ mod tests {
         let mut db_cache = DatabaseCache::default();
 
         let query_graph =
-            make_query_graph(&index, &txn, &mut db_cache, "released from prison by the government")
-                .unwrap();
+            make_query_graph(&index, &txn, &mut db_cache, "b b b b b b b b b b").unwrap();
 
         // TODO: filters + maybe distinct attributes?
         let universe = get_start_universe(
@@ -335,7 +333,7 @@ mod tests {
             &mut db_cache,
             &universe,
             &query_graph,
-            &mut logger, /*  0, 20 */
+            &mut logger, //&mut DefaultSearchLogger, /*  0, 20 */
         )
         .unwrap();
 

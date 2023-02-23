@@ -51,7 +51,7 @@ pub fn word_derivations(
     let mut two_typos = vec![];
 
     if max_typo == 0 {
-        if is_prefix {
+        if is_prefix && !use_prefix_db {
             let prefix = Str::new(word).starts_with();
             let mut stream = fst.search(prefix).into_stream();
 

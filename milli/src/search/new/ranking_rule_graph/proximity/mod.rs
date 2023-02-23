@@ -3,6 +3,7 @@ pub mod compute_docids;
 
 use heed::RoTxn;
 
+use super::paths_map::PathsMap;
 use super::{Edge, EdgeDetails, RankingRuleGraphTrait};
 use crate::new::db_cache::DatabaseCache;
 use crate::new::query_term::WordDerivations;
@@ -18,6 +19,7 @@ pub enum WordPair {
     WordPrefixSwapped { left: String, right_prefix: String },
 }
 
+#[derive(Clone)]
 pub struct ProximityEdge {
     pairs: Vec<WordPair>,
     proximity: u8,
@@ -60,5 +62,13 @@ impl RankingRuleGraphTrait for ProximityGraph {
         from_node_data: &'from_data Self::BuildVisitedFromNode,
     ) -> Result<Vec<(u8, EdgeDetails<Self::EdgeDetails>)>> {
         build::visit_to_node(index, txn, db_cache, to_node, from_node_data)
+    }
+
+    fn log_state(
+        graph: &super::RankingRuleGraph<Self>,
+        paths: &PathsMap<u64>,
+        logger: &mut dyn crate::new::logger::SearchLogger<crate::new::QueryGraph>,
+    ) {
+        logger.log_proximity_state(graph, paths);
     }
 }

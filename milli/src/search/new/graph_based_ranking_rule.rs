@@ -94,6 +94,8 @@ impl<'transaction, G: RankingRuleGraphTrait> RankingRule<'transaction, QueryGrap
             return Ok(None);
         }
 
+        G::log_state(&state.graph, &paths, logger);
+
         let bucket = state.graph.resolve_paths(
             index,
             txn,

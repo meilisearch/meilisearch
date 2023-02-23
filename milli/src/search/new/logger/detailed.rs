@@ -5,6 +5,8 @@ use std::path::Path;
 use std::{io::Write, path::PathBuf};
 
 use crate::new::QueryNode;
+use crate::new::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
+use crate::new::ranking_rule_graph::{Edge, EdgeDetails, RankingRuleGraphTrait};
 use crate::new::ranking_rule_graph::{
     paths_map::PathsMap, proximity::ProximityGraph, RankingRuleGraph,
 };
@@ -112,6 +114,11 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
     fn log_words_state(&mut self, query_graph: &QueryGraph) {
         self.events.push(SearchEvents::WordsState { query_graph: query_graph.clone() });
     }
+
+    fn log_proximity_state(&mut self, query_graph: &RankingRuleGraph<ProximityGraph>, paths_map: &PathsMap<u64>,) {
+        self.events.push(SearchEvents::ProximityState { graph: query_graph.clone(), paths: paths_map.clone() })
+    }
+    
     
 }
 
@@ -129,7 +136,7 @@ impl DetailedSearchLogger {
         }
 
         let index_path = self.folder_path.join("index.d2");
-        let mut file = std::fs::File::create(&index_path).unwrap();
+        let mut file = std::fs::File::create(index_path).unwrap();
         writeln!(&mut file, "Control Flow Between Ranking Rules: {{").unwrap();
         writeln!(&mut file, "shape: sequence_diagram");
         for (idx, rr_id) in self.ranking_rules_ids.as_ref().unwrap().iter().enumerate() {
@@ -210,17 +217,63 @@ results.{random} {{
                     let id = format!("{cur_ranking_rule}.{cur_activated_id}");
                     let mut new_file_path = self.folder_path.join(format!("{id}.d2"));
                     let mut new_file = std::fs::File::create(new_file_path).unwrap();
-                    Self::query_graph_d2_description(&query_graph, &mut new_file);
+                    Self::query_graph_d2_description(query_graph, &mut new_file);
                     writeln!(
                         &mut file,
                         "{id} {{
     link: \"{id}.d2.svg\"
 }}").unwrap();
                 },
-                SearchEvents::ProximityState { graph, paths } => todo!(),
+                SearchEvents::ProximityState { graph, paths } => {
+                    let cur_ranking_rule = timestamp.len() - 1;
+                    let cur_activated_id = activated_id(&timestamp);
+                    let id = format!("{cur_ranking_rule}.{cur_activated_id}");
+                    let mut new_file_path = self.folder_path.join(format!("{id}.d2"));
+                    let mut new_file = std::fs::File::create(new_file_path).unwrap();
+                    Self::proximity_graph_d2_description(graph, paths, &mut new_file);
+                    writeln!(
+                        &mut file,
+                        "{id} {{
+    link: \"{id}.d2.svg\"
+}}").unwrap();
+                },
             }
         }
         writeln!(&mut file, "}}");
+    }
+    
+    fn query_node_d2_desc(node_idx: usize, node: &QueryNode, file: &mut File) {
+        match &node {
+            QueryNode::Term(LocatedQueryTerm { value, positions }) => {
+                match value {
+                    QueryTerm::Phrase(_) => todo!(),
+                    QueryTerm::Word { derivations: WordDerivations { original, zero_typo, one_typo, two_typos, use_prefix_db } } => {
+                        writeln!(file,"{node_idx} : \"{original}\" {{
+shape: class").unwrap();
+                        for w in zero_typo {
+                            writeln!(file, "\"{w}\" : 0").unwrap();
+                        }
+                        for w in one_typo {
+                            writeln!(file, "\"{w}\" : 1").unwrap();
+                        }
+                        for w in two_typos {
+                            writeln!(file, "\"{w}\" : 2").unwrap();
+                        }
+                        if *use_prefix_db {
+                            writeln!(file, "use prefix DB : true").unwrap();
+                        }
+                        writeln!(file, "}}").unwrap();
+                    },
+                }
+            },
+            QueryNode::Deleted => panic!(),
+            QueryNode::Start => {
+                writeln!(file,"{node_idx} : START").unwrap();
+            },
+            QueryNode::End => {
+                writeln!(file,"{node_idx} : END").unwrap();
+            },
+        }
     }
     fn query_graph_d2_description(query_graph: &QueryGraph, file: &mut File) {
         writeln!(file,"direction: right");
@@ -228,11 +281,79 @@ results.{random} {{
             if matches!(query_graph.nodes[node], QueryNode::Deleted) {
                 continue;
             }
-            writeln!(file,"{node}");
-
+            Self::query_node_d2_desc(node, &query_graph.nodes[node], file);
+            
             for edge in query_graph.edges[node].successors.iter() {
                 writeln!(file, "{node} -> {edge};\n").unwrap();
             }
         }        
+    }
+    fn proximity_graph_d2_description(graph: &RankingRuleGraph<ProximityGraph>, paths: &PathsMap<u64>, file: &mut File) {
+        writeln!(file,"direction: right").unwrap();
+
+        writeln!(file, "Proximity Graph {{").unwrap();
+        for (node_idx, node) in graph.query_graph.nodes.iter().enumerate() {
+            if matches!(node, QueryNode::Deleted) {
+                continue;
+            }
+            Self::query_node_d2_desc(node_idx, node, file);
+        }
+        for edge in graph.all_edges.iter().flatten() {
+            let Edge { from_node, to_node, cost, details } = edge;
+
+            match &details {
+                EdgeDetails::Unconditional => {
+                    writeln!(file, 
+                        "{from_node} -> {to_node} : \"always cost {cost}\"",
+                        cost = edge.cost,
+                    );
+                }
+                EdgeDetails::Data(details) => {
+                    writeln!(file, 
+                        "{from_node} -> {to_node} : \"cost {cost} {edge_label}\"",
+                        cost = edge.cost,
+                        edge_label = ProximityGraph::graphviz_edge_details_label(details)
+                    );
+                }
+            }
+        }
+        writeln!(file, "}}").unwrap();
+
+        writeln!(file, "Shortest Paths {{").unwrap();
+        Self::paths_d2_description(graph, paths, file);
+        writeln!(file, "}}").unwrap();
+    }
+    fn paths_d2_description(graph: &RankingRuleGraph<ProximityGraph>, paths: &PathsMap<u64>, file: &mut File) { 
+        for (edge_idx, rest) in paths.nodes.iter() {
+            let Edge { from_node, to_node, cost, .. } = graph.all_edges[*edge_idx as usize].as_ref().unwrap();
+            let from_node = &graph.query_graph.nodes[*from_node as usize];
+            let from_node_desc = match from_node {
+                QueryNode::Term(term) => match &term.value {
+                    QueryTerm::Phrase(_) => todo!(),
+                    QueryTerm::Word { derivations } => derivations.original.clone(),
+                },
+                QueryNode::Deleted => panic!(),
+                QueryNode::Start => "START".to_owned(),
+                QueryNode::End => "END".to_owned(),
+            };
+            let to_node = &graph.query_graph.nodes[*to_node as usize];
+            let to_node_desc = match to_node {
+                QueryNode::Term(term) => match &term.value {
+                    QueryTerm::Phrase(_) => todo!(),
+                    QueryTerm::Word { derivations } => derivations.original.clone(),
+                },
+                QueryNode::Deleted => panic!(),
+                QueryNode::Start => "START".to_owned(),
+                QueryNode::End => "END".to_owned(),
+            };
+            writeln!(file, "{edge_idx}: \"{from_node_desc}->{to_node_desc} [{cost}]\" {{
+                shape: class
+            }}").unwrap();
+
+            for (dest_edge_idx, _) in rest.nodes.iter() {
+                writeln!(file, "{edge_idx} -> {dest_edge_idx}").unwrap();
+            }
+            Self::paths_d2_description(graph, rest, file);
+        }
     }
 }
