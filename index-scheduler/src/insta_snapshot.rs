@@ -254,6 +254,16 @@ pub fn snapshot_canceled_by(
     snap
 }
 pub fn snapshot_index_mapper(rtxn: &RoTxn, mapper: &IndexMapper) -> String {
+    let mut s = String::new();
     let names = mapper.index_names(rtxn).unwrap();
-    format!("{names:?}")
+
+    for name in names {
+        let stats = mapper.stats_of(rtxn, &name).unwrap();
+        s.push_str(&format!(
+            "{name}: {{ number_of_documents: {}, field_distribution: {:?} }}\n",
+            stats.number_of_documents, stats.field_distribution
+        ));
+    }
+
+    s
 }
