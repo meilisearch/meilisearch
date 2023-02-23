@@ -2,7 +2,7 @@ use actix_web::http::header;
 use actix_web::web::{self, Data};
 use actix_web::HttpResponse;
 use index_scheduler::IndexScheduler;
-use meilisearch_auth::AuthController;
+use meilisearch_auth::{AuthController, AuthFilter};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use prometheus::{Encoder, TextEncoder};
@@ -19,9 +19,11 @@ pub async fn get_metrics(
     index_scheduler: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, Data<IndexScheduler>>,
     auth_controller: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, AuthController>,
 ) -> Result<HttpResponse, ResponseError> {
-    let search_rules = &index_scheduler.filters().search_rules;
-    let response =
-        create_all_stats((*index_scheduler).clone(), (*auth_controller).clone(), search_rules)?;
+    let response = create_all_stats(
+        (*index_scheduler).clone(),
+        (*auth_controller).clone(),
+        &AuthFilter::default(),
+    )?;
 
     crate::metrics::MEILISEARCH_DB_SIZE_BYTES.set(response.database_size as i64);
     crate::metrics::MEILISEARCH_INDEX_COUNT.set(response.indexes.len() as i64);
