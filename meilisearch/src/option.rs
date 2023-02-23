@@ -286,7 +286,7 @@ pub struct Opt {
     #[serde(default)]
     pub log_level: LogLevel,
 
-    /// Experimental metrics feature. For more information, see: https://github.com/meilisearch/meilisearch/discussions/3518
+    /// Experimental metrics feature. For more information, see: <https://github.com/meilisearch/meilisearch/discussions/3518>
     ///
     /// Enables the Prometheus metrics on the `GET /metrics` endpoint.
     #[clap(long, env = MEILI_EXPERIMENTAL_ENABLE_METRICS)]
