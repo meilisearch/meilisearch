@@ -280,9 +280,9 @@ async fn replace_documents_bad_csv_delimiter() {
     snapshot!(json_string!(response), @r###"
     {
       "message": "Invalid value in parameter `csvDelimiter`: expected a string of one character, but found an empty string",
-      "code": "invalid_index_csv_delimiter",
+      "code": "invalid_document_csv_delimiter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_index_csv_delimiter"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_csv_delimiter"
     }
     "###);
 
@@ -292,9 +292,9 @@ async fn replace_documents_bad_csv_delimiter() {
     snapshot!(json_string!(response), @r###"
     {
       "message": "Invalid value in parameter `csvDelimiter`: expected a string of one character, but found the following string of 5 characters: `doggo`",
-      "code": "invalid_index_csv_delimiter",
+      "code": "invalid_document_csv_delimiter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_index_csv_delimiter"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_csv_delimiter"
     }
     "###);
 
@@ -305,9 +305,9 @@ async fn replace_documents_bad_csv_delimiter() {
     snapshot!(json_string!(response), @r###"
     {
       "message": "csv delimiter must be an ascii character. Found: `🍰`",
-      "code": "invalid_index_csv_delimiter",
+      "code": "invalid_document_csv_delimiter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_index_csv_delimiter"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_csv_delimiter"
     }
     "###);
 }
@@ -323,9 +323,9 @@ async fn update_documents_bad_csv_delimiter() {
     snapshot!(json_string!(response), @r###"
     {
       "message": "Invalid value in parameter `csvDelimiter`: expected a string of one character, but found an empty string",
-      "code": "invalid_index_csv_delimiter",
+      "code": "invalid_document_csv_delimiter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_index_csv_delimiter"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_csv_delimiter"
     }
     "###);
 
@@ -335,9 +335,9 @@ async fn update_documents_bad_csv_delimiter() {
     snapshot!(json_string!(response), @r###"
     {
       "message": "Invalid value in parameter `csvDelimiter`: expected a string of one character, but found the following string of 5 characters: `doggo`",
-      "code": "invalid_index_csv_delimiter",
+      "code": "invalid_document_csv_delimiter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_index_csv_delimiter"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_csv_delimiter"
     }
     "###);
 
@@ -352,9 +352,9 @@ async fn update_documents_bad_csv_delimiter() {
     snapshot!(json_string!(response), @r###"
     {
       "message": "csv delimiter must be an ascii character. Found: `🍰`",
-      "code": "invalid_index_csv_delimiter",
+      "code": "invalid_document_csv_delimiter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_index_csv_delimiter"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_csv_delimiter"
     }
     "###);
 }
