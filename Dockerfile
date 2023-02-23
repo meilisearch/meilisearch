@@ -12,7 +12,7 @@ ENV     RUSTFLAGS="-C target-feature=-crt-static"
 COPY    . .
 RUN     set -eux; \
         arch="$(dpkg --print-architecture)"; \
-        if [ "$arch" = "aarch64" ]; then \
+        if [ "$arch" = "arm64" ]; then \
             export JEMALLOC_SYS_WITH_LG_PAGE=16; \
         fi && \
         cargo build --release
