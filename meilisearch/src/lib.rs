@@ -45,6 +45,34 @@ use option::ScheduleSnapshot;
 
 use crate::error::MeilisearchHttpError;
 
+/// Default number of simultaneously opened indexes.
+///
+/// This value is used when dynamic computation of how many indexes can be opened at once was skipped (e.g., in tests).
+///
+/// Lower for Windows that dedicates a smaller virtual address space to processes.
+///
+/// The value was chosen this way:
+///
+/// - Windows provides a small virtual address space of about 10TiB to processes.
+/// - The chosen value allows for indexes to use the default map size of 2TiB safely.
+#[cfg(windows)]
+const DEFAULT_INDEX_COUNT: usize = 4;
+
+/// Default number of simultaneously opened indexes.
+///
+/// This value is used when dynamic computation of how many indexes can be opened at once was skipped (e.g., in tests).
+///
+/// The higher, the better for avoiding reopening indexes.
+///
+/// The value was chosen this way:
+///
+/// - Opening an index consumes a file descriptor.
+/// - The default on many unices is about 256 file descriptors for a process.
+/// - 100 is a little bit less than half this value.
+/// - The chosen value allows for indexes to use the default map size of 2TiB safely.
+#[cfg(not(windows))]
+const DEFAULT_INDEX_COUNT: usize = 20;
+
 /// Check if a db is empty. It does not provide any information on the
 /// validity of the data in it.
 /// We consider a database as non empty when it's a non empty directory.
@@ -206,9 +234,11 @@ fn open_or_create_database_unchecked(
             snapshots_path: opt.snapshot_dir.clone(),
             dumps_path: opt.dump_dir.clone(),
             task_db_size: opt.max_task_db_size.get_bytes() as usize,
-            index_size: opt.max_index_size.get_bytes() as usize,
+            index_base_map_size: opt.max_index_size.get_bytes() as usize,
             indexer_config: (&opt.indexer_options).try_into()?,
             autobatching_enabled: true,
+            index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().get_bytes() as usize,
+            index_count: DEFAULT_INDEX_COUNT,
         })?)
     };
 
