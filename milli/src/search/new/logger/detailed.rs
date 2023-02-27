@@ -320,12 +320,13 @@ shape: class").unwrap();
         writeln!(file, "}}").unwrap();
 
         writeln!(file, "Shortest Paths {{").unwrap();
-        Self::paths_d2_description(graph, paths, file);
+        Self::paths_d2_description(graph, "", paths, file);
         writeln!(file, "}}").unwrap();
     }
-    fn paths_d2_description(graph: &RankingRuleGraph<ProximityGraph>, paths: &PathsMap<u64>, file: &mut File) { 
+    fn paths_d2_description(graph: &RankingRuleGraph<ProximityGraph>, paths_idx: &str, paths: &PathsMap<u64>, file: &mut File) { 
+
         for (edge_idx, rest) in paths.nodes.iter() {
-            let Edge { from_node, to_node, cost, .. } = graph.all_edges[*edge_idx as usize].as_ref().unwrap();
+            let Some(Edge { from_node, to_node, cost, .. }) = graph.all_edges[*edge_idx as usize].as_ref() else { continue };
             let from_node = &graph.query_graph.nodes[*from_node as usize];
             let from_node_desc = match from_node {
                 QueryNode::Term(term) => match &term.value {
@@ -346,14 +347,15 @@ shape: class").unwrap();
                 QueryNode::Start => "START".to_owned(),
                 QueryNode::End => "END".to_owned(),
             };
-            writeln!(file, "{edge_idx}: \"{from_node_desc}->{to_node_desc} [{cost}]\" {{
+            let edge_id = format!("{paths_idx}{edge_idx}");
+            writeln!(file, "{edge_id}: \"{from_node_desc}->{to_node_desc} [{cost}]\" {{
                 shape: class
             }}").unwrap();
-
             for (dest_edge_idx, _) in rest.nodes.iter() {
-                writeln!(file, "{edge_idx} -> {dest_edge_idx}").unwrap();
+                let dest_edge_id = format!("{paths_idx}{edge_idx}{dest_edge_idx}");
+                writeln!(file, "{edge_id} -> {dest_edge_id}").unwrap();
             }
-            Self::paths_d2_description(graph, rest, file);
+            Self::paths_d2_description(graph, &format!("{paths_idx}{edge_idx}"), rest, file);
         }
     }
 }
