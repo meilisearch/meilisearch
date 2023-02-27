@@ -76,7 +76,7 @@ static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
 });
 
 static INVALID_METRICS_RESPONSE: Lazy<Value> = Lazy::new(|| {
-    json!({"message": "The provided API key is invalid. The API key for the `/metrics` route must have no limitation on the indexes.",
+    json!({"message": "The provided API key is invalid. The API key for the `/metrics` route must allow access to all indexes.",
         "code": "invalid_api_key",
         "type": "auth",
         "link": "https://docs.meilisearch.com/errors#invalid_api_key"

@@ -22,9 +22,9 @@ pub async fn get_metrics(
     let auth_filters = index_scheduler.filters();
     if !auth_filters.all_indexes_authorized() {
         let mut error = ResponseError::from(AuthenticationError::InvalidToken);
-        error.message.push_str(
-            " The API key for the `/metrics` route must have no limitation on the indexes.",
-        );
+        error
+            .message
+            .push_str(" The API key for the `/metrics` route must allow access to all indexes.");
         return Err(error);
     }
 
