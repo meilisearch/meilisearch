@@ -326,7 +326,7 @@ shape: class").unwrap();
     fn paths_d2_description(graph: &RankingRuleGraph<ProximityGraph>, paths_idx: &str, paths: &PathsMap<u64>, file: &mut File) { 
 
         for (edge_idx, rest) in paths.nodes.iter() {
-            let Some(Edge { from_node, to_node, cost, .. }) = graph.all_edges[*edge_idx as usize].as_ref() else { continue };
+            let Edge { from_node, to_node, cost, .. } = graph.all_edges[*edge_idx as usize].as_ref().unwrap() ;
             let from_node = &graph.query_graph.nodes[*from_node as usize];
             let from_node_desc = match from_node {
                 QueryNode::Term(term) => match &term.value {

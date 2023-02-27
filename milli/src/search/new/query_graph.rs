@@ -192,18 +192,14 @@ impl QueryGraph {
     }
     pub fn remove_words_at_position(&mut self, position: i8) {
         let mut nodes_to_remove_keeping_edges = vec![];
-        let mut nodes_to_remove = vec![];
         for (node_idx, node) in self.nodes.iter().enumerate() {
             let node_idx = node_idx as u32;
             let QueryNode::Term(LocatedQueryTerm { value: _, positions }) = node else { continue };
-            if positions.contains(&position) {
+            if positions.start() == &position {
                 nodes_to_remove_keeping_edges.push(node_idx)
-            } else if positions.contains(&position) {
-                nodes_to_remove.push(node_idx)
             }
         }
 
-        self.remove_nodes(&nodes_to_remove);
         self.remove_nodes_keep_edges(&nodes_to_remove_keeping_edges);
 
         self.simplify();

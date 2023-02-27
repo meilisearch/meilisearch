@@ -313,7 +313,7 @@ mod tests {
         let mut db_cache = DatabaseCache::default();
 
         let query_graph =
-            make_query_graph(&index, &txn, &mut db_cache, "released from prison by the government")
+            make_query_graph(&index, &txn, &mut db_cache, "the sun flower is facing the su")
                 .unwrap();
 
         // TODO: filters + maybe distinct attributes?

@@ -74,13 +74,17 @@ impl KCheapestPathsState {
         empty_paths_cache: &EmptyPathsCache,
         into_map: &mut PathsMap<u64>,
     ) -> Option<Self> {
-        into_map.add_path(&self.kth_cheapest_path);
+        if !empty_paths_cache.path_is_empty(&self.kth_cheapest_path.edges) {
+            into_map.add_path(&self.kth_cheapest_path);
+        }
         let cur_cost = self.kth_cheapest_path.cost;
         while self.kth_cheapest_path.cost <= cur_cost {
             if let Some(next_self) = self.compute_next_cheapest_paths(graph, empty_paths_cache) {
                 self = next_self;
                 if self.kth_cheapest_path.cost == cur_cost {
                     into_map.add_path(&self.kth_cheapest_path);
+                } else {
+                    break;
                 }
             } else {
                 return None;
@@ -89,8 +93,6 @@ impl KCheapestPathsState {
         Some(self)
     }
 
-    // TODO: use the cache to potentially remove edges that return an empty RoaringBitmap
-    // TODO: return an Option<&'self Path>?
     fn compute_next_cheapest_paths<G: RankingRuleGraphTrait>(
         mut self,
         graph: &mut RankingRuleGraph<G>,
@@ -141,19 +143,12 @@ impl KCheapestPathsState {
         }
         while let Some(mut next_cheapest_paths_entry) = self.potential_cheapest_paths.first_entry()
         {
-            // This could be implemented faster
-            // Here, maybe I should filter the potential cheapest paths so that they
-            // don't contain any removed edge?
-
             let cost = *next_cheapest_paths_entry.key();
             let next_cheapest_paths = next_cheapest_paths_entry.get_mut();
 
             while let Some((next_cheapest_path, cost2)) = next_cheapest_paths.remove_first() {
                 assert_eq!(cost, cost2);
-                if next_cheapest_path
-                    .iter()
-                    .any(|edge_index| graph.all_edges[*edge_index as usize].is_none())
-                {
+                if empty_paths_cache.path_is_empty(&next_cheapest_path) {
                     continue;
                 } else {
                     self.cheapest_paths.insert(next_cheapest_path.iter().copied(), cost);
