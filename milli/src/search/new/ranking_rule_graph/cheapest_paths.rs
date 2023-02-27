@@ -81,7 +81,9 @@ impl KCheapestPathsState {
         while self.kth_cheapest_path.cost <= cur_cost {
             if let Some(next_self) = self.compute_next_cheapest_paths(graph, empty_paths_cache) {
                 self = next_self;
-                if self.kth_cheapest_path.cost == cur_cost {
+                if self.kth_cheapest_path.cost == cur_cost
+                    && !empty_paths_cache.path_is_empty(&self.kth_cheapest_path.edges)
+                {
                     into_map.add_path(&self.kth_cheapest_path);
                 } else {
                     break;
@@ -148,7 +150,13 @@ impl KCheapestPathsState {
 
             while let Some((next_cheapest_path, cost2)) = next_cheapest_paths.remove_first() {
                 assert_eq!(cost, cost2);
-                if empty_paths_cache.path_is_empty(&next_cheapest_path) {
+                // NOTE: it is important not to discard the paths that are forbidden due to a
+                // forbidden prefix, because the cheapest path algorithm (Dijkstra) cannot take
+                // this property into account.
+                if next_cheapest_path
+                    .iter()
+                    .any(|edge_index| graph.all_edges[*edge_index as usize].is_none())
+                {
                     continue;
                 } else {
                     self.cheapest_paths.insert(next_cheapest_path.iter().copied(), cost);

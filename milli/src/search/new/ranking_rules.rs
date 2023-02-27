@@ -139,6 +139,7 @@ pub fn execute_search<'transaction>(
     candidates[0] = universe.clone();
 
     let mut cur_ranking_rule_index = 0;
+
     macro_rules! back {
         () => {
             logger.end_iteration_ranking_rule(
@@ -157,13 +158,20 @@ pub fn execute_search<'transaction>(
     }
 
     let mut results = vec![];
+    macro_rules! add_to_results {
+        ($candidates:expr) => {
+            logger.add_to_results(&mut $candidates.iter().take(20 - results.len()));
+            let iter = $candidates.iter().take(20 - results.len());
+            results.extend(iter);
+        };
+    }
+
     // TODO: skip buckets when we want to start from an offset
     while results.len() < 20 {
         // The universe for this bucket is zero or one element, so we don't need to sort
         // anything, just extend the results and go back to the parent ranking rule.
         if candidates[cur_ranking_rule_index].len() <= 1 {
-            logger.add_to_results(&candidates[cur_ranking_rule_index]);
-            results.extend(&candidates[cur_ranking_rule_index]);
+            add_to_results!(candidates[cur_ranking_rule_index]);
             back!();
             continue;
         }
@@ -183,15 +191,12 @@ pub fn execute_search<'transaction>(
 
         if next_bucket.candidates.len() <= 1 {
             // Only zero or one candidate, no need to sort through the child ranking rule.
-            logger.add_to_results(&next_bucket.candidates);
-            results.extend(next_bucket.candidates);
+            add_to_results!(next_bucket.candidates);
             continue;
         } else {
             // many candidates, give to next ranking rule, if any
             if cur_ranking_rule_index == ranking_rules_len - 1 {
-                // TODO: don't extend too much, up to the limit only
-                logger.add_to_results(&next_bucket.candidates);
-                results.extend(next_bucket.candidates);
+                add_to_results!(next_bucket.candidates);
             } else {
                 cur_ranking_rule_index += 1;
                 candidates[cur_ranking_rule_index] = next_bucket.candidates.clone();
@@ -313,8 +318,7 @@ mod tests {
         let mut db_cache = DatabaseCache::default();
 
         let query_graph =
-            make_query_graph(&index, &txn, &mut db_cache, "the sun flower is facing the su")
-                .unwrap();
+            make_query_graph(&index, &txn, &mut db_cache, "a a a a a a a a a a").unwrap();
 
         // TODO: filters + maybe distinct attributes?
         let universe = get_start_universe(

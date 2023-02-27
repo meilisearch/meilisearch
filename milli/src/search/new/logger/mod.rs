@@ -5,7 +5,10 @@ use roaring::RoaringBitmap;
 
 use super::{
     query_graph,
-    ranking_rule_graph::{paths_map::PathsMap, proximity::ProximityGraph, RankingRuleGraph},
+    ranking_rule_graph::{
+        empty_paths_cache::EmptyPathsCache, paths_map::PathsMap, proximity::ProximityGraph,
+        RankingRuleGraph,
+    },
     QueryGraph, RankingRule, RankingRuleQueryTrait,
 };
 
@@ -41,7 +44,7 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
     ) {
     }
 
-    fn add_to_results(&mut self, docids: &RoaringBitmap) {}
+    fn add_to_results(&mut self, docids: &mut dyn Iterator<Item = u32>) {}
 
     fn log_words_state(&mut self, query_graph: &Q) {}
 
@@ -49,6 +52,7 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
         &mut self,
         query_graph: &RankingRuleGraph<ProximityGraph>,
         paths_map: &PathsMap<u64>,
+        empty_paths_cache: &EmptyPathsCache,
     ) {
     }
 }
@@ -78,7 +82,7 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
         ranking_rule: &dyn RankingRule<'transaction, Q>,
         universe: &RoaringBitmap,
     );
-    fn add_to_results(&mut self, docids: &RoaringBitmap);
+    fn add_to_results(&mut self, docids: &mut dyn Iterator<Item = u32>);
 
     fn log_words_state(&mut self, query_graph: &Q);
 
@@ -86,5 +90,6 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
         &mut self,
         query_graph: &RankingRuleGraph<ProximityGraph>,
         paths: &PathsMap<u64>,
+        empty_paths_cache: &EmptyPathsCache,
     );
 }

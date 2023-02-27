@@ -40,7 +40,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                     BitmapOrAllRef::Bitmap(edge_docids) => {
                         if edge_docids.is_disjoint(universe) {
                             // 1. Store in the cache that this edge is empty for this universe
-                            empty_paths_cache.empty_edges.insert(edge_index);
+                            empty_paths_cache.forbid_edge(edge_index);
                             // 2. remove all the paths that contain this edge for this universe
                             paths.remove_edge(&edge_index);
                             // 3. remove this edge from the proximity graph

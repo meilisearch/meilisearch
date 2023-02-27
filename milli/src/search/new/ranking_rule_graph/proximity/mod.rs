@@ -3,6 +3,7 @@ pub mod compute_docids;
 
 use heed::RoTxn;
 
+use super::empty_paths_cache::EmptyPathsCache;
 use super::paths_map::PathsMap;
 use super::{Edge, EdgeDetails, RankingRuleGraphTrait};
 use crate::new::db_cache::DatabaseCache;
@@ -67,8 +68,9 @@ impl RankingRuleGraphTrait for ProximityGraph {
     fn log_state(
         graph: &super::RankingRuleGraph<Self>,
         paths: &PathsMap<u64>,
+        empty_paths_cache: &EmptyPathsCache,
         logger: &mut dyn crate::new::logger::SearchLogger<crate::new::QueryGraph>,
     ) {
-        logger.log_proximity_state(graph, paths);
+        logger.log_proximity_state(graph, paths, empty_paths_cache);
     }
 }

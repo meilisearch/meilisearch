@@ -11,6 +11,7 @@ use std::ops::ControlFlow;
 use heed::RoTxn;
 use roaring::RoaringBitmap;
 
+use self::empty_paths_cache::EmptyPathsCache;
 use self::paths_map::PathsMap;
 
 use super::db_cache::DatabaseCache;
@@ -82,6 +83,7 @@ pub trait RankingRuleGraphTrait: Sized {
     fn log_state(
         graph: &RankingRuleGraph<Self>,
         paths: &PathsMap<u64>,
+        empty_paths_cache: &EmptyPathsCache,
         logger: &mut dyn SearchLogger<QueryGraph>,
     );
 }
