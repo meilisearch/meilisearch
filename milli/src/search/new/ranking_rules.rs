@@ -119,8 +119,8 @@ pub fn execute_search<'transaction>(
     universe: &RoaringBitmap,
     query_graph: &QueryGraph,
     logger: &mut dyn SearchLogger<QueryGraph>,
-    // _from: usize,
-    // _length: usize,
+    from: usize,
+    length: usize,
 ) -> Result<Vec<u32>> {
     let words = Words::new(TermsMatchingStrategy::Last);
     // let sort = Sort::new(index, txn, "sort1".to_owned(), true)?;
@@ -158,20 +158,58 @@ pub fn execute_search<'transaction>(
     }
 
     let mut results = vec![];
+    let mut cur_offset = 0usize;
+
     macro_rules! add_to_results {
         ($candidates:expr) => {
-            logger.add_to_results(&mut $candidates.iter().take(20 - results.len()));
-            let iter = $candidates.iter().take(20 - results.len());
-            results.extend(iter);
+            let candidates = $candidates;
+            let len = candidates.len();
+            if !candidates.is_empty() {
+                println!("cur_offset: {}, candidates_len: {}", cur_offset, candidates.len());
+                if cur_offset < from {
+                    println!("  cur_offset < from");
+                    if cur_offset + (candidates.len() as usize) < from {
+                        println!("    cur_offset + candidates_len < from");
+                        logger.skip_bucket_ranking_rule(
+                            cur_ranking_rule_index,
+                            ranking_rules[cur_ranking_rule_index].as_ref(),
+                            &candidates,
+                        );
+                    } else {
+                        println!("      cur_offset + candidates_len >= from");
+                        let all_candidates = candidates.iter().collect::<Vec<_>>();
+                        let (skipped_candidates, candidates) =
+                            all_candidates.split_at(from - cur_offset);
+                        logger.skip_bucket_ranking_rule(
+                            cur_ranking_rule_index,
+                            ranking_rules[cur_ranking_rule_index].as_ref(),
+                            &skipped_candidates.into_iter().collect(),
+                        );
+                        let candidates = candidates
+                            .iter()
+                            .take(length - results.len())
+                            .copied()
+                            .collect::<Vec<_>>();
+                        logger.add_to_results(&candidates);
+                        results.extend(&candidates);
+                    }
+                } else {
+                    let candidates =
+                        candidates.iter().take(length - results.len()).collect::<Vec<_>>();
+                    logger.add_to_results(&candidates);
+                    results.extend(&candidates);
+                }
+            }
+            cur_offset += len as usize;
         };
     }
 
     // TODO: skip buckets when we want to start from an offset
-    while results.len() < 20 {
+    while results.len() < length {
         // The universe for this bucket is zero or one element, so we don't need to sort
         // anything, just extend the results and go back to the parent ranking rule.
         if candidates[cur_ranking_rule_index].len() <= 1 {
-            add_to_results!(candidates[cur_ranking_rule_index]);
+            add_to_results!(&candidates[cur_ranking_rule_index]);
             back!();
             continue;
         }
@@ -197,6 +235,14 @@ pub fn execute_search<'transaction>(
             // many candidates, give to next ranking rule, if any
             if cur_ranking_rule_index == ranking_rules_len - 1 {
                 add_to_results!(next_bucket.candidates);
+            } else if cur_offset + (next_bucket.candidates.len() as usize) < from {
+                cur_offset += next_bucket.candidates.len() as usize;
+                logger.skip_bucket_ranking_rule(
+                    cur_ranking_rule_index,
+                    ranking_rules[cur_ranking_rule_index].as_ref(),
+                    &next_bucket.candidates,
+                );
+                continue;
             } else {
                 cur_ranking_rule_index += 1;
                 candidates[cur_ranking_rule_index] = next_bucket.candidates.clone();
@@ -296,7 +342,9 @@ mod tests {
             &mut db_cache,
             &universe,
             &query_graph,
-            &mut logger, /*  0, 20 */
+            &mut logger,
+            0,
+            20,
         )
         .unwrap();
         println!("{results:?}")
@@ -317,8 +365,13 @@ mod tests {
 
         let mut db_cache = DatabaseCache::default();
 
-        let query_graph =
-            make_query_graph(&index, &txn, &mut db_cache, "a a a a a a a a a a").unwrap();
+        let query_graph = make_query_graph(
+            &index,
+            &txn,
+            &mut db_cache,
+            "and he was released from prison by the government",
+        )
+        .unwrap();
 
         // TODO: filters + maybe distinct attributes?
         let universe = get_start_universe(
@@ -338,7 +391,9 @@ mod tests {
             &mut db_cache,
             &universe,
             &query_graph,
-            &mut logger, //&mut DefaultSearchLogger, /*  0, 20 */
+            &mut logger, //&mut DefaultSearchLogger,
+            500,
+            100,
         )
         .unwrap();
 

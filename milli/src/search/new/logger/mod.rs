@@ -35,6 +35,13 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
         universe: &RoaringBitmap,
     ) {
     }
+    fn skip_bucket_ranking_rule<'transaction>(
+        &mut self,
+        ranking_rule_idx: usize,
+        ranking_rule: &dyn RankingRule<'transaction, Q>,
+        candidates: &RoaringBitmap,
+    ) {
+    }
 
     fn end_iteration_ranking_rule<'transaction>(
         &mut self,
@@ -44,7 +51,7 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
     ) {
     }
 
-    fn add_to_results(&mut self, docids: &mut dyn Iterator<Item = u32>) {}
+    fn add_to_results(&mut self, docids: &[u32]) {}
 
     fn log_words_state(&mut self, query_graph: &Q) {}
 
@@ -76,13 +83,19 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
         ranking_rule: &dyn RankingRule<'transaction, Q>,
         universe: &RoaringBitmap,
     );
+    fn skip_bucket_ranking_rule<'transaction>(
+        &mut self,
+        ranking_rule_idx: usize,
+        ranking_rule: &dyn RankingRule<'transaction, Q>,
+        candidates: &RoaringBitmap,
+    );
     fn end_iteration_ranking_rule<'transaction>(
         &mut self,
         ranking_rule_idx: usize,
         ranking_rule: &dyn RankingRule<'transaction, Q>,
         universe: &RoaringBitmap,
     );
-    fn add_to_results(&mut self, docids: &mut dyn Iterator<Item = u32>);
+    fn add_to_results(&mut self, docids: &[u32]);
 
     fn log_words_state(&mut self, query_graph: &Q);
 

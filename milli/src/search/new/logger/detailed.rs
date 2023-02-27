@@ -29,7 +29,7 @@ pub enum SearchEvents {
         universe: RoaringBitmap,
     },
     ExtendResults {
-        new: RoaringBitmap,
+        new: Vec<u32>,
     },
     WordsState {
         query_graph: QueryGraph,
@@ -39,6 +39,7 @@ pub enum SearchEvents {
         paths: PathsMap<u64>,
         empty_paths_cache: EmptyPathsCache,
     },
+    RankingRuleSkipBucket { ranking_rule_idx: usize, candidates: RoaringBitmap },
 }
 
 pub struct DetailedSearchLogger {
@@ -97,6 +98,17 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
             universe: universe.clone(),
         })
     }
+    fn skip_bucket_ranking_rule<'transaction>(
+        &mut self,
+        ranking_rule_idx: usize,
+        ranking_rule: &dyn RankingRule<'transaction, QueryGraph>,
+        candidates: &RoaringBitmap,
+    ) {
+        self.events.push(SearchEvents::RankingRuleSkipBucket {
+            ranking_rule_idx,
+            candidates: candidates.clone(),
+        })
+    }
 
     fn end_iteration_ranking_rule<'transaction>(
         &mut self,
@@ -109,8 +121,8 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
             universe: universe.clone(),
         })
     }
-    fn add_to_results(&mut self, docids: &mut dyn Iterator<Item = u32>) {
-        self.events.push(SearchEvents::ExtendResults { new: docids.collect() });
+    fn add_to_results(&mut self, docids: &[u32]) {
+        self.events.push(SearchEvents::ExtendResults { new: docids.to_vec() });
     }
 
     fn log_words_state(&mut self, query_graph: &QueryGraph) {
@@ -173,6 +185,15 @@ impl DetailedSearchLogger {
                     let next_activated_id = activated_id(&timestamp);
                     writeln!(&mut file, 
                         "{ranking_rule_idx}.{old_activated_id} -> {ranking_rule_idx}.{next_activated_id} : next bucket",)
+                        .unwrap();
+                }
+                SearchEvents::RankingRuleSkipBucket { ranking_rule_idx, candidates } => {
+                    let old_activated_id = activated_id(&timestamp);
+                    *timestamp.last_mut().unwrap() += 1;
+                    let next_activated_id = activated_id(&timestamp);
+                    let len = candidates.len();
+                    writeln!(&mut file, 
+                        "{ranking_rule_idx}.{old_activated_id} -> {ranking_rule_idx}.{next_activated_id} : skip bucket ({len})",)
                         .unwrap();
                 }
                 SearchEvents::RankingRuleEndIteration { universe, ranking_rule_idx } => {
