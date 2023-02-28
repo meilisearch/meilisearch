@@ -70,14 +70,16 @@ impl<'transaction, G: RankingRuleGraphTrait> RankingRule<'transaction, QueryGrap
     ) -> Result<Option<RankingRuleOutput<QueryGraph>>> {
         assert!(universe.len() > 1);
         let mut state = self.state.take().unwrap();
-
-        let Some(mut cheapest_paths_state) = state.cheapest_paths_state.take() else {
+        if state.cheapest_paths_state.is_none() {
             return Ok(None);
-        };
+        }
 
         let mut paths = PathsMap::default();
 
         while paths.is_empty() {
+            let Some(cheapest_paths_state) = state.cheapest_paths_state.take() else {
+                break;
+            };
             if let Some(next_cheapest_paths_state) = cheapest_paths_state
                 .compute_paths_of_next_lowest_cost(
                     &mut state.graph,
@@ -85,13 +87,15 @@ impl<'transaction, G: RankingRuleGraphTrait> RankingRule<'transaction, QueryGrap
                     &mut paths,
                 )
             {
-                cheapest_paths_state = next_cheapest_paths_state;
+                state.cheapest_paths_state = Some(next_cheapest_paths_state);
             } else {
-                self.state = None;
-                return Ok(None);
+                break;
             }
         }
-        state.cheapest_paths_state = Some(cheapest_paths_state);
+
+        if paths.is_empty() && state.cheapest_paths_state.is_none() {
+            return Ok(None);
+        }
 
         G::log_state(&state.graph, &paths, &state.empty_paths_cache, logger);
 

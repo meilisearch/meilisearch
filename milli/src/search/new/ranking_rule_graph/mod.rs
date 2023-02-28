@@ -5,6 +5,7 @@ pub mod empty_paths_cache;
 pub mod paths_map;
 pub mod proximity;
 pub mod resolve_paths;
+pub mod typo;
 
 use std::ops::ControlFlow;
 

@@ -6,7 +6,7 @@ use roaring::RoaringBitmap;
 use super::{
     ranking_rule_graph::{
         empty_paths_cache::EmptyPathsCache, paths_map::PathsMap, proximity::ProximityGraph,
-        RankingRuleGraph,
+        typo::TypoGraph, RankingRuleGraph,
     },
     RankingRule, RankingRuleQueryTrait,
 };
@@ -61,6 +61,14 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
         _empty_paths_cache: &EmptyPathsCache,
     ) {
     }
+
+    fn log_typo_state(
+        &mut self,
+        query_graph: &RankingRuleGraph<TypoGraph>,
+        paths: &PathsMap<u64>,
+        empty_paths_cache: &EmptyPathsCache,
+    ) {
+    }
 }
 
 pub trait SearchLogger<Q: RankingRuleQueryTrait> {
@@ -101,6 +109,13 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
     fn log_proximity_state(
         &mut self,
         query_graph: &RankingRuleGraph<ProximityGraph>,
+        paths: &PathsMap<u64>,
+        empty_paths_cache: &EmptyPathsCache,
+    );
+
+    fn log_typo_state(
+        &mut self,
+        query_graph: &RankingRuleGraph<TypoGraph>,
         paths: &PathsMap<u64>,
         empty_paths_cache: &EmptyPathsCache,
     );

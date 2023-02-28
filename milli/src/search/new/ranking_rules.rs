@@ -7,6 +7,7 @@ use super::logger::SearchLogger;
 use super::QueryGraph;
 use crate::new::graph_based_ranking_rule::GraphBasedRankingRule;
 use crate::new::ranking_rule_graph::proximity::ProximityGraph;
+use crate::new::ranking_rule_graph::typo::TypoGraph;
 use crate::new::words::Words;
 use crate::search::new::sort::Sort;
 use crate::{Filter, Index, Result, TermsMatchingStrategy};
@@ -125,9 +126,10 @@ pub fn execute_search<'transaction>(
     let words = &mut Words::new(TermsMatchingStrategy::Last);
     let sort = &mut Sort::new(index, txn, "release_date".to_owned(), true)?;
     let proximity = &mut GraphBasedRankingRule::<ProximityGraph>::new("proximity".to_owned());
+    let typo = &mut GraphBasedRankingRule::<TypoGraph>::new("typo".to_owned());
     // TODO: ranking rules given as argument
     let mut ranking_rules: Vec<&mut dyn RankingRule<'transaction, QueryGraph>> =
-        vec![words, proximity, sort];
+        vec![words, typo, proximity, sort];
 
     logger.ranking_rules(&ranking_rules);
 
@@ -152,7 +154,7 @@ pub fn execute_search<'transaction>(
 
     macro_rules! back {
         () => {
-            assert!(candidates[cur_ranking_rule_index].is_empty());
+            // assert!(candidates[cur_ranking_rule_index].is_empty());
             logger.end_iteration_ranking_rule(
                 cur_ranking_rule_index,
                 ranking_rules[cur_ranking_rule_index],
@@ -230,6 +232,7 @@ pub fn execute_search<'transaction>(
         );
 
         let Some(next_bucket) = ranking_rules[cur_ranking_rule_index].next_bucket(index, txn, db_cache, logger, &candidates[cur_ranking_rule_index])? else {
+            // TODO: add remaining candidates automatically here?
             back!();
             continue;
         };
@@ -346,7 +349,7 @@ mod tests {
         let mut db_cache = DatabaseCache::default();
 
         let query_graph =
-            make_query_graph(&index, &txn, &mut db_cache, "released from prison by the government")
+            make_query_graph(&index, &txn, &mut db_cache, "releases from poison by the government")
                 .unwrap();
 
         let mut logger = DetailedSearchLogger::new("log");

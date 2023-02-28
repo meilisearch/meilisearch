@@ -3,6 +3,7 @@ use roaring::RoaringBitmap;
 use std::fs::File;
 use std::{io::Write, path::PathBuf};
 
+use crate::new::ranking_rule_graph::typo::TypoGraph;
 use crate::new::{QueryNode, QueryGraph};
 use crate::new::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
 use crate::new::ranking_rule_graph::empty_paths_cache::EmptyPathsCache;
@@ -35,6 +36,11 @@ pub enum SearchEvents {
     },
     ProximityState {
         graph: RankingRuleGraph<ProximityGraph>,
+        paths: PathsMap<u64>,
+        empty_paths_cache: EmptyPathsCache,
+    },
+    TypoState {
+        graph: RankingRuleGraph<TypoGraph>,
         paths: PathsMap<u64>,
         empty_paths_cache: EmptyPathsCache,
     },
@@ -132,7 +138,10 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         self.events.push(SearchEvents::ProximityState { graph: query_graph.clone(), paths: paths_map.clone(), empty_paths_cache: empty_paths_cache.clone() })
     }
     
-    
+    fn log_typo_state(&mut self, query_graph: &RankingRuleGraph<TypoGraph>, paths_map: &PathsMap<u64>, empty_paths_cache: &EmptyPathsCache) {
+        self.events.push(SearchEvents::TypoState { graph: query_graph.clone(), paths: paths_map.clone(), empty_paths_cache: empty_paths_cache.clone() })
+    }
+
 }
 
 impl DetailedSearchLogger {
@@ -251,7 +260,20 @@ results.{random} {{
                     let id = format!("{cur_ranking_rule}.{cur_activated_id}");
                     let new_file_path = self.folder_path.join(format!("{id}.d2"));
                     let mut new_file = std::fs::File::create(new_file_path).unwrap();
-                    Self::proximity_graph_d2_description(graph, paths, empty_paths_cache, &mut new_file);
+                    Self::ranking_rule_graph_d2_description(graph, paths, empty_paths_cache, &mut new_file);
+                    writeln!(
+                        &mut file,
+                        "{id} {{
+    link: \"{id}.d2.svg\"
+}}").unwrap();
+                },
+                SearchEvents::TypoState { graph, paths, empty_paths_cache } => {
+                    let cur_ranking_rule = timestamp.len() - 1;
+                    let cur_activated_id = activated_id(&timestamp);
+                    let id = format!("{cur_ranking_rule}.{cur_activated_id}");
+                    let new_file_path = self.folder_path.join(format!("{id}.d2"));
+                    let mut new_file = std::fs::File::create(new_file_path).unwrap();
+                    Self::ranking_rule_graph_d2_description(graph, paths, empty_paths_cache, &mut new_file);
                     writeln!(
                         &mut file,
                         "{id} {{
@@ -309,7 +331,7 @@ shape: class").unwrap();
             }
         }        
     }
-    fn proximity_graph_d2_description(graph: &RankingRuleGraph<ProximityGraph>, paths: &PathsMap<u64>, empty_paths_cache: &EmptyPathsCache, file: &mut File) {
+    fn ranking_rule_graph_d2_description<R: RankingRuleGraphTrait>(graph: &RankingRuleGraph<R>, paths: &PathsMap<u64>, empty_paths_cache: &EmptyPathsCache, file: &mut File) {
         writeln!(file,"direction: right").unwrap();
 
         writeln!(file, "Proximity Graph {{").unwrap();
@@ -333,7 +355,7 @@ shape: class").unwrap();
                     writeln!(file, 
                         "{from_node} -> {to_node} : \"cost {cost} {edge_label}\"",
                         cost = edge.cost,
-                        edge_label = ProximityGraph::graphviz_edge_details_label(details)
+                        edge_label = R::graphviz_edge_details_label(details)
                     ).unwrap();
                 }
             }
@@ -354,7 +376,7 @@ shape: class").unwrap();
         }
         writeln!(file, "}}").unwrap();
     }
-    fn edge_d2_description(graph: &RankingRuleGraph<ProximityGraph>, paths_idx: &str, edge_idx: u32, file: &mut File) -> String {
+    fn edge_d2_description<R: RankingRuleGraphTrait>(graph: &RankingRuleGraph<R>, paths_idx: &str, edge_idx: u32, file: &mut File) -> String {
         let Edge { from_node, to_node, cost, .. } = graph.all_edges[edge_idx as usize].as_ref().unwrap() ;
         let from_node = &graph.query_graph.nodes[*from_node as usize];
         let from_node_desc = match from_node {
@@ -382,7 +404,7 @@ shape: class").unwrap();
         }}").unwrap();
         edge_id
     }
-    fn paths_d2_description<T>(graph: &RankingRuleGraph<ProximityGraph>, paths_idx: &str, paths: &PathsMap<T>, file: &mut File) { 
+    fn paths_d2_description<R: RankingRuleGraphTrait, T>(graph: &RankingRuleGraph<R>, paths_idx: &str, paths: &PathsMap<T>, file: &mut File) { 
         for (edge_idx, rest) in paths.nodes.iter() {
             let edge_id = Self::edge_d2_description(graph, paths_idx, *edge_idx, file);
             for (dest_edge_idx, _) in rest.nodes.iter() {
