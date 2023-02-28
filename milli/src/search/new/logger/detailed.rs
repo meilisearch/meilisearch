@@ -1,10 +1,9 @@
 use rand::random;
 use roaring::RoaringBitmap;
 use std::fs::File;
-use std::path::Path;
 use std::{io::Write, path::PathBuf};
 
-use crate::new::QueryNode;
+use crate::new::{QueryNode, QueryGraph};
 use crate::new::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
 use crate::new::ranking_rule_graph::empty_paths_cache::EmptyPathsCache;
 use crate::new::ranking_rule_graph::{Edge, EdgeDetails, RankingRuleGraphTrait};
@@ -12,7 +11,7 @@ use crate::new::ranking_rule_graph::{
     paths_map::PathsMap, proximity::ProximityGraph, RankingRuleGraph,
 };
 
-use super::{QueryGraph, RankingRule, RankingRuleQueryTrait, SearchLogger};
+use super::{RankingRule, SearchLogger};
 
 pub enum SearchEvents {
     RankingRuleStartIteration {
@@ -76,7 +75,7 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
     fn start_iteration_ranking_rule<'transaction>(
         &mut self,
         ranking_rule_idx: usize,
-        ranking_rule: &dyn RankingRule<'transaction, QueryGraph>,
+        _ranking_rule: &dyn RankingRule<'transaction, QueryGraph>,
         query: &QueryGraph,
         universe: &RoaringBitmap,
     ) {
@@ -90,7 +89,7 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
     fn next_bucket_ranking_rule<'transaction>(
         &mut self,
         ranking_rule_idx: usize,
-        ranking_rule: &dyn RankingRule<'transaction, QueryGraph>,
+        _ranking_rule: &dyn RankingRule<'transaction, QueryGraph>,
         universe: &RoaringBitmap,
     ) {
         self.events.push(SearchEvents::RankingRuleNextBucket {
@@ -101,7 +100,7 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
     fn skip_bucket_ranking_rule<'transaction>(
         &mut self,
         ranking_rule_idx: usize,
-        ranking_rule: &dyn RankingRule<'transaction, QueryGraph>,
+        _ranking_rule: &dyn RankingRule<'transaction, QueryGraph>,
         candidates: &RoaringBitmap,
     ) {
         self.events.push(SearchEvents::RankingRuleSkipBucket {
@@ -113,7 +112,7 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
     fn end_iteration_ranking_rule<'transaction>(
         &mut self,
         ranking_rule_idx: usize,
-        ranking_rule: &dyn RankingRule<'transaction, QueryGraph>,
+        _ranking_rule: &dyn RankingRule<'transaction, QueryGraph>,
         universe: &RoaringBitmap,
     ) {
         self.events.push(SearchEvents::RankingRuleEndIteration {
@@ -138,7 +137,6 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
 
 impl DetailedSearchLogger {
     pub fn write_d2_description(&self) {
-        let mut timestamp_idx = 0;
         let mut timestamp = vec![];
         fn activated_id(timestamp: &[usize]) -> String {
             let mut s = String::new();
@@ -152,14 +150,14 @@ impl DetailedSearchLogger {
         let index_path = self.folder_path.join("index.d2");
         let mut file = std::fs::File::create(index_path).unwrap();
         writeln!(&mut file, "Control Flow Between Ranking Rules: {{").unwrap();
-        writeln!(&mut file, "shape: sequence_diagram");
+        writeln!(&mut file, "shape: sequence_diagram").unwrap();
         for (idx, rr_id) in self.ranking_rules_ids.as_ref().unwrap().iter().enumerate() {
             writeln!(&mut file, "{idx}: {rr_id}").unwrap();
         }
-        writeln!(&mut file, "results");
+        writeln!(&mut file, "results").unwrap();
         for event in self.events.iter() {
             match event {
-                SearchEvents::RankingRuleStartIteration { query, universe, ranking_rule_idx } => {
+                SearchEvents::RankingRuleStartIteration { ranking_rule_idx, .. } => {
 
                     let parent_activated_id = activated_id(&timestamp);
                     timestamp.push(0);
@@ -179,7 +177,7 @@ impl DetailedSearchLogger {
     }}
 }}").unwrap();
                 }
-                SearchEvents::RankingRuleNextBucket { universe, ranking_rule_idx } => {
+                SearchEvents::RankingRuleNextBucket { ranking_rule_idx, .. } => {
                     let old_activated_id = activated_id(&timestamp);
                     *timestamp.last_mut().unwrap() += 1;
                     let next_activated_id = activated_id(&timestamp);
@@ -196,7 +194,7 @@ impl DetailedSearchLogger {
                         "{ranking_rule_idx}.{old_activated_id} -> {ranking_rule_idx}.{next_activated_id} : skip bucket ({len})",)
                         .unwrap();
                 }
-                SearchEvents::RankingRuleEndIteration { universe, ranking_rule_idx } => {
+                SearchEvents::RankingRuleEndIteration { ranking_rule_idx, .. } => {
                     let cur_activated_id = activated_id(&timestamp);
                     timestamp.pop();
                     let parent_activated_id = activated_id(&timestamp);
@@ -238,7 +236,7 @@ results.{random} {{
                     let cur_ranking_rule = timestamp.len() - 1;
                     let cur_activated_id = activated_id(&timestamp);
                     let id = format!("{cur_ranking_rule}.{cur_activated_id}");
-                    let mut new_file_path = self.folder_path.join(format!("{id}.d2"));
+                    let new_file_path = self.folder_path.join(format!("{id}.d2"));
                     let mut new_file = std::fs::File::create(new_file_path).unwrap();
                     Self::query_graph_d2_description(query_graph, &mut new_file);
                     writeln!(
@@ -251,7 +249,7 @@ results.{random} {{
                     let cur_ranking_rule = timestamp.len() - 1;
                     let cur_activated_id = activated_id(&timestamp);
                     let id = format!("{cur_ranking_rule}.{cur_activated_id}");
-                    let mut new_file_path = self.folder_path.join(format!("{id}.d2"));
+                    let new_file_path = self.folder_path.join(format!("{id}.d2"));
                     let mut new_file = std::fs::File::create(new_file_path).unwrap();
                     Self::proximity_graph_d2_description(graph, paths, empty_paths_cache, &mut new_file);
                     writeln!(
@@ -262,12 +260,12 @@ results.{random} {{
                 },
             }
         }
-        writeln!(&mut file, "}}");
+        writeln!(&mut file, "}}").unwrap();
     }
     
     fn query_node_d2_desc(node_idx: usize, node: &QueryNode, file: &mut File) {
         match &node {
-            QueryNode::Term(LocatedQueryTerm { value, positions }) => {
+            QueryNode::Term(LocatedQueryTerm { value, .. }) => {
                 match value {
                     QueryTerm::Phrase(_) => todo!(),
                     QueryTerm::Word { derivations: WordDerivations { original, zero_typo, one_typo, two_typos, use_prefix_db } } => {
@@ -299,7 +297,7 @@ shape: class").unwrap();
         }
     }
     fn query_graph_d2_description(query_graph: &QueryGraph, file: &mut File) {
-        writeln!(file,"direction: right");
+        writeln!(file,"direction: right").unwrap();
         for node in 0..query_graph.nodes.len() {
             if matches!(query_graph.nodes[node], QueryNode::Deleted) {
                 continue;
@@ -322,21 +320,21 @@ shape: class").unwrap();
             Self::query_node_d2_desc(node_idx, node, file);
         }
         for edge in graph.all_edges.iter().flatten() {
-            let Edge { from_node, to_node, cost, details } = edge;
+            let Edge { from_node, to_node, details, .. } = edge;
 
             match &details {
                 EdgeDetails::Unconditional => {
                     writeln!(file, 
                         "{from_node} -> {to_node} : \"always cost {cost}\"",
                         cost = edge.cost,
-                    );
+                    ).unwrap();
                 }
                 EdgeDetails::Data(details) => {
                     writeln!(file, 
                         "{from_node} -> {to_node} : \"cost {cost} {edge_label}\"",
                         cost = edge.cost,
                         edge_label = ProximityGraph::graphviz_edge_details_label(details)
-                    );
+                    ).unwrap();
                 }
             }
         }

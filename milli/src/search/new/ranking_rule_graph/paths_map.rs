@@ -1,5 +1,4 @@
 use std::collections::hash_map::DefaultHasher;
-use std::collections::HashSet;
 use std::fmt::Write;
 use std::hash::{Hash, Hasher};
 
@@ -206,7 +205,7 @@ impl<V> PathsMap<V> {
             h.finish()
         };
         for (edge_idx, rest) in self.nodes.iter() {
-            let Some(Edge { from_node, to_node, cost, details }) = graph.all_edges[*edge_idx as usize].as_ref() else {
+            let Some(Edge { from_node, to_node, cost, .. }) = graph.all_edges[*edge_idx as usize].as_ref() else {
                 continue;
             };
             let mut path_to = path_from.clone();
@@ -248,7 +247,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
 
         for (edge_idx, edge) in self.all_edges.iter().enumerate() {
             let Some(edge) = edge else { continue };
-            let Edge { from_node, to_node, cost, details } = edge;
+            let Edge { from_node, to_node, .. } = edge;
             let color = if path.edges.contains(&(edge_idx as u32)) { "red" } else { "green" };
             match &edge.details {
                 EdgeDetails::Unconditional => {

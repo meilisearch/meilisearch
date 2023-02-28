@@ -9,7 +9,7 @@ use super::ranking_rule_graph::empty_paths_cache::EmptyPathsCache;
 use super::ranking_rule_graph::paths_map::PathsMap;
 use super::ranking_rule_graph::{RankingRuleGraph, RankingRuleGraphTrait};
 use super::{QueryGraph, RankingRule, RankingRuleOutput};
-use crate::new::ranking_rule_graph::cheapest_paths::{self, Path};
+
 use crate::{Index, Result};
 
 pub struct GraphBasedRankingRule<G: RankingRuleGraphTrait> {
@@ -40,8 +40,8 @@ impl<'transaction, G: RankingRuleGraphTrait> RankingRule<'transaction, QueryGrap
         index: &Index,
         txn: &'transaction RoTxn,
         db_cache: &mut DatabaseCache<'transaction>,
-        logger: &mut dyn SearchLogger<QueryGraph>,
-        universe: &RoaringBitmap,
+        _logger: &mut dyn SearchLogger<QueryGraph>,
+        _universe: &RoaringBitmap,
         query_graph: &QueryGraph,
     ) -> Result<()> {
         // TODO: update old state instead of starting from scratch
@@ -117,7 +117,7 @@ impl<'transaction, G: RankingRuleGraphTrait> RankingRule<'transaction, QueryGrap
         _index: &Index,
         _txn: &'transaction RoTxn,
         _db_cache: &mut DatabaseCache<'transaction>,
-        logger: &mut dyn SearchLogger<QueryGraph>,
+        _logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
         self.state = None;
     }

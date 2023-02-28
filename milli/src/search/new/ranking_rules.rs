@@ -1,11 +1,9 @@
-use std::fmt::Display;
-
 use heed::RoTxn;
 use roaring::RoaringBitmap;
 
 use super::db_cache::DatabaseCache;
 use super::logger::SearchLogger;
-use super::resolve_query_graph::resolve_query_graph;
+
 use super::QueryGraph;
 use crate::new::graph_based_ranking_rule::GraphBasedRankingRule;
 use crate::new::ranking_rule_graph::proximity::ProximityGraph;
@@ -172,7 +170,8 @@ pub fn execute_search<'transaction>(
     let mut results = vec![];
     let mut cur_offset = 0usize;
 
-    // Add the candidates to the results. Take the `from`, `limit`, and `cur_offset` into account.
+    // Add the candidates to the results. Take the `from`, `limit`, and `cur_offset`
+    // into account and inform the logger.
     macro_rules! maybe_add_to_results {
         ($candidates:expr) => {
             let candidates = $candidates;
@@ -213,7 +212,6 @@ pub fn execute_search<'transaction>(
             cur_offset += len as usize;
         };
     }
-    // TODO: skip buckets when we want to start from an offset
     while results.len() < length {
         // The universe for this bucket is zero or one element, so we don't need to sort
         // anything, just extend the results and go back to the parent ranking rule.
@@ -273,7 +271,7 @@ mod tests {
 
     use heed::EnvOpenOptions;
 
-    use super::{execute_search, get_start_universe};
+    use super::execute_search;
     use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
     use crate::index::tests::TempIndex;
     use crate::new::db_cache::DatabaseCache;
@@ -344,23 +342,9 @@ mod tests {
 
         let mut db_cache = DatabaseCache::default();
 
-        let query_graph = make_query_graph(
-            &index,
-            &txn,
-            &mut db_cache,
-            "and he was released from prison by the government",
-        )
-        .unwrap();
-
-        // TODO: filters + maybe distinct attributes?
-        let universe = get_start_universe(
-            &index,
-            &txn,
-            &mut db_cache,
-            &query_graph,
-            TermsMatchingStrategy::Last,
-        )
-        .unwrap();
+        let query_graph =
+            make_query_graph(&index, &txn, &mut db_cache, "released from prison by the government")
+                .unwrap();
 
         let mut logger = DetailedSearchLogger::new("log");
 
@@ -370,8 +354,8 @@ mod tests {
             &mut db_cache,
             &query_graph,
             None,
-            500,
-            100,
+            5,
+            20,
             &mut logger, //&mut DefaultSearchLogger,
         )
         .unwrap();

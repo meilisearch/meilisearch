@@ -8,7 +8,7 @@ use super::empty_paths_cache::EmptyPathsCache;
 use super::paths_map::PathsMap;
 use super::{RankingRuleGraph, RankingRuleGraphTrait};
 use crate::new::db_cache::DatabaseCache;
-use crate::new::ranking_rule_graph::Edge;
+
 use crate::new::BitmapOrAllRef;
 use crate::{Index, Result};
 

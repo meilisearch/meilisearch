@@ -5,7 +5,7 @@ pub mod empty_paths_cache;
 pub mod paths_map;
 pub mod proximity;
 pub mod resolve_paths;
-use std::collections::{BTreeSet, HashSet};
+
 use std::ops::ControlFlow;
 
 use heed::RoTxn;
@@ -137,7 +137,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
     fn remove_edge(&mut self, edge_index: u32) {
         let edge_opt = &mut self.all_edges[edge_index as usize];
         let Some(edge) = &edge_opt else { return };
-        let (from_node, to_node) = (edge.from_node, edge.to_node);
+        let (from_node, _to_node) = (edge.from_node, edge.to_node);
         *edge_opt = None;
 
         let from_node_edges = &mut self.node_edges[from_node as usize];
@@ -168,7 +168,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
             desc.push_str(";\n");
         }
         for edge in self.all_edges.iter().flatten() {
-            let Edge { from_node, to_node, cost, details } = edge;
+            let Edge { from_node, to_node, details, .. } = edge;
 
             match &details {
                 EdgeDetails::Unconditional => {

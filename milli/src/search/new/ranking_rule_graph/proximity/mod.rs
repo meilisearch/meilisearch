@@ -5,7 +5,7 @@ use heed::RoTxn;
 
 use super::empty_paths_cache::EmptyPathsCache;
 use super::paths_map::PathsMap;
-use super::{Edge, EdgeDetails, RankingRuleGraphTrait};
+use super::{EdgeDetails, RankingRuleGraphTrait};
 use crate::new::db_cache::DatabaseCache;
 use crate::new::query_term::WordDerivations;
 use crate::new::QueryNode;

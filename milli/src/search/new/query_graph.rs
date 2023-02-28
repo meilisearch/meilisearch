@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-use std::fmt;
 use std::fmt::Debug;
 
 use heed::RoTxn;

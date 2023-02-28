@@ -39,8 +39,8 @@ impl<'transaction> RankingRule<'transaction, QueryGraph> for Words {
         _index: &Index,
         _txn: &'transaction RoTxn,
         _db_cache: &mut DatabaseCache<'transaction>,
-        logger: &mut dyn SearchLogger<QueryGraph>,
-        parent_candidates: &RoaringBitmap,
+        _logger: &mut dyn SearchLogger<QueryGraph>,
+        _parent_candidates: &RoaringBitmap,
         parent_query_graph: &QueryGraph,
     ) -> Result<()> {
         // println!("Words: start iteration");

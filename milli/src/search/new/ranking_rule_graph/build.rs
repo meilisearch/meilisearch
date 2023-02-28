@@ -1,5 +1,3 @@
-use std::collections::{BTreeSet, HashSet};
-
 use heed::RoTxn;
 use roaring::RoaringBitmap;
 

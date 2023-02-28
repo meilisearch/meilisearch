@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use fxhash::FxHashMap;
@@ -22,10 +21,7 @@ pub struct EdgeDocidsCache<G: RankingRuleGraphTrait> {
 }
 impl<G: RankingRuleGraphTrait> Default for EdgeDocidsCache<G> {
     fn default() -> Self {
-        Self {
-            cache: Default::default(),
-            _phantom: Default::default(),
-        }
+        Self { cache: Default::default(), _phantom: Default::default() }
     }
 }
 impl<G: RankingRuleGraphTrait> EdgeDocidsCache<G> {

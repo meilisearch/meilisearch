@@ -7,7 +7,7 @@ use super::ProximityEdge;
 use crate::new::db_cache::DatabaseCache;
 use crate::new::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
 use crate::new::ranking_rule_graph::proximity::WordPair;
-use crate::new::ranking_rule_graph::{Edge, EdgeDetails};
+use crate::new::ranking_rule_graph::EdgeDetails;
 use crate::new::QueryNode;
 use crate::{Index, Result};
 

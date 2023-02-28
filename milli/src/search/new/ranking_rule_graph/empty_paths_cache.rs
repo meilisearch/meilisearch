@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use roaring::RoaringBitmap;
 
 use super::paths_map::PathsMap;

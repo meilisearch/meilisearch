@@ -1,11 +1,11 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::VecDeque;
 
 use fxhash::FxHashMap;
 use heed::{BytesDecode, RoTxn};
 use roaring::{MultiOps, RoaringBitmap};
 
 use super::db_cache::DatabaseCache;
-use super::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
+use super::query_term::{QueryTerm, WordDerivations};
 use super::QueryGraph;
 use crate::{Index, Result, RoaringBitmapCodec};
 

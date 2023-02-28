@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, HashSet};
 
-use itertools::Itertools;
 use roaring::RoaringBitmap;
 
 use super::empty_paths_cache::EmptyPathsCache;
