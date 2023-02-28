@@ -1245,9 +1245,14 @@ struct IndexBudget {
     task_db_size: usize,
 }
 
+/// The statistics that can be computed from an `Index` object and the scheduler.
+///
+/// Compared with `index_mapper::IndexStats`, it adds the scheduling status.
 #[derive(Debug)]
 pub struct IndexStats {
+    /// Whether this index is currently performing indexation, according to the scheduler.
     pub is_indexing: bool,
+    /// Internal stats computed from the index.
     pub inner_stats: index_mapper::IndexStats,
 }
 

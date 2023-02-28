@@ -847,8 +847,10 @@ impl IndexScheduler {
                 // this is a non-critical operation. If it fails, we should not fail
                 // the entire batch.
                 let res = || -> Result<()> {
+                    let index_rtxn = index.read_txn()?;
+                    let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)?;
                     let mut wtxn = self.env.write_txn()?;
-                    self.index_mapper.compute_and_store_stats_of(&mut wtxn, &index_uid)?;
+                    self.index_mapper.store_stats_of(&mut wtxn, &index_uid, stats)?;
                     wtxn.commit()?;
                     Ok(())
                 }();
@@ -888,6 +890,10 @@ impl IndexScheduler {
                     )?;
                     index_wtxn.commit()?;
                 }
+
+                // drop rtxn before starting a new wtxn on the same db
+                rtxn.commit()?;
+
                 task.status = Status::Succeeded;
                 task.details = Some(Details::IndexInfo { primary_key });
 
@@ -897,7 +903,9 @@ impl IndexScheduler {
                 // the entire batch.
                 let res = || -> Result<()> {
                     let mut wtxn = self.env.write_txn()?;
-                    self.index_mapper.compute_and_store_stats_of(&mut wtxn, &index_uid)?;
+                    let index_rtxn = index.read_txn()?;
+                    let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)?;
+                    self.index_mapper.store_stats_of(&mut wtxn, &index_uid, stats)?;
                     wtxn.commit()?;
                     Ok(())
                 }();

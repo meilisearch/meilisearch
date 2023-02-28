@@ -220,11 +220,15 @@ pub async fn delete_index(
     Ok(HttpResponse::Accepted().json(task))
 }
 
+/// Stats of an `Index`, as known to the `stats` route.
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexStats {
+    /// Number of documents in the index
     pub number_of_documents: u64,
+    /// Whether the index is currently performing indexation, according to the scheduler.
     pub is_indexing: bool,
+    /// Association of every field name with the number of times it occurs in the documents.
     pub field_distribution: FieldDistribution,
 }
 
