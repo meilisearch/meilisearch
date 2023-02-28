@@ -8,7 +8,7 @@ use super::QueryGraph;
 use crate::new::graph_based_ranking_rule::GraphBasedRankingRule;
 use crate::new::ranking_rule_graph::proximity::ProximityGraph;
 use crate::new::words::Words;
-// use crate::search::new::sort::Sort;
+use crate::search::new::sort::Sort;
 use crate::{Filter, Index, Result, TermsMatchingStrategy};
 
 pub trait RankingRuleOutputIter<'transaction, Query> {
@@ -122,12 +122,12 @@ pub fn execute_search<'transaction>(
     length: usize,
     logger: &mut dyn SearchLogger<QueryGraph>,
 ) -> Result<Vec<u32>> {
-    let words = Words::new(TermsMatchingStrategy::Last);
-    // let sort = Sort::new(index, txn, "sort1".to_owned(), true)?;
-    let proximity = GraphBasedRankingRule::<ProximityGraph>::new("proximity".to_owned());
+    let words = &mut Words::new(TermsMatchingStrategy::Last);
+    let sort = &mut Sort::new(index, txn, "release_date".to_owned(), true)?;
+    let proximity = &mut GraphBasedRankingRule::<ProximityGraph>::new("proximity".to_owned());
     // TODO: ranking rules given as argument
-    let mut ranking_rules: Vec<Box<dyn RankingRule<'transaction, QueryGraph>>> =
-        vec![Box::new(words), Box::new(proximity) /*  Box::new(sort) */];
+    let mut ranking_rules: Vec<&mut dyn RankingRule<'transaction, QueryGraph>> =
+        vec![words, proximity, sort];
 
     logger.ranking_rules(&ranking_rules);
 
@@ -142,7 +142,7 @@ pub fn execute_search<'transaction>(
     }
 
     let ranking_rules_len = ranking_rules.len();
-    logger.start_iteration_ranking_rule(0, ranking_rules[0].as_ref(), query_graph, &universe);
+    logger.start_iteration_ranking_rule(0, ranking_rules[0], query_graph, &universe);
     ranking_rules[0].start_iteration(index, txn, db_cache, logger, &universe, query_graph)?;
 
     let mut candidates = vec![RoaringBitmap::default(); ranking_rules_len];
@@ -152,9 +152,10 @@ pub fn execute_search<'transaction>(
 
     macro_rules! back {
         () => {
+            assert!(candidates[cur_ranking_rule_index].is_empty());
             logger.end_iteration_ranking_rule(
                 cur_ranking_rule_index,
-                ranking_rules[cur_ranking_rule_index].as_ref(),
+                ranking_rules[cur_ranking_rule_index],
                 &candidates[cur_ranking_rule_index],
             );
             candidates[cur_ranking_rule_index].clear();
@@ -182,7 +183,7 @@ pub fn execute_search<'transaction>(
                     if cur_offset + (candidates.len() as usize) < from {
                         logger.skip_bucket_ranking_rule(
                             cur_ranking_rule_index,
-                            ranking_rules[cur_ranking_rule_index].as_ref(),
+                            ranking_rules[cur_ranking_rule_index],
                             &candidates,
                         );
                     } else {
@@ -191,7 +192,7 @@ pub fn execute_search<'transaction>(
                             all_candidates.split_at(from - cur_offset);
                         logger.skip_bucket_ranking_rule(
                             cur_ranking_rule_index,
-                            ranking_rules[cur_ranking_rule_index].as_ref(),
+                            ranking_rules[cur_ranking_rule_index],
                             &skipped_candidates.into_iter().collect(),
                         );
                         let candidates = candidates
@@ -216,6 +217,7 @@ pub fn execute_search<'transaction>(
         // The universe for this bucket is zero or one element, so we don't need to sort
         // anything, just extend the results and go back to the parent ranking rule.
         if candidates[cur_ranking_rule_index].len() <= 1 {
+            candidates[cur_ranking_rule_index].clear();
             maybe_add_to_results!(&candidates[cur_ranking_rule_index]);
             back!();
             continue;
@@ -223,7 +225,7 @@ pub fn execute_search<'transaction>(
 
         logger.next_bucket_ranking_rule(
             cur_ranking_rule_index,
-            ranking_rules[cur_ranking_rule_index].as_ref(),
+            ranking_rules[cur_ranking_rule_index],
             &candidates[cur_ranking_rule_index],
         );
 
@@ -232,6 +234,7 @@ pub fn execute_search<'transaction>(
             continue;
         };
 
+        assert!(candidates[cur_ranking_rule_index].is_superset(&next_bucket.candidates));
         candidates[cur_ranking_rule_index] -= &next_bucket.candidates;
 
         if cur_ranking_rule_index == ranking_rules_len - 1
@@ -246,7 +249,7 @@ pub fn execute_search<'transaction>(
         candidates[cur_ranking_rule_index] = next_bucket.candidates.clone();
         logger.start_iteration_ranking_rule(
             cur_ranking_rule_index,
-            ranking_rules[cur_ranking_rule_index].as_ref(),
+            ranking_rules[cur_ranking_rule_index],
             &next_bucket.query,
             &candidates[cur_ranking_rule_index],
         );

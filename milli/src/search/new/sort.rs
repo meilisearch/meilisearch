@@ -16,19 +16,16 @@ use crate::{
     Result,
 };
 
-// TODO: The implementation of Sort is not correct:
-// (1) it should not return documents it has already returned (does the current implementation have the same bug?)
-// (2) at the end, it should return all the remaining documents (this could be ensured at the trait level?)
-
 pub struct Sort<'transaction, Query> {
     field_name: String,
     field_id: Option<FieldId>,
     is_ascending: bool,
+    original_query: Option<Query>,
     iter: Option<RankingRuleOutputIterWrapper<'transaction, Query>>,
 }
 impl<'transaction, Query> Sort<'transaction, Query> {
     pub fn new(
-        index: &'transaction Index,
+        index: &Index,
         rtxn: &'transaction heed::RoTxn,
         field_name: String,
         is_ascending: bool,
@@ -36,7 +33,7 @@ impl<'transaction, Query> Sort<'transaction, Query> {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         let field_id = fields_ids_map.id(&field_name);
 
-        Ok(Self { field_name, field_id, is_ascending, iter: None })
+        Ok(Self { field_name, field_id, is_ascending, original_query: None, iter: None })
     }
 }
 
@@ -87,6 +84,7 @@ impl<'transaction, Query: RankingRuleQueryTrait> RankingRule<'transaction, Query
             }
             None => RankingRuleOutputIterWrapper::new(Box::new(std::iter::empty())),
         };
+        self.original_query = Some(parent_query_graph.clone());
         self.iter = Some(iter);
         Ok(())
     }
@@ -97,11 +95,17 @@ impl<'transaction, Query: RankingRuleQueryTrait> RankingRule<'transaction, Query
         _txn: &'transaction RoTxn,
         _db_cache: &mut DatabaseCache<'transaction>,
         _logger: &mut dyn SearchLogger<Query>,
-        _universe: &RoaringBitmap,
+        universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<Query>>> {
         let iter = self.iter.as_mut().unwrap();
         // TODO: we should make use of the universe in the function below
-        iter.next_bucket()
+        if let Some(mut bucket) = iter.next_bucket()? {
+            bucket.candidates &= universe;
+            Ok(Some(bucket))
+        } else {
+            let query = self.original_query.as_ref().unwrap().clone();
+            Ok(Some(RankingRuleOutput { query, candidates: universe.clone() }))
+        }
     }
 
     fn end_iteration(
@@ -111,6 +115,7 @@ impl<'transaction, Query: RankingRuleQueryTrait> RankingRule<'transaction, Query
         _db_cache: &mut DatabaseCache<'transaction>,
         _logger: &mut dyn SearchLogger<Query>,
     ) {
+        self.original_query = None;
         self.iter = None;
     }
 }

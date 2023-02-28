@@ -17,7 +17,7 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
 
     fn initial_universe(&mut self, _universe: &RoaringBitmap) {}
 
-    fn ranking_rules(&mut self, _rr: &[Box<dyn RankingRule<Q>>]) {}
+    fn ranking_rules(&mut self, _rr: &[&mut dyn RankingRule<Q>]) {}
     fn start_iteration_ranking_rule<'transaction>(
         &mut self,
         _ranking_rule_idx: usize,
@@ -67,7 +67,7 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
     fn initial_query(&mut self, query: &Q);
     fn initial_universe(&mut self, universe: &RoaringBitmap);
 
-    fn ranking_rules(&mut self, rr: &[Box<dyn RankingRule<Q>>]);
+    fn ranking_rules(&mut self, rr: &[&mut dyn RankingRule<Q>]);
 
     fn start_iteration_ranking_rule<'transaction>(
         &mut self,
