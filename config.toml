@@ -123,7 +123,7 @@ ssl_tickets = false
 ### Experimental features ###
 #############################
 
-experimental-enable-metrics = false
+experimental_enable_metrics = false
 # Experimental metrics feature. For more information, see: <https://github.com/meilisearch/meilisearch/discussions/3518>
 # Enables the Prometheus metrics on the `GET /metrics` endpoint.
 
