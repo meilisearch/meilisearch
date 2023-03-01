@@ -747,7 +747,7 @@ fn create_matching_words(
     let mut matching_word_cache = MatchingWordCache::default();
     let mut matching_words = Vec::new();
     ngrams(ctx, authorize_typos, query, &mut matching_words, &mut matching_word_cache, 0)?;
-    Ok(MatchingWords::new(matching_words))
+    MatchingWords::new(matching_words)
 }
 
 pub type PrimitiveQuery = Vec<PrimitiveQueryPart>;

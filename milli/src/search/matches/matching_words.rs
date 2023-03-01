@@ -7,6 +7,7 @@ use std::rc::Rc;
 use charabia::Token;
 use levenshtein_automata::{Distance, DFA};
 
+use crate::error::InternalError;
 use crate::search::build_dfa;
 use crate::MAX_WORD_LENGTH;
 
@@ -31,12 +32,19 @@ impl fmt::Debug for MatchingWords {
 }
 
 impl MatchingWords {
-    pub fn new(mut matching_words: Vec<(Vec<Rc<MatchingWord>>, Vec<PrimitiveWordId>)>) -> Self {
+    pub fn new(
+        mut matching_words: Vec<(Vec<Rc<MatchingWord>>, Vec<PrimitiveWordId>)>,
+    ) -> crate::Result<Self> {
+        // if one of the matching_words vec doesn't contain a word.
+        if matching_words.iter().any(|(mw, _)| mw.is_empty()) {
+            return Err(InternalError::InvalidMatchingWords.into());
+        }
+
         // Sort word by len in DESC order prioritizing the longuest matches,
         // in order to highlight the longuest part of the matched word.
         matching_words.sort_unstable_by_key(|(mw, _)| Reverse((mw.len(), mw[0].word.len())));
 
-        Self { inner: matching_words }
+        Ok(Self { inner: matching_words })
     }
 
     /// Returns an iterator over terms that match or partially match the given token.
@@ -360,7 +368,7 @@ mod tests {
             (vec![all[2].clone()], vec![2]),
         ];
 
-        let matching_words = MatchingWords::new(matching_words);
+        let matching_words = MatchingWords::new(matching_words).unwrap();
 
         assert_eq!(
             matching_words

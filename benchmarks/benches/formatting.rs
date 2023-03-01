@@ -29,7 +29,7 @@ fn bench_formatting(c: &mut criterion::Criterion) {
 	            (vec![Rc::new(MatchingWord::new("thedoord".to_string(), 1, true).unwrap())], vec![0, 1, 2]),
 	            (vec![Rc::new(MatchingWord::new("doord".to_string(), 1, true).unwrap())], vec![1, 2]),
         	]
-            ), TokenizerBuilder::default().build()),
+            ).unwrap(), TokenizerBuilder::default().build()),
 		},
     ];
 
