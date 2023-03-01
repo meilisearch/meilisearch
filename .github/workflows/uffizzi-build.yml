@@ -23,7 +23,7 @@ jobs:
           target: x86_64-unknown-linux-musl
 
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.2.0
+        uses: Swatinem/rust-cache@v2.2.1
 
       - name: Run cargo check without any default features
         uses: actions-rs/cargo@v1
