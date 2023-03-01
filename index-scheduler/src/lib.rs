@@ -435,9 +435,19 @@ impl IndexScheduler {
         mut task_db_size: usize,
         max_index_count: usize,
     ) -> IndexBudget {
-        let budget = utils::dichotomic_search(base_map_size, |map_size| {
-            Self::is_good_heed(tasks_path, map_size)
-        });
+        #[cfg(windows)]
+        const DEFAULT_BUDGET: usize = 6 * 1024 * 1024 * 1024 * 1024; // 6 TiB, 1 index
+        #[cfg(not(windows))]
+        const DEFAULT_BUDGET: usize = 80 * 1024 * 1024 * 1024 * 1024; // 80 TiB, 18 indexes
+
+        let budget = if Self::is_good_heed(tasks_path, DEFAULT_BUDGET) {
+            DEFAULT_BUDGET
+        } else {
+            log::debug!("determining budget with dichotomic search");
+            utils::dichotomic_search(DEFAULT_BUDGET / 2, |map_size| {
+                Self::is_good_heed(tasks_path, map_size)
+            })
+        };
 
         log::debug!("memmap budget: {budget}B");
         let mut budget = budget / 2;
