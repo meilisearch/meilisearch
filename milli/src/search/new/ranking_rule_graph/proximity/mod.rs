@@ -2,18 +2,21 @@ pub mod build;
 pub mod compute_docids;
 
 use heed::RoTxn;
+use roaring::RoaringBitmap;
 
 use super::empty_paths_cache::EmptyPathsCache;
-use super::paths_map::PathsMap;
+
 use super::{EdgeDetails, RankingRuleGraphTrait};
 use crate::new::db_cache::DatabaseCache;
+use crate::new::logger::SearchLogger;
 use crate::new::query_term::WordDerivations;
-use crate::new::QueryNode;
+use crate::new::{QueryGraph, QueryNode};
 use crate::{Index, Result};
+
+// TODO: intern the strings, refer to them by their pointer?
 
 #[derive(Debug, Clone)]
 pub enum WordPair {
-    // TODO: add WordsSwapped and WordPrefixSwapped case
     Words { left: String, right: String },
     WordsSwapped { left: String, right: String },
     WordPrefix { left: String, right_prefix: String },
@@ -22,6 +25,7 @@ pub enum WordPair {
 
 #[derive(Clone)]
 pub struct ProximityEdge {
+    // TODO: use a list of pointers to the word pairs instead?
     pairs: Vec<WordPair>,
     proximity: u8,
 }
@@ -67,10 +71,20 @@ impl RankingRuleGraphTrait for ProximityGraph {
 
     fn log_state(
         graph: &super::RankingRuleGraph<Self>,
-        paths: &PathsMap<u64>,
+        paths: &[Vec<u32>],
         empty_paths_cache: &EmptyPathsCache,
-        logger: &mut dyn crate::new::logger::SearchLogger<crate::new::QueryGraph>,
+        universe: &RoaringBitmap,
+        distances: &[Vec<u64>],
+        cost: u64,
+        logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
-        logger.log_proximity_state(graph, paths, empty_paths_cache);
+        logger.log_proximity_state(
+            graph,
+            paths,
+            empty_paths_cache,
+            universe,
+            distances.to_vec(),
+            cost,
+        );
     }
 }

@@ -3,7 +3,53 @@
 
 #[cfg(test)]
 #[global_allocator]
-static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+pub static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+// #[cfg(test)]
+// pub mod allocator {
+//     use std::alloc::{GlobalAlloc, System};
+//     use std::sync::atomic::{self, AtomicI64};
+
+//     #[global_allocator]
+//     pub static ALLOC: CountingAlloc = CountingAlloc {
+//         max_resident: AtomicI64::new(0),
+//         resident: AtomicI64::new(0),
+//         allocated: AtomicI64::new(0),
+//     };
+
+//     pub struct CountingAlloc {
+//         pub max_resident: AtomicI64,
+//         pub resident: AtomicI64,
+//         pub allocated: AtomicI64,
+//     }
+//     unsafe impl GlobalAlloc for CountingAlloc {
+//         unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
+//             self.allocated.fetch_add(layout.size() as i64, atomic::Ordering::SeqCst);
+//             let old_resident =
+//                 self.resident.fetch_add(layout.size() as i64, atomic::Ordering::SeqCst);
+
+//             let resident = old_resident + layout.size() as i64;
+//             self.max_resident.fetch_max(resident, atomic::Ordering::SeqCst);
+
+//             // if layout.size() > 1_000_000 {
+//             //     eprintln!(
+//             //         "allocating {} with new resident size: {resident}",
+//             //         layout.size() / 1_000_000
+//             //     );
+//             //     // let trace = std::backtrace::Backtrace::capture();
+//             //     // let t = trace.to_string();
+//             //     // eprintln!("{t}");
+//             // }
+
+//             System.alloc(layout)
+//         }
+
+//         unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
+//             self.resident.fetch_sub(layout.size() as i64, atomic::Ordering::Relaxed);
+//             System.dealloc(ptr, layout)
+//         }
+//     }
+// }
 
 #[macro_use]
 pub mod documents;

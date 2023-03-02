@@ -1,10 +1,8 @@
-use std::collections::{BTreeMap, HashSet};
-
-use roaring::RoaringBitmap;
+#![allow(clippy::too_many_arguments)]
 
 use super::empty_paths_cache::EmptyPathsCache;
-use super::paths_map::PathsMap;
-use super::{Edge, RankingRuleGraph, RankingRuleGraphTrait};
+use super::{RankingRuleGraph, RankingRuleGraphTrait};
+use std::collections::VecDeque;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Path {
@@ -12,226 +10,119 @@ pub struct Path {
     pub cost: u64,
 }
 
-struct DijkstraState {
-    unvisited: RoaringBitmap, // should be a small bitset?
-    distances: Vec<u64>,      // or binary heap, or btreemap? (f64, usize)
-    edges: Vec<u32>,
-    edge_costs: Vec<u8>,
-    paths: Vec<Option<u32>>,
-}
-
-pub struct KCheapestPathsState {
-    cheapest_paths: PathsMap<u64>,
-    potential_cheapest_paths: BTreeMap<u64, PathsMap<u64>>,
-    pub kth_cheapest_path: Path,
-}
-
-impl KCheapestPathsState {
-    pub fn next_cost(&self) -> u64 {
-        self.kth_cheapest_path.cost
-    }
-
-    pub fn new<G: RankingRuleGraphTrait>(
-        graph: &RankingRuleGraph<G>,
-    ) -> Option<KCheapestPathsState> {
-        let Some(cheapest_path) = graph.cheapest_path_to_end(graph.query_graph.root_node) else {
-            return None
-        };
-        let cheapest_paths = PathsMap::from_paths(&[cheapest_path.clone()]);
-        let potential_cheapest_paths = BTreeMap::new();
-        Some(KCheapestPathsState {
-            cheapest_paths,
-            potential_cheapest_paths,
-            kth_cheapest_path: cheapest_path,
-        })
-    }
-
-    pub fn remove_empty_paths(mut self, empty_paths_cache: &EmptyPathsCache) -> Option<Self> {
-        self.cheapest_paths.remove_edges(&empty_paths_cache.empty_edges);
-        self.cheapest_paths.remove_prefixes(&empty_paths_cache.empty_prefixes);
-
-        let mut costs_to_delete = HashSet::new();
-        for (cost, potential_cheapest_paths) in self.potential_cheapest_paths.iter_mut() {
-            potential_cheapest_paths.remove_edges(&empty_paths_cache.empty_edges);
-            potential_cheapest_paths.remove_prefixes(&empty_paths_cache.empty_prefixes);
-            if potential_cheapest_paths.is_empty() {
-                costs_to_delete.insert(*cost);
-            }
-        }
-        for cost in costs_to_delete {
-            self.potential_cheapest_paths.remove(&cost);
-        }
-
-        if self.cheapest_paths.is_empty() {}
-
-        todo!()
-    }
-
-    pub fn compute_paths_of_next_lowest_cost<G: RankingRuleGraphTrait>(
-        mut self,
-        graph: &mut RankingRuleGraph<G>,
+impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
+    pub fn paths_of_cost(
+        &self,
+        from: usize,
+        cost: u64,
+        all_distances: &[Vec<u64>],
         empty_paths_cache: &EmptyPathsCache,
-        into_map: &mut PathsMap<u64>,
-    ) -> Option<Self> {
-        if !empty_paths_cache.path_is_empty(&self.kth_cheapest_path.edges) {
-            into_map.add_path(&self.kth_cheapest_path);
+    ) -> Vec<Vec<u32>> {
+        let mut paths = vec![];
+        self.paths_of_cost_rec(
+            from,
+            all_distances,
+            cost,
+            &mut vec![],
+            &mut paths,
+            &vec![false; self.all_edges.len()],
+            empty_paths_cache,
+        );
+        paths
+    }
+    pub fn paths_of_cost_rec(
+        &self,
+        from: usize,
+        all_distances: &[Vec<u64>],
+        cost: u64,
+        prev_edges: &mut Vec<u32>,
+        paths: &mut Vec<Vec<u32>>,
+        forbidden_edges: &[bool],
+        empty_paths_cache: &EmptyPathsCache,
+    ) {
+        let distances = &all_distances[from];
+        if !distances.contains(&cost) {
+            panic!();
         }
-        let cur_cost = self.kth_cheapest_path.cost;
-        while self.kth_cheapest_path.cost <= cur_cost {
-            if let Some(next_self) = self.compute_next_cheapest_paths(graph, empty_paths_cache) {
-                self = next_self;
-                if self.kth_cheapest_path.cost == cur_cost
-                    && !empty_paths_cache.path_is_empty(&self.kth_cheapest_path.edges)
+        let tos = &self.query_graph.edges[from].successors;
+        let mut valid_edges = vec![];
+        for to in tos {
+            self.visit_edges::<()>(from as u32, to, |edge_idx, edge| {
+                if cost >= edge.cost as u64
+                    && all_distances[to as usize].contains(&(cost - edge.cost as u64))
+                    && !forbidden_edges[edge_idx as usize]
                 {
-                    into_map.add_path(&self.kth_cheapest_path);
-                } else {
-                    break;
+                    valid_edges.push((edge_idx, edge.cost, to));
                 }
-            } else {
-                return None;
-            }
+                std::ops::ControlFlow::Continue(())
+            });
         }
-        Some(self)
-    }
 
-    fn compute_next_cheapest_paths<G: RankingRuleGraphTrait>(
-        mut self,
-        graph: &mut RankingRuleGraph<G>,
-        empty_paths_cache: &EmptyPathsCache,
-    ) -> Option<KCheapestPathsState> {
-        // for all nodes in the last cheapest path (called spur_node), except last one...
-        for (i, edge_idx) in self.kth_cheapest_path.edges[..self.kth_cheapest_path.edges.len() - 1]
-            .iter()
-            .enumerate()
-        {
-            let Some(edge) = graph.all_edges[*edge_idx as usize].as_ref() else { continue; };
-            let Edge { from_node: spur_node, .. } = edge;
-
-            let root_path = &self.kth_cheapest_path.edges[..i];
-            if empty_paths_cache.path_is_empty(root_path) {
+        for (edge_idx, edge_cost, to) in valid_edges {
+            prev_edges.push(edge_idx);
+            if empty_paths_cache.empty_prefixes.contains_prefix_of_path(prev_edges) {
                 continue;
             }
-
-            let root_cost = root_path.iter().fold(0, |sum, next| {
-                sum + graph.all_edges[*next as usize].as_ref().unwrap().cost as u64
-            });
-
-            let mut tmp_removed_edges = vec![];
-            // for all the paths already found that share a common prefix with the root path
-            // we delete the edge from the spur node to the next one
-            for edge_index_to_remove in self.cheapest_paths.edge_indices_after_prefix(root_path) {
-                let was_removed =
-                    graph.node_edges[*spur_node as usize].remove(edge_index_to_remove);
-                if was_removed {
-                    tmp_removed_edges.push(edge_index_to_remove);
-                }
+            let mut new_forbidden_edges = forbidden_edges.to_vec();
+            for edge_idx in empty_paths_cache.empty_couple_edges[edge_idx as usize].iter() {
+                new_forbidden_edges[*edge_idx as usize] = true;
+            }
+            for edge_idx in empty_paths_cache.empty_prefixes.final_edges_ater_prefix(prev_edges) {
+                new_forbidden_edges[edge_idx as usize] = true;
             }
 
-            // Compute the cheapest path from the spur node to the destination
-            // we will combine it with the root path to get a potential kth cheapest path
-            let spur_path = graph.cheapest_path_to_end(*spur_node);
-            // restore the temporarily removed edges
-            graph.node_edges[*spur_node as usize].extend(tmp_removed_edges);
-
-            let Some(spur_path) = spur_path else { continue; };
-            let total_cost = root_cost + spur_path.cost;
-            let total_path = Path {
-                edges: root_path.iter().chain(spur_path.edges.iter()).cloned().collect(),
-                cost: total_cost,
-            };
-            let entry = self.potential_cheapest_paths.entry(total_cost).or_default();
-            entry.add_path(&total_path);
+            if to == self.query_graph.end_node {
+                paths.push(prev_edges.clone());
+            } else {
+                self.paths_of_cost_rec(
+                    to as usize,
+                    all_distances,
+                    cost - edge_cost as u64,
+                    prev_edges,
+                    paths,
+                    &new_forbidden_edges,
+                    empty_paths_cache,
+                )
+            }
+            prev_edges.pop();
         }
-        while let Some(mut next_cheapest_paths_entry) = self.potential_cheapest_paths.first_entry()
+    }
+
+    pub fn initialize_distances_cheapest(&self) -> Vec<Vec<u64>> {
+        let mut distances_to_end: Vec<Vec<u64>> = vec![vec![]; self.query_graph.nodes.len()];
+        let mut enqueued = vec![false; self.query_graph.nodes.len()];
+
+        let mut node_stack = VecDeque::new();
+
+        distances_to_end[self.query_graph.end_node as usize] = vec![0];
+        for prev_node in
+            self.query_graph.edges[self.query_graph.end_node as usize].predecessors.iter()
         {
-            let cost = *next_cheapest_paths_entry.key();
-            let next_cheapest_paths = next_cheapest_paths_entry.get_mut();
+            node_stack.push_back(prev_node as usize);
+            enqueued[prev_node as usize] = true;
+        }
 
-            while let Some((next_cheapest_path, cost2)) = next_cheapest_paths.remove_first() {
-                assert_eq!(cost, cost2);
-                // NOTE: it is important not to discard the paths that are forbidden due to a
-                // forbidden prefix, because the cheapest path algorithm (Dijkstra) cannot take
-                // this property into account.
-                if next_cheapest_path
-                    .iter()
-                    .any(|edge_index| graph.all_edges[*edge_index as usize].is_none())
-                {
-                    continue;
-                } else {
-                    self.cheapest_paths.insert(next_cheapest_path.iter().copied(), cost);
-
-                    if next_cheapest_paths.is_empty() {
-                        next_cheapest_paths_entry.remove();
+        while let Some(cur_node) = node_stack.pop_front() {
+            let mut self_distances = vec![];
+            for succ_node in self.query_graph.edges[cur_node].successors.iter() {
+                let succ_distances = &distances_to_end[succ_node as usize];
+                let _ = self.visit_edges::<()>(cur_node as u32, succ_node, |_, edge| {
+                    for succ_distance in succ_distances {
+                        self_distances.push(edge.cost as u64 + succ_distance);
                     }
-                    self.kth_cheapest_path = Path { edges: next_cheapest_path, cost };
-
-                    return Some(self);
+                    std::ops::ControlFlow::Continue(())
+                });
+            }
+            self_distances.sort_unstable();
+            self_distances.dedup();
+            distances_to_end[cur_node] = self_distances;
+            for prev_node in self.query_graph.edges[cur_node].predecessors.iter() {
+                if !enqueued[prev_node as usize] {
+                    node_stack.push_back(prev_node as usize);
+                    enqueued[prev_node as usize] = true;
                 }
             }
-            let _ = next_cheapest_paths_entry.remove_entry();
         }
-        None
-    }
-}
-
-impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
-    fn cheapest_path_to_end(&self, from: u32) -> Option<Path> {
-        let mut dijkstra = DijkstraState {
-            unvisited: (0..self.query_graph.nodes.len() as u32).collect(),
-            distances: vec![u64::MAX; self.query_graph.nodes.len()],
-            edges: vec![u32::MAX; self.query_graph.nodes.len()],
-            edge_costs: vec![u8::MAX; self.query_graph.nodes.len()],
-            paths: vec![None; self.query_graph.nodes.len()],
-        };
-        dijkstra.distances[from as usize] = 0;
-
-        // TODO: could use a binary heap here to store the distances, or a btreemap
-        while let Some(cur_node) =
-            dijkstra.unvisited.iter().min_by_key(|&n| dijkstra.distances[n as usize])
-        {
-            let cur_node_dist = dijkstra.distances[cur_node as usize];
-            if cur_node_dist == u64::MAX {
-                return None;
-            }
-            if cur_node == self.query_graph.end_node {
-                break;
-            }
-
-            let succ_cur_node = &self.successors[cur_node as usize];
-            let unvisited_succ_cur_node = succ_cur_node & &dijkstra.unvisited;
-            for succ in unvisited_succ_cur_node {
-                let Some((cheapest_edge, cheapest_edge_cost)) = self.cheapest_edge(cur_node, succ) else {
-                    continue
-                };
-
-                let old_dist_succ = &mut dijkstra.distances[succ as usize];
-                let new_potential_distance = cur_node_dist + cheapest_edge_cost as u64;
-                if new_potential_distance < *old_dist_succ {
-                    *old_dist_succ = new_potential_distance;
-                    dijkstra.edges[succ as usize] = cheapest_edge;
-                    dijkstra.edge_costs[succ as usize] = cheapest_edge_cost;
-                    dijkstra.paths[succ as usize] = Some(cur_node);
-                }
-            }
-            dijkstra.unvisited.remove(cur_node);
-        }
-
-        let mut cur = self.query_graph.end_node;
-        let mut path_edges = vec![];
-        while let Some(n) = dijkstra.paths[cur as usize] {
-            path_edges.push(dijkstra.edges[cur as usize]);
-            cur = n;
-        }
-        path_edges.reverse();
-        Some(Path {
-            edges: path_edges,
-            cost: dijkstra.distances[self.query_graph.end_node as usize],
-        })
-    }
-
-    pub fn cheapest_edge(&self, cur_node: u32, succ: u32) -> Option<(u32, u8)> {
-        self.visit_edges(cur_node, succ, |edge_idx, edge| {
-            std::ops::ControlFlow::Break((edge_idx, edge.cost))
-        })
+        distances_to_end
     }
 }

@@ -13,7 +13,6 @@ use heed::RoTxn;
 use roaring::RoaringBitmap;
 
 use self::empty_paths_cache::EmptyPathsCache;
-use self::paths_map::PathsMap;
 
 use super::db_cache::DatabaseCache;
 use super::logger::SearchLogger;
@@ -83,8 +82,11 @@ pub trait RankingRuleGraphTrait: Sized {
 
     fn log_state(
         graph: &RankingRuleGraph<Self>,
-        paths: &PathsMap<u64>,
+        paths: &[Vec<u32>],
         empty_paths_cache: &EmptyPathsCache,
+        universe: &RoaringBitmap,
+        distances: &[Vec<u64>],
+        cost: u64,
         logger: &mut dyn SearchLogger<QueryGraph>,
     );
 }
@@ -135,7 +137,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         None
     }
 
-    fn remove_edge(&mut self, edge_index: u32) {
+    pub fn remove_edge(&mut self, edge_index: u32) {
         let edge_opt = &mut self.all_edges[edge_index as usize];
         let Some(edge) = &edge_opt else { return };
         let (from_node, _to_node) = (edge.from_node, edge.to_node);
@@ -150,45 +152,5 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
             new_successors_from_node.insert(*to_node);
         }
         self.successors[from_node as usize] = new_successors_from_node;
-    }
-
-    pub fn graphviz(&self) -> String {
-        let mut desc = String::new();
-        desc.push_str("digraph G {\nrankdir = LR;\nnode [shape = \"record\"]\n");
-
-        for (node_idx, node) in self.query_graph.nodes.iter().enumerate() {
-            if matches!(node, QueryNode::Deleted) {
-                continue;
-            }
-            desc.push_str(&format!("{node_idx} [label = {:?}]", node));
-            if node_idx == self.query_graph.root_node as usize {
-                desc.push_str("[color = blue]");
-            } else if node_idx == self.query_graph.end_node as usize {
-                desc.push_str("[color = red]");
-            }
-            desc.push_str(";\n");
-        }
-        for edge in self.all_edges.iter().flatten() {
-            let Edge { from_node, to_node, details, .. } = edge;
-
-            match &details {
-                EdgeDetails::Unconditional => {
-                    desc.push_str(&format!(
-                        "{from_node} -> {to_node} [label = \"always cost {cost}\"];\n",
-                        cost = edge.cost,
-                    ));
-                }
-                EdgeDetails::Data(details) => {
-                    desc.push_str(&format!(
-                        "{from_node} -> {to_node} [label = \"cost {cost} {edge_label}\"];\n",
-                        cost = edge.cost,
-                        edge_label = G::graphviz_edge_details_label(details)
-                    ));
-                }
-            }
-        }
-
-        desc.push('}');
-        desc
     }
 }

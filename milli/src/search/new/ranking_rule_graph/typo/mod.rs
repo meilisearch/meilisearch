@@ -2,16 +2,18 @@ use heed::{BytesDecode, RoTxn};
 use roaring::RoaringBitmap;
 
 use super::empty_paths_cache::EmptyPathsCache;
-use super::paths_map::PathsMap;
-use super::{EdgeDetails, RankingRuleGraphTrait};
+
+use super::{EdgeDetails, RankingRuleGraph, RankingRuleGraphTrait};
 use crate::new::db_cache::DatabaseCache;
-use crate::new::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
-use crate::new::QueryNode;
+use crate::new::logger::SearchLogger;
+use crate::new::query_term::{LocatedQueryTerm, Phrase, QueryTerm, WordDerivations};
+use crate::new::resolve_query_graph::resolve_phrase;
+use crate::new::{QueryGraph, QueryNode};
 use crate::{Index, Result, RoaringBitmapCodec};
 
 #[derive(Clone)]
 pub enum TypoEdge {
-    Phrase,
+    Phrase { phrase: Phrase },
     Word { derivations: WordDerivations, nbr_typos: u8 },
 }
 
@@ -23,7 +25,7 @@ impl RankingRuleGraphTrait for TypoGraph {
 
     fn graphviz_edge_details_label(edge: &Self::EdgeDetails) -> String {
         match edge {
-            TypoEdge::Phrase => format!(", 0 typos"),
+            TypoEdge::Phrase { .. } => ", 0 typos".to_owned(),
             TypoEdge::Word { nbr_typos, .. } => format!(", {nbr_typos} typos"),
         }
     }
@@ -33,9 +35,9 @@ impl RankingRuleGraphTrait for TypoGraph {
         txn: &'transaction RoTxn,
         db_cache: &mut DatabaseCache<'transaction>,
         edge: &Self::EdgeDetails,
-    ) -> Result<roaring::RoaringBitmap> {
+    ) -> Result<RoaringBitmap> {
         match edge {
-            TypoEdge::Phrase => todo!(),
+            TypoEdge::Phrase { phrase } => resolve_phrase(index, txn, db_cache, phrase),
             TypoEdge::Word { derivations, nbr_typos } => {
                 let words = match nbr_typos {
                     0 => &derivations.zero_typo,
@@ -68,21 +70,23 @@ impl RankingRuleGraphTrait for TypoGraph {
         _index: &Index,
         _txn: &'transaction RoTxn,
         _db_cache: &mut DatabaseCache<'transaction>,
-        from_node: &QueryNode,
+        _from_node: &QueryNode,
     ) -> Result<Option<Self::BuildVisitedFromNode>> {
         Ok(Some(()))
     }
 
     fn build_visit_to_node<'from_data, 'transaction: 'from_data>(
-        index: &Index,
-        txn: &'transaction RoTxn,
-        db_cache: &mut DatabaseCache<'transaction>,
+        _index: &Index,
+        _txn: &'transaction RoTxn,
+        _db_cache: &mut DatabaseCache<'transaction>,
         to_node: &QueryNode,
-        from_node_data: &'from_data Self::BuildVisitedFromNode,
+        _from_node_data: &'from_data Self::BuildVisitedFromNode,
     ) -> Result<Vec<(u8, EdgeDetails<Self::EdgeDetails>)>> {
         match to_node {
             QueryNode::Term(LocatedQueryTerm { value, .. }) => match value {
-                QueryTerm::Phrase(_) => Ok(vec![(0, EdgeDetails::Data(TypoEdge::Phrase))]),
+                QueryTerm::Phrase { phrase } => {
+                    Ok(vec![(0, EdgeDetails::Data(TypoEdge::Phrase { phrase: phrase.clone() }))])
+                }
                 QueryTerm::Word { derivations } => {
                     let mut edges = vec![];
                     if !derivations.zero_typo.is_empty() || derivations.use_prefix_db {
@@ -121,11 +125,14 @@ impl RankingRuleGraphTrait for TypoGraph {
     }
 
     fn log_state(
-        graph: &super::RankingRuleGraph<Self>,
-        paths: &PathsMap<u64>,
+        graph: &RankingRuleGraph<Self>,
+        paths: &[Vec<u32>],
         empty_paths_cache: &EmptyPathsCache,
-        logger: &mut dyn crate::new::logger::SearchLogger<crate::new::QueryGraph>,
+        universe: &RoaringBitmap,
+        distances: &[Vec<u64>],
+        cost: u64,
+        logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
-        logger.log_typo_state(graph, paths, empty_paths_cache);
+        logger.log_typo_state(graph, paths, empty_paths_cache, universe, distances.to_vec(), cost);
     }
 }

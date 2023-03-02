@@ -32,16 +32,19 @@ impl<G: RankingRuleGraphTrait> EdgeDocidsCache<G> {
         db_cache: &mut DatabaseCache<'transaction>,
         edge_index: u32,
         graph: &RankingRuleGraph<G>,
+        // TODO: maybe universe doesn't belong here
+        universe: &RoaringBitmap,
     ) -> Result<BitmapOrAllRef<'s>> {
-        if self.cache.contains_key(&edge_index) {
-            return Ok(BitmapOrAllRef::Bitmap(&self.cache[&edge_index]));
-        }
         let edge = graph.all_edges[edge_index as usize].as_ref().unwrap();
 
         match &edge.details {
             EdgeDetails::Unconditional => Ok(BitmapOrAllRef::All),
             EdgeDetails::Data(details) => {
-                let docids = G::compute_docids(index, txn, db_cache, details)?;
+                if self.cache.contains_key(&edge_index) {
+                    return Ok(BitmapOrAllRef::Bitmap(&self.cache[&edge_index]));
+                }
+                // TODO: maybe universe doesn't belong here
+                let docids = universe & G::compute_docids(index, txn, db_cache, details)?;
 
                 let _ = self.cache.insert(edge_index, docids);
                 let docids = &self.cache[&edge_index];

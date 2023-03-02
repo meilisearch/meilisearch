@@ -1,12 +1,11 @@
-use std::collections::hash_map::DefaultHasher;
-use std::fmt::Write;
-use std::hash::{Hash, Hasher};
+
+
+
 
 use roaring::RoaringBitmap;
 
 use super::cheapest_paths::Path;
-use super::{Edge, EdgeDetails, RankingRuleGraph, RankingRuleGraphTrait};
-use crate::new::QueryNode;
+
 
 #[derive(Debug, Clone)]
 pub struct PathsMap<V> {
@@ -157,6 +156,24 @@ impl<V> PathsMap<V> {
         }
     }
 
+    pub fn final_edges_ater_prefix(&self, prefix: &[u32]) -> Vec<u32> {
+        let [first_edge, remaining_prefix @ ..] = prefix else {
+            return self.nodes.iter().filter_map(|n| {
+                if n.1.value.is_some() {
+                    Some(n.0)
+                } else {
+                    None
+                }
+            }).collect();
+        };
+        for (edge, rest) in self.nodes.iter() {
+            if edge == first_edge {
+                return rest.final_edges_ater_prefix(remaining_prefix);
+            }
+        }
+        vec![]
+    }
+
     pub fn edge_indices_after_prefix(&self, prefix: &[u32]) -> Vec<u32> {
         let [first_edge, remaining_prefix @ ..] = prefix else {
             return self.nodes.iter().map(|n| n.0).collect();
@@ -184,89 +201,5 @@ impl<V> PathsMap<V> {
                 false
             }
         }
-    }
-
-    pub fn graphviz<G: RankingRuleGraphTrait>(&self, graph: &RankingRuleGraph<G>) -> String {
-        let mut desc = String::new();
-        desc.push_str("digraph G {\n");
-        self.graphviz_rec(&mut desc, vec![], graph);
-        desc.push_str("\n}\n");
-        desc
-    }
-    fn graphviz_rec<G: RankingRuleGraphTrait>(
-        &self,
-        desc: &mut String,
-        path_from: Vec<u64>,
-        graph: &RankingRuleGraph<G>,
-    ) {
-        let id_from = {
-            let mut h = DefaultHasher::new();
-            path_from.hash(&mut h);
-            h.finish()
-        };
-        for (edge_idx, rest) in self.nodes.iter() {
-            let Some(Edge { from_node, to_node, cost, .. }) = graph.all_edges[*edge_idx as usize].as_ref() else {
-                continue;
-            };
-            let mut path_to = path_from.clone();
-            path_to.push({
-                let mut h = DefaultHasher::new();
-                edge_idx.hash(&mut h);
-                h.finish()
-            });
-            let id_to = {
-                let mut h = DefaultHasher::new();
-                path_to.hash(&mut h);
-                h.finish()
-            };
-            writeln!(desc, "{id_to} [label = \"{from_node}→{to_node} [{cost}]\"];").unwrap();
-            writeln!(desc, "{id_from} -> {id_to};").unwrap();
-
-            rest.graphviz_rec(desc, path_to, graph);
-        }
-    }
-}
-
-impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
-    pub fn graphviz_with_path(&self, path: &Path) -> String {
-        let mut desc = String::new();
-        desc.push_str("digraph G {\nrankdir = LR;\nnode [shape = \"record\"]\n");
-
-        for (node_idx, node) in self.query_graph.nodes.iter().enumerate() {
-            if matches!(node, QueryNode::Deleted) {
-                continue;
-            }
-            desc.push_str(&format!("{node_idx} [label = {:?}]", node));
-            if node_idx == self.query_graph.root_node as usize {
-                desc.push_str("[color = blue]");
-            } else if node_idx == self.query_graph.end_node as usize {
-                desc.push_str("[color = red]");
-            }
-            desc.push_str(";\n");
-        }
-
-        for (edge_idx, edge) in self.all_edges.iter().enumerate() {
-            let Some(edge) = edge else { continue };
-            let Edge { from_node, to_node, .. } = edge;
-            let color = if path.edges.contains(&(edge_idx as u32)) { "red" } else { "green" };
-            match &edge.details {
-                EdgeDetails::Unconditional => {
-                    desc.push_str(&format!(
-                        "{from_node} -> {to_node} [label = \"cost {cost}\", color = {color}];\n",
-                        cost = edge.cost,
-                    ));
-                }
-                EdgeDetails::Data(details) => {
-                    desc.push_str(&format!(
-                        "{from_node} -> {to_node} [label = \"cost {cost} {edge_label}\", color = {color}];\n",
-                        cost = edge.cost,
-                        edge_label = G::graphviz_edge_details_label(details),
-                    ));
-                }
-            }
-        }
-
-        desc.push('}');
-        desc
     }
 }

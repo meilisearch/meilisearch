@@ -16,9 +16,9 @@ pub fn visit_from_node(from_node: &QueryNode) -> Result<Option<(WordDerivations,
         QueryNode::Term(LocatedQueryTerm { value: value1, positions: pos1 }) => {
             match value1 {
                 QueryTerm::Word { derivations } => (derivations.clone(), *pos1.end()),
-                QueryTerm::Phrase(phrase1) => {
+                QueryTerm::Phrase { phrase: phrase1 } => {
                     // TODO: remove second unwrap
-                    let original = phrase1.last().unwrap().as_ref().unwrap().clone();
+                    let original = phrase1.words.last().unwrap().as_ref().unwrap().clone();
                     (
                         WordDerivations {
                             original: original.clone(),
@@ -26,6 +26,8 @@ pub fn visit_from_node(from_node: &QueryNode) -> Result<Option<(WordDerivations,
                             one_typo: vec![],
                             two_typos: vec![],
                             use_prefix_db: false,
+                            synonyms: vec![],
+                            split_words: None,
                         },
                         *pos1.end(),
                     )
@@ -39,6 +41,8 @@ pub fn visit_from_node(from_node: &QueryNode) -> Result<Option<(WordDerivations,
                 one_typo: vec![],
                 two_typos: vec![],
                 use_prefix_db: false,
+                synonyms: vec![],
+                split_words: None,
             },
             -100,
         ),
@@ -63,9 +67,9 @@ pub fn visit_to_node<'transaction, 'from_data>(
 
     let (derivations2, pos2, ngram_len2) = match value2 {
         QueryTerm::Word { derivations } => (derivations.clone(), *pos2.start(), pos2.len()),
-        QueryTerm::Phrase(phrase2) => {
+        QueryTerm::Phrase { phrase: phrase2 } => {
             // TODO: remove second unwrap
-            let original = phrase2.last().unwrap().as_ref().unwrap().clone();
+            let original = phrase2.words.last().unwrap().as_ref().unwrap().clone();
             (
                 WordDerivations {
                     original: original.clone(),
@@ -73,6 +77,8 @@ pub fn visit_to_node<'transaction, 'from_data>(
                     one_typo: vec![],
                     two_typos: vec![],
                     use_prefix_db: false,
+                    synonyms: vec![],
+                    split_words: None,
                 },
                 *pos2.start(),
                 1,
