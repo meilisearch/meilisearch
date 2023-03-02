@@ -7,7 +7,7 @@ use super::db_cache::DatabaseCache;
 use super::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
 use crate::{Index, Result};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum QueryNode {
     Term(LocatedQueryTerm),
     Deleted,
@@ -31,7 +31,7 @@ pub struct QueryGraph {
 }
 
 fn _assert_sizes() {
-    let _: [u8; 112] = [0; std::mem::size_of::<QueryNode>()];
+    let _: [u8; 184] = [0; std::mem::size_of::<QueryNode>()];
     let _: [u8; 48] = [0; std::mem::size_of::<Edges>()];
 }
 
@@ -116,6 +116,8 @@ impl QueryGraph {
                                     one_typo: vec![],
                                     two_typos: vec![],
                                     use_prefix_db: false,
+                                    synonyms: vec![],  // TODO: ngram synonyms
+                                    split_words: None, // TODO: maybe ngram split words?
                                 },
                             },
                             positions: ngram2_pos,
@@ -141,6 +143,8 @@ impl QueryGraph {
                                     one_typo: vec![],
                                     two_typos: vec![],
                                     use_prefix_db: false,
+                                    synonyms: vec![],  // TODO: ngram synonyms
+                                    split_words: None, // TODO: maybe ngram split words?
                                 },
                             },
                             positions: ngram3_pos,
@@ -188,19 +192,20 @@ impl QueryGraph {
                 Edges { predecessors: RoaringBitmap::new(), successors: RoaringBitmap::new() };
         }
     }
-    pub fn remove_words_at_position(&mut self, position: i8) {
+    pub fn remove_words_at_position(&mut self, position: i8) -> bool {
         let mut nodes_to_remove_keeping_edges = vec![];
         for (node_idx, node) in self.nodes.iter().enumerate() {
             let node_idx = node_idx as u32;
             let QueryNode::Term(LocatedQueryTerm { value: _, positions }) = node else { continue };
             if positions.start() == &position {
-                nodes_to_remove_keeping_edges.push(node_idx)
+                nodes_to_remove_keeping_edges.push(node_idx);
             }
         }
 
         self.remove_nodes_keep_edges(&nodes_to_remove_keeping_edges);
 
         self.simplify();
+        !nodes_to_remove_keeping_edges.is_empty()
     }
 
     fn simplify(&mut self) {
@@ -221,82 +226,5 @@ impl QueryGraph {
                 self.remove_nodes(&nodes_to_remove);
             }
         }
-    }
-}
-impl Debug for QueryNode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            QueryNode::Term(term @ LocatedQueryTerm { value, positions: _ }) => match value {
-                QueryTerm::Word {
-                    derivations:
-                        WordDerivations { original, zero_typo, one_typo, two_typos, use_prefix_db },
-                } => {
-                    if term.is_empty() {
-                        write!(f, "\"{original} (∅)\"")
-                    } else {
-                        let derivations = std::iter::once(original.clone())
-                            .chain(zero_typo.iter().map(|s| format!("T0 .. {s}")))
-                            .chain(one_typo.iter().map(|s| format!("T1 .. {s}")))
-                            .chain(two_typos.iter().map(|s| format!("T2 .. {s}")))
-                            .collect::<Vec<String>>()
-                            .join(" | ");
-
-                        write!(f, "\"{derivations}")?;
-                        if *use_prefix_db {
-                            write!(f, " | +prefix_db")?;
-                        }
-                        write!(f, " | pos:{}..={}", term.positions.start(), term.positions.end())?;
-                        write!(f, "\"")?;
-                        /*
-                        "beautiful" [label = "<f0> beautiful | beauiful | beautifol"]
-                        */
-                        Ok(())
-                    }
-                }
-                QueryTerm::Phrase(ws) => {
-                    let joined =
-                        ws.iter().filter_map(|x| x.clone()).collect::<Vec<String>>().join(" ");
-                    let in_quotes = format!("\"{joined}\"");
-                    let escaped = in_quotes.escape_default().collect::<String>();
-                    write!(f, "\"{escaped}\"")
-                }
-            },
-            QueryNode::Start => write!(f, "\"START\""),
-            QueryNode::End => write!(f, "\"END\""),
-            QueryNode::Deleted => write!(f, "\"_deleted_\""),
-        }
-    }
-}
-
-impl QueryGraph {
-    pub fn graphviz(&self) -> String {
-        let mut desc = String::new();
-        desc.push_str(
-            r#"
-digraph G {
-rankdir = LR;
-node [shape = "record"]
-"#,
-        );
-
-        for node in 0..self.nodes.len() {
-            if matches!(self.nodes[node], QueryNode::Deleted) {
-                continue;
-            }
-            desc.push_str(&format!("{node} [label = {:?}]", &self.nodes[node],));
-            if node == self.root_node as usize {
-                desc.push_str("[color = blue]");
-            } else if node == self.end_node as usize {
-                desc.push_str("[color = red]");
-            }
-            desc.push_str(";\n");
-
-            for edge in self.edges[node].successors.iter() {
-                desc.push_str(&format!("{node} -> {edge};\n"));
-            }
-        }
-
-        desc.push('}');
-        desc
     }
 }

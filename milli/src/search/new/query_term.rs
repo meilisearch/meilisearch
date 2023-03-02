@@ -10,14 +10,28 @@ use fst::automaton::Str;
 use fst::{Automaton, IntoStreamer, Streamer};
 use heed::types::DecodeIgnore;
 use heed::RoTxn;
+use itertools::Itertools;
 
 use crate::search::fst_utils::{Complement, Intersection, StartsWith, Union};
 use crate::search::{build_dfa, get_first};
-use crate::{Index, Result};
+use crate::{CboRoaringBitmapLenCodec, Index, Result};
+
+#[derive(Debug, Default, Clone)]
+pub struct Phrase {
+    pub words: Vec<Option<String>>,
+}
+impl Phrase {
+    pub fn description(&self) -> String {
+        self.words.iter().flatten().join(" ")
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct WordDerivations {
     pub original: String,
+    // TODO: pub prefix_of: Vec<String>,
+    pub synonyms: Vec<Phrase>,
+    pub split_words: Option<(String, String)>,
     pub zero_typo: Vec<String>,
     pub one_typo: Vec<String>,
     pub two_typos: Vec<String>,
@@ -114,19 +128,63 @@ pub fn word_derivations(
             }
         }
     }
+    let split_words = split_best_frequency(index, txn, word)?;
 
-    Ok(WordDerivations { original: word.to_owned(), zero_typo, one_typo, two_typos, use_prefix_db })
+    let synonyms = index.synonyms(txn)?;
+    let synonyms = synonyms
+        .get(&vec![word.to_owned()])
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|words| Phrase { words: words.into_iter().map(Some).collect() })
+        .collect();
+
+    Ok(WordDerivations {
+        original: word.to_owned(),
+        synonyms,
+        split_words,
+        zero_typo,
+        one_typo,
+        two_typos,
+        use_prefix_db,
+    })
+}
+
+fn split_best_frequency(
+    index: &Index,
+    txn: &RoTxn,
+    original: &str,
+) -> Result<Option<(String, String)>> {
+    let chars = original.char_indices().skip(1);
+    let mut best = None;
+
+    for (i, _) in chars {
+        let (left, right) = original.split_at(i);
+
+        let key = (1, left, right);
+        let frequency = index
+            .word_pair_proximity_docids
+            .remap_data_type::<CboRoaringBitmapLenCodec>()
+            .get(txn, &key)?
+            .unwrap_or(0);
+
+        if frequency != 0 && best.map_or(true, |(old, _, _)| frequency > old) {
+            best = Some((frequency, left, right));
+        }
+    }
+
+    Ok(best.map(|(_, left, right)| (left.to_owned(), right.to_owned())))
 }
 
 #[derive(Debug, Clone)]
 pub enum QueryTerm {
-    Phrase(Vec<Option<String>>),
+    Phrase { phrase: Phrase },
     Word { derivations: WordDerivations },
 }
 impl QueryTerm {
     pub fn original_single_word(&self) -> Option<&str> {
         match self {
-            QueryTerm::Phrase(_) => None,
+            QueryTerm::Phrase { phrase: _ } => None,
             QueryTerm::Word { derivations } => {
                 if derivations.is_empty() {
                     None
@@ -140,14 +198,14 @@ impl QueryTerm {
 
 #[derive(Debug, Clone)]
 pub struct LocatedQueryTerm {
-    pub value: QueryTerm, // value should be able to contain the word derivations as well
+    pub value: QueryTerm,
     pub positions: RangeInclusive<i8>,
 }
 
 impl LocatedQueryTerm {
     pub fn is_empty(&self) -> bool {
         match &self.value {
-            QueryTerm::Phrase(_) => false,
+            QueryTerm::Phrase { phrase: _ } => false,
             QueryTerm::Word { derivations, .. } => derivations.is_empty(),
         }
     }
@@ -156,6 +214,7 @@ impl LocatedQueryTerm {
     pub fn from_query(
         query: NormalizedTokenIter<Vec<u8>>,
         words_limit: Option<usize>,
+        // TODO:` use index + txn + ? instead of closure
         derivations: impl Fn(&str, bool) -> Result<WordDerivations>,
     ) -> Result<Vec<LocatedQueryTerm>> {
         let mut primitive_query = Vec::new();
@@ -232,7 +291,9 @@ impl LocatedQueryTerm {
                         && (quote_count > 0 || separator_kind == SeparatorKind::Hard)
                     {
                         let located_query_term = LocatedQueryTerm {
-                            value: QueryTerm::Phrase(mem::take(&mut phrase)),
+                            value: QueryTerm::Phrase {
+                                phrase: Phrase { words: mem::take(&mut phrase) },
+                            },
                             positions: phrase_start..=phrase_end,
                         };
                         primitive_query.push(located_query_term);
@@ -245,7 +306,7 @@ impl LocatedQueryTerm {
         // If a quote is never closed, we consider all of the end of the query as a phrase.
         if !phrase.is_empty() {
             let located_query_term = LocatedQueryTerm {
-                value: QueryTerm::Phrase(mem::take(&mut phrase)),
+                value: QueryTerm::Phrase { phrase: Phrase { words: mem::take(&mut phrase) } },
                 positions: phrase_start..=phrase_end,
             };
             primitive_query.push(located_query_term);

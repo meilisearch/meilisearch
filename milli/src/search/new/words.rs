@@ -99,14 +99,17 @@ impl<'transaction> RankingRule<'transaction, QueryGraph> for Words {
         )?;
 
         let child_query_graph = query_graph.clone();
-        // TODO: Check whether a position exists in the graph before removing it and
-        // returning the next bucket.
-        // while graph.does_not_contain(positions_to_remove.last()) { positions_to_remove.pop() }
-        if self.positions_to_remove.is_empty() {
-            self.exhausted = true;
-        } else {
-            let position_to_remove = self.positions_to_remove.pop().unwrap();
-            query_graph.remove_words_at_position(position_to_remove);
+        loop {
+            if self.positions_to_remove.is_empty() {
+                self.exhausted = true;
+                break;
+            } else {
+                let position_to_remove = self.positions_to_remove.pop().unwrap();
+                let did_delete_any_node = query_graph.remove_words_at_position(position_to_remove);
+                if did_delete_any_node {
+                    break;
+                }
+            }
         }
 
         Ok(Some(RankingRuleOutput { query: child_query_graph, candidates: this_bucket }))
