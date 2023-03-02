@@ -32,15 +32,6 @@ fn test_phrase_search_with_stop_words_given_criteria(criteria: &[Criterion]) {
     let result = search.execute().unwrap();
     // 1 document should match
     assert_eq!(result.documents_ids.len(), 1);
-
-    // test for a single stop word only, no other search terms
-    let mut search = Search::new(&txn, &index);
-    search.query("\"the\"");
-    search.limit(10);
-    search.authorize_typos(false);
-    search.terms_matching_strategy(TermsMatchingStrategy::All);
-    let result = search.execute().unwrap();
-    assert_eq!(result.documents_ids.len(), 0);
 }
 
 #[test]

@@ -59,6 +59,8 @@ pub enum InternalError {
     Utf8(#[from] str::Utf8Error),
     #[error("An indexation process was explicitly aborted.")]
     AbortedIndexation,
+    #[error("The matching words list contains at least one invalid member.")]
+    InvalidMatchingWords,
 }
 
 #[derive(Error, Debug)]

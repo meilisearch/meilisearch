@@ -149,6 +149,27 @@ async fn simple_search() {
         .await;
 }
 
+#[actix_rt::test]
+async fn phrase_search_with_stop_word() {
+    // related to https://github.com/meilisearch/meilisearch/issues/3521
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (_, code) = index.update_settings(json!({"stopWords": ["the", "of"]})).await;
+    meili_snap::snapshot!(code, @"202 Accepted");
+
+    let documents = DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(1).await;
+
+    index
+        .search(json!({"q": "how \"to\" train \"the" }), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            assert_eq!(response["hits"].as_array().unwrap().len(), 1);
+        })
+        .await;
+}
+
 #[cfg(feature = "default")]
 #[actix_rt::test]
 async fn test_kanji_language_detection() {
