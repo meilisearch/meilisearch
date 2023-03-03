@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   schedule:
     # Everyday at 5:00am
-    - cron: "0 5 * * *"
+    - cron: '0 5 * * *'
   pull_request:
   push:
     # trying and staging branches are for Bors config
@@ -85,16 +85,13 @@ jobs:
       # Use ubuntu-18.04 to compile with glibc 2.27, which are the production expectations
       image: ubuntu:18.04
     if: github.event_name == 'schedule'
-
     steps:
       - uses: actions/checkout@v3
-
       - name: Run cargo build with all features
         uses: actions-rs/cargo@v1
         with:
           command: build
           args: --workspace --locked --release --all-features
-
       - name: Run cargo test with all features
         uses: actions-rs/cargo@v1
         with:
