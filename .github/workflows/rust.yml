@@ -79,15 +79,11 @@ jobs:
           args: --locked --release --all
 
   test-all-features:
-    name: Tests all features on ${{ matrix.os }} on cron schedule only
-
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-18.04, macos-12, windows-2022]
-
+    name: Tests all features on cron schedule only
+    runs-on: ubuntu-latest
+    container:
+      # Use ubuntu-18.04 to compile with glibc 2.27, which are the production expectations
+      image: ubuntu:18.04
     if: github.event_name == 'schedule'
 
     steps:
