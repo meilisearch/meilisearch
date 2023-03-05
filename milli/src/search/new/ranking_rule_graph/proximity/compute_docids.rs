@@ -20,11 +20,8 @@ pub fn compute_docids<'transaction>(
             }
             WordPair::WordPrefix { left, right_prefix } => db_cache
                 .get_word_prefix_pair_proximity_docids(index, txn, left, right_prefix, *proximity),
-            WordPair::WordsSwapped { left, right } => {
-                db_cache.get_word_pair_proximity_docids(index, txn, left, right, *proximity)
-            }
-            WordPair::WordPrefixSwapped { left, right_prefix } => db_cache
-                .get_prefix_word_pair_proximity_docids(index, txn, left, right_prefix, *proximity),
+            WordPair::WordPrefixSwapped { left_prefix, right } => db_cache
+                .get_prefix_word_pair_proximity_docids(index, txn, left_prefix, right, *proximity),
         }?;
         let bitmap =
             bytes.map(CboRoaringBitmapCodec::deserialize_from).transpose()?.unwrap_or_default();

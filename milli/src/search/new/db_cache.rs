@@ -121,18 +121,18 @@ impl<'transaction> DatabaseCache<'transaction> {
         &mut self,
         index: &Index,
         txn: &'transaction RoTxn,
-        word1: &str,
-        prefix2: &str,
+        left_prefix: &str,
+        right: &str,
         proximity: u8,
     ) -> Result<Option<&'transaction [u8]>> {
-        let key = (proximity, prefix2.to_owned(), word1.to_owned());
+        let key = (proximity, left_prefix.to_owned(), right.to_owned());
         match self.prefix_word_pair_proximity_docids.entry(key) {
             Entry::Occupied(bitmap_ptr) => Ok(*bitmap_ptr.get()),
             Entry::Vacant(entry) => {
                 let bitmap_ptr = index
                     .prefix_word_pair_proximity_docids
                     .remap_data_type::<ByteSlice>()
-                    .get(txn, &(proximity, prefix2, word1))?;
+                    .get(txn, &(proximity, left_prefix, right))?;
                 entry.insert(bitmap_ptr);
                 Ok(bitmap_ptr)
             }

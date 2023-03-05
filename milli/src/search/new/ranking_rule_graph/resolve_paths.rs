@@ -24,9 +24,13 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         mut paths: Vec<Vec<u32>>,
     ) -> Result<RoaringBitmap> {
         paths.sort_unstable();
+        // let mut needs_filtering_empty_edges = false;
+        // let mut needs_filtering_empty_prefix = false;
+        // let mut needs_filtering_empty_couple_edges = false;
         let mut needs_filtering = false;
         let mut path_bitmaps = vec![];
         'path_loop: loop {
+            // TODO: distinguish between empty_edges, empty_prefix, and empty_couple_edges filtering
             if needs_filtering {
                 for path in paths.iter_mut() {
                     if empty_paths_cache.path_is_empty(path) {
@@ -61,11 +65,13 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                             self.remove_edge(edge_index);
                             edge_docids_cache.cache.remove(&edge_index);
                             needs_filtering = true;
+                            // needs_filtering_empty_edges = true;
                             // 3. continue executing this function again on the remaining paths
                             continue 'path_loop;
                         } else {
                             path_bitmap &= edge_docids;
                             if path_bitmap.is_disjoint(universe) {
+                                // needs_filtering_empty_prefix = true;
                                 needs_filtering = true;
                                 empty_paths_cache.forbid_prefix(&visited_edges);
                                 // if the intersection between this edge and any
@@ -76,6 +82,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                                 {
                                     let intersection = edge_docids & edge_docids2;
                                     if intersection.is_disjoint(universe) {
+                                        // needs_filtering_empty_couple_edges = true;
                                         empty_paths_cache
                                             .forbid_couple_edges(*edge_index2, edge_index);
                                     }

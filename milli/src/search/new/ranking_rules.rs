@@ -98,20 +98,6 @@ pub struct RankingRuleOutput<Q> {
     pub candidates: RoaringBitmap,
 }
 
-#[allow(unused)]
-pub fn get_start_universe<'transaction>(
-    index: &Index,
-    txn: &'transaction RoTxn,
-    db_cache: &mut DatabaseCache<'transaction>,
-    query_graph: &QueryGraph,
-    term_matching_strategy: TermsMatchingStrategy,
-    // filters: Filters,
-) -> Result<RoaringBitmap> {
-    // TODO: actually compute the universe from the query graph
-    let universe = index.documents_ids(txn).unwrap();
-    Ok(universe)
-}
-
 // TODO: can make it generic over the query type (either query graph or placeholder) fairly easily
 #[allow(clippy::too_many_arguments)]
 pub fn execute_search<'transaction>(

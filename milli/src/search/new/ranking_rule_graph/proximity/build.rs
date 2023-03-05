@@ -13,16 +13,14 @@ use crate::{Index, Result};
 
 pub fn visit_from_node(from_node: &QueryNode) -> Result<Option<(WordDerivations, i8)>> {
     Ok(Some(match from_node {
-        QueryNode::Term(LocatedQueryTerm { value: value1, positions: pos1 }) => {
-            match value1 {
-                QueryTerm::Word { derivations } => (derivations.clone(), *pos1.end()),
-                QueryTerm::Phrase { phrase: phrase1 } => {
-                    // TODO: remove second unwrap
-                    let original = phrase1.words.last().unwrap().as_ref().unwrap().clone();
+        QueryNode::Term(LocatedQueryTerm { value: value1, positions: pos1 }) => match value1 {
+            QueryTerm::Word { derivations } => (derivations.clone(), *pos1.end()),
+            QueryTerm::Phrase { phrase: phrase1 } => {
+                if let Some(original) = phrase1.words.last().unwrap().as_ref() {
                     (
                         WordDerivations {
                             original: original.clone(),
-                            zero_typo: vec![original],
+                            zero_typo: vec![original.to_owned()],
                             one_typo: vec![],
                             two_typos: vec![],
                             use_prefix_db: false,
@@ -31,9 +29,12 @@ pub fn visit_from_node(from_node: &QueryNode) -> Result<Option<(WordDerivations,
                         },
                         *pos1.end(),
                     )
+                } else {
+                    // No word pairs if the phrase does not have a regular word as its last term
+                    return Ok(None);
                 }
             }
-        }
+        },
         QueryNode::Start => (
             WordDerivations {
                 original: String::new(),
@@ -68,26 +69,27 @@ pub fn visit_to_node<'transaction, 'from_data>(
     let (derivations2, pos2, ngram_len2) = match value2 {
         QueryTerm::Word { derivations } => (derivations.clone(), *pos2.start(), pos2.len()),
         QueryTerm::Phrase { phrase: phrase2 } => {
-            // TODO: remove second unwrap
-            let original = phrase2.words.last().unwrap().as_ref().unwrap().clone();
-            (
-                WordDerivations {
-                    original: original.clone(),
-                    zero_typo: vec![original],
-                    one_typo: vec![],
-                    two_typos: vec![],
-                    use_prefix_db: false,
-                    synonyms: vec![],
-                    split_words: None,
-                },
-                *pos2.start(),
-                1,
-            )
+            if let Some(original) = phrase2.words.first().unwrap().as_ref() {
+                (
+                    WordDerivations {
+                        original: original.clone(),
+                        zero_typo: vec![original.to_owned()],
+                        one_typo: vec![],
+                        two_typos: vec![],
+                        use_prefix_db: false,
+                        synonyms: vec![],
+                        split_words: None,
+                    },
+                    *pos2.start(),
+                    1,
+                )
+            } else {
+                // No word pairs if the phrase does not have a regular word as its first term
+                return Ok(vec![]);
+            }
         }
     };
 
-    // TODO: here we would actually do it for each combination of word1 and word2
-    // and take the union of them
     if pos1 + 1 != pos2 {
         // TODO: how should this actually be handled?
         // We want to effectively ignore this pair of terms
@@ -130,19 +132,37 @@ pub fn visit_to_node<'transaction, 'from_data>(
                             right_prefix: original_word_2.to_owned(),
                         });
                 }
+                if db_cache
+                    .get_prefix_word_pair_proximity_docids(
+                        index,
+                        txn,
+                        original_word_2.as_str(),
+                        word1.as_str(),
+                        proximity as u8 - 1,
+                    )?
+                    .is_some()
+                {
+                    cost_proximity_word_pairs
+                        .entry(cost)
+                        .or_default()
+                        .entry(proximity as u8)
+                        .or_default()
+                        .push(WordPair::WordPrefixSwapped {
+                            left_prefix: original_word_2.to_owned(),
+                            right: word1.to_owned(),
+                        });
+                }
             }
         }
     }
 
     let derivations2 = derivations2.all_derivations_except_prefix_db();
-    // TODO: safeguard in case the cartesian product is too large?
+    // TODO: add safeguard in case the cartesian product is too large?
     let product_derivations = derivations1.cartesian_product(derivations2);
 
     for (word1, word2) in product_derivations {
         for proximity in 1..=(8 - ngram_len2) {
             let cost = (proximity + ngram_len2 - 1) as u8;
-            // TODO: do the opposite way with a proximity penalty as well!
-            //       search for (word2, word1, proximity-1), I guess?
             if db_cache
                 .get_word_pair_proximity_docids(index, txn, word1, word2, proximity as u8)?
                 .is_some()
@@ -153,6 +173,18 @@ pub fn visit_to_node<'transaction, 'from_data>(
                     .entry(proximity as u8)
                     .or_default()
                     .push(WordPair::Words { left: word1.to_owned(), right: word2.to_owned() });
+            }
+            if proximity > 1
+                && db_cache
+                    .get_word_pair_proximity_docids(index, txn, word2, word1, proximity as u8 - 1)?
+                    .is_some()
+            {
+                cost_proximity_word_pairs
+                    .entry(cost)
+                    .or_default()
+                    .entry(proximity as u8 - 1)
+                    .or_default()
+                    .push(WordPair::Words { left: word2.to_owned(), right: word1.to_owned() });
             }
         }
     }

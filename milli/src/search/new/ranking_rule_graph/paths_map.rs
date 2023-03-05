@@ -6,6 +6,10 @@ use roaring::RoaringBitmap;
 
 use super::cheapest_paths::Path;
 
+// What is PathsMap used for?
+// For the empty_prefixes field in the EmptyPathsCache only :/
+// but it could be used for more, like efficient computing of a set of paths
+
 
 #[derive(Debug, Clone)]
 pub struct PathsMap<V> {

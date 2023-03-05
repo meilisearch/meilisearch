@@ -1,18 +1,22 @@
-pub mod db_cache;
-pub mod graph_based_ranking_rule;
-pub mod logger;
-pub mod query_graph;
-pub mod query_term;
-pub mod ranking_rule_graph;
-pub mod ranking_rules;
-pub mod resolve_query_graph;
-pub mod sort;
-pub mod words;
+mod db_cache;
+mod graph_based_ranking_rule;
+mod logger;
+mod query_graph;
+mod query_term;
+mod ranking_rule_graph;
+mod ranking_rules;
+mod resolve_query_graph;
+mod sort;
+mod words;
 
 use charabia::Tokenize;
 use heed::RoTxn;
-pub use query_graph::*;
-pub use ranking_rules::*;
+
+use query_graph::{QueryGraph, QueryNode};
+pub use ranking_rules::{
+    execute_search, RankingRule, RankingRuleOutput, RankingRuleOutputIter,
+    RankingRuleOutputIterWrapper, RankingRuleQueryTrait,
+};
 use roaring::RoaringBitmap;
 
 use self::db_cache::DatabaseCache;

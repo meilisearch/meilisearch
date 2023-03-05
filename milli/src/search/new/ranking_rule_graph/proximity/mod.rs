@@ -18,9 +18,8 @@ use crate::{Index, Result};
 #[derive(Debug, Clone)]
 pub enum WordPair {
     Words { left: String, right: String },
-    WordsSwapped { left: String, right: String },
     WordPrefix { left: String, right_prefix: String },
-    WordPrefixSwapped { left: String, right_prefix: String },
+    WordPrefixSwapped { left_prefix: String, right: String },
 }
 
 #[derive(Clone)]

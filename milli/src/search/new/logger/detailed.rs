@@ -194,7 +194,7 @@ impl DetailedSearchLogger {
         for event in self.events.iter() {
             match event {
                 SearchEvents::RankingRuleStartIteration { ranking_rule_idx, time, .. } => {
-                    let elapsed = time.duration_since(prev_time);
+                    let _elapsed = time.duration_since(prev_time);
                     prev_time = *time;
                     let parent_activated_id = activated_id(&timestamp);
                     timestamp.push(0);
@@ -216,7 +216,7 @@ impl DetailedSearchLogger {
 }}").unwrap();
                 }
                 SearchEvents::RankingRuleNextBucket { ranking_rule_idx, time, universe, candidates } => {
-                    let elapsed = time.duration_since(prev_time);
+                    let _elapsed = time.duration_since(prev_time);
                     prev_time = *time;
                     let old_activated_id = activated_id(&timestamp);
                     // writeln!(&mut file, "time.{old_activated_id}: {:.2}", elapsed.as_micros() as f64 / 1000.0).unwrap();
@@ -227,7 +227,7 @@ impl DetailedSearchLogger {
                         .unwrap();
                 }
                 SearchEvents::RankingRuleSkipBucket { ranking_rule_idx, candidates, time } => {
-                    let elapsed = time.duration_since(prev_time);
+                    let _elapsed = time.duration_since(prev_time);
                     prev_time = *time;
                     let old_activated_id = activated_id(&timestamp);
                     // writeln!(&mut file, "time.{old_activated_id}: {:.2}", elapsed.as_micros() as f64 / 1000.0).unwrap();
@@ -239,7 +239,7 @@ impl DetailedSearchLogger {
                         .unwrap();
                 }
                 SearchEvents::RankingRuleEndIteration { ranking_rule_idx, time, .. } => {
-                    let elapsed = time.duration_since(prev_time);
+                    let _elapsed = time.duration_since(prev_time);
                     prev_time = *time;
                     let cur_activated_id = activated_id(&timestamp);
                     // writeln!(&mut file, "time.{cur_activated_id}: {:.2}", elapsed.as_micros() as f64 / 1000.0).unwrap();
@@ -332,7 +332,7 @@ results.{random} {{
         writeln!(&mut file, "}}").unwrap();
     }
     
-    fn query_node_d2_desc(node_idx: usize, node: &QueryNode, distances: &[u64], file: &mut File) {
+    fn query_node_d2_desc(node_idx: usize, node: &QueryNode, _distances: &[u64], file: &mut File) {
         match &node {
             QueryNode::Term(LocatedQueryTerm { value, .. }) => {
                 match value {
