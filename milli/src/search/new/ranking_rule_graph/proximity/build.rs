@@ -108,7 +108,7 @@ pub fn visit_to_node<'transaction, 'from_data>(
 
     if updb2 {
         for word1 in derivations1.clone() {
-            for proximity in 0..(7 - ngram_len2) {
+            for proximity in 1..=(8 - ngram_len2) {
                 let cost = (proximity + ngram_len2 - 1) as u8;
                 if db_cache
                     .get_word_prefix_pair_proximity_docids(
@@ -139,7 +139,7 @@ pub fn visit_to_node<'transaction, 'from_data>(
     let product_derivations = derivations1.cartesian_product(derivations2);
 
     for (word1, word2) in product_derivations {
-        for proximity in 0..(7 - ngram_len2) {
+        for proximity in 1..=(8 - ngram_len2) {
             let cost = (proximity + ngram_len2 - 1) as u8;
             // TODO: do the opposite way with a proximity penalty as well!
             //       search for (word2, word1, proximity-1), I guess?
