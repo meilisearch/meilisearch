@@ -282,7 +282,9 @@ results.{random} {{
                 },
                 SearchEvents::WordsState { query_graph } => {
                     let cur_ranking_rule = timestamp.len() - 1;
+                    *timestamp.last_mut().unwrap() += 1;
                     let cur_activated_id = activated_id(&timestamp);
+                    *timestamp.last_mut().unwrap() -= 1;
                     let id = format!("{cur_ranking_rule}.{cur_activated_id}");
                     let new_file_path = self.folder_path.join(format!("{id}.d2"));
                     let mut new_file = std::fs::File::create(new_file_path).unwrap();
@@ -295,7 +297,9 @@ results.{random} {{
                 },
                 SearchEvents::ProximityState { graph, paths, empty_paths_cache, universe, distances, cost } => {
                     let cur_ranking_rule = timestamp.len() - 1;
+                    *timestamp.last_mut().unwrap() += 1;
                     let cur_activated_id = activated_id(&timestamp);
+                    *timestamp.last_mut().unwrap() -= 1;
                     let id = format!("{cur_ranking_rule}.{cur_activated_id}");
                     let new_file_path = self.folder_path.join(format!("{id}.d2"));
                     let mut new_file = std::fs::File::create(new_file_path).unwrap();
@@ -309,7 +313,9 @@ results.{random} {{
                 },
                 SearchEvents::TypoState { graph, paths, empty_paths_cache, universe, distances, cost } => {
                     let cur_ranking_rule = timestamp.len() - 1;
+                    *timestamp.last_mut().unwrap() += 1;
                     let cur_activated_id = activated_id(&timestamp);
+                    *timestamp.last_mut().unwrap() -= 1;
                     let id = format!("{cur_ranking_rule}.{cur_activated_id}");
                     let new_file_path = self.folder_path.join(format!("{id}.d2"));
                     let mut new_file = std::fs::File::create(new_file_path).unwrap();
