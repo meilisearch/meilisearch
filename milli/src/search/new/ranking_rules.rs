@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use heed::RoTxn;
 use roaring::RoaringBitmap;
 
@@ -8,11 +6,11 @@ use super::logger::SearchLogger;
 
 use super::QueryGraph;
 use crate::new::graph_based_ranking_rule::GraphBasedRankingRule;
-use crate::new::ranking_rule_graph::proximity::ProximityGraph;
-use crate::new::ranking_rule_graph::typo::TypoGraph;
+use crate::new::ranking_rule_graph::ProximityGraph;
+use crate::new::ranking_rule_graph::TypoGraph;
 use crate::new::words::Words;
 // use crate::search::new::sort::Sort;
-use crate::{Filter, Index, Result, TermsMatchingStrategy};
+use crate::{Index, Result, TermsMatchingStrategy};
 
 pub trait RankingRuleOutputIter<'transaction, Query> {
     fn next_bucket(&mut self) -> Result<Option<RankingRuleOutput<Query>>>;
@@ -100,18 +98,18 @@ pub struct RankingRuleOutput<Q> {
 
 // TODO: can make it generic over the query type (either query graph or placeholder) fairly easily
 #[allow(clippy::too_many_arguments)]
-pub fn execute_search<'transaction>(
+pub fn apply_ranking_rules<'transaction>(
     index: &Index,
     txn: &'transaction heed::RoTxn,
     // TODO: ranking rules parameter
     db_cache: &mut DatabaseCache<'transaction>,
     query_graph: &QueryGraph,
-    filters: Option<Filter>,
+    universe: &RoaringBitmap,
     from: usize,
     length: usize,
     logger: &mut dyn SearchLogger<QueryGraph>,
 ) -> Result<Vec<u32>> {
-    logger.initial_query(query_graph, Instant::now());
+    logger.initial_query(query_graph);
     let words = &mut Words::new(TermsMatchingStrategy::Last);
     // let sort = &mut Sort::new(index, txn, "release_date".to_owned(), true)?;
     let proximity = &mut GraphBasedRankingRule::<ProximityGraph>::new("proximity".to_owned());
@@ -122,25 +120,13 @@ pub fn execute_search<'transaction>(
 
     logger.ranking_rules(&ranking_rules);
 
-    let universe = if let Some(filters) = filters {
-        filters.evaluate(txn, index)?
-    } else {
-        index.documents_ids(txn)?
-    };
-
     if universe.len() < from as u64 {
         return Ok(vec![]);
     }
 
     let ranking_rules_len = ranking_rules.len();
-    logger.start_iteration_ranking_rule(
-        0,
-        ranking_rules[0],
-        query_graph,
-        &universe,
-        Instant::now(),
-    );
-    ranking_rules[0].start_iteration(index, txn, db_cache, logger, &universe, query_graph)?;
+    logger.start_iteration_ranking_rule(0, ranking_rules[0], query_graph, universe);
+    ranking_rules[0].start_iteration(index, txn, db_cache, logger, universe, query_graph)?;
 
     let mut candidates = vec![RoaringBitmap::default(); ranking_rules_len];
     candidates[0] = universe.clone();
@@ -154,7 +140,6 @@ pub fn execute_search<'transaction>(
                 cur_ranking_rule_index,
                 ranking_rules[cur_ranking_rule_index],
                 &candidates[cur_ranking_rule_index],
-                Instant::now(),
             );
             candidates[cur_ranking_rule_index].clear();
             ranking_rules[cur_ranking_rule_index].end_iteration(index, txn, db_cache, logger);
@@ -183,7 +168,6 @@ pub fn execute_search<'transaction>(
                             cur_ranking_rule_index,
                             ranking_rules[cur_ranking_rule_index],
                             &candidates,
-                            Instant::now(),
                         );
                     } else {
                         let all_candidates = candidates.iter().collect::<Vec<_>>();
@@ -193,7 +177,6 @@ pub fn execute_search<'transaction>(
                             cur_ranking_rule_index,
                             ranking_rules[cur_ranking_rule_index],
                             &skipped_candidates.into_iter().collect(),
-                            Instant::now(),
                         );
                         let candidates = candidates
                             .iter()
@@ -234,7 +217,6 @@ pub fn execute_search<'transaction>(
             ranking_rules[cur_ranking_rule_index],
             &candidates[cur_ranking_rule_index],
             &next_bucket.candidates,
-            Instant::now(),
         );
 
         assert!(candidates[cur_ranking_rule_index].is_superset(&next_bucket.candidates));
@@ -255,7 +237,6 @@ pub fn execute_search<'transaction>(
             ranking_rules[cur_ranking_rule_index],
             &next_bucket.query,
             &candidates[cur_ranking_rule_index],
-            Instant::now(),
         );
         ranking_rules[cur_ranking_rule_index].start_iteration(
             index,
@@ -272,11 +253,11 @@ pub fn execute_search<'transaction>(
 
 #[cfg(test)]
 mod tests {
-    use super::execute_search;
     // use crate::allocator::ALLOC;
     use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
     use crate::index::tests::TempIndex;
     use crate::new::db_cache::DatabaseCache;
+    use crate::new::execute_search;
     use big_s::S;
     use heed::EnvOpenOptions;
     use maplit::hashset;
@@ -284,8 +265,7 @@ mod tests {
     use std::io::{BufRead, BufReader, Cursor, Seek};
     use std::time::Instant;
     // use crate::new::logger::detailed::DetailedSearchLogger;
-    use crate::new::logger::{DefaultSearchLogger, SearchLogger};
-    use crate::new::make_query_graph;
+    use crate::new::logger::DefaultSearchLogger;
     use crate::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
     use crate::{Criterion, Index, Object, Search, TermsMatchingStrategy};
 
@@ -321,17 +301,20 @@ mod tests {
             ]))
             .unwrap();
         let txn = index.read_txn().unwrap();
-        let mut logger = DefaultSearchLogger;
         let mut db_cache = DatabaseCache::default();
 
-        let query_graph =
-            make_query_graph(&index, &txn, &mut db_cache, "releases from poison by the government")
-                .unwrap();
-        logger.initial_query(&query_graph, Instant::now());
+        let results = execute_search(
+            &index,
+            &txn,
+            &mut db_cache,
+            "releases from poison by the government",
+            None,
+            0,
+            50,
+            &mut DefaultSearchLogger,
+        )
+        .unwrap();
 
-        let results =
-            execute_search(&index, &txn, &mut db_cache, &query_graph, None, 0, 50, &mut logger)
-                .unwrap();
         println!("{results:?}")
     }
 
@@ -352,21 +335,13 @@ mod tests {
 
         let mut db_cache = DatabaseCache::default();
 
-        let query_graph = make_query_graph(
-            &index,
-            &txn,
-            &mut db_cache,
-            "which a the releases from poison by the government",
-        )
-        .unwrap();
-
         // let mut logger = crate::new::logger::detailed::DetailedSearchLogger::new("log");
 
         let results = execute_search(
             &index,
             &txn,
             &mut db_cache,
-            &query_graph,
+            "which a the releases from poison by the government",
             None,
             0,
             20,
@@ -453,17 +428,13 @@ mod tests {
 
         let mut db_cache = DatabaseCache::default();
 
-        let query_graph =
-            make_query_graph(&index, &txn, &mut db_cache, "releases from poison by the government")
-                .unwrap();
-
         let mut logger = crate::new::logger::detailed::DetailedSearchLogger::new("log");
 
         let results = execute_search(
             &index,
             &txn,
             &mut db_cache,
-            &query_graph,
+            "releases from poison by the government",
             None,
             0,
             20,

@@ -1,18 +1,21 @@
-pub mod build;
-pub mod cheapest_paths;
-pub mod edge_docids_cache;
-pub mod empty_paths_cache;
-pub mod paths_map;
-pub mod proximity;
-pub mod resolve_paths;
-pub mod typo;
+mod build;
+mod cheapest_paths;
+mod edge_docids_cache;
+mod empty_paths_cache;
+mod paths_map;
+mod proximity;
+mod resolve_paths;
+mod typo;
+
+pub use edge_docids_cache::EdgeDocidsCache;
+pub use empty_paths_cache::EmptyPathsCache;
+pub use proximity::ProximityGraph;
+pub use typo::TypoGraph;
 
 use std::ops::ControlFlow;
 
 use heed::RoTxn;
 use roaring::RoaringBitmap;
-
-use self::empty_paths_cache::EmptyPathsCache;
 
 use super::db_cache::DatabaseCache;
 use super::logger::SearchLogger;

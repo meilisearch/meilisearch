@@ -3,8 +3,8 @@ use roaring::RoaringBitmap;
 
 use super::db_cache::DatabaseCache;
 use super::logger::SearchLogger;
-use super::ranking_rule_graph::edge_docids_cache::EdgeDocidsCache;
-use super::ranking_rule_graph::empty_paths_cache::EmptyPathsCache;
+use super::ranking_rule_graph::EdgeDocidsCache;
+use super::ranking_rule_graph::EmptyPathsCache;
 
 use super::ranking_rule_graph::{RankingRuleGraph, RankingRuleGraphTrait};
 use super::{BitmapOrAllRef, QueryGraph, RankingRule, RankingRuleOutput};

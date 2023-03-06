@@ -4,7 +4,7 @@ use heed::RoTxn;
 use roaring::RoaringBitmap;
 
 use super::db_cache::DatabaseCache;
-use super::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
+use super::query_term::{self, LocatedQueryTerm, QueryTerm, WordDerivations};
 use crate::{Index, Result};
 
 #[derive(Debug, Clone)]
@@ -31,6 +31,7 @@ pub struct QueryGraph {
 }
 
 fn _assert_sizes() {
+    // TODO: QueryNodes are too big now, 184B is an unreasonable size
     let _: [u8; 184] = [0; std::mem::size_of::<QueryNode>()];
     let _: [u8; 48] = [0; std::mem::size_of::<Edges>()];
 }
@@ -75,7 +76,7 @@ impl QueryGraph {
         index: &Index,
         txn: &RoTxn,
         _db_cache: &mut DatabaseCache<'transaction>,
-        query: Vec<LocatedQueryTerm>,
+        terms: Vec<LocatedQueryTerm>,
     ) -> Result<QueryGraph> {
         // TODO: maybe empty nodes should not be removed here, to compute
         // the score of the `words` ranking rule correctly
@@ -90,8 +91,8 @@ impl QueryGraph {
             (vec![], vec![], vec![graph.root_node]);
 
         // TODO: split words / synonyms
-        for length in 1..=query.len() {
-            let query = &query[..length];
+        for length in 1..=terms.len() {
+            let query = &terms[..length];
 
             let term0 = query.last().unwrap();
 
@@ -104,7 +105,7 @@ impl QueryGraph {
 
             if !prev1.is_empty() {
                 if let Some((ngram2_str, ngram2_pos)) =
-                    LocatedQueryTerm::ngram2(&query[length - 2], &query[length - 1])
+                    query_term::ngram2(&query[length - 2], &query[length - 1])
                 {
                     if word_set.contains(ngram2_str.as_bytes()) {
                         let ngram2 = LocatedQueryTerm {
@@ -128,11 +129,9 @@ impl QueryGraph {
                 }
             }
             if !prev2.is_empty() {
-                if let Some((ngram3_str, ngram3_pos)) = LocatedQueryTerm::ngram3(
-                    &query[length - 3],
-                    &query[length - 2],
-                    &query[length - 1],
-                ) {
+                if let Some((ngram3_str, ngram3_pos)) =
+                    query_term::ngram3(&query[length - 3], &query[length - 2], &query[length - 1])
+                {
                     if word_set.contains(ngram3_str.as_bytes()) {
                         let ngram3 = LocatedQueryTerm {
                             value: QueryTerm::Word {
@@ -143,8 +142,9 @@ impl QueryGraph {
                                     one_typo: vec![],
                                     two_typos: vec![],
                                     use_prefix_db: false,
-                                    synonyms: vec![],  // TODO: ngram synonyms
+                                    synonyms: vec![], // TODO: ngram synonyms
                                     split_words: None, // TODO: maybe ngram split words?
+                                                      // would be nice for typos like su nflower
                                 },
                             },
                             positions: ngram3_pos,

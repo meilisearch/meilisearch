@@ -5,13 +5,13 @@ use std::fs::File;
 use std::time::Instant;
 use std::{io::Write, path::PathBuf};
 
-use crate::new::ranking_rule_graph::typo::TypoGraph;
+use crate::new::ranking_rule_graph::TypoGraph;
 use crate::new::{QueryNode, QueryGraph};
 use crate::new::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
-use crate::new::ranking_rule_graph::empty_paths_cache::EmptyPathsCache;
+use crate::new::ranking_rule_graph::EmptyPathsCache;
 use crate::new::ranking_rule_graph::{Edge, EdgeDetails, RankingRuleGraphTrait};
 use crate::new::ranking_rule_graph::{
-    proximity::ProximityGraph, RankingRuleGraph,
+    ProximityGraph, RankingRuleGraph,
 };
 
 use super::{RankingRule, SearchLogger};
@@ -21,18 +21,18 @@ pub enum SearchEvents {
         ranking_rule_idx: usize,
         query: QueryGraph,
         universe: RoaringBitmap,
-        time: Instant,
+        time: Instant
     },
     RankingRuleNextBucket {
         ranking_rule_idx: usize,
         universe: RoaringBitmap,
         candidates: RoaringBitmap,
-        time: Instant,
+        time: Instant
     },
     RankingRuleEndIteration {
         ranking_rule_idx: usize,
         universe: RoaringBitmap,
-        time: Instant,
+        time: Instant
     },
     ExtendResults {
         new: Vec<u32>,
@@ -56,13 +56,14 @@ pub enum SearchEvents {
         distances: Vec<Vec<u64>>,
         cost: u64,
     },
-    RankingRuleSkipBucket { ranking_rule_idx: usize, candidates: RoaringBitmap, time: Instant, },
+    RankingRuleSkipBucket { ranking_rule_idx: usize, candidates: RoaringBitmap, time: Instant },
 }
 
 pub struct DetailedSearchLogger {
     folder_path: PathBuf,
     initial_query: Option<QueryGraph>,
     initial_query_time: Option<Instant>,
+    query_for_universe: Option<QueryGraph>,
     initial_universe: Option<RoaringBitmap>,
     ranking_rules_ids: Option<Vec<String>>,
     events: Vec<SearchEvents>,
@@ -73,6 +74,7 @@ impl DetailedSearchLogger {
             folder_path: PathBuf::new().join(folder_path),
             initial_query: None,
             initial_query_time: None,
+            query_for_universe: None,
             initial_universe: None,
             ranking_rules_ids: None,
             events: vec![],
@@ -81,9 +83,13 @@ impl DetailedSearchLogger {
 }
 
 impl SearchLogger<QueryGraph> for DetailedSearchLogger {
-    fn initial_query(&mut self, query: &QueryGraph, time: Instant) {
+    fn initial_query(&mut self, query: &QueryGraph) {
         self.initial_query = Some(query.clone());
-        self.initial_query_time = Some(time);
+        self.initial_query_time = Some(Instant::now());
+    }
+
+    fn query_for_universe(&mut self, query: &QueryGraph) {
+        self.query_for_universe = Some(query.clone());
     }
 
     fn initial_universe(&mut self, universe: &RoaringBitmap) {
@@ -99,13 +105,13 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         _ranking_rule: &dyn RankingRule<'transaction, QueryGraph>,
         query: &QueryGraph,
         universe: &RoaringBitmap,
-        time: Instant,
+        
     ) {
         self.events.push(SearchEvents::RankingRuleStartIteration {
             ranking_rule_idx,
             query: query.clone(),
             universe: universe.clone(),
-            time,
+            time: Instant::now(),
         })
     }
 
@@ -115,13 +121,13 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         _ranking_rule: &dyn RankingRule<'transaction, QueryGraph>,
         universe: &RoaringBitmap,
         candidates: &RoaringBitmap,
-        time: Instant,
+        
     ) {
         self.events.push(SearchEvents::RankingRuleNextBucket {
             ranking_rule_idx,
             universe: universe.clone(),
             candidates: candidates.clone(),
-            time,
+            time: Instant::now(),
         })
     }
     fn skip_bucket_ranking_rule<'transaction>(
@@ -129,12 +135,12 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         ranking_rule_idx: usize,
         _ranking_rule: &dyn RankingRule<'transaction, QueryGraph>,
         candidates: &RoaringBitmap,
-        time: Instant,
+        
     ) {
         self.events.push(SearchEvents::RankingRuleSkipBucket {
             ranking_rule_idx,
             candidates: candidates.clone(),
-            time
+            time: Instant::now()
         })
     }
 
@@ -143,12 +149,12 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         ranking_rule_idx: usize,
         _ranking_rule: &dyn RankingRule<'transaction, QueryGraph>,
         universe: &RoaringBitmap,
-        time: Instant,
+        
     ) {
         self.events.push(SearchEvents::RankingRuleEndIteration {
             ranking_rule_idx,
             universe: universe.clone(),
-            time
+            time: Instant::now()
         })
     }
     fn add_to_results(&mut self, docids: &[u32]) {
@@ -184,6 +190,20 @@ impl DetailedSearchLogger {
 
         let index_path = self.folder_path.join("index.d2");
         let mut file = std::fs::File::create(index_path).unwrap();
+        writeln!(&mut file, "direction: right").unwrap();
+        writeln!(&mut file, "Initial Query Graph: {{").unwrap();
+        let initial_query_graph = self.initial_query.as_ref().unwrap();
+        Self::query_graph_d2_description(initial_query_graph, &mut file);
+        writeln!(&mut file, "}}").unwrap();
+
+        writeln!(&mut file, "Query Graph Used To Compute Universe: {{").unwrap();
+        let query_graph_for_universe = self.query_for_universe.as_ref().unwrap();
+        Self::query_graph_d2_description(query_graph_for_universe, &mut file);
+        writeln!(&mut file, "}}").unwrap();
+
+        let initial_universe = self.initial_universe.as_ref().unwrap();
+        writeln!(&mut file, "Initial Universe Length {}", initial_universe.len()).unwrap();
+
         writeln!(&mut file, "Control Flow Between Ranking Rules: {{").unwrap();
         writeln!(&mut file, "shape: sequence_diagram").unwrap();
         for (idx, rr_id) in self.ranking_rules_ids.as_ref().unwrap().iter().enumerate() {

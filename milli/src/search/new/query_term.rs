@@ -178,9 +178,15 @@ fn split_best_frequency(
 
 #[derive(Debug, Clone)]
 pub enum QueryTerm {
+    // TODO: should there be SplitWord, NGram2, and NGram3 variants?
+    // NGram2 can have 1 typo and synonyms
+    // NGram3 cannot have typos but can have synonyms
+    // SplitWords are a phrase
+    // Can NGrams be prefixes?
     Phrase { phrase: Phrase },
     Word { derivations: WordDerivations },
 }
+
 impl QueryTerm {
     pub fn original_single_word(&self) -> Option<&str> {
         match self {
@@ -209,53 +215,77 @@ impl LocatedQueryTerm {
             QueryTerm::Word { derivations, .. } => derivations.is_empty(),
         }
     }
-    /// Create primitive query from tokenized query string,
-    /// the primitive query is an intermediate state to build the query tree.
-    pub fn from_query(
-        query: NormalizedTokenIter<Vec<u8>>,
-        words_limit: Option<usize>,
-        // TODO:` use index + txn + ? instead of closure
-        derivations: impl Fn(&str, bool) -> Result<WordDerivations>,
-    ) -> Result<Vec<LocatedQueryTerm>> {
-        let mut primitive_query = Vec::new();
-        let mut phrase = Vec::new();
+}
 
-        let mut quoted = false;
+pub fn located_query_terms_from_string<'transaction>(
+    index: &Index,
+    txn: &'transaction RoTxn,
+    query: NormalizedTokenIter<Vec<u8>>,
+    words_limit: Option<usize>,
+) -> Result<Vec<LocatedQueryTerm>> {
+    let authorize_typos = index.authorize_typos(txn)?;
+    let min_len_one_typo = index.min_word_len_one_typo(txn)?;
+    let min_len_two_typos = index.min_word_len_two_typos(txn)?;
 
-        let parts_limit = words_limit.unwrap_or(usize::MAX);
+    let exact_words = index.exact_words(txn)?;
+    let fst = index.words_fst(txn)?;
 
-        let mut position = -1i8;
-        let mut phrase_start = -1i8;
-        let mut phrase_end = -1i8;
+    let nbr_typos = |word: &str| {
+        if !authorize_typos
+            || word.len() < min_len_one_typo as usize
+            || exact_words.as_ref().map_or(false, |fst| fst.contains(word))
+        {
+            0
+        } else if word.len() < min_len_two_typos as usize {
+            1
+        } else {
+            2
+        }
+    };
 
-        let mut peekable = query.peekable();
-        while let Some(token) = peekable.next() {
-            // early return if word limit is exceeded
-            if primitive_query.len() >= parts_limit {
-                return Ok(primitive_query);
-            }
+    let derivations = |word: &str, is_prefix: bool| {
+        word_derivations(index, txn, word, nbr_typos(word), is_prefix, &fst)
+    };
 
-            match token.kind {
-                TokenKind::Word | TokenKind::StopWord => {
-                    position += 1;
-                    // 1. if the word is quoted we push it in a phrase-buffer waiting for the ending quote,
-                    // 2. if the word is not the last token of the query and is not a stop_word we push it as a non-prefix word,
-                    // 3. if the word is the last token of the query we push it as a prefix word.
-                    if quoted {
-                        phrase_end = position;
-                        if phrase.is_empty() {
-                            phrase_start = position;
-                        }
-                        if let TokenKind::StopWord = token.kind {
-                            phrase.push(None);
-                        } else {
-                            // TODO: in a phrase, check that every word exists
-                            // otherwise return WordDerivations::Empty
-                            phrase.push(Some(token.lemma().to_string()));
-                        }
-                    } else if peekable.peek().is_some() {
-                        if let TokenKind::StopWord = token.kind {
-                        } else {
+    let mut primitive_query = Vec::new();
+    let mut phrase = Vec::new();
+
+    let mut quoted = false;
+
+    let parts_limit = words_limit.unwrap_or(usize::MAX);
+
+    let mut position = -1i8;
+    let mut phrase_start = -1i8;
+    let mut phrase_end = -1i8;
+
+    let mut peekable = query.peekable();
+    while let Some(token) = peekable.next() {
+        // early return if word limit is exceeded
+        if primitive_query.len() >= parts_limit {
+            return Ok(primitive_query);
+        }
+
+        match token.kind {
+            TokenKind::Word | TokenKind::StopWord => {
+                position += 1;
+                // 1. if the word is quoted we push it in a phrase-buffer waiting for the ending quote,
+                // 2. if the word is not the last token of the query and is not a stop_word we push it as a non-prefix word,
+                // 3. if the word is the last token of the query we push it as a prefix word.
+                if quoted {
+                    phrase_end = position;
+                    if phrase.is_empty() {
+                        phrase_start = position;
+                    }
+                    if let TokenKind::StopWord = token.kind {
+                        phrase.push(None);
+                    } else {
+                        // TODO: in a phrase, check that every word exists
+                        // otherwise return WordDerivations::Empty
+                        phrase.push(Some(token.lemma().to_string()));
+                    }
+                } else if peekable.peek().is_some() {
+                    match token.kind {
+                        TokenKind::Word => {
                             let derivations = derivations(token.lemma(), false)?;
                             let located_term = LocatedQueryTerm {
                                 value: QueryTerm::Word { derivations },
@@ -263,100 +293,91 @@ impl LocatedQueryTerm {
                             };
                             primitive_query.push(located_term);
                         }
-                    } else {
-                        let derivations = derivations(token.lemma(), true)?;
-                        let located_term = LocatedQueryTerm {
-                            value: QueryTerm::Word { derivations },
-                            positions: position..=position,
-                        };
-                        primitive_query.push(located_term);
+                        TokenKind::StopWord | TokenKind::Separator(_) | TokenKind::Unknown => {}
                     }
+                } else {
+                    let derivations = derivations(token.lemma(), true)?;
+                    let located_term = LocatedQueryTerm {
+                        value: QueryTerm::Word { derivations },
+                        positions: position..=position,
+                    };
+                    primitive_query.push(located_term);
                 }
-                TokenKind::Separator(separator_kind) => {
-                    match separator_kind {
-                        SeparatorKind::Hard => {
-                            position += 1;
-                        }
-                        SeparatorKind::Soft => {
-                            position += 0;
-                        }
-                    }
-                    let quote_count = token.lemma().chars().filter(|&s| s == '"').count();
-                    // swap quoted state if we encounter a double quote
-                    if quote_count % 2 != 0 {
-                        quoted = !quoted;
-                    }
-                    // if there is a quote or a hard separator we close the phrase.
-                    if !phrase.is_empty()
-                        && (quote_count > 0 || separator_kind == SeparatorKind::Hard)
-                    {
-                        let located_query_term = LocatedQueryTerm {
-                            value: QueryTerm::Phrase {
-                                phrase: Phrase { words: mem::take(&mut phrase) },
-                            },
-                            positions: phrase_start..=phrase_end,
-                        };
-                        primitive_query.push(located_query_term);
-                    }
-                }
-                _ => (),
             }
+            TokenKind::Separator(separator_kind) => {
+                match separator_kind {
+                    SeparatorKind::Hard => {
+                        position += 1;
+                    }
+                    SeparatorKind::Soft => {
+                        position += 0;
+                    }
+                }
+                let quote_count = token.lemma().chars().filter(|&s| s == '"').count();
+                // swap quoted state if we encounter a double quote
+                if quote_count % 2 != 0 {
+                    quoted = !quoted;
+                }
+                // if there is a quote or a hard separator we close the phrase.
+                if !phrase.is_empty() && (quote_count > 0 || separator_kind == SeparatorKind::Hard)
+                {
+                    let located_query_term = LocatedQueryTerm {
+                        value: QueryTerm::Phrase {
+                            phrase: Phrase { words: mem::take(&mut phrase) },
+                        },
+                        positions: phrase_start..=phrase_end,
+                    };
+                    primitive_query.push(located_query_term);
+                }
+            }
+            _ => (),
         }
-
-        // If a quote is never closed, we consider all of the end of the query as a phrase.
-        if !phrase.is_empty() {
-            let located_query_term = LocatedQueryTerm {
-                value: QueryTerm::Phrase { phrase: Phrase { words: mem::take(&mut phrase) } },
-                positions: phrase_start..=phrase_end,
-            };
-            primitive_query.push(located_query_term);
-        }
-
-        Ok(primitive_query)
     }
+
+    // If a quote is never closed, we consider all of the end of the query as a phrase.
+    if !phrase.is_empty() {
+        let located_query_term = LocatedQueryTerm {
+            value: QueryTerm::Phrase { phrase: Phrase { words: mem::take(&mut phrase) } },
+            positions: phrase_start..=phrase_end,
+        };
+        primitive_query.push(located_query_term);
+    }
+
+    Ok(primitive_query)
 }
 
-impl LocatedQueryTerm {
-    pub fn ngram2(
-        x: &LocatedQueryTerm,
-        y: &LocatedQueryTerm,
-    ) -> Option<(String, RangeInclusive<i8>)> {
-        if *x.positions.end() != y.positions.start() - 1 {
-            println!(
-                "x positions end: {}, y positions start: {}",
-                *x.positions.end(),
-                y.positions.start()
-            );
-            return None;
-        }
-        match (&x.value.original_single_word(), &y.value.original_single_word()) {
-            (Some(w1), Some(w2)) => {
-                let term = (format!("{w1}{w2}"), *x.positions.start()..=*y.positions.end());
-                Some(term)
-            }
-            _ => None,
-        }
+// TODO: return a word derivations instead?
+pub fn ngram2(x: &LocatedQueryTerm, y: &LocatedQueryTerm) -> Option<(String, RangeInclusive<i8>)> {
+    if *x.positions.end() != y.positions.start() - 1 {
+        return None;
     }
-    pub fn ngram3(
-        x: &LocatedQueryTerm,
-        y: &LocatedQueryTerm,
-        z: &LocatedQueryTerm,
-    ) -> Option<(String, RangeInclusive<i8>)> {
-        if *x.positions.end() != y.positions.start() - 1
-            || *y.positions.end() != z.positions.start() - 1
-        {
-            return None;
+    match (&x.value.original_single_word(), &y.value.original_single_word()) {
+        (Some(w1), Some(w2)) => {
+            let term = (format!("{w1}{w2}"), *x.positions.start()..=*y.positions.end());
+            Some(term)
         }
-        match (
-            &x.value.original_single_word(),
-            &y.value.original_single_word(),
-            &z.value.original_single_word(),
-        ) {
-            (Some(w1), Some(w2), Some(w3)) => {
-                let term = (format!("{w1}{w2}{w3}"), *x.positions.start()..=*z.positions.end());
-                Some(term)
-            }
-            _ => None,
+        _ => None,
+    }
+}
+pub fn ngram3(
+    x: &LocatedQueryTerm,
+    y: &LocatedQueryTerm,
+    z: &LocatedQueryTerm,
+) -> Option<(String, RangeInclusive<i8>)> {
+    if *x.positions.end() != y.positions.start() - 1
+        || *y.positions.end() != z.positions.start() - 1
+    {
+        return None;
+    }
+    match (
+        &x.value.original_single_word(),
+        &y.value.original_single_word(),
+        &z.value.original_single_word(),
+    ) {
+        (Some(w1), Some(w2), Some(w3)) => {
+            let term = (format!("{w1}{w2}{w3}"), *x.positions.start()..=*z.positions.end());
+            Some(term)
         }
+        _ => None,
     }
 }

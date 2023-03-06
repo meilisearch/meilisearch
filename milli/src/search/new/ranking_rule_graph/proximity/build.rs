@@ -105,6 +105,7 @@ pub fn visit_to_node<'transaction, 'from_data>(
     assert!(!updb1);
 
     let derivations1 = derivations1.all_derivations_except_prefix_db();
+    // TODO: eventually, we want to get rid of the uses from `orginal`
     let original_word_2 = derivations2.original.clone();
     let mut cost_proximity_word_pairs = BTreeMap::<u8, BTreeMap<u8, Vec<WordPair>>>::new();
 

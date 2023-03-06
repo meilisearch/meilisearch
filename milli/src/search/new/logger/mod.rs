@@ -2,19 +2,17 @@
 pub mod detailed;
 
 use roaring::RoaringBitmap;
-use std::time::Instant;
 
 use super::{
-    ranking_rule_graph::{
-        empty_paths_cache::EmptyPathsCache, proximity::ProximityGraph, typo::TypoGraph,
-        RankingRuleGraph,
-    },
+    ranking_rule_graph::{EmptyPathsCache, ProximityGraph, RankingRuleGraph, TypoGraph},
     RankingRule, RankingRuleQueryTrait,
 };
 
 pub struct DefaultSearchLogger;
 impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
-    fn initial_query(&mut self, _query: &Q, _time: Instant) {}
+    fn initial_query(&mut self, _query: &Q) {}
+
+    fn query_for_universe(&mut self, _query: &Q) {}
 
     fn initial_universe(&mut self, _universe: &RoaringBitmap) {}
 
@@ -26,7 +24,6 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
         _ranking_rule: &dyn RankingRule<'transaction, Q>,
         _query: &Q,
         _universe: &RoaringBitmap,
-        _time: Instant,
     ) {
     }
 
@@ -36,7 +33,6 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
         _ranking_rule: &dyn RankingRule<'transaction, Q>,
         _universe: &RoaringBitmap,
         _candidates: &RoaringBitmap,
-        _time: Instant,
     ) {
     }
     fn skip_bucket_ranking_rule<'transaction>(
@@ -44,7 +40,6 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
         _ranking_rule_idx: usize,
         _ranking_rule: &dyn RankingRule<'transaction, Q>,
         _candidates: &RoaringBitmap,
-        _time: Instant,
     ) {
     }
 
@@ -53,7 +48,6 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
         _ranking_rule_idx: usize,
         _ranking_rule: &dyn RankingRule<'transaction, Q>,
         _universe: &RoaringBitmap,
-        _time: Instant,
     ) {
     }
 
@@ -85,7 +79,10 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
 }
 
 pub trait SearchLogger<Q: RankingRuleQueryTrait> {
-    fn initial_query(&mut self, query: &Q, time: Instant);
+    fn initial_query(&mut self, query: &Q);
+
+    fn query_for_universe(&mut self, query: &Q);
+
     fn initial_universe(&mut self, universe: &RoaringBitmap);
 
     fn ranking_rules(&mut self, rr: &[&mut dyn RankingRule<Q>]);
@@ -96,7 +93,6 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
         ranking_rule: &dyn RankingRule<'transaction, Q>,
         query: &Q,
         universe: &RoaringBitmap,
-        time: Instant,
     );
     fn next_bucket_ranking_rule<'transaction>(
         &mut self,
@@ -104,21 +100,18 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
         ranking_rule: &dyn RankingRule<'transaction, Q>,
         universe: &RoaringBitmap,
         candidates: &RoaringBitmap,
-        time: Instant,
     );
     fn skip_bucket_ranking_rule<'transaction>(
         &mut self,
         ranking_rule_idx: usize,
         ranking_rule: &dyn RankingRule<'transaction, Q>,
         candidates: &RoaringBitmap,
-        time: Instant,
     );
     fn end_iteration_ranking_rule<'transaction>(
         &mut self,
         ranking_rule_idx: usize,
         ranking_rule: &dyn RankingRule<'transaction, Q>,
         universe: &RoaringBitmap,
-        time: Instant,
     );
     fn add_to_results(&mut self, docids: &[u32]);
 

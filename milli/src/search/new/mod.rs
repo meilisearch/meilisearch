@@ -9,55 +9,113 @@ mod resolve_query_graph;
 mod sort;
 mod words;
 
-use charabia::Tokenize;
-use heed::RoTxn;
+use std::collections::BTreeSet;
 
-use query_graph::{QueryGraph, QueryNode};
 pub use ranking_rules::{
-    execute_search, RankingRule, RankingRuleOutput, RankingRuleOutputIter,
+    apply_ranking_rules, RankingRule, RankingRuleOutput, RankingRuleOutputIter,
     RankingRuleOutputIterWrapper, RankingRuleQueryTrait,
 };
+
+use crate::{
+    new::query_term::located_query_terms_from_string, Filter, Index, Result, TermsMatchingStrategy,
+};
+use charabia::Tokenize;
+use db_cache::DatabaseCache;
+use heed::RoTxn;
+use query_graph::{QueryGraph, QueryNode};
 use roaring::RoaringBitmap;
 
-use self::db_cache::DatabaseCache;
-use self::query_term::{word_derivations, LocatedQueryTerm};
-use crate::{Index, Result};
+use self::{
+    logger::SearchLogger,
+    resolve_query_graph::{resolve_query_graph, NodeDocIdsCache},
+};
 
 pub enum BitmapOrAllRef<'s> {
     Bitmap(&'s RoaringBitmap),
     All,
 }
 
-pub fn make_query_graph<'transaction>(
+#[allow(clippy::too_many_arguments)]
+pub fn resolve_maximally_reduced_query_graph<'transaction>(
     index: &Index,
-    txn: &RoTxn,
+    txn: &'transaction heed::RoTxn,
+    db_cache: &mut DatabaseCache<'transaction>,
+    universe: &RoaringBitmap,
+    query_graph: &QueryGraph,
+    node_docids_cache: &mut NodeDocIdsCache,
+    matching_strategy: TermsMatchingStrategy,
+    logger: &mut dyn SearchLogger<QueryGraph>,
+) -> Result<RoaringBitmap> {
+    let mut graph = query_graph.clone();
+    let mut positions_to_remove = match matching_strategy {
+        TermsMatchingStrategy::Last => {
+            let mut all_positions = BTreeSet::new();
+            for n in query_graph.nodes.iter() {
+                match n {
+                    QueryNode::Term(term) => {
+                        all_positions.extend(term.positions.clone().into_iter());
+                    }
+                    QueryNode::Deleted | QueryNode::Start | QueryNode::End => {}
+                }
+            }
+            all_positions.into_iter().collect()
+        }
+        TermsMatchingStrategy::All => vec![],
+    };
+    // don't remove the first term
+    positions_to_remove.remove(0);
+    loop {
+        if positions_to_remove.is_empty() {
+            break;
+        } else {
+            let position_to_remove = positions_to_remove.pop().unwrap();
+            let _ = graph.remove_words_at_position(position_to_remove);
+        }
+    }
+    logger.query_for_universe(&graph);
+    let docids = resolve_query_graph(index, txn, db_cache, node_docids_cache, &graph, universe)?;
+
+    Ok(docids)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn execute_search<'transaction>(
+    index: &Index,
+    txn: &'transaction RoTxn,
     db_cache: &mut DatabaseCache<'transaction>,
     query: &str,
-) -> Result<QueryGraph> {
+    filters: Option<Filter>,
+    from: usize,
+    length: usize,
+    logger: &mut dyn SearchLogger<QueryGraph>,
+) -> Result<Vec<u32>> {
     assert!(!query.is_empty());
-    let authorize_typos = index.authorize_typos(txn)?;
-    let min_len_one_typo = index.min_word_len_one_typo(txn)?;
-    let min_len_two_typos = index.min_word_len_two_typos(txn)?;
+    let query_terms = located_query_terms_from_string(index, txn, query.tokenize(), None).unwrap();
+    let graph = QueryGraph::from_query(index, txn, db_cache, query_terms)?;
 
-    let exact_words = index.exact_words(txn)?;
-    let fst = index.words_fst(txn)?;
+    logger.initial_query(&graph);
 
-    // TODO: get rid of this closure
-    // also, ngrams can have one typo?
-    let query = LocatedQueryTerm::from_query(query.tokenize(), None, move |word, is_prefix| {
-        let typos = if !authorize_typos
-            || word.len() < min_len_one_typo as usize
-            || exact_words.as_ref().map_or(false, |fst| fst.contains(word))
-        {
-            0
-        } else if word.len() < min_len_two_typos as usize {
-            1
-        } else {
-            2
-        };
-        word_derivations(index, txn, word, typos, is_prefix, &fst)
-    })
-    .unwrap();
-    let graph = QueryGraph::from_query(index, txn, db_cache, query)?;
-    Ok(graph)
+    let universe = if let Some(filters) = filters {
+        filters.evaluate(txn, index)?
+    } else {
+        index.documents_ids(txn)?
+    };
+
+    let mut node_docids_cache = NodeDocIdsCache::default();
+
+    let universe = resolve_maximally_reduced_query_graph(
+        index,
+        txn,
+        db_cache,
+        &universe,
+        &graph,
+        &mut node_docids_cache,
+        TermsMatchingStrategy::Last,
+        logger,
+    )?;
+    // TODO: create ranking rules here, reuse the node docids cache for the words ranking rule
+
+    logger.initial_universe(&universe);
+
+    apply_ranking_rules(index, txn, db_cache, &graph, &universe, from, length, logger)
 }

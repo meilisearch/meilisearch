@@ -43,12 +43,9 @@ impl<'transaction> RankingRule<'transaction, QueryGraph> for Words {
         _parent_candidates: &RoaringBitmap,
         parent_query_graph: &QueryGraph,
     ) -> Result<()> {
-        // println!("Words: start iteration");
         self.exhausted = false;
         self.query_graph = Some(parent_query_graph.clone());
 
-        // TODO: a phrase can contain many positions, but represents a single node.
-        // That's a problem.
         let positions_to_remove = match self.terms_matching_strategy {
             TermsMatchingStrategy::Last => {
                 let mut all_positions = BTreeSet::new();
@@ -60,11 +57,13 @@ impl<'transaction> RankingRule<'transaction, QueryGraph> for Words {
                         QueryNode::Deleted | QueryNode::Start | QueryNode::End => {}
                     }
                 }
-                all_positions.into_iter().collect()
+                let mut r: Vec<i8> = all_positions.into_iter().collect();
+                // don't remove the first term
+                r.remove(0);
+                r
             }
             TermsMatchingStrategy::All => vec![],
         };
-        // println!("positions to remove: {positions_to_remove:?}");
         self.positions_to_remove = positions_to_remove;
         self.iterating = true;
         Ok(())
@@ -78,7 +77,6 @@ impl<'transaction> RankingRule<'transaction, QueryGraph> for Words {
         logger: &mut dyn SearchLogger<QueryGraph>,
         universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<QueryGraph>>> {
-        // println!("Words: next bucket");
         assert!(self.iterating);
         assert!(universe.len() > 1);
 
@@ -122,9 +120,9 @@ impl<'transaction> RankingRule<'transaction, QueryGraph> for Words {
         _db_cache: &mut DatabaseCache<'transaction>,
         _logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
-        // println!("Words: end iteration");
         self.iterating = false;
         self.exhausted = true;
         self.positions_to_remove = vec![];
+        self.query_graph = None;
     }
 }

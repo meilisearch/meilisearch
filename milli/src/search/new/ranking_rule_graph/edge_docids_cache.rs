@@ -41,11 +41,12 @@ impl<G: RankingRuleGraphTrait> EdgeDocidsCache<G> {
             EdgeDetails::Unconditional => Ok(BitmapOrAllRef::All),
             EdgeDetails::Data(details) => {
                 if self.cache.contains_key(&edge_index) {
+                    // TODO: should we update the bitmap in the cache if the new universe
+                    // reduces it?
                     return Ok(BitmapOrAllRef::Bitmap(&self.cache[&edge_index]));
                 }
                 // TODO: maybe universe doesn't belong here
                 let docids = universe & G::compute_docids(index, txn, db_cache, details)?;
-
                 let _ = self.cache.insert(edge_index, docids);
                 let docids = &self.cache[&edge_index];
                 Ok(BitmapOrAllRef::Bitmap(docids))
