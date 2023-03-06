@@ -23,8 +23,10 @@ FROM    debian:11.6
 ENV     MEILI_HTTP_ADDR 0.0.0.0:7700
 ENV     MEILI_SERVER_PROVIDER docker
 
-RUN     apt update -q \
-        && apt install -q -y tini
+RUN     set -ex; \
+        apt-get update -q; \
+        apt-get install -q -y --no-install-recommends tini; \
+        rm -rf /var/lib/apt/lists/*
 
 # add meilisearch to the `/bin` so you can run it from anywhere and it's easy
 # to find.
