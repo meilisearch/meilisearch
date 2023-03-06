@@ -81,7 +81,7 @@ async fn perform_snapshot() {
         // set when performing the snapshot
         //server.stats(),
 
-        // We can't test all the tasks contained in the snapshot because the on the original instance the snapshotCreation task was added
+        // The original instance contains the snapshotCreation task, while the snapshotted-instance does not. For this reason we need to compare the task queue **after** the task 4
         server.tasks_filter("?from=4"),
 
         server.index("test").get_all_documents(GetAllDocumentsOptions::default()),
