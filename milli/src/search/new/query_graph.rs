@@ -1,13 +1,10 @@
+use super::query_term::{self, LocatedQueryTerm, QueryTerm, WordDerivations};
+use super::SearchContext;
+use crate::Result;
+use roaring::RoaringBitmap;
 use std::fmt::Debug;
 
-use heed::RoTxn;
-use roaring::RoaringBitmap;
-
-use super::db_cache::DatabaseCache;
-use super::query_term::{self, LocatedQueryTerm, QueryTerm, WordDerivations};
-use crate::{Index, Result};
-
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum QueryNode {
     Term(LocatedQueryTerm),
     Deleted,
@@ -22,7 +19,7 @@ pub struct Edges {
     pub successors: RoaringBitmap,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct QueryGraph {
     pub root_node: u32,
     pub end_node: u32,
@@ -31,8 +28,8 @@ pub struct QueryGraph {
 }
 
 fn _assert_sizes() {
-    // TODO: QueryNodes are too big now, 184B is an unreasonable size
-    let _: [u8; 184] = [0; std::mem::size_of::<QueryNode>()];
+    // TODO: QueryNodes are too big now, 88B is a bit too big
+    let _: [u8; 88] = [0; std::mem::size_of::<QueryNode>()];
     let _: [u8; 48] = [0; std::mem::size_of::<Edges>()];
 }
 
@@ -72,19 +69,14 @@ impl QueryGraph {
 
 impl QueryGraph {
     // TODO: return the list of all matching words here as well
-    pub fn from_query<'transaction>(
-        index: &Index,
-        txn: &RoTxn,
-        _db_cache: &mut DatabaseCache<'transaction>,
-        terms: Vec<LocatedQueryTerm>,
-    ) -> Result<QueryGraph> {
+    pub fn from_query(ctx: &mut SearchContext, terms: Vec<LocatedQueryTerm>) -> Result<QueryGraph> {
         // TODO: maybe empty nodes should not be removed here, to compute
         // the score of the `words` ranking rule correctly
         // it is very easy to traverse the graph and remove afterwards anyway
         // Still, I'm keeping this here as a demo
         let mut empty_nodes = vec![];
 
-        let word_set = index.words_fst(txn)?;
+        let word_set = ctx.index.words_fst(ctx.txn)?;
         let mut graph = QueryGraph::default();
 
         let (mut prev2, mut prev1, mut prev0): (Vec<u32>, Vec<u32>, Vec<u32>) =
@@ -105,20 +97,20 @@ impl QueryGraph {
 
             if !prev1.is_empty() {
                 if let Some((ngram2_str, ngram2_pos)) =
-                    query_term::ngram2(&query[length - 2], &query[length - 1])
+                    query_term::ngram2(ctx, &query[length - 2], &query[length - 1])
                 {
-                    if word_set.contains(ngram2_str.as_bytes()) {
+                    if word_set.contains(ctx.word_interner.get(ngram2_str)) {
                         let ngram2 = LocatedQueryTerm {
                             value: QueryTerm::Word {
                                 derivations: WordDerivations {
-                                    original: ngram2_str.clone(),
+                                    original: ngram2_str,
                                     // TODO: could add a typo if it's an ngram?
-                                    zero_typo: vec![ngram2_str],
-                                    one_typo: vec![],
-                                    two_typos: vec![],
+                                    zero_typo: Box::new([ngram2_str]),
+                                    one_typo: Box::new([]),
+                                    two_typos: Box::new([]),
                                     use_prefix_db: false,
-                                    synonyms: vec![],  // TODO: ngram synonyms
-                                    split_words: None, // TODO: maybe ngram split words?
+                                    synonyms: Box::new([]), // TODO: ngram synonyms
+                                    split_words: None,      // TODO: maybe ngram split words?
                                 },
                             },
                             positions: ngram2_pos,
@@ -129,22 +121,25 @@ impl QueryGraph {
                 }
             }
             if !prev2.is_empty() {
-                if let Some((ngram3_str, ngram3_pos)) =
-                    query_term::ngram3(&query[length - 3], &query[length - 2], &query[length - 1])
-                {
-                    if word_set.contains(ngram3_str.as_bytes()) {
+                if let Some((ngram3_str, ngram3_pos)) = query_term::ngram3(
+                    ctx,
+                    &query[length - 3],
+                    &query[length - 2],
+                    &query[length - 1],
+                ) {
+                    if word_set.contains(ctx.word_interner.get(ngram3_str)) {
                         let ngram3 = LocatedQueryTerm {
                             value: QueryTerm::Word {
                                 derivations: WordDerivations {
-                                    original: ngram3_str.clone(),
+                                    original: ngram3_str,
                                     // TODO: could add a typo if it's an ngram?
-                                    zero_typo: vec![ngram3_str],
-                                    one_typo: vec![],
-                                    two_typos: vec![],
+                                    zero_typo: Box::new([ngram3_str]),
+                                    one_typo: Box::new([]),
+                                    two_typos: Box::new([]),
                                     use_prefix_db: false,
-                                    synonyms: vec![], // TODO: ngram synonyms
-                                    split_words: None, // TODO: maybe ngram split words?
-                                                      // would be nice for typos like su nflower
+                                    synonyms: Box::new([]), // TODO: ngram synonyms
+                                    split_words: None,      // TODO: maybe ngram split words?
+                                                            // would be nice for typos like su nflower
                                 },
                             },
                             positions: ngram3_pos,

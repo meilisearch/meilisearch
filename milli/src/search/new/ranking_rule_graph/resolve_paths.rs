@@ -1,23 +1,18 @@
 #![allow(clippy::too_many_arguments)]
 
-use heed::RoTxn;
-use roaring::{MultiOps, RoaringBitmap};
-
 use super::edge_docids_cache::EdgeDocidsCache;
 use super::empty_paths_cache::EmptyPathsCache;
-
 use super::{RankingRuleGraph, RankingRuleGraphTrait};
-use crate::new::db_cache::DatabaseCache;
-
-use crate::new::BitmapOrAllRef;
-use crate::{Index, Result};
+use crate::new::{BitmapOrAllRef, SearchContext};
+use crate::Result;
+use roaring::{MultiOps, RoaringBitmap};
 
 impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
-    pub fn resolve_paths<'transaction>(
+    // TODO: reduce the universe after computing each path
+    // TODO: deserialize roaring bitmap within a universe
+    pub fn resolve_paths<'search>(
         &mut self,
-        index: &Index,
-        txn: &'transaction RoTxn,
-        db_cache: &mut DatabaseCache<'transaction>,
+        ctx: &mut SearchContext<'search>,
         edge_docids_cache: &mut EdgeDocidsCache<G>,
         empty_paths_cache: &mut EmptyPathsCache,
         universe: &RoaringBitmap,
@@ -52,8 +47,8 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
             let mut cached_edge_docids = vec![];
             'edge_loop: for edge_index in edge_indexes {
                 visited_edges.push(edge_index);
-                let edge_docids = edge_docids_cache
-                    .get_edge_docids(index, txn, db_cache, edge_index, self, universe)?;
+                let edge_docids =
+                    edge_docids_cache.get_edge_docids(ctx, edge_index, self, universe)?;
                 match edge_docids {
                     BitmapOrAllRef::Bitmap(edge_docids) => {
                         cached_edge_docids.push((edge_index, edge_docids.clone()));

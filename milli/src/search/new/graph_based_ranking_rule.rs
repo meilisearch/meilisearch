@@ -1,15 +1,11 @@
-use heed::RoTxn;
-use roaring::RoaringBitmap;
-
-use super::db_cache::DatabaseCache;
 use super::logger::SearchLogger;
 use super::ranking_rule_graph::EdgeDocidsCache;
 use super::ranking_rule_graph::EmptyPathsCache;
-
 use super::ranking_rule_graph::{RankingRuleGraph, RankingRuleGraphTrait};
+use super::SearchContext;
 use super::{BitmapOrAllRef, QueryGraph, RankingRule, RankingRuleOutput};
-
-use crate::{Index, Result};
+use crate::Result;
+use roaring::RoaringBitmap;
 
 pub struct GraphBasedRankingRule<G: RankingRuleGraphTrait> {
     id: String,
@@ -29,12 +25,10 @@ pub struct GraphBasedRankingRuleState<G: RankingRuleGraphTrait> {
     cur_distance_idx: usize,
 }
 
-fn remove_empty_edges<'transaction, G: RankingRuleGraphTrait>(
+fn remove_empty_edges<'search, G: RankingRuleGraphTrait>(
+    ctx: &mut SearchContext<'search>,
     graph: &mut RankingRuleGraph<G>,
     edge_docids_cache: &mut EdgeDocidsCache<G>,
-    index: &Index,
-    txn: &'transaction RoTxn,
-    db_cache: &mut DatabaseCache<'transaction>,
     universe: &RoaringBitmap,
     empty_paths_cache: &mut EmptyPathsCache,
 ) -> Result<()> {
@@ -42,8 +36,7 @@ fn remove_empty_edges<'transaction, G: RankingRuleGraphTrait>(
         if graph.all_edges[edge_index as usize].is_none() {
             continue;
         }
-        let docids = edge_docids_cache
-            .get_edge_docids(index, txn, db_cache, edge_index, &*graph, universe)?;
+        let docids = edge_docids_cache.get_edge_docids(ctx, edge_index, &*graph, universe)?;
         match docids {
             BitmapOrAllRef::Bitmap(bitmap) => {
                 if bitmap.is_disjoint(universe) {
@@ -59,7 +52,7 @@ fn remove_empty_edges<'transaction, G: RankingRuleGraphTrait>(
     Ok(())
 }
 
-impl<'transaction, G: RankingRuleGraphTrait> RankingRule<'transaction, QueryGraph>
+impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
     for GraphBasedRankingRule<G>
 {
     fn id(&self) -> String {
@@ -67,24 +60,20 @@ impl<'transaction, G: RankingRuleGraphTrait> RankingRule<'transaction, QueryGrap
     }
     fn start_iteration(
         &mut self,
-        index: &Index,
-        txn: &'transaction RoTxn,
-        db_cache: &mut DatabaseCache<'transaction>,
+        ctx: &mut SearchContext<'search>,
         _logger: &mut dyn SearchLogger<QueryGraph>,
         universe: &RoaringBitmap,
         query_graph: &QueryGraph,
     ) -> Result<()> {
         // TODO: update old state instead of starting from scratch
-        let mut graph = RankingRuleGraph::build(index, txn, db_cache, query_graph.clone())?;
+        let mut graph = RankingRuleGraph::build(ctx, query_graph.clone())?;
         let mut edge_docids_cache = EdgeDocidsCache::default();
         let mut empty_paths_cache = EmptyPathsCache::new(graph.all_edges.len());
 
         remove_empty_edges(
+            ctx,
             &mut graph,
             &mut edge_docids_cache,
-            index,
-            txn,
-            db_cache,
             universe,
             &mut empty_paths_cache,
         )?;
@@ -105,20 +94,16 @@ impl<'transaction, G: RankingRuleGraphTrait> RankingRule<'transaction, QueryGrap
 
     fn next_bucket(
         &mut self,
-        index: &Index,
-        txn: &'transaction RoTxn,
-        db_cache: &mut DatabaseCache<'transaction>,
+        ctx: &mut SearchContext<'search>,
         logger: &mut dyn SearchLogger<QueryGraph>,
         universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<QueryGraph>>> {
         assert!(universe.len() > 1);
         let mut state = self.state.take().unwrap();
         remove_empty_edges(
+            ctx,
             &mut state.graph,
             &mut state.edge_docids_cache,
-            index,
-            txn,
-            db_cache,
             universe,
             &mut state.empty_paths_cache,
         )?;
@@ -151,9 +136,7 @@ impl<'transaction, G: RankingRuleGraphTrait> RankingRule<'transaction, QueryGrap
         );
 
         let bucket = state.graph.resolve_paths(
-            index,
-            txn,
-            db_cache,
+            ctx,
             &mut state.edge_docids_cache,
             &mut state.empty_paths_cache,
             universe,
@@ -169,9 +152,7 @@ impl<'transaction, G: RankingRuleGraphTrait> RankingRule<'transaction, QueryGrap
 
     fn end_iteration(
         &mut self,
-        _index: &Index,
-        _txn: &'transaction RoTxn,
-        _db_cache: &mut DatabaseCache<'transaction>,
+        _ctx: &mut SearchContext<'search>,
         _logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
         self.state = None;

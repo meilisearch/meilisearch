@@ -1,18 +1,10 @@
-use heed::RoTxn;
+use super::{Edge, RankingRuleGraph, RankingRuleGraphTrait};
+use crate::new::{QueryGraph, SearchContext};
+use crate::Result;
 use roaring::RoaringBitmap;
 
-use super::{Edge, RankingRuleGraph, RankingRuleGraphTrait};
-use crate::new::db_cache::DatabaseCache;
-use crate::new::QueryGraph;
-use crate::{Index, Result};
-
 impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
-    pub fn build<'db_cache, 'transaction: 'db_cache>(
-        index: &Index,
-        txn: &'transaction RoTxn,
-        db_cache: &mut DatabaseCache<'transaction>,
-        query_graph: QueryGraph,
-    ) -> Result<Self> {
+    pub fn build(ctx: &mut SearchContext, query_graph: QueryGraph) -> Result<Self> {
         let mut ranking_rule_graph =
             Self { query_graph, all_edges: vec![], node_edges: vec![], successors: vec![] };
 
@@ -22,12 +14,11 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
             let new_edges = ranking_rule_graph.node_edges.last_mut().unwrap();
             let new_successors = ranking_rule_graph.successors.last_mut().unwrap();
 
-            let Some(from_node_data) = G::build_visit_from_node(index, txn, db_cache, node)? else { continue };
+            let Some(from_node_data) = G::build_visit_from_node(ctx, node)? else { continue };
 
             for successor_idx in ranking_rule_graph.query_graph.edges[node_idx].successors.iter() {
                 let to_node = &ranking_rule_graph.query_graph.nodes[successor_idx as usize];
-                let mut edges =
-                    G::build_visit_to_node(index, txn, db_cache, to_node, &from_node_data)?;
+                let mut edges = G::build_visit_to_node(ctx, to_node, &from_node_data)?;
                 if edges.is_empty() {
                     continue;
                 }

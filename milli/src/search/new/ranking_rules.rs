@@ -1,33 +1,28 @@
-use heed::RoTxn;
-use roaring::RoaringBitmap;
-
-use super::db_cache::DatabaseCache;
 use super::logger::SearchLogger;
-
 use super::QueryGraph;
+use super::SearchContext;
 use crate::new::graph_based_ranking_rule::GraphBasedRankingRule;
 use crate::new::ranking_rule_graph::ProximityGraph;
 use crate::new::ranking_rule_graph::TypoGraph;
 use crate::new::words::Words;
+use roaring::RoaringBitmap;
 // use crate::search::new::sort::Sort;
-use crate::{Index, Result, TermsMatchingStrategy};
+use crate::{Result, TermsMatchingStrategy};
 
-pub trait RankingRuleOutputIter<'transaction, Query> {
+pub trait RankingRuleOutputIter<'search, Query> {
     fn next_bucket(&mut self) -> Result<Option<RankingRuleOutput<Query>>>;
 }
 
-pub struct RankingRuleOutputIterWrapper<'transaction, Query> {
-    iter: Box<dyn Iterator<Item = Result<RankingRuleOutput<Query>>> + 'transaction>,
+pub struct RankingRuleOutputIterWrapper<'search, Query> {
+    iter: Box<dyn Iterator<Item = Result<RankingRuleOutput<Query>>> + 'search>,
 }
-impl<'transaction, Query> RankingRuleOutputIterWrapper<'transaction, Query> {
-    pub fn new(
-        iter: Box<dyn Iterator<Item = Result<RankingRuleOutput<Query>>> + 'transaction>,
-    ) -> Self {
+impl<'search, Query> RankingRuleOutputIterWrapper<'search, Query> {
+    pub fn new(iter: Box<dyn Iterator<Item = Result<RankingRuleOutput<Query>>> + 'search>) -> Self {
         Self { iter }
     }
 }
-impl<'transaction, Query> RankingRuleOutputIter<'transaction, Query>
-    for RankingRuleOutputIterWrapper<'transaction, Query>
+impl<'search, Query> RankingRuleOutputIter<'search, Query>
+    for RankingRuleOutputIterWrapper<'search, Query>
 {
     fn next_bucket(&mut self) -> Result<Option<RankingRuleOutput<Query>>> {
         match self.iter.next() {
@@ -44,7 +39,7 @@ pub struct PlaceholderQuery;
 impl RankingRuleQueryTrait for PlaceholderQuery {}
 impl RankingRuleQueryTrait for QueryGraph {}
 
-pub trait RankingRule<'transaction, Query: RankingRuleQueryTrait> {
+pub trait RankingRule<'search, Query: RankingRuleQueryTrait> {
     fn id(&self) -> String;
 
     /// Prepare the ranking rule such that it can start iterating over its
@@ -53,9 +48,7 @@ pub trait RankingRule<'transaction, Query: RankingRuleQueryTrait> {
     /// The given universe is the universe that will be given to [`next_bucket`](RankingRule::next_bucket).
     fn start_iteration(
         &mut self,
-        index: &Index,
-        txn: &'transaction RoTxn,
-        db_cache: &mut DatabaseCache<'transaction>,
+        ctx: &mut SearchContext<'search>,
         logger: &mut dyn SearchLogger<Query>,
         universe: &RoaringBitmap,
         query: &Query,
@@ -70,9 +63,7 @@ pub trait RankingRule<'transaction, Query: RankingRuleQueryTrait> {
     /// - the universe given to [`start_iteration`](RankingRule::start_iteration)
     fn next_bucket(
         &mut self,
-        index: &Index,
-        txn: &'transaction RoTxn,
-        db_cache: &mut DatabaseCache<'transaction>,
+        ctx: &mut SearchContext<'search>,
         logger: &mut dyn SearchLogger<Query>,
         universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<Query>>>;
@@ -81,9 +72,7 @@ pub trait RankingRule<'transaction, Query: RankingRuleQueryTrait> {
     /// The next call to this ranking rule, if any, will be [`start_iteration`](RankingRule::start_iteration).
     fn end_iteration(
         &mut self,
-        index: &Index,
-        txn: &'transaction RoTxn,
-        db_cache: &mut DatabaseCache<'transaction>,
+        ctx: &mut SearchContext<'search>,
         logger: &mut dyn SearchLogger<Query>,
     );
 }
@@ -98,11 +87,9 @@ pub struct RankingRuleOutput<Q> {
 
 // TODO: can make it generic over the query type (either query graph or placeholder) fairly easily
 #[allow(clippy::too_many_arguments)]
-pub fn apply_ranking_rules<'transaction>(
-    index: &Index,
-    txn: &'transaction heed::RoTxn,
+pub fn apply_ranking_rules<'search>(
+    ctx: &mut SearchContext<'search>,
     // TODO: ranking rules parameter
-    db_cache: &mut DatabaseCache<'transaction>,
     query_graph: &QueryGraph,
     universe: &RoaringBitmap,
     from: usize,
@@ -115,7 +102,7 @@ pub fn apply_ranking_rules<'transaction>(
     let proximity = &mut GraphBasedRankingRule::<ProximityGraph>::new("proximity".to_owned());
     let typo = &mut GraphBasedRankingRule::<TypoGraph>::new("typo".to_owned());
     // TODO: ranking rules given as argument
-    let mut ranking_rules: Vec<&mut dyn RankingRule<'transaction, QueryGraph>> =
+    let mut ranking_rules: Vec<&mut dyn RankingRule<'search, QueryGraph>> =
         vec![words, typo, proximity /*sort*/];
 
     logger.ranking_rules(&ranking_rules);
@@ -126,7 +113,7 @@ pub fn apply_ranking_rules<'transaction>(
 
     let ranking_rules_len = ranking_rules.len();
     logger.start_iteration_ranking_rule(0, ranking_rules[0], query_graph, universe);
-    ranking_rules[0].start_iteration(index, txn, db_cache, logger, universe, query_graph)?;
+    ranking_rules[0].start_iteration(ctx, logger, universe, query_graph)?;
 
     let mut candidates = vec![RoaringBitmap::default(); ranking_rules_len];
     candidates[0] = universe.clone();
@@ -142,7 +129,7 @@ pub fn apply_ranking_rules<'transaction>(
                 &candidates[cur_ranking_rule_index],
             );
             candidates[cur_ranking_rule_index].clear();
-            ranking_rules[cur_ranking_rule_index].end_iteration(index, txn, db_cache, logger);
+            ranking_rules[cur_ranking_rule_index].end_iteration(ctx, logger);
             if cur_ranking_rule_index == 0 {
                 break;
             } else {
@@ -206,7 +193,7 @@ pub fn apply_ranking_rules<'transaction>(
             continue;
         }
 
-        let Some(next_bucket) = ranking_rules[cur_ranking_rule_index].next_bucket(index, txn, db_cache, logger, &candidates[cur_ranking_rule_index])? else {
+        let Some(next_bucket) = ranking_rules[cur_ranking_rule_index].next_bucket(ctx, logger, &candidates[cur_ranking_rule_index])? else {
             // TODO: add remaining candidates automatically here?
             back!();
             continue;
@@ -239,9 +226,7 @@ pub fn apply_ranking_rules<'transaction>(
             &candidates[cur_ranking_rule_index],
         );
         ranking_rules[cur_ranking_rule_index].start_iteration(
-            index,
-            txn,
-            db_cache,
+            ctx,
             logger,
             &next_bucket.candidates,
             &next_bucket.query,
@@ -255,9 +240,7 @@ pub fn apply_ranking_rules<'transaction>(
 mod tests {
     // use crate::allocator::ALLOC;
     use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
-    use crate::index::tests::TempIndex;
-    use crate::new::db_cache::DatabaseCache;
-    use crate::new::execute_search;
+    use crate::new::{execute_search, SearchContext};
     use big_s::S;
     use heed::EnvOpenOptions;
     use maplit::hashset;
@@ -268,55 +251,6 @@ mod tests {
     use crate::new::logger::DefaultSearchLogger;
     use crate::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
     use crate::{Criterion, Index, Object, Search, TermsMatchingStrategy};
-
-    #[test]
-    fn execute_new_search() {
-        let index = TempIndex::new();
-        index
-            .add_documents(documents!([
-                {
-                    "id": 7,
-                    "text": "the super quick super brown fox jumps over",
-                },
-                {
-                    "id": 8,
-                    "text": "the super quick brown fox jumps over",
-                },
-                {
-                    "id": 9,
-                    "text": "the quick super brown fox jumps over",
-                },
-                {
-                    "id": 10,
-                    "text": "the quick brown fox jumps over",
-                },
-                {
-                    "id": 11,
-                    "text": "the quick brown fox jumps over the lazy dog",
-                },
-                {
-                    "id": 12,
-                    "text": "the quick brown cat jumps over the lazy dog",
-                },
-            ]))
-            .unwrap();
-        let txn = index.read_txn().unwrap();
-        let mut db_cache = DatabaseCache::default();
-
-        let results = execute_search(
-            &index,
-            &txn,
-            &mut db_cache,
-            "releases from poison by the government",
-            None,
-            0,
-            50,
-            &mut DefaultSearchLogger,
-        )
-        .unwrap();
-
-        println!("{results:?}")
-    }
 
     #[test]
     fn search_wiki_new() {
@@ -331,24 +265,20 @@ mod tests {
         // loop {
         let start = Instant::now();
 
-        let mut db_cache = DatabaseCache::default();
-
-        let mut logger = crate::new::logger::detailed::DetailedSearchLogger::new("log");
+        // let mut logger = crate::new::logger::detailed::DetailedSearchLogger::new("log");
 
         let results = execute_search(
-            &index,
-            &txn,
-            &mut db_cache,
+            &mut SearchContext::new(&index, &txn),
             "releases from poison by the government",
             None,
             0,
             20,
-            // &mut DefaultSearchLogger,
-            &mut logger,
+            &mut DefaultSearchLogger,
+            // &mut logger,
         )
         .unwrap();
 
-        logger.write_d2_description();
+        // logger.write_d2_description();
 
         let elapsed = start.elapsed();
 
@@ -425,19 +355,15 @@ mod tests {
         let index = Index::new(options, "data_movies").unwrap();
         let txn = index.read_txn().unwrap();
 
-        let primary_key = index.primary_key(&txn).unwrap().unwrap();
-        let primary_key = index.fields_ids_map(&txn).unwrap().id(primary_key).unwrap();
+        // let primary_key = index.primary_key(&txn).unwrap().unwrap();
+        // let primary_key = index.fields_ids_map(&txn).unwrap().id(primary_key).unwrap();
         // loop {
         let start = Instant::now();
 
-        let mut db_cache = DatabaseCache::default();
-
         let mut logger = crate::new::logger::detailed::DetailedSearchLogger::new("log");
-
+        let mut ctx = SearchContext::new(&index, &txn);
         let results = execute_search(
-            &index,
-            &txn,
-            &mut db_cache,
+            &mut ctx,
             "releases from poison by the government",
             None,
             0,
@@ -447,24 +373,24 @@ mod tests {
         )
         .unwrap();
 
-        logger.write_d2_description();
+        logger.write_d2_description(&mut ctx);
 
         let elapsed = start.elapsed();
 
-        let ids = index
-            .documents(&txn, results.iter().copied())
-            .unwrap()
-            .into_iter()
-            .map(|x| {
-                let obkv = &x.1;
-                let id = obkv.get(primary_key).unwrap();
-                let id: serde_json::Value = serde_json::from_slice(id).unwrap();
-                id.as_str().unwrap().to_owned()
-            })
-            .collect::<Vec<_>>();
+        // let ids = index
+        //     .documents(&txn, results.iter().copied())
+        //     .unwrap()
+        //     .into_iter()
+        //     .map(|x| {
+        //         let obkv = &x.1;
+        //         let id = obkv.get(primary_key).unwrap();
+        //         let id: serde_json::Value = serde_json::from_slice(id).unwrap();
+        //         id.as_str().unwrap().to_owned()
+        //     })
+        //     .collect::<Vec<_>>();
 
         println!("{}us: {results:?}", elapsed.as_micros());
-        println!("external ids: {ids:?}");
+        // println!("external ids: {ids:?}");
         // }
     }
 

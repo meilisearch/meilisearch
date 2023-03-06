@@ -1,34 +1,28 @@
-use std::collections::VecDeque;
-
-use fxhash::FxHashMap;
-use heed::{BytesDecode, RoTxn};
-use roaring::{MultiOps, RoaringBitmap};
-
-use super::db_cache::DatabaseCache;
+use super::interner::Interned;
 use super::query_term::{Phrase, QueryTerm, WordDerivations};
-use super::{QueryGraph, QueryNode};
-
-use crate::{CboRoaringBitmapCodec, Index, Result, RoaringBitmapCodec};
+use super::{QueryGraph, QueryNode, SearchContext};
+use crate::{CboRoaringBitmapCodec, Result, RoaringBitmapCodec};
+use fxhash::FxHashMap;
+use heed::BytesDecode;
+use roaring::{MultiOps, RoaringBitmap};
+use std::collections::VecDeque;
 
 // TODO: manual performance metrics: access to DB, bitmap deserializations/operations, etc.
 #[derive(Default)]
 pub struct NodeDocIdsCache {
     pub cache: FxHashMap<u32, RoaringBitmap>,
 }
-impl NodeDocIdsCache {
-    fn get_docids<'cache, 'transaction>(
+impl<'search> SearchContext<'search> {
+    fn get_node_docids<'cache>(
         &'cache mut self,
-        index: &Index,
-        txn: &'transaction RoTxn,
-        db_cache: &mut DatabaseCache<'transaction>,
         term: &QueryTerm,
         node_idx: u32,
     ) -> Result<&'cache RoaringBitmap> {
-        if self.cache.contains_key(&node_idx) {
-            return Ok(&self.cache[&node_idx]);
+        if self.node_docids_cache.cache.contains_key(&node_idx) {
+            return Ok(&self.node_docids_cache.cache[&node_idx]);
         };
         let docids = match term {
-            QueryTerm::Phrase { phrase } => resolve_phrase(index, txn, db_cache, phrase)?,
+            QueryTerm::Phrase { phrase } => resolve_phrase(self, *phrase)?,
             QueryTerm::Word {
                 derivations:
                     WordDerivations {
@@ -42,15 +36,14 @@ impl NodeDocIdsCache {
                     },
             } => {
                 let mut or_docids = vec![];
-                for word in zero_typo.iter().chain(one_typo.iter()).chain(two_typos.iter()) {
-                    if let Some(word_docids) = db_cache.get_word_docids(index, txn, word)? {
+                for word in zero_typo.iter().chain(one_typo.iter()).chain(two_typos.iter()).copied()
+                {
+                    if let Some(word_docids) = self.get_word_docids(word)? {
                         or_docids.push(word_docids);
                     }
                 }
                 if *use_prefix_db {
-                    if let Some(prefix_docids) =
-                        db_cache.get_prefix_docids(index, txn, original.as_str())?
-                    {
+                    if let Some(prefix_docids) = self.get_prefix_docids(*original)? {
                         or_docids.push(prefix_docids);
                     }
                 }
@@ -58,32 +51,25 @@ impl NodeDocIdsCache {
                     .into_iter()
                     .map(|slice| RoaringBitmapCodec::bytes_decode(slice).unwrap())
                     .collect::<Vec<_>>();
-                for synonym in synonyms {
+                for synonym in synonyms.iter().copied() {
                     // TODO: cache resolve_phrase?
-                    docids.push(resolve_phrase(index, txn, db_cache, synonym)?);
+                    docids.push(resolve_phrase(self, synonym)?);
                 }
-                if let Some((left, right)) = split_words {
-                    if let Some(split_word_docids) =
-                        db_cache.get_word_pair_proximity_docids(index, txn, left, right, 1)?
-                    {
-                        docids.push(CboRoaringBitmapCodec::deserialize_from(split_word_docids)?);
-                    }
+                if let Some(split_words) = split_words {
+                    docids.push(resolve_phrase(self, *split_words)?);
                 }
 
                 MultiOps::union(docids)
             }
         };
-        let _ = self.cache.insert(node_idx, docids);
-        let docids = &self.cache[&node_idx];
+        let _ = self.node_docids_cache.cache.insert(node_idx, docids);
+        let docids = &self.node_docids_cache.cache[&node_idx];
         Ok(docids)
     }
 }
 
-pub fn resolve_query_graph<'transaction>(
-    index: &Index,
-    txn: &'transaction RoTxn,
-    db_cache: &mut DatabaseCache<'transaction>,
-    node_docids_cache: &mut NodeDocIdsCache,
+pub fn resolve_query_graph<'search>(
+    ctx: &mut SearchContext<'search>,
     q: &QueryGraph,
     universe: &RoaringBitmap,
 ) -> Result<RoaringBitmap> {
@@ -111,8 +97,7 @@ pub fn resolve_query_graph<'transaction>(
         let node_docids = match n {
             QueryNode::Term(located_term) => {
                 let term = &located_term.value;
-                let derivations_docids =
-                    node_docids_cache.get_docids(index, txn, db_cache, term, node)?;
+                let derivations_docids = ctx.get_node_docids(term, node)?;
                 predecessors_docids & derivations_docids
             }
             QueryNode::Deleted => {
@@ -143,13 +128,8 @@ pub fn resolve_query_graph<'transaction>(
     panic!()
 }
 
-pub fn resolve_phrase<'transaction>(
-    index: &Index,
-    txn: &'transaction RoTxn,
-    db_cache: &mut DatabaseCache<'transaction>,
-    phrase: &Phrase,
-) -> Result<RoaringBitmap> {
-    let Phrase { words } = phrase;
+pub fn resolve_phrase(ctx: &mut SearchContext, phrase: Interned<Phrase>) -> Result<RoaringBitmap> {
+    let Phrase { words } = ctx.phrase_interner.get(phrase).clone();
     let mut candidates = RoaringBitmap::new();
     let mut first_iter = true;
     let winsize = words.len().min(3);
@@ -161,19 +141,19 @@ pub fn resolve_phrase<'transaction>(
     for win in words.windows(winsize) {
         // Get all the documents with the matching distance for each word pairs.
         let mut bitmaps = Vec::with_capacity(winsize.pow(2));
-        for (offset, s1) in win
+        for (offset, &s1) in win
             .iter()
             .enumerate()
             .filter_map(|(index, word)| word.as_ref().map(|word| (index, word)))
         {
-            for (dist, s2) in win
+            for (dist, &s2) in win
                 .iter()
                 .skip(offset + 1)
                 .enumerate()
                 .filter_map(|(index, word)| word.as_ref().map(|word| (index, word)))
             {
                 if dist == 0 {
-                    match db_cache.get_word_pair_proximity_docids(index, txn, s1, s2, 1)? {
+                    match ctx.get_word_pair_proximity_docids(s1, s2, 1)? {
                         Some(m) => bitmaps.push(CboRoaringBitmapCodec::deserialize_from(m)?),
                         // If there are no documents for this pair, there will be no
                         // results for the phrase query.
@@ -182,13 +162,9 @@ pub fn resolve_phrase<'transaction>(
                 } else {
                     let mut bitmap = RoaringBitmap::new();
                     for dist in 0..=dist {
-                        if let Some(m) = db_cache.get_word_pair_proximity_docids(
-                            index,
-                            txn,
-                            s1,
-                            s2,
-                            dist as u8 + 1,
-                        )? {
+                        if let Some(m) =
+                            ctx.get_word_pair_proximity_docids(s1, s2, dist as u8 + 1)?
+                        {
                             bitmap |= CboRoaringBitmapCodec::deserialize_from(m)?;
                         }
                     }

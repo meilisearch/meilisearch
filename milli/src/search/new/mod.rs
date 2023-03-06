@@ -1,5 +1,6 @@
 mod db_cache;
 mod graph_based_ranking_rule;
+mod interner;
 mod logger;
 mod query_graph;
 mod query_term;
@@ -26,7 +27,9 @@ use query_graph::{QueryGraph, QueryNode};
 use roaring::RoaringBitmap;
 
 use self::{
+    interner::Interner,
     logger::SearchLogger,
+    query_term::Phrase,
     resolve_query_graph::{resolve_query_graph, NodeDocIdsCache},
 };
 
@@ -35,14 +38,32 @@ pub enum BitmapOrAllRef<'s> {
     All,
 }
 
+pub struct SearchContext<'search> {
+    pub index: &'search Index,
+    pub txn: &'search RoTxn<'search>,
+    pub db_cache: DatabaseCache<'search>,
+    pub word_interner: Interner<String>,
+    pub phrase_interner: Interner<Phrase>,
+    pub node_docids_cache: NodeDocIdsCache,
+}
+impl<'search> SearchContext<'search> {
+    pub fn new(index: &'search Index, txn: &'search RoTxn<'search>) -> Self {
+        Self {
+            index,
+            txn,
+            db_cache: <_>::default(),
+            word_interner: <_>::default(),
+            phrase_interner: <_>::default(),
+            node_docids_cache: <_>::default(),
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
-pub fn resolve_maximally_reduced_query_graph<'transaction>(
-    index: &Index,
-    txn: &'transaction heed::RoTxn,
-    db_cache: &mut DatabaseCache<'transaction>,
+pub fn resolve_maximally_reduced_query_graph<'search>(
+    ctx: &mut SearchContext<'search>,
     universe: &RoaringBitmap,
     query_graph: &QueryGraph,
-    node_docids_cache: &mut NodeDocIdsCache,
     matching_strategy: TermsMatchingStrategy,
     logger: &mut dyn SearchLogger<QueryGraph>,
 ) -> Result<RoaringBitmap> {
@@ -73,16 +94,14 @@ pub fn resolve_maximally_reduced_query_graph<'transaction>(
         }
     }
     logger.query_for_universe(&graph);
-    let docids = resolve_query_graph(index, txn, db_cache, node_docids_cache, &graph, universe)?;
+    let docids = resolve_query_graph(ctx, &graph, universe)?;
 
     Ok(docids)
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn execute_search<'transaction>(
-    index: &Index,
-    txn: &'transaction RoTxn,
-    db_cache: &mut DatabaseCache<'transaction>,
+pub fn execute_search<'search>(
+    ctx: &mut SearchContext<'search>,
     query: &str,
     filters: Option<Filter>,
     from: usize,
@@ -90,26 +109,21 @@ pub fn execute_search<'transaction>(
     logger: &mut dyn SearchLogger<QueryGraph>,
 ) -> Result<Vec<u32>> {
     assert!(!query.is_empty());
-    let query_terms = located_query_terms_from_string(index, txn, query.tokenize(), None).unwrap();
-    let graph = QueryGraph::from_query(index, txn, db_cache, query_terms)?;
+    let query_terms = located_query_terms_from_string(ctx, query.tokenize(), None).unwrap();
+    let graph = QueryGraph::from_query(ctx, query_terms)?;
 
     logger.initial_query(&graph);
 
     let universe = if let Some(filters) = filters {
-        filters.evaluate(txn, index)?
+        filters.evaluate(ctx.txn, ctx.index)?
     } else {
-        index.documents_ids(txn)?
+        ctx.index.documents_ids(ctx.txn)?
     };
 
-    let mut node_docids_cache = NodeDocIdsCache::default();
-
     let universe = resolve_maximally_reduced_query_graph(
-        index,
-        txn,
-        db_cache,
+        ctx,
         &universe,
         &graph,
-        &mut node_docids_cache,
         TermsMatchingStrategy::Last,
         logger,
     )?;
@@ -117,5 +131,5 @@ pub fn execute_search<'transaction>(
 
     logger.initial_universe(&universe);
 
-    apply_ranking_rules(index, txn, db_cache, &graph, &universe, from, length, logger)
+    apply_ranking_rules(ctx, &graph, &universe, from, length, logger)
 }

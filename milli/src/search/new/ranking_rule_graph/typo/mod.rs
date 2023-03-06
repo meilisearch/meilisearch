@@ -1,19 +1,17 @@
-use heed::{BytesDecode, RoTxn};
-use roaring::RoaringBitmap;
-
 use super::empty_paths_cache::EmptyPathsCache;
-
 use super::{EdgeDetails, RankingRuleGraph, RankingRuleGraphTrait};
-use crate::new::db_cache::DatabaseCache;
+use crate::new::interner::Interned;
 use crate::new::logger::SearchLogger;
 use crate::new::query_term::{LocatedQueryTerm, Phrase, QueryTerm, WordDerivations};
 use crate::new::resolve_query_graph::resolve_phrase;
-use crate::new::{QueryGraph, QueryNode};
-use crate::{Index, Result, RoaringBitmapCodec};
+use crate::new::{QueryGraph, QueryNode, SearchContext};
+use crate::{Result, RoaringBitmapCodec};
+use heed::BytesDecode;
+use roaring::RoaringBitmap;
 
 #[derive(Clone)]
 pub enum TypoEdge {
-    Phrase { phrase: Phrase },
+    Phrase { phrase: Interned<Phrase> },
     Word { derivations: WordDerivations, nbr_typos: u8 },
 }
 
@@ -30,14 +28,12 @@ impl RankingRuleGraphTrait for TypoGraph {
         }
     }
 
-    fn compute_docids<'db_cache, 'transaction>(
-        index: &Index,
-        txn: &'transaction RoTxn,
-        db_cache: &mut DatabaseCache<'transaction>,
+    fn compute_docids<'db_cache, 'search>(
+        ctx: &mut SearchContext<'search>,
         edge: &Self::EdgeDetails,
     ) -> Result<RoaringBitmap> {
         match edge {
-            TypoEdge::Phrase { phrase } => resolve_phrase(index, txn, db_cache, phrase),
+            TypoEdge::Phrase { phrase } => resolve_phrase(ctx, *phrase),
             TypoEdge::Word { derivations, nbr_typos } => {
                 let words = match nbr_typos {
                     0 => &derivations.zero_typo,
@@ -46,16 +42,14 @@ impl RankingRuleGraphTrait for TypoGraph {
                     _ => panic!(),
                 };
                 let mut docids = RoaringBitmap::new();
-                for word in words.iter() {
-                    let Some(bytes) = db_cache.get_word_docids(index, txn, word)? else { continue };
+                for word in words.iter().copied() {
+                    let Some(bytes) = ctx.get_word_docids(word)? else { continue };
                     let bitmap =
                         RoaringBitmapCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding)?;
                     docids |= bitmap;
                 }
                 if *nbr_typos == 0 {
-                    if let Some(bytes) =
-                        db_cache.get_prefix_docids(index, txn, &derivations.original)?
-                    {
+                    if let Some(bytes) = ctx.get_prefix_docids(derivations.original)? {
                         let bitmap =
                             RoaringBitmapCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding)?;
                         docids |= bitmap;
@@ -66,26 +60,22 @@ impl RankingRuleGraphTrait for TypoGraph {
         }
     }
 
-    fn build_visit_from_node<'transaction>(
-        _index: &Index,
-        _txn: &'transaction RoTxn,
-        _db_cache: &mut DatabaseCache<'transaction>,
+    fn build_visit_from_node<'search>(
+        _ctx: &mut SearchContext<'search>,
         _from_node: &QueryNode,
     ) -> Result<Option<Self::BuildVisitedFromNode>> {
         Ok(Some(()))
     }
 
-    fn build_visit_to_node<'from_data, 'transaction: 'from_data>(
-        _index: &Index,
-        _txn: &'transaction RoTxn,
-        _db_cache: &mut DatabaseCache<'transaction>,
+    fn build_visit_to_node<'from_data, 'search: 'from_data>(
+        _ctx: &mut SearchContext<'search>,
         to_node: &QueryNode,
         _from_node_data: &'from_data Self::BuildVisitedFromNode,
     ) -> Result<Vec<(u8, EdgeDetails<Self::EdgeDetails>)>> {
         match to_node {
             QueryNode::Term(LocatedQueryTerm { value, .. }) => match value {
-                QueryTerm::Phrase { phrase } => {
-                    Ok(vec![(0, EdgeDetails::Data(TypoEdge::Phrase { phrase: phrase.clone() }))])
+                &QueryTerm::Phrase { phrase } => {
+                    Ok(vec![(0, EdgeDetails::Data(TypoEdge::Phrase { phrase }))])
                 }
                 QueryTerm::Word { derivations } => {
                     let mut edges = vec![];

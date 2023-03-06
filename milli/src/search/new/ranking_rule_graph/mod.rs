@@ -7,20 +7,15 @@ mod proximity;
 mod resolve_paths;
 mod typo;
 
+use super::logger::SearchLogger;
+use super::{QueryGraph, QueryNode, SearchContext};
+use crate::Result;
 pub use edge_docids_cache::EdgeDocidsCache;
 pub use empty_paths_cache::EmptyPathsCache;
 pub use proximity::ProximityGraph;
-pub use typo::TypoGraph;
-
-use std::ops::ControlFlow;
-
-use heed::RoTxn;
 use roaring::RoaringBitmap;
-
-use super::db_cache::DatabaseCache;
-use super::logger::SearchLogger;
-use super::{QueryGraph, QueryNode};
-use crate::{Index, Result};
+use std::ops::ControlFlow;
+pub use typo::TypoGraph;
 
 #[derive(Debug, Clone)]
 pub enum EdgeDetails<E> {
@@ -42,6 +37,48 @@ pub struct EdgePointer<'graph, E> {
     pub edge: &'graph Edge<E>,
 }
 
+// pub struct SubWordDerivations {
+//     words: FxHashSet<Interned<String>>,
+//     synonyms: FxHashSet<Interned<Phrase>>, // NO! they're phrases, not strings
+//     split_words: bool,
+//     use_prefix_db: bool,
+// }
+
+// pub struct EdgeWordDerivations {
+//     // TODO: not Option, instead: Any | All | Subset(SubWordDerivations)
+//     from_words: Option<SubWordDerivations>, // ???
+//     to_words: Option<SubWordDerivations>,   // + use prefix db?
+// }
+
+// fn aggregate_edge_word_derivations(
+//     graph: (),
+//     edges: Vec<usize>,
+// ) -> BTreeMap<usize, SubWordDerivations> {
+//     todo!()
+// }
+
+// fn reduce_word_term_to_sub_word_derivations(
+//     term: &mut WordDerivations,
+//     derivations: &SubWordDerivations,
+// ) {
+//     let mut new_one_typo = vec![];
+//     for w in term.one_typo {
+//         if derivations.words.contains(w) {
+//             new_one_typo.push(w);
+//         }
+//     }
+//     if term.use_prefix_db && !derivations.use_prefix_db {
+//         term.use_prefix_db = false;
+//     }
+//     // etc.
+// }
+
+// fn word_derivations_used_by_edge<G: RankingRuleGraphTrait>(
+//     edge: G::EdgeDetails,
+// ) -> SubWordDerivations {
+//     todo!()
+// }
+
 pub trait RankingRuleGraphTrait: Sized {
     /// The details of an edge connecting two query nodes. These details
     /// should be sufficient to compute the edge's cost and associated document ids
@@ -55,10 +92,8 @@ pub trait RankingRuleGraphTrait: Sized {
     fn graphviz_edge_details_label(edge: &Self::EdgeDetails) -> String;
 
     /// Compute the document ids associated with the given edge.
-    fn compute_docids<'transaction>(
-        index: &Index,
-        txn: &'transaction RoTxn,
-        db_cache: &mut DatabaseCache<'transaction>,
+    fn compute_docids<'search>(
+        ctx: &mut SearchContext<'search>,
         edge_details: &Self::EdgeDetails,
     ) -> Result<RoaringBitmap>;
 
@@ -66,19 +101,15 @@ pub trait RankingRuleGraphTrait: Sized {
     ///
     /// This call is followed by zero, one or more calls to [`build_visit_to_node`](RankingRuleGraphTrait::build_visit_to_node),
     /// which builds the actual edges.
-    fn build_visit_from_node<'transaction>(
-        index: &Index,
-        txn: &'transaction RoTxn,
-        db_cache: &mut DatabaseCache<'transaction>,
+    fn build_visit_from_node<'search>(
+        ctx: &mut SearchContext<'search>,
         from_node: &QueryNode,
     ) -> Result<Option<Self::BuildVisitedFromNode>>;
 
     /// Return the cost and details of the edges going from the previously visited node
     /// (with [`build_visit_from_node`](RankingRuleGraphTrait::build_visit_from_node)) to `to_node`.
-    fn build_visit_to_node<'from_data, 'transaction: 'from_data>(
-        index: &Index,
-        txn: &'transaction RoTxn,
-        db_cache: &mut DatabaseCache<'transaction>,
+    fn build_visit_to_node<'from_data, 'search: 'from_data>(
+        ctx: &mut SearchContext<'search>,
         to_node: &QueryNode,
         from_node_data: &'from_data Self::BuildVisitedFromNode,
     ) -> Result<Vec<(u8, EdgeDetails<Self::EdgeDetails>)>>;

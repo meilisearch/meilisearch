@@ -6,7 +6,7 @@ use std::time::Instant;
 use std::{io::Write, path::PathBuf};
 
 use crate::new::ranking_rule_graph::TypoGraph;
-use crate::new::{QueryNode, QueryGraph};
+use crate::new::{QueryNode, QueryGraph, SearchContext};
 use crate::new::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
 use crate::new::ranking_rule_graph::EmptyPathsCache;
 use crate::new::ranking_rule_graph::{Edge, EdgeDetails, RankingRuleGraphTrait};
@@ -176,7 +176,7 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
 }
 
 impl DetailedSearchLogger {
-    pub fn write_d2_description(&self) {
+    pub fn write_d2_description(&self,ctx: &mut SearchContext,) {
         let mut prev_time = self.initial_query_time.unwrap();
         let mut timestamp = vec![];
         fn activated_id(timestamp: &[usize]) -> String {
@@ -193,12 +193,12 @@ impl DetailedSearchLogger {
         writeln!(&mut file, "direction: right").unwrap();
         writeln!(&mut file, "Initial Query Graph: {{").unwrap();
         let initial_query_graph = self.initial_query.as_ref().unwrap();
-        Self::query_graph_d2_description(initial_query_graph, &mut file);
+        Self::query_graph_d2_description(ctx, initial_query_graph, &mut file);
         writeln!(&mut file, "}}").unwrap();
 
         writeln!(&mut file, "Query Graph Used To Compute Universe: {{").unwrap();
         let query_graph_for_universe = self.query_for_universe.as_ref().unwrap();
-        Self::query_graph_d2_description(query_graph_for_universe, &mut file);
+        Self::query_graph_d2_description(ctx, query_graph_for_universe, &mut file);
         writeln!(&mut file, "}}").unwrap();
 
         let initial_universe = self.initial_universe.as_ref().unwrap();
@@ -308,7 +308,7 @@ results.{random} {{
                     let id = format!("{cur_ranking_rule}.{cur_activated_id}");
                     let new_file_path = self.folder_path.join(format!("{id}.d2"));
                     let mut new_file = std::fs::File::create(new_file_path).unwrap();
-                    Self::query_graph_d2_description(query_graph, &mut new_file);
+                    Self::query_graph_d2_description(ctx, query_graph, &mut new_file);
                     writeln!(
                         &mut file,
                         "{id} {{
@@ -323,7 +323,7 @@ results.{random} {{
                     let id = format!("{cur_ranking_rule}.{cur_activated_id}");
                     let new_file_path = self.folder_path.join(format!("{id}.d2"));
                     let mut new_file = std::fs::File::create(new_file_path).unwrap();
-                    Self::ranking_rule_graph_d2_description(graph, paths, empty_paths_cache, distances.clone(), &mut new_file);
+                    Self::ranking_rule_graph_d2_description(ctx, graph, paths, empty_paths_cache, distances.clone(), &mut new_file);
                     writeln!(
                         &mut file,
                         "{id} {{
@@ -339,7 +339,7 @@ results.{random} {{
                     let id = format!("{cur_ranking_rule}.{cur_activated_id}");
                     let new_file_path = self.folder_path.join(format!("{id}.d2"));
                     let mut new_file = std::fs::File::create(new_file_path).unwrap();
-                    Self::ranking_rule_graph_d2_description(graph, paths, empty_paths_cache, distances.clone(), &mut new_file);
+                    Self::ranking_rule_graph_d2_description(ctx,graph, paths, empty_paths_cache, distances.clone(), &mut new_file);
                     writeln!(
                         &mut file,
                         "{id} {{
@@ -352,31 +352,40 @@ results.{random} {{
         writeln!(&mut file, "}}").unwrap();
     }
     
-    fn query_node_d2_desc(node_idx: usize, node: &QueryNode, _distances: &[u64], file: &mut File) {
+    fn query_node_d2_desc(ctx: &mut SearchContext, node_idx: usize, node: &QueryNode, _distances: &[u64], file: &mut File) {
         match &node {
             QueryNode::Term(LocatedQueryTerm { value, .. }) => {
                 match value {
                     QueryTerm::Phrase { phrase } => {
-                        let phrase_str = phrase.description();
+                        let phrase = ctx.phrase_interner.get(*phrase);
+                        let phrase_str =  phrase.description(&ctx.word_interner);
                         writeln!(file,"{node_idx} : \"{phrase_str}\"").unwrap();
                     },
                     QueryTerm::Word { derivations: WordDerivations { original, zero_typo, one_typo, two_typos, use_prefix_db, synonyms, split_words } } => {
+                        let original = ctx.word_interner.get(*original);
                         writeln!(file,"{node_idx} : \"{original}\" {{
 shape: class").unwrap();
-                        for w in zero_typo {
+                        for w in zero_typo.iter().copied() {
+                            let w = ctx.word_interner.get(w);
                             writeln!(file, "\"{w}\" : 0").unwrap();
                         }
-                        for w in one_typo {
+                        for w in one_typo.iter().copied() {
+                            let w = ctx.word_interner.get(w);
                             writeln!(file, "\"{w}\" : 1").unwrap();
                         }
-                        for w in two_typos {
+                        for w in two_typos.iter().copied() {
+                            let w = ctx.word_interner.get(w);
                             writeln!(file, "\"{w}\" : 2").unwrap();
                         }
-                        if let Some((left, right)) = split_words {
-                            writeln!(file, "\"{left} {right}\" : split_words").unwrap();
+                        if let Some(split_words) = split_words {
+                            let phrase = ctx.phrase_interner.get(*split_words);
+                            let phrase_str =  phrase.description(&ctx.word_interner);
+                            writeln!(file, "\"{phrase_str}\" : split_words").unwrap();
                         }
-                        for synonym in synonyms {
-                            writeln!(file, "\"{}\" : synonym", synonym.description()).unwrap();
+                        for synonym in synonyms.iter().copied() {
+                            let phrase = ctx.phrase_interner.get(synonym);
+                            let phrase_str =  phrase.description(&ctx.word_interner);
+                            writeln!(file, "\"{phrase_str}\" : synonym").unwrap();
                         }
                         if *use_prefix_db {
                             writeln!(file, "use prefix DB : true").unwrap();
@@ -398,20 +407,20 @@ shape: class").unwrap();
             },
         }
     }
-    fn query_graph_d2_description(query_graph: &QueryGraph, file: &mut File) {
+    fn query_graph_d2_description(ctx: &mut SearchContext, query_graph: &QueryGraph, file: &mut File) {
         writeln!(file,"direction: right").unwrap();
         for node in 0..query_graph.nodes.len() {
             if matches!(query_graph.nodes[node], QueryNode::Deleted) {
                 continue;
             }
-            Self::query_node_d2_desc(node, &query_graph.nodes[node], &[], file);
+            Self::query_node_d2_desc(ctx, node, &query_graph.nodes[node], &[], file);
             
             for edge in query_graph.edges[node].successors.iter() {
                 writeln!(file, "{node} -> {edge};\n").unwrap();
             }
         }        
     }
-    fn ranking_rule_graph_d2_description<R: RankingRuleGraphTrait>(graph: &RankingRuleGraph<R>, paths: &[Vec<u32>], _empty_paths_cache: &EmptyPathsCache, distances: Vec<Vec<u64>>, file: &mut File) {
+    fn ranking_rule_graph_d2_description<R: RankingRuleGraphTrait>(ctx: &mut SearchContext, graph: &RankingRuleGraph<R>, paths: &[Vec<u32>], _empty_paths_cache: &EmptyPathsCache, distances: Vec<Vec<u64>>, file: &mut File) {
         writeln!(file,"direction: right").unwrap();
 
         writeln!(file, "Proximity Graph {{").unwrap();
@@ -420,7 +429,7 @@ shape: class").unwrap();
                 continue;
             }
             let distances = &distances[node_idx];
-            Self::query_node_d2_desc(node_idx, node, distances.as_slice(), file);
+            Self::query_node_d2_desc(ctx, node_idx, node, distances.as_slice(), file);
         }
         for edge in graph.all_edges.iter().flatten() {
             let Edge { from_node, to_node, details, .. } = edge;
@@ -449,7 +458,7 @@ shape: class").unwrap();
 
         
         writeln!(file, "Shortest Paths {{").unwrap();
-        Self::paths_d2_description(graph, paths, file);
+        Self::paths_d2_description(ctx, graph, paths, file);
         writeln!(file, "}}").unwrap();
 
         // writeln!(file, "Empty Edge Couples {{").unwrap();            
@@ -468,15 +477,18 @@ shape: class").unwrap();
         // }
         // writeln!(file, "}}").unwrap();
     }
-    fn edge_d2_description<R: RankingRuleGraphTrait>(graph: &RankingRuleGraph<R>, edge_idx: u32, file: &mut File) {
+    fn edge_d2_description<R: RankingRuleGraphTrait>(ctx: &mut SearchContext,graph: &RankingRuleGraph<R>, edge_idx: u32, file: &mut File) {
         let Edge { from_node, to_node, cost, .. } = graph.all_edges[edge_idx as usize].as_ref().unwrap() ;
         let from_node = &graph.query_graph.nodes[*from_node as usize];
         let from_node_desc = match from_node {
             QueryNode::Term(term) => match &term.value {
                 QueryTerm::Phrase { phrase } => {
-                    phrase.description()
+                    let phrase = ctx.phrase_interner.get(*phrase);
+                    phrase.description(&ctx.word_interner)
                 },
-                QueryTerm::Word { derivations } => derivations.original.clone(),
+                QueryTerm::Word { derivations } => {
+                    ctx.word_interner.get(derivations.original).to_owned()
+                },
             },
             QueryNode::Deleted => panic!(),
             QueryNode::Start => "START".to_owned(),
@@ -485,8 +497,11 @@ shape: class").unwrap();
         let to_node = &graph.query_graph.nodes[*to_node as usize];
         let to_node_desc = match to_node {
             QueryNode::Term(term) => match &term.value {
-                QueryTerm::Phrase { phrase } => phrase.description(),
-                QueryTerm::Word { derivations } => derivations.original.clone(),
+                QueryTerm::Phrase { phrase } => {
+                    let phrase = ctx.phrase_interner.get(*phrase);
+                    phrase.description(&ctx.word_interner)
+                },
+                QueryTerm::Word { derivations } => ctx.word_interner.get(derivations.original).to_owned(),
             },
             QueryNode::Deleted => panic!(),
             QueryNode::Start => "START".to_owned(),
@@ -496,11 +511,11 @@ shape: class").unwrap();
             shape: class
         }}").unwrap();
     }
-    fn paths_d2_description<R: RankingRuleGraphTrait>(graph: &RankingRuleGraph<R>, paths: &[Vec<u32>], file: &mut File) { 
+    fn paths_d2_description<R: RankingRuleGraphTrait>(ctx: &mut SearchContext, graph: &RankingRuleGraph<R>, paths: &[Vec<u32>], file: &mut File) { 
         for (path_idx, edge_indexes) in paths.iter().enumerate() {
             writeln!(file, "{path_idx} {{").unwrap();
             for edge_idx in edge_indexes.iter() {
-                Self::edge_d2_description(graph, *edge_idx, file);
+                Self::edge_d2_description(ctx, graph, *edge_idx, file);
             }
             for couple_edges in edge_indexes.windows(2) {
                 let [src_edge_idx, dest_edge_idx] = couple_edges else { panic!() };

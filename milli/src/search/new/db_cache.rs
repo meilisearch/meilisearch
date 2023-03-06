@@ -1,51 +1,48 @@
-use std::collections::hash_map::Entry;
-
+use super::{interner::Interned, SearchContext};
+use crate::Result;
 use fxhash::FxHashMap;
 use heed::types::ByteSlice;
-use heed::RoTxn;
-
-use crate::{Index, Result};
+use std::collections::hash_map::Entry;
 
 #[derive(Default)]
-pub struct DatabaseCache<'transaction> {
-    pub word_pair_proximity_docids: FxHashMap<(u8, String, String), Option<&'transaction [u8]>>,
+pub struct DatabaseCache<'search> {
+    // TODO: interner for all database cache keys
+    pub word_pair_proximity_docids:
+        FxHashMap<(u8, Interned<String>, Interned<String>), Option<&'search [u8]>>,
     pub word_prefix_pair_proximity_docids:
-        FxHashMap<(u8, String, String), Option<&'transaction [u8]>>,
+        FxHashMap<(u8, Interned<String>, Interned<String>), Option<&'search [u8]>>,
     pub prefix_word_pair_proximity_docids:
-        FxHashMap<(u8, String, String), Option<&'transaction [u8]>>,
-    pub word_docids: FxHashMap<String, Option<&'transaction [u8]>>,
-    pub exact_word_docids: FxHashMap<String, Option<&'transaction [u8]>>,
-    pub word_prefix_docids: FxHashMap<String, Option<&'transaction [u8]>>,
+        FxHashMap<(u8, Interned<String>, Interned<String>), Option<&'search [u8]>>,
+    pub word_docids: FxHashMap<Interned<String>, Option<&'search [u8]>>,
+    pub exact_word_docids: FxHashMap<Interned<String>, Option<&'search [u8]>>,
+    pub word_prefix_docids: FxHashMap<Interned<String>, Option<&'search [u8]>>,
 }
-impl<'transaction> DatabaseCache<'transaction> {
-    pub fn get_word_docids(
-        &mut self,
-        index: &Index,
-        txn: &'transaction RoTxn,
-        word: &str,
-    ) -> Result<Option<&'transaction [u8]>> {
-        let bitmap_ptr = match self.word_docids.entry(word.to_owned()) {
+impl<'search> SearchContext<'search> {
+    pub fn get_word_docids(&mut self, word: Interned<String>) -> Result<Option<&'search [u8]>> {
+        let bitmap_ptr = match self.db_cache.word_docids.entry(word) {
             Entry::Occupied(bitmap_ptr) => *bitmap_ptr.get(),
             Entry::Vacant(entry) => {
-                let bitmap_ptr = index.word_docids.remap_data_type::<ByteSlice>().get(txn, word)?;
+                let bitmap_ptr = self
+                    .index
+                    .word_docids
+                    .remap_data_type::<ByteSlice>()
+                    .get(self.txn, self.word_interner.get(word))?;
                 entry.insert(bitmap_ptr);
                 bitmap_ptr
             }
         };
         Ok(bitmap_ptr)
     }
-    pub fn get_prefix_docids(
-        &mut self,
-        index: &Index,
-        txn: &'transaction RoTxn,
-        prefix: &str,
-    ) -> Result<Option<&'transaction [u8]>> {
+    pub fn get_prefix_docids(&mut self, prefix: Interned<String>) -> Result<Option<&'search [u8]>> {
         // In the future, this will be a frozen roaring bitmap
-        let bitmap_ptr = match self.word_prefix_docids.entry(prefix.to_owned()) {
+        let bitmap_ptr = match self.db_cache.word_prefix_docids.entry(prefix) {
             Entry::Occupied(bitmap_ptr) => *bitmap_ptr.get(),
             Entry::Vacant(entry) => {
-                let bitmap_ptr =
-                    index.word_prefix_docids.remap_data_type::<ByteSlice>().get(txn, prefix)?;
+                let bitmap_ptr = self
+                    .index
+                    .word_prefix_docids
+                    .remap_data_type::<ByteSlice>()
+                    .get(self.txn, self.word_interner.get(prefix))?;
                 entry.insert(bitmap_ptr);
                 bitmap_ptr
             }
@@ -55,14 +52,12 @@ impl<'transaction> DatabaseCache<'transaction> {
 
     pub fn get_word_pair_proximity_docids(
         &mut self,
-        index: &Index,
-        txn: &'transaction RoTxn,
-        word1: &str,
-        word2: &str,
+        word1: Interned<String>,
+        word2: Interned<String>,
         proximity: u8,
-    ) -> Result<Option<&'transaction [u8]>> {
-        let key = (proximity, word1.to_owned(), word2.to_owned());
-        match self.word_pair_proximity_docids.entry(key.clone()) {
+    ) -> Result<Option<&'search [u8]>> {
+        let key = (proximity, word1, word2);
+        match self.db_cache.word_pair_proximity_docids.entry(key) {
             Entry::Occupied(bitmap_ptr) => Ok(*bitmap_ptr.get()),
             Entry::Vacant(entry) => {
                 // We shouldn't greedily access this DB at all
@@ -86,10 +81,11 @@ impl<'transaction> DatabaseCache<'transaction> {
                 //          output.push(word1, word2, proximities);
                 //      }
                 //  }
-                let bitmap_ptr = index
-                    .word_pair_proximity_docids
-                    .remap_data_type::<ByteSlice>()
-                    .get(txn, &(key.0, key.1.as_str(), key.2.as_str()))?;
+                let bitmap_ptr =
+                    self.index.word_pair_proximity_docids.remap_data_type::<ByteSlice>().get(
+                        self.txn,
+                        &(key.0, self.word_interner.get(key.1), self.word_interner.get(key.2)),
+                    )?;
                 entry.insert(bitmap_ptr);
                 Ok(bitmap_ptr)
             }
@@ -98,20 +94,22 @@ impl<'transaction> DatabaseCache<'transaction> {
 
     pub fn get_word_prefix_pair_proximity_docids(
         &mut self,
-        index: &Index,
-        txn: &'transaction RoTxn,
-        word1: &str,
-        prefix2: &str,
+        word1: Interned<String>,
+        prefix2: Interned<String>,
         proximity: u8,
-    ) -> Result<Option<&'transaction [u8]>> {
-        let key = (proximity, word1.to_owned(), prefix2.to_owned());
-        match self.word_prefix_pair_proximity_docids.entry(key.clone()) {
+    ) -> Result<Option<&'search [u8]>> {
+        let key = (proximity, word1, prefix2);
+        match self.db_cache.word_prefix_pair_proximity_docids.entry(key) {
             Entry::Occupied(bitmap_ptr) => Ok(*bitmap_ptr.get()),
             Entry::Vacant(entry) => {
-                let bitmap_ptr = index
+                let bitmap_ptr = self
+                    .index
                     .word_prefix_pair_proximity_docids
                     .remap_data_type::<ByteSlice>()
-                    .get(txn, &(key.0, key.1.as_str(), key.2.as_str()))?;
+                    .get(
+                        self.txn,
+                        &(key.0, self.word_interner.get(key.1), self.word_interner.get(key.2)),
+                    )?;
                 entry.insert(bitmap_ptr);
                 Ok(bitmap_ptr)
             }
@@ -119,20 +117,26 @@ impl<'transaction> DatabaseCache<'transaction> {
     }
     pub fn get_prefix_word_pair_proximity_docids(
         &mut self,
-        index: &Index,
-        txn: &'transaction RoTxn,
-        left_prefix: &str,
-        right: &str,
+        left_prefix: Interned<String>,
+        right: Interned<String>,
         proximity: u8,
-    ) -> Result<Option<&'transaction [u8]>> {
-        let key = (proximity, left_prefix.to_owned(), right.to_owned());
-        match self.prefix_word_pair_proximity_docids.entry(key) {
+    ) -> Result<Option<&'search [u8]>> {
+        let key = (proximity, left_prefix, right);
+        match self.db_cache.prefix_word_pair_proximity_docids.entry(key) {
             Entry::Occupied(bitmap_ptr) => Ok(*bitmap_ptr.get()),
             Entry::Vacant(entry) => {
-                let bitmap_ptr = index
+                let bitmap_ptr = self
+                    .index
                     .prefix_word_pair_proximity_docids
                     .remap_data_type::<ByteSlice>()
-                    .get(txn, &(proximity, left_prefix, right))?;
+                    .get(
+                        self.txn,
+                        &(
+                            proximity,
+                            self.word_interner.get(left_prefix),
+                            self.word_interner.get(right),
+                        ),
+                    )?;
                 entry.insert(bitmap_ptr);
                 Ok(bitmap_ptr)
             }

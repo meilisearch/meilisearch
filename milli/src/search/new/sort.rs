@@ -1,11 +1,7 @@
-use heed::RoTxn;
-use roaring::RoaringBitmap;
-
-use super::db_cache::DatabaseCache;
 use super::logger::SearchLogger;
 use super::{
     RankingRule, RankingRuleOutput, RankingRuleOutputIter, RankingRuleOutputIterWrapper,
-    RankingRuleQueryTrait,
+    RankingRuleQueryTrait, SearchContext,
 };
 use crate::{
     // facet::FacetType,
@@ -15,18 +11,19 @@ use crate::{
     Index,
     Result,
 };
+use roaring::RoaringBitmap;
 
-pub struct Sort<'transaction, Query> {
+pub struct Sort<'search, Query> {
     field_name: String,
     field_id: Option<FieldId>,
     is_ascending: bool,
     original_query: Option<Query>,
-    iter: Option<RankingRuleOutputIterWrapper<'transaction, Query>>,
+    iter: Option<RankingRuleOutputIterWrapper<'search, Query>>,
 }
-impl<'transaction, Query> Sort<'transaction, Query> {
-    pub fn new(
+impl<'search, Query> Sort<'search, Query> {
+    pub fn _new(
         index: &Index,
-        rtxn: &'transaction heed::RoTxn,
+        rtxn: &'search heed::RoTxn,
         field_name: String,
         is_ascending: bool,
     ) -> Result<Self> {
@@ -37,18 +34,14 @@ impl<'transaction, Query> Sort<'transaction, Query> {
     }
 }
 
-impl<'transaction, Query: RankingRuleQueryTrait> RankingRule<'transaction, Query>
-    for Sort<'transaction, Query>
-{
+impl<'search, Query: RankingRuleQueryTrait> RankingRule<'search, Query> for Sort<'search, Query> {
     fn id(&self) -> String {
         let Self { field_name, is_ascending, .. } = self;
         format!("{field_name}:{}", if *is_ascending { "asc" } else { "desc " })
     }
     fn start_iteration(
         &mut self,
-        index: &Index,
-        txn: &'transaction RoTxn,
-        _db_cache: &mut DatabaseCache<'transaction>,
+        ctx: &mut SearchContext<'search>,
         _logger: &mut dyn SearchLogger<Query>,
         parent_candidates: &RoaringBitmap,
         parent_query_graph: &Query,
@@ -59,8 +52,8 @@ impl<'transaction, Query: RankingRuleQueryTrait> RankingRule<'transaction, Query
                     if self.is_ascending { ascending_facet_sort } else { descending_facet_sort };
 
                 let number_iter = make_iter(
-                    txn,
-                    index
+                    ctx.txn,
+                    ctx.index
                         .facet_id_f64_docids
                         .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
                     field_id,
@@ -68,8 +61,8 @@ impl<'transaction, Query: RankingRuleQueryTrait> RankingRule<'transaction, Query
                 )?;
 
                 let string_iter = make_iter(
-                    txn,
-                    index
+                    ctx.txn,
+                    ctx.index
                         .facet_id_string_docids
                         .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
                     field_id,
@@ -91,9 +84,7 @@ impl<'transaction, Query: RankingRuleQueryTrait> RankingRule<'transaction, Query
 
     fn next_bucket(
         &mut self,
-        _index: &Index,
-        _txn: &'transaction RoTxn,
-        _db_cache: &mut DatabaseCache<'transaction>,
+        _ctx: &mut SearchContext<'search>,
         _logger: &mut dyn SearchLogger<Query>,
         universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<Query>>> {
@@ -110,9 +101,7 @@ impl<'transaction, Query: RankingRuleQueryTrait> RankingRule<'transaction, Query
 
     fn end_iteration(
         &mut self,
-        _index: &Index,
-        _txn: &'transaction RoTxn,
-        _db_cache: &mut DatabaseCache<'transaction>,
+        _ctx: &mut SearchContext<'search>,
         _logger: &mut dyn SearchLogger<Query>,
     ) {
         self.original_query = None;

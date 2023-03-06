@@ -1,30 +1,30 @@
-use std::collections::BTreeMap;
-
-use heed::RoTxn;
-use itertools::Itertools;
-
 use super::ProximityEdge;
-use crate::new::db_cache::DatabaseCache;
 use crate::new::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
 use crate::new::ranking_rule_graph::proximity::WordPair;
 use crate::new::ranking_rule_graph::EdgeDetails;
-use crate::new::QueryNode;
-use crate::{Index, Result};
+use crate::new::{QueryNode, SearchContext};
+use crate::Result;
+use itertools::Itertools;
+use std::collections::BTreeMap;
 
-pub fn visit_from_node(from_node: &QueryNode) -> Result<Option<(WordDerivations, i8)>> {
+pub fn visit_from_node(
+    ctx: &mut SearchContext,
+    from_node: &QueryNode,
+) -> Result<Option<(WordDerivations, i8)>> {
     Ok(Some(match from_node {
         QueryNode::Term(LocatedQueryTerm { value: value1, positions: pos1 }) => match value1 {
             QueryTerm::Word { derivations } => (derivations.clone(), *pos1.end()),
             QueryTerm::Phrase { phrase: phrase1 } => {
-                if let Some(original) = phrase1.words.last().unwrap().as_ref() {
+                let phrase1 = ctx.phrase_interner.get(*phrase1);
+                if let Some(original) = *phrase1.words.last().unwrap() {
                     (
                         WordDerivations {
-                            original: original.clone(),
-                            zero_typo: vec![original.to_owned()],
-                            one_typo: vec![],
-                            two_typos: vec![],
+                            original,
+                            zero_typo: Box::new([original]),
+                            one_typo: Box::new([]),
+                            two_typos: Box::new([]),
                             use_prefix_db: false,
-                            synonyms: vec![],
+                            synonyms: Box::new([]),
                             split_words: None,
                         },
                         *pos1.end(),
@@ -37,12 +37,12 @@ pub fn visit_from_node(from_node: &QueryNode) -> Result<Option<(WordDerivations,
         },
         QueryNode::Start => (
             WordDerivations {
-                original: String::new(),
-                zero_typo: vec![],
-                one_typo: vec![],
-                two_typos: vec![],
+                original: ctx.word_interner.insert(String::new()),
+                zero_typo: Box::new([]),
+                one_typo: Box::new([]),
+                two_typos: Box::new([]),
                 use_prefix_db: false,
-                synonyms: vec![],
+                synonyms: Box::new([]),
                 split_words: None,
             },
             -100,
@@ -51,10 +51,8 @@ pub fn visit_from_node(from_node: &QueryNode) -> Result<Option<(WordDerivations,
     }))
 }
 
-pub fn visit_to_node<'transaction, 'from_data>(
-    index: &Index,
-    txn: &'transaction RoTxn,
-    db_cache: &mut DatabaseCache<'transaction>,
+pub fn visit_to_node<'search, 'from_data>(
+    ctx: &mut SearchContext<'search>,
     to_node: &QueryNode,
     from_node_data: &'from_data (WordDerivations, i8),
 ) -> Result<Vec<(u8, EdgeDetails<ProximityEdge>)>> {
@@ -69,15 +67,16 @@ pub fn visit_to_node<'transaction, 'from_data>(
     let (derivations2, pos2, ngram_len2) = match value2 {
         QueryTerm::Word { derivations } => (derivations.clone(), *pos2.start(), pos2.len()),
         QueryTerm::Phrase { phrase: phrase2 } => {
-            if let Some(original) = phrase2.words.first().unwrap().as_ref() {
+            let phrase2 = ctx.phrase_interner.get(*phrase2);
+            if let Some(original) = *phrase2.words.first().unwrap() {
                 (
                     WordDerivations {
-                        original: original.clone(),
-                        zero_typo: vec![original.to_owned()],
-                        one_typo: vec![],
-                        two_typos: vec![],
+                        original,
+                        zero_typo: Box::new([original]),
+                        one_typo: Box::new([]),
+                        two_typos: Box::new([]),
                         use_prefix_db: false,
-                        synonyms: vec![],
+                        synonyms: Box::new([]),
                         split_words: None,
                     },
                     *pos2.start(),
@@ -106,19 +105,16 @@ pub fn visit_to_node<'transaction, 'from_data>(
 
     let derivations1 = derivations1.all_derivations_except_prefix_db();
     // TODO: eventually, we want to get rid of the uses from `orginal`
-    let original_word_2 = derivations2.original.clone();
     let mut cost_proximity_word_pairs = BTreeMap::<u8, BTreeMap<u8, Vec<WordPair>>>::new();
 
     if updb2 {
         for word1 in derivations1.clone() {
             for proximity in 1..=(8 - ngram_len2) {
                 let cost = (proximity + ngram_len2 - 1) as u8;
-                if db_cache
+                if ctx
                     .get_word_prefix_pair_proximity_docids(
-                        index,
-                        txn,
                         word1,
-                        original_word_2.as_str(),
+                        derivations2.original,
                         proximity as u8,
                     )?
                     .is_some()
@@ -129,16 +125,14 @@ pub fn visit_to_node<'transaction, 'from_data>(
                         .entry(proximity as u8)
                         .or_default()
                         .push(WordPair::WordPrefix {
-                            left: word1.to_owned(),
-                            right_prefix: original_word_2.to_owned(),
+                            left: word1,
+                            right_prefix: derivations2.original,
                         });
                 }
-                if db_cache
+                if ctx
                     .get_prefix_word_pair_proximity_docids(
-                        index,
-                        txn,
-                        original_word_2.as_str(),
-                        word1.as_str(),
+                        derivations2.original,
+                        word1,
                         proximity as u8 - 1,
                     )?
                     .is_some()
@@ -149,8 +143,8 @@ pub fn visit_to_node<'transaction, 'from_data>(
                         .entry(proximity as u8)
                         .or_default()
                         .push(WordPair::WordPrefixSwapped {
-                            left_prefix: original_word_2.to_owned(),
-                            right: word1.to_owned(),
+                            left_prefix: derivations2.original,
+                            right: word1,
                         });
                 }
             }
@@ -164,28 +158,23 @@ pub fn visit_to_node<'transaction, 'from_data>(
     for (word1, word2) in product_derivations {
         for proximity in 1..=(8 - ngram_len2) {
             let cost = (proximity + ngram_len2 - 1) as u8;
-            if db_cache
-                .get_word_pair_proximity_docids(index, txn, word1, word2, proximity as u8)?
-                .is_some()
-            {
+            if ctx.get_word_pair_proximity_docids(word1, word2, proximity as u8)?.is_some() {
                 cost_proximity_word_pairs
                     .entry(cost)
                     .or_default()
                     .entry(proximity as u8)
                     .or_default()
-                    .push(WordPair::Words { left: word1.to_owned(), right: word2.to_owned() });
+                    .push(WordPair::Words { left: word1, right: word2 });
             }
             if proximity > 1
-                && db_cache
-                    .get_word_pair_proximity_docids(index, txn, word2, word1, proximity as u8 - 1)?
-                    .is_some()
+                && ctx.get_word_pair_proximity_docids(word2, word1, proximity as u8 - 1)?.is_some()
             {
                 cost_proximity_word_pairs
                     .entry(cost)
                     .or_default()
                     .entry(proximity as u8 - 1)
                     .or_default()
-                    .push(WordPair::Words { left: word2.to_owned(), right: word1.to_owned() });
+                    .push(WordPair::Words { left: word2, right: word1 });
             }
         }
     }

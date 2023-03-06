@@ -1,13 +1,9 @@
-use std::collections::BTreeSet;
-
-use heed::RoTxn;
-use roaring::RoaringBitmap;
-
-use super::db_cache::DatabaseCache;
 use super::logger::SearchLogger;
-use super::resolve_query_graph::{resolve_query_graph, NodeDocIdsCache};
-use super::{QueryGraph, QueryNode, RankingRule, RankingRuleOutput};
-use crate::{Index, Result, TermsMatchingStrategy};
+use super::resolve_query_graph::resolve_query_graph;
+use super::{QueryGraph, QueryNode, RankingRule, RankingRuleOutput, SearchContext};
+use crate::{Result, TermsMatchingStrategy};
+use roaring::RoaringBitmap;
+use std::collections::BTreeSet;
 
 pub struct Words {
     exhausted: bool,
@@ -15,7 +11,6 @@ pub struct Words {
     iterating: bool,
     positions_to_remove: Vec<i8>,
     terms_matching_strategy: TermsMatchingStrategy,
-    node_docids_cache: NodeDocIdsCache,
 }
 impl Words {
     pub fn new(terms_matching_strategy: TermsMatchingStrategy) -> Self {
@@ -25,20 +20,17 @@ impl Words {
             iterating: false,
             positions_to_remove: vec![],
             terms_matching_strategy,
-            node_docids_cache: <_>::default(),
         }
     }
 }
 
-impl<'transaction> RankingRule<'transaction, QueryGraph> for Words {
+impl<'search> RankingRule<'search, QueryGraph> for Words {
     fn id(&self) -> String {
         "words".to_owned()
     }
     fn start_iteration(
         &mut self,
-        _index: &Index,
-        _txn: &'transaction RoTxn,
-        _db_cache: &mut DatabaseCache<'transaction>,
+        _ctx: &mut SearchContext<'search>,
         _logger: &mut dyn SearchLogger<QueryGraph>,
         _parent_candidates: &RoaringBitmap,
         parent_query_graph: &QueryGraph,
@@ -71,9 +63,7 @@ impl<'transaction> RankingRule<'transaction, QueryGraph> for Words {
 
     fn next_bucket(
         &mut self,
-        index: &Index,
-        txn: &'transaction RoTxn,
-        db_cache: &mut DatabaseCache<'transaction>,
+        ctx: &mut SearchContext<'search>,
         logger: &mut dyn SearchLogger<QueryGraph>,
         universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<QueryGraph>>> {
@@ -87,14 +77,7 @@ impl<'transaction> RankingRule<'transaction, QueryGraph> for Words {
 
         logger.log_words_state(query_graph);
 
-        let this_bucket = resolve_query_graph(
-            index,
-            txn,
-            db_cache,
-            &mut self.node_docids_cache,
-            query_graph,
-            universe,
-        )?;
+        let this_bucket = resolve_query_graph(ctx, query_graph, universe)?;
 
         let child_query_graph = query_graph.clone();
         loop {
@@ -115,9 +98,7 @@ impl<'transaction> RankingRule<'transaction, QueryGraph> for Words {
 
     fn end_iteration(
         &mut self,
-        _index: &Index,
-        _txn: &'transaction RoTxn,
-        _db_cache: &mut DatabaseCache<'transaction>,
+        _ctx: &mut SearchContext<'search>,
         _logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
         self.iterating = false;

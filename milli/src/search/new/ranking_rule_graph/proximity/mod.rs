@@ -1,25 +1,22 @@
 pub mod build;
 pub mod compute_docids;
 
-use heed::RoTxn;
-use roaring::RoaringBitmap;
-
 use super::empty_paths_cache::EmptyPathsCache;
-
 use super::{EdgeDetails, RankingRuleGraphTrait};
-use crate::new::db_cache::DatabaseCache;
+use crate::new::interner::Interned;
 use crate::new::logger::SearchLogger;
 use crate::new::query_term::WordDerivations;
-use crate::new::{QueryGraph, QueryNode};
-use crate::{Index, Result};
+use crate::new::{QueryGraph, QueryNode, SearchContext};
+use crate::Result;
+use roaring::RoaringBitmap;
 
 // TODO: intern the strings, refer to them by their pointer?
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum WordPair {
-    Words { left: String, right: String },
-    WordPrefix { left: String, right_prefix: String },
-    WordPrefixSwapped { left_prefix: String, right: String },
+    Words { left: Interned<String>, right: Interned<String> },
+    WordPrefix { left: Interned<String>, right_prefix: Interned<String> },
+    WordPrefixSwapped { left_prefix: Interned<String>, right: Interned<String> },
 }
 
 #[derive(Clone)]
@@ -40,32 +37,26 @@ impl RankingRuleGraphTrait for ProximityGraph {
         format!(", prox {proximity}, {} pairs", pairs.len())
     }
 
-    fn compute_docids<'db_cache, 'transaction>(
-        index: &Index,
-        txn: &'transaction RoTxn,
-        db_cache: &mut DatabaseCache<'transaction>,
+    fn compute_docids<'search>(
+        ctx: &mut SearchContext<'search>,
         edge: &Self::EdgeDetails,
     ) -> Result<roaring::RoaringBitmap> {
-        compute_docids::compute_docids(index, txn, db_cache, edge)
+        compute_docids::compute_docids(ctx, edge)
     }
 
-    fn build_visit_from_node<'transaction>(
-        _index: &Index,
-        _txn: &'transaction RoTxn,
-        _db_cache: &mut DatabaseCache<'transaction>,
+    fn build_visit_from_node<'search>(
+        ctx: &mut SearchContext<'search>,
         from_node: &QueryNode,
     ) -> Result<Option<Self::BuildVisitedFromNode>> {
-        build::visit_from_node(from_node)
+        build::visit_from_node(ctx, from_node)
     }
 
-    fn build_visit_to_node<'from_data, 'transaction: 'from_data>(
-        index: &Index,
-        txn: &'transaction RoTxn,
-        db_cache: &mut DatabaseCache<'transaction>,
+    fn build_visit_to_node<'from_data, 'search: 'from_data>(
+        ctx: &mut SearchContext<'search>,
         to_node: &QueryNode,
         from_node_data: &'from_data Self::BuildVisitedFromNode,
     ) -> Result<Vec<(u8, EdgeDetails<Self::EdgeDetails>)>> {
-        build::visit_to_node(index, txn, db_cache, to_node, from_node_data)
+        build::visit_to_node(ctx, to_node, from_node_data)
     }
 
     fn log_state(

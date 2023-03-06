@@ -1,13 +1,10 @@
 use std::marker::PhantomData;
 
-use fxhash::FxHashMap;
-use heed::RoTxn;
-use roaring::RoaringBitmap;
-
 use super::{EdgeDetails, RankingRuleGraph, RankingRuleGraphTrait};
-use crate::new::db_cache::DatabaseCache;
-use crate::new::BitmapOrAllRef;
-use crate::{Index, Result};
+use crate::new::{BitmapOrAllRef, SearchContext};
+use crate::Result;
+use fxhash::FxHashMap;
+use roaring::RoaringBitmap;
 
 // TODO: the cache should have a G::EdgeDetails as key
 // but then it means that we should have a quick way of
@@ -25,11 +22,9 @@ impl<G: RankingRuleGraphTrait> Default for EdgeDocidsCache<G> {
     }
 }
 impl<G: RankingRuleGraphTrait> EdgeDocidsCache<G> {
-    pub fn get_edge_docids<'s, 'transaction>(
+    pub fn get_edge_docids<'s, 'search>(
         &'s mut self,
-        index: &Index,
-        txn: &'transaction RoTxn,
-        db_cache: &mut DatabaseCache<'transaction>,
+        ctx: &mut SearchContext<'search>,
         edge_index: u32,
         graph: &RankingRuleGraph<G>,
         // TODO: maybe universe doesn't belong here
@@ -46,7 +41,7 @@ impl<G: RankingRuleGraphTrait> EdgeDocidsCache<G> {
                     return Ok(BitmapOrAllRef::Bitmap(&self.cache[&edge_index]));
                 }
                 // TODO: maybe universe doesn't belong here
-                let docids = universe & G::compute_docids(index, txn, db_cache, details)?;
+                let docids = universe & G::compute_docids(ctx, details)?;
                 let _ = self.cache.insert(edge_index, docids);
                 let docids = &self.cache[&edge_index];
                 Ok(BitmapOrAllRef::Bitmap(docids))
