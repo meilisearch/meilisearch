@@ -36,7 +36,7 @@ async fn perform_snapshot() {
 
     let options = Opt {
         snapshot_dir: snapshot_dir.path().to_owned(),
-        schedule_snapshot: ScheduleSnapshot::Enabled(1),
+        schedule_snapshot: ScheduleSnapshot::Enabled(2),
         ..default_settings(temp.path())
     };
 
@@ -55,7 +55,7 @@ async fn perform_snapshot() {
 
     index.wait_task(2).await;
 
-    sleep(Duration::from_secs(1)).await;
+    sleep(Duration::from_secs(2)).await;
 
     let temp = tempfile::tempdir().unwrap();
 
@@ -82,7 +82,7 @@ async fn perform_snapshot() {
         //server.stats(),
 
         // The original instance contains the snapshotCreation task, while the snapshotted-instance does not. For this reason we need to compare the task queue **after** the task 4
-        server.tasks_filter("?from=4"),
+        server.tasks_filter("?from=2"),
 
         server.index("test").get_all_documents(GetAllDocumentsOptions::default()),
         server.index("test").settings(),
