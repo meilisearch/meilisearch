@@ -87,6 +87,14 @@ jobs:
     if: github.event_name == 'schedule'
     steps:
       - uses: actions/checkout@v3
+      - name: Install needed dependencies
+        run: |
+          apt-get update
+          apt-get install --assume-yes build-essential curl
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
       - name: Run cargo build with all features
         uses: actions-rs/cargo@v1
         with:
