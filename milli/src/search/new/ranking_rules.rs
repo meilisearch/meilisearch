@@ -328,49 +328,50 @@ mod tests {
 
         println!("nbr docids: {}", index.documents_ids(&txn).unwrap().len());
 
-        let primary_key = index.primary_key(&txn).unwrap().unwrap();
-        let primary_key = index.fields_ids_map(&txn).unwrap().id(primary_key).unwrap();
         // loop {
         let start = Instant::now();
 
         let mut db_cache = DatabaseCache::default();
 
-        // let mut logger = crate::new::logger::detailed::DetailedSearchLogger::new("log");
+        let mut logger = crate::new::logger::detailed::DetailedSearchLogger::new("log");
 
         let results = execute_search(
             &index,
             &txn,
             &mut db_cache,
-            "which a the releases from poison by the government",
+            "releases from poison by the government",
             None,
             0,
             20,
-            &mut DefaultSearchLogger,
-            // &mut logger,
+            // &mut DefaultSearchLogger,
+            &mut logger,
         )
         .unwrap();
 
-        // logger.write_d2_description();
+        logger.write_d2_description();
 
         let elapsed = start.elapsed();
 
-        let ids = index
+        let documents = index
             .documents(&txn, results.iter().copied())
             .unwrap()
             .into_iter()
-            .map(|x| {
-                let obkv = &x.1;
-                let id = obkv.get(primary_key).unwrap();
-                let id: serde_json::Value = serde_json::from_slice(id).unwrap();
-                id.as_str().unwrap().to_owned()
+            .map(|(id, obkv)| {
+                let mut object = serde_json::Map::default();
+                for (fid, fid_name) in index.fields_ids_map(&txn).unwrap().iter() {
+                    let value = obkv.get(fid).unwrap();
+                    let value: serde_json::Value = serde_json::from_slice(value).unwrap();
+                    object.insert(fid_name.to_owned(), value);
+                }
+                (id, serde_json::to_string_pretty(&object).unwrap())
             })
             .collect::<Vec<_>>();
 
-        println!("{}us: {results:?}", elapsed.as_micros());
-        println!("external ids: {ids:?}");
-        // println!("max_resident: {}", ALLOC.max_resident.load(std::sync::atomic::Ordering::SeqCst));
-        // println!("allocated: {}", ALLOC.allocated.load(std::sync::atomic::Ordering::SeqCst));
-        // }
+        println!("{}us: {:?}", elapsed.as_micros(), results);
+        for (id, document) in documents {
+            println!("{id}:");
+            println!("{document}");
+        }
     }
 
     #[test]
@@ -385,9 +386,6 @@ mod tests {
         let rr = index.criteria(&txn).unwrap();
         println!("{rr:?}");
 
-        let primary_key = index.primary_key(&txn).unwrap().unwrap();
-        let primary_key = index.fields_ids_map(&txn).unwrap().id(primary_key).unwrap();
-
         let start = Instant::now();
 
         let mut s = Search::new(&txn, &index);
@@ -398,20 +396,26 @@ mod tests {
 
         let elapsed = start.elapsed();
 
-        let ids = index
+        let documents = index
             .documents(&txn, docs.documents_ids.iter().copied())
             .unwrap()
             .into_iter()
-            .map(|x| {
-                let obkv = &x.1;
-                let id = obkv.get(primary_key).unwrap();
-                let id: serde_json::Value = serde_json::from_slice(id).unwrap();
-                id.as_str().unwrap().to_owned()
+            .map(|(id, obkv)| {
+                let mut object = serde_json::Map::default();
+                for (fid, fid_name) in index.fields_ids_map(&txn).unwrap().iter() {
+                    let value = obkv.get(fid).unwrap();
+                    let value: serde_json::Value = serde_json::from_slice(value).unwrap();
+                    object.insert(fid_name.to_owned(), value);
+                }
+                (id, serde_json::to_string_pretty(&object).unwrap())
             })
             .collect::<Vec<_>>();
 
         println!("{}us: {:?}", elapsed.as_micros(), docs.documents_ids);
-        println!("external ids: {ids:?}");
+        for (id, document) in documents {
+            println!("{id}:");
+            println!("{document}");
+        }
     }
     #[test]
     fn search_movies_new() {
