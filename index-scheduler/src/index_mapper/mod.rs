@@ -432,14 +432,14 @@ impl IndexMapper {
         &self,
         wtxn: &mut RwTxn,
         index_uid: &str,
-        stats: IndexStats,
+        stats: &IndexStats,
     ) -> Result<()> {
         let uuid = self
             .index_mapping
             .get(wtxn, index_uid)?
             .ok_or_else(|| Error::IndexNotFound(index_uid.to_string()))?;
 
-        self.index_stats.put(wtxn, &uuid, &stats)?;
+        self.index_stats.put(wtxn, &uuid, stats)?;
         Ok(())
     }
 

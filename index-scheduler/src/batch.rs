@@ -850,7 +850,7 @@ impl IndexScheduler {
                     let index_rtxn = index.read_txn()?;
                     let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)?;
                     let mut wtxn = self.env.write_txn()?;
-                    self.index_mapper.store_stats_of(&mut wtxn, &index_uid, stats)?;
+                    self.index_mapper.store_stats_of(&mut wtxn, &index_uid, &stats)?;
                     wtxn.commit()?;
                     Ok(())
                 }();
@@ -905,7 +905,7 @@ impl IndexScheduler {
                     let mut wtxn = self.env.write_txn()?;
                     let index_rtxn = index.read_txn()?;
                     let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)?;
-                    self.index_mapper.store_stats_of(&mut wtxn, &index_uid, stats)?;
+                    self.index_mapper.store_stats_of(&mut wtxn, &index_uid, &stats)?;
                     wtxn.commit()?;
                     Ok(())
                 }();
