@@ -101,6 +101,9 @@ pub enum KindDump {
         documents_ids: Vec<String>,
     },
     DocumentClear,
+    DocumentDeletionByFilter {
+        filter: String,
+    },
     Settings {
         settings: Box<meilisearch_types::settings::Settings<Unchecked>>,
         is_deletion: bool,
@@ -165,6 +168,9 @@ impl From<KindWithContent> for KindDump {
             },
             KindWithContent::DocumentDeletion { documents_ids, .. } => {
                 KindDump::DocumentDeletion { documents_ids }
+            }
+            KindWithContent::DocumentDeletionByFilter { filter_expr, .. } => {
+                KindDump::DocumentDeletionByFilter { filter: filter_expr.to_string() }
             }
             KindWithContent::DocumentClear { .. } => KindDump::DocumentClear,
             KindWithContent::SettingsUpdate {

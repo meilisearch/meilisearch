@@ -112,6 +112,8 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     InvalidGeoField(#[from] GeoError),
     #[error("{0}")]
     InvalidFilter(String),
+    #[error("Invalid type for filter subexpression: `expected {}, found: {1}`.", .0.join(", "))]
+    InvalidFilterExpression(&'static [&'static str], Value),
     #[error("Attribute `{}` is not sortable. {}",
         .field,
         match .valid_fields.is_empty() {

@@ -25,6 +25,7 @@ enum AutobatchKind {
         primary_key: Option<String>,
     },
     DocumentDeletion,
+    DocumentDeletionByFilter,
     DocumentClear,
     Settings {
         allow_index_creation: bool,
@@ -64,6 +65,9 @@ impl From<KindWithContent> for AutobatchKind {
             } => AutobatchKind::DocumentImport { method, allow_index_creation, primary_key },
             KindWithContent::DocumentDeletion { .. } => AutobatchKind::DocumentDeletion,
             KindWithContent::DocumentClear { .. } => AutobatchKind::DocumentClear,
+            KindWithContent::DocumentDeletionByFilter { .. } => {
+                AutobatchKind::DocumentDeletionByFilter
+            }
             KindWithContent::SettingsUpdate { allow_index_creation, is_deletion, .. } => {
                 AutobatchKind::Settings {
                     allow_index_creation: allow_index_creation && !is_deletion,
@@ -96,6 +100,9 @@ pub enum BatchKind {
     },
     DocumentDeletion {
         deletion_ids: Vec<TaskId>,
+    },
+    DocumentDeletionByFilter {
+        id: TaskId,
     },
     ClearAndSettings {
         other: Vec<TaskId>,
@@ -195,6 +202,9 @@ impl BatchKind {
             K::DocumentDeletion => {
                 (Continue(BatchKind::DocumentDeletion { deletion_ids: vec![task_id] }), false)
             }
+            K::DocumentDeletionByFilter => {
+                (Break(BatchKind::DocumentDeletionByFilter { id: task_id }), false)
+            }
             K::Settings { allow_index_creation } => (
                 Continue(BatchKind::Settings { allow_index_creation, settings_ids: vec![task_id] }),
                 allow_index_creation,
@@ -212,7 +222,7 @@ impl BatchKind {
 
         match (self, kind) {
             // We don't batch any of these operations
-            (this, K::IndexCreation | K::IndexUpdate | K::IndexSwap) => Break(this),
+            (this, K::IndexCreation | K::IndexUpdate | K::IndexSwap | K::DocumentDeletionByFilter) => Break(this),
             // We must not batch tasks that don't have the same index creation rights if the index doesn't already exists.
             (this, kind) if !index_already_exists && this.allow_index_creation() == Some(false) && kind.allow_index_creation() == Some(true) => {
                 Break(this)
@@ -471,7 +481,8 @@ impl BatchKind {
                 BatchKind::IndexCreation { .. }
                 | BatchKind::IndexDeletion { .. }
                 | BatchKind::IndexUpdate { .. }
-                | BatchKind::IndexSwap { .. },
+                | BatchKind::IndexSwap { .. }
+                | BatchKind::DocumentDeletionByFilter { .. },
                 _,
             ) => {
                 unreachable!()
