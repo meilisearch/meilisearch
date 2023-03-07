@@ -675,9 +675,6 @@ impl IndexScheduler {
                 }
 
                 // 3. Snapshot every indexes
-                // TODO we are opening all of the indexes it can be too much we should unload all
-                //      of the indexes we are trying to open. It would be even better to only unload
-                //      the ones that were opened by us. Or maybe use a LRU in the index mapper.
                 for result in self.index_mapper.index_mapping.iter(&rtxn)? {
                     let (name, uuid) = result?;
                     let index = self.index_mapper.index(&rtxn, name)?;
@@ -714,6 +711,14 @@ impl IndexScheduler {
                 // 5.3 Change the permission to make the snapshot readonly
                 let mut permissions = file.metadata()?.permissions();
                 permissions.set_readonly(true);
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    #[allow(clippy::non_octal_unix_permissions)]
+                    //                     rwxrwxrwx
+                    permissions.set_mode(0b100100100);
+                }
+
                 file.set_permissions(permissions)?;
 
                 for task in &mut tasks {

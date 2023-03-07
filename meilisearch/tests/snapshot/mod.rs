@@ -1,8 +1,8 @@
 use std::time::Duration;
 
+use actix_rt::time::sleep;
 use meilisearch::option::ScheduleSnapshot;
 use meilisearch::Opt;
-use tokio::time::sleep;
 
 use crate::common::server::default_settings;
 use crate::common::{GetAllDocumentsOptions, Server};
@@ -23,21 +23,20 @@ macro_rules! verify_snapshot {
                     };
                     let (snapshot, _) = test(snapshot.clone()).await;
                     let (orig, _) = test(orig.clone()).await;
-                    assert_eq!(snapshot, orig);
+                    assert_eq!(snapshot, orig, "Got \n{}\nWhile expecting:\n{}", serde_json::to_string_pretty(&snapshot).unwrap(), serde_json::to_string_pretty(&orig).unwrap());
                 }
             )*
     };
 }
 
 #[actix_rt::test]
-#[ignore] // TODO: unignore
 async fn perform_snapshot() {
     let temp = tempfile::tempdir().unwrap();
     let snapshot_dir = tempfile::tempdir().unwrap();
 
     let options = Opt {
         snapshot_dir: snapshot_dir.path().to_owned(),
-        schedule_snapshot: ScheduleSnapshot::Enabled(1),
+        schedule_snapshot: ScheduleSnapshot::Enabled(2),
         ..default_settings(temp.path())
     };
 
@@ -61,6 +60,16 @@ async fn perform_snapshot() {
     let temp = tempfile::tempdir().unwrap();
 
     let snapshot_path = snapshot_dir.path().to_owned().join("db.snapshot");
+    #[cfg_attr(windows, allow(unused))]
+    let snapshot_meta = std::fs::metadata(&snapshot_path).unwrap();
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = snapshot_meta.permissions().mode();
+        //                                                    rwxrwxrwx
+        meili_snap::snapshot!(format!("{:b}", mode), @"1000000100100100");
+    }
 
     let options = Opt { import_snapshot: Some(snapshot_path), ..default_settings(temp.path()) };
 
@@ -71,7 +80,10 @@ async fn perform_snapshot() {
         // for some reason the db sizes differ. this may be due to the compaction options we have
         // set when performing the snapshot
         //server.stats(),
-        server.tasks(),
+
+        // The original instance contains the snapshotCreation task, while the snapshotted-instance does not. For this reason we need to compare the task queue **after** the task 4
+        server.tasks_filter("?from=2"),
+
         server.index("test").get_all_documents(GetAllDocumentsOptions::default()),
         server.index("test").settings(),
         server.index("test1").get_all_documents(GetAllDocumentsOptions::default()),
