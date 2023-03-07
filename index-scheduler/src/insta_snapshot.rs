@@ -183,6 +183,9 @@ fn snapshot_details(d: &Details) -> String {
             provided_ids: received_document_ids,
             deleted_documents,
         } => format!("{{ received_document_ids: {received_document_ids}, deleted_documents: {deleted_documents:?} }}"),
+        Details::DocumentDeletionByFilter { original_filter, deleted_documents } => format!(
+           "{{ original_filter: {original_filter}, deleted_documents: {deleted_documents:?} }}"
+        ),
         Details::ClearAll { deleted_documents } => {
             format!("{{ deleted_documents: {deleted_documents:?} }}")
         },

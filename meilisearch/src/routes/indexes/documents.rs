@@ -17,7 +17,6 @@ use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
-use meilisearch_types::milli::InternalError;
 use meilisearch_types::star_or::OptionStarOrList;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::{milli, Document, Index};
@@ -381,31 +380,6 @@ pub enum DocumentDeletionQuery {
     Object { filter: Option<Value> },
 }
 
-/// Parses a Json encoded document id and validate it, returning a user error when it is one.
-/// FIXME: stolen from milli
-fn validate_document_id_value(document_id: Value) -> String {
-    match document_id {
-        Value::String(string) => match validate_document_id(&string) {
-            Some(s) if s.len() == string.len() => string,
-            Some(s) => s.to_string(),
-            None => panic!(),
-        },
-        Value::Number(number) if number.is_i64() => number.to_string(),
-        _content => panic!(),
-    }
-}
-
-/// FIXME: stolen from milli
-fn validate_document_id(document_id: &str) -> Option<&str> {
-    if !document_id.is_empty()
-        && document_id.chars().all(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_'))
-    {
-        Some(document_id)
-    } else {
-        None
-    }
-}
-
 pub async fn delete_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
@@ -428,34 +402,22 @@ pub async fn delete_documents(
             debug!("filter: {:?}", filter);
 
             // FIXME: spawn_blocking
-            if let Some(ref filter) = filter {
-                if let Some(facets) = crate::search::parse_filter(filter)? {
+            if let Some(mut filter) = filter {
+                if let Some(facets) = crate::search::parse_filter(&filter)? {
                     debug!("facets: {:?}", facets);
 
-                    let index = index_scheduler.index(&index_uid)?;
-                    let rtxn = index.read_txn()?;
-                    let filtered_candidates = facets.evaluate(&rtxn, &index)?;
-                    debug!("filtered_candidates.len(): {:?}", filtered_candidates.len());
+                    let task = KindWithContent::DocumentDeletionByFilter {
+                        index_uid: index_uid.to_string(),
+                        filter_expr: filter.take(),
+                    };
 
-                    // FIXME: unwraps
-                    let primary_key = index.primary_key(&rtxn)?.unwrap();
-                    let primary_key = index.fields_ids_map(&rtxn)?.id(primary_key).unwrap();
+                    let task: SummarizedTaskView =
+                        tokio::task::spawn_blocking(move || index_scheduler.register(task))
+                            .await??
+                            .into();
 
-                    let documents = index.documents(&rtxn, filtered_candidates.into_iter())?;
-                    debug!("documents.len(): {:?}", documents.len());
-                    let documents: Vec<String> = documents
-                        .into_iter()
-                        .map(|(_, document)| {
-                            let value = document.get(primary_key).unwrap();
-                            let value: Value = serde_json::from_slice(value)
-                                .map_err(InternalError::SerdeJson)
-                                .unwrap();
-
-                            validate_document_id_value(value)
-                        })
-                        .collect();
-                    debug!("documents: {:?}", documents);
-                    documents
+                    debug!("returns: {:?}", task);
+                    return Ok(HttpResponse::Accepted().json(task));
                 } else {
                     vec![]
                 }
