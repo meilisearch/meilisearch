@@ -260,13 +260,17 @@ pub fn create_all_stats(
     let mut indexes = BTreeMap::new();
     let mut database_size = 0;
 
-    // accumulate the size of each indexes
     for index_uid in index_scheduler.index_names()? {
+        // Accumulate the size of all indexes, even unauthorized ones, so
+        // as to return a database_size representative of the correct database size on disk.
+        // See <https://github.com/meilisearch/meilisearch/pull/3541#discussion_r1126747643> for context.
+        let stats = index_scheduler.index_stats(&index_uid)?;
+        database_size += stats.inner_stats.database_size;
+
         if !filters.is_index_authorized(&index_uid) {
             continue;
         }
 
-        let stats = index_scheduler.index_stats(&index_uid)?;
         last_task = last_task.map_or(Some(stats.inner_stats.updated_at), |last| {
             Some(last.max(stats.inner_stats.updated_at))
         });
