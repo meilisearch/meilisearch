@@ -7,31 +7,26 @@ mod query_term;
 mod ranking_rule_graph;
 mod ranking_rules;
 mod resolve_query_graph;
+mod small_bitmap;
 mod sort;
 mod words;
 
-use std::collections::BTreeSet;
-
-pub use ranking_rules::{
-    apply_ranking_rules, RankingRule, RankingRuleOutput, RankingRuleOutputIter,
-    RankingRuleOutputIterWrapper, RankingRuleQueryTrait,
-};
-
-use crate::{
-    new::query_term::located_query_terms_from_string, Filter, Index, Result, TermsMatchingStrategy,
-};
+use self::interner::Interner;
+use self::logger::SearchLogger;
+use self::query_term::Phrase;
+use self::resolve_query_graph::{resolve_query_graph, NodeDocIdsCache};
+use crate::new::query_term::located_query_terms_from_string;
+use crate::{Filter, Index, Result, TermsMatchingStrategy};
 use charabia::Tokenize;
 use db_cache::DatabaseCache;
 use heed::RoTxn;
 use query_graph::{QueryGraph, QueryNode};
-use roaring::RoaringBitmap;
-
-use self::{
-    interner::Interner,
-    logger::SearchLogger,
-    query_term::Phrase,
-    resolve_query_graph::{resolve_query_graph, NodeDocIdsCache},
+pub use ranking_rules::{
+    apply_ranking_rules, RankingRule, RankingRuleOutput, RankingRuleOutputIter,
+    RankingRuleOutputIterWrapper, RankingRuleQueryTrait,
 };
+use roaring::RoaringBitmap;
+use std::collections::BTreeSet;
 
 pub enum BitmapOrAllRef<'s> {
     Bitmap(&'s RoaringBitmap),
@@ -109,7 +104,7 @@ pub fn execute_search<'search>(
     logger: &mut dyn SearchLogger<QueryGraph>,
 ) -> Result<Vec<u32>> {
     assert!(!query.is_empty());
-    let query_terms = located_query_terms_from_string(ctx, query.tokenize(), None).unwrap();
+    let query_terms = located_query_terms_from_string(ctx, query.tokenize(), None)?;
     let graph = QueryGraph::from_query(ctx, query_terms)?;
 
     logger.initial_query(&graph);
@@ -127,7 +122,7 @@ pub fn execute_search<'search>(
         TermsMatchingStrategy::Last,
         logger,
     )?;
-    // TODO: create ranking rules here, reuse the node docids cache for the words ranking rule
+    // TODO: create ranking rules here
 
     logger.initial_universe(&universe);
 

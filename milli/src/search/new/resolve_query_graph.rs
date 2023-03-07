@@ -1,5 +1,6 @@
 use super::interner::Interned;
 use super::query_term::{Phrase, QueryTerm, WordDerivations};
+use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, QueryNode, SearchContext};
 use crate::{CboRoaringBitmapCodec, Result, RoaringBitmapCodec};
 use fxhash::FxHashMap;
@@ -10,13 +11,13 @@ use std::collections::VecDeque;
 // TODO: manual performance metrics: access to DB, bitmap deserializations/operations, etc.
 #[derive(Default)]
 pub struct NodeDocIdsCache {
-    pub cache: FxHashMap<u32, RoaringBitmap>,
+    pub cache: FxHashMap<u16, RoaringBitmap>,
 }
 impl<'search> SearchContext<'search> {
     fn get_node_docids<'cache>(
         &'cache mut self,
         term: &QueryTerm,
-        node_idx: u32,
+        node_idx: u16,
     ) -> Result<&'cache RoaringBitmap> {
         if self.node_docids_cache.cache.contains_key(&node_idx) {
             return Ok(&self.node_docids_cache.cache[&node_idx]);
@@ -76,7 +77,7 @@ pub fn resolve_query_graph<'search>(
     // TODO: there is definitely a faster way to compute this big
     // roaring bitmap expression
 
-    let mut nodes_resolved = RoaringBitmap::new();
+    let mut nodes_resolved = SmallBitmap::new(64);
     let mut path_nodes_docids = vec![RoaringBitmap::new(); q.nodes.len()];
 
     let mut next_nodes_to_visit = VecDeque::new();
@@ -89,8 +90,10 @@ pub fn resolve_query_graph<'search>(
             continue;
         }
         // Take union of all predecessors
-        let predecessors_iter = predecessors.iter().map(|p| &path_nodes_docids[p as usize]);
-        let predecessors_docids = MultiOps::union(predecessors_iter);
+        let mut predecessors_docids = RoaringBitmap::new();
+        for p in predecessors.iter() {
+            predecessors_docids |= &path_nodes_docids[p as usize];
+        }
 
         let n = &q.nodes[node as usize];
 

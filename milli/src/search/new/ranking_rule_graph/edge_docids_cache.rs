@@ -11,9 +11,20 @@ use roaring::RoaringBitmap;
 // computing their hash and comparing them
 // which can be done...
 // by using a pointer (real, Rc, bumpalo, or in a vector)???
+//
+// But actually.... the edge details' docids are a subset of the universe at the
+// moment they were computed.
+// But the universes between two iterations of a ranking rule are completely different
+// Thus, there is no point in doing this.
+// UNLESS...
+// we compute the whole docids corresponding to the edge details (potentially expensive in time and memory
+// in the common case)
+//
+// But we could still benefit within a single iteration for requests like:
+// `a a a a a a a a a` where we have many of the same edge details, repeated
 
 pub struct EdgeDocidsCache<G: RankingRuleGraphTrait> {
-    pub cache: FxHashMap<u32, RoaringBitmap>,
+    pub cache: FxHashMap<u16, RoaringBitmap>,
     _phantom: PhantomData<G>,
 }
 impl<G: RankingRuleGraphTrait> Default for EdgeDocidsCache<G> {
@@ -25,7 +36,7 @@ impl<G: RankingRuleGraphTrait> EdgeDocidsCache<G> {
     pub fn get_edge_docids<'s, 'search>(
         &'s mut self,
         ctx: &mut SearchContext<'search>,
-        edge_index: u32,
+        edge_index: u16,
         graph: &RankingRuleGraph<G>,
         // TODO: maybe universe doesn't belong here
         universe: &RoaringBitmap,
@@ -41,7 +52,7 @@ impl<G: RankingRuleGraphTrait> EdgeDocidsCache<G> {
                     return Ok(BitmapOrAllRef::Bitmap(&self.cache[&edge_index]));
                 }
                 // TODO: maybe universe doesn't belong here
-                let docids = universe & G::compute_docids(ctx, details)?;
+                let docids = universe & G::compute_docids(ctx, details, universe)?;
                 let _ = self.cache.insert(edge_index, docids);
                 let docids = &self.cache[&edge_index];
                 Ok(BitmapOrAllRef::Bitmap(docids))

@@ -111,6 +111,8 @@ pub fn visit_to_node<'search, 'from_data>(
         for word1 in derivations1.clone() {
             for proximity in 1..=(8 - ngram_len2) {
                 let cost = (proximity + ngram_len2 - 1) as u8;
+                // TODO: if we had access to the universe here, we could already check whether
+                // the bitmap corresponding to this word pair is disjoint with the universe or not
                 if ctx
                     .get_word_prefix_pair_proximity_docids(
                         word1,
@@ -183,8 +185,13 @@ pub fn visit_to_node<'search, 'from_data>(
         .flat_map(|(cost, proximity_word_pairs)| {
             let mut edges = vec![];
             for (proximity, word_pairs) in proximity_word_pairs {
-                edges
-                    .push((cost, EdgeDetails::Data(ProximityEdge { pairs: word_pairs, proximity })))
+                edges.push((
+                    cost,
+                    EdgeDetails::Data(ProximityEdge {
+                        pairs: word_pairs.into_boxed_slice(),
+                        proximity,
+                    }),
+                ))
             }
             edges
         })

@@ -1,9 +1,4 @@
-
-
-
-
-use roaring::RoaringBitmap;
-
+use crate::new::small_bitmap::SmallBitmap;
 use super::cheapest_paths::Path;
 
 // What is PathsMap used for?
@@ -13,7 +8,7 @@ use super::cheapest_paths::Path;
 
 #[derive(Debug, Clone)]
 pub struct PathsMap<V> {
-    pub nodes: Vec<(u32, PathsMap<V>)>,
+    pub nodes: Vec<(u16, PathsMap<V>)>,
     pub value: Option<V>,
 }
 impl<V> Default for PathsMap<V> {
@@ -39,7 +34,7 @@ impl<V> PathsMap<V> {
         self.nodes.is_empty() && self.value.is_none()
     }
 
-    pub fn insert(&mut self, mut edges: impl Iterator<Item = u32>, value: V) {
+    pub fn insert(&mut self, mut edges: impl Iterator<Item = u16>, value: V) {
         match edges.next() {
             None => {
                 self.value = Some(value);
@@ -57,7 +52,7 @@ impl<V> PathsMap<V> {
             }
         }
     }
-    fn remove_first_rec(&mut self, cur: &mut Vec<u32>) -> (bool, V) {
+    fn remove_first_rec(&mut self, cur: &mut Vec<u16>) -> (bool, V) {
         let Some((first_edge, rest)) = self.nodes.first_mut() else { 
             // The PathsMap has to be correct by construction here, otherwise
             // the unwrap() will crash
@@ -72,7 +67,7 @@ impl<V> PathsMap<V> {
             (false, value)
         }
     }
-    pub fn remove_first(&mut self) -> Option<(Vec<u32>, V)> {
+    pub fn remove_first(&mut self) -> Option<(Vec<u16>, V)> {
         if self.is_empty() {
             return None;
         }
@@ -81,7 +76,7 @@ impl<V> PathsMap<V> {
         let (_, value) = self.remove_first_rec(&mut result);
         Some((result, value))
     }
-    pub fn iterate_rec(&self, cur: &mut Vec<u32>, visit: &mut impl FnMut(&Vec<u32>, &V)) {
+    pub fn iterate_rec(&self, cur: &mut Vec<u16>, visit: &mut impl FnMut(&Vec<u16>, &V)) {
         if let Some(value) = &self.value {
             visit(cur, value);
         }
@@ -91,7 +86,7 @@ impl<V> PathsMap<V> {
             cur.pop();
         }
     }
-    pub fn iterate(&self, mut visit: impl FnMut(&Vec<u32>, &V)) {
+    pub fn iterate(&self, mut visit: impl FnMut(&Vec<u16>, &V)) {
         self.iterate_rec(&mut vec![], &mut visit)
     }
 
@@ -100,7 +95,7 @@ impl<V> PathsMap<V> {
             self.remove_prefix(prefix);
         });
     }
-    pub fn remove_edges(&mut self, forbidden_edges: &RoaringBitmap) {
+    pub fn remove_edges(&mut self, forbidden_edges: &SmallBitmap) {
         let mut i = 0;
         while i < self.nodes.len() {
             let should_remove = if forbidden_edges.contains(self.nodes[i].0) {
@@ -118,7 +113,7 @@ impl<V> PathsMap<V> {
             }
         }
     }
-    pub fn remove_edge(&mut self, forbidden_edge: &u32) {
+    pub fn remove_edge(&mut self, forbidden_edge: &u16) {
         let mut i = 0;
         while i < self.nodes.len() {
             let should_remove = if &self.nodes[i].0 == forbidden_edge {
@@ -136,7 +131,7 @@ impl<V> PathsMap<V> {
             }
         }
     }
-    pub fn remove_prefix(&mut self, forbidden_prefix: &[u32]) {
+    pub fn remove_prefix(&mut self, forbidden_prefix: &[u16]) {
         let [first_edge, remaining_prefix @ ..] = forbidden_prefix else {
             self.nodes.clear();
             self.value = None;
@@ -160,25 +155,23 @@ impl<V> PathsMap<V> {
         }
     }
 
-    pub fn final_edges_ater_prefix(&self, prefix: &[u32]) -> Vec<u32> {
+    pub fn final_edges_after_prefix(&self, prefix: &[u16], visit: &mut impl FnMut(u16)) {
         let [first_edge, remaining_prefix @ ..] = prefix else {
-            return self.nodes.iter().filter_map(|n| {
-                if n.1.value.is_some() {
-                    Some(n.0)
-                } else {
-                    None
+            for node in self.nodes.iter() {
+                if node.1.value.is_some() {
+                    visit(node.0)
                 }
-            }).collect();
+            }
+            return
         };
         for (edge, rest) in self.nodes.iter() {
             if edge == first_edge {
-                return rest.final_edges_ater_prefix(remaining_prefix);
+                return rest.final_edges_after_prefix(remaining_prefix, visit);
             }
         }
-        vec![]
     }
 
-    pub fn edge_indices_after_prefix(&self, prefix: &[u32]) -> Vec<u32> {
+    pub fn edge_indices_after_prefix(&self, prefix: &[u16]) -> Vec<u16> {
         let [first_edge, remaining_prefix @ ..] = prefix else {
             return self.nodes.iter().map(|n| n.0).collect();
         };
@@ -190,7 +183,7 @@ impl<V> PathsMap<V> {
         vec![]
     }
 
-    pub fn contains_prefix_of_path(&self, path: &[u32]) -> bool {
+    pub fn contains_prefix_of_path(&self, path: &[u16]) -> bool {
         if self.value.is_some() {
             return true;
         }

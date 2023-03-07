@@ -1,14 +1,15 @@
 use super::{ProximityEdge, WordPair};
 use crate::new::SearchContext;
 use crate::{CboRoaringBitmapCodec, Result};
-use roaring::{MultiOps, RoaringBitmap};
+use roaring::RoaringBitmap;
 
 pub fn compute_docids<'search>(
     ctx: &mut SearchContext<'search>,
     edge: &ProximityEdge,
+    universe: &RoaringBitmap,
 ) -> Result<RoaringBitmap> {
     let ProximityEdge { pairs, proximity } = edge;
-    let mut pair_docids = vec![];
+    let mut pair_docids = RoaringBitmap::new();
     for pair in pairs.iter() {
         let bytes = match pair {
             WordPair::Words { left, right } => {
@@ -21,10 +22,11 @@ pub fn compute_docids<'search>(
                 ctx.get_prefix_word_pair_proximity_docids(*left_prefix, *right, *proximity)
             }
         }?;
-        let bitmap =
-            bytes.map(CboRoaringBitmapCodec::deserialize_from).transpose()?.unwrap_or_default();
-        pair_docids.push(bitmap);
+        // TODO: deserialize bitmap within a universe, and (maybe) using a bump allocator?
+        let bitmap = universe
+            & bytes.map(CboRoaringBitmapCodec::deserialize_from).transpose()?.unwrap_or_default();
+        pair_docids |= bitmap;
     }
-    let docids = MultiOps::union(pair_docids);
-    Ok(docids)
+
+    Ok(pair_docids)
 }

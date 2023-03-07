@@ -58,22 +58,22 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
     fn log_proximity_state(
         &mut self,
         _query_graph: &RankingRuleGraph<ProximityGraph>,
-        _paths_map: &[Vec<u32>],
+        _paths_map: &[Vec<u16>],
         _empty_paths_cache: &EmptyPathsCache,
         _universe: &RoaringBitmap,
-        _distances: Vec<Vec<u64>>,
-        _cost: u64,
+        _distances: Vec<Vec<u16>>,
+        _cost: u16,
     ) {
     }
 
     fn log_typo_state(
         &mut self,
         _query_graph: &RankingRuleGraph<TypoGraph>,
-        _paths: &[Vec<u32>],
+        _paths: &[Vec<u16>],
         _empty_paths_cache: &EmptyPathsCache,
         _universe: &RoaringBitmap,
-        _distances: Vec<Vec<u64>>,
-        _cost: u64,
+        _distances: Vec<Vec<u16>>,
+        _cost: u16,
     ) {
     }
 }
@@ -120,20 +120,20 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
     fn log_proximity_state(
         &mut self,
         query_graph: &RankingRuleGraph<ProximityGraph>,
-        paths: &[Vec<u32>],
+        paths: &[Vec<u16>],
         empty_paths_cache: &EmptyPathsCache,
         universe: &RoaringBitmap,
-        _distances: Vec<Vec<u64>>,
-        cost: u64,
+        distances: Vec<Vec<u16>>,
+        cost: u16,
     );
 
     fn log_typo_state(
         &mut self,
         query_graph: &RankingRuleGraph<TypoGraph>,
-        paths: &[Vec<u32>],
+        paths: &[Vec<u16>],
         empty_paths_cache: &EmptyPathsCache,
         universe: &RoaringBitmap,
-        _distances: Vec<Vec<u64>>,
-        cost: u64,
+        distances: Vec<Vec<u16>>,
+        cost: u16,
     );
 }

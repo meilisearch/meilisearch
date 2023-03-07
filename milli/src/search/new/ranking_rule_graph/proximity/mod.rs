@@ -10,7 +10,7 @@ use crate::new::{QueryGraph, QueryNode, SearchContext};
 use crate::Result;
 use roaring::RoaringBitmap;
 
-// TODO: intern the strings, refer to them by their pointer?
+// TODO: intern the proximity edges as well?
 
 #[derive(Clone)]
 pub enum WordPair {
@@ -21,8 +21,7 @@ pub enum WordPair {
 
 #[derive(Clone)]
 pub struct ProximityEdge {
-    // TODO: use a list of pointers to the word pairs instead?
-    pairs: Vec<WordPair>,
+    pairs: Box<[WordPair]>,
     proximity: u8,
 }
 
@@ -40,8 +39,9 @@ impl RankingRuleGraphTrait for ProximityGraph {
     fn compute_docids<'search>(
         ctx: &mut SearchContext<'search>,
         edge: &Self::EdgeDetails,
+        universe: &RoaringBitmap,
     ) -> Result<roaring::RoaringBitmap> {
-        compute_docids::compute_docids(ctx, edge)
+        compute_docids::compute_docids(ctx, edge, universe)
     }
 
     fn build_visit_from_node<'search>(
@@ -61,11 +61,11 @@ impl RankingRuleGraphTrait for ProximityGraph {
 
     fn log_state(
         graph: &super::RankingRuleGraph<Self>,
-        paths: &[Vec<u32>],
+        paths: &[Vec<u16>],
         empty_paths_cache: &EmptyPathsCache,
         universe: &RoaringBitmap,
-        distances: &[Vec<u64>],
-        cost: u64,
+        distances: &[Vec<u16>],
+        cost: u16,
         logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
         logger.log_proximity_state(

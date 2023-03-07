@@ -1,8 +1,7 @@
 use super::query_term::{self, LocatedQueryTerm, QueryTerm, WordDerivations};
+use super::small_bitmap::SmallBitmap;
 use super::SearchContext;
 use crate::Result;
-use roaring::RoaringBitmap;
-use std::fmt::Debug;
 
 #[derive(Clone)]
 pub enum QueryNode {
@@ -12,17 +11,17 @@ pub enum QueryNode {
     End,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Edges {
     // TODO: use a tiny bitset instead, something like a simple Vec<u8> where most queries will see a vector of one element
-    pub predecessors: RoaringBitmap,
-    pub successors: RoaringBitmap,
+    pub predecessors: SmallBitmap,
+    pub successors: SmallBitmap,
 }
 
 #[derive(Clone)]
 pub struct QueryGraph {
-    pub root_node: u32,
-    pub end_node: u32,
+    pub root_node: u16,
+    pub end_node: u16,
     pub nodes: Vec<QueryNode>,
     pub edges: Vec<Edges>,
 }
@@ -30,7 +29,7 @@ pub struct QueryGraph {
 fn _assert_sizes() {
     // TODO: QueryNodes are too big now, 88B is a bit too big
     let _: [u8; 88] = [0; std::mem::size_of::<QueryNode>()];
-    let _: [u8; 48] = [0; std::mem::size_of::<Edges>()];
+    let _: [u8; 32] = [0; std::mem::size_of::<Edges>()];
 }
 
 impl Default for QueryGraph {
@@ -38,8 +37,8 @@ impl Default for QueryGraph {
     fn default() -> Self {
         let nodes = vec![QueryNode::Start, QueryNode::End];
         let edges = vec![
-            Edges { predecessors: RoaringBitmap::new(), successors: RoaringBitmap::new() },
-            Edges { predecessors: RoaringBitmap::new(), successors: RoaringBitmap::new() },
+            Edges { predecessors: SmallBitmap::new(64), successors: SmallBitmap::new(64) },
+            Edges { predecessors: SmallBitmap::new(64), successors: SmallBitmap::new(64) },
         ];
 
         Self { root_node: 0, end_node: 1, nodes, edges }
@@ -47,18 +46,18 @@ impl Default for QueryGraph {
 }
 
 impl QueryGraph {
-    fn connect_to_node(&mut self, from_nodes: &[u32], to_node: u32) {
+    fn connect_to_node(&mut self, from_nodes: &[u16], to_node: u16) {
         for &from_node in from_nodes {
             self.edges[from_node as usize].successors.insert(to_node);
             self.edges[to_node as usize].predecessors.insert(from_node);
         }
     }
-    fn add_node(&mut self, from_nodes: &[u32], node: QueryNode) -> u32 {
-        let new_node_idx = self.nodes.len() as u32;
+    fn add_node(&mut self, from_nodes: &[u16], node: QueryNode) -> u16 {
+        let new_node_idx = self.nodes.len() as u16;
         self.nodes.push(node);
         self.edges.push(Edges {
-            predecessors: from_nodes.iter().collect(),
-            successors: RoaringBitmap::new(),
+            predecessors: SmallBitmap::from_array(from_nodes, 64),
+            successors: SmallBitmap::new(64),
         });
         for from_node in from_nodes {
             self.edges[*from_node as usize].successors.insert(new_node_idx);
@@ -79,7 +78,7 @@ impl QueryGraph {
         let word_set = ctx.index.words_fst(ctx.txn)?;
         let mut graph = QueryGraph::default();
 
-        let (mut prev2, mut prev1, mut prev0): (Vec<u32>, Vec<u32>, Vec<u32>) =
+        let (mut prev2, mut prev1, mut prev0): (Vec<u16>, Vec<u16>, Vec<u16>) =
             (vec![], vec![], vec![graph.root_node]);
 
         // TODO: split words / synonyms
@@ -157,40 +156,40 @@ impl QueryGraph {
 
         Ok(graph)
     }
-    pub fn remove_nodes(&mut self, nodes: &[u32]) {
+    pub fn remove_nodes(&mut self, nodes: &[u16]) {
         for &node in nodes {
             self.nodes[node as usize] = QueryNode::Deleted;
             let edges = self.edges[node as usize].clone();
             for pred in edges.predecessors.iter() {
                 self.edges[pred as usize].successors.remove(node);
             }
-            for succ in edges.successors {
+            for succ in edges.successors.iter() {
                 self.edges[succ as usize].predecessors.remove(node);
             }
             self.edges[node as usize] =
-                Edges { predecessors: RoaringBitmap::new(), successors: RoaringBitmap::new() };
+                Edges { predecessors: SmallBitmap::new(64), successors: SmallBitmap::new(64) };
         }
     }
-    pub fn remove_nodes_keep_edges(&mut self, nodes: &[u32]) {
+    pub fn remove_nodes_keep_edges(&mut self, nodes: &[u16]) {
         for &node in nodes {
             self.nodes[node as usize] = QueryNode::Deleted;
             let edges = self.edges[node as usize].clone();
             for pred in edges.predecessors.iter() {
                 self.edges[pred as usize].successors.remove(node);
-                self.edges[pred as usize].successors |= &edges.successors;
+                self.edges[pred as usize].successors.union(&edges.successors);
             }
-            for succ in edges.successors {
+            for succ in edges.successors.iter() {
                 self.edges[succ as usize].predecessors.remove(node);
-                self.edges[succ as usize].predecessors |= &edges.predecessors;
+                self.edges[succ as usize].predecessors.union(&edges.predecessors);
             }
             self.edges[node as usize] =
-                Edges { predecessors: RoaringBitmap::new(), successors: RoaringBitmap::new() };
+                Edges { predecessors: SmallBitmap::new(64), successors: SmallBitmap::new(64) };
         }
     }
     pub fn remove_words_at_position(&mut self, position: i8) -> bool {
         let mut nodes_to_remove_keeping_edges = vec![];
         for (node_idx, node) in self.nodes.iter().enumerate() {
-            let node_idx = node_idx as u32;
+            let node_idx = node_idx as u16;
             let QueryNode::Term(LocatedQueryTerm { value: _, positions }) = node else { continue };
             if positions.start() == &position {
                 nodes_to_remove_keeping_edges.push(node_idx);
@@ -212,7 +211,7 @@ impl QueryGraph {
                     || (!matches!(node, QueryNode::Start | QueryNode::Deleted)
                         && self.edges[node_idx].predecessors.is_empty())
                 {
-                    nodes_to_remove.push(node_idx as u32);
+                    nodes_to_remove.push(node_idx as u16);
                 }
             }
             if nodes_to_remove.is_empty() {

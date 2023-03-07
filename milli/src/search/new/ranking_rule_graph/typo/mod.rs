@@ -31,6 +31,7 @@ impl RankingRuleGraphTrait for TypoGraph {
     fn compute_docids<'db_cache, 'search>(
         ctx: &mut SearchContext<'search>,
         edge: &Self::EdgeDetails,
+        universe: &RoaringBitmap,
     ) -> Result<RoaringBitmap> {
         match edge {
             TypoEdge::Phrase { phrase } => resolve_phrase(ctx, *phrase),
@@ -44,14 +45,17 @@ impl RankingRuleGraphTrait for TypoGraph {
                 let mut docids = RoaringBitmap::new();
                 for word in words.iter().copied() {
                     let Some(bytes) = ctx.get_word_docids(word)? else { continue };
-                    let bitmap =
-                        RoaringBitmapCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding)?;
+                    // TODO: deserialize bitmap within a universe
+                    let bitmap = universe
+                        & RoaringBitmapCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding)?;
                     docids |= bitmap;
                 }
                 if *nbr_typos == 0 {
                     if let Some(bytes) = ctx.get_prefix_docids(derivations.original)? {
-                        let bitmap =
-                            RoaringBitmapCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding)?;
+                        // TODO: deserialize bitmap within a universe
+                        let bitmap = universe
+                            & RoaringBitmapCodec::bytes_decode(bytes)
+                                .ok_or(heed::Error::Decoding)?;
                         docids |= bitmap;
                     }
                 }
@@ -116,11 +120,11 @@ impl RankingRuleGraphTrait for TypoGraph {
 
     fn log_state(
         graph: &RankingRuleGraph<Self>,
-        paths: &[Vec<u32>],
+        paths: &[Vec<u16>],
         empty_paths_cache: &EmptyPathsCache,
         universe: &RoaringBitmap,
-        distances: &[Vec<u64>],
-        cost: u64,
+        distances: &[Vec<u16>],
+        cost: u16,
         logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
         logger.log_typo_state(graph, paths, empty_paths_cache, universe, distances.to_vec(), cost);

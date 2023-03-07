@@ -4,17 +4,16 @@ mod edge_docids_cache;
 mod empty_paths_cache;
 mod paths_map;
 mod proximity;
-mod resolve_paths;
 mod typo;
 
 use super::logger::SearchLogger;
+use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, QueryNode, SearchContext};
 use crate::Result;
 pub use edge_docids_cache::EdgeDocidsCache;
 pub use empty_paths_cache::EmptyPathsCache;
 pub use proximity::ProximityGraph;
 use roaring::RoaringBitmap;
-use std::ops::ControlFlow;
 pub use typo::TypoGraph;
 
 #[derive(Debug, Clone)]
@@ -25,15 +24,15 @@ pub enum EdgeDetails<E> {
 
 #[derive(Debug, Clone)]
 pub struct Edge<E> {
-    pub from_node: u32,
-    pub to_node: u32,
+    pub from_node: u16,
+    pub to_node: u16,
     pub cost: u8,
     pub details: EdgeDetails<E>,
 }
 
 #[derive(Debug, Clone)]
 pub struct EdgePointer<'graph, E> {
-    pub index: u32,
+    pub index: u16,
     pub edge: &'graph Edge<E>,
 }
 
@@ -95,6 +94,7 @@ pub trait RankingRuleGraphTrait: Sized {
     fn compute_docids<'search>(
         ctx: &mut SearchContext<'search>,
         edge_details: &Self::EdgeDetails,
+        universe: &RoaringBitmap,
     ) -> Result<RoaringBitmap>;
 
     /// Prepare to build the edges outgoing from `from_node`.
@@ -116,11 +116,11 @@ pub trait RankingRuleGraphTrait: Sized {
 
     fn log_state(
         graph: &RankingRuleGraph<Self>,
-        paths: &[Vec<u32>],
+        paths: &[Vec<u16>],
         empty_paths_cache: &EmptyPathsCache,
         universe: &RoaringBitmap,
-        distances: &[Vec<u64>],
-        cost: u64,
+        distances: &[Vec<u16>],
+        cost: u16,
         logger: &mut dyn SearchLogger<QueryGraph>,
     );
 }
@@ -130,9 +130,9 @@ pub struct RankingRuleGraph<G: RankingRuleGraphTrait> {
     // pub edges: Vec<HashMap<usize, Vec<Edge<G::EdgeDetails>>>>,
     pub all_edges: Vec<Option<Edge<G::EdgeDetails>>>,
 
-    pub node_edges: Vec<RoaringBitmap>,
+    pub node_edges: Vec<SmallBitmap>,
 
-    pub successors: Vec<RoaringBitmap>,
+    pub successors: Vec<SmallBitmap>,
     // TODO: to get the edges between two nodes:
     // 1. get node_outgoing_edges[from]
     // 2. get node_incoming_edges[to]
@@ -149,29 +149,7 @@ impl<G: RankingRuleGraphTrait> Clone for RankingRuleGraph<G> {
     }
 }
 impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
-    // Visit all edges between the two given nodes in order of increasing cost.
-    pub fn visit_edges<'graph, O>(
-        &'graph self,
-        from: u32,
-        to: u32,
-        mut visit: impl FnMut(u32, &'graph Edge<G::EdgeDetails>) -> ControlFlow<O>,
-    ) -> Option<O> {
-        let from_edges = &self.node_edges[from as usize];
-        for edge_idx in from_edges {
-            let edge = self.all_edges[edge_idx as usize].as_ref().unwrap();
-            if edge.to_node == to {
-                let cf = visit(edge_idx, edge);
-                match cf {
-                    ControlFlow::Continue(_) => continue,
-                    ControlFlow::Break(o) => return Some(o),
-                }
-            }
-        }
-
-        None
-    }
-
-    pub fn remove_edge(&mut self, edge_index: u32) {
+    pub fn remove_edge(&mut self, edge_index: u16) {
         let edge_opt = &mut self.all_edges[edge_index as usize];
         let Some(edge) = &edge_opt else { return };
         let (from_node, _to_node) = (edge.from_node, edge.to_node);
@@ -180,9 +158,10 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         let from_node_edges = &mut self.node_edges[from_node as usize];
         from_node_edges.remove(edge_index);
 
-        let mut new_successors_from_node = RoaringBitmap::new();
+        let mut new_successors_from_node = SmallBitmap::new(self.all_edges.len() as u16);
+        let all_edges = &self.all_edges;
         for from_node_edge in from_node_edges.iter() {
-            let Edge { to_node, .. } = &self.all_edges[from_node_edge as usize].as_ref().unwrap();
+            let Edge { to_node, .. } = &all_edges[from_node_edge as usize].as_ref().unwrap();
             new_successors_from_node.insert(*to_node);
         }
         self.successors[from_node as usize] = new_successors_from_node;
