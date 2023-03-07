@@ -899,20 +899,7 @@ impl IndexScheduler {
                     let rtxn = self.env.read_txn()?;
                     self.index_mapper.index(&rtxn, index_uid)?
                 };
-                let filter = Filter::from_json(filter)?;
-                let deleted_documents = if let Some(filter) = filter {
-                    let index_rtxn = index.read_txn()?;
-
-                    let candidates = filter.evaluate(&index_rtxn, &index)?;
-                    let mut wtxn = index.write_txn()?;
-                    let mut delete_operation = DeleteDocuments::new(&mut wtxn, &index)?;
-                    delete_operation.delete_documents(&candidates);
-                    let result = delete_operation.execute().map(|result| result.deleted_documents);
-                    wtxn.commit()?;
-                    result
-                } else {
-                    Ok(0)
-                };
+                let deleted_documents = delete_document_by_filter(filter, index);
                 let original_filter = if let Some(Details::DocumentDeletionByFilter {
                     original_filter,
                     deleted_documents: _,
@@ -1497,4 +1484,22 @@ impl IndexScheduler {
 
         Ok(content_files_to_delete)
     }
+}
+
+fn delete_document_by_filter(filter: &serde_json::Value, index: Index) -> Result<u64> {
+    let filter = Filter::from_json(filter)?;
+    Ok(if let Some(filter) = filter {
+        let index_rtxn = index.read_txn()?;
+
+        let candidates = filter.evaluate(&index_rtxn, &index)?;
+        let mut wtxn = index.write_txn()?;
+        let mut delete_operation = DeleteDocuments::new(&mut wtxn, &index)?;
+        delete_operation.delete_documents(&candidates);
+        let deleted_documents =
+            delete_operation.execute().map(|result| result.deleted_documents)?;
+        wtxn.commit()?;
+        deleted_documents
+    } else {
+        0
+    })
 }
