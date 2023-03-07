@@ -1,4 +1,4 @@
-name: Benchmarks search wikipedia articles (push)
+name: Benchmarks of search for geo (push)
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - main
 
 env:
-  BENCH_NAME: "search_wiki"
+  BENCH_NAME: "search_geo"
   INFLUX_TOKEN: ${{ secrets.INFLUX_TOKEN }}
 
 jobs:

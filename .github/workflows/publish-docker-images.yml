@@ -1,4 +1,5 @@
----
+name: Publish images to Docker Hub
+
 on:
   push:
     # Will run for every tag pushed except `latest`
@@ -11,8 +12,6 @@ on:
   schedule:
     - cron: '0 23 * * *' # Every day at 11:00pm
   workflow_dispatch:
-
-name: Publish tagged images to Docker Hub
 
 jobs:
   docker:

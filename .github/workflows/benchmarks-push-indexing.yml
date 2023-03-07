@@ -1,4 +1,4 @@
-name: Benchmarks search songs (push)
+name: Benchmarks of indexing (push)
 
 on:
   push:
@@ -6,13 +6,14 @@ on:
       - main
 
 env:
-  BENCH_NAME: "search_songs"
   INFLUX_TOKEN: ${{ secrets.INFLUX_TOKEN }}
+  BENCH_NAME: "indexing"
 
 jobs:
   benchmarks:
     name: Run and upload benchmarks
     runs-on: benchmarks
+    timeout-minutes: 4320 # 72h
     steps:
       - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1

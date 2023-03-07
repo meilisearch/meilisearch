@@ -1,4 +1,4 @@
-name: Publish to APT repository & Homebrew
+name: Publish to APT & Homebrew
 
 on:
   release:
