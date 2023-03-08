@@ -745,7 +745,7 @@ fn format_value<A: AsRef<[u8]>>(
     }
 }
 
-pub fn parse_filter(facets: &Value) -> Result<Option<Filter>, MeilisearchHttpError> {
+pub(crate) fn parse_filter(facets: &Value) -> Result<Option<Filter>, MeilisearchHttpError> {
     match facets {
         Value::String(expr) => {
             let condition = Filter::from_str(expr)?;
