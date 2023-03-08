@@ -47,7 +47,7 @@ mod value;
 use std::fmt::Debug;
 
 pub use condition::{parse_condition, parse_to, Condition};
-use condition::{parse_exists, parse_not_exists};
+use condition::{parse_exists, parse_not_exists, parse_not_null, parse_null};
 use error::{cut_with_err, ExpectedValueKind, NomErrorExt};
 pub use error::{Error, ErrorKind};
 use nom::branch::alt;
@@ -414,6 +414,8 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
         parse_in,
         parse_not_in,
         parse_condition,
+        parse_null,
+        parse_not_null,
         parse_exists,
         parse_not_exists,
         parse_to,
@@ -496,14 +498,23 @@ pub mod tests {
         insta::assert_display_snapshot!(p("subscribers <= 1000"), @"{subscribers} <= {1000}");
         insta::assert_display_snapshot!(p("subscribers 100 TO 1000"), @"{subscribers} {100} TO {1000}");
 
-        // Test NOT + EXISTS
-        insta::assert_display_snapshot!(p("subscribers EXISTS"), @"{subscribers} EXISTS");
+        // Test NOT
         insta::assert_display_snapshot!(p("NOT subscribers < 1000"), @"NOT ({subscribers} < {1000})");
+        insta::assert_display_snapshot!(p("NOT subscribers 100 TO 1000"), @"NOT ({subscribers} {100} TO {1000})");
+
+        // Test NULL + NOT NULL
+        insta::assert_display_snapshot!(p("subscribers NULL"), @"{subscribers} NULL");
+        insta::assert_display_snapshot!(p("NOT subscribers NULL"), @"NOT ({subscribers} NULL)");
+        insta::assert_display_snapshot!(p("subscribers NOT NULL"), @"NOT ({subscribers} NULL)");
+        insta::assert_display_snapshot!(p("NOT subscribers NOT NULL"), @"{subscribers} NULL");
+        insta::assert_display_snapshot!(p("subscribers NOT   NULL"), @"NOT ({subscribers} NULL)");
+
+        // Test EXISTS + NOT EXITS
+        insta::assert_display_snapshot!(p("subscribers EXISTS"), @"{subscribers} EXISTS");
         insta::assert_display_snapshot!(p("NOT subscribers EXISTS"), @"NOT ({subscribers} EXISTS)");
         insta::assert_display_snapshot!(p("subscribers NOT EXISTS"), @"NOT ({subscribers} EXISTS)");
         insta::assert_display_snapshot!(p("NOT subscribers NOT EXISTS"), @"{subscribers} EXISTS");
         insta::assert_display_snapshot!(p("subscribers NOT   EXISTS"), @"NOT ({subscribers} EXISTS)");
-        insta::assert_display_snapshot!(p("NOT subscribers 100 TO 1000"), @"NOT ({subscribers} {100} TO {1000})");
 
         // Test nested NOT
         insta::assert_display_snapshot!(p("NOT NOT NOT NOT x = 5"), @"{x} = {5}");
@@ -800,6 +811,7 @@ impl<'a> std::fmt::Display for Condition<'a> {
             Condition::GreaterThanOrEqual(token) => write!(f, ">= {token}"),
             Condition::Equal(token) => write!(f, "= {token}"),
             Condition::NotEqual(token) => write!(f, "!= {token}"),
+            Condition::Null => write!(f, "NULL"),
             Condition::Exists => write!(f, "EXISTS"),
             Condition::LowerThan(token) => write!(f, "< {token}"),
             Condition::LowerThanOrEqual(token) => write!(f, "<= {token}"),

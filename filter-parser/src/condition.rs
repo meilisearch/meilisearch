@@ -20,6 +20,7 @@ pub enum Condition<'a> {
     GreaterThanOrEqual(Token<'a>),
     Equal(Token<'a>),
     NotEqual(Token<'a>),
+    Null,
     Exists,
     LowerThan(Token<'a>),
     LowerThanOrEqual(Token<'a>),
@@ -42,6 +43,21 @@ pub fn parse_condition(input: Span) -> IResult<FilterCondition> {
     };
 
     Ok((input, condition))
+}
+
+/// null          = value "NULL"
+pub fn parse_null(input: Span) -> IResult<FilterCondition> {
+    let (input, key) = terminated(parse_value, tag("NULL"))(input)?;
+
+    Ok((input, FilterCondition::Condition { fid: key, op: Null }))
+}
+
+/// null          = value "NOT" WS+ "NULL"
+pub fn parse_not_null(input: Span) -> IResult<FilterCondition> {
+    let (input, key) = parse_value(input)?;
+
+    let (input, _) = tuple((tag("NOT"), multispace1, tag("NULL")))(input)?;
+    Ok((input, FilterCondition::Not(Box::new(FilterCondition::Condition { fid: key, op: Null }))))
 }
 
 /// exist          = value "EXISTS"

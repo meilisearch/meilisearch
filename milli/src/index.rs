@@ -839,6 +839,18 @@ impl Index {
         }
     }
 
+    /// Retrieve all the documents which contain this field id set as null
+    pub fn null_faceted_documents_ids(
+        &self,
+        rtxn: &RoTxn,
+        field_id: FieldId,
+    ) -> heed::Result<RoaringBitmap> {
+        match self.facet_id_is_null_docids.get(rtxn, &BEU16::new(field_id))? {
+            Some(docids) => Ok(docids),
+            None => Ok(RoaringBitmap::new()),
+        }
+    }
+
     /// Retrieve all the documents which contain this field id
     pub fn exists_faceted_documents_ids(
         &self,
