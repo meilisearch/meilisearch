@@ -1032,16 +1032,15 @@ impl Index {
 
     /* documents */
 
-    /// Returns a [`Vec`] of the requested documents. Returns an error if a document is missing.
-    pub fn documents<'t>(
-        &self,
+    /// Returns an iterator over the requested documents. The next item will be an error if a document is missing.
+    pub fn iter_documents<'a, 't: 'a>(
+        &'a self,
         rtxn: &'t RoTxn,
-        ids: impl IntoIterator<Item = DocumentId>,
-    ) -> Result<Vec<(DocumentId, obkv::KvReaderU16<'t>)>> {
+        ids: impl IntoIterator<Item = DocumentId> + 'a,
+    ) -> Result<impl Iterator<Item = Result<(DocumentId, obkv::KvReaderU16<'t>)>> + 'a> {
         let soft_deleted_documents = self.soft_deleted_documents_ids(rtxn)?;
-        let mut documents = Vec::new();
 
-        for id in ids {
+        Ok(ids.into_iter().map(move |id| {
             if soft_deleted_documents.contains(id) {
                 return Err(UserError::AccessingSoftDeletedDocument { document_id: id })?;
             }
@@ -1049,27 +1048,25 @@ impl Index {
                 .documents
                 .get(rtxn, &BEU32::new(id))?
                 .ok_or(UserError::UnknownInternalDocumentId { document_id: id })?;
-            documents.push((id, kv));
-        }
+            Ok((id, kv))
+        }))
+    }
 
-        Ok(documents)
+    /// Returns a [`Vec`] of the requested documents. Returns an error if a document is missing.
+    pub fn documents<'t>(
+        &self,
+        rtxn: &'t RoTxn,
+        ids: impl IntoIterator<Item = DocumentId>,
+    ) -> Result<Vec<(DocumentId, obkv::KvReaderU16<'t>)>> {
+        self.iter_documents(rtxn, ids)?.collect()
     }
 
     /// Returns an iterator over all the documents in the index.
-    pub fn all_documents<'t>(
-        &self,
+    pub fn all_documents<'a, 't: 'a>(
+        &'a self,
         rtxn: &'t RoTxn,
-    ) -> Result<impl Iterator<Item = heed::Result<(DocumentId, obkv::KvReaderU16<'t>)>>> {
-        let soft_deleted_docids = self.soft_deleted_documents_ids(rtxn)?;
-
-        Ok(self
-            .documents
-            .iter(rtxn)?
-            // we cast the BEU32 to a DocumentId
-            .map(|document| document.map(|(id, obkv)| (id.get(), obkv)))
-            .filter(move |document| {
-                document.as_ref().map_or(true, |(id, _)| !soft_deleted_docids.contains(*id))
-            }))
+    ) -> Result<impl Iterator<Item = Result<(DocumentId, obkv::KvReaderU16<'t>)>> + 'a> {
+        self.iter_documents(rtxn, self.documents_ids(rtxn)?)
     }
 
     pub fn facets_distribution<'a>(&'a self, rtxn: &'a RoTxn) -> FacetDistribution<'a> {
