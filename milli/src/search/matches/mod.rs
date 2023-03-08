@@ -513,7 +513,7 @@ mod tests {
             (vec![all[2].clone()], vec![2]),
         ];
 
-        MatchingWords::new(matching_words)
+        MatchingWords::new(matching_words).unwrap()
     }
 
     impl MatcherBuilder<'_, Vec<u8>> {
@@ -600,7 +600,7 @@ mod tests {
         ];
         let matching_words = vec![(vec![all[0].clone()], vec![0]), (vec![all[1].clone()], vec![1])];
 
-        let matching_words = MatchingWords::new(matching_words);
+        let matching_words = MatchingWords::new(matching_words).unwrap();
 
         let builder = MatcherBuilder::from_matching_words(matching_words);
 
@@ -847,7 +847,7 @@ mod tests {
             (vec![all[4].clone()], vec![2]),
         ];
 
-        let matching_words = MatchingWords::new(matching_words);
+        let matching_words = MatchingWords::new(matching_words).unwrap();
 
         let mut builder = MatcherBuilder::from_matching_words(matching_words);
         builder.highlight_prefix("_".to_string());

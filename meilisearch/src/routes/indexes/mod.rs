@@ -61,6 +61,8 @@ pub struct IndexView {
 
 impl IndexView {
     fn new(uid: String, index: &Index) -> Result<IndexView, milli::Error> {
+        // It is important that this function does not keep the Index handle or a clone of it, because
+        // `list_indexes` relies on this property to avoid opening all indexes at once.
         let rtxn = index.read_txn()?;
         Ok(IndexView {
             uid,
@@ -89,14 +91,16 @@ pub async fn list_indexes(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, Data<IndexScheduler>>,
     paginate: AwebQueryParameter<ListIndexes, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
-    let search_rules = &index_scheduler.filters().search_rules;
-    let indexes: Vec<_> = index_scheduler.indexes()?;
-    let indexes = indexes
-        .into_iter()
-        .filter(|(name, _)| search_rules.is_index_authorized(name))
-        .map(|(name, index)| IndexView::new(name, &index))
-        .collect::<Result<Vec<_>, _>>()?;
-
+    let filters = index_scheduler.filters();
+    let indexes: Vec<Option<IndexView>> =
+        index_scheduler.try_for_each_index(|uid, index| -> Result<Option<IndexView>, _> {
+            if !filters.is_index_authorized(uid) {
+                return Ok(None);
+            }
+            Ok(Some(IndexView::new(uid.to_string(), index)?))
+        })?;
+    // Won't cause to open all indexes because IndexView doesn't keep the `Index` opened.
+    let indexes: Vec<IndexView> = indexes.into_iter().flatten().collect();
     let ret = paginate.as_pagination().auto_paginate_sized(indexes.into_iter());
 
     debug!("returns: {:?}", ret);
@@ -120,7 +124,7 @@ pub async fn create_index(
 ) -> Result<HttpResponse, ResponseError> {
     let IndexCreateRequest { primary_key, uid } = body.into_inner();
 
-    let allow_index_creation = index_scheduler.filters().search_rules.is_index_authorized(&uid);
+    let allow_index_creation = index_scheduler.filters().allow_index_creation(&uid);
     if allow_index_creation {
         analytics.publish(
             "Index Created".to_string(),

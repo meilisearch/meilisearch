@@ -788,15 +788,15 @@ impl IndexScheduler {
                 dump_tasks.flush()?;
 
                 // 3. Dump the indexes
-                for (uid, index) in self.index_mapper.indexes(&rtxn)? {
+                self.index_mapper.try_for_each_index(&rtxn, |uid, index| -> Result<()> {
                     let rtxn = index.read_txn()?;
                     let metadata = IndexMetadata {
-                        uid: uid.clone(),
+                        uid: uid.to_owned(),
                         primary_key: index.primary_key(&rtxn)?.map(String::from),
                         created_at: index.created_at(&rtxn)?,
                         updated_at: index.updated_at(&rtxn)?,
                     };
-                    let mut index_dumper = dump.create_index(&uid, &metadata)?;
+                    let mut index_dumper = dump.create_index(uid, &metadata)?;
 
                     let fields_ids_map = index.fields_ids_map(&rtxn)?;
                     let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
@@ -809,9 +809,10 @@ impl IndexScheduler {
                     }
 
                     // 3.2. Dump the settings
-                    let settings = meilisearch_types::settings::settings(&index, &rtxn)?;
+                    let settings = meilisearch_types::settings::settings(index, &rtxn)?;
                     index_dumper.settings(&settings)?;
-                }
+                    Ok(())
+                })?;
 
                 let dump_uid = started_at.format(format_description!(
                     "[year repr:full][month repr:numerical][day padding:zero]-[hour padding:zero][minute padding:zero][second padding:zero][subsecond digits:3]"

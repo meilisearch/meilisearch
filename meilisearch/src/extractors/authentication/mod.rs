@@ -136,6 +136,13 @@ pub mod policies {
 
     use crate::extractors::authentication::Policy;
 
+    enum TenantTokenOutcome {
+        NotATenantToken,
+        Invalid,
+        Expired,
+        Valid(Uuid, SearchRules),
+    }
+
     fn tenant_token_validation() -> Validation {
         let mut validation = Validation::default();
         validation.validate_exp = false;
@@ -164,29 +171,42 @@ pub mod policies {
     pub struct ActionPolicy<const A: u8>;
 
     impl<const A: u8> Policy for ActionPolicy<A> {
+        /// Attempts to grant authentication from a bearer token (that can be a tenant token or an API key), the requested Action,
+        /// and a list of requested indexes.
+        ///
+        /// If the bearer token is not allowed for the specified indexes and action, returns `None`.
+        /// Otherwise, returns an object containing the generated permissions: the search filters to add to a search, and the list of allowed indexes
+        /// (that may contain more indexes than requested).
         fn authenticate(
             auth: AuthController,
             token: &str,
             index: Option<&str>,
         ) -> Option<AuthFilter> {
             // authenticate if token is the master key.
-            // master key can only have access to keys routes.
-            // if master key is None only keys routes are inaccessible.
+            // Without a master key, all routes are accessible except the key-related routes.
             if auth.get_master_key().map_or_else(|| !is_keys_action(A), |mk| mk == token) {
                 return Some(AuthFilter::default());
             }
 
-            // Tenant token
-            if let Some(filters) = ActionPolicy::<A>::authenticate_tenant_token(&auth, token, index)
-            {
-                return Some(filters);
-            } else if let Some(action) = Action::from_repr(A) {
-                // API key
-                if let Ok(Some(uid)) = auth.get_optional_uid_from_encoded_key(token.as_bytes()) {
-                    if let Ok(true) = auth.is_key_authorized(uid, action, index) {
-                        return auth.get_key_filters(uid, None).ok();
+            let (key_uuid, search_rules) =
+                match ActionPolicy::<A>::authenticate_tenant_token(&auth, token) {
+                    TenantTokenOutcome::Valid(key_uuid, search_rules) => {
+                        (key_uuid, Some(search_rules))
                     }
-                }
+                    TenantTokenOutcome::Expired => return None,
+                    TenantTokenOutcome::Invalid => return None,
+                    TenantTokenOutcome::NotATenantToken => {
+                        (auth.get_optional_uid_from_encoded_key(token.as_bytes()).ok()??, None)
+                    }
+                };
+
+            // check that the indexes are allowed
+            let action = Action::from_repr(A)?;
+            let auth_filter = auth.get_key_filters(key_uuid, search_rules).ok()?;
+            if auth.is_key_authorized(key_uuid, action, index).unwrap_or(false)
+                && index.map(|index| auth_filter.is_index_authorized(index)).unwrap_or(true)
+            {
+                return Some(auth_filter);
             }
 
             None
@@ -194,50 +214,43 @@ pub mod policies {
     }
 
     impl<const A: u8> ActionPolicy<A> {
-        fn authenticate_tenant_token(
-            auth: &AuthController,
-            token: &str,
-            index: Option<&str>,
-        ) -> Option<AuthFilter> {
-            // A tenant token only has access to the search route which always defines an index.
-            let index = index?;
-
+        fn authenticate_tenant_token(auth: &AuthController, token: &str) -> TenantTokenOutcome {
             // Only search action can be accessed by a tenant token.
             if A != actions::SEARCH {
-                return None;
+                return TenantTokenOutcome::NotATenantToken;
             }
 
-            let uid = extract_key_id(token)?;
-            // check if parent key is authorized to do the action.
-            if auth.is_key_authorized(uid, Action::Search, Some(index)).ok()? {
-                // Check if tenant token is valid.
-                let key = auth.generate_key(uid)?;
-                let data = decode::<Claims>(
-                    token,
-                    &DecodingKey::from_secret(key.as_bytes()),
-                    &tenant_token_validation(),
-                )
-                .ok()?;
+            let uid = if let Some(uid) = extract_key_id(token) {
+                uid
+            } else {
+                return TenantTokenOutcome::NotATenantToken;
+            };
 
-                // Check index access if an index restriction is provided.
-                if !data.claims.search_rules.is_index_authorized(index) {
-                    return None;
+            // Check if tenant token is valid.
+            let key = if let Some(key) = auth.generate_key(uid) {
+                key
+            } else {
+                return TenantTokenOutcome::Invalid;
+            };
+
+            let data = if let Ok(data) = decode::<Claims>(
+                token,
+                &DecodingKey::from_secret(key.as_bytes()),
+                &tenant_token_validation(),
+            ) {
+                data
+            } else {
+                return TenantTokenOutcome::Invalid;
+            };
+
+            // Check if token is expired.
+            if let Some(exp) = data.claims.exp {
+                if OffsetDateTime::now_utc().unix_timestamp() > exp {
+                    return TenantTokenOutcome::Expired;
                 }
-
-                // Check if token is expired.
-                if let Some(exp) = data.claims.exp {
-                    if OffsetDateTime::now_utc().unix_timestamp() > exp {
-                        return None;
-                    }
-                }
-
-                return match auth.get_key_filters(uid, Some(data.claims.search_rules)) {
-                    Ok(auth) if auth.search_rules.is_index_authorized(index) => Some(auth),
-                    _ => None,
-                };
             }
 
-            None
+            TenantTokenOutcome::Valid(uid, data.claims.search_rules)
         }
     }
 

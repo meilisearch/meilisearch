@@ -10,7 +10,8 @@ use crate::common::Server;
 
 pub static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'static str>>> =
     Lazy::new(|| {
-        let mut authorizations = hashmap! {
+        let authorizations = hashmap! {
+            ("POST",    "/multi-search") =>                                    hashset!{"search", "*"},
             ("POST",    "/indexes/products/search") =>                         hashset!{"search", "*"},
             ("GET",     "/indexes/products/search") =>                         hashset!{"search", "*"},
             ("POST",    "/indexes/products/documents") =>                      hashset!{"documents.add", "documents.*", "*"},
@@ -51,16 +52,13 @@ pub static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'
             ("GET",     "/stats") =>                                           hashset!{"stats.get", "stats.*", "*"},
             ("POST",    "/dumps") =>                                           hashset!{"dumps.create", "dumps.*", "*"},
             ("GET",     "/version") =>                                         hashset!{"version", "*"},
+            ("GET",     "/metrics") =>                                         hashset!{"metrics.get", "metrics.*", "*"},
             ("PATCH",   "/keys/mykey/") =>                                     hashset!{"keys.update", "*"},
             ("GET",     "/keys/mykey/") =>                                     hashset!{"keys.get", "*"},
             ("DELETE",  "/keys/mykey/") =>                                     hashset!{"keys.delete", "*"},
             ("POST",    "/keys") =>                                            hashset!{"keys.create", "*"},
             ("GET",     "/keys") =>                                            hashset!{"keys.get", "*"},
         };
-
-        if cfg!(feature = "metrics") {
-            authorizations.insert(("GET", "/metrics"), hashset! {"metrics.get", "metrics.*", "*"});
-        }
 
         authorizations
     });
@@ -71,6 +69,14 @@ pub static ALL_ACTIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
 
 static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
     json!({"message": "The provided API key is invalid.",
+        "code": "invalid_api_key",
+        "type": "auth",
+        "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+    })
+});
+
+static INVALID_METRICS_RESPONSE: Lazy<Value> = Lazy::new(|| {
+    json!({"message": "The provided API key is invalid. The API key for the `/metrics` route must allow access to all indexes.",
         "code": "invalid_api_key",
         "type": "auth",
         "link": "https://docs.meilisearch.com/errors#invalid_api_key"
@@ -204,15 +210,28 @@ async fn access_authorized_restricted_index() {
 
             let (response, code) = server.dummy_request(method, route).await;
 
-            assert_ne!(
-                response,
-                INVALID_RESPONSE.clone(),
-                "on route: {:?} - {:?} with action: {:?}",
-                method,
-                route,
-                action
-            );
-            assert_ne!(code, 403);
+            // The metrics route MUST have no limitation on the indexes
+            if *route == "/metrics" {
+                assert_eq!(
+                    response,
+                    INVALID_METRICS_RESPONSE.clone(),
+                    "on route: {:?} - {:?} with action: {:?}",
+                    method,
+                    route,
+                    action
+                );
+                assert_eq!(code, 403);
+            } else {
+                assert_ne!(
+                    response,
+                    INVALID_RESPONSE.clone(),
+                    "on route: {:?} - {:?} with action: {:?}",
+                    method,
+                    route,
+                    action
+                );
+                assert_ne!(code, 403);
+            }
         }
     }
 }

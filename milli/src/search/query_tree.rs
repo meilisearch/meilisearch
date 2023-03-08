@@ -747,7 +747,7 @@ fn create_matching_words(
     let mut matching_word_cache = MatchingWordCache::default();
     let mut matching_words = Vec::new();
     ngrams(ctx, authorize_typos, query, &mut matching_words, &mut matching_word_cache, 0)?;
-    Ok(MatchingWords::new(matching_words))
+    MatchingWords::new(matching_words)
 }
 
 pub type PrimitiveQuery = Vec<PrimitiveQueryPart>;
@@ -825,9 +825,13 @@ where
                     quoted = !quoted;
                 }
                 // if there is a quote or a hard separator we close the phrase.
-                if !phrase.is_empty() && (quote_count > 0 || separator_kind == SeparatorKind::Hard)
-                {
-                    primitive_query.push(PrimitiveQueryPart::Phrase(mem::take(&mut phrase)));
+                if quote_count > 0 || separator_kind == SeparatorKind::Hard {
+                    let phrase = mem::take(&mut phrase);
+
+                    // if the phrase only contains stop words, we don't keep it in the query.
+                    if phrase.iter().any(|w| w.is_some()) {
+                        primitive_query.push(PrimitiveQueryPart::Phrase(phrase));
+                    }
                 }
             }
             _ => (),
@@ -835,7 +839,7 @@ where
     }
 
     // If a quote is never closed, we consider all of the end of the query as a phrase.
-    if !phrase.is_empty() {
+    if phrase.iter().any(|w| w.is_some()) {
         primitive_query.push(PrimitiveQueryPart::Phrase(mem::take(&mut phrase)));
     }
 

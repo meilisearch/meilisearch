@@ -25,36 +25,36 @@ jobs:
       # Use ubuntu-18.04 to compile with glibc 2.27, which are the production expectations
       image: ubuntu:18.04
     steps:
-    - uses: actions/checkout@v3
-    - name: Install needed dependencies
-      run: |
-        apt-get update && apt-get install -y curl
-        apt-get install build-essential -y
-    - name: Run test with Rust stable
-      if: github.event_name != 'schedule'
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        override: true
-    - name: Run test with Rust nightly
-      if: github.event_name == 'schedule'
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: nightly
-        override: true
-    # Disable cache due to disk space issues with Windows workers in CI
-    # - name: Cache dependencies
-    #   uses: Swatinem/rust-cache@v2.2.0
-    - name: Run cargo check without any default features
-      uses: actions-rs/cargo@v1
-      with:
-        command: build
-        args: --locked --release --no-default-features --all
-    - name: Run cargo test
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: --locked --release --all
+      - uses: actions/checkout@v3
+      - name: Install needed dependencies
+        run: |
+          apt-get update && apt-get install -y curl
+          apt-get install build-essential -y
+      - name: Run test with Rust stable
+        if: github.event_name != 'schedule'
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Run test with Rust nightly
+        if: github.event_name == 'schedule'
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+      # Disable cache due to disk space issues with Windows workers in CI
+      # - name: Cache dependencies
+      #   uses: Swatinem/rust-cache@v2.2.0
+      - name: Run cargo check without any default features
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --locked --release --no-default-features --all
+      - name: Run cargo test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --locked --release --all
 
   test-others:
     name: Tests on ${{ matrix.os }}
@@ -64,19 +64,47 @@ jobs:
       matrix:
         os: [macos-12, windows-2022]
     steps:
-    - uses: actions/checkout@v3
-#     - name: Cache dependencies
-#       uses: Swatinem/rust-cache@v2.2.0
-    - name: Run cargo check without any default features
-      uses: actions-rs/cargo@v1
-      with:
-        command: build
-        args: --locked --release --no-default-features --all
-    - name: Run cargo test
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: --locked --release --all
+      - uses: actions/checkout@v3
+      #     - name: Cache dependencies
+      #       uses: Swatinem/rust-cache@v2.2.0
+      - name: Run cargo check without any default features
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --locked --release --no-default-features --all
+      - name: Run cargo test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --locked --release --all
+
+  test-all-features:
+    name: Tests all features on cron schedule only
+    runs-on: ubuntu-latest
+    container:
+      # Use ubuntu-18.04 to compile with glibc 2.27, which are the production expectations
+      image: ubuntu:18.04
+    if: github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install needed dependencies
+        run: |
+          apt-get update
+          apt-get install --assume-yes build-essential curl
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Run cargo build with all features
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --workspace --locked --release --all-features
+      - name: Run cargo test with all features
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --workspace --locked --release --all-features
 
   # We run tests in debug also, to make sure that the debug_assertions are hit
   test-debug:

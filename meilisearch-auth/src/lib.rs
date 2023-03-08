@@ -85,17 +85,13 @@ impl AuthController {
         uid: Uuid,
         search_rules: Option<SearchRules>,
     ) -> Result<AuthFilter> {
-        let mut filters = AuthFilter::default();
         let key = self.get_key(uid)?;
 
-        filters.search_rules = match search_rules {
-            Some(search_rules) => search_rules,
-            None => SearchRules::Set(key.indexes.into_iter().collect()),
-        };
+        let key_authorized_indexes = SearchRules::Set(key.indexes.into_iter().collect());
 
-        filters.allow_index_creation = self.is_key_authorized(uid, Action::IndexesAdd, None)?;
+        let allow_index_creation = self.is_key_authorized(uid, Action::IndexesAdd, None)?;
 
-        Ok(filters)
+        Ok(AuthFilter { search_rules, key_authorized_indexes, allow_index_creation })
     }
 
     pub fn list_keys(&self) -> Result<Vec<Key>> {
@@ -160,13 +156,59 @@ impl AuthController {
 }
 
 pub struct AuthFilter {
-    pub search_rules: SearchRules,
-    pub allow_index_creation: bool,
+    search_rules: Option<SearchRules>,
+    key_authorized_indexes: SearchRules,
+    allow_index_creation: bool,
 }
 
 impl Default for AuthFilter {
     fn default() -> Self {
-        Self { search_rules: SearchRules::default(), allow_index_creation: true }
+        Self {
+            search_rules: None,
+            key_authorized_indexes: SearchRules::default(),
+            allow_index_creation: true,
+        }
+    }
+}
+
+impl AuthFilter {
+    #[inline]
+    pub fn allow_index_creation(&self, index: &str) -> bool {
+        self.allow_index_creation && self.is_index_authorized(index)
+    }
+
+    pub fn with_allowed_indexes(allowed_indexes: HashSet<IndexUidPattern>) -> Self {
+        Self {
+            search_rules: None,
+            key_authorized_indexes: SearchRules::Set(allowed_indexes),
+            allow_index_creation: false,
+        }
+    }
+
+    pub fn all_indexes_authorized(&self) -> bool {
+        self.key_authorized_indexes.all_indexes_authorized()
+            && self
+                .search_rules
+                .as_ref()
+                .map(|search_rules| search_rules.all_indexes_authorized())
+                .unwrap_or(true)
+    }
+
+    pub fn is_index_authorized(&self, index: &str) -> bool {
+        self.key_authorized_indexes.is_index_authorized(index)
+            && self
+                .search_rules
+                .as_ref()
+                .map(|search_rules| search_rules.is_index_authorized(index))
+                .unwrap_or(true)
+    }
+
+    pub fn get_index_search_rules(&self, index: &str) -> Option<IndexSearchRules> {
+        if !self.is_index_authorized(index) {
+            return None;
+        }
+        let search_rules = self.search_rules.as_ref().unwrap_or(&self.key_authorized_indexes);
+        search_rules.get_index_search_rules(index)
     }
 }
 
@@ -185,7 +227,7 @@ impl Default for SearchRules {
 }
 
 impl SearchRules {
-    pub fn is_index_authorized(&self, index: &str) -> bool {
+    fn is_index_authorized(&self, index: &str) -> bool {
         match self {
             Self::Set(set) => {
                 set.contains("*")
@@ -200,7 +242,7 @@ impl SearchRules {
         }
     }
 
-    pub fn get_index_search_rules(&self, index: &str) -> Option<IndexSearchRules> {
+    fn get_index_search_rules(&self, index: &str) -> Option<IndexSearchRules> {
         match self {
             Self::Set(_) => {
                 if self.is_index_authorized(index) {
@@ -219,24 +261,10 @@ impl SearchRules {
         }
     }
 
-    /// Return the list of indexes such that `self.is_index_authorized(index) == true`,
-    /// or `None` if all indexes satisfy this condition.
-    pub fn authorized_indexes(&self) -> Option<Vec<IndexUidPattern>> {
+    fn all_indexes_authorized(&self) -> bool {
         match self {
-            SearchRules::Set(set) => {
-                if set.contains("*") {
-                    None
-                } else {
-                    Some(set.iter().cloned().collect())
-                }
-            }
-            SearchRules::Map(map) => {
-                if map.contains_key("*") {
-                    None
-                } else {
-                    Some(map.keys().cloned().collect())
-                }
-            }
+            SearchRules::Set(set) => set.contains("*"),
+            SearchRules::Map(map) => map.contains_key("*"),
         }
     }
 }

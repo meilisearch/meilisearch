@@ -442,3 +442,37 @@ async fn displayedattr_2_smol() {
         )
         .await;
 }
+
+#[cfg(feature = "default")]
+#[actix_rt::test]
+async fn test_cjk_highlight() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = json!([
+        { "id": 0, "title": "この度、クーポンで無料で頂きました。" },
+        { "id": 1, "title": "大卫到了扫罗那里" },
+    ]);
+    index.add_documents(documents, None).await;
+    index.wait_task(0).await;
+
+    index
+        .search(json!({"q": "で", "attributesToHighlight": ["title"]}), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            assert_eq!(
+                response["hits"][0]["_formatted"]["title"],
+                json!("この度、クーポン<em>で</em>無料<em>で</em>頂きました。")
+            );
+        })
+        .await;
+
+    index
+        .search(json!({"q": "大卫", "attributesToHighlight": ["title"]}), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            assert_eq!(
+                response["hits"][0]["_formatted"]["title"],
+                json!("<em>大卫</em>到了扫罗那里")
+            );
+        })
+        .await;
+}

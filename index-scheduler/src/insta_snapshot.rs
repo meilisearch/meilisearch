@@ -254,6 +254,6 @@ pub fn snapshot_canceled_by(
     snap
 }
 pub fn snapshot_index_mapper(rtxn: &RoTxn, mapper: &IndexMapper) -> String {
-    let names = mapper.indexes(rtxn).unwrap().into_iter().map(|(n, _)| n).collect::<Vec<_>>();
+    let names = mapper.index_names(rtxn).unwrap();
     format!("{names:?}")
 }

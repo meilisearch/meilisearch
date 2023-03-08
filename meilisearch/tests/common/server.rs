@@ -103,6 +103,10 @@ impl Server {
         Index { uid: uid.as_ref().to_string(), service: &self.service, encoder }
     }
 
+    pub async fn multi_search(&self, queries: Value) -> (Value, StatusCode) {
+        self.service.post("/multi-search", queries).await
+    }
+
     pub async fn list_indexes_raw(&self, parameters: &str) -> (Value, StatusCode) {
         self.service.get(format!("/indexes{parameters}")).await
     }
@@ -201,10 +205,10 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
         indexer_options: IndexerOpts {
             // memory has to be unlimited because several meilisearch are running in test context.
             max_indexing_memory: MaxMemory::unlimited(),
+            skip_index_budget: true,
             ..Parser::parse_from(None as Option<&str>)
         },
-        #[cfg(feature = "metrics")]
-        enable_metrics_route: true,
+        experimental_enable_metrics: true,
         ..Parser::parse_from(None as Option<&str>)
     }
 }

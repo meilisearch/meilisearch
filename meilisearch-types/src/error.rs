@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct ResponseError {
     #[serde(skip)]
-    code: StatusCode,
-    message: String,
+    pub code: StatusCode,
+    pub message: String,
     #[serde(rename = "code")]
     error_code: String,
     #[serde(rename = "type")]
@@ -212,6 +212,7 @@ InvalidApiKeyName                     , InvalidRequest       , BAD_REQUEST ;
 InvalidApiKeyOffset                   , InvalidRequest       , BAD_REQUEST ;
 InvalidApiKeyUid                      , InvalidRequest       , BAD_REQUEST ;
 InvalidContentType                    , InvalidRequest       , UNSUPPORTED_MEDIA_TYPE ;
+InvalidDocumentCsvDelimiter           , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentFields                 , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentGeoField               , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentId                     , InvalidRequest       , BAD_REQUEST ;
@@ -220,7 +221,6 @@ InvalidDocumentOffset                 , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexLimit                     , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexOffset                    , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexPrimaryKey                , InvalidRequest       , BAD_REQUEST ;
-InvalidIndexCsvDelimiter              , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexUid                       , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToCrop         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToHighlight    , InvalidRequest       , BAD_REQUEST ;

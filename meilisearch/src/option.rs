@@ -47,8 +47,7 @@ const MEILI_IGNORE_MISSING_DUMP: &str = "MEILI_IGNORE_MISSING_DUMP";
 const MEILI_IGNORE_DUMP_IF_DB_EXISTS: &str = "MEILI_IGNORE_DUMP_IF_DB_EXISTS";
 const MEILI_DUMP_DIR: &str = "MEILI_DUMP_DIR";
 const MEILI_LOG_LEVEL: &str = "MEILI_LOG_LEVEL";
-#[cfg(feature = "metrics")]
-const MEILI_ENABLE_METRICS_ROUTE: &str = "MEILI_ENABLE_METRICS_ROUTE";
+const MEILI_EXPERIMENTAL_ENABLE_METRICS: &str = "MEILI_EXPERIMENTAL_ENABLE_METRICS";
 
 const DEFAULT_CONFIG_FILE_PATH: &str = "./config.toml";
 const DEFAULT_DB_PATH: &str = "./data.ms";
@@ -65,11 +64,11 @@ const MEILI_MAX_INDEXING_THREADS: &str = "MEILI_MAX_INDEXING_THREADS";
 const DEFAULT_LOG_EVERY_N: usize = 100_000;
 
 // Each environment (index and task-db) is taking space in the virtual address space.
-//
-// The size of the virtual address space is limited by the OS. About 100TB for Linux and about 10TB for Windows.
-// This means that the number of indexes is limited to about 200 for Linux and about 20 for Windows.
-pub const INDEX_SIZE: u64 = 536_870_912_000; // 500 GiB
-pub const TASK_DB_SIZE: u64 = 10_737_418_240; // 10 GiB
+// Ideally, indexes can occupy 2TiB each to avoid having to manually resize them.
+// The actual size of the virtual address space is computed at startup to determine how many 2TiB indexes can be
+// opened simultaneously.
+pub const INDEX_SIZE: u64 = 2 * 1024 * 1024 * 1024 * 1024; // 2 TiB
+pub const TASK_DB_SIZE: u64 = 10 * 1024 * 1024 * 1024; // 10 GiB
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
@@ -287,11 +286,12 @@ pub struct Opt {
     #[serde(default)]
     pub log_level: LogLevel,
 
-    /// Enables Prometheus metrics and /metrics route.
-    #[cfg(feature = "metrics")]
-    #[clap(long, env = MEILI_ENABLE_METRICS_ROUTE)]
+    /// Experimental metrics feature. For more information, see: <https://github.com/meilisearch/meilisearch/discussions/3518>
+    ///
+    /// Enables the Prometheus metrics on the `GET /metrics` endpoint.
+    #[clap(long, env = MEILI_EXPERIMENTAL_ENABLE_METRICS)]
     #[serde(default)]
-    pub enable_metrics_route: bool,
+    pub experimental_enable_metrics: bool,
 
     #[serde(flatten)]
     #[clap(flatten)]
@@ -384,8 +384,7 @@ impl Opt {
             config_file_path: _,
             #[cfg(all(not(debug_assertions), feature = "analytics"))]
             no_analytics,
-            #[cfg(feature = "metrics")]
-            enable_metrics_route,
+            experimental_enable_metrics: enable_metrics_route,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
         export_to_env_if_not_present(MEILI_HTTP_ADDR, http_addr);
@@ -423,13 +422,10 @@ impl Opt {
 
         export_to_env_if_not_present(MEILI_DUMP_DIR, dump_dir);
         export_to_env_if_not_present(MEILI_LOG_LEVEL, log_level.to_string());
-        #[cfg(feature = "metrics")]
-        {
-            export_to_env_if_not_present(
-                MEILI_ENABLE_METRICS_ROUTE,
-                enable_metrics_route.to_string(),
-            );
-        }
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_ENABLE_METRICS,
+            enable_metrics_route.to_string(),
+        );
         indexer_options.export_to_env();
     }
 
@@ -494,12 +490,21 @@ pub struct IndexerOpts {
     #[clap(long, env = MEILI_MAX_INDEXING_THREADS, default_value_t)]
     #[serde(default)]
     pub max_indexing_threads: MaxThreads,
+
+    /// Whether or not we want to determine the budget of virtual memory address space we have available dynamically
+    /// (the default), or statically.
+    ///
+    /// Determining the budget of virtual memory address space dynamically takes some time on some systems (such as macOS)
+    /// and may make tests non-deterministic, so we want to skip it in tests.
+    #[clap(skip)]
+    #[serde(skip)]
+    pub skip_index_budget: bool,
 }
 
 impl IndexerOpts {
     /// Exports the values to their corresponding env vars if they are not set.
     pub fn export_to_env(self) {
-        let IndexerOpts { max_indexing_memory, max_indexing_threads } = self;
+        let IndexerOpts { max_indexing_memory, max_indexing_threads, skip_index_budget: _ } = self;
         if let Some(max_indexing_memory) = max_indexing_memory.0 {
             export_to_env_if_not_present(
                 MEILI_MAX_INDEXING_MEMORY,
@@ -527,6 +532,7 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
             max_memory: other.max_indexing_memory.map(|b| b.get_bytes() as usize),
             thread_pool: Some(thread_pool),
             max_positions_per_attributes: None,
+            skip_index_budget: other.skip_index_budget,
             ..Default::default()
         })
     }

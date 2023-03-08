@@ -5,8 +5,10 @@ use std::time::Instant;
 
 use deserr::Deserr;
 use either::Either;
+use meilisearch_auth::IndexSearchRules;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::TokenizerBuilder;
@@ -74,6 +76,100 @@ impl SearchQuery {
     }
 }
 
+/// A `SearchQuery` + an index UID.
+// This struct contains the fields of `SearchQuery` inline.
+// This is because neither deserr nor serde support `flatten` when using `deny_unknown_fields.
+// The `From<SearchQueryWithIndex>` implementation ensures both structs remain up to date.
+#[derive(Debug, Clone, PartialEq, Eq, Deserr)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+pub struct SearchQueryWithIndex {
+    #[deserr(error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
+    pub index_uid: IndexUid,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
+    pub q: Option<String>,
+    #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
+    pub offset: usize,
+    #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
+    pub limit: usize,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
+    pub page: Option<usize>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchHitsPerPage>)]
+    pub hits_per_page: Option<usize>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToRetrieve>)]
+    pub attributes_to_retrieve: Option<BTreeSet<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
+    pub attributes_to_crop: Option<Vec<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
+    pub crop_length: usize,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
+    pub attributes_to_highlight: Option<HashSet<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>, default)]
+    pub show_matches_position: bool,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
+    pub filter: Option<Value>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
+    pub sort: Option<Vec<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
+    pub facets: Option<Vec<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
+    pub highlight_pre_tag: String,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
+    pub highlight_post_tag: String,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
+    pub crop_marker: String,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
+    pub matching_strategy: MatchingStrategy,
+}
+
+impl SearchQueryWithIndex {
+    pub fn into_index_query(self) -> (IndexUid, SearchQuery) {
+        let SearchQueryWithIndex {
+            index_uid,
+            q,
+            offset,
+            limit,
+            page,
+            hits_per_page,
+            attributes_to_retrieve,
+            attributes_to_crop,
+            crop_length,
+            attributes_to_highlight,
+            show_matches_position,
+            filter,
+            sort,
+            facets,
+            highlight_pre_tag,
+            highlight_post_tag,
+            crop_marker,
+            matching_strategy,
+        } = self;
+        (
+            index_uid,
+            SearchQuery {
+                q,
+                offset,
+                limit,
+                page,
+                hits_per_page,
+                attributes_to_retrieve,
+                attributes_to_crop,
+                crop_length,
+                attributes_to_highlight,
+                show_matches_position,
+                filter,
+                sort,
+                facets,
+                highlight_pre_tag,
+                highlight_post_tag,
+                crop_marker,
+                matching_strategy,
+                // do not use ..Default::default() here,
+                // rather add any missing field from `SearchQuery` to `SearchQueryWithIndex`
+            },
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserr)]
 #[deserr(rename_all = camelCase)]
 pub enum MatchingStrategy {
@@ -108,7 +204,7 @@ pub struct SearchHit {
     pub matches_position: Option<MatchesPosition>,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
     pub hits: Vec<SearchHit>,
@@ -118,6 +214,16 @@ pub struct SearchResult {
     pub hits_info: HitsInfo,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facet_distribution: Option<BTreeMap<String, BTreeMap<String, u64>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub facet_stats: Option<BTreeMap<String, FacetStats>>,
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchResultWithIndex {
+    pub index_uid: String,
+    #[serde(flatten)]
+    pub result: SearchResult,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]
@@ -127,6 +233,32 @@ pub enum HitsInfo {
     Pagination { hits_per_page: usize, page: usize, total_pages: usize, total_hits: usize },
     #[serde(rename_all = "camelCase")]
     OffsetLimit { limit: usize, offset: usize, estimated_total_hits: usize },
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq)]
+pub struct FacetStats {
+    pub min: f64,
+    pub max: f64,
+}
+
+/// Incorporate search rules in search query
+pub fn add_search_rules(query: &mut SearchQuery, rules: IndexSearchRules) {
+    query.filter = match (query.filter.take(), rules.filter) {
+        (None, rules_filter) => rules_filter,
+        (filter, None) => filter,
+        (Some(filter), Some(rules_filter)) => {
+            let filter = match filter {
+                Value::Array(filter) => filter,
+                filter => vec![filter],
+            };
+            let rules_filter = match rules_filter {
+                Value::Array(rules_filter) => rules_filter,
+                rules_filter => vec![rules_filter],
+            };
+
+            Some(Value::Array([filter, rules_filter].concat()))
+        }
+    }
 }
 
 pub fn perform_search(
@@ -243,9 +375,10 @@ pub fn perform_search(
         &displayed_ids,
     );
 
-    let tokenizer = TokenizerBuilder::default().build();
+    let mut tokenizer_buidler = TokenizerBuilder::default();
+    tokenizer_buidler.create_char_map(true);
 
-    let mut formatter_builder = MatcherBuilder::new(matching_words, tokenizer);
+    let mut formatter_builder = MatcherBuilder::new(matching_words, tokenizer_buidler.build());
     formatter_builder.crop_marker(query.crop_marker);
     formatter_builder.highlight_prefix(query.highlight_pre_tag);
     formatter_builder.highlight_suffix(query.highlight_post_tag);
@@ -300,7 +433,7 @@ pub fn perform_search(
         HitsInfo::OffsetLimit { limit: query.limit, offset, estimated_total_hits: number_of_hits }
     };
 
-    let facet_distribution = match query.facets {
+    let (facet_distribution, facet_stats) = match query.facets {
         Some(ref fields) => {
             let mut facet_distribution = index.facets_distribution(&rtxn);
 
@@ -314,11 +447,15 @@ pub fn perform_search(
                 facet_distribution.facets(fields);
             }
             let distribution = facet_distribution.candidates(candidates).execute()?;
-
-            Some(distribution)
+            let stats = facet_distribution.compute_stats()?;
+            (Some(distribution), Some(stats))
         }
-        None => None,
+        None => (None, None),
     };
+
+    let facet_stats = facet_stats.map(|stats| {
+        stats.into_iter().map(|(k, (min, max))| (k, FacetStats { min, max })).collect()
+    });
 
     let result = SearchResult {
         hits: documents,
@@ -326,6 +463,7 @@ pub fn perform_search(
         query: query.q.clone().unwrap_or_default(),
         processing_time_ms: before_search.elapsed().as_millis(),
         facet_distribution,
+        facet_stats,
     };
     Ok(result)
 }

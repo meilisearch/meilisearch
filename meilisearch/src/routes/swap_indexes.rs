@@ -42,7 +42,7 @@ pub async fn swap_indexes(
         }),
         Some(&req),
     );
-    let search_rules = &index_scheduler.filters().search_rules;
+    let filters = index_scheduler.filters();
 
     let mut swaps = vec![];
     for SwapIndexesPayload { indexes } in params.into_iter() {
@@ -53,7 +53,7 @@ pub async fn swap_indexes(
                 return Err(MeilisearchHttpError::SwapIndexPayloadWrongLength(indexes).into());
             }
         };
-        if !search_rules.is_index_authorized(lhs) || !search_rules.is_index_authorized(rhs) {
+        if !filters.is_index_authorized(lhs) || !filters.is_index_authorized(rhs) {
             return Err(AuthenticationError::InvalidToken.into());
         }
         swaps.push(IndexSwap { indexes: (lhs.to_string(), rhs.to_string()) });

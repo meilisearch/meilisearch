@@ -46,7 +46,7 @@ pub fn check_version_file(db_path: &Path) -> anyhow::Result<()> {
 pub enum VersionFileError {
     #[error(
         "Meilisearch (v{}) failed to infer the version of the database.
-        To update Meilisearch please follow our guide on https://docs.meilisearch.com/learn/advanced/updating.html.",
+        To update Meilisearch please follow our guide on https://docs.meilisearch.com/learn/update_and_migration/updating.html.",
         env!("CARGO_PKG_VERSION").to_string()
     )]
     MissingVersionFile,
@@ -54,7 +54,7 @@ pub enum VersionFileError {
     MalformedVersionFile,
     #[error(
         "Your database version ({major}.{minor}.{patch}) is incompatible with your current engine version ({}).\n\
-        To migrate data between Meilisearch versions, please follow our guide on https://docs.meilisearch.com/learn/advanced/updating.html.",
+        To migrate data between Meilisearch versions, please follow our guide on https://docs.meilisearch.com/learn/update_and_migration/updating.html.",
         env!("CARGO_PKG_VERSION").to_string()
     )]
     VersionMismatch { major: String, minor: String, patch: String },

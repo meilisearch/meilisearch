@@ -160,19 +160,19 @@ pub async fn get_all_documents(
 pub struct UpdateDocumentsQuery {
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexPrimaryKey>)]
     pub primary_key: Option<String>,
-    #[deserr(default, try_from(char) = from_char_csv_delimiter -> DeserrQueryParamError<InvalidIndexCsvDelimiter>, error = DeserrQueryParamError<InvalidIndexCsvDelimiter>)]
+    #[deserr(default, try_from(char) = from_char_csv_delimiter -> DeserrQueryParamError<InvalidDocumentCsvDelimiter>, error = DeserrQueryParamError<InvalidDocumentCsvDelimiter>)]
     pub csv_delimiter: Option<u8>,
 }
 
 fn from_char_csv_delimiter(
     c: char,
-) -> Result<Option<u8>, DeserrQueryParamError<InvalidIndexCsvDelimiter>> {
+) -> Result<Option<u8>, DeserrQueryParamError<InvalidDocumentCsvDelimiter>> {
     if c.is_ascii() {
         Ok(Some(c as u8))
     } else {
         Err(DeserrQueryParamError::new(
             format!("csv delimiter must be an ascii character. Found: `{}`", c),
-            Code::InvalidIndexCsvDelimiter,
+            Code::InvalidDocumentCsvDelimiter,
         ))
     }
 }
@@ -192,7 +192,7 @@ pub async fn replace_documents(
 
     analytics.add_documents(&params, index_scheduler.index(&index_uid).is_err(), &req);
 
-    let allow_index_creation = index_scheduler.filters().allow_index_creation;
+    let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
     let task = document_addition(
         extract_mime_type(&req)?,
         index_scheduler,
@@ -223,7 +223,7 @@ pub async fn update_documents(
 
     analytics.update_documents(&params, index_scheduler.index(&index_uid).is_err(), &req);
 
-    let allow_index_creation = index_scheduler.filters().allow_index_creation;
+    let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
     let task = document_addition(
         extract_mime_type(&req)?,
         index_scheduler,
