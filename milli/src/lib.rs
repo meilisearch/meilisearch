@@ -54,8 +54,6 @@ pub static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 #[macro_use]
 pub mod documents;
 
-pub use search::new;
-
 mod asc_desc;
 mod criterion;
 mod error;

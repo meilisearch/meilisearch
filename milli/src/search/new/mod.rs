@@ -11,12 +11,8 @@ mod small_bitmap;
 mod sort;
 mod words;
 
-use self::interner::Interner;
-use self::logger::SearchLogger;
-use self::query_term::Phrase;
-use self::resolve_query_graph::{resolve_query_graph, NodeDocIdsCache};
-use crate::new::query_term::located_query_terms_from_string;
-use crate::{Filter, Index, Result, TermsMatchingStrategy};
+use std::collections::BTreeSet;
+
 use charabia::Tokenize;
 use db_cache::DatabaseCache;
 use heed::RoTxn;
@@ -26,7 +22,13 @@ pub use ranking_rules::{
     RankingRuleOutputIterWrapper, RankingRuleQueryTrait,
 };
 use roaring::RoaringBitmap;
-use std::collections::BTreeSet;
+
+use self::interner::Interner;
+use self::logger::SearchLogger;
+use self::query_term::Phrase;
+use self::resolve_query_graph::{resolve_query_graph, NodeDocIdsCache};
+use crate::search::new::query_term::located_query_terms_from_string;
+use crate::{Filter, Index, Result, TermsMatchingStrategy};
 
 pub enum BitmapOrAllRef<'s> {
     Bitmap(&'s RoaringBitmap),

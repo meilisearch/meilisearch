@@ -1,12 +1,12 @@
-use super::logger::SearchLogger;
-use super::ranking_rule_graph::EdgeDocidsCache;
-use super::ranking_rule_graph::EmptyPathsCache;
-use super::ranking_rule_graph::{RankingRuleGraph, RankingRuleGraphTrait};
-use super::small_bitmap::SmallBitmap;
-use super::SearchContext;
-use super::{BitmapOrAllRef, QueryGraph, RankingRule, RankingRuleOutput};
-use crate::Result;
 use roaring::RoaringBitmap;
+
+use super::logger::SearchLogger;
+use super::ranking_rule_graph::{
+    EdgeDocidsCache, EmptyPathsCache, RankingRuleGraph, RankingRuleGraphTrait,
+};
+use super::small_bitmap::SmallBitmap;
+use super::{BitmapOrAllRef, QueryGraph, RankingRule, RankingRuleOutput, SearchContext};
+use crate::Result;
 
 pub struct GraphBasedRankingRule<G: RankingRuleGraphTrait> {
     id: String,

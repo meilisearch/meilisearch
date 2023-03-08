@@ -1,9 +1,11 @@
+use std::collections::BTreeSet;
+
+use roaring::RoaringBitmap;
+
 use super::logger::SearchLogger;
 use super::resolve_query_graph::resolve_query_graph;
 use super::{QueryGraph, QueryNode, RankingRule, RankingRuleOutput, SearchContext};
 use crate::{Result, TermsMatchingStrategy};
-use roaring::RoaringBitmap;
-use std::collections::BTreeSet;
 
 pub struct Words {
     exhausted: bool,

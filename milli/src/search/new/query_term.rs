@@ -12,12 +12,11 @@ use heed::types::DecodeIgnore;
 use heed::RoTxn;
 use itertools::Itertools;
 
+use super::interner::{Interned, Interner};
+use super::SearchContext;
 use crate::search::fst_utils::{Complement, Intersection, StartsWith, Union};
 use crate::search::{build_dfa, get_first};
 use crate::{CboRoaringBitmapLenCodec, Index, Result};
-
-use super::interner::{Interned, Interner};
-use super::SearchContext;
 
 #[derive(Default, Clone, PartialEq, Eq, Hash)]
 pub struct Phrase {

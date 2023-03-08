@@ -1,15 +1,16 @@
 pub mod build;
 pub mod compute_docids;
 
+use roaring::RoaringBitmap;
+
 use super::empty_paths_cache::EmptyPathsCache;
 use super::{EdgeDetails, RankingRuleGraphTrait};
-use crate::new::interner::Interned;
-use crate::new::logger::SearchLogger;
-use crate::new::query_term::WordDerivations;
-use crate::new::small_bitmap::SmallBitmap;
-use crate::new::{QueryGraph, QueryNode, SearchContext};
+use crate::search::new::interner::Interned;
+use crate::search::new::logger::SearchLogger;
+use crate::search::new::query_term::WordDerivations;
+use crate::search::new::small_bitmap::SmallBitmap;
+use crate::search::new::{QueryGraph, QueryNode, SearchContext};
 use crate::Result;
-use roaring::RoaringBitmap;
 
 // TODO: intern the proximity edges as well?
 

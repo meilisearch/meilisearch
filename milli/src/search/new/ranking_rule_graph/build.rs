@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
 use super::{Edge, RankingRuleGraph, RankingRuleGraphTrait};
-use crate::new::small_bitmap::SmallBitmap;
-use crate::new::{QueryGraph, SearchContext};
+use crate::search::new::small_bitmap::SmallBitmap;
+use crate::search::new::{QueryGraph, SearchContext};
 use crate::Result;
 
 impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {

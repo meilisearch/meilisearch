@@ -1,11 +1,12 @@
 #![allow(clippy::too_many_arguments)]
 
-use super::empty_paths_cache::EmptyPathsCache;
-use super::{RankingRuleGraph, RankingRuleGraphTrait};
-use crate::new::small_bitmap::SmallBitmap;
-use crate::Result;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, VecDeque};
+
+use super::empty_paths_cache::EmptyPathsCache;
+use super::{RankingRuleGraph, RankingRuleGraphTrait};
+use crate::search::new::small_bitmap::SmallBitmap;
+use crate::Result;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Path {

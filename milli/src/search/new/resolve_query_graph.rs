@@ -1,12 +1,14 @@
+use std::collections::VecDeque;
+
+use fxhash::FxHashMap;
+use heed::BytesDecode;
+use roaring::{MultiOps, RoaringBitmap};
+
 use super::interner::Interned;
 use super::query_term::{Phrase, QueryTerm, WordDerivations};
 use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, QueryNode, SearchContext};
 use crate::{CboRoaringBitmapCodec, Result, RoaringBitmapCodec};
-use fxhash::FxHashMap;
-use heed::BytesDecode;
-use roaring::{MultiOps, RoaringBitmap};
-use std::collections::VecDeque;
 
 // TODO: manual performance metrics: access to DB, bitmap deserializations/operations, etc.
 #[derive(Default)]

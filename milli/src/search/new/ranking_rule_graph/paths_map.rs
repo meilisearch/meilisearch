@@ -1,10 +1,9 @@
-use crate::new::small_bitmap::SmallBitmap;
 use super::cheapest_paths::Path;
+use crate::search::new::small_bitmap::SmallBitmap;
 
 // What is PathsMap used for?
 // For the empty_prefixes field in the EmptyPathsCache only :/
 // but it could be used for more, like efficient computing of a set of paths
-
 
 #[derive(Debug, Clone)]
 pub struct PathsMap<V> {
@@ -53,10 +52,10 @@ impl<V> PathsMap<V> {
         }
     }
     fn remove_first_rec(&mut self, cur: &mut Vec<u16>) -> (bool, V) {
-        let Some((first_edge, rest)) = self.nodes.first_mut() else { 
+        let Some((first_edge, rest)) = self.nodes.first_mut() else {
             // The PathsMap has to be correct by construction here, otherwise
             // the unwrap() will crash
-            return (true, self.value.take().unwrap()) 
+            return (true, self.value.take().unwrap())
         };
         cur.push(*first_edge);
         let (rest_is_empty, value) = rest.remove_first_rec(cur);

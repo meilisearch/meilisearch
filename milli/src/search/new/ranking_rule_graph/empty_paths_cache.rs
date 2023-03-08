@@ -1,6 +1,5 @@
-use crate::new::small_bitmap::SmallBitmap;
-
 use super::paths_map::PathsMap;
+use crate::search::new::small_bitmap::SmallBitmap;
 
 #[derive(Clone)]
 pub struct EmptyPathsCache {

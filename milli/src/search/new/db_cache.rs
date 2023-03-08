@@ -1,8 +1,11 @@
-use super::{interner::Interned, SearchContext};
-use crate::Result;
+use std::collections::hash_map::Entry;
+
 use fxhash::FxHashMap;
 use heed::types::ByteSlice;
-use std::collections::hash_map::Entry;
+
+use super::interner::Interned;
+use super::SearchContext;
+use crate::Result;
 
 #[derive(Default)]
 pub struct DatabaseCache<'search> {

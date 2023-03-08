@@ -1,11 +1,13 @@
-use super::ProximityEdge;
-use crate::new::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
-use crate::new::ranking_rule_graph::proximity::WordPair;
-use crate::new::ranking_rule_graph::EdgeDetails;
-use crate::new::{QueryNode, SearchContext};
-use crate::Result;
-use itertools::Itertools;
 use std::collections::BTreeMap;
+
+use itertools::Itertools;
+
+use super::ProximityEdge;
+use crate::search::new::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
+use crate::search::new::ranking_rule_graph::proximity::WordPair;
+use crate::search::new::ranking_rule_graph::EdgeDetails;
+use crate::search::new::{QueryNode, SearchContext};
+use crate::Result;
 
 pub fn visit_from_node(
     ctx: &mut SearchContext,

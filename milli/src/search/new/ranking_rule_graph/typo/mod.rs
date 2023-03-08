@@ -1,14 +1,15 @@
-use super::empty_paths_cache::EmptyPathsCache;
-use super::{EdgeDetails, RankingRuleGraph, RankingRuleGraphTrait};
-use crate::new::interner::Interned;
-use crate::new::logger::SearchLogger;
-use crate::new::query_term::{LocatedQueryTerm, Phrase, QueryTerm, WordDerivations};
-use crate::new::resolve_query_graph::resolve_phrase;
-use crate::new::small_bitmap::SmallBitmap;
-use crate::new::{QueryGraph, QueryNode, SearchContext};
-use crate::{Result, RoaringBitmapCodec};
 use heed::BytesDecode;
 use roaring::RoaringBitmap;
+
+use super::empty_paths_cache::EmptyPathsCache;
+use super::{EdgeDetails, RankingRuleGraph, RankingRuleGraphTrait};
+use crate::search::new::interner::Interned;
+use crate::search::new::logger::SearchLogger;
+use crate::search::new::query_term::{LocatedQueryTerm, Phrase, QueryTerm, WordDerivations};
+use crate::search::new::resolve_query_graph::resolve_phrase;
+use crate::search::new::small_bitmap::SmallBitmap;
+use crate::search::new::{QueryGraph, QueryNode, SearchContext};
+use crate::{Result, RoaringBitmapCodec};
 
 #[derive(Clone)]
 pub enum TypoEdge {

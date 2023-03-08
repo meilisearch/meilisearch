@@ -3,11 +3,9 @@ pub mod detailed;
 
 use roaring::RoaringBitmap;
 
-use super::{
-    ranking_rule_graph::{EmptyPathsCache, ProximityGraph, RankingRuleGraph, TypoGraph},
-    small_bitmap::SmallBitmap,
-    RankingRule, RankingRuleQueryTrait,
-};
+use super::ranking_rule_graph::{EmptyPathsCache, ProximityGraph, RankingRuleGraph, TypoGraph};
+use super::small_bitmap::SmallBitmap;
+use super::{RankingRule, RankingRuleQueryTrait};
 
 pub struct DefaultSearchLogger;
 impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {

@@ -1,10 +1,11 @@
 use std::marker::PhantomData;
 
-use super::{EdgeDetails, RankingRuleGraph, RankingRuleGraphTrait};
-use crate::new::{BitmapOrAllRef, SearchContext};
-use crate::Result;
 use fxhash::FxHashMap;
 use roaring::RoaringBitmap;
+
+use super::{EdgeDetails, RankingRuleGraph, RankingRuleGraphTrait};
+use crate::search::new::{BitmapOrAllRef, SearchContext};
+use crate::Result;
 
 // TODO: the cache should have a G::EdgeDetails as key
 // but then it means that we should have a quick way of

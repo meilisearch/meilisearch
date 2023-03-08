@@ -1,6 +1,7 @@
-use fxhash::FxHashMap;
 use std::hash::Hash;
 use std::marker::PhantomData;
+
+use fxhash::FxHashMap;
 
 pub struct Interned<T> {
     idx: u32,

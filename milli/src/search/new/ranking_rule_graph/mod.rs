@@ -6,15 +6,16 @@ mod paths_map;
 mod proximity;
 mod typo;
 
-use super::logger::SearchLogger;
-use super::small_bitmap::SmallBitmap;
-use super::{QueryGraph, QueryNode, SearchContext};
-use crate::Result;
 pub use edge_docids_cache::EdgeDocidsCache;
 pub use empty_paths_cache::EmptyPathsCache;
 pub use proximity::ProximityGraph;
 use roaring::RoaringBitmap;
 pub use typo::TypoGraph;
+
+use super::logger::SearchLogger;
+use super::small_bitmap::SmallBitmap;
+use super::{QueryGraph, QueryNode, SearchContext};
+use crate::Result;
 
 #[derive(Debug, Clone)]
 pub enum EdgeDetails<E> {

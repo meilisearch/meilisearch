@@ -1,39 +1,37 @@
+use std::fs::File;
+use std::io::Write;
+use std::path::PathBuf;
+use std::time::Instant;
 
 use rand::random;
 use roaring::RoaringBitmap;
-use std::fs::File;
-use std::time::Instant;
-use std::{io::Write, path::PathBuf};
 
-use crate::new::ranking_rule_graph::TypoGraph;
-use crate::new::small_bitmap::SmallBitmap;
-use crate::new::{QueryNode, QueryGraph, SearchContext};
-use crate::new::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
-use crate::new::ranking_rule_graph::EmptyPathsCache;
-use crate::new::ranking_rule_graph::{Edge, EdgeDetails, RankingRuleGraphTrait};
-use crate::new::ranking_rule_graph::{
-    ProximityGraph, RankingRuleGraph,
+use crate::search::new::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
+use crate::search::new::ranking_rule_graph::{
+    Edge, EdgeDetails, EmptyPathsCache, ProximityGraph, RankingRuleGraph, RankingRuleGraphTrait,
+    TypoGraph,
 };
-
-use super::{RankingRule, SearchLogger};
+use crate::search::new::small_bitmap::SmallBitmap;
+use crate::search::new::{QueryGraph, QueryNode, SearchContext};
+use crate::search::new::{RankingRule, SearchLogger};
 
 pub enum SearchEvents {
     RankingRuleStartIteration {
         ranking_rule_idx: usize,
         query: QueryGraph,
         universe: RoaringBitmap,
-        time: Instant
+        time: Instant,
     },
     RankingRuleNextBucket {
         ranking_rule_idx: usize,
         universe: RoaringBitmap,
         candidates: RoaringBitmap,
-        time: Instant
+        time: Instant,
     },
     RankingRuleEndIteration {
         ranking_rule_idx: usize,
         universe: RoaringBitmap,
-        time: Instant
+        time: Instant,
     },
     ExtendResults {
         new: Vec<u32>,
@@ -57,7 +55,11 @@ pub enum SearchEvents {
         distances: Vec<Vec<(u16, SmallBitmap)>>,
         cost: u16,
     },
-    RankingRuleSkipBucket { ranking_rule_idx: usize, candidates: RoaringBitmap, time: Instant },
+    RankingRuleSkipBucket {
+        ranking_rule_idx: usize,
+        candidates: RoaringBitmap,
+        time: Instant,
+    },
 }
 
 pub struct DetailedSearchLogger {
@@ -106,7 +108,6 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         _ranking_rule: &dyn RankingRule<'transaction, QueryGraph>,
         query: &QueryGraph,
         universe: &RoaringBitmap,
-        
     ) {
         self.events.push(SearchEvents::RankingRuleStartIteration {
             ranking_rule_idx,
@@ -122,7 +123,6 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         _ranking_rule: &dyn RankingRule<'transaction, QueryGraph>,
         universe: &RoaringBitmap,
         candidates: &RoaringBitmap,
-        
     ) {
         self.events.push(SearchEvents::RankingRuleNextBucket {
             ranking_rule_idx,
@@ -136,12 +136,11 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         ranking_rule_idx: usize,
         _ranking_rule: &dyn RankingRule<'transaction, QueryGraph>,
         candidates: &RoaringBitmap,
-        
     ) {
         self.events.push(SearchEvents::RankingRuleSkipBucket {
             ranking_rule_idx,
             candidates: candidates.clone(),
-            time: Instant::now()
+            time: Instant::now(),
         })
     }
 
@@ -150,12 +149,11 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         ranking_rule_idx: usize,
         _ranking_rule: &dyn RankingRule<'transaction, QueryGraph>,
         universe: &RoaringBitmap,
-        
     ) {
         self.events.push(SearchEvents::RankingRuleEndIteration {
             ranking_rule_idx,
             universe: universe.clone(),
-            time: Instant::now()
+            time: Instant::now(),
         })
     }
     fn add_to_results(&mut self, docids: &[u32]) {
@@ -166,18 +164,47 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         self.events.push(SearchEvents::WordsState { query_graph: query_graph.clone() });
     }
 
-    fn log_proximity_state(&mut self, query_graph: &RankingRuleGraph<ProximityGraph>, paths_map: &[Vec<u16>], empty_paths_cache: &EmptyPathsCache, universe: &RoaringBitmap, distances: Vec<Vec<(u16, SmallBitmap)>>, cost: u16,) {
-        self.events.push(SearchEvents::ProximityState { graph: query_graph.clone(), paths: paths_map.to_vec(), empty_paths_cache: empty_paths_cache.clone(), universe: universe.clone(), distances, cost })
-    }
-    
-    fn log_typo_state(&mut self, query_graph: &RankingRuleGraph<TypoGraph>, paths_map: &[Vec<u16>], empty_paths_cache: &EmptyPathsCache, universe: &RoaringBitmap, distances: Vec<Vec<(u16, SmallBitmap)>>,  cost: u16,) {
-        self.events.push(SearchEvents::TypoState { graph: query_graph.clone(), paths: paths_map.to_vec(), empty_paths_cache: empty_paths_cache.clone(), universe: universe.clone(), distances,  cost })
+    fn log_proximity_state(
+        &mut self,
+        query_graph: &RankingRuleGraph<ProximityGraph>,
+        paths_map: &[Vec<u16>],
+        empty_paths_cache: &EmptyPathsCache,
+        universe: &RoaringBitmap,
+        distances: Vec<Vec<(u16, SmallBitmap)>>,
+        cost: u16,
+    ) {
+        self.events.push(SearchEvents::ProximityState {
+            graph: query_graph.clone(),
+            paths: paths_map.to_vec(),
+            empty_paths_cache: empty_paths_cache.clone(),
+            universe: universe.clone(),
+            distances,
+            cost,
+        })
     }
 
+    fn log_typo_state(
+        &mut self,
+        query_graph: &RankingRuleGraph<TypoGraph>,
+        paths_map: &[Vec<u16>],
+        empty_paths_cache: &EmptyPathsCache,
+        universe: &RoaringBitmap,
+        distances: Vec<Vec<(u16, SmallBitmap)>>,
+        cost: u16,
+    ) {
+        self.events.push(SearchEvents::TypoState {
+            graph: query_graph.clone(),
+            paths: paths_map.to_vec(),
+            empty_paths_cache: empty_paths_cache.clone(),
+            universe: universe.clone(),
+            distances,
+            cost,
+        })
+    }
 }
 
 impl DetailedSearchLogger {
-    pub fn write_d2_description(&self,ctx: &mut SearchContext,) {
+    pub fn write_d2_description(&self, ctx: &mut SearchContext) {
         let mut prev_time = self.initial_query_time.unwrap();
         let mut timestamp = vec![];
         fn activated_id(timestamp: &[usize]) -> String {
@@ -229,21 +256,29 @@ impl DetailedSearchLogger {
                         )
                         .unwrap();
                     }
-                    writeln!(&mut file, 
-                    "{ranking_rule_idx}.{self_activated_id} {{
+                    writeln!(
+                        &mut file,
+                        "{ranking_rule_idx}.{self_activated_id} {{
     style {{
         fill: \"#D8A7B1\"
     }}
-}}").unwrap();
+}}"
+                    )
+                    .unwrap();
                 }
-                SearchEvents::RankingRuleNextBucket { ranking_rule_idx, time, universe, candidates } => {
+                SearchEvents::RankingRuleNextBucket {
+                    ranking_rule_idx,
+                    time,
+                    universe,
+                    candidates,
+                } => {
                     let _elapsed = time.duration_since(prev_time);
                     prev_time = *time;
                     let old_activated_id = activated_id(&timestamp);
                     // writeln!(&mut file, "time.{old_activated_id}: {:.2}", elapsed.as_micros() as f64 / 1000.0).unwrap();
                     *timestamp.last_mut().unwrap() += 1;
                     let next_activated_id = activated_id(&timestamp);
-                    writeln!(&mut file, 
+                    writeln!(&mut file,
                         "{ranking_rule_idx}.{old_activated_id} -> {ranking_rule_idx}.{next_activated_id} : next bucket {}/{}", candidates.len(), universe.len())
                         .unwrap();
                 }
@@ -255,7 +290,7 @@ impl DetailedSearchLogger {
                     *timestamp.last_mut().unwrap() += 1;
                     let next_activated_id = activated_id(&timestamp);
                     let len = candidates.len();
-                    writeln!(&mut file, 
+                    writeln!(&mut file,
                         "{ranking_rule_idx}.{old_activated_id} -> {ranking_rule_idx}.{next_activated_id} : skip bucket ({len})",)
                         .unwrap();
                 }
@@ -280,14 +315,14 @@ impl DetailedSearchLogger {
                 }
                 SearchEvents::ExtendResults { new } => {
                     if new.is_empty() {
-                        continue
+                        continue;
                     }
                     let cur_ranking_rule = timestamp.len() - 1;
                     let cur_activated_id = activated_id(&timestamp);
                     let docids = new.iter().collect::<Vec<_>>();
                     let len = new.len();
                     let random = random::<u64>();
-                    
+
                     writeln!(
                         &mut file,
                         "{cur_ranking_rule}.{cur_activated_id} -> results.{random} : \"add {len}\"
@@ -300,7 +335,7 @@ results.{random} {{
 "
                     )
                     .unwrap();
-                },
+                }
                 SearchEvents::WordsState { query_graph } => {
                     let cur_ranking_rule = timestamp.len() - 1;
                     *timestamp.last_mut().unwrap() += 1;
@@ -314,9 +349,18 @@ results.{random} {{
                         &mut file,
                         "{id} {{
     link: \"{id}.d2.svg\"
-}}").unwrap();
-                },
-                SearchEvents::ProximityState { graph, paths, empty_paths_cache, universe, distances, cost } => {
+}}"
+                    )
+                    .unwrap();
+                }
+                SearchEvents::ProximityState {
+                    graph,
+                    paths,
+                    empty_paths_cache,
+                    universe,
+                    distances,
+                    cost,
+                } => {
                     let cur_ranking_rule = timestamp.len() - 1;
                     *timestamp.last_mut().unwrap() += 1;
                     let cur_activated_id = activated_id(&timestamp);
@@ -324,15 +368,32 @@ results.{random} {{
                     let id = format!("{cur_ranking_rule}.{cur_activated_id}");
                     let new_file_path = self.folder_path.join(format!("{id}.d2"));
                     let mut new_file = std::fs::File::create(new_file_path).unwrap();
-                    Self::ranking_rule_graph_d2_description(ctx, graph, paths, empty_paths_cache, distances.clone(), &mut new_file);
+                    Self::ranking_rule_graph_d2_description(
+                        ctx,
+                        graph,
+                        paths,
+                        empty_paths_cache,
+                        distances.clone(),
+                        &mut new_file,
+                    );
                     writeln!(
                         &mut file,
                         "{id} {{
     link: \"{id}.d2.svg\"
     tooltip: \"cost {cost}, universe len: {}\"
-}}", universe.len()).unwrap();
-                },
-                SearchEvents::TypoState { graph, paths, empty_paths_cache, universe, distances, cost } => {
+}}",
+                        universe.len()
+                    )
+                    .unwrap();
+                }
+                SearchEvents::TypoState {
+                    graph,
+                    paths,
+                    empty_paths_cache,
+                    universe,
+                    distances,
+                    cost,
+                } => {
                     let cur_ranking_rule = timestamp.len() - 1;
                     *timestamp.last_mut().unwrap() += 1;
                     let cur_activated_id = activated_id(&timestamp);
@@ -340,89 +401,130 @@ results.{random} {{
                     let id = format!("{cur_ranking_rule}.{cur_activated_id}");
                     let new_file_path = self.folder_path.join(format!("{id}.d2"));
                     let mut new_file = std::fs::File::create(new_file_path).unwrap();
-                    Self::ranking_rule_graph_d2_description(ctx,graph, paths, empty_paths_cache, distances.clone(), &mut new_file);
+                    Self::ranking_rule_graph_d2_description(
+                        ctx,
+                        graph,
+                        paths,
+                        empty_paths_cache,
+                        distances.clone(),
+                        &mut new_file,
+                    );
                     writeln!(
                         &mut file,
                         "{id} {{
     link: \"{id}.d2.svg\"
     tooltip: \"cost {cost}, universe len: {}\"
-}}", universe.len()).unwrap();
-                },
+}}",
+                        universe.len()
+                    )
+                    .unwrap();
+                }
             }
         }
         writeln!(&mut file, "}}").unwrap();
     }
-    
-    fn query_node_d2_desc(ctx: &mut SearchContext, node_idx: usize, node: &QueryNode, distances: &[(u16, SmallBitmap)], file: &mut File) {
+
+    fn query_node_d2_desc(
+        ctx: &mut SearchContext,
+        node_idx: usize,
+        node: &QueryNode,
+        distances: &[(u16, SmallBitmap)],
+        file: &mut File,
+    ) {
         match &node {
-            QueryNode::Term(LocatedQueryTerm { value, .. }) => {
-                match value {
-                    QueryTerm::Phrase { phrase } => {
-                        let phrase = ctx.phrase_interner.get(*phrase);
-                        let phrase_str =  phrase.description(&ctx.word_interner);
-                        writeln!(file,"{node_idx} : \"{phrase_str}\"").unwrap();
-                    },
-                    QueryTerm::Word { derivations: WordDerivations { original, zero_typo, one_typo, two_typos, use_prefix_db, synonyms, split_words } } => {
-                        let original = ctx.word_interner.get(*original);
-                        writeln!(file,"{node_idx} : \"{original}\" {{
-shape: class").unwrap();
-                        for w in zero_typo.iter().copied() {
-                            let w = ctx.word_interner.get(w);
-                            writeln!(file, "\"{w}\" : 0").unwrap();
-                        }
-                        for w in one_typo.iter().copied() {
-                            let w = ctx.word_interner.get(w);
-                            writeln!(file, "\"{w}\" : 1").unwrap();
-                        }
-                        for w in two_typos.iter().copied() {
-                            let w = ctx.word_interner.get(w);
-                            writeln!(file, "\"{w}\" : 2").unwrap();
-                        }
-                        if let Some(split_words) = split_words {
-                            let phrase = ctx.phrase_interner.get(*split_words);
-                            let phrase_str =  phrase.description(&ctx.word_interner);
-                            writeln!(file, "\"{phrase_str}\" : split_words").unwrap();
-                        }
-                        for synonym in synonyms.iter().copied() {
-                            let phrase = ctx.phrase_interner.get(synonym);
-                            let phrase_str =  phrase.description(&ctx.word_interner);
-                            writeln!(file, "\"{phrase_str}\" : synonym").unwrap();
-                        }
-                        if *use_prefix_db {
-                            writeln!(file, "use prefix DB : true").unwrap();
-                        }
-                        for (d, edges) in distances.iter() {
-                            writeln!(file, "\"distance {d}\" : {:?}", edges.iter().collect::<Vec<_>>() ).unwrap();
-                        }
-                        
-                        writeln!(file, "}}").unwrap();
-                    },
+            QueryNode::Term(LocatedQueryTerm { value, .. }) => match value {
+                QueryTerm::Phrase { phrase } => {
+                    let phrase = ctx.phrase_interner.get(*phrase);
+                    let phrase_str = phrase.description(&ctx.word_interner);
+                    writeln!(file, "{node_idx} : \"{phrase_str}\"").unwrap();
+                }
+                QueryTerm::Word {
+                    derivations:
+                        WordDerivations {
+                            original,
+                            zero_typo,
+                            one_typo,
+                            two_typos,
+                            use_prefix_db,
+                            synonyms,
+                            split_words,
+                        },
+                } => {
+                    let original = ctx.word_interner.get(*original);
+                    writeln!(
+                        file,
+                        "{node_idx} : \"{original}\" {{
+shape: class"
+                    )
+                    .unwrap();
+                    for w in zero_typo.iter().copied() {
+                        let w = ctx.word_interner.get(w);
+                        writeln!(file, "\"{w}\" : 0").unwrap();
+                    }
+                    for w in one_typo.iter().copied() {
+                        let w = ctx.word_interner.get(w);
+                        writeln!(file, "\"{w}\" : 1").unwrap();
+                    }
+                    for w in two_typos.iter().copied() {
+                        let w = ctx.word_interner.get(w);
+                        writeln!(file, "\"{w}\" : 2").unwrap();
+                    }
+                    if let Some(split_words) = split_words {
+                        let phrase = ctx.phrase_interner.get(*split_words);
+                        let phrase_str = phrase.description(&ctx.word_interner);
+                        writeln!(file, "\"{phrase_str}\" : split_words").unwrap();
+                    }
+                    for synonym in synonyms.iter().copied() {
+                        let phrase = ctx.phrase_interner.get(synonym);
+                        let phrase_str = phrase.description(&ctx.word_interner);
+                        writeln!(file, "\"{phrase_str}\" : synonym").unwrap();
+                    }
+                    if *use_prefix_db {
+                        writeln!(file, "use prefix DB : true").unwrap();
+                    }
+                    for (d, edges) in distances.iter() {
+                        writeln!(file, "\"distance {d}\" : {:?}", edges.iter().collect::<Vec<_>>())
+                            .unwrap();
+                    }
+
+                    writeln!(file, "}}").unwrap();
                 }
             },
             QueryNode::Deleted => panic!(),
             QueryNode::Start => {
-                writeln!(file,"{node_idx} : START").unwrap();
-            },
+                writeln!(file, "{node_idx} : START").unwrap();
+            }
             QueryNode::End => {
-                writeln!(file,"{node_idx} : END").unwrap();
-            },
+                writeln!(file, "{node_idx} : END").unwrap();
+            }
         }
     }
-    fn query_graph_d2_description(ctx: &mut SearchContext, query_graph: &QueryGraph, file: &mut File) {
-        writeln!(file,"direction: right").unwrap();
+    fn query_graph_d2_description(
+        ctx: &mut SearchContext,
+        query_graph: &QueryGraph,
+        file: &mut File,
+    ) {
+        writeln!(file, "direction: right").unwrap();
         for node in 0..query_graph.nodes.len() {
             if matches!(query_graph.nodes[node], QueryNode::Deleted) {
                 continue;
             }
             Self::query_node_d2_desc(ctx, node, &query_graph.nodes[node], &[], file);
-            
+
             for edge in query_graph.edges[node].successors.iter() {
                 writeln!(file, "{node} -> {edge};\n").unwrap();
             }
-        }        
+        }
     }
-    fn ranking_rule_graph_d2_description<R: RankingRuleGraphTrait>(ctx: &mut SearchContext, graph: &RankingRuleGraph<R>, paths: &[Vec<u16>], _empty_paths_cache: &EmptyPathsCache, distances: Vec<Vec<(u16, SmallBitmap)>>, file: &mut File) {
-        writeln!(file,"direction: right").unwrap();
+    fn ranking_rule_graph_d2_description<R: RankingRuleGraphTrait>(
+        ctx: &mut SearchContext,
+        graph: &RankingRuleGraph<R>,
+        paths: &[Vec<u16>],
+        _empty_paths_cache: &EmptyPathsCache,
+        distances: Vec<Vec<(u16, SmallBitmap)>>,
+        file: &mut File,
+    ) {
+        writeln!(file, "direction: right").unwrap();
 
         writeln!(file, "Proximity Graph {{").unwrap();
         for (node_idx, node) in graph.query_graph.nodes.iter().enumerate() {
@@ -437,17 +539,21 @@ shape: class").unwrap();
 
             match &details {
                 EdgeDetails::Unconditional => {
-                    writeln!(file, 
+                    writeln!(
+                        file,
                         "{from_node} -> {to_node} : \"always cost {cost}\"",
                         cost = edge.cost,
-                    ).unwrap();
+                    )
+                    .unwrap();
                 }
                 EdgeDetails::Data(details) => {
-                    writeln!(file, 
+                    writeln!(
+                        file,
                         "{from_node} -> {to_node} : \"cost {cost} {edge_label}\"",
                         cost = edge.cost,
                         edge_label = R::graphviz_edge_details_label(details)
-                    ).unwrap();
+                    )
+                    .unwrap();
                 }
             }
         }
@@ -457,12 +563,11 @@ shape: class").unwrap();
         // Self::paths_d2_description(graph, paths, file);
         // writeln!(file, "}}").unwrap();
 
-        
         writeln!(file, "Shortest Paths {{").unwrap();
         Self::paths_d2_description(ctx, graph, paths, file);
         writeln!(file, "}}").unwrap();
 
-        // writeln!(file, "Empty Edge Couples {{").unwrap();            
+        // writeln!(file, "Empty Edge Couples {{").unwrap();
         // for (i, (e1, e2)) in empty_paths_cache.empty_couple_edges.iter().enumerate() {
         //     writeln!(file, "{i} : \"\" {{").unwrap();
         //     Self::edge_d2_description(graph, *e1, file);
@@ -478,18 +583,24 @@ shape: class").unwrap();
         // }
         // writeln!(file, "}}").unwrap();
     }
-    fn edge_d2_description<R: RankingRuleGraphTrait>(ctx: &mut SearchContext, graph: &RankingRuleGraph<R>, edge_idx: u16, file: &mut File) {
-        let Edge { from_node, to_node, cost, .. } = graph.all_edges[edge_idx as usize].as_ref().unwrap() ;
+    fn edge_d2_description<R: RankingRuleGraphTrait>(
+        ctx: &mut SearchContext,
+        graph: &RankingRuleGraph<R>,
+        edge_idx: u16,
+        file: &mut File,
+    ) {
+        let Edge { from_node, to_node, cost, .. } =
+            graph.all_edges[edge_idx as usize].as_ref().unwrap();
         let from_node = &graph.query_graph.nodes[*from_node as usize];
         let from_node_desc = match from_node {
             QueryNode::Term(term) => match &term.value {
                 QueryTerm::Phrase { phrase } => {
                     let phrase = ctx.phrase_interner.get(*phrase);
                     phrase.description(&ctx.word_interner)
-                },
+                }
                 QueryTerm::Word { derivations } => {
                     ctx.word_interner.get(derivations.original).to_owned()
-                },
+                }
             },
             QueryNode::Deleted => panic!(),
             QueryNode::Start => "START".to_owned(),
@@ -501,18 +612,29 @@ shape: class").unwrap();
                 QueryTerm::Phrase { phrase } => {
                     let phrase = ctx.phrase_interner.get(*phrase);
                     phrase.description(&ctx.word_interner)
-                },
-                QueryTerm::Word { derivations } => ctx.word_interner.get(derivations.original).to_owned(),
+                }
+                QueryTerm::Word { derivations } => {
+                    ctx.word_interner.get(derivations.original).to_owned()
+                }
             },
             QueryNode::Deleted => panic!(),
             QueryNode::Start => "START".to_owned(),
             QueryNode::End => "END".to_owned(),
         };
-        writeln!(file, "{edge_idx}: \"{from_node_desc}->{to_node_desc} [{cost}]\" {{
+        writeln!(
+            file,
+            "{edge_idx}: \"{from_node_desc}->{to_node_desc} [{cost}]\" {{
             shape: class
-        }}").unwrap();
+        }}"
+        )
+        .unwrap();
     }
-    fn paths_d2_description<R: RankingRuleGraphTrait>(ctx: &mut SearchContext, graph: &RankingRuleGraph<R>, paths: &[Vec<u16>], file: &mut File) { 
+    fn paths_d2_description<R: RankingRuleGraphTrait>(
+        ctx: &mut SearchContext,
+        graph: &RankingRuleGraph<R>,
+        paths: &[Vec<u16>],
+        file: &mut File,
+    ) {
         for (path_idx, edge_indexes) in paths.iter().enumerate() {
             writeln!(file, "{path_idx} {{").unwrap();
             for edge_idx in edge_indexes.iter() {

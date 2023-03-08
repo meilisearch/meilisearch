@@ -1,3 +1,5 @@
+use roaring::RoaringBitmap;
+
 use super::logger::SearchLogger;
 use super::{
     RankingRule, RankingRuleOutput, RankingRuleOutputIter, RankingRuleOutputIterWrapper,
@@ -11,7 +13,6 @@ use crate::{
     Index,
     Result,
 };
-use roaring::RoaringBitmap;
 
 pub struct Sort<'search, Query> {
     field_name: String,

@@ -1,11 +1,10 @@
-use super::logger::SearchLogger;
-use super::QueryGraph;
-use super::SearchContext;
-use crate::new::graph_based_ranking_rule::GraphBasedRankingRule;
-use crate::new::ranking_rule_graph::ProximityGraph;
-use crate::new::ranking_rule_graph::TypoGraph;
-use crate::new::words::Words;
 use roaring::RoaringBitmap;
+
+use super::logger::SearchLogger;
+use super::{QueryGraph, SearchContext};
+use crate::search::new::graph_based_ranking_rule::GraphBasedRankingRule;
+use crate::search::new::ranking_rule_graph::{ProximityGraph, TypoGraph};
+use crate::search::new::words::Words;
 // use crate::search::new::sort::Sort;
 use crate::{Result, TermsMatchingStrategy};
 
@@ -239,16 +238,18 @@ pub fn apply_ranking_rules<'search>(
 #[cfg(test)]
 mod tests {
     // use crate::allocator::ALLOC;
-    use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
-    use crate::new::{execute_search, SearchContext};
-    use big_s::S;
-    use heed::EnvOpenOptions;
-    use maplit::hashset;
     use std::fs::File;
     use std::io::{BufRead, BufReader, Cursor, Seek};
     use std::time::Instant;
-    // use crate::new::logger::detailed::DetailedSearchLogger;
-    use crate::new::logger::DefaultSearchLogger;
+
+    use big_s::S;
+    use heed::EnvOpenOptions;
+    use maplit::hashset;
+
+    use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
+    // use crate::search::new::logger::detailed::DetailedSearchLogger;
+    use crate::search::new::logger::DefaultSearchLogger;
+    use crate::search::new::{execute_search, SearchContext};
     use crate::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
     use crate::{Criterion, Index, Object, Search, TermsMatchingStrategy};
 
@@ -265,7 +266,7 @@ mod tests {
         // loop {
         let start = Instant::now();
 
-        // let mut logger = crate::new::logger::detailed::DetailedSearchLogger::new("log");
+        // let mut logger = crate::search::new::logger::detailed::DetailedSearchLogger::new("log");
         let mut ctx = SearchContext::new(&index, &txn);
         let results = execute_search(
             &mut ctx,
@@ -362,7 +363,7 @@ mod tests {
         // loop {
         let start = Instant::now();
 
-        let mut logger = crate::new::logger::detailed::DetailedSearchLogger::new("log");
+        let mut logger = crate::search::new::logger::detailed::DetailedSearchLogger::new("log");
         let mut ctx = SearchContext::new(&index, &txn);
         let results = execute_search(
             &mut ctx,
