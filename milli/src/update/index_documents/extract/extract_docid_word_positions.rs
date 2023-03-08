@@ -288,5 +288,5 @@ fn most_frequent_languages(
 
 fn compute_laguage_frequency_threshold(languages_frequency: &[(Language, usize)]) -> usize {
     let total: usize = languages_frequency.iter().map(|(_, c)| c).sum();
-    total / 20 // 5% is a completely arbitrar value.
+    total / 10 // 10% is a completely arbitrar value.
 }
