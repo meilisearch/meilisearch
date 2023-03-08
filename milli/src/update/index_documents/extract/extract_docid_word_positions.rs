@@ -127,6 +127,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         .map(|reader| (documents_ids, reader, script_language_docids))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn extract_tokens_from_document<T: AsRef<[u8]>>(
     obkv: &KvReader<FieldId>,
     searchable_fields: &Option<HashSet<FieldId>>,
@@ -272,23 +273,20 @@ fn most_frequent_languages(
     if languages_frequency.len() > 1 {
         let threshold = compute_laguage_frequency_threshold(languages_frequency);
 
-        let languages: Vec<_> = languages_frequency
-            .iter()
-            .filter(|(_, c)| *c > threshold)
-            .map(|(l, _)| l.clone())
-            .collect();
+        let languages: Vec<_> =
+            languages_frequency.iter().filter(|(_, c)| *c > threshold).map(|(l, _)| *l).collect();
 
         if languages.is_empty() {
             None
         } else {
-            Some((script.clone(), languages))
+            Some((*script, languages))
         }
     } else {
         None
     }
 }
 
-fn compute_laguage_frequency_threshold(languages_frequency: &Vec<(Language, usize)>) -> usize {
+fn compute_laguage_frequency_threshold(languages_frequency: &[(Language, usize)]) -> usize {
     let total: usize = languages_frequency.iter().map(|(_, c)| c).sum();
     total / 20 // 5% is a completely arbitrar value.
 }
