@@ -99,6 +99,22 @@ pub(crate) fn data_from_obkv_documents(
         });
     }
 
+    // merge facet_is_null_docids and send them as a typed chunk
+    {
+        let lmdb_writer_sx = lmdb_writer_sx.clone();
+        rayon::spawn(move || {
+            debug!("merge {} database", "facet-id-is-null-docids");
+            match facet_is_null_docids_chunks.merge(merge_cbo_roaring_bitmaps, &indexer) {
+                Ok(reader) => {
+                    let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetIsNullDocids(reader)));
+                }
+                Err(e) => {
+                    let _ = lmdb_writer_sx.send(Err(e));
+                }
+            }
+        });
+    }
+
     spawn_extraction_task::<_, _, Vec<grenad::Reader<File>>>(
         docid_word_positions_chunks.clone(),
         indexer,
