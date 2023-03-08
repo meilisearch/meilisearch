@@ -11,6 +11,8 @@ mod small_bitmap;
 mod sort;
 mod words;
 
+pub use logger::{DefaultSearchLogger, SearchLogger};
+
 use std::collections::BTreeSet;
 
 use charabia::Tokenize;
@@ -24,7 +26,6 @@ pub use ranking_rules::{
 use roaring::RoaringBitmap;
 
 use self::interner::Interner;
-use self::logger::SearchLogger;
 use self::query_term::Phrase;
 use self::resolve_query_graph::{resolve_query_graph, NodeDocIdsCache};
 use crate::search::new::query_term::located_query_terms_from_string;
@@ -57,7 +58,7 @@ impl<'search> SearchContext<'search> {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn resolve_maximally_reduced_query_graph<'search>(
+fn resolve_maximally_reduced_query_graph<'search>(
     ctx: &mut SearchContext<'search>,
     universe: &RoaringBitmap,
     query_graph: &QueryGraph,

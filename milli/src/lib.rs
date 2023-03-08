@@ -70,6 +70,8 @@ pub mod update;
 #[macro_use]
 pub mod snapshot_tests;
 
+pub use search::new::{execute_search, SearchContext};
+
 use std::collections::{BTreeMap, HashMap};
 use std::convert::{TryFrom, TryInto};
 use std::hash::BuildHasherDefault;

@@ -1,31 +1,3 @@
-// #[macro_export]
-// macro_rules! iter_bitmap {
-//     ($bitmap:expr, $id:lifetime, $p:pat, $body:block) => {
-//         match $bitmap {
-//             SmallBitmap::Tiny(mut set) => {
-//                 while set > 0 {
-//                     let $p = set.trailing_zeros() as u16;
-//                     $body;
-//                     set &= set - 1;
-//                 }
-//             }
-//             SmallBitmap::Small(sets) => {
-//                 let mut base = 0;
-//                 for set in sets.iter() {
-//                     let mut set = *set;
-//                     while set > 0 {
-//                         let idx = set.trailing_zeros() as u16;
-//                         let $p = idx + base;
-//                         set &= set - 1;
-//                         $body;
-//                     }
-//                     base += 64;
-//                 }
-//             }
-//         }
-//     };
-// }
-
 #[derive(Clone)]
 pub enum SmallBitmap {
     Tiny(u64),
@@ -256,16 +228,8 @@ mod tests {
             bitmap2.insert(x * 3);
         }
         bitmap1.intersection(&bitmap2);
-        // println!("{}", bitmap.contains(12));
-        // bitmap1
-        //     .iter(|x| {
-        //         println!("{x}");
-        //         Ok(())
-        //     })
-        //     .unwrap();
-
-        // iter_bitmap!(bitmap1, 'loop1, x, {
-        //     println!("{x}");
-        // })
+        for v in bitmap1.iter() {
+            println!("{v}");
+        }
     }
 }
