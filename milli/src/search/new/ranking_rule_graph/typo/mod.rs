@@ -53,7 +53,7 @@ impl RankingRuleGraphTrait for TypoGraph {
                     docids |= bitmap;
                 }
                 if *nbr_typos == 0 {
-                    if let Some(bytes) = ctx.get_prefix_docids(derivations.original)? {
+                    if let Some(bytes) = ctx.get_word_prefix_docids(derivations.original)? {
                         // TODO: deserialize bitmap within a universe
                         let bitmap = universe
                             & RoaringBitmapCodec::bytes_decode(bytes)

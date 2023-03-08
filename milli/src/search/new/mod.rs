@@ -88,7 +88,7 @@ fn resolve_maximally_reduced_query_graph<'search>(
             break;
         } else {
             let position_to_remove = positions_to_remove.pop().unwrap();
-            let _ = graph.remove_words_at_position(position_to_remove);
+            let _ = graph.remove_words_starting_at_position(position_to_remove);
         }
     }
     logger.query_for_universe(&graph);

@@ -88,7 +88,8 @@ impl<'search> RankingRule<'search, QueryGraph> for Words {
                 break;
             } else {
                 let position_to_remove = self.positions_to_remove.pop().unwrap();
-                let did_delete_any_node = query_graph.remove_words_at_position(position_to_remove);
+                let did_delete_any_node =
+                    query_graph.remove_words_starting_at_position(position_to_remove);
                 if did_delete_any_node {
                     break;
                 }

@@ -46,7 +46,7 @@ impl<'search> SearchContext<'search> {
                     }
                 }
                 if *use_prefix_db {
-                    if let Some(prefix_docids) = self.get_prefix_docids(*original)? {
+                    if let Some(prefix_docids) = self.get_word_prefix_docids(*original)? {
                         or_docids.push(prefix_docids);
                     }
                 }

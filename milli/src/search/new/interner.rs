@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 
 use fxhash::FxHashMap;
 
+/// An index within a [`Interner<T>`] structure.
 pub struct Interned<T> {
     idx: u32,
     _phantom: PhantomData<T>,
@@ -13,7 +14,10 @@ impl<T> Interned<T> {
         Self { idx, _phantom: PhantomData }
     }
 }
-
+/// An [`Interner`] is used to store a unique copy of a value of type `T`. This value
+/// is then identified by a lightweight index of type [`Interned<T>`], which can
+/// be copied, compared, and hashed efficiently. An immutable reference to the original value
+/// can be retrieved using `self.get(interned)`.
 pub struct Interner<T> {
     stable_store: Vec<T>,
     lookup: FxHashMap<T, Interned<T>>,
