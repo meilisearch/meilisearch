@@ -121,15 +121,19 @@ The full Meilisearch release process is described in [this guide](https://github
 Depending on the developed feature, you might need to provide a prototyped version of Meilisearch to make it easier to test by the users.
 
 The prototype name must follow this convention: `prototype-X-Y` where
-- `X` is the feature name formatted in `kebab-case`
+- `X` is the feature name formatted in `kebab-case`. It should not end with a single number.
 - `Y` is the version of the prototype, starting from `0`.
 
-Example: `prototype-auto-resize-0`.
+✅ Example: `prototype-auto-resize-0`. </br>
+❌ Bad example: `auto-resize-0`: lacks the `prototype` prefix. </br>
+❌ Bad example: `prototype-auto-resize`: lacks the version suffix. </br>
+❌ Bad example: `prototype-auto-resize-0-0`: feature name ends with a single number.
 
 Steps to create a prototype:
 
 1. In your terminal, go to the last commit of your branch (the one you want to provide as a prototype).
 2. Create a tag following the convention: `git tag prototype-X-Y`
+3. Run Meilisearch and check that its launch summary features a line: `Prototype: prototype-X-Y` (you may need to switch branches and back after tagging for this to work).
 3. Push the tag: `git push origin prototype-X-Y`
 4. Check the [Docker CI](https://github.com/meilisearch/meilisearch/actions/workflows/publish-docker-images.yml) is now running.
 
@@ -138,7 +142,7 @@ More information about [how to run Meilisearch with Docker](https://docs.meilise
 
 ⚙️ However, no binaries will be created. If the users do not use Docker, they can go to the `prototype-X-Y` tag in the Meilisearch repository and compile from the source code.
 
-⚠️ When sharing a prototype with users, prevent them from using it in production. Prototypes are only for test purposes.
+⚠️ When sharing a prototype with users, remind them to not use it in production. Prototypes are solely for test purposes.
 
 ### Release assets
 

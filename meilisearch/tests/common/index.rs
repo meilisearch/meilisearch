@@ -30,7 +30,7 @@ impl Index<'_> {
             .post_str(
                 url,
                 include_str!("../assets/test_set.json"),
-                ("content-type", "application/json"),
+                vec![("content-type", "application/json")],
             )
             .await;
         assert_eq!(code, 202);
@@ -46,7 +46,7 @@ impl Index<'_> {
             .post_str(
                 url,
                 include_str!("../assets/test_set.ndjson"),
-                ("content-type", "application/x-ndjson"),
+                vec![("content-type", "application/x-ndjson")],
             )
             .await;
         assert_eq!(code, 202);
@@ -96,6 +96,21 @@ impl Index<'_> {
         self.service.post_encoded(url, documents, self.encoder).await
     }
 
+    pub async fn raw_add_documents(
+        &self,
+        payload: &str,
+        content_type: Option<&str>,
+        query_parameter: &str,
+    ) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/documents{}", urlencode(self.uid.as_ref()), query_parameter);
+
+        if let Some(content_type) = content_type {
+            self.service.post_str(url, payload, vec![("Content-Type", content_type)]).await
+        } else {
+            self.service.post_str(url, payload, Vec::new()).await
+        }
+    }
+
     pub async fn update_documents(
         &self,
         documents: Value,
@@ -108,6 +123,21 @@ impl Index<'_> {
             None => format!("/indexes/{}/documents", urlencode(self.uid.as_ref())),
         };
         self.service.put_encoded(url, documents, self.encoder).await
+    }
+
+    pub async fn raw_update_documents(
+        &self,
+        payload: &str,
+        content_type: Option<&str>,
+        query_parameter: &str,
+    ) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/documents{}", urlencode(self.uid.as_ref()), query_parameter);
+
+        if let Some(content_type) = content_type {
+            self.service.put_str(url, payload, vec![("Content-Type", content_type)]).await
+        } else {
+            self.service.put_str(url, payload, Vec::new()).await
+        }
     }
 
     pub async fn wait_task(&self, update_id: u64) -> Value {

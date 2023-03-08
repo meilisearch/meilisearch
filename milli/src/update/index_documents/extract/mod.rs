@@ -257,13 +257,14 @@ fn send_and_extract_flattened_documents_data(
     let (docid_word_positions_chunk, docid_fid_facet_values_chunks): (Result<_>, Result<_>) =
         rayon::join(
             || {
-                let (documents_ids, docid_word_positions_chunk) = extract_docid_word_positions(
-                    flattened_documents_chunk.clone(),
-                    indexer,
-                    searchable_fields,
-                    stop_words.as_ref(),
-                    max_positions_per_attributes,
-                )?;
+                let (documents_ids, docid_word_positions_chunk, script_language_pair) =
+                    extract_docid_word_positions(
+                        flattened_documents_chunk.clone(),
+                        indexer,
+                        searchable_fields,
+                        stop_words.as_ref(),
+                        max_positions_per_attributes,
+                    )?;
 
                 // send documents_ids to DB writer
                 let _ = lmdb_writer_sx.send(Ok(TypedChunk::NewDocumentsIds(documents_ids)));
@@ -273,6 +274,9 @@ fn send_and_extract_flattened_documents_data(
                     unsafe { as_cloneable_grenad(&docid_word_positions_chunk)? };
                 let _ = lmdb_writer_sx
                     .send(Ok(TypedChunk::DocidWordPositions(docid_word_positions_chunk.clone())));
+
+                let _ =
+                    lmdb_writer_sx.send(Ok(TypedChunk::ScriptLanguageDocids(script_language_pair)));
 
                 Ok(docid_word_positions_chunk)
             },

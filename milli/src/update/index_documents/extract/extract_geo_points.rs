@@ -59,6 +59,7 @@ pub fn extract_geo_points<R: io::Read + io::Seek>(
         } else if lat.is_some() && lng.is_none() {
             return Err(GeoError::MissingLongitude { document_id: document_id() })?;
         }
+        // else => the _geo object was `null`, there is nothing to do
     }
 
     writer_into_reader(writer)

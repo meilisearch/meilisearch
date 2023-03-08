@@ -88,11 +88,11 @@ pub enum BatchKind {
     DocumentClear {
         ids: Vec<TaskId>,
     },
-    DocumentImport {
+    DocumentOperation {
         method: IndexDocumentsMethod,
         allow_index_creation: bool,
         primary_key: Option<String>,
-        import_ids: Vec<TaskId>,
+        operation_ids: Vec<TaskId>,
     },
     DocumentDeletion {
         deletion_ids: Vec<TaskId>,
@@ -102,12 +102,12 @@ pub enum BatchKind {
         allow_index_creation: bool,
         settings_ids: Vec<TaskId>,
     },
-    SettingsAndDocumentImport {
+    SettingsAndDocumentOperation {
         settings_ids: Vec<TaskId>,
         method: IndexDocumentsMethod,
         allow_index_creation: bool,
         primary_key: Option<String>,
-        import_ids: Vec<TaskId>,
+        operation_ids: Vec<TaskId>,
     },
     Settings {
         allow_index_creation: bool,
@@ -131,9 +131,9 @@ impl BatchKind {
     #[rustfmt::skip]
     fn allow_index_creation(&self) -> Option<bool> {
         match self {
-            BatchKind::DocumentImport { allow_index_creation, .. }
+            BatchKind::DocumentOperation { allow_index_creation, .. }
             | BatchKind::ClearAndSettings { allow_index_creation, .. }
-            | BatchKind::SettingsAndDocumentImport { allow_index_creation, .. }
+            | BatchKind::SettingsAndDocumentOperation { allow_index_creation, .. }
             | BatchKind::Settings { allow_index_creation, .. } => Some(*allow_index_creation),
             _ => None,
         }
@@ -141,8 +141,8 @@ impl BatchKind {
 
     fn primary_key(&self) -> Option<Option<&str>> {
         match self {
-            BatchKind::DocumentImport { primary_key, .. }
-            | BatchKind::SettingsAndDocumentImport { primary_key, .. } => {
+            BatchKind::DocumentOperation { primary_key, .. }
+            | BatchKind::SettingsAndDocumentOperation { primary_key, .. } => {
                 Some(primary_key.as_deref())
             }
             _ => None,
@@ -173,22 +173,22 @@ impl BatchKind {
                 if primary_key.is_none() || pk.is_none() || primary_key == pk.as_deref() =>
             {
                 (
-                    Continue(BatchKind::DocumentImport {
+                    Continue(BatchKind::DocumentOperation {
                         method,
                         allow_index_creation,
                         primary_key: pk,
-                        import_ids: vec![task_id],
+                        operation_ids: vec![task_id],
                     }),
                     allow_index_creation,
                 )
             }
             // if the primary key set in the task was different than ours we should stop and make this batch fail asap.
             K::DocumentImport { method, allow_index_creation, primary_key } => (
-                Break(BatchKind::DocumentImport {
+                Break(BatchKind::DocumentOperation {
                     method,
                     allow_index_creation,
                     primary_key,
-                    import_ids: vec![task_id],
+                    operation_ids: vec![task_id],
                 }),
                 allow_index_creation,
             ),
@@ -249,7 +249,7 @@ impl BatchKind {
             (
                 BatchKind::DocumentClear { mut ids }
                 | BatchKind::DocumentDeletion { deletion_ids: mut ids }
-                | BatchKind::DocumentImport { method: _, allow_index_creation: _, primary_key: _, import_ids: mut ids }
+                | BatchKind::DocumentOperation { method: _, allow_index_creation: _, primary_key: _, operation_ids: mut ids }
                 | BatchKind::Settings { allow_index_creation: _, settings_ids: mut ids },
                 K::IndexDeletion,
             ) => {
@@ -258,7 +258,7 @@ impl BatchKind {
             }
             (
                 BatchKind::ClearAndSettings { settings_ids: mut ids, allow_index_creation: _, mut other }
-                | BatchKind::SettingsAndDocumentImport { import_ids: mut ids, method: _, allow_index_creation: _, primary_key: _, settings_ids: mut other },
+                | BatchKind::SettingsAndDocumentOperation { operation_ids: mut ids, method: _, allow_index_creation: _, primary_key: _, settings_ids: mut other },
                 K::IndexDeletion,
             ) => {
                 ids.push(id);
@@ -278,63 +278,108 @@ impl BatchKind {
                 K::DocumentImport { .. } | K::Settings { .. },
             ) => Break(this),
             (
-                BatchKind::DocumentImport { method: _, allow_index_creation: _, primary_key: _, import_ids: mut ids },
+                BatchKind::DocumentOperation { method: _, allow_index_creation: _, primary_key: _, mut operation_ids },
                 K::DocumentClear,
             ) => {
-                ids.push(id);
-                Continue(BatchKind::DocumentClear { ids })
+                operation_ids.push(id);
+                Continue(BatchKind::DocumentClear { ids: operation_ids })
             }
 
             // we can autobatch the same kind of document additions / updates
             (
-                BatchKind::DocumentImport { method: ReplaceDocuments, allow_index_creation, primary_key: _, mut import_ids },
+                BatchKind::DocumentOperation { method: ReplaceDocuments, allow_index_creation, primary_key: _, mut operation_ids },
                 K::DocumentImport { method: ReplaceDocuments, primary_key: pk, .. },
             ) => {
-                import_ids.push(id);
-                Continue(BatchKind::DocumentImport {
+                operation_ids.push(id);
+                Continue(BatchKind::DocumentOperation {
                     method: ReplaceDocuments,
                     allow_index_creation,
-                    import_ids,
+                    operation_ids,
                     primary_key: pk,
                 })
             }
             (
-                BatchKind::DocumentImport { method: UpdateDocuments, allow_index_creation, primary_key: _, mut import_ids },
+                BatchKind::DocumentOperation { method: UpdateDocuments, allow_index_creation, primary_key: _, mut operation_ids },
                 K::DocumentImport { method: UpdateDocuments, primary_key: pk, .. },
             ) => {
-
-                import_ids.push(id);
-                Continue(BatchKind::DocumentImport {
+                operation_ids.push(id);
+                Continue(BatchKind::DocumentOperation {
                     method: UpdateDocuments,
                     allow_index_creation,
                     primary_key: pk,
-                    import_ids,
+                    operation_ids,
                 })
             }
+            (
+                BatchKind::DocumentOperation { method, allow_index_creation, primary_key, mut operation_ids },
+                K::DocumentDeletion,
+            ) => {
+                operation_ids.push(id);
 
+                Continue(BatchKind::DocumentOperation {
+                    method,
+                    allow_index_creation,
+                    primary_key,
+                    operation_ids,
+                })
+            }
             // but we can't autobatch documents if it's not the same kind
             // this match branch MUST be AFTER the previous one
             (
-                this @ BatchKind::DocumentImport { .. },
-                K::DocumentDeletion | K::DocumentImport { .. },
+                this @ BatchKind::DocumentOperation { .. },
+                K::DocumentImport { .. },
             ) => Break(this),
 
             (
-                BatchKind::DocumentImport { method, allow_index_creation, primary_key, import_ids },
+                BatchKind::DocumentOperation { method, allow_index_creation, primary_key, operation_ids },
                 K::Settings { .. },
-            ) => Continue(BatchKind::SettingsAndDocumentImport {
+            ) => Continue(BatchKind::SettingsAndDocumentOperation {
                 settings_ids: vec![id],
                 method,
                 allow_index_creation,
                 primary_key,
-                import_ids,
+                operation_ids,
             }),
 
             (BatchKind::DocumentDeletion { mut deletion_ids }, K::DocumentClear) => {
                 deletion_ids.push(id);
                 Continue(BatchKind::DocumentClear { ids: deletion_ids })
             }
-            (this @ BatchKind::DocumentDeletion { .. }, K::DocumentImport { .. }) => Break(this),
+            // we can autobatch the deletion and import if the index already exists
+            (
+                BatchKind::DocumentDeletion { mut deletion_ids },
+                K::DocumentImport { method, allow_index_creation, primary_key }
+            ) if index_already_exists => {
+                deletion_ids.push(id);
+
+                Continue(BatchKind::DocumentOperation {
+                    method,
+                    allow_index_creation,
+                    primary_key,
+                    operation_ids: deletion_ids,
+                })
+            }
+            // we can autobatch the deletion and import if both can't create an index
+            (
+                BatchKind::DocumentDeletion { mut deletion_ids },
+                K::DocumentImport { method, allow_index_creation, primary_key }
+            ) if !allow_index_creation => {
+                deletion_ids.push(id);
+
+                Continue(BatchKind::DocumentOperation {
+                    method,
+                    allow_index_creation,
+                    primary_key,
+                    operation_ids: deletion_ids,
+                })
+            }
+            // we can't autobatch a deletion and an import if the index does not exists but would be created by an addition
+            (
+                this @ BatchKind::DocumentDeletion { .. },
+                K::DocumentImport { .. }
+            ) => {
+                Break(this)
+            }
             (BatchKind::DocumentDeletion { mut deletion_ids }, K::DocumentDeletion) => {
                 deletion_ids.push(id);
                 Continue(BatchKind::DocumentDeletion { deletion_ids })
@@ -403,60 +448,60 @@ impl BatchKind {
                 })
             }
             (
-                BatchKind::SettingsAndDocumentImport { settings_ids, method: _, import_ids: mut other, allow_index_creation, primary_key: _ },
+                BatchKind::SettingsAndDocumentOperation { settings_ids, method: _, mut operation_ids, allow_index_creation, primary_key: _ },
                 K::DocumentClear,
             ) => {
-                other.push(id);
+                operation_ids.push(id);
                 Continue(BatchKind::ClearAndSettings {
                     settings_ids,
-                    other,
+                    other: operation_ids,
                     allow_index_creation,
                 })
             }
 
             (
-                BatchKind::SettingsAndDocumentImport { settings_ids, method: ReplaceDocuments, mut import_ids, allow_index_creation, primary_key: _},
+                BatchKind::SettingsAndDocumentOperation { settings_ids, method: ReplaceDocuments, mut operation_ids, allow_index_creation, primary_key: _},
                 K::DocumentImport { method: ReplaceDocuments, primary_key: pk2, .. },
             ) => {
-                import_ids.push(id);
-                Continue(BatchKind::SettingsAndDocumentImport {
+                operation_ids.push(id);
+                Continue(BatchKind::SettingsAndDocumentOperation {
                     settings_ids,
                     method: ReplaceDocuments,
                     allow_index_creation,
                         primary_key: pk2,
-                    import_ids,
+                    operation_ids,
                 })
             }
             (
-                BatchKind::SettingsAndDocumentImport { settings_ids, method: UpdateDocuments, allow_index_creation, primary_key: _, mut import_ids },
+                BatchKind::SettingsAndDocumentOperation { settings_ids, method: UpdateDocuments, allow_index_creation, primary_key: _, mut operation_ids },
                 K::DocumentImport { method: UpdateDocuments, primary_key: pk2, .. },
             ) => {
-                import_ids.push(id);
-                Continue(BatchKind::SettingsAndDocumentImport {
+                operation_ids.push(id);
+                Continue(BatchKind::SettingsAndDocumentOperation {
                     settings_ids,
                     method: UpdateDocuments,
                     allow_index_creation,
                     primary_key: pk2,
-                    import_ids,
+                    operation_ids,
                 })
             }
             // But we can't batch a settings and a doc op with another doc op
             // this MUST be AFTER the two previous branch
             (
-                this @ BatchKind::SettingsAndDocumentImport { .. },
+                this @ BatchKind::SettingsAndDocumentOperation { .. },
                 K::DocumentDeletion | K::DocumentImport { .. },
             ) => Break(this),
             (
-                BatchKind::SettingsAndDocumentImport { mut settings_ids, method, allow_index_creation,primary_key, import_ids },
+                BatchKind::SettingsAndDocumentOperation { mut settings_ids, method, allow_index_creation,primary_key, operation_ids },
                 K::Settings { .. },
             ) => {
                 settings_ids.push(id);
-                Continue(BatchKind::SettingsAndDocumentImport {
+                Continue(BatchKind::SettingsAndDocumentOperation {
                     settings_ids,
                     method,
                     allow_index_creation,
                     primary_key,
-                    import_ids,
+                    operation_ids,
                 })
             }
             (
@@ -588,29 +633,29 @@ mod tests {
     fn autobatch_simple_operation_together() {
         // we can autobatch one or multiple `ReplaceDocuments` together.
         // if the index exists.
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, false, None)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, import_ids: [0] }, false))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), doc_imp( ReplaceDocuments, true , None), doc_imp(ReplaceDocuments, true , None)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0, 1, 2] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, false, None), doc_imp( ReplaceDocuments, false , None), doc_imp(ReplaceDocuments, false , None)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, import_ids: [0, 1, 2] }, false))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, false, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0] }, false))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), doc_imp( ReplaceDocuments, true , None), doc_imp(ReplaceDocuments, true , None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0, 1, 2] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, false, None), doc_imp( ReplaceDocuments, false , None), doc_imp(ReplaceDocuments, false , None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0, 1, 2] }, false))");
 
         // if it doesn't exists.
-        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments, false, None)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, import_ids: [0] }, false))");
-        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments, true, None), doc_imp( ReplaceDocuments, true , None), doc_imp(ReplaceDocuments, true , None)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0, 1, 2] }, true))");
-        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments, false, None), doc_imp( ReplaceDocuments, true , None), doc_imp(ReplaceDocuments, true , None)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, import_ids: [0] }, false))");
+        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments, false, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0] }, false))");
+        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments, true, None), doc_imp( ReplaceDocuments, true , None), doc_imp(ReplaceDocuments, true , None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0, 1, 2] }, true))");
+        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments, false, None), doc_imp( ReplaceDocuments, true , None), doc_imp(ReplaceDocuments, true , None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0] }, false))");
 
         // we can autobatch one or multiple `UpdateDocuments` together.
         // if the index exists.
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None)]), @"Some((DocumentImport { method: UpdateDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), doc_imp(UpdateDocuments, true, None), doc_imp(UpdateDocuments, true, None)]), @"Some((DocumentImport { method: UpdateDocuments, allow_index_creation: true, primary_key: None, import_ids: [0, 1, 2] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, false, None)]), @"Some((DocumentImport { method: UpdateDocuments, allow_index_creation: false, primary_key: None, import_ids: [0] }, false))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, false, None), doc_imp(UpdateDocuments, false, None), doc_imp(UpdateDocuments, false, None)]), @"Some((DocumentImport { method: UpdateDocuments, allow_index_creation: false, primary_key: None, import_ids: [0, 1, 2] }, false))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None)]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), doc_imp(UpdateDocuments, true, None), doc_imp(UpdateDocuments, true, None)]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0, 1, 2] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, false, None)]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0] }, false))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, false, None), doc_imp(UpdateDocuments, false, None), doc_imp(UpdateDocuments, false, None)]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0, 1, 2] }, false))");
 
         // if it doesn't exists.
-        debug_snapshot!(autobatch_from(false,None,  [doc_imp(UpdateDocuments, true, None)]), @"Some((DocumentImport { method: UpdateDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(false,None,  [doc_imp(UpdateDocuments, true, None), doc_imp(UpdateDocuments, true, None), doc_imp(UpdateDocuments, true, None)]), @"Some((DocumentImport { method: UpdateDocuments, allow_index_creation: true, primary_key: None, import_ids: [0, 1, 2] }, true))");
-        debug_snapshot!(autobatch_from(false,None,  [doc_imp(UpdateDocuments, false, None)]), @"Some((DocumentImport { method: UpdateDocuments, allow_index_creation: false, primary_key: None, import_ids: [0] }, false))");
-        debug_snapshot!(autobatch_from(false,None,  [doc_imp(UpdateDocuments, false, None), doc_imp(UpdateDocuments, false, None), doc_imp(UpdateDocuments, false, None)]), @"Some((DocumentImport { method: UpdateDocuments, allow_index_creation: false, primary_key: None, import_ids: [0, 1, 2] }, false))");
+        debug_snapshot!(autobatch_from(false,None,  [doc_imp(UpdateDocuments, true, None)]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(false,None,  [doc_imp(UpdateDocuments, true, None), doc_imp(UpdateDocuments, true, None), doc_imp(UpdateDocuments, true, None)]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0, 1, 2] }, true))");
+        debug_snapshot!(autobatch_from(false,None,  [doc_imp(UpdateDocuments, false, None)]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0] }, false))");
+        debug_snapshot!(autobatch_from(false,None,  [doc_imp(UpdateDocuments, false, None), doc_imp(UpdateDocuments, false, None), doc_imp(UpdateDocuments, false, None)]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0, 1, 2] }, false))");
 
         // we can autobatch one or multiple DocumentDeletion together
         debug_snapshot!(autobatch_from(true, None, [doc_del()]), @"Some((DocumentDeletion { deletion_ids: [0] }, false))");
@@ -628,56 +673,83 @@ mod tests {
         debug_snapshot!(autobatch_from(false,None,  [settings(true), settings(true), settings(true)]), @"Some((Settings { allow_index_creation: true, settings_ids: [0, 1, 2] }, true))");
         debug_snapshot!(autobatch_from(false,None,  [settings(false)]), @"Some((Settings { allow_index_creation: false, settings_ids: [0] }, false))");
         debug_snapshot!(autobatch_from(false,None,  [settings(false), settings(false), settings(false)]), @"Some((Settings { allow_index_creation: false, settings_ids: [0, 1, 2] }, false))");
+
+        // We can autobatch document addition with document deletion
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), doc_del()]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0, 1] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), doc_del()]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0, 1] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, false, None), doc_del()]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0, 1] }, false))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, false, None), doc_del()]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0, 1] }, false))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, Some("catto")), doc_del()]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("catto"), operation_ids: [0, 1] }, true))"###);
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, Some("catto")), doc_del()]), @r###"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: true, primary_key: Some("catto"), operation_ids: [0, 1] }, true))"###);
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, false, Some("catto")), doc_del()]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: Some("catto"), operation_ids: [0, 1] }, false))"###);
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, false, Some("catto")), doc_del()]), @r###"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: false, primary_key: Some("catto"), operation_ids: [0, 1] }, false))"###);
+        debug_snapshot!(autobatch_from(false, None, [doc_imp(ReplaceDocuments, true, None), doc_del()]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0, 1] }, true))");
+        debug_snapshot!(autobatch_from(false, None, [doc_imp(UpdateDocuments, true, None), doc_del()]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0, 1] }, true))");
+        debug_snapshot!(autobatch_from(false, None, [doc_imp(ReplaceDocuments, false, None), doc_del()]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0, 1] }, false))");
+        debug_snapshot!(autobatch_from(false, None, [doc_imp(UpdateDocuments, false, None), doc_del()]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0, 1] }, false))");
+        debug_snapshot!(autobatch_from(false, None, [doc_imp(ReplaceDocuments, true, Some("catto")), doc_del()]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("catto"), operation_ids: [0, 1] }, true))"###);
+        debug_snapshot!(autobatch_from(false, None, [doc_imp(UpdateDocuments, true, Some("catto")), doc_del()]), @r###"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: true, primary_key: Some("catto"), operation_ids: [0, 1] }, true))"###);
+        debug_snapshot!(autobatch_from(false, None, [doc_imp(ReplaceDocuments, false, Some("catto")), doc_del()]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: Some("catto"), operation_ids: [0, 1] }, false))"###);
+        debug_snapshot!(autobatch_from(false, None, [doc_imp(UpdateDocuments, false, Some("catto")), doc_del()]), @r###"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: false, primary_key: Some("catto"), operation_ids: [0, 1] }, false))"###);
+        // And the other way around
+        debug_snapshot!(autobatch_from(true, None, [doc_del(), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0, 1] }, false))");
+        debug_snapshot!(autobatch_from(true, None, [doc_del(), doc_imp(UpdateDocuments, true, None)]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0, 1] }, false))");
+        debug_snapshot!(autobatch_from(true, None, [doc_del(), doc_imp(ReplaceDocuments, false, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0, 1] }, false))");
+        debug_snapshot!(autobatch_from(true, None, [doc_del(), doc_imp(UpdateDocuments, false, None)]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0, 1] }, false))");
+        debug_snapshot!(autobatch_from(true, None, [doc_del(), doc_imp(ReplaceDocuments, true, Some("catto"))]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("catto"), operation_ids: [0, 1] }, false))"###);
+        debug_snapshot!(autobatch_from(true, None, [doc_del(), doc_imp(UpdateDocuments, true, Some("catto"))]), @r###"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: true, primary_key: Some("catto"), operation_ids: [0, 1] }, false))"###);
+        debug_snapshot!(autobatch_from(true, None, [doc_del(), doc_imp(ReplaceDocuments, false, Some("catto"))]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: Some("catto"), operation_ids: [0, 1] }, false))"###);
+        debug_snapshot!(autobatch_from(true, None, [doc_del(), doc_imp(UpdateDocuments, false, Some("catto"))]), @r###"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: false, primary_key: Some("catto"), operation_ids: [0, 1] }, false))"###);
+        debug_snapshot!(autobatch_from(false, None, [doc_del(), doc_imp(ReplaceDocuments, false, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0, 1] }, false))");
+        debug_snapshot!(autobatch_from(false, None, [doc_del(), doc_imp(UpdateDocuments, false, None)]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0, 1] }, false))");
+        debug_snapshot!(autobatch_from(false, None, [doc_del(), doc_imp(ReplaceDocuments, false, Some("catto"))]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: Some("catto"), operation_ids: [0, 1] }, false))"###);
+        debug_snapshot!(autobatch_from(false, None, [doc_del(), doc_imp(UpdateDocuments, false, Some("catto"))]), @r###"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: false, primary_key: Some("catto"), operation_ids: [0, 1] }, false))"###);
     }
 
     #[test]
     fn simple_document_operation_dont_autobatch_with_other() {
         // addition, updates and deletion can't batch together
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), doc_imp(UpdateDocuments, true, None)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), doc_del()]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentImport { method: UpdateDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), doc_del()]), @"Some((DocumentImport { method: UpdateDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_del(), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentDeletion { deletion_ids: [0] }, false))");
-        debug_snapshot!(autobatch_from(true, None, [doc_del(), doc_imp(UpdateDocuments, true, None)]), @"Some((DocumentDeletion { deletion_ids: [0] }, false))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), doc_imp(UpdateDocuments, true, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
 
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), idx_create()]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), idx_create()]), @"Some((DocumentImport { method: UpdateDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), idx_create()]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), idx_create()]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
         debug_snapshot!(autobatch_from(true, None, [doc_del(), idx_create()]), @"Some((DocumentDeletion { deletion_ids: [0] }, false))");
 
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), idx_update()]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), idx_update()]), @"Some((DocumentImport { method: UpdateDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), idx_update()]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), idx_update()]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
         debug_snapshot!(autobatch_from(true, None, [doc_del(), idx_update()]), @"Some((DocumentDeletion { deletion_ids: [0] }, false))");
 
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), idx_swap()]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), idx_swap()]), @"Some((DocumentImport { method: UpdateDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), idx_swap()]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), idx_swap()]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
         debug_snapshot!(autobatch_from(true, None, [doc_del(), idx_swap()]), @"Some((DocumentDeletion { deletion_ids: [0] }, false))");
     }
 
     #[test]
     fn document_addition_batch_with_settings() {
         // simple case
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), settings(true)]), @"Some((SettingsAndDocumentImport { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), settings(true)]), @"Some((SettingsAndDocumentImport { settings_ids: [1], method: UpdateDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), settings(true)]), @"Some((SettingsAndDocumentOperation { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), settings(true)]), @"Some((SettingsAndDocumentOperation { settings_ids: [1], method: UpdateDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
 
         // multiple settings and doc addition
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, None), settings(true), settings(true)]), @"Some((SettingsAndDocumentImport { settings_ids: [2, 3], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0, 1] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, None), settings(true), settings(true)]), @"Some((SettingsAndDocumentImport { settings_ids: [2, 3], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0, 1] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, None), settings(true), settings(true)]), @"Some((SettingsAndDocumentOperation { settings_ids: [2, 3], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0, 1] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, None), settings(true), settings(true)]), @"Some((SettingsAndDocumentOperation { settings_ids: [2, 3], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0, 1] }, true))");
 
         // addition and setting unordered
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), settings(true), doc_imp(ReplaceDocuments, true, None), settings(true)]), @"Some((SettingsAndDocumentImport { settings_ids: [1, 3], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0, 2] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), settings(true), doc_imp(UpdateDocuments, true, None), settings(true)]), @"Some((SettingsAndDocumentImport { settings_ids: [1, 3], method: UpdateDocuments, allow_index_creation: true, primary_key: None, import_ids: [0, 2] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), settings(true), doc_imp(ReplaceDocuments, true, None), settings(true)]), @"Some((SettingsAndDocumentOperation { settings_ids: [1, 3], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0, 2] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), settings(true), doc_imp(UpdateDocuments, true, None), settings(true)]), @"Some((SettingsAndDocumentOperation { settings_ids: [1, 3], method: UpdateDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0, 2] }, true))");
 
         // We ensure this kind of batch doesn't batch with forbidden operations
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), settings(true), doc_imp(UpdateDocuments, true, None)]), @"Some((SettingsAndDocumentImport { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), settings(true), doc_imp(ReplaceDocuments, true, None)]), @"Some((SettingsAndDocumentImport { settings_ids: [1], method: UpdateDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), settings(true), doc_del()]), @"Some((SettingsAndDocumentImport { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), settings(true), doc_del()]), @"Some((SettingsAndDocumentImport { settings_ids: [1], method: UpdateDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), settings(true), idx_create()]), @"Some((SettingsAndDocumentImport { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), settings(true), idx_create()]), @"Some((SettingsAndDocumentImport { settings_ids: [1], method: UpdateDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), settings(true), idx_update()]), @"Some((SettingsAndDocumentImport { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), settings(true), idx_update()]), @"Some((SettingsAndDocumentImport { settings_ids: [1], method: UpdateDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), settings(true), idx_swap()]), @"Some((SettingsAndDocumentImport { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), settings(true), idx_swap()]), @"Some((SettingsAndDocumentImport { settings_ids: [1], method: UpdateDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), settings(true), doc_imp(UpdateDocuments, true, None)]), @"Some((SettingsAndDocumentOperation { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), settings(true), doc_imp(ReplaceDocuments, true, None)]), @"Some((SettingsAndDocumentOperation { settings_ids: [1], method: UpdateDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), settings(true), doc_del()]), @"Some((SettingsAndDocumentOperation { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), settings(true), doc_del()]), @"Some((SettingsAndDocumentOperation { settings_ids: [1], method: UpdateDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), settings(true), idx_create()]), @"Some((SettingsAndDocumentOperation { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), settings(true), idx_create()]), @"Some((SettingsAndDocumentOperation { settings_ids: [1], method: UpdateDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), settings(true), idx_update()]), @"Some((SettingsAndDocumentOperation { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), settings(true), idx_update()]), @"Some((SettingsAndDocumentOperation { settings_ids: [1], method: UpdateDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), settings(true), idx_swap()]), @"Some((SettingsAndDocumentOperation { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), settings(true), idx_swap()]), @"Some((SettingsAndDocumentOperation { settings_ids: [1], method: UpdateDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
     }
 
     #[test]
@@ -789,67 +861,73 @@ mod tests {
         debug_snapshot!(autobatch_from(false,None,  [doc_imp(UpdateDocuments, false, None), settings(false), doc_clr(), idx_del()]), @"Some((IndexDeletion { ids: [1, 3, 0, 2] }, false))");
         // The third and final case is when the first task doesn't create an index but is directly followed by a task creating an index. In this case we can't batch with what
         // follows because we first need to process the erroneous batch.
-        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments,false, None), settings(true), idx_del()]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, import_ids: [0] }, false))");
-        debug_snapshot!(autobatch_from(false,None,  [doc_imp(UpdateDocuments, false, None), settings(true), idx_del()]), @"Some((DocumentImport { method: UpdateDocuments, allow_index_creation: false, primary_key: None, import_ids: [0] }, false))");
-        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments,false, None), settings(true), doc_clr(), idx_del()]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, import_ids: [0] }, false))");
-        debug_snapshot!(autobatch_from(false,None,  [doc_imp(UpdateDocuments, false, None), settings(true), doc_clr(), idx_del()]), @"Some((DocumentImport { method: UpdateDocuments, allow_index_creation: false, primary_key: None, import_ids: [0] }, false))");
+        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments,false, None), settings(true), idx_del()]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0] }, false))");
+        debug_snapshot!(autobatch_from(false,None,  [doc_imp(UpdateDocuments, false, None), settings(true), idx_del()]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0] }, false))");
+        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments,false, None), settings(true), doc_clr(), idx_del()]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0] }, false))");
+        debug_snapshot!(autobatch_from(false,None,  [doc_imp(UpdateDocuments, false, None), settings(true), doc_clr(), idx_del()]), @"Some((DocumentOperation { method: UpdateDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0] }, false))");
     }
 
     #[test]
     fn allowed_and_disallowed_index_creation() {
         // `DocumentImport` can't be mixed with those disallowed to do so except if the index already exists.
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, false, None), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, import_ids: [0, 1] }, false))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0, 1] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, false, None), doc_imp(ReplaceDocuments, false, None)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, import_ids: [0, 1] }, false))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), settings(true)]), @"Some((SettingsAndDocumentImport { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, false, None), settings(true)]), @"Some((SettingsAndDocumentImport { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: false, primary_key: None, import_ids: [0] }, false))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, false, None), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0, 1] }, false))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0, 1] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, false, None), doc_imp(ReplaceDocuments, false, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0, 1] }, false))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), settings(true)]), @"Some((SettingsAndDocumentOperation { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, false, None), settings(true)]), @"Some((SettingsAndDocumentOperation { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0] }, false))");
 
-        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments, false, None), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, import_ids: [0] }, false))");
-        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0, 1] }, true))");
-        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments, false, None), doc_imp(ReplaceDocuments, false, None)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, import_ids: [0, 1] }, false))");
-        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments, true, None), settings(true)]), @"Some((SettingsAndDocumentImport { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments, false, None), settings(true)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, import_ids: [0] }, false))");
+        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments, false, None), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0] }, false))");
+        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0, 1] }, true))");
+        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments, false, None), doc_imp(ReplaceDocuments, false, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0, 1] }, false))");
+        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments, true, None), settings(true)]), @"Some((SettingsAndDocumentOperation { settings_ids: [1], method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(false,None,  [doc_imp(ReplaceDocuments, false, None), settings(true)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: false, primary_key: None, operation_ids: [0] }, false))");
+
+        // batch deletion and addition
+        debug_snapshot!(autobatch_from(false, None, [doc_del(), doc_imp(ReplaceDocuments, true, Some("catto"))]), @"Some((DocumentDeletion { deletion_ids: [0] }, false))");
+        debug_snapshot!(autobatch_from(false, None, [doc_del(), doc_imp(UpdateDocuments, true, Some("catto"))]), @"Some((DocumentDeletion { deletion_ids: [0] }, false))");
+        debug_snapshot!(autobatch_from(false, None, [doc_del(), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentDeletion { deletion_ids: [0] }, false))");
+        debug_snapshot!(autobatch_from(false, None, [doc_del(), doc_imp(UpdateDocuments, true, None)]), @"Some((DocumentDeletion { deletion_ids: [0] }, false))");
     }
 
     #[test]
     fn autobatch_primary_key() {
         // ==> If I have a pk
         // With a single update
-        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("id"))]), @r###"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), import_ids: [0] }, true))"###);
-        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("other"))]), @r###"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("other"), import_ids: [0] }, true))"###);
+        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("id"))]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), operation_ids: [0] }, true))"###);
+        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("other"))]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("other"), operation_ids: [0] }, true))"###);
 
         // With a multiple updates
-        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0, 1] }, true))");
-        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, Some("id"))]), @r###"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), import_ids: [0, 1] }, true))"###);
-        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, Some("id")), doc_imp(ReplaceDocuments, true, None)]), @r###"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), import_ids: [0, 1] }, true))"###);
-        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, Some("other"))]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, Some("id"))]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0, 1] }, true))");
+        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, Some("id"))]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), operation_ids: [0, 1] }, true))"###);
+        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, Some("id")), doc_imp(ReplaceDocuments, true, None)]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), operation_ids: [0, 1] }, true))"###);
+        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, Some("other"))]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, Some("id"))]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
 
-        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("id")), doc_imp(ReplaceDocuments, true, None)]), @r###"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), import_ids: [0] }, true))"###);
-        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("id")), doc_imp(ReplaceDocuments, true, Some("id"))]), @r###"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), import_ids: [0, 1] }, true))"###);
-        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("id")), doc_imp(ReplaceDocuments, true, Some("id")), doc_imp(ReplaceDocuments, true, None)]), @r###"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), import_ids: [0, 1] }, true))"###);
-        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("id")), doc_imp(ReplaceDocuments, true, Some("other"))]), @r###"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), import_ids: [0] }, true))"###);
-        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("id")), doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, None)]), @r###"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), import_ids: [0] }, true))"###);
-        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("id")), doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, Some("id"))]), @r###"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), import_ids: [0] }, true))"###);
+        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("id")), doc_imp(ReplaceDocuments, true, None)]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), operation_ids: [0] }, true))"###);
+        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("id")), doc_imp(ReplaceDocuments, true, Some("id"))]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), operation_ids: [0, 1] }, true))"###);
+        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("id")), doc_imp(ReplaceDocuments, true, Some("id")), doc_imp(ReplaceDocuments, true, None)]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), operation_ids: [0, 1] }, true))"###);
+        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("id")), doc_imp(ReplaceDocuments, true, Some("other"))]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), operation_ids: [0] }, true))"###);
+        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("id")), doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, None)]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), operation_ids: [0] }, true))"###);
+        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("id")), doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, Some("id"))]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), operation_ids: [0] }, true))"###);
 
-        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, None)]), @r###"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("other"), import_ids: [0] }, true))"###);
-        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, Some("id"))]), @r###"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("other"), import_ids: [0] }, true))"###);
-        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, Some("id")), doc_imp(ReplaceDocuments, true, None)]), @r###"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("other"), import_ids: [0] }, true))"###);
-        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, Some("other"))]), @r###"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("other"), import_ids: [0] }, true))"###);
-        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, None)]), @r###"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("other"), import_ids: [0] }, true))"###);
-        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, Some("id"))]), @r###"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("other"), import_ids: [0] }, true))"###);
+        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, None)]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("other"), operation_ids: [0] }, true))"###);
+        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, Some("id"))]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("other"), operation_ids: [0] }, true))"###);
+        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, Some("id")), doc_imp(ReplaceDocuments, true, None)]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("other"), operation_ids: [0] }, true))"###);
+        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, Some("other"))]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("other"), operation_ids: [0] }, true))"###);
+        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, None)]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("other"), operation_ids: [0] }, true))"###);
+        debug_snapshot!(autobatch_from(true, Some("id"), [doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, Some("other")), doc_imp(ReplaceDocuments, true, Some("id"))]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("other"), operation_ids: [0] }, true))"###);
 
         // ==> If I don't have a pk
         // With a single update
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, Some("id"))]), @r###"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), import_ids: [0] }, true))"###);
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, Some("other"))]), @r###"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("other"), import_ids: [0] }, true))"###);
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, Some("id"))]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), operation_ids: [0] }, true))"###);
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, Some("other"))]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("other"), operation_ids: [0] }, true))"###);
 
         // With a multiple updates
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0, 1] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, Some("id"))]), @"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, import_ids: [0] }, true))");
-        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, Some("id")), doc_imp(ReplaceDocuments, true, None)]), @r###"Some((DocumentImport { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), import_ids: [0] }, true))"###);
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0, 1] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), doc_imp(ReplaceDocuments, true, Some("id"))]), @"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: None, operation_ids: [0] }, true))");
+        debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, Some("id")), doc_imp(ReplaceDocuments, true, None)]), @r###"Some((DocumentOperation { method: ReplaceDocuments, allow_index_creation: true, primary_key: Some("id"), operation_ids: [0] }, true))"###);
     }
 }
