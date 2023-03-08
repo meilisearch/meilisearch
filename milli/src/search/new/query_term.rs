@@ -1,6 +1,3 @@
-// TODO: put primitive query part in here
-
-use std::borrow::Cow;
 use std::mem;
 use std::ops::RangeInclusive;
 
@@ -18,6 +15,8 @@ use crate::search::fst_utils::{Complement, Intersection, StartsWith, Union};
 use crate::search::{build_dfa, get_first};
 use crate::{CboRoaringBitmapLenCodec, Index, Result};
 
+/// A phrase in the user's search query, consisting of several words
+/// that must appear side-by-side in the search results.
 #[derive(Default, Clone, PartialEq, Eq, Hash)]
 pub struct Phrase {
     pub words: Vec<Option<Interned<String>>>,
@@ -28,18 +27,38 @@ impl Phrase {
     }
 }
 
+/// A structure storing all the different ways to match
+/// a term in the user's search query.
 #[derive(Clone)]
 pub struct WordDerivations {
+    /// The original word
     pub original: Interned<String>,
-    // TODO: pub prefix_of: Vec<String>,
+    // TODO: original should only be used for debugging purposes?
+    // TODO: pub zero_typo: Option<Interned<String>>,
+    // TODO: pub prefix_of: Box<[Interned<String>]>,
+    /// All the synonyms of the original word
     pub synonyms: Box<[Interned<Phrase>]>,
+
+    /// The original word split into multiple consecutive words
     pub split_words: Option<Interned<Phrase>>,
+
+    /// The original words and words which are prefixed by it
     pub zero_typo: Box<[Interned<String>]>,
+
+    /// Words that are 1 typo away from the original word
     pub one_typo: Box<[Interned<String>]>,
+
+    /// Words that are 2 typos away from the original word
     pub two_typos: Box<[Interned<String>]>,
+
+    /// True if the prefix databases must be used to retrieve
+    /// the words which are prefixed by the original word.
     pub use_prefix_db: bool,
 }
 impl WordDerivations {
+    /// Return an iterator over all the single words derived from the original word.
+    ///
+    /// This excludes synonyms, split words, and words stored in the prefix databases.
     pub fn all_derivations_except_prefix_db(
         &'_ self,
     ) -> impl Iterator<Item = Interned<String>> + Clone + '_ {
@@ -49,17 +68,20 @@ impl WordDerivations {
         self.zero_typo.is_empty()
             && self.one_typo.is_empty()
             && self.two_typos.is_empty()
+            && self.synonyms.is_empty()
+            && self.split_words.is_none()
             && !self.use_prefix_db
     }
 }
 
+/// Compute the word derivations for the given word
 pub fn word_derivations(
     ctx: &mut SearchContext,
     word: &str,
     max_typo: u8,
     is_prefix: bool,
-    fst: &fst::Set<Cow<[u8]>>,
 ) -> Result<WordDerivations> {
+    let fst = ctx.index.words_fst(ctx.txn)?;
     let word_interned = ctx.word_interner.insert(word.to_owned());
 
     let use_prefix_db = is_prefix
@@ -171,6 +193,10 @@ pub fn word_derivations(
     })
 }
 
+/// Split the original word into the two words that appear the
+/// most next to each other in the index.
+///
+/// Return `None` if the original word cannot be split.
 fn split_best_frequency(
     index: &Index,
     txn: &RoTxn,
@@ -199,16 +225,12 @@ fn split_best_frequency(
 
 #[derive(Clone)]
 pub enum QueryTerm {
-    // TODO: should there be SplitWord, NGram2, and NGram3 variants?
-    // NGram2 can have 1 typo and synonyms
-    // NGram3 cannot have typos but can have synonyms
-    // SplitWords are a phrase
-    // Can NGrams be prefixes?
     Phrase { phrase: Interned<Phrase> },
     Word { derivations: WordDerivations },
 }
 
 impl QueryTerm {
+    /// Return the original word from the given query term
     pub fn original_single_word<'interner>(
         &self,
         word_interner: &'interner Interner<String>,
@@ -226,6 +248,7 @@ impl QueryTerm {
     }
 }
 
+/// A query term term coupled with its position in the user's search query.
 #[derive(Clone)]
 pub struct LocatedQueryTerm {
     pub value: QueryTerm,
@@ -233,14 +256,18 @@ pub struct LocatedQueryTerm {
 }
 
 impl LocatedQueryTerm {
+    /// Return `true` iff the word derivations within the query term are empty
     pub fn is_empty(&self) -> bool {
         match &self.value {
+            // TODO: phrases should be greedily computed, so that they can be excluded from
+            // the query graph right from the start?
             QueryTerm::Phrase { phrase: _ } => false,
             QueryTerm::Word { derivations, .. } => derivations.is_empty(),
         }
     }
 }
 
+/// Convert the tokenised search query into a list of located query terms.
 pub fn located_query_terms_from_string<'search>(
     ctx: &mut SearchContext<'search>,
     query: NormalizedTokenIter<Vec<u8>>,
@@ -250,8 +277,8 @@ pub fn located_query_terms_from_string<'search>(
     let min_len_one_typo = ctx.index.min_word_len_one_typo(ctx.txn)?;
     let min_len_two_typos = ctx.index.min_word_len_two_typos(ctx.txn)?;
 
+    // TODO: should `exact_words` also disable prefix search, ngrams, split words, or synonyms?
     let exact_words = ctx.index.exact_words(ctx.txn)?;
-    let fst = ctx.index.words_fst(ctx.txn)?;
 
     let nbr_typos = |word: &str| {
         if !authorize_typos
@@ -266,9 +293,9 @@ pub fn located_query_terms_from_string<'search>(
         }
     };
 
-    let mut primitive_query = Vec::new();
-    let mut phrase = Vec::new();
+    let mut located_terms = Vec::new();
 
+    let mut phrase = Vec::new();
     let mut quoted = false;
 
     let parts_limit = words_limit.unwrap_or(usize::MAX);
@@ -280,8 +307,8 @@ pub fn located_query_terms_from_string<'search>(
     let mut peekable = query.peekable();
     while let Some(token) = peekable.next() {
         // early return if word limit is exceeded
-        if primitive_query.len() >= parts_limit {
-            return Ok(primitive_query);
+        if located_terms.len() >= parts_limit {
+            return Ok(located_terms);
         }
 
         match token.kind {
@@ -307,24 +334,23 @@ pub fn located_query_terms_from_string<'search>(
                     match token.kind {
                         TokenKind::Word => {
                             let word = token.lemma();
-                            let derivations =
-                                word_derivations(ctx, word, nbr_typos(word), false, &fst)?;
+                            let derivations = word_derivations(ctx, word, nbr_typos(word), false)?;
                             let located_term = LocatedQueryTerm {
                                 value: QueryTerm::Word { derivations },
                                 positions: position..=position,
                             };
-                            primitive_query.push(located_term);
+                            located_terms.push(located_term);
                         }
                         TokenKind::StopWord | TokenKind::Separator(_) | TokenKind::Unknown => {}
                     }
                 } else {
                     let word = token.lemma();
-                    let derivations = word_derivations(ctx, word, nbr_typos(word), true, &fst)?;
+                    let derivations = word_derivations(ctx, word, nbr_typos(word), true)?;
                     let located_term = LocatedQueryTerm {
                         value: QueryTerm::Word { derivations },
                         positions: position..=position,
                     };
-                    primitive_query.push(located_term);
+                    located_terms.push(located_term);
                 }
             }
             TokenKind::Separator(separator_kind) => {
@@ -352,7 +378,7 @@ pub fn located_query_terms_from_string<'search>(
                         },
                         positions: phrase_start..=phrase_end,
                     };
-                    primitive_query.push(located_query_term);
+                    located_terms.push(located_query_term);
                 }
             }
             _ => (),
@@ -367,10 +393,10 @@ pub fn located_query_terms_from_string<'search>(
             },
             positions: phrase_start..=phrase_end,
         };
-        primitive_query.push(located_query_term);
+        located_terms.push(located_query_term);
     }
 
-    Ok(primitive_query)
+    Ok(located_terms)
 }
 
 // TODO: return a word derivations instead?
@@ -396,6 +422,8 @@ pub fn ngram2(
         _ => None,
     }
 }
+
+// TODO: return a word derivations instead?
 pub fn ngram3(
     ctx: &mut SearchContext,
     x: &LocatedQueryTerm,

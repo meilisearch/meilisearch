@@ -2,7 +2,7 @@ use heed::BytesDecode;
 use roaring::RoaringBitmap;
 
 use super::empty_paths_cache::EmptyPathsCache;
-use super::{EdgeDetails, RankingRuleGraph, RankingRuleGraphTrait};
+use super::{EdgeCondition, RankingRuleGraph, RankingRuleGraphTrait};
 use crate::search::new::interner::Interned;
 use crate::search::new::logger::SearchLogger;
 use crate::search::new::query_term::{LocatedQueryTerm, Phrase, QueryTerm, WordDerivations};
@@ -20,19 +20,19 @@ pub enum TypoEdge {
 pub enum TypoGraph {}
 
 impl RankingRuleGraphTrait for TypoGraph {
-    type EdgeDetails = TypoEdge;
+    type EdgeCondition = TypoEdge;
     type BuildVisitedFromNode = ();
 
-    fn graphviz_edge_details_label(edge: &Self::EdgeDetails) -> String {
+    fn label_for_edge_condition(edge: &Self::EdgeCondition) -> String {
         match edge {
             TypoEdge::Phrase { .. } => ", 0 typos".to_owned(),
             TypoEdge::Word { nbr_typos, .. } => format!(", {nbr_typos} typos"),
         }
     }
 
-    fn compute_docids<'db_cache, 'search>(
+    fn resolve_edge_condition<'db_cache, 'search>(
         ctx: &mut SearchContext<'search>,
-        edge: &Self::EdgeDetails,
+        edge: &Self::EdgeCondition,
         universe: &RoaringBitmap,
     ) -> Result<RoaringBitmap> {
         match edge {
@@ -66,29 +66,29 @@ impl RankingRuleGraphTrait for TypoGraph {
         }
     }
 
-    fn build_visit_from_node<'search>(
+    fn build_step_visit_source_node<'search>(
         _ctx: &mut SearchContext<'search>,
         _from_node: &QueryNode,
     ) -> Result<Option<Self::BuildVisitedFromNode>> {
         Ok(Some(()))
     }
 
-    fn build_visit_to_node<'from_data, 'search: 'from_data>(
+    fn build_step_visit_destination_node<'from_data, 'search: 'from_data>(
         _ctx: &mut SearchContext<'search>,
         to_node: &QueryNode,
         _from_node_data: &'from_data Self::BuildVisitedFromNode,
-    ) -> Result<Vec<(u8, EdgeDetails<Self::EdgeDetails>)>> {
+    ) -> Result<Vec<(u8, EdgeCondition<Self::EdgeCondition>)>> {
         match to_node {
             QueryNode::Term(LocatedQueryTerm { value, .. }) => match value {
                 &QueryTerm::Phrase { phrase } => {
-                    Ok(vec![(0, EdgeDetails::Data(TypoEdge::Phrase { phrase }))])
+                    Ok(vec![(0, EdgeCondition::Conditional(TypoEdge::Phrase { phrase }))])
                 }
                 QueryTerm::Word { derivations } => {
                     let mut edges = vec![];
                     if !derivations.zero_typo.is_empty() || derivations.use_prefix_db {
                         edges.push((
                             0,
-                            EdgeDetails::Data(TypoEdge::Word {
+                            EdgeCondition::Conditional(TypoEdge::Word {
                                 derivations: derivations.clone(),
                                 nbr_typos: 0,
                             }),
@@ -97,7 +97,7 @@ impl RankingRuleGraphTrait for TypoGraph {
                     if !derivations.one_typo.is_empty() {
                         edges.push((
                             1,
-                            EdgeDetails::Data(TypoEdge::Word {
+                            EdgeCondition::Conditional(TypoEdge::Word {
                                 derivations: derivations.clone(),
                                 nbr_typos: 1,
                             }),
@@ -106,7 +106,7 @@ impl RankingRuleGraphTrait for TypoGraph {
                     if !derivations.two_typos.is_empty() {
                         edges.push((
                             2,
-                            EdgeDetails::Data(TypoEdge::Word {
+                            EdgeCondition::Conditional(TypoEdge::Word {
                                 derivations: derivations.clone(),
                                 nbr_typos: 2,
                             }),
@@ -115,7 +115,7 @@ impl RankingRuleGraphTrait for TypoGraph {
                     Ok(edges)
                 }
             },
-            QueryNode::End => Ok(vec![(0, EdgeDetails::Unconditional)]),
+            QueryNode::End => Ok(vec![(0, EdgeCondition::Unconditional)]),
             QueryNode::Deleted | QueryNode::Start => panic!(),
         }
     }

@@ -8,7 +8,7 @@ use roaring::RoaringBitmap;
 
 use crate::search::new::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
 use crate::search::new::ranking_rule_graph::{
-    Edge, EdgeDetails, EmptyPathsCache, ProximityGraph, RankingRuleGraph, RankingRuleGraphTrait,
+    Edge, EdgeCondition, EmptyPathsCache, ProximityGraph, RankingRuleGraph, RankingRuleGraphTrait,
     TypoGraph,
 };
 use crate::search::new::small_bitmap::SmallBitmap;
@@ -534,24 +534,24 @@ shape: class"
             let distances = &distances[node_idx];
             Self::query_node_d2_desc(ctx, node_idx, node, distances.as_slice(), file);
         }
-        for edge in graph.all_edges.iter().flatten() {
-            let Edge { from_node, to_node, details, .. } = edge;
+        for edge in graph.edges_store.iter().flatten() {
+            let Edge { source_node, dest_node, condition: details, .. } = edge;
 
             match &details {
-                EdgeDetails::Unconditional => {
+                EdgeCondition::Unconditional => {
                     writeln!(
                         file,
-                        "{from_node} -> {to_node} : \"always cost {cost}\"",
+                        "{source_node} -> {dest_node} : \"always cost {cost}\"",
                         cost = edge.cost,
                     )
                     .unwrap();
                 }
-                EdgeDetails::Data(details) => {
+                EdgeCondition::Conditional(details) => {
                     writeln!(
                         file,
-                        "{from_node} -> {to_node} : \"cost {cost} {edge_label}\"",
+                        "{source_node} -> {dest_node} : \"cost {cost} {edge_label}\"",
                         cost = edge.cost,
-                        edge_label = R::graphviz_edge_details_label(details)
+                        edge_label = R::label_for_edge_condition(details)
                     )
                     .unwrap();
                 }
@@ -589,10 +589,10 @@ shape: class"
         edge_idx: u16,
         file: &mut File,
     ) {
-        let Edge { from_node, to_node, cost, .. } =
-            graph.all_edges[edge_idx as usize].as_ref().unwrap();
-        let from_node = &graph.query_graph.nodes[*from_node as usize];
-        let from_node_desc = match from_node {
+        let Edge { source_node, dest_node, cost, .. } =
+            graph.edges_store[edge_idx as usize].as_ref().unwrap();
+        let source_node = &graph.query_graph.nodes[*source_node as usize];
+        let source_node_desc = match source_node {
             QueryNode::Term(term) => match &term.value {
                 QueryTerm::Phrase { phrase } => {
                     let phrase = ctx.phrase_interner.get(*phrase);
@@ -606,8 +606,8 @@ shape: class"
             QueryNode::Start => "START".to_owned(),
             QueryNode::End => "END".to_owned(),
         };
-        let to_node = &graph.query_graph.nodes[*to_node as usize];
-        let to_node_desc = match to_node {
+        let dest_node = &graph.query_graph.nodes[*dest_node as usize];
+        let dest_node_desc = match dest_node {
             QueryNode::Term(term) => match &term.value {
                 QueryTerm::Phrase { phrase } => {
                     let phrase = ctx.phrase_interner.get(*phrase);
@@ -623,7 +623,7 @@ shape: class"
         };
         writeln!(
             file,
-            "{edge_idx}: \"{from_node_desc}->{to_node_desc} [{cost}]\" {{
+            "{edge_idx}: \"{source_node_desc}->{dest_node_desc} [{cost}]\" {{
             shape: class
         }}"
         )

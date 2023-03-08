@@ -30,7 +30,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
             empty_paths_cache,
             &mut visit,
             &mut vec![],
-            &mut SmallBitmap::new(self.all_edges.len() as u16),
+            &mut SmallBitmap::new(self.edges_store.len() as u16),
             empty_paths_cache.empty_edges.clone(),
         )?;
         Ok(())
@@ -48,12 +48,12 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
     ) -> Result<bool> {
         let mut any_valid = false;
 
-        let edges = self.node_edges[from].clone();
+        let edges = self.edges_of_node[from].clone();
         for edge_idx in edges.iter() {
-            let Some(edge) = self.all_edges[edge_idx as usize].as_ref() else { continue };
+            let Some(edge) = self.edges_store[edge_idx as usize].as_ref() else { continue };
             if cost < edge.cost as u16
                 || forbidden_edges.contains(edge_idx)
-                || !all_distances[edge.to_node as usize].iter().any(
+                || !all_distances[edge.dest_node as usize].iter().any(
                     |(next_cost, necessary_edges)| {
                         (*next_cost == cost - edge.cost as u16)
                             && !forbidden_edges.intersects(necessary_edges)
@@ -71,13 +71,13 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                 new_forbidden_edges.insert(x);
             });
 
-            let next_any_valid = if edge.to_node == self.query_graph.end_node {
+            let next_any_valid = if edge.dest_node == self.query_graph.end_node {
                 any_valid = true;
                 visit(prev_edges, self, empty_paths_cache)?;
                 true
             } else {
                 self.visit_paths_of_cost_rec(
-                    edge.to_node as usize,
+                    edge.dest_node as usize,
                     cost - edge.cost as u16,
                     all_distances,
                     empty_paths_cache,
@@ -115,7 +115,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         let mut node_stack = VecDeque::new();
 
         distances_to_end[self.query_graph.end_node as usize] =
-            vec![(0, SmallBitmap::new(self.all_edges.len() as u16))];
+            vec![(0, SmallBitmap::new(self.edges_store.len() as u16))];
 
         for prev_node in
             self.query_graph.edges[self.query_graph.end_node as usize].predecessors.iter()
@@ -127,15 +127,15 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         while let Some(cur_node) = node_stack.pop_front() {
             let mut self_distances = BTreeMap::<u16, SmallBitmap>::new();
 
-            let cur_node_edges = &self.node_edges[cur_node];
+            let cur_node_edges = &self.edges_of_node[cur_node];
             for edge_idx in cur_node_edges.iter() {
-                let edge = self.all_edges[edge_idx as usize].as_ref().unwrap();
-                let succ_node = edge.to_node;
+                let edge = self.edges_store[edge_idx as usize].as_ref().unwrap();
+                let succ_node = edge.dest_node;
                 let succ_distances = &distances_to_end[succ_node as usize];
                 for (succ_distance, succ_necessary_edges) in succ_distances {
                     let potential_necessary_edges = SmallBitmap::from_iter(
                         std::iter::once(edge_idx).chain(succ_necessary_edges.iter()),
-                        self.all_edges.len() as u16,
+                        self.edges_store.len() as u16,
                     );
                     match self_distances.entry(edge.cost as u16 + succ_distance) {
                         Entry::Occupied(mut prev_necessary_edges) => {

@@ -5,7 +5,7 @@ use itertools::Itertools;
 use super::ProximityEdge;
 use crate::search::new::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
 use crate::search::new::ranking_rule_graph::proximity::WordPair;
-use crate::search::new::ranking_rule_graph::EdgeDetails;
+use crate::search::new::ranking_rule_graph::EdgeCondition;
 use crate::search::new::{QueryNode, SearchContext};
 use crate::Result;
 
@@ -57,10 +57,10 @@ pub fn visit_to_node<'search, 'from_data>(
     ctx: &mut SearchContext<'search>,
     to_node: &QueryNode,
     from_node_data: &'from_data (WordDerivations, i8),
-) -> Result<Vec<(u8, EdgeDetails<ProximityEdge>)>> {
+) -> Result<Vec<(u8, EdgeCondition<ProximityEdge>)>> {
     let (derivations1, pos1) = from_node_data;
     let term2 = match &to_node {
-        QueryNode::End => return Ok(vec![(0, EdgeDetails::Unconditional)]),
+        QueryNode::End => return Ok(vec![(0, EdgeCondition::Unconditional)]),
         QueryNode::Deleted | QueryNode::Start => return Ok(vec![]),
         QueryNode::Term(term) => term,
     };
@@ -96,7 +96,7 @@ pub fn visit_to_node<'search, 'from_data>(
         // We want to effectively ignore this pair of terms
         // Unconditionally walk through the edge without computing the docids
         // But also what should the cost be?
-        return Ok(vec![(0, EdgeDetails::Unconditional)]);
+        return Ok(vec![(0, EdgeCondition::Unconditional)]);
     }
 
     let updb1 = derivations1.use_prefix_db;
@@ -189,7 +189,7 @@ pub fn visit_to_node<'search, 'from_data>(
             for (proximity, word_pairs) in proximity_word_pairs {
                 edges.push((
                     cost,
-                    EdgeDetails::Data(ProximityEdge {
+                    EdgeCondition::Conditional(ProximityEdge {
                         pairs: word_pairs.into_boxed_slice(),
                         proximity,
                     }),
@@ -198,6 +198,6 @@ pub fn visit_to_node<'search, 'from_data>(
             edges
         })
         .collect::<Vec<_>>();
-    new_edges.push((8 + (ngram_len2 - 1) as u8, EdgeDetails::Unconditional));
+    new_edges.push((8 + (ngram_len2 - 1) as u8, EdgeCondition::Unconditional));
     Ok(new_edges)
 }

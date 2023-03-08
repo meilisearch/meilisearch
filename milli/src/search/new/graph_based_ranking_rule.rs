@@ -85,15 +85,15 @@ fn remove_empty_edges<'search, G: RankingRuleGraphTrait>(
     universe: &RoaringBitmap,
     empty_paths_cache: &mut EmptyPathsCache,
 ) -> Result<()> {
-    for edge_index in 0..graph.all_edges.len() as u16 {
-        if graph.all_edges[edge_index as usize].is_none() {
+    for edge_index in 0..graph.edges_store.len() as u16 {
+        if graph.edges_store[edge_index as usize].is_none() {
             continue;
         }
         let docids = edge_docids_cache.get_edge_docids(ctx, edge_index, &*graph, universe)?;
         match docids {
             BitmapOrAllRef::Bitmap(docids) => {
                 if docids.is_disjoint(universe) {
-                    graph.remove_edge(edge_index);
+                    graph.remove_ranking_rule_edge(edge_index);
                     empty_paths_cache.forbid_edge(edge_index);
                     edge_docids_cache.cache.remove(&edge_index);
                     continue;
@@ -120,7 +120,7 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
     ) -> Result<()> {
         let mut graph = RankingRuleGraph::build(ctx, query_graph.clone())?;
         let mut edge_docids_cache = EdgeDocidsCache::default();
-        let mut empty_paths_cache = EmptyPathsCache::new(graph.all_edges.len() as u16);
+        let mut empty_paths_cache = EmptyPathsCache::new(graph.edges_store.len() as u16);
 
         // First simplify the graph as much as possible, by computing the docids of the edges
         // within the rule's universe and removing the edges that have no associated docids.
@@ -242,7 +242,7 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
                         // 1. Store in the cache that this edge is empty for this universe
                         empty_paths_cache.forbid_edge(edge_index);
                         // 2. remove this edge from the ranking rule graph
-                        graph.remove_edge(edge_index);
+                        graph.remove_ranking_rule_edge(edge_index);
                         // 3. Also remove the entry from the edge_docids_cache, since we don't need it anymore
                         edge_docids_cache.cache.remove(&edge_index);
                         return Ok(());
