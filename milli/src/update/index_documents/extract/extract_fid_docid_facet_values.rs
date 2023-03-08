@@ -8,7 +8,7 @@ use charabia::normalizer::{CharNormalizer, CompatibilityDecompositionNormalizer}
 use heed::zerocopy::AsBytes;
 use heed::BytesEncode;
 use roaring::RoaringBitmap;
-use serde_json::Value;
+use serde_json::{from_slice, Value};
 
 use super::helpers::{create_sorter, keep_first, sorter_into_reader, GrenadParameters};
 use crate::error::InternalError;
@@ -25,7 +25,8 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
     faceted_fields: &HashSet<FieldId>,
-) -> Result<(grenad::Reader<File>, grenad::Reader<File>, grenad::Reader<File>)> {
+) -> Result<(grenad::Reader<File>, grenad::Reader<File>, grenad::Reader<File>, grenad::Reader<File>)>
+{
     let max_memory = indexer.max_memory_by_thread();
 
     let mut fid_docid_facet_numbers_sorter = create_sorter(
@@ -47,6 +48,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     );
 
     let mut facet_exists_docids = BTreeMap::<FieldId, RoaringBitmap>::new();
+    let mut facet_is_null_docids = BTreeMap::<FieldId, RoaringBitmap>::new();
 
     let mut key_buffer = Vec::new();
     let mut cursor = obkv_documents.into_cursor()?;
@@ -70,33 +72,40 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
                 // For the other extraction tasks, prefix the key with the field_id and the document_id
                 key_buffer.extend_from_slice(docid_bytes);
 
-                let value =
-                    serde_json::from_slice(field_bytes).map_err(InternalError::SerdeJson)?;
-
-                let (numbers, strings) = extract_facet_values(&value);
-
-                // insert facet numbers in sorter
-                for number in numbers {
-                    key_buffer.truncate(size_of::<FieldId>() + size_of::<DocumentId>());
-                    if let Some(value_bytes) = f64_into_bytes(number) {
-                        key_buffer.extend_from_slice(&value_bytes);
-                        key_buffer.extend_from_slice(&number.to_be_bytes());
-
-                        fid_docid_facet_numbers_sorter.insert(&key_buffer, ().as_bytes())?;
+                let value = from_slice(field_bytes).map_err(InternalError::SerdeJson)?;
+                match extract_facet_values(&value) {
+                    FilterableValues::Null => {
+                        facet_is_null_docids.entry(field_id).or_default().insert(document);
                     }
-                }
+                    FilterableValues::Values { numbers, strings } => {
+                        // insert facet numbers in sorter
+                        for number in numbers {
+                            key_buffer.truncate(size_of::<FieldId>() + size_of::<DocumentId>());
+                            if let Some(value_bytes) = f64_into_bytes(number) {
+                                key_buffer.extend_from_slice(&value_bytes);
+                                key_buffer.extend_from_slice(&number.to_be_bytes());
 
-                // insert normalized and original facet string in sorter
-                for (normalized, original) in strings.into_iter().filter(|(n, _)| !n.is_empty()) {
-                    let normalised_truncated_value: String = normalized
-                        .char_indices()
-                        .take_while(|(idx, _)| idx + 4 < MAX_FACET_VALUE_LENGTH)
-                        .map(|(_, c)| c)
-                        .collect();
+                                fid_docid_facet_numbers_sorter
+                                    .insert(&key_buffer, ().as_bytes())?;
+                            }
+                        }
 
-                    key_buffer.truncate(size_of::<FieldId>() + size_of::<DocumentId>());
-                    key_buffer.extend_from_slice(normalised_truncated_value.as_bytes());
-                    fid_docid_facet_strings_sorter.insert(&key_buffer, original.as_bytes())?;
+                        // insert normalized and original facet string in sorter
+                        for (normalized, original) in
+                            strings.into_iter().filter(|(n, _)| !n.is_empty())
+                        {
+                            let normalised_truncated_value: String = normalized
+                                .char_indices()
+                                .take_while(|(idx, _)| idx + 4 < MAX_FACET_VALUE_LENGTH)
+                                .map(|(_, c)| c)
+                                .collect();
+
+                            key_buffer.truncate(size_of::<FieldId>() + size_of::<DocumentId>());
+                            key_buffer.extend_from_slice(normalised_truncated_value.as_bytes());
+                            fid_docid_facet_strings_sorter
+                                .insert(&key_buffer, original.as_bytes())?;
+                        }
+                    }
                 }
             }
         }
@@ -113,14 +122,36 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     }
     let facet_exists_docids_reader = writer_into_reader(facet_exists_docids_writer)?;
 
+    let mut facet_is_null_docids_writer = create_writer(
+        indexer.chunk_compression_type,
+        indexer.chunk_compression_level,
+        tempfile::tempfile()?,
+    );
+    for (fid, bitmap) in facet_is_null_docids.into_iter() {
+        let bitmap_bytes = CboRoaringBitmapCodec::bytes_encode(&bitmap).unwrap();
+        facet_is_null_docids_writer.insert(fid.to_be_bytes(), &bitmap_bytes)?;
+    }
+    let facet_is_null_docids_reader = writer_into_reader(facet_is_null_docids_writer)?;
+
     Ok((
         sorter_into_reader(fid_docid_facet_numbers_sorter, indexer)?,
         sorter_into_reader(fid_docid_facet_strings_sorter, indexer)?,
+        facet_is_null_docids_reader,
         facet_exists_docids_reader,
     ))
 }
 
-fn extract_facet_values(value: &Value) -> (Vec<f64>, Vec<(String, String)>) {
+/// Represent what a document field contains.
+enum FilterableValues {
+    Null,
+    /// Represents all the numbers and strings values found in this document field.
+    Values {
+        numbers: Vec<f64>,
+        strings: Vec<(String, String)>,
+    },
+}
+
+fn extract_facet_values(value: &Value) -> FilterableValues {
     fn inner_extract_facet_values(
         value: &Value,
         can_recurse: bool,
@@ -152,9 +183,13 @@ fn extract_facet_values(value: &Value) -> (Vec<f64>, Vec<(String, String)>) {
         }
     }
 
-    let mut facet_number_values = Vec::new();
-    let mut facet_string_values = Vec::new();
-    inner_extract_facet_values(value, true, &mut facet_number_values, &mut facet_string_values);
-
-    (facet_number_values, facet_string_values)
+    match value {
+        Value::Null => FilterableValues::Null,
+        otherwise => {
+            let mut numbers = Vec::new();
+            let mut strings = Vec::new();
+            inner_extract_facet_values(otherwise, true, &mut numbers, &mut strings);
+            FilterableValues::Values { numbers, strings }
+        }
+    }
 }

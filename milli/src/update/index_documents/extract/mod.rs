@@ -55,7 +55,7 @@ pub(crate) fn data_from_obkv_documents(
         .collect::<Result<()>>()?;
 
     #[allow(clippy::type_complexity)]
-    let result: Result<(Vec<_>, (Vec<_>, (Vec<_>, Vec<_>)))> = flattened_obkv_chunks
+    let result: Result<(Vec<_>, (Vec<_>, (Vec<_>, (Vec<_>, Vec<_>))))> = flattened_obkv_chunks
         .par_bridge()
         .map(|flattened_obkv_chunks| {
             send_and_extract_flattened_documents_data(
@@ -76,7 +76,10 @@ pub(crate) fn data_from_obkv_documents(
         docid_word_positions_chunks,
         (
             docid_fid_facet_numbers_chunks,
-            (docid_fid_facet_strings_chunks, facet_exists_docids_chunks),
+            (
+                docid_fid_facet_strings_chunks,
+                (facet_is_null_docids_chunks, facet_exists_docids_chunks),
+            ),
         ),
     ) = result?;
 
@@ -235,7 +238,7 @@ fn send_and_extract_flattened_documents_data(
     grenad::Reader<CursorClonableMmap>,
     (
         grenad::Reader<CursorClonableMmap>,
-        (grenad::Reader<CursorClonableMmap>, grenad::Reader<File>),
+        (grenad::Reader<CursorClonableMmap>, (grenad::Reader<File>, grenad::Reader<File>)),
     ),
 )> {
     let flattened_documents_chunk =
@@ -284,6 +287,7 @@ fn send_and_extract_flattened_documents_data(
                 let (
                     docid_fid_facet_numbers_chunk,
                     docid_fid_facet_strings_chunk,
+                    fid_facet_is_null_docids_chunk,
                     fid_facet_exists_docids_chunk,
                 ) = extract_fid_docid_facet_values(
                     flattened_documents_chunk.clone(),
@@ -309,7 +313,10 @@ fn send_and_extract_flattened_documents_data(
 
                 Ok((
                     docid_fid_facet_numbers_chunk,
-                    (docid_fid_facet_strings_chunk, fid_facet_exists_docids_chunk),
+                    (
+                        docid_fid_facet_strings_chunk,
+                        (fid_facet_is_null_docids_chunk, fid_facet_exists_docids_chunk),
+                    ),
                 ))
             },
         );
