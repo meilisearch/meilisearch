@@ -262,44 +262,44 @@ mod tests {
 
         println!("nbr docids: {}", index.documents_ids(&txn).unwrap().len());
 
-        loop {
-            let start = Instant::now();
+        // loop {
+        let start = Instant::now();
 
-            // let mut logger = crate::new::logger::detailed::DetailedSearchLogger::new("log");
-            let mut ctx = SearchContext::new(&index, &txn);
-            let results = execute_search(
-                &mut ctx,
-                "which a the releases from poison by the government",
-                None,
-                0,
-                20,
-                &mut DefaultSearchLogger,
-                // &mut logger,
-            )
-            .unwrap();
+        // let mut logger = crate::new::logger::detailed::DetailedSearchLogger::new("log");
+        let mut ctx = SearchContext::new(&index, &txn);
+        let results = execute_search(
+            &mut ctx,
+            "which a the releases from poison by the government",
+            None,
+            0,
+            20,
+            &mut DefaultSearchLogger,
+            // &mut logger,
+        )
+        .unwrap();
 
-            // logger.write_d2_description(&mut ctx);
+        // logger.write_d2_description(&mut ctx);
 
-            let elapsed = start.elapsed();
-            println!("{}us", elapsed.as_micros());
+        let elapsed = start.elapsed();
+        println!("{}us", elapsed.as_micros());
 
-            let _documents = index
-                .documents(&txn, results.iter().copied())
-                .unwrap()
-                .into_iter()
-                .map(|(id, obkv)| {
-                    let mut object = serde_json::Map::default();
-                    for (fid, fid_name) in index.fields_ids_map(&txn).unwrap().iter() {
-                        let value = obkv.get(fid).unwrap();
-                        let value: serde_json::Value = serde_json::from_slice(value).unwrap();
-                        object.insert(fid_name.to_owned(), value);
-                    }
-                    (id, serde_json::to_string_pretty(&object).unwrap())
-                })
-                .collect::<Vec<_>>();
+        let _documents = index
+            .documents(&txn, results.iter().copied())
+            .unwrap()
+            .into_iter()
+            .map(|(id, obkv)| {
+                let mut object = serde_json::Map::default();
+                for (fid, fid_name) in index.fields_ids_map(&txn).unwrap().iter() {
+                    let value = obkv.get(fid).unwrap();
+                    let value: serde_json::Value = serde_json::from_slice(value).unwrap();
+                    object.insert(fid_name.to_owned(), value);
+                }
+                (id, serde_json::to_string_pretty(&object).unwrap())
+            })
+            .collect::<Vec<_>>();
 
-            println!("{}us: {:?}", elapsed.as_micros(), results);
-        }
+        println!("{}us: {:?}", elapsed.as_micros(), results);
+        // }
         // for (id, _document) in documents {
         //     println!("{id}:");
         //     // println!("{document}");
@@ -321,7 +321,7 @@ mod tests {
         let start = Instant::now();
 
         let mut s = Search::new(&txn, &index);
-        s.query("releases from poison by the government");
+        s.query("which a the releases from poison by the government");
         s.terms_matching_strategy(TermsMatchingStrategy::Last);
         s.criterion_implementation_strategy(crate::CriterionImplementationStrategy::OnlySetBased);
         let docs = s.execute().unwrap();
@@ -362,7 +362,7 @@ mod tests {
         // loop {
         let start = Instant::now();
 
-        // let mut logger = crate::new::logger::detailed::DetailedSearchLogger::new("log");
+        let mut logger = crate::new::logger::detailed::DetailedSearchLogger::new("log");
         let mut ctx = SearchContext::new(&index, &txn);
         let results = execute_search(
             &mut ctx,
@@ -370,12 +370,12 @@ mod tests {
             None,
             0,
             20,
-            &mut DefaultSearchLogger,
-            // &mut logger,
+            // &mut DefaultSearchLogger,
+            &mut logger,
         )
         .unwrap();
 
-        // logger.write_d2_description(&mut ctx);
+        logger.write_d2_description(&mut ctx);
 
         let elapsed = start.elapsed();
 
@@ -414,7 +414,7 @@ mod tests {
         let start = Instant::now();
 
         let mut s = Search::new(&txn, &index);
-        s.query("releases from poison by the government");
+        s.query("which a the releases from poison by the government");
         s.terms_matching_strategy(TermsMatchingStrategy::Last);
         s.criterion_implementation_strategy(crate::CriterionImplementationStrategy::OnlySetBased);
         let docs = s.execute().unwrap();

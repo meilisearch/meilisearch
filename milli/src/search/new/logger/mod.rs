@@ -5,6 +5,7 @@ use roaring::RoaringBitmap;
 
 use super::{
     ranking_rule_graph::{EmptyPathsCache, ProximityGraph, RankingRuleGraph, TypoGraph},
+    small_bitmap::SmallBitmap,
     RankingRule, RankingRuleQueryTrait,
 };
 
@@ -61,7 +62,7 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
         _paths_map: &[Vec<u16>],
         _empty_paths_cache: &EmptyPathsCache,
         _universe: &RoaringBitmap,
-        _distances: Vec<Vec<u16>>,
+        _distances: Vec<Vec<(u16, SmallBitmap)>>,
         _cost: u16,
     ) {
     }
@@ -72,7 +73,7 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
         _paths: &[Vec<u16>],
         _empty_paths_cache: &EmptyPathsCache,
         _universe: &RoaringBitmap,
-        _distances: Vec<Vec<u16>>,
+        _distances: Vec<Vec<(u16, SmallBitmap)>>,
         _cost: u16,
     ) {
     }
@@ -123,7 +124,7 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
         paths: &[Vec<u16>],
         empty_paths_cache: &EmptyPathsCache,
         universe: &RoaringBitmap,
-        distances: Vec<Vec<u16>>,
+        distances: Vec<Vec<(u16, SmallBitmap)>>,
         cost: u16,
     );
 
@@ -133,7 +134,7 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
         paths: &[Vec<u16>],
         empty_paths_cache: &EmptyPathsCache,
         universe: &RoaringBitmap,
-        distances: Vec<Vec<u16>>,
+        distances: Vec<Vec<(u16, SmallBitmap)>>,
         cost: u16,
     );
 }

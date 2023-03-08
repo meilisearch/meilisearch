@@ -6,6 +6,7 @@ use std::time::Instant;
 use std::{io::Write, path::PathBuf};
 
 use crate::new::ranking_rule_graph::TypoGraph;
+use crate::new::small_bitmap::SmallBitmap;
 use crate::new::{QueryNode, QueryGraph, SearchContext};
 use crate::new::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
 use crate::new::ranking_rule_graph::EmptyPathsCache;
@@ -45,7 +46,7 @@ pub enum SearchEvents {
         paths: Vec<Vec<u16>>,
         empty_paths_cache: EmptyPathsCache,
         universe: RoaringBitmap,
-        distances: Vec<Vec<u16>>,
+        distances: Vec<Vec<(u16, SmallBitmap)>>,
         cost: u16,
     },
     TypoState {
@@ -53,7 +54,7 @@ pub enum SearchEvents {
         paths: Vec<Vec<u16>>,
         empty_paths_cache: EmptyPathsCache,
         universe: RoaringBitmap,
-        distances: Vec<Vec<u16>>,
+        distances: Vec<Vec<(u16, SmallBitmap)>>,
         cost: u16,
     },
     RankingRuleSkipBucket { ranking_rule_idx: usize, candidates: RoaringBitmap, time: Instant },
@@ -165,11 +166,11 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         self.events.push(SearchEvents::WordsState { query_graph: query_graph.clone() });
     }
 
-    fn log_proximity_state(&mut self, query_graph: &RankingRuleGraph<ProximityGraph>, paths_map: &[Vec<u16>], empty_paths_cache: &EmptyPathsCache, universe: &RoaringBitmap, distances: Vec<Vec<u16>>, cost: u16,) {
+    fn log_proximity_state(&mut self, query_graph: &RankingRuleGraph<ProximityGraph>, paths_map: &[Vec<u16>], empty_paths_cache: &EmptyPathsCache, universe: &RoaringBitmap, distances: Vec<Vec<(u16, SmallBitmap)>>, cost: u16,) {
         self.events.push(SearchEvents::ProximityState { graph: query_graph.clone(), paths: paths_map.to_vec(), empty_paths_cache: empty_paths_cache.clone(), universe: universe.clone(), distances, cost })
     }
     
-    fn log_typo_state(&mut self, query_graph: &RankingRuleGraph<TypoGraph>, paths_map: &[Vec<u16>], empty_paths_cache: &EmptyPathsCache, universe: &RoaringBitmap, distances: Vec<Vec<u16>>,  cost: u16,) {
+    fn log_typo_state(&mut self, query_graph: &RankingRuleGraph<TypoGraph>, paths_map: &[Vec<u16>], empty_paths_cache: &EmptyPathsCache, universe: &RoaringBitmap, distances: Vec<Vec<(u16, SmallBitmap)>>,  cost: u16,) {
         self.events.push(SearchEvents::TypoState { graph: query_graph.clone(), paths: paths_map.to_vec(), empty_paths_cache: empty_paths_cache.clone(), universe: universe.clone(), distances,  cost })
     }
 
@@ -352,7 +353,7 @@ results.{random} {{
         writeln!(&mut file, "}}").unwrap();
     }
     
-    fn query_node_d2_desc(ctx: &mut SearchContext, node_idx: usize, node: &QueryNode, _distances: &[u16], file: &mut File) {
+    fn query_node_d2_desc(ctx: &mut SearchContext, node_idx: usize, node: &QueryNode, distances: &[(u16, SmallBitmap)], file: &mut File) {
         match &node {
             QueryNode::Term(LocatedQueryTerm { value, .. }) => {
                 match value {
@@ -390,9 +391,9 @@ shape: class").unwrap();
                         if *use_prefix_db {
                             writeln!(file, "use prefix DB : true").unwrap();
                         }
-                        // for (i, d) in distances.iter().enumerate() {
-                        //     writeln!(file, "\"distances\" : {d}").unwrap();
-                        // }
+                        for (d, edges) in distances.iter() {
+                            writeln!(file, "\"distance {d}\" : {:?}", edges.iter().collect::<Vec<_>>() ).unwrap();
+                        }
                         
                         writeln!(file, "}}").unwrap();
                     },
@@ -420,7 +421,7 @@ shape: class").unwrap();
             }
         }        
     }
-    fn ranking_rule_graph_d2_description<R: RankingRuleGraphTrait>(ctx: &mut SearchContext, graph: &RankingRuleGraph<R>, paths: &[Vec<u16>], _empty_paths_cache: &EmptyPathsCache, distances: Vec<Vec<u16>>, file: &mut File) {
+    fn ranking_rule_graph_d2_description<R: RankingRuleGraphTrait>(ctx: &mut SearchContext, graph: &RankingRuleGraph<R>, paths: &[Vec<u16>], _empty_paths_cache: &EmptyPathsCache, distances: Vec<Vec<(u16, SmallBitmap)>>, file: &mut File) {
         writeln!(file,"direction: right").unwrap();
 
         writeln!(file, "Proximity Graph {{").unwrap();
@@ -477,7 +478,7 @@ shape: class").unwrap();
         // }
         // writeln!(file, "}}").unwrap();
     }
-    fn edge_d2_description<R: RankingRuleGraphTrait>(ctx: &mut SearchContext,graph: &RankingRuleGraph<R>, edge_idx: u16, file: &mut File) {
+    fn edge_d2_description<R: RankingRuleGraphTrait>(ctx: &mut SearchContext, graph: &RankingRuleGraph<R>, edge_idx: u16, file: &mut File) {
         let Edge { from_node, to_node, cost, .. } = graph.all_edges[edge_idx as usize].as_ref().unwrap() ;
         let from_node = &graph.query_graph.nodes[*from_node as usize];
         let from_node_desc = match from_node {

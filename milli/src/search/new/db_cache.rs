@@ -6,7 +6,7 @@ use std::collections::hash_map::Entry;
 
 #[derive(Default)]
 pub struct DatabaseCache<'search> {
-    // TODO: interner for all database cache keys
+    // TODO: interner for all database cache keys?
     pub word_pair_proximity_docids:
         FxHashMap<(u8, Interned<String>, Interned<String>), Option<&'search [u8]>>,
     pub word_prefix_pair_proximity_docids:

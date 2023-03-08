@@ -6,6 +6,7 @@ use super::{EdgeDetails, RankingRuleGraphTrait};
 use crate::new::interner::Interned;
 use crate::new::logger::SearchLogger;
 use crate::new::query_term::WordDerivations;
+use crate::new::small_bitmap::SmallBitmap;
 use crate::new::{QueryGraph, QueryNode, SearchContext};
 use crate::Result;
 use roaring::RoaringBitmap;
@@ -64,7 +65,7 @@ impl RankingRuleGraphTrait for ProximityGraph {
         paths: &[Vec<u16>],
         empty_paths_cache: &EmptyPathsCache,
         universe: &RoaringBitmap,
-        distances: &[Vec<u16>],
+        distances: &[Vec<(u16, SmallBitmap)>],
         cost: u16,
         logger: &mut dyn SearchLogger<QueryGraph>,
     ) {

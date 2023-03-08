@@ -119,7 +119,7 @@ pub trait RankingRuleGraphTrait: Sized {
         paths: &[Vec<u16>],
         empty_paths_cache: &EmptyPathsCache,
         universe: &RoaringBitmap,
-        distances: &[Vec<u16>],
+        distances: &[Vec<(u16, SmallBitmap)>],
         cost: u16,
         logger: &mut dyn SearchLogger<QueryGraph>,
     );

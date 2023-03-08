@@ -49,6 +49,9 @@ impl<G: RankingRuleGraphTrait> EdgeDocidsCache<G> {
                 if self.cache.contains_key(&edge_index) {
                     // TODO: should we update the bitmap in the cache if the new universe
                     // reduces it?
+                    // TODO: maybe have a generation: u32 to track every time the universe was
+                    // reduced. Then only attempt to recompute the intersection when there is a chance
+                    // that edge_docids & universe changed
                     return Ok(BitmapOrAllRef::Bitmap(&self.cache[&edge_index]));
                 }
                 // TODO: maybe universe doesn't belong here

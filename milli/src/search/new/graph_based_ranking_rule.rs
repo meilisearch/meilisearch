@@ -2,6 +2,7 @@ use super::logger::SearchLogger;
 use super::ranking_rule_graph::EdgeDocidsCache;
 use super::ranking_rule_graph::EmptyPathsCache;
 use super::ranking_rule_graph::{RankingRuleGraph, RankingRuleGraphTrait};
+use super::small_bitmap::SmallBitmap;
 use super::SearchContext;
 use super::{BitmapOrAllRef, QueryGraph, RankingRule, RankingRuleOutput};
 use crate::Result;
@@ -21,7 +22,7 @@ pub struct GraphBasedRankingRuleState<G: RankingRuleGraphTrait> {
     graph: RankingRuleGraph<G>,
     edge_docids_cache: EdgeDocidsCache<G>,
     empty_paths_cache: EmptyPathsCache,
-    all_distances: Vec<Vec<u16>>,
+    all_distances: Vec<Vec<(u16, SmallBitmap)>>,
     cur_distance_idx: usize,
 }
 
@@ -65,7 +66,6 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
         universe: &RoaringBitmap,
         query_graph: &QueryGraph,
     ) -> Result<()> {
-        // TODO: update old state instead of starting from scratch
         let mut graph = RankingRuleGraph::build(ctx, query_graph.clone())?;
         let mut edge_docids_cache = EdgeDocidsCache::default();
         let mut empty_paths_cache = EmptyPathsCache::new(graph.all_edges.len() as u16);
@@ -77,7 +77,7 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
             universe,
             &mut empty_paths_cache,
         )?;
-        let all_distances = graph.initialize_distances_cheapest();
+        let all_distances = graph.initialize_distances_with_necessary_edges();
 
         let state = GraphBasedRankingRuleState {
             graph,
@@ -100,6 +100,7 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
     ) -> Result<Option<RankingRuleOutput<QueryGraph>>> {
         assert!(universe.len() > 1);
         let mut state = self.state.take().unwrap();
+
         remove_empty_edges(
             ctx,
             &mut state.graph,
@@ -114,7 +115,7 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
             self.state = None;
             return Ok(None);
         }
-        let cost =
+        let (cost, _) =
             state.all_distances[state.graph.query_graph.root_node as usize][state.cur_distance_idx];
         state.cur_distance_idx += 1;
 
@@ -132,12 +133,15 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
         let original_universe = universe;
         let mut universe = universe.clone();
 
+        // TODO: remove this unnecessary clone
+        let original_graph = graph.clone();
         graph.visit_paths_of_cost(
             graph.query_graph.root_node as usize,
             cost,
             all_distances,
             empty_paths_cache,
             |path, graph, empty_paths_cache| {
+                paths.push(path.to_vec());
                 let mut path_docids = universe.clone();
                 let mut visited_edges = vec![];
                 let mut cached_edge_docids = vec![];
@@ -161,7 +165,7 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
                     path_docids &= edge_docids;
 
                     if path_docids.is_disjoint(&universe) {
-                        empty_paths_cache.forbid_prefix(&visited_edges);
+                        // empty_paths_cache.forbid_prefix(&visited_edges);
                         // if the intersection between this edge and any
                         // previous one is disjoint with the universe,
                         // then we add these two edges to the empty_path_cache
@@ -170,14 +174,12 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
                         {
                             let intersection = edge_docids & edge_docids2;
                             if intersection.is_disjoint(&universe) {
-                                // needs_filtering_empty_couple_edges = true;
                                 empty_paths_cache.forbid_couple_edges(*edge_index2, edge_index);
                             }
                         }
                         return Ok(());
                     }
                 }
-                paths.push(path.to_vec());
                 bucket |= &path_docids;
                 universe -= path_docids;
                 Ok(())
@@ -185,7 +187,7 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
         )?;
 
         G::log_state(
-            &state.graph,
+            &original_graph,
             &paths,
             &state.empty_paths_cache,
             original_universe,

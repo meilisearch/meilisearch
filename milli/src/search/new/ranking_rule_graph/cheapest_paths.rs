@@ -4,7 +4,8 @@ use super::empty_paths_cache::EmptyPathsCache;
 use super::{RankingRuleGraph, RankingRuleGraphTrait};
 use crate::new::small_bitmap::SmallBitmap;
 use crate::Result;
-use std::collections::VecDeque;
+use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, VecDeque};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Path {
@@ -17,7 +18,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         &mut self,
         from: usize,
         cost: u16,
-        all_distances: &[Vec<u16>],
+        all_distances: &[Vec<(u16, SmallBitmap)>],
         empty_paths_cache: &mut EmptyPathsCache,
         mut visit: impl FnMut(&[u16], &mut Self, &mut EmptyPathsCache) -> Result<()>,
     ) -> Result<()> {
@@ -37,13 +38,9 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         &mut self,
         from: usize,
         cost: u16,
-        // TODO: replace all_distances with a Vec<SmallBitmap> where the SmallBitmap contains true if the cost exists and false otherwise
-        all_distances: &[Vec<u16>],
+        all_distances: &[Vec<(u16, SmallBitmap)>],
         empty_paths_cache: &mut EmptyPathsCache,
         visit: &mut impl FnMut(&[u16], &mut Self, &mut EmptyPathsCache) -> Result<()>,
-        // replace prev edges by:
-        // (1) a small bitmap representing the path
-        // (2) a pointer within the EmptyPathsCache::forbidden_prefixes structure
         prev_edges: &mut Vec<u16>,
         cur_path: &mut SmallBitmap,
         mut forbidden_edges: SmallBitmap,
@@ -55,7 +52,12 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
             let Some(edge) = self.all_edges[edge_idx as usize].as_ref() else { continue };
             if cost < edge.cost as u16
                 || forbidden_edges.contains(edge_idx)
-                || !all_distances[edge.to_node as usize].contains(&(cost - edge.cost as u16))
+                || !all_distances[edge.to_node as usize].iter().any(
+                    |(next_cost, necessary_edges)| {
+                        (*next_cost == cost - edge.cost as u16)
+                            && !forbidden_edges.intersects(necessary_edges)
+                    },
+                )
             {
                 continue;
             }
@@ -99,21 +101,20 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                     forbidden_edges.insert(x);
                 });
             }
-            if next_any_valid && empty_paths_cache.path_is_empty(prev_edges, cur_path) {
-                return Ok(any_valid);
-            }
         }
 
         Ok(any_valid)
     }
 
-    pub fn initialize_distances_cheapest(&self) -> Vec<Vec<u16>> {
-        let mut distances_to_end: Vec<Vec<u16>> = vec![vec![]; self.query_graph.nodes.len()];
+    pub fn initialize_distances_with_necessary_edges(&self) -> Vec<Vec<(u16, SmallBitmap)>> {
+        let mut distances_to_end: Vec<Vec<(u16, SmallBitmap)>> =
+            vec![vec![]; self.query_graph.nodes.len()];
         let mut enqueued = SmallBitmap::new(self.query_graph.nodes.len() as u16);
 
         let mut node_stack = VecDeque::new();
 
-        distances_to_end[self.query_graph.end_node as usize] = vec![0];
+        distances_to_end[self.query_graph.end_node as usize] =
+            vec![(0, SmallBitmap::new(self.all_edges.len() as u16))];
 
         for prev_node in
             self.query_graph.edges[self.query_graph.end_node as usize].predecessors.iter()
@@ -123,21 +124,29 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         }
 
         while let Some(cur_node) = node_stack.pop_front() {
-            let mut self_distances = vec![];
+            let mut self_distances = BTreeMap::<u16, SmallBitmap>::new();
 
             let cur_node_edges = &self.node_edges[cur_node];
             for edge_idx in cur_node_edges.iter() {
                 let edge = self.all_edges[edge_idx as usize].as_ref().unwrap();
                 let succ_node = edge.to_node;
                 let succ_distances = &distances_to_end[succ_node as usize];
-                for succ_distance in succ_distances {
-                    self_distances.push(edge.cost as u16 + succ_distance);
+                for (succ_distance, succ_necessary_edges) in succ_distances {
+                    let potential_necessary_edges = SmallBitmap::from_iter(
+                        std::iter::once(edge_idx).chain(succ_necessary_edges.iter()),
+                        self.all_edges.len() as u16,
+                    );
+                    match self_distances.entry(edge.cost as u16 + succ_distance) {
+                        Entry::Occupied(mut prev_necessary_edges) => {
+                            prev_necessary_edges.get_mut().intersection(&potential_necessary_edges);
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(potential_necessary_edges);
+                        }
+                    }
                 }
             }
-
-            self_distances.sort_unstable();
-            self_distances.dedup();
-            distances_to_end[cur_node] = self_distances;
+            distances_to_end[cur_node] = self_distances.into_iter().collect();
             for prev_node in self.query_graph.edges[cur_node].predecessors.iter() {
                 if !enqueued.contains(prev_node) {
                     node_stack.push_back(prev_node as usize);
