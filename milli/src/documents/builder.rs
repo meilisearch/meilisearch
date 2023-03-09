@@ -116,17 +116,37 @@ impl<W: Write> DocumentsBatchBuilder<W> {
                 let value = &record[*i];
                 match type_ {
                     AllowedType::Number => {
-                        if value.trim().is_empty() {
+                        let trimmed_value = value.trim();
+                        if trimmed_value.is_empty() {
                             to_writer(&mut self.value_buffer, &Value::Null)?;
-                        } else if let Ok(integer) = value.trim().parse::<i64>() {
+                        } else if let Ok(integer) = trimmed_value.parse::<i64>() {
                             to_writer(&mut self.value_buffer, &integer)?;
                         } else {
-                            match value.trim().parse::<f64>() {
+                            match trimmed_value.parse::<f64>() {
                                 Ok(float) => {
                                     to_writer(&mut self.value_buffer, &float)?;
                                 }
                                 Err(error) => {
                                     return Err(Error::ParseFloat {
+                                        error,
+                                        line,
+                                        value: value.to_string(),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    AllowedType::Boolean => {
+                        let trimmed_value = value.trim();
+                        if trimmed_value.is_empty() {
+                            to_writer(&mut self.value_buffer, &Value::Null)?;
+                        } else {
+                            match trimmed_value.parse::<bool>() {
+                                Ok(bool) => {
+                                    to_writer(&mut self.value_buffer, &bool)?;
+                                }
+                                Err(error) => {
+                                    return Err(Error::ParseBool {
                                         error,
                                         line,
                                         value: value.to_string(),
@@ -173,6 +193,7 @@ impl<W: Write> DocumentsBatchBuilder<W> {
 #[derive(Debug)]
 enum AllowedType {
     String,
+    Boolean,
     Number,
 }
 
@@ -181,6 +202,7 @@ fn parse_csv_header(header: &str) -> (&str, AllowedType) {
     match header.rsplit_once(':') {
         Some((field_name, field_type)) => match field_type {
             "string" => (field_name, AllowedType::String),
+            "boolean" => (field_name, AllowedType::Boolean),
             "number" => (field_name, AllowedType::Number),
             // if the pattern isn't reconized, we keep the whole field.
             _otherwise => (header, AllowedType::String),

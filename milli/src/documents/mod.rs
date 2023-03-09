@@ -90,6 +90,7 @@ impl DocumentsBatchIndex {
 #[derive(Debug)]
 pub enum Error {
     ParseFloat { error: std::num::ParseFloatError, line: usize, value: String },
+    ParseBool { error: std::str::ParseBoolError, line: usize, value: String },
     InvalidDocumentFormat,
     InvalidEnrichedData,
     InvalidUtf8(Utf8Error),
@@ -135,6 +136,9 @@ impl fmt::Display for Error {
         match self {
             Error::ParseFloat { error, line, value } => {
                 write!(f, "Error parsing number {:?} at line {}: {}", value, line, error)
+            }
+            Error::ParseBool { error, line, value } => {
+                write!(f, "Error parsing boolean {:?} at line {}: {}", value, line, error)
             }
             Error::InvalidDocumentFormat => {
                 f.write_str("Invalid document addition format, missing the documents batch index.")
@@ -272,6 +276,19 @@ mod test {
             {"id": 1,"b": 0},
             {"id": 2,"a": 0,"b": 0},
         ]);
+    }
+
+    #[test]
+    fn csv_types_dont_panic() {
+        let csv1_content =
+            "id:number,b:boolean,c,d:number\n1,,,\n2,true,doggo,2\n3,false,the best doggo,-2\n4,,\"Hello, World!\",2.5";
+        let csv1 = csv::Reader::from_reader(Cursor::new(csv1_content));
+
+        let mut builder = DocumentsBatchBuilder::new(Vec::new());
+        builder.append_csv(csv1).unwrap();
+        let vector = builder.into_inner().unwrap();
+
+        DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap();
     }
 
     #[test]
