@@ -1211,11 +1211,22 @@ impl Index {
         let soft_deleted_documents = self.soft_deleted_documents_ids(rtxn)?;
 
         let mut script_language: HashMap<Script, Vec<Language>> = HashMap::new();
+        let mut script_language_doc_count: Vec<(Script, Language, u64)> = Vec::new();
+        let mut total = 0;
         for sl in self.script_language_docids.iter(rtxn)? {
             let ((script, language), docids) = sl?;
 
             // keep only Languages that contains at least 1 document.
-            if !soft_deleted_documents.is_superset(&docids) {
+            let remaining_documents_count = (docids - &soft_deleted_documents).len();
+            total += remaining_documents_count;
+            if remaining_documents_count > 0 {
+                script_language_doc_count.push((script, language, remaining_documents_count));
+            }
+        }
+
+        let threshold = total / 20; // 5% (arbitrary)
+        for (script, language, count) in script_language_doc_count {
+            if count > threshold {
                 if let Some(languages) = script_language.get_mut(&script) {
                     (*languages).push(language);
                 } else {
