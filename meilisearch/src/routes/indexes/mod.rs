@@ -101,7 +101,6 @@ pub async fn list_indexes(
         })?;
     // Won't cause to open all indexes because IndexView doesn't keep the `Index` opened.
     // error when trying to fix it: the trait `ExactSizeIterator` is not implemented for `Flatten<IntoIter<Option<IndexView>>>`
-    #[allow(clippy::needless_collect)]
     let indexes: Vec<IndexView> = indexes.into_iter().flatten().collect();
     let ret = paginate.as_pagination().auto_paginate_sized(indexes.into_iter());
 
