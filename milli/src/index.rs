@@ -1224,7 +1224,7 @@ impl Index {
             }
         }
 
-        let threshold = total / 20; // 5% (arbitrar)
+        let threshold = total / 20; // 5% (arbitrary)
         for (script, language, count) in script_language_doc_count {
             if count > threshold {
                 if let Some(languages) = script_language.get_mut(&script) {

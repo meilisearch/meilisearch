@@ -375,15 +375,15 @@ pub fn perform_search(
         &displayed_ids,
     );
 
-    let mut tokenizer_buidler = TokenizerBuilder::default();
-    tokenizer_buidler.create_char_map(true);
+    let mut tokenizer_builder = TokenizerBuilder::default();
+    tokenizer_builder.create_char_map(true);
 
     let script_lang_map = index.script_language(&rtxn)?;
     if !script_lang_map.is_empty() {
-        tokenizer_buidler.allow_list(&script_lang_map);
+        tokenizer_builder.allow_list(&script_lang_map);
     }
 
-    let mut formatter_builder = MatcherBuilder::new(matching_words, tokenizer_buidler.build());
+    let mut formatter_builder = MatcherBuilder::new(matching_words, tokenizer_builder.build());
     formatter_builder.crop_marker(query.crop_marker);
     formatter_builder.highlight_prefix(query.highlight_pre_tag);
     formatter_builder.highlight_suffix(query.highlight_post_tag);

@@ -89,7 +89,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
             // if the allow list is empty, meaning that no Language is considered frequent,
             // then we don't rerun the extraction.
             if !script_language.is_empty() {
-                // build a new temporar tokenizer including the allow list.
+                // build a new temporary tokenizer including the allow list.
                 let mut tokenizer_builder = TokenizerBuilder::new();
                 if let Some(stop_words) = stop_words {
                     tokenizer_builder.stop_words(stop_words);
@@ -260,7 +260,7 @@ fn process_tokens<'a>(
 
 fn potential_language_detection_error(languages_frequency: &Vec<(Language, usize)>) -> bool {
     if languages_frequency.len() > 1 {
-        let threshold = compute_laguage_frequency_threshold(languages_frequency);
+        let threshold = compute_language_frequency_threshold(languages_frequency);
         languages_frequency.iter().any(|(_, c)| *c <= threshold)
     } else {
         false
@@ -271,7 +271,7 @@ fn most_frequent_languages(
     (script, languages_frequency): (&Script, &Vec<(Language, usize)>),
 ) -> Option<(Script, Vec<Language>)> {
     if languages_frequency.len() > 1 {
-        let threshold = compute_laguage_frequency_threshold(languages_frequency);
+        let threshold = compute_language_frequency_threshold(languages_frequency);
 
         let languages: Vec<_> =
             languages_frequency.iter().filter(|(_, c)| *c > threshold).map(|(l, _)| *l).collect();
@@ -286,7 +286,7 @@ fn most_frequent_languages(
     }
 }
 
-fn compute_laguage_frequency_threshold(languages_frequency: &[(Language, usize)]) -> usize {
+fn compute_language_frequency_threshold(languages_frequency: &[(Language, usize)]) -> usize {
     let total: usize = languages_frequency.iter().map(|(_, c)| c).sum();
-    total / 10 // 10% is a completely arbitrar value.
+    total / 10 // 10% is a completely arbitrary value.
 }
