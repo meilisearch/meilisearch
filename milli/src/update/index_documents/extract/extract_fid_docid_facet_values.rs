@@ -16,18 +16,24 @@ use crate::facet::value_encoding::f64_into_bytes;
 use crate::update::index_documents::{create_writer, writer_into_reader};
 use crate::{CboRoaringBitmapCodec, DocumentId, FieldId, Result, BEU32, MAX_FACET_VALUE_LENGTH};
 
+/// The extracted facet values stored in grenad files by type.
+pub struct ExtractedFacetValues {
+    pub docid_fid_facet_numbers_chunk: grenad::Reader<File>,
+    pub docid_fid_facet_strings_chunk: grenad::Reader<File>,
+    pub fid_facet_is_null_docids_chunk: grenad::Reader<File>,
+    pub fid_facet_exists_docids_chunk: grenad::Reader<File>,
+}
+
 /// Extracts the facet values of each faceted field of each document.
 ///
 /// Returns the generated grenad reader containing the docid the fid and the orginal value as key
 /// and the normalized value as value extracted from the given chunk of documents.
 #[logging_timer::time]
-#[allow(clippy::type_complexity)]
 pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
     faceted_fields: &HashSet<FieldId>,
-) -> Result<(grenad::Reader<File>, grenad::Reader<File>, grenad::Reader<File>, grenad::Reader<File>)>
-{
+) -> Result<ExtractedFacetValues> {
     let max_memory = indexer.max_memory_by_thread();
 
     let mut fid_docid_facet_numbers_sorter = create_sorter(
@@ -134,12 +140,12 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     }
     let facet_is_null_docids_reader = writer_into_reader(facet_is_null_docids_writer)?;
 
-    Ok((
-        sorter_into_reader(fid_docid_facet_numbers_sorter, indexer)?,
-        sorter_into_reader(fid_docid_facet_strings_sorter, indexer)?,
-        facet_is_null_docids_reader,
-        facet_exists_docids_reader,
-    ))
+    Ok(ExtractedFacetValues {
+        docid_fid_facet_numbers_chunk: sorter_into_reader(fid_docid_facet_numbers_sorter, indexer)?,
+        docid_fid_facet_strings_chunk: sorter_into_reader(fid_docid_facet_strings_sorter, indexer)?,
+        fid_facet_is_null_docids_chunk: facet_is_null_docids_reader,
+        fid_facet_exists_docids_chunk: facet_exists_docids_reader,
+    })
 }
 
 /// Represent what a document field contains.

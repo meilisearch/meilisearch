@@ -18,7 +18,7 @@ use rayon::prelude::*;
 use self::extract_docid_word_positions::extract_docid_word_positions;
 use self::extract_facet_number_docids::extract_facet_number_docids;
 use self::extract_facet_string_docids::extract_facet_string_docids;
-use self::extract_fid_docid_facet_values::extract_fid_docid_facet_values;
+use self::extract_fid_docid_facet_values::{extract_fid_docid_facet_values, ExtractedFacetValues};
 use self::extract_fid_word_count_docids::extract_fid_word_count_docids;
 use self::extract_geo_points::extract_geo_points;
 use self::extract_word_docids::extract_word_docids;
@@ -300,12 +300,12 @@ fn send_and_extract_flattened_documents_data(
                 Ok(docid_word_positions_chunk)
             },
             || {
-                let (
+                let ExtractedFacetValues {
                     docid_fid_facet_numbers_chunk,
                     docid_fid_facet_strings_chunk,
                     fid_facet_is_null_docids_chunk,
                     fid_facet_exists_docids_chunk,
-                ) = extract_fid_docid_facet_values(
+                } = extract_fid_docid_facet_values(
                     flattened_documents_chunk.clone(),
                     indexer,
                     faceted_fields,
