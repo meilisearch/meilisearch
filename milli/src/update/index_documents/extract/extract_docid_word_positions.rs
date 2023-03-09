@@ -79,7 +79,11 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         // if we detect a potetial mistake in the language detection,
         // we rerun the extraction forcing the tokenizer to detect the most frequently detected Languages.
         // context: https://github.com/meilisearch/meilisearch/issues/3565
-        if script_language_word_count.values().any(potential_language_detection_error) {
+        if script_language_word_count
+            .values()
+            .map(Vec::as_slice)
+            .any(potential_language_detection_error)
+        {
             // build an allow list with the most frequent detected languages in the document.
             let script_language: HashMap<_, _> =
                 script_language_word_count.iter().filter_map(most_frequent_languages).collect();
@@ -254,7 +258,7 @@ fn process_tokens<'a>(
         .filter(|(_, t)| t.is_word())
 }
 
-fn potential_language_detection_error(languages_frequency: &Vec<(Language, usize)>) -> bool {
+fn potential_language_detection_error(languages_frequency: &[(Language, usize)]) -> bool {
     if languages_frequency.len() > 1 {
         let threshold = compute_language_frequency_threshold(languages_frequency);
         languages_frequency.iter().any(|(_, c)| *c <= threshold)
@@ -289,6 +293,10 @@ fn compute_language_frequency_threshold(languages_frequency: &[(Language, usize)
 
 #[derive(Default)]
 struct Buffers {
+    // the key buffer is the concatenation of the internal document id with the field id.
+    // The buffer has to be completelly cleared between documents,
+    // and the field id part must be cleared between each field.
     key_buffer: Vec<u8>,
+    // the field buffer for each fields desserialization, and must be cleared between each field.
     field_buffer: String,
 }
