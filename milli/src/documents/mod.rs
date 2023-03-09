@@ -3,7 +3,7 @@ mod enriched;
 mod reader;
 mod serde_impl;
 
-use std::fmt::{self, Debug};
+use std::fmt::Debug;
 use std::io;
 use std::str::Utf8Error;
 
@@ -87,74 +87,29 @@ impl DocumentsBatchIndex {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("Error parsing number {value:?} at line {line}: {error}")]
     ParseFloat { error: std::num::ParseFloatError, line: usize, value: String },
+    #[error("Error parsing boolean {value:?} at line {line}: {error}")]
     ParseBool { error: std::str::ParseBoolError, line: usize, value: String },
+    #[error("Invalid document addition format, missing the documents batch index.")]
     InvalidDocumentFormat,
+    #[error("Invalid enriched data.")]
     InvalidEnrichedData,
-    InvalidUtf8(Utf8Error),
-    Csv(csv::Error),
-    Json(serde_json::Error),
+    #[error(transparent)]
+    InvalidUtf8(#[from] Utf8Error),
+    #[error(transparent)]
+    Csv(#[from] csv::Error),
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+    #[error(transparent)]
     Serialize(serde_json::Error),
-    Grenad(grenad::Error),
-    Io(io::Error),
+    #[error(transparent)]
+    Grenad(#[from] grenad::Error),
+    #[error(transparent)]
+    Io(#[from] io::Error),
 }
-
-impl From<csv::Error> for Error {
-    fn from(e: csv::Error) -> Self {
-        Self::Csv(e)
-    }
-}
-
-impl From<io::Error> for Error {
-    fn from(other: io::Error) -> Self {
-        Self::Io(other)
-    }
-}
-
-impl From<serde_json::Error> for Error {
-    fn from(other: serde_json::Error) -> Self {
-        Self::Json(other)
-    }
-}
-
-impl From<grenad::Error> for Error {
-    fn from(other: grenad::Error) -> Self {
-        Self::Grenad(other)
-    }
-}
-
-impl From<Utf8Error> for Error {
-    fn from(other: Utf8Error) -> Self {
-        Self::InvalidUtf8(other)
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Error::ParseFloat { error, line, value } => {
-                write!(f, "Error parsing number {:?} at line {}: {}", value, line, error)
-            }
-            Error::ParseBool { error, line, value } => {
-                write!(f, "Error parsing boolean {:?} at line {}: {}", value, line, error)
-            }
-            Error::InvalidDocumentFormat => {
-                f.write_str("Invalid document addition format, missing the documents batch index.")
-            }
-            Error::InvalidEnrichedData => f.write_str("Invalid enriched data."),
-            Error::InvalidUtf8(e) => write!(f, "{}", e),
-            Error::Io(e) => write!(f, "{}", e),
-            Error::Serialize(e) => write!(f, "{}", e),
-            Error::Grenad(e) => write!(f, "{}", e),
-            Error::Csv(e) => write!(f, "{}", e),
-            Error::Json(e) => write!(f, "{}", e),
-        }
-    }
-}
-
-impl std::error::Error for Error {}
 
 #[cfg(test)]
 pub fn objects_from_json_value(json: serde_json::Value) -> Vec<crate::Object> {
