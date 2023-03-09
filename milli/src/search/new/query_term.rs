@@ -29,7 +29,7 @@ impl Phrase {
 
 /// A structure storing all the different ways to match
 /// a term in the user's search query.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct WordDerivations {
     /// The original word
     pub original: Interned<String>,
@@ -59,12 +59,12 @@ impl WordDerivations {
     /// Return an iterator over all the single words derived from the original word.
     ///
     /// This excludes synonyms, split words, and words stored in the prefix databases.
-    pub fn all_derivations_except_prefix_db(
+    pub fn all_single_word_derivations_except_prefix_db(
         &'_ self,
     ) -> impl Iterator<Item = Interned<String>> + Clone + '_ {
         self.zero_typo.iter().chain(self.one_typo.iter()).chain(self.two_typos.iter()).copied()
     }
-    fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.zero_typo.is_empty()
             && self.one_typo.is_empty()
             && self.two_typos.is_empty()
@@ -101,10 +101,10 @@ pub fn word_derivations(
             let prefix = Str::new(word).starts_with();
             let mut stream = fst.search(prefix).into_stream();
 
-            while let Some(word) = stream.next() {
-                let word = std::str::from_utf8(word)?.to_owned();
-                let word_interned = ctx.word_interner.insert(word);
-                zero_typo.push(word_interned);
+            while let Some(derived_word) = stream.next() {
+                let derived_word = std::str::from_utf8(derived_word)?.to_owned();
+                let derived_word_interned = ctx.word_interner.insert(derived_word);
+                zero_typo.push(derived_word_interned);
             }
         } else if fst.contains(word) {
             zero_typo.push(word_interned);
@@ -113,17 +113,19 @@ pub fn word_derivations(
         let dfa = build_dfa(word, 1, is_prefix);
         let starts = StartsWith(Str::new(get_first(word)));
         let mut stream = fst.search_with_state(Intersection(starts, &dfa)).into_stream();
+        // TODO: There may be wayyy too many matches (e.g. in the thousands), how to reduce them?
 
-        while let Some((word, state)) = stream.next() {
-            let word = std::str::from_utf8(word)?;
-            let word_interned = ctx.word_interner.insert(word.to_owned());
+        while let Some((derived_word, state)) = stream.next() {
+            let derived_word = std::str::from_utf8(derived_word)?;
+
             let d = dfa.distance(state.1);
+            let derived_word_interned = ctx.word_interner.insert(derived_word.to_owned());
             match d.to_u8() {
                 0 => {
-                    zero_typo.push(word_interned);
+                    zero_typo.push(derived_word_interned);
                 }
                 1 => {
-                    one_typo.push(word_interned);
+                    one_typo.push(derived_word_interned);
                 }
                 _ => panic!(),
             }
@@ -136,27 +138,28 @@ pub fn word_derivations(
         let automaton = Union(first, &second);
 
         let mut stream = fst.search_with_state(automaton).into_stream();
+        // TODO: There may be wayyy too many matches (e.g. in the thousands), how to reduce them?
 
-        while let Some((found_word, state)) = stream.next() {
-            let found_word = std::str::from_utf8(found_word)?;
-            let found_word_interned = ctx.word_interner.insert(found_word.to_owned());
+        while let Some((derived_word, state)) = stream.next() {
+            let derived_word = std::str::from_utf8(derived_word)?;
+            let derived_word_interned = ctx.word_interner.insert(derived_word.to_owned());
             // in the case the typo is on the first letter, we know the number of typo
             // is two
-            if get_first(found_word) != get_first(word) {
-                two_typos.push(found_word_interned);
+            if get_first(derived_word) != get_first(word) {
+                two_typos.push(derived_word_interned);
             } else {
                 // Else, we know that it is the second dfa that matched and compute the
                 // correct distance
                 let d = second_dfa.distance((state.1).0);
                 match d.to_u8() {
                     0 => {
-                        zero_typo.push(found_word_interned);
+                        zero_typo.push(derived_word_interned);
                     }
                     1 => {
-                        one_typo.push(found_word_interned);
+                        one_typo.push(derived_word_interned);
                     }
                     2 => {
-                        two_typos.push(found_word_interned);
+                        two_typos.push(derived_word_interned);
                     }
                     _ => panic!(),
                 }
@@ -223,10 +226,11 @@ fn split_best_frequency(
     Ok(best.map(|(_, left, right)| (left.to_owned(), right.to_owned())))
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum QueryTerm {
     Phrase { phrase: Interned<Phrase> },
-    Word { derivations: WordDerivations },
+    // TODO: change to `Interned<WordDerivations>`?
+    Word { derivations: Interned<WordDerivations> },
 }
 
 impl QueryTerm {
@@ -234,10 +238,12 @@ impl QueryTerm {
     pub fn original_single_word<'interner>(
         &self,
         word_interner: &'interner Interner<String>,
+        derivations_interner: &'interner Interner<WordDerivations>,
     ) -> Option<&'interner str> {
         match self {
             QueryTerm::Phrase { phrase: _ } => None,
             QueryTerm::Word { derivations } => {
+                let derivations = derivations_interner.get(*derivations);
                 if derivations.is_empty() {
                     None
                 } else {
@@ -257,12 +263,12 @@ pub struct LocatedQueryTerm {
 
 impl LocatedQueryTerm {
     /// Return `true` iff the word derivations within the query term are empty
-    pub fn is_empty(&self) -> bool {
-        match &self.value {
+    pub fn is_empty(&self, interner: &Interner<WordDerivations>) -> bool {
+        match self.value {
             // TODO: phrases should be greedily computed, so that they can be excluded from
             // the query graph right from the start?
             QueryTerm::Phrase { phrase: _ } => false,
-            QueryTerm::Word { derivations, .. } => derivations.is_empty(),
+            QueryTerm::Word { derivations, .. } => interner.get(derivations).is_empty(),
         }
     }
 }
@@ -336,7 +342,9 @@ pub fn located_query_terms_from_string<'search>(
                             let word = token.lemma();
                             let derivations = word_derivations(ctx, word, nbr_typos(word), false)?;
                             let located_term = LocatedQueryTerm {
-                                value: QueryTerm::Word { derivations },
+                                value: QueryTerm::Word {
+                                    derivations: ctx.derivations_interner.insert(derivations),
+                                },
                                 positions: position..=position,
                             };
                             located_terms.push(located_term);
@@ -347,7 +355,9 @@ pub fn located_query_terms_from_string<'search>(
                     let word = token.lemma();
                     let derivations = word_derivations(ctx, word, nbr_typos(word), true)?;
                     let located_term = LocatedQueryTerm {
-                        value: QueryTerm::Word { derivations },
+                        value: QueryTerm::Word {
+                            derivations: ctx.derivations_interner.insert(derivations),
+                        },
                         positions: position..=position,
                     };
                     located_terms.push(located_term);
@@ -409,8 +419,8 @@ pub fn ngram2(
         return None;
     }
     match (
-        &x.value.original_single_word(&ctx.word_interner),
-        &y.value.original_single_word(&ctx.word_interner),
+        &x.value.original_single_word(&ctx.word_interner, &ctx.derivations_interner),
+        &y.value.original_single_word(&ctx.word_interner, &ctx.derivations_interner),
     ) {
         (Some(w1), Some(w2)) => {
             let term = (
@@ -436,9 +446,9 @@ pub fn ngram3(
         return None;
     }
     match (
-        &x.value.original_single_word(&ctx.word_interner),
-        &y.value.original_single_word(&ctx.word_interner),
-        &z.value.original_single_word(&ctx.word_interner),
+        &x.value.original_single_word(&ctx.word_interner, &ctx.derivations_interner),
+        &y.value.original_single_word(&ctx.word_interner, &ctx.derivations_interner),
+        &z.value.original_single_word(&ctx.word_interner, &ctx.derivations_interner),
     ) {
         (Some(w1), Some(w2), Some(w3)) => {
             let term = (

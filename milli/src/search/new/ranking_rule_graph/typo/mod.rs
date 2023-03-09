@@ -1,4 +1,3 @@
-use heed::BytesDecode;
 use roaring::RoaringBitmap;
 
 use super::empty_paths_cache::EmptyPathsCache;
@@ -6,15 +5,14 @@ use super::{EdgeCondition, RankingRuleGraph, RankingRuleGraphTrait};
 use crate::search::new::interner::Interned;
 use crate::search::new::logger::SearchLogger;
 use crate::search::new::query_term::{LocatedQueryTerm, Phrase, QueryTerm, WordDerivations};
-use crate::search::new::resolve_query_graph::resolve_phrase;
 use crate::search::new::small_bitmap::SmallBitmap;
 use crate::search::new::{QueryGraph, QueryNode, SearchContext};
-use crate::{Result, RoaringBitmapCodec};
+use crate::Result;
 
 #[derive(Clone)]
 pub enum TypoEdge {
     Phrase { phrase: Interned<Phrase> },
-    Word { derivations: WordDerivations, nbr_typos: u8 },
+    Word { derivations: Interned<WordDerivations>, nbr_typos: u8 },
 }
 
 pub enum TypoGraph {}
@@ -35,32 +33,37 @@ impl RankingRuleGraphTrait for TypoGraph {
         edge: &Self::EdgeCondition,
         universe: &RoaringBitmap,
     ) -> Result<RoaringBitmap> {
+        let SearchContext {
+            index,
+            txn,
+            db_cache,
+            word_interner,
+            phrase_interner,
+            derivations_interner,
+            query_term_docids,
+        } = ctx;
         match edge {
-            TypoEdge::Phrase { phrase } => resolve_phrase(ctx, *phrase),
-            TypoEdge::Word { derivations, nbr_typos } => {
-                let words = match nbr_typos {
-                    0 => &derivations.zero_typo,
-                    1 => &derivations.one_typo,
-                    2 => &derivations.two_typos,
-                    _ => panic!(),
-                };
-                let mut docids = RoaringBitmap::new();
-                for word in words.iter().copied() {
-                    let Some(bytes) = ctx.get_word_docids(word)? else { continue };
-                    // TODO: deserialize bitmap within a universe
-                    let bitmap = universe
-                        & RoaringBitmapCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding)?;
-                    docids |= bitmap;
-                }
-                if *nbr_typos == 0 {
-                    if let Some(bytes) = ctx.get_word_prefix_docids(derivations.original)? {
-                        // TODO: deserialize bitmap within a universe
-                        let bitmap = universe
-                            & RoaringBitmapCodec::bytes_decode(bytes)
-                                .ok_or(heed::Error::Decoding)?;
-                        docids |= bitmap;
-                    }
-                }
+            &TypoEdge::Phrase { phrase } => Ok(universe
+                & query_term_docids.get_phrase_docids(
+                    index,
+                    txn,
+                    db_cache,
+                    word_interner,
+                    phrase_interner,
+                    phrase,
+                )?),
+            TypoEdge::Word { derivations, .. } => {
+                let docids = universe
+                    & query_term_docids.get_word_derivations_docids(
+                        index,
+                        txn,
+                        db_cache,
+                        word_interner,
+                        derivations_interner,
+                        phrase_interner,
+                        *derivations,
+                    )?;
+
                 Ok(docids)
             }
         }
@@ -74,43 +77,71 @@ impl RankingRuleGraphTrait for TypoGraph {
     }
 
     fn build_step_visit_destination_node<'from_data, 'search: 'from_data>(
-        _ctx: &mut SearchContext<'search>,
+        ctx: &mut SearchContext<'search>,
         to_node: &QueryNode,
         _from_node_data: &'from_data Self::BuildVisitedFromNode,
     ) -> Result<Vec<(u8, EdgeCondition<Self::EdgeCondition>)>> {
+        let SearchContext { derivations_interner, .. } = ctx;
         match to_node {
-            QueryNode::Term(LocatedQueryTerm { value, .. }) => match value {
-                &QueryTerm::Phrase { phrase } => {
+            QueryNode::Term(LocatedQueryTerm { value, .. }) => match *value {
+                QueryTerm::Phrase { phrase } => {
                     Ok(vec![(0, EdgeCondition::Conditional(TypoEdge::Phrase { phrase }))])
                 }
                 QueryTerm::Word { derivations } => {
                     let mut edges = vec![];
-                    if !derivations.zero_typo.is_empty() || derivations.use_prefix_db {
-                        edges.push((
-                            0,
-                            EdgeCondition::Conditional(TypoEdge::Word {
-                                derivations: derivations.clone(),
-                                nbr_typos: 0,
-                            }),
-                        ))
-                    }
-                    if !derivations.one_typo.is_empty() {
-                        edges.push((
-                            1,
-                            EdgeCondition::Conditional(TypoEdge::Word {
-                                derivations: derivations.clone(),
-                                nbr_typos: 1,
-                            }),
-                        ))
-                    }
-                    if !derivations.two_typos.is_empty() {
-                        edges.push((
-                            2,
-                            EdgeCondition::Conditional(TypoEdge::Word {
-                                derivations: derivations.clone(),
-                                nbr_typos: 2,
-                            }),
-                        ))
+
+                    for nbr_typos in 0..=2 {
+                        let derivations = derivations_interner.get(derivations).clone();
+                        let new_derivations = match nbr_typos {
+                            0 => {
+                                // TODO: think about how split words and synonyms should be handled here
+                                // TODO: what about ngrams?
+                                // Maybe 2grams should have one typo by default and 3grams 2 typos by default
+                                WordDerivations {
+                                    original: derivations.original,
+                                    synonyms: derivations.synonyms,
+                                    split_words: None,
+                                    zero_typo: derivations.zero_typo,
+                                    one_typo: Box::new([]),
+                                    two_typos: Box::new([]),
+                                    use_prefix_db: derivations.use_prefix_db,
+                                }
+                            }
+                            1 => {
+                                // What about split words and synonyms here?
+                                WordDerivations {
+                                    original: derivations.original,
+                                    synonyms: Box::new([]),
+                                    split_words: derivations.split_words,
+                                    zero_typo: Box::new([]),
+                                    one_typo: derivations.one_typo,
+                                    two_typos: Box::new([]),
+                                    use_prefix_db: false, // false because all items from use_prefix_db haev 0 typos
+                                }
+                            }
+                            2 => {
+                                // What about split words and synonyms here?
+                                WordDerivations {
+                                    original: derivations.original,
+                                    synonyms: Box::new([]),
+                                    split_words: None,
+                                    zero_typo: Box::new([]),
+                                    one_typo: Box::new([]),
+                                    two_typos: derivations.two_typos,
+                                    use_prefix_db: false, // false because all items from use_prefix_db haev 0 typos
+                                }
+                            }
+                            _ => panic!(),
+                        };
+                        if !new_derivations.is_empty() {
+                            edges.push((
+                                nbr_typos,
+                                EdgeCondition::Conditional(TypoEdge::Word {
+                                    derivations: derivations_interner.insert(new_derivations),
+                                    nbr_typos,
+                                }),
+                            ))
+                        }
                     }
                     Ok(edges)
                 }

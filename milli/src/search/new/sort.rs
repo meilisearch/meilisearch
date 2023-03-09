@@ -1,10 +1,31 @@
 use roaring::RoaringBitmap;
 
 use super::logger::SearchLogger;
-use super::{
-    RankingRule, RankingRuleOutput, RankingRuleOutputIter, RankingRuleOutputIterWrapper,
-    RankingRuleQueryTrait, SearchContext,
-};
+use super::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait, SearchContext};
+
+pub trait RankingRuleOutputIter<'search, Query> {
+    fn next_bucket(&mut self) -> Result<Option<RankingRuleOutput<Query>>>;
+}
+
+pub struct RankingRuleOutputIterWrapper<'search, Query> {
+    iter: Box<dyn Iterator<Item = Result<RankingRuleOutput<Query>>> + 'search>,
+}
+impl<'search, Query> RankingRuleOutputIterWrapper<'search, Query> {
+    pub fn new(iter: Box<dyn Iterator<Item = Result<RankingRuleOutput<Query>>> + 'search>) -> Self {
+        Self { iter }
+    }
+}
+impl<'search, Query> RankingRuleOutputIter<'search, Query>
+    for RankingRuleOutputIterWrapper<'search, Query>
+{
+    fn next_bucket(&mut self) -> Result<Option<RankingRuleOutput<Query>>> {
+        match self.iter.next() {
+            Some(x) => x.map(Some),
+            None => Ok(None),
+        }
+    }
+}
+
 use crate::{
     // facet::FacetType,
     heed_codec::{facet::FacetGroupKeyCodec, ByteSliceRefCodec},

@@ -432,7 +432,10 @@ results.{random} {{
         file: &mut File,
     ) {
         match &node {
-            QueryNode::Term(LocatedQueryTerm { value, .. }) => match value {
+            QueryNode::Term(LocatedQueryTerm { value, .. }) => match ctx
+                .query_term_interner
+                .get(*value)
+            {
                 QueryTerm::Phrase { phrase } => {
                     let phrase = ctx.phrase_interner.get(*phrase);
                     let phrase_str = phrase.description(&ctx.word_interner);
@@ -593,7 +596,7 @@ shape: class"
             graph.edges_store[edge_idx as usize].as_ref().unwrap();
         let source_node = &graph.query_graph.nodes[*source_node as usize];
         let source_node_desc = match source_node {
-            QueryNode::Term(term) => match &term.value {
+            QueryNode::Term(term) => match ctx.query_term_interner.get(term.value) {
                 QueryTerm::Phrase { phrase } => {
                     let phrase = ctx.phrase_interner.get(*phrase);
                     phrase.description(&ctx.word_interner)
@@ -608,7 +611,7 @@ shape: class"
         };
         let dest_node = &graph.query_graph.nodes[*dest_node as usize];
         let dest_node_desc = match dest_node {
-            QueryNode::Term(term) => match &term.value {
+            QueryNode::Term(term) => match ctx.query_term_interner.get(term.value) {
                 QueryTerm::Phrase { phrase } => {
                     let phrase = ctx.phrase_interner.get(*phrase);
                     phrase.description(&ctx.word_interner)

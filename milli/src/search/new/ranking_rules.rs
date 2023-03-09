@@ -2,42 +2,23 @@ use roaring::RoaringBitmap;
 
 use super::logger::SearchLogger;
 use super::{QueryGraph, SearchContext};
-use crate::search::new::graph_based_ranking_rule::GraphBasedRankingRule;
-use crate::search::new::ranking_rule_graph::{ProximityGraph, TypoGraph};
-use crate::search::new::words::Words;
 // use crate::search::new::sort::Sort;
-use crate::{Result, TermsMatchingStrategy};
+use crate::Result;
 
-pub trait RankingRuleOutputIter<'search, Query> {
-    fn next_bucket(&mut self) -> Result<Option<RankingRuleOutput<Query>>>;
-}
-
-pub struct RankingRuleOutputIterWrapper<'search, Query> {
-    iter: Box<dyn Iterator<Item = Result<RankingRuleOutput<Query>>> + 'search>,
-}
-impl<'search, Query> RankingRuleOutputIterWrapper<'search, Query> {
-    pub fn new(iter: Box<dyn Iterator<Item = Result<RankingRuleOutput<Query>>> + 'search>) -> Self {
-        Self { iter }
-    }
-}
-impl<'search, Query> RankingRuleOutputIter<'search, Query>
-    for RankingRuleOutputIterWrapper<'search, Query>
-{
-    fn next_bucket(&mut self) -> Result<Option<RankingRuleOutput<Query>>> {
-        match self.iter.next() {
-            Some(x) => x.map(Some),
-            None => Ok(None),
-        }
-    }
-}
-
+/// An internal trait implemented by only [`PlaceholderQuery`] and [`QueryGraph`]
 pub trait RankingRuleQueryTrait: Sized + Clone + 'static {}
 
+/// A type describing a placeholder search
 #[derive(Clone)]
 pub struct PlaceholderQuery;
 impl RankingRuleQueryTrait for PlaceholderQuery {}
 impl RankingRuleQueryTrait for QueryGraph {}
 
+/// A trait that must be implemented by all ranking rules.
+///
+/// It is generic over `'search`, the lifetime of the search context
+/// (i.e. the read transaction and the cache) and over `Query`, which
+/// can be either [`PlaceholderQuery`] or [`QueryGraph`].
 pub trait RankingRule<'search, Query: RankingRuleQueryTrait> {
     fn id(&self) -> String;
 
@@ -76,6 +57,8 @@ pub trait RankingRule<'search, Query: RankingRuleQueryTrait> {
     );
 }
 
+/// Output of a ranking rule, consisting of the query to be used
+/// by the child ranking rule and a set of document ids.
 #[derive(Debug)]
 pub struct RankingRuleOutput<Q> {
     /// The query corresponding to the current bucket for the child ranking rule
@@ -84,25 +67,16 @@ pub struct RankingRuleOutput<Q> {
     pub candidates: RoaringBitmap,
 }
 
-// TODO: can make it generic over the query type (either query graph or placeholder) fairly easily
-#[allow(clippy::too_many_arguments)]
-pub fn apply_ranking_rules<'search>(
+pub fn bucket_sort<'search, Q: RankingRuleQueryTrait>(
     ctx: &mut SearchContext<'search>,
-    // TODO: ranking rules parameter
-    query_graph: &QueryGraph,
+    mut ranking_rules: Vec<&mut dyn RankingRule<'search, Q>>,
+    query_graph: &Q,
     universe: &RoaringBitmap,
     from: usize,
     length: usize,
-    logger: &mut dyn SearchLogger<QueryGraph>,
+    logger: &mut dyn SearchLogger<Q>,
 ) -> Result<Vec<u32>> {
     logger.initial_query(query_graph);
-    let words = &mut Words::new(TermsMatchingStrategy::Last);
-    // let sort = &mut Sort::new(index, txn, "release_date".to_owned(), true)?;
-    let proximity = &mut GraphBasedRankingRule::<ProximityGraph>::new("proximity".to_owned());
-    let typo = &mut GraphBasedRankingRule::<TypoGraph>::new("typo".to_owned());
-    // TODO: ranking rules given as argument
-    let mut ranking_rules: Vec<&mut dyn RankingRule<'search, QueryGraph>> =
-        vec![words, typo, proximity /*sort*/];
 
     logger.ranking_rules(&ranking_rules);
 
@@ -119,6 +93,9 @@ pub fn apply_ranking_rules<'search>(
 
     let mut cur_ranking_rule_index = 0;
 
+    /// Finish iterating over the current ranking rule, yielding
+    /// control to the parent (or finishing the search if not possible).
+    /// Update the candidates accordingly and inform the logger.
     macro_rules! back {
         () => {
             assert!(candidates[cur_ranking_rule_index].is_empty());
@@ -140,8 +117,8 @@ pub fn apply_ranking_rules<'search>(
     let mut results = vec![];
     let mut cur_offset = 0usize;
 
-    // Add the candidates to the results. Take the `from`, `limit`, and `cur_offset`
-    // into account and inform the logger.
+    /// Add the candidates to the results. Take the `from`, `limit`, and `cur_offset`
+    /// into account and inform the logger.
     macro_rules! maybe_add_to_results {
         ($candidates:expr) => {
             let candidates = $candidates;
@@ -193,7 +170,6 @@ pub fn apply_ranking_rules<'search>(
         }
 
         let Some(next_bucket) = ranking_rules[cur_ranking_rule_index].next_bucket(ctx, logger, &candidates[cur_ranking_rule_index])? else {
-            // TODO: add remaining candidates automatically here?
             back!();
             continue;
         };

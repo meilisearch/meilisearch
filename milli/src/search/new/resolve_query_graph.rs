@@ -1,73 +1,139 @@
+#![allow(clippy::too_many_arguments)]
+
 use std::collections::VecDeque;
 
 use fxhash::FxHashMap;
-use heed::BytesDecode;
+use heed::{BytesDecode, RoTxn};
 use roaring::{MultiOps, RoaringBitmap};
 
-use super::interner::Interned;
+use super::db_cache::DatabaseCache;
+use super::interner::{Interned, Interner};
+use super::query_graph::QUERY_GRAPH_NODE_LENGTH_LIMIT;
 use super::query_term::{Phrase, QueryTerm, WordDerivations};
 use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, QueryNode, SearchContext};
-use crate::{CboRoaringBitmapCodec, Result, RoaringBitmapCodec};
+use crate::{CboRoaringBitmapCodec, Index, Result, RoaringBitmapCodec};
 
-// TODO: manual performance metrics: access to DB, bitmap deserializations/operations, etc.
 #[derive(Default)]
-pub struct NodeDocIdsCache {
-    pub cache: FxHashMap<u16, RoaringBitmap>,
+pub struct QueryTermDocIdsCache {
+    pub phrases: FxHashMap<Interned<Phrase>, RoaringBitmap>,
+    pub derivations: FxHashMap<Interned<WordDerivations>, RoaringBitmap>,
 }
-impl<'search> SearchContext<'search> {
-    fn get_node_docids<'cache>(
-        &'cache mut self,
-        term: &QueryTerm,
-        node_idx: u16,
-    ) -> Result<&'cache RoaringBitmap> {
-        if self.node_docids_cache.cache.contains_key(&node_idx) {
-            return Ok(&self.node_docids_cache.cache[&node_idx]);
+impl QueryTermDocIdsCache {
+    /// Get the document ids associated with the given phrase
+    pub fn get_phrase_docids<'s, 'search>(
+        &'s mut self,
+        index: &Index,
+        txn: &'search RoTxn,
+        db_cache: &mut DatabaseCache<'search>,
+        word_interner: &Interner<String>,
+        phrase_interner: &Interner<Phrase>,
+        phrase: Interned<Phrase>,
+    ) -> Result<&'s RoaringBitmap> {
+        if self.phrases.contains_key(&phrase) {
+            return Ok(&self.phrases[&phrase]);
         };
-        let docids = match term {
-            QueryTerm::Phrase { phrase } => resolve_phrase(self, *phrase)?,
-            QueryTerm::Word {
-                derivations:
-                    WordDerivations {
-                        original,
-                        zero_typo,
-                        one_typo,
-                        two_typos,
-                        use_prefix_db,
-                        synonyms,
-                        split_words,
-                    },
-            } => {
-                let mut or_docids = vec![];
-                for word in zero_typo.iter().chain(one_typo.iter()).chain(two_typos.iter()).copied()
-                {
-                    if let Some(word_docids) = self.get_word_docids(word)? {
-                        or_docids.push(word_docids);
-                    }
-                }
-                if *use_prefix_db {
-                    if let Some(prefix_docids) = self.get_word_prefix_docids(*original)? {
-                        or_docids.push(prefix_docids);
-                    }
-                }
-                let mut docids = or_docids
-                    .into_iter()
-                    .map(|slice| RoaringBitmapCodec::bytes_decode(slice).unwrap())
-                    .collect::<Vec<_>>();
-                for synonym in synonyms.iter().copied() {
-                    // TODO: cache resolve_phrase?
-                    docids.push(resolve_phrase(self, synonym)?);
-                }
-                if let Some(split_words) = split_words {
-                    docids.push(resolve_phrase(self, *split_words)?);
-                }
-
-                MultiOps::union(docids)
-            }
-        };
-        let _ = self.node_docids_cache.cache.insert(node_idx, docids);
-        let docids = &self.node_docids_cache.cache[&node_idx];
+        let docids = resolve_phrase(index, txn, db_cache, word_interner, phrase_interner, phrase)?;
+        let _ = self.phrases.insert(phrase, docids);
+        let docids = &self.phrases[&phrase];
         Ok(docids)
+    }
+
+    /// Get the document ids associated with the given word derivations
+    pub fn get_word_derivations_docids<'s, 'search>(
+        &'s mut self,
+        index: &Index,
+        txn: &'search RoTxn,
+        db_cache: &mut DatabaseCache<'search>,
+        word_interner: &Interner<String>,
+        derivations_interner: &Interner<WordDerivations>,
+        phrase_interner: &Interner<Phrase>,
+        derivations: Interned<WordDerivations>,
+    ) -> Result<&'s RoaringBitmap> {
+        if self.derivations.contains_key(&derivations) {
+            return Ok(&self.derivations[&derivations]);
+        };
+        let WordDerivations {
+            original,
+            synonyms,
+            split_words,
+            zero_typo,
+            one_typo,
+            two_typos,
+            use_prefix_db,
+        } = derivations_interner.get(derivations);
+        let mut or_docids = vec![];
+        for word in zero_typo.iter().chain(one_typo.iter()).chain(two_typos.iter()).copied() {
+            if let Some(word_docids) = db_cache.get_word_docids(index, txn, word_interner, word)? {
+                or_docids.push(word_docids);
+            }
+        }
+        if *use_prefix_db {
+            // TODO: this will change if we decide to change from (original, zero_typo) to:
+            // (debug_original, prefix_of, zero_typo)
+            if let Some(prefix_docids) =
+                db_cache.get_word_prefix_docids(index, txn, word_interner, *original)?
+            {
+                or_docids.push(prefix_docids);
+            }
+        }
+        let mut docids = or_docids
+            .into_iter()
+            .map(|slice| RoaringBitmapCodec::bytes_decode(slice).unwrap())
+            .collect::<Vec<_>>();
+        for synonym in synonyms.iter().copied() {
+            // TODO: cache resolve_phrase?
+            docids.push(resolve_phrase(
+                index,
+                txn,
+                db_cache,
+                word_interner,
+                phrase_interner,
+                synonym,
+            )?);
+        }
+        if let Some(split_words) = split_words {
+            docids.push(resolve_phrase(
+                index,
+                txn,
+                db_cache,
+                word_interner,
+                phrase_interner,
+                *split_words,
+            )?);
+        }
+
+        let docids = MultiOps::union(docids);
+        let _ = self.derivations.insert(derivations, docids);
+        let docids = &self.derivations[&derivations];
+        Ok(docids)
+    }
+
+    /// Get the document ids associated with the given query term.
+    fn get_query_term_docids<'s, 'search>(
+        &'s mut self,
+        index: &Index,
+        txn: &'search RoTxn,
+        db_cache: &mut DatabaseCache<'search>,
+        word_interner: &Interner<String>,
+        derivations_interner: &Interner<WordDerivations>,
+        phrase_interner: &Interner<Phrase>,
+        term: &QueryTerm,
+    ) -> Result<&'s RoaringBitmap> {
+        match *term {
+            QueryTerm::Phrase { phrase } => {
+                self.get_phrase_docids(index, txn, db_cache, word_interner, phrase_interner, phrase)
+            }
+            QueryTerm::Word { derivations } => self.get_word_derivations_docids(
+                index,
+                txn,
+                db_cache,
+                word_interner,
+                derivations_interner,
+                phrase_interner,
+                derivations,
+            ),
+        }
     }
 }
 
@@ -76,14 +142,23 @@ pub fn resolve_query_graph<'search>(
     q: &QueryGraph,
     universe: &RoaringBitmap,
 ) -> Result<RoaringBitmap> {
-    // TODO: there is definitely a faster way to compute this big
+    let SearchContext {
+        index,
+        txn,
+        db_cache,
+        word_interner,
+        phrase_interner,
+        derivations_interner,
+        query_term_docids,
+    } = ctx;
+    // TODO: there is a faster way to compute this big
     // roaring bitmap expression
 
-    let mut nodes_resolved = SmallBitmap::new(64);
+    let mut nodes_resolved = SmallBitmap::new(QUERY_GRAPH_NODE_LENGTH_LIMIT);
     let mut path_nodes_docids = vec![RoaringBitmap::new(); q.nodes.len()];
 
     let mut next_nodes_to_visit = VecDeque::new();
-    next_nodes_to_visit.push_front(q.root_node);
+    next_nodes_to_visit.push_back(q.root_node);
 
     while let Some(node) = next_nodes_to_visit.pop_front() {
         let predecessors = &q.edges[node as usize].predecessors;
@@ -101,8 +176,15 @@ pub fn resolve_query_graph<'search>(
 
         let node_docids = match n {
             QueryNode::Term(located_term) => {
-                let term = &located_term.value;
-                let derivations_docids = ctx.get_node_docids(term, node)?;
+                let derivations_docids = query_term_docids.get_query_term_docids(
+                    index,
+                    txn,
+                    db_cache,
+                    word_interner,
+                    derivations_interner,
+                    phrase_interner,
+                    &located_term.value,
+                )?;
                 predecessors_docids & derivations_docids
             }
             QueryNode::Deleted => {
@@ -122,19 +204,24 @@ pub fn resolve_query_graph<'search>(
             }
         }
 
-        // This is currently slow but could easily be implemented very efficiently
         for prec in q.edges[node as usize].predecessors.iter() {
             if q.edges[prec as usize].successors.is_subset(&nodes_resolved) {
                 path_nodes_docids[prec as usize].clear();
             }
         }
     }
-
     panic!()
 }
 
-pub fn resolve_phrase(ctx: &mut SearchContext, phrase: Interned<Phrase>) -> Result<RoaringBitmap> {
-    let Phrase { words } = ctx.phrase_interner.get(phrase).clone();
+pub fn resolve_phrase<'search>(
+    index: &Index,
+    txn: &'search RoTxn,
+    db_cache: &mut DatabaseCache<'search>,
+    word_interner: &Interner<String>,
+    phrase_interner: &Interner<Phrase>,
+    phrase: Interned<Phrase>,
+) -> Result<RoaringBitmap> {
+    let Phrase { words } = phrase_interner.get(phrase).clone();
     let mut candidates = RoaringBitmap::new();
     let mut first_iter = true;
     let winsize = words.len().min(3);
@@ -158,7 +245,14 @@ pub fn resolve_phrase(ctx: &mut SearchContext, phrase: Interned<Phrase>) -> Resu
                 .filter_map(|(index, word)| word.as_ref().map(|word| (index, word)))
             {
                 if dist == 0 {
-                    match ctx.get_word_pair_proximity_docids(s1, s2, 1)? {
+                    match db_cache.get_word_pair_proximity_docids(
+                        index,
+                        txn,
+                        word_interner,
+                        s1,
+                        s2,
+                        1,
+                    )? {
                         Some(m) => bitmaps.push(CboRoaringBitmapCodec::deserialize_from(m)?),
                         // If there are no documents for this pair, there will be no
                         // results for the phrase query.
@@ -167,9 +261,14 @@ pub fn resolve_phrase(ctx: &mut SearchContext, phrase: Interned<Phrase>) -> Resu
                 } else {
                     let mut bitmap = RoaringBitmap::new();
                     for dist in 0..=dist {
-                        if let Some(m) =
-                            ctx.get_word_pair_proximity_docids(s1, s2, dist as u8 + 1)?
-                        {
+                        if let Some(m) = db_cache.get_word_pair_proximity_docids(
+                            index,
+                            txn,
+                            word_interner,
+                            s1,
+                            s2,
+                            dist as u8 + 1,
+                        )? {
                             bitmap |= CboRoaringBitmapCodec::deserialize_from(m)?;
                         }
                     }

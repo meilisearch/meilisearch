@@ -18,13 +18,6 @@ impl SmallBitmap {
         }
         s
     }
-    pub fn from_array(xs: &[u16], universe_length: u16) -> Self {
-        let mut s = Self::new(universe_length);
-        for x in xs {
-            s.insert(*x);
-        }
-        s
-    }
     pub fn is_empty(&self) -> bool {
         match self {
             SmallBitmap::Tiny(set) => *set == 0,
@@ -81,27 +74,6 @@ impl SmallBitmap {
         };
         *set &= !(0b1 << x);
     }
-    // fn iter_single(mut set: u64, mut visit: impl FnMut(u16) -> Result<()>) -> Result<()> {
-    //     while set > 0 {
-    //         let idx = set.trailing_zeros() as u16;
-    //         visit(idx)?;
-    //         set &= set - 1;
-    //     }
-    //     Ok(())
-    // }
-    // pub fn iter(&self, mut visit: impl FnMut(u16) -> Result<()>) -> Result<()> {
-    //     match self {
-    //         SmallBitmap::Tiny(set) => Self::iter_single(*set, &mut visit),
-    //         SmallBitmap::Small(sets) => {
-    //             let mut base = 0;
-    //             for set in sets.iter() {
-    //                 Self::iter_single(*set, |x| visit(base + x))?;
-    //                 base += 64;
-    //             }
-    //             Ok(())
-    //         }
-    //     }
-    // }
 
     pub fn intersection(&mut self, other: &SmallBitmap) {
         self.apply_op(other, |a, b| *a &= b);

@@ -3,7 +3,7 @@ use super::small_bitmap::SmallBitmap;
 use super::SearchContext;
 use crate::Result;
 
-const QUERY_GRAPH_NODE_LENGTH_LIMIT: u16 = 64;
+pub const QUERY_GRAPH_NODE_LENGTH_LIMIT: u16 = 64;
 
 /// A node of the [`QueryGraph`].
 ///
@@ -148,7 +148,7 @@ impl QueryGraph {
             let mut new_nodes = vec![];
             let new_node_idx = graph.add_node(&prev0, QueryNode::Term(term0.clone()));
             new_nodes.push(new_node_idx);
-            if term0.is_empty() {
+            if term0.is_empty(&ctx.derivations_interner) {
                 empty_nodes.push(new_node_idx);
             }
 
@@ -159,7 +159,7 @@ impl QueryGraph {
                     if word_set.contains(ctx.word_interner.get(ngram2_str)) {
                         let ngram2 = LocatedQueryTerm {
                             value: QueryTerm::Word {
-                                derivations: WordDerivations {
+                                derivations: ctx.derivations_interner.insert(WordDerivations {
                                     original: ngram2_str,
                                     // TODO: could add a typo if it's an ngram?
                                     zero_typo: Box::new([ngram2_str]),
@@ -168,7 +168,7 @@ impl QueryGraph {
                                     use_prefix_db: false,
                                     synonyms: Box::new([]), // TODO: ngram synonyms
                                     split_words: None,      // TODO: maybe ngram split words?
-                                },
+                                }),
                             },
                             positions: ngram2_pos,
                         };
@@ -187,7 +187,7 @@ impl QueryGraph {
                     if word_set.contains(ctx.word_interner.get(ngram3_str)) {
                         let ngram3 = LocatedQueryTerm {
                             value: QueryTerm::Word {
-                                derivations: WordDerivations {
+                                derivations: ctx.derivations_interner.insert(WordDerivations {
                                     original: ngram3_str,
                                     // TODO: could add a typo if it's an ngram?
                                     zero_typo: Box::new([ngram3_str]),
@@ -197,7 +197,7 @@ impl QueryGraph {
                                     synonyms: Box::new([]), // TODO: ngram synonyms
                                     split_words: None,      // TODO: maybe ngram split words?
                                                             // would be nice for typos like su nflower
-                                },
+                                }),
                             },
                             positions: ngram3_pos,
                         };
@@ -277,9 +277,10 @@ impl QueryGraph {
         loop {
             let mut nodes_to_remove = vec![];
             for (node_idx, node) in self.nodes.iter().enumerate() {
-                if !matches!(node, QueryNode::End | QueryNode::Deleted)
-                    && (self.edges[node_idx].successors.is_empty()
-                        || self.edges[node_idx].predecessors.is_empty())
+                if (!matches!(node, QueryNode::End | QueryNode::Deleted)
+                    && self.edges[node_idx].successors.is_empty())
+                    || (!matches!(node, QueryNode::Start | QueryNode::Deleted)
+                        && self.edges[node_idx].predecessors.is_empty())
                 {
                     nodes_to_remove.push(node_idx as u16);
                 }
