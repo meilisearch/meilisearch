@@ -1,21 +1,18 @@
-name: Benchmarks
+name: Benchmarks of search for Wikipedia articles (push)
 
 on:
-  workflow_dispatch:
-    inputs:
-      dataset_name:
-        description: 'The name of the dataset used to benchmark (search_songs, search_wiki, search_geo or indexing)'
-        required: false
-        default: 'search_songs'
+  push:
+    branches:
+      - main
 
 env:
-  BENCH_NAME: ${{ github.event.inputs.dataset_name }}
+  BENCH_NAME: "search_wiki"
+  INFLUX_TOKEN: ${{ secrets.INFLUX_TOKEN }}
 
 jobs:
   benchmarks:
     name: Run and upload benchmarks
     runs-on: benchmarks
-    timeout-minutes: 4320 # 72h
     steps:
       - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
@@ -67,6 +64,10 @@ jobs:
           space_region: ${{ secrets.DO_SPACES_SPACE_REGION }}
           source: ${{ steps.file.outputs.basename }}.json
           out_dir: critcmp_results
+
+      # Upload benchmarks to influxdb
+      - name: Upload ${{ steps.file.outputs.basename }}.json to influxDB
+        run: telegraf --config https://eu-central-1-1.aws.cloud2.influxdata.com/api/v2/telegrafs/08b52e34a370b000 --once --debug
 
       # Helper
       - name: 'README: compare with another benchmark'
