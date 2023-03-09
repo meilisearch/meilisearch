@@ -192,6 +192,31 @@ async fn test_kanji_language_detection() {
         .await;
 }
 
+#[cfg(feature = "default")]
+#[actix_rt::test]
+async fn test_thai_language() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    // We don't need documents, the issue is on the query side only.
+    let documents = json!([
+        { "id": 0, "title": "สบู่สมุนไพรดอกดาวเรือง 100 กรัม จำนวน 6 ก้อน" },
+        { "id": 1, "title": "สบู่สมุนไพรชาเขียว 100 กรัม จำนวน 6 ก้อน" },
+        { "id": 2, "title": "สบู่สมุนไพรฝางแดงผสมว่านหางจรเข้ 100 กรัม จำนวน 6 ก้อน" }
+    ]);
+    index.add_documents(documents, None).await;
+    index.wait_task(0).await;
+
+    index.update_settings(json!({"rankingRules": ["exactness"]})).await;
+    index.wait_task(1).await;
+
+    index
+        .search(json!({"q": "สบู"}), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+        })
+        .await;
+}
+
 #[actix_rt::test]
 async fn search_multiple_params() {
     let server = Server::new().await;
