@@ -518,14 +518,14 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
         drop(iter);
         // We delete the documents ids that are under the facet field id values.
-        remove_docids_from_facet_id_exists_docids(
+        remove_docids_from_facet_id_docids(
             self.wtxn,
             facet_id_exists_docids,
             &self.to_delete_docids,
         )?;
 
         // We delete the documents ids that are under the facet field id values.
-        remove_docids_from_facet_id_exists_docids(
+        remove_docids_from_facet_id_docids(
             self.wtxn,
             facet_id_is_null_docids,
             &self.to_delete_docids,
@@ -633,7 +633,7 @@ fn remove_docids_from_field_id_docid_facet_value(
     Ok(all_affected_facet_values)
 }
 
-fn remove_docids_from_facet_id_exists_docids<'a, C>(
+fn remove_docids_from_facet_id_docids<'a, C>(
     wtxn: &'a mut heed::RwTxn,
     db: &heed::Database<C, CboRoaringBitmapCodec>,
     to_remove: &RoaringBitmap,
