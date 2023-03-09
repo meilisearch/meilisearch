@@ -792,6 +792,10 @@ where
 
     let mut peekable = query.peekable();
     while let Some(token) = peekable.next() {
+        if token.lemma().is_empty() {
+            continue;
+        }
+
         // early return if word limit is exceeded
         if primitive_query.len() >= parts_limit {
             return primitive_query;
