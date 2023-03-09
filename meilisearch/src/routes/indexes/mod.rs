@@ -100,7 +100,6 @@ pub async fn list_indexes(
             Ok(Some(IndexView::new(uid.to_string(), index)?))
         })?;
     // Won't cause to open all indexes because IndexView doesn't keep the `Index` opened.
-    // error when trying to fix it: the trait `ExactSizeIterator` is not implemented for `Flatten<IntoIter<Option<IndexView>>>`
     let indexes: Vec<IndexView> = indexes.into_iter().flatten().collect();
     let ret = paginate.as_pagination().auto_paginate_sized(indexes.into_iter());
 
