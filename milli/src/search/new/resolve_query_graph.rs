@@ -150,6 +150,7 @@ pub fn resolve_query_graph<'search>(
         phrase_interner,
         derivations_interner,
         query_term_docids,
+        ..
     } = ctx;
     // TODO: there is a faster way to compute this big
     // roaring bitmap expression

@@ -80,7 +80,7 @@ pub fn word_derivations(
     word: &str,
     max_typo: u8,
     is_prefix: bool,
-) -> Result<WordDerivations> {
+) -> Result<Interned<WordDerivations>> {
     let fst = ctx.index.words_fst(ctx.txn)?;
     let word_interned = ctx.word_interner.insert(word.to_owned());
 
@@ -185,7 +185,7 @@ pub fn word_derivations(
         })
         .collect();
 
-    Ok(WordDerivations {
+    let interned = ctx.derivations_interner.insert(WordDerivations {
         original: ctx.word_interner.insert(word.to_owned()),
         synonyms,
         split_words,
@@ -193,7 +193,9 @@ pub fn word_derivations(
         one_typo: one_typo.into_boxed_slice(),
         two_typos: two_typos.into_boxed_slice(),
         use_prefix_db,
-    })
+    });
+
+    Ok(interned)
 }
 
 /// Split the original word into the two words that appear the
@@ -342,9 +344,7 @@ pub fn located_query_terms_from_string<'search>(
                             let word = token.lemma();
                             let derivations = word_derivations(ctx, word, nbr_typos(word), false)?;
                             let located_term = LocatedQueryTerm {
-                                value: QueryTerm::Word {
-                                    derivations: ctx.derivations_interner.insert(derivations),
-                                },
+                                value: QueryTerm::Word { derivations },
                                 positions: position..=position,
                             };
                             located_terms.push(located_term);
@@ -355,9 +355,7 @@ pub fn located_query_terms_from_string<'search>(
                     let word = token.lemma();
                     let derivations = word_derivations(ctx, word, nbr_typos(word), true)?;
                     let located_term = LocatedQueryTerm {
-                        value: QueryTerm::Word {
-                            derivations: ctx.derivations_interner.insert(derivations),
-                        },
+                        value: QueryTerm::Word { derivations },
                         positions: position..=position,
                     };
                     located_terms.push(located_term);
