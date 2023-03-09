@@ -833,19 +833,37 @@ impl IndexScheduler {
                 Ok(vec![task])
             }
             Batch::IndexOperation { op, must_create_index } => {
-                let index_uid = op.index_uid();
+                let index_uid = op.index_uid().to_string();
                 let index = if must_create_index {
                     // create the index if it doesn't already exist
                     let wtxn = self.env.write_txn()?;
-                    self.index_mapper.create_index(wtxn, index_uid, None)?
+                    self.index_mapper.create_index(wtxn, &index_uid, None)?
                 } else {
                     let rtxn = self.env.read_txn()?;
-                    self.index_mapper.index(&rtxn, index_uid)?
+                    self.index_mapper.index(&rtxn, &index_uid)?
                 };
 
                 let mut index_wtxn = index.write_txn()?;
                 let tasks = self.apply_index_operation(&mut index_wtxn, &index, op)?;
                 index_wtxn.commit()?;
+
+                // if the update processed successfully, we're going to store the new
+                // stats of the index. Since the tasks have already been processed and
+                // this is a non-critical operation. If it fails, we should not fail
+                // the entire batch.
+                let res = || -> Result<()> {
+                    let index_rtxn = index.read_txn()?;
+                    let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)?;
+                    let mut wtxn = self.env.write_txn()?;
+                    self.index_mapper.store_stats_of(&mut wtxn, &index_uid, &stats)?;
+                    wtxn.commit()?;
+                    Ok(())
+                }();
+
+                match res {
+                    Ok(_) => (),
+                    Err(e) => error!("Could not write the stats of the index {}", e),
+                }
 
                 Ok(tasks)
             }
@@ -877,8 +895,30 @@ impl IndexScheduler {
                     )?;
                     index_wtxn.commit()?;
                 }
+
+                // drop rtxn before starting a new wtxn on the same db
+                rtxn.commit()?;
+
                 task.status = Status::Succeeded;
                 task.details = Some(Details::IndexInfo { primary_key });
+
+                // if the update processed successfully, we're going to store the new
+                // stats of the index. Since the tasks have already been processed and
+                // this is a non-critical operation. If it fails, we should not fail
+                // the entire batch.
+                let res = || -> Result<()> {
+                    let mut wtxn = self.env.write_txn()?;
+                    let index_rtxn = index.read_txn()?;
+                    let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)?;
+                    self.index_mapper.store_stats_of(&mut wtxn, &index_uid, &stats)?;
+                    wtxn.commit()?;
+                    Ok(())
+                }();
+
+                match res {
+                    Ok(_) => (),
+                    Err(e) => error!("Could not write the stats of the index {}", e),
+                }
 
                 Ok(vec![task])
             }

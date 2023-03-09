@@ -18,7 +18,8 @@ enqueued [0,]
 doggos [0,]
 ----------------------------------------------------------------------
 ### Index Mapper:
-["doggos"]
+doggos: { number_of_documents: 1, field_distribution: {"doggo": 1, "id": 1} }
+
 ----------------------------------------------------------------------
 ### Canceled By:
 

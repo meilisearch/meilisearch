@@ -27,7 +27,10 @@ doggos [0,3,]
 girafos [2,5,]
 ----------------------------------------------------------------------
 ### Index Mapper:
-["cattos", "doggos", "girafos"]
+cattos: { number_of_documents: 0, field_distribution: {} }
+doggos: { number_of_documents: 0, field_distribution: {} }
+girafos: { number_of_documents: 0, field_distribution: {} }
+
 ----------------------------------------------------------------------
 ### Canceled By:
 

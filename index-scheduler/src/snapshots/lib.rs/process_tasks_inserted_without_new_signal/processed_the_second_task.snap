@@ -23,7 +23,9 @@ cattos [1,]
 doggos [0,2,]
 ----------------------------------------------------------------------
 ### Index Mapper:
-["cattos", "doggos"]
+cattos: { number_of_documents: 0, field_distribution: {} }
+doggos: { number_of_documents: 0, field_distribution: {} }
+
 ----------------------------------------------------------------------
 ### Canceled By:
 

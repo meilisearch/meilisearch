@@ -220,6 +220,28 @@ pub async fn delete_index(
     Ok(HttpResponse::Accepted().json(task))
 }
 
+/// Stats of an `Index`, as known to the `stats` route.
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexStats {
+    /// Number of documents in the index
+    pub number_of_documents: u64,
+    /// Whether the index is currently performing indexation, according to the scheduler.
+    pub is_indexing: bool,
+    /// Association of every field name with the number of times it occurs in the documents.
+    pub field_distribution: FieldDistribution,
+}
+
+impl From<index_scheduler::IndexStats> for IndexStats {
+    fn from(stats: index_scheduler::IndexStats) -> Self {
+        IndexStats {
+            number_of_documents: stats.inner_stats.number_of_documents,
+            is_indexing: stats.is_indexing,
+            field_distribution: stats.inner_stats.field_distribution,
+        }
+    }
+}
+
 pub async fn get_index_stats(
     index_scheduler: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
@@ -229,33 +251,8 @@ pub async fn get_index_stats(
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     analytics.publish("Stats Seen".to_string(), json!({ "per_index_uid": true }), Some(&req));
 
-    let stats = IndexStats::new((*index_scheduler).clone(), index_uid.into_inner())?;
+    let stats = IndexStats::from(index_scheduler.index_stats(&index_uid)?);
 
     debug!("returns: {:?}", stats);
     Ok(HttpResponse::Ok().json(stats))
-}
-
-#[derive(Serialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct IndexStats {
-    pub number_of_documents: u64,
-    pub is_indexing: bool,
-    pub field_distribution: FieldDistribution,
-}
-
-impl IndexStats {
-    pub fn new(
-        index_scheduler: Data<IndexScheduler>,
-        index_uid: String,
-    ) -> Result<Self, ResponseError> {
-        // we check if there is currently a task processing associated with this index.
-        let is_processing = index_scheduler.is_index_processing(&index_uid)?;
-        let index = index_scheduler.index(&index_uid)?;
-        let rtxn = index.read_txn()?;
-        Ok(IndexStats {
-            number_of_documents: index.number_of_documents(&rtxn)?,
-            is_indexing: is_processing,
-            field_distribution: index.field_distribution(&rtxn)?,
-        })
-    }
 }

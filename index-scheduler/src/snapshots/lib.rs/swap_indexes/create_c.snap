@@ -25,7 +25,10 @@ c [2,]
 d [3,]
 ----------------------------------------------------------------------
 ### Index Mapper:
-["a", "b", "c"]
+a: { number_of_documents: 0, field_distribution: {} }
+b: { number_of_documents: 0, field_distribution: {} }
+c: { number_of_documents: 0, field_distribution: {} }
+
 ----------------------------------------------------------------------
 ### Canceled By:
 
