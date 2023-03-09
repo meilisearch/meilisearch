@@ -1,11 +1,11 @@
 mod db_cache;
+mod distinct;
 mod graph_based_ranking_rule;
 mod interner;
 mod logger;
 mod query_graph;
 mod query_term;
 mod ranking_rule_graph;
-
 mod ranking_rules;
 mod resolve_query_graph;
 // TODO: documentation + comments
