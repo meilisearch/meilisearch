@@ -45,8 +45,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         max_memory,
     );
 
-    let mut key_buffer = Vec::new();
-    let mut field_buffer = String::new();
+    let mut buffers = Buffers::default();
     let mut tokenizer_builder = TokenizerBuilder::new();
     if let Some(stop_words) = stop_words {
         tokenizer_builder.stop_words(stop_words);
@@ -62,8 +61,8 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         let obkv = KvReader::<FieldId>::new(value);
 
         documents_ids.push(document_id);
-        key_buffer.clear();
-        key_buffer.extend_from_slice(&document_id.to_be_bytes());
+        buffers.key_buffer.clear();
+        buffers.key_buffer.extend_from_slice(&document_id.to_be_bytes());
 
         let mut script_language_word_count = HashMap::new();
 
@@ -72,8 +71,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
             searchable_fields,
             &tokenizer,
             max_positions_per_attributes,
-            &mut key_buffer,
-            &mut field_buffer,
+            &mut buffers,
             &mut script_language_word_count,
             &mut docid_word_positions_sorter,
         )?;
@@ -105,8 +103,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
                     searchable_fields,
                     &tokenizer,
                     max_positions_per_attributes,
-                    &mut key_buffer,
-                    &mut field_buffer,
+                    &mut buffers,
                     &mut script_language_word_count,
                     &mut docid_word_positions_sorter,
                 )?;
@@ -127,22 +124,20 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         .map(|reader| (documents_ids, reader, script_language_docids))
 }
 
-#[allow(clippy::too_many_arguments)]
 fn extract_tokens_from_document<T: AsRef<[u8]>>(
     obkv: &KvReader<FieldId>,
     searchable_fields: &Option<HashSet<FieldId>>,
     tokenizer: &Tokenizer<T>,
     max_positions_per_attributes: u32,
-    key_buffer: &mut Vec<u8>,
-    field_buffer: &mut String,
+    buffers: &mut Buffers,
     script_language_word_count: &mut HashMap<Script, Vec<(Language, usize)>>,
     docid_word_positions_sorter: &mut grenad::Sorter<MergeFn>,
 ) -> Result<()> {
     for (field_id, field_bytes) in obkv.iter() {
         if searchable_fields.as_ref().map_or(true, |sf| sf.contains(&field_id)) {
             let value = serde_json::from_slice(field_bytes).map_err(InternalError::SerdeJson)?;
-            field_buffer.clear();
-            if let Some(field) = json_to_string(&value, field_buffer) {
+            buffers.field_buffer.clear();
+            if let Some(field) = json_to_string(&value, &mut buffers.field_buffer) {
                 let tokens = process_tokens(tokenizer.tokenize(field))
                     .take_while(|(p, _)| (*p as u32) < max_positions_per_attributes);
 
@@ -159,14 +154,15 @@ fn extract_tokens_from_document<T: AsRef<[u8]>>(
                     }
                     let token = token.lemma().trim();
                     if !token.is_empty() && token.len() <= MAX_WORD_LENGTH {
-                        key_buffer.truncate(mem::size_of::<u32>());
-                        key_buffer.extend_from_slice(token.as_bytes());
+                        buffers.key_buffer.truncate(mem::size_of::<u32>());
+                        buffers.key_buffer.extend_from_slice(token.as_bytes());
 
                         let position: u16 = index
                             .try_into()
                             .map_err(|_| SerializationError::InvalidNumberSerialization)?;
                         let position = absolute_from_relative_position(field_id, position);
-                        docid_word_positions_sorter.insert(&key_buffer, position.to_ne_bytes())?;
+                        docid_word_positions_sorter
+                            .insert(&buffers.key_buffer, position.to_ne_bytes())?;
                     }
                 }
             }
@@ -289,4 +285,10 @@ fn most_frequent_languages(
 fn compute_language_frequency_threshold(languages_frequency: &[(Language, usize)]) -> usize {
     let total: usize = languages_frequency.iter().map(|(_, c)| c).sum();
     total / 10 // 10% is a completely arbitrary value.
+}
+
+#[derive(Default)]
+struct Buffers {
+    key_buffer: Vec<u8>,
+    field_buffer: String,
 }
