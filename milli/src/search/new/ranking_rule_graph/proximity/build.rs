@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use itertools::Itertools;
 
 use super::ProximityEdge;
+use crate::search::new::interner::Interner;
 use crate::search::new::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
 use crate::search::new::ranking_rule_graph::proximity::WordPair;
 use crate::search::new::ranking_rule_graph::EdgeCondition;
@@ -59,6 +60,7 @@ pub fn visit_from_node(
 
 pub fn visit_to_node<'search, 'from_data>(
     ctx: &mut SearchContext<'search>,
+    conditions_interner: &mut Interner<ProximityEdge>,
     to_node: &QueryNode,
     from_node_data: &'from_data (WordDerivations, i8),
 ) -> Result<Vec<(u8, EdgeCondition<ProximityEdge>)>> {
@@ -224,22 +226,23 @@ pub fn visit_to_node<'search, 'from_data>(
             }
         }
     }
-    let mut new_edges = cost_proximity_word_pairs
-        .into_iter()
-        .flat_map(|(cost, proximity_word_pairs)| {
-            let mut edges = vec![];
-            for (proximity, word_pairs) in proximity_word_pairs {
-                edges.push((
-                    cost,
-                    EdgeCondition::Conditional(ProximityEdge {
-                        pairs: word_pairs.into_boxed_slice(),
-                        proximity,
-                    }),
-                ))
-            }
-            edges
-        })
-        .collect::<Vec<_>>();
+    let mut new_edges =
+        cost_proximity_word_pairs
+            .into_iter()
+            .flat_map(|(cost, proximity_word_pairs)| {
+                let mut edges = vec![];
+                for (proximity, word_pairs) in proximity_word_pairs {
+                    edges.push((
+                        cost,
+                        EdgeCondition::Conditional(conditions_interner.insert(ProximityEdge {
+                            pairs: word_pairs.into_boxed_slice(),
+                            proximity,
+                        })),
+                    ))
+                }
+                edges
+            })
+            .collect::<Vec<_>>();
     new_edges.push((8 + (ngram_len2 - 1) as u8, EdgeCondition::Unconditional));
     Ok(new_edges)
 }

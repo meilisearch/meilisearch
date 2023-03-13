@@ -5,23 +5,21 @@ use roaring::RoaringBitmap;
 
 use super::empty_paths_cache::EmptyPathsCache;
 use super::{EdgeCondition, RankingRuleGraphTrait};
-use crate::search::new::interner::Interned;
+use crate::search::new::interner::{Interned, Interner};
 use crate::search::new::logger::SearchLogger;
 use crate::search::new::query_term::WordDerivations;
 use crate::search::new::small_bitmap::SmallBitmap;
 use crate::search::new::{QueryGraph, QueryNode, SearchContext};
 use crate::Result;
 
-// TODO: intern the proximity edges as well?
-
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum WordPair {
     Words { left: Interned<String>, right: Interned<String> },
     WordPrefix { left: Interned<String>, right_prefix: Interned<String> },
     WordPrefixSwapped { left_prefix: Interned<String>, right: Interned<String> },
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct ProximityEdge {
     pairs: Box<[WordPair]>,
     proximity: u8,
@@ -55,10 +53,11 @@ impl RankingRuleGraphTrait for ProximityGraph {
 
     fn build_step_visit_destination_node<'from_data, 'search: 'from_data>(
         ctx: &mut SearchContext<'search>,
+        conditions_interner: &mut Interner<Self::EdgeCondition>,
         to_node: &QueryNode,
         from_node_data: &'from_data Self::BuildVisitedFromNode,
     ) -> Result<Vec<(u8, EdgeCondition<Self::EdgeCondition>)>> {
-        build::visit_to_node(ctx, to_node, from_node_data)
+        build::visit_to_node(ctx, conditions_interner, to_node, from_node_data)
     }
 
     fn log_state(

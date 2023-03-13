@@ -35,11 +35,6 @@ use crate::search::new::query_term::located_query_terms_from_string;
 use crate::search::new::words::Words;
 use crate::{Filter, Index, Result, TermsMatchingStrategy};
 
-pub enum BitmapOrAllRef<'s> {
-    Bitmap(&'s RoaringBitmap),
-    All,
-}
-
 pub struct SearchContext<'search> {
     pub index: &'search Index,
     pub txn: &'search RoTxn<'search>,

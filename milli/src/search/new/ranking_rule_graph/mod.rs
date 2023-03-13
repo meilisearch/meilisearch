@@ -16,12 +16,15 @@ mod proximity;
 /// Implementation of the `typo` ranking rule
 mod typo;
 
-pub use edge_docids_cache::EdgeDocidsCache;
+use std::hash::Hash;
+
+pub use edge_docids_cache::EdgeConditionsCache;
 pub use empty_paths_cache::EmptyPathsCache;
 pub use proximity::ProximityGraph;
 use roaring::RoaringBitmap;
 pub use typo::TypoGraph;
 
+use super::interner::{Interned, Interner};
 use super::logger::SearchLogger;
 use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, QueryNode, SearchContext};
@@ -36,10 +39,20 @@ use crate::Result;
 /// proximity ranking rule, the condition could be that a word is N-close to another one.
 /// When the edge is traversed, some database operations are executed to retrieve the set
 /// of documents that satisfy the condition, which reduces the list of candidate document ids.
-#[derive(Debug, Clone)]
 pub enum EdgeCondition<E> {
     Unconditional,
-    Conditional(E),
+    Conditional(Interned<E>),
+}
+
+impl<E> Copy for EdgeCondition<E> {}
+
+impl<E> Clone for EdgeCondition<E> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Unconditional => Self::Unconditional,
+            Self::Conditional(arg0) => Self::Conditional(*arg0),
+        }
+    }
 }
 
 /// An edge in the ranking rule graph.
@@ -48,7 +61,7 @@ pub enum EdgeCondition<E> {
 /// 1. The source and destination nodes
 /// 2. The cost of traversing this edge
 /// 3. The condition associated with it
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Edge<E> {
     pub source_node: u16,
     pub dest_node: u16,
@@ -106,7 +119,7 @@ pub trait RankingRuleGraphTrait: Sized {
     /// The condition of an edge connecting two query nodes. The condition
     /// should be sufficient to compute the edge's cost and associated document ids
     /// in [`resolve_edge_condition`](RankingRuleGraphTrait::resolve_edge_condition).
-    type EdgeCondition: Sized + Clone;
+    type EdgeCondition: Sized + Clone + PartialEq + Eq + Hash;
 
     /// A structure used in the construction of the graph, created when a
     /// query graph source node is visited. It is used to determine the cost
@@ -138,6 +151,7 @@ pub trait RankingRuleGraphTrait: Sized {
     /// (with [`build_step_visit_source_node`](RankingRuleGraphTrait::build_step_visit_source_node)) to `dest_node`.
     fn build_step_visit_destination_node<'from_data, 'search: 'from_data>(
         ctx: &mut SearchContext<'search>,
+        conditions_interner: &mut Interner<Self::EdgeCondition>,
         dest_node: &QueryNode,
         source_node_data: &'from_data Self::BuildVisitedFromNode,
     ) -> Result<Vec<(u8, EdgeCondition<Self::EdgeCondition>)>>;
@@ -161,16 +175,18 @@ pub struct RankingRuleGraph<G: RankingRuleGraphTrait> {
     pub query_graph: QueryGraph,
     pub edges_store: Vec<Option<Edge<G::EdgeCondition>>>,
     pub edges_of_node: Vec<SmallBitmap>,
+    pub conditions_interner: Interner<G::EdgeCondition>,
 }
-impl<G: RankingRuleGraphTrait> Clone for RankingRuleGraph<G> {
-    fn clone(&self) -> Self {
-        Self {
-            query_graph: self.query_graph.clone(),
-            edges_store: self.edges_store.clone(),
-            edges_of_node: self.edges_of_node.clone(),
-        }
-    }
-}
+// impl<G: RankingRuleGraphTrait> Clone for RankingRuleGraph<G> {
+//     fn clone(&self) -> Self {
+//         Self {
+//             query_graph: self.query_graph.clone(),
+//             edges_store: self.edges_store.clone(),
+//             edges_of_node: self.edges_of_node.clone(),
+//             conditions_interner: self.conditions_interner.clone(),
+//         }
+//     }
+// }
 impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
     /// Remove the given edge from the ranking rule graph
     pub fn remove_ranking_rule_edge(&mut self, edge_index: u16) {

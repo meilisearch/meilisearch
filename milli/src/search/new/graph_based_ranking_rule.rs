@@ -40,10 +40,11 @@ use roaring::RoaringBitmap;
 
 use super::logger::SearchLogger;
 use super::ranking_rule_graph::{
-    EdgeDocidsCache, EmptyPathsCache, RankingRuleGraph, RankingRuleGraphTrait, TypoGraph, ProximityGraph,
+    EdgeCondition, EdgeConditionsCache, EmptyPathsCache, ProximityGraph, RankingRuleGraph,
+    RankingRuleGraphTrait, TypoGraph,
 };
 use super::small_bitmap::SmallBitmap;
-use super::{BitmapOrAllRef, QueryGraph, RankingRule, RankingRuleOutput, SearchContext};
+use super::{QueryGraph, RankingRule, RankingRuleOutput, SearchContext};
 use crate::Result;
 
 pub type Proximity = GraphBasedRankingRule<ProximityGraph>;
@@ -78,7 +79,7 @@ pub struct GraphBasedRankingRuleState<G: RankingRuleGraphTrait> {
     /// The current graph
     graph: RankingRuleGraph<G>,
     /// Cache to retrieve the docids associated with each edge
-    edge_docids_cache: EdgeDocidsCache<G>,
+    edge_conditions_cache: EdgeConditionsCache<G>,
     /// Cache used to optimistically discard paths that resolve to no documents.
     empty_paths_cache: EmptyPathsCache,
     /// A structure giving the list of possible costs from each node to the end node,
@@ -94,25 +95,27 @@ pub struct GraphBasedRankingRuleState<G: RankingRuleGraphTrait> {
 fn remove_empty_edges<'search, G: RankingRuleGraphTrait>(
     ctx: &mut SearchContext<'search>,
     graph: &mut RankingRuleGraph<G>,
-    edge_docids_cache: &mut EdgeDocidsCache<G>,
+    edge_docids_cache: &mut EdgeConditionsCache<G>,
     universe: &RoaringBitmap,
     empty_paths_cache: &mut EmptyPathsCache,
 ) -> Result<()> {
     for edge_index in 0..graph.edges_store.len() as u16 {
-        if graph.edges_store[edge_index as usize].is_none() {
+        let Some(edge) = graph.edges_store[edge_index as usize].as_ref() else {
             continue;
-        }
-        let docids = edge_docids_cache.get_edge_docids(ctx, edge_index, &*graph, universe)?;
-        match docids {
-            BitmapOrAllRef::Bitmap(docids) => {
+        };
+        let condition = edge.condition;
+
+        match condition {
+            EdgeCondition::Unconditional => continue,
+            EdgeCondition::Conditional(condition) => {
+                let docids = edge_docids_cache.get_edge_docids(ctx, condition, graph, universe)?;
                 if docids.is_disjoint(universe) {
                     graph.remove_ranking_rule_edge(edge_index);
                     empty_paths_cache.forbid_edge(edge_index);
-                    edge_docids_cache.cache.remove(&edge_index);
+                    edge_docids_cache.cache.remove(&condition);
                     continue;
                 }
             }
-            BitmapOrAllRef::All => continue,
         }
     }
     Ok(())
@@ -132,7 +135,7 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
         query_graph: &QueryGraph,
     ) -> Result<()> {
         let mut graph = RankingRuleGraph::build(ctx, query_graph.clone())?;
-        let mut edge_docids_cache = EdgeDocidsCache::default();
+        let mut edge_docids_cache = EdgeConditionsCache::default();
         let mut empty_paths_cache = EmptyPathsCache::new(graph.edges_store.len() as u16);
 
         // First simplify the graph as much as possible, by computing the docids of the edges
@@ -150,7 +153,7 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
 
         let state = GraphBasedRankingRuleState {
             graph,
-            edge_docids_cache,
+            edge_conditions_cache: edge_docids_cache,
             empty_paths_cache,
             all_distances,
             cur_distance_idx: 0,
@@ -174,11 +177,11 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
         // should never happen
         let mut state = self.state.take().unwrap();
 
-        // TODO: does this have a real positive performance cost?
+        // TODO: does this have a real positive performance impact?
         remove_empty_edges(
             ctx,
             &mut state.graph,
-            &mut state.edge_docids_cache,
+            &mut state.edge_conditions_cache,
             universe,
             &mut state.empty_paths_cache,
         )?;
@@ -201,17 +204,17 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
 
         let GraphBasedRankingRuleState {
             graph,
-            edge_docids_cache,
+            edge_conditions_cache: edge_docids_cache,
             empty_paths_cache,
             all_distances,
             cur_distance_idx: _,
         } = &mut state;
 
-        let original_universe = universe;
+        // let original_universe = universe;
         let mut universe = universe.clone();
 
         // TODO: remove this unnecessary clone
-        let original_graph = graph.clone();
+        // let original_graph = graph.clone();
         // and this vector as well
         let mut paths = vec![];
 
@@ -241,12 +244,15 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
 
                 for &edge_index in path {
                     visited_edges.push(edge_index);
-                    let edge_docids =
-                        edge_docids_cache.get_edge_docids(ctx, edge_index, graph, &universe)?;
-                    let edge_docids = match edge_docids {
-                        BitmapOrAllRef::Bitmap(b) => b,
-                        BitmapOrAllRef::All => continue,
+                    let edge = graph.edges_store[edge_index as usize].as_ref().unwrap();
+                    let condition = match edge.condition {
+                        EdgeCondition::Unconditional => continue,
+                        EdgeCondition::Conditional(condition) => condition,
                     };
+
+                    let edge_docids =
+                        edge_docids_cache.get_edge_docids(ctx, condition, graph, &universe)?;
+
                     cached_edge_docids.push((edge_index, edge_docids.clone()));
 
                     // If the edge is empty, then the path will be empty as well, we update the graph
@@ -257,7 +263,7 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
                         // 2. remove this edge from the ranking rule graph
                         graph.remove_ranking_rule_edge(edge_index);
                         // 3. Also remove the entry from the edge_docids_cache, since we don't need it anymore
-                        edge_docids_cache.cache.remove(&edge_index);
+                        edge_docids_cache.cache.remove(&condition);
                         return Ok(());
                     }
                     path_docids &= edge_docids;
@@ -279,6 +285,8 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
                                 empty_paths_cache.forbid_couple_edges(*edge_index2, edge_index);
                             }
                         }
+                        // We should maybe instead try to compute:
+                        // 0th & nth & 1st & n-1th & 2nd & etc...
                         return Ok(());
                     }
                 }
@@ -289,15 +297,15 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
             },
         )?;
 
-        G::log_state(
-            &original_graph,
-            &paths,
-            &state.empty_paths_cache,
-            original_universe,
-            &state.all_distances,
-            cost,
-            logger,
-        );
+        // G::log_state(
+        //     &original_graph,
+        //     &paths,
+        //     &state.empty_paths_cache,
+        //     original_universe,
+        //     &state.all_distances,
+        //     cost,
+        //     logger,
+        // );
 
         // TODO: Graph-based ranking rules do not (yet) modify the query graph. We could, however,
         // remove nodes and/or terms within nodes that weren't present in any of the paths.

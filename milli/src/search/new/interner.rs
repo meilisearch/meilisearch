@@ -14,6 +14,21 @@ impl<T> Interned<T> {
         Self { idx, _phantom: PhantomData }
     }
 }
+
+// TODO: the stable store should be replaced by a bump allocator
+// and the interned value should be a pointer wrapper
+// then we can get its value with `interned.get()` instead of `interner.get(interned)`
+// and as a bonus, its validity is tracked with Rust's lifetime system
+// one problem is that we need two lifetimes: one for the bump allocator, one for the
+// hashmap
+// but that's okay, we can use:
+// ```
+// struct Interner<'bump> {
+//      bump: &'bump Bump,
+//      lookup: FxHashMap
+// }
+// ```
+
 /// An [`Interner`] is used to store a unique copy of a value of type `T`. This value
 /// is then identified by a lightweight index of type [`Interned<T>`], which can
 /// be copied, compared, and hashed efficiently. An immutable reference to the original value

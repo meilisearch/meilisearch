@@ -2,14 +2,14 @@ use roaring::RoaringBitmap;
 
 use super::empty_paths_cache::EmptyPathsCache;
 use super::{EdgeCondition, RankingRuleGraph, RankingRuleGraphTrait};
-use crate::search::new::interner::Interned;
+use crate::search::new::interner::{Interned, Interner};
 use crate::search::new::logger::SearchLogger;
 use crate::search::new::query_term::{LocatedQueryTerm, Phrase, QueryTerm, WordDerivations};
 use crate::search::new::small_bitmap::SmallBitmap;
 use crate::search::new::{QueryGraph, QueryNode, SearchContext};
 use crate::Result;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum TypoEdge {
     Phrase { phrase: Interned<Phrase> },
     Word { derivations: Interned<WordDerivations>, nbr_typos: u8 },
@@ -78,15 +78,19 @@ impl RankingRuleGraphTrait for TypoGraph {
 
     fn build_step_visit_destination_node<'from_data, 'search: 'from_data>(
         ctx: &mut SearchContext<'search>,
+        conditions_interner: &mut Interner<Self::EdgeCondition>,
         to_node: &QueryNode,
         _from_node_data: &'from_data Self::BuildVisitedFromNode,
     ) -> Result<Vec<(u8, EdgeCondition<Self::EdgeCondition>)>> {
         let SearchContext { derivations_interner, .. } = ctx;
         match to_node {
             QueryNode::Term(LocatedQueryTerm { value, .. }) => match *value {
-                QueryTerm::Phrase { phrase } => {
-                    Ok(vec![(0, EdgeCondition::Conditional(TypoEdge::Phrase { phrase }))])
-                }
+                QueryTerm::Phrase { phrase } => Ok(vec![(
+                    0,
+                    EdgeCondition::Conditional(
+                        conditions_interner.insert(TypoEdge::Phrase { phrase }),
+                    ),
+                )]),
                 QueryTerm::Word { derivations } => {
                     let mut edges = vec![];
 
@@ -136,10 +140,12 @@ impl RankingRuleGraphTrait for TypoGraph {
                         if !new_derivations.is_empty() {
                             edges.push((
                                 nbr_typos,
-                                EdgeCondition::Conditional(TypoEdge::Word {
-                                    derivations: derivations_interner.insert(new_derivations),
-                                    nbr_typos,
-                                }),
+                                EdgeCondition::Conditional(conditions_interner.insert(
+                                    TypoEdge::Word {
+                                        derivations: derivations_interner.insert(new_derivations),
+                                        nbr_typos,
+                                    },
+                                )),
                             ))
                         }
                     }
