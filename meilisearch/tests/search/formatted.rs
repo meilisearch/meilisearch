@@ -443,7 +443,7 @@ async fn displayedattr_2_smol() {
         .await;
 }
 
-#[cfg(feature = "default")]
+#[cfg(feature = "chinese")]
 #[actix_rt::test]
 async fn test_cjk_highlight() {
     let server = Server::new().await;
