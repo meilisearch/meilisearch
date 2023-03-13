@@ -178,7 +178,10 @@ fn is_syntax_component(c: char) -> bool {
 }
 
 fn is_keyword(s: &str) -> bool {
-    matches!(s, "AND" | "OR" | "IN" | "NOT" | "TO" | "EXISTS" | "_geoRadius" | "_geoBoundingBox")
+    matches!(
+        s,
+        "AND" | "OR" | "IN" | "NOT" | "TO" | "EXISTS" | "NULL" | "_geoRadius" | "_geoBoundingBox"
+    )
 }
 
 #[cfg(test)]
