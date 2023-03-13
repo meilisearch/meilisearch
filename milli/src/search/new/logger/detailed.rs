@@ -545,12 +545,13 @@ shape: class"
                     )
                     .unwrap();
                 }
-                EdgeCondition::Conditional(details) => {
+                EdgeCondition::Conditional(condition) => {
+                    let condition = graph.conditions_interner.get(*condition);
                     writeln!(
                         file,
                         "{source_node} -> {dest_node} : \"cost {cost} {edge_label}\"",
                         cost = edge.cost,
-                        edge_label = R::label_for_edge_condition(details)
+                        edge_label = R::label_for_edge_condition(condition)
                     )
                     .unwrap();
                 }

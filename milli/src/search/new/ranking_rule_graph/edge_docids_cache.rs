@@ -24,9 +24,9 @@ impl<G: RankingRuleGraphTrait> EdgeConditionsCache<G> {
     ///
     /// If the cache does not yet contain these docids, they are computed
     /// and inserted in the cache.
-    pub fn get_edge_docids<'s, 'search>(
+    pub fn get_edge_docids<'s, 'ctx>(
         &'s mut self,
-        ctx: &mut SearchContext<'search>,
+        ctx: &mut SearchContext<'ctx>,
         // TODO: should be Interned<EdgeCondition>
         interned_edge_condition: Interned<G::EdgeCondition>,
         graph: &RankingRuleGraph<G>,

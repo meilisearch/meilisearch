@@ -276,8 +276,8 @@ impl LocatedQueryTerm {
 }
 
 /// Convert the tokenised search query into a list of located query terms.
-pub fn located_query_terms_from_string<'search>(
-    ctx: &mut SearchContext<'search>,
+pub fn located_query_terms_from_string<'ctx>(
+    ctx: &mut SearchContext<'ctx>,
     query: NormalizedTokenIter<Vec<u8>>,
     words_limit: Option<usize>,
 ) -> Result<Vec<LocatedQueryTerm>> {

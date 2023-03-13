@@ -36,23 +36,23 @@ impl RankingRuleGraphTrait for ProximityGraph {
         format!(", prox {proximity}, {} pairs", pairs.len())
     }
 
-    fn resolve_edge_condition<'search>(
-        ctx: &mut SearchContext<'search>,
+    fn resolve_edge_condition<'ctx>(
+        ctx: &mut SearchContext<'ctx>,
         edge: &Self::EdgeCondition,
         universe: &RoaringBitmap,
     ) -> Result<roaring::RoaringBitmap> {
         compute_docids::compute_docids(ctx, edge, universe)
     }
 
-    fn build_step_visit_source_node<'search>(
-        ctx: &mut SearchContext<'search>,
+    fn build_step_visit_source_node<'ctx>(
+        ctx: &mut SearchContext<'ctx>,
         from_node: &QueryNode,
     ) -> Result<Option<Self::BuildVisitedFromNode>> {
         build::visit_from_node(ctx, from_node)
     }
 
-    fn build_step_visit_destination_node<'from_data, 'search: 'from_data>(
-        ctx: &mut SearchContext<'search>,
+    fn build_step_visit_destination_node<'from_data, 'ctx: 'from_data>(
+        ctx: &mut SearchContext<'ctx>,
         conditions_interner: &mut Interner<Self::EdgeCondition>,
         to_node: &QueryNode,
         from_node_data: &'from_data Self::BuildVisitedFromNode,

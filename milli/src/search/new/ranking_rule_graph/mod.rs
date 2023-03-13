@@ -69,47 +69,6 @@ pub struct Edge<E> {
     pub condition: EdgeCondition<E>,
 }
 
-// pub struct SubWordDerivations {
-//     words: FxHashSet<Interned<String>>,
-//     phrases: FxHashSet<Interned<Phrase>>,
-//     use_prefix_db: bool,
-// }
-
-// pub struct EdgeWordDerivations {
-//     // TODO: not Option, instead: Any | All | Subset(SubWordDerivations)
-//     from_words: Option<SubWordDerivations>, // ???
-//     to_words: Option<SubWordDerivations>,   // + use prefix db?
-// }
-
-// fn aggregate_edge_word_derivations(
-//     graph: (),
-//     edges: Vec<usize>,
-// ) -> BTreeMap<usize, SubWordDerivations> {
-//     todo!()
-// }
-
-// fn reduce_word_term_to_sub_word_derivations(
-//     term: &mut WordDerivations,
-//     derivations: &SubWordDerivations,
-// ) {
-//     let mut new_one_typo = vec![];
-//     for w in term.one_typo {
-//         if derivations.words.contains(w) {
-//             new_one_typo.push(w);
-//         }
-//     }
-//     if term.use_prefix_db && !derivations.use_prefix_db {
-//         term.use_prefix_db = false;
-//     }
-//     // etc.
-// }
-
-// fn word_derivations_used_by_edge<G: RankingRuleGraphTrait>(
-//     edge: G::EdgeCondition,
-// ) -> SubWordDerivations {
-//     todo!()
-// }
-
 /// A trait to be implemented by a marker type to build a graph-based ranking rule.
 ///
 /// It mostly describes how to:
@@ -132,8 +91,8 @@ pub trait RankingRuleGraphTrait: Sized {
 
     /// Compute the document ids associated with the given edge condition,
     /// restricted to the given universe.
-    fn resolve_edge_condition<'search>(
-        ctx: &mut SearchContext<'search>,
+    fn resolve_edge_condition<'ctx>(
+        ctx: &mut SearchContext<'ctx>,
         edge_condition: &Self::EdgeCondition,
         universe: &RoaringBitmap,
     ) -> Result<RoaringBitmap>;
@@ -142,15 +101,15 @@ pub trait RankingRuleGraphTrait: Sized {
     ///
     /// This call is followed by zero, one or more calls to [`build_step_visit_destination_node`](RankingRuleGraphTrait::build_step_visit_destination_node),
     /// which builds the actual edges.
-    fn build_step_visit_source_node<'search>(
-        ctx: &mut SearchContext<'search>,
+    fn build_step_visit_source_node<'ctx>(
+        ctx: &mut SearchContext<'ctx>,
         source_node: &QueryNode,
     ) -> Result<Option<Self::BuildVisitedFromNode>>;
 
     /// Return the cost and condition of the edges going from the previously visited node
     /// (with [`build_step_visit_source_node`](RankingRuleGraphTrait::build_step_visit_source_node)) to `dest_node`.
-    fn build_step_visit_destination_node<'from_data, 'search: 'from_data>(
-        ctx: &mut SearchContext<'search>,
+    fn build_step_visit_destination_node<'from_data, 'ctx: 'from_data>(
+        ctx: &mut SearchContext<'ctx>,
         conditions_interner: &mut Interner<Self::EdgeCondition>,
         dest_node: &QueryNode,
         source_node_data: &'from_data Self::BuildVisitedFromNode,
@@ -177,16 +136,16 @@ pub struct RankingRuleGraph<G: RankingRuleGraphTrait> {
     pub edges_of_node: Vec<SmallBitmap>,
     pub conditions_interner: Interner<G::EdgeCondition>,
 }
-// impl<G: RankingRuleGraphTrait> Clone for RankingRuleGraph<G> {
-//     fn clone(&self) -> Self {
-//         Self {
-//             query_graph: self.query_graph.clone(),
-//             edges_store: self.edges_store.clone(),
-//             edges_of_node: self.edges_of_node.clone(),
-//             conditions_interner: self.conditions_interner.clone(),
-//         }
-//     }
-// }
+impl<G: RankingRuleGraphTrait> Clone for RankingRuleGraph<G> {
+    fn clone(&self) -> Self {
+        Self {
+            query_graph: self.query_graph.clone(),
+            edges_store: self.edges_store.clone(),
+            edges_of_node: self.edges_of_node.clone(),
+            conditions_interner: self.conditions_interner.clone(),
+        }
+    }
+}
 impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
     /// Remove the given edge from the ranking rule graph
     pub fn remove_ranking_rule_edge(&mut self, edge_index: u16) {

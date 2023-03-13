@@ -20,8 +20,8 @@ pub struct DistinctOutput {
     pub excluded: RoaringBitmap,
 }
 
-pub fn apply_distinct_rule<'search>(
-    ctx: &mut SearchContext<'search>,
+pub fn apply_distinct_rule<'ctx>(
+    ctx: &mut SearchContext<'ctx>,
     field_id: u16,
     candidates: &RoaringBitmap,
 ) -> Result<DistinctOutput> {

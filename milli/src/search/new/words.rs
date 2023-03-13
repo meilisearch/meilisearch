@@ -26,13 +26,13 @@ impl Words {
     }
 }
 
-impl<'search> RankingRule<'search, QueryGraph> for Words {
+impl<'ctx> RankingRule<'ctx, QueryGraph> for Words {
     fn id(&self) -> String {
         "words".to_owned()
     }
     fn start_iteration(
         &mut self,
-        _ctx: &mut SearchContext<'search>,
+        _ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<QueryGraph>,
         _parent_candidates: &RoaringBitmap,
         parent_query_graph: &QueryGraph,
@@ -65,7 +65,7 @@ impl<'search> RankingRule<'search, QueryGraph> for Words {
 
     fn next_bucket(
         &mut self,
-        ctx: &mut SearchContext<'search>,
+        ctx: &mut SearchContext<'ctx>,
         logger: &mut dyn SearchLogger<QueryGraph>,
         universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<QueryGraph>>> {
@@ -101,7 +101,7 @@ impl<'search> RankingRule<'search, QueryGraph> for Words {
 
     fn end_iteration(
         &mut self,
-        _ctx: &mut SearchContext<'search>,
+        _ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
         self.iterating = false;

@@ -21,11 +21,11 @@ pub struct QueryTermDocIdsCache {
 }
 impl QueryTermDocIdsCache {
     /// Get the document ids associated with the given phrase
-    pub fn get_phrase_docids<'s, 'search>(
+    pub fn get_phrase_docids<'s, 'ctx>(
         &'s mut self,
         index: &Index,
-        txn: &'search RoTxn,
-        db_cache: &mut DatabaseCache<'search>,
+        txn: &'ctx RoTxn,
+        db_cache: &mut DatabaseCache<'ctx>,
         word_interner: &Interner<String>,
         phrase_interner: &Interner<Phrase>,
         phrase: Interned<Phrase>,
@@ -40,11 +40,11 @@ impl QueryTermDocIdsCache {
     }
 
     /// Get the document ids associated with the given word derivations
-    pub fn get_word_derivations_docids<'s, 'search>(
+    pub fn get_word_derivations_docids<'s, 'ctx>(
         &'s mut self,
         index: &Index,
-        txn: &'search RoTxn,
-        db_cache: &mut DatabaseCache<'search>,
+        txn: &'ctx RoTxn,
+        db_cache: &mut DatabaseCache<'ctx>,
         word_interner: &Interner<String>,
         derivations_interner: &Interner<WordDerivations>,
         phrase_interner: &Interner<Phrase>,
@@ -110,11 +110,11 @@ impl QueryTermDocIdsCache {
     }
 
     /// Get the document ids associated with the given query term.
-    fn get_query_term_docids<'s, 'search>(
+    fn get_query_term_docids<'s, 'ctx>(
         &'s mut self,
         index: &Index,
-        txn: &'search RoTxn,
-        db_cache: &mut DatabaseCache<'search>,
+        txn: &'ctx RoTxn,
+        db_cache: &mut DatabaseCache<'ctx>,
         word_interner: &Interner<String>,
         derivations_interner: &Interner<WordDerivations>,
         phrase_interner: &Interner<Phrase>,
@@ -137,8 +137,8 @@ impl QueryTermDocIdsCache {
     }
 }
 
-pub fn resolve_query_graph<'search>(
-    ctx: &mut SearchContext<'search>,
+pub fn resolve_query_graph<'ctx>(
+    ctx: &mut SearchContext<'ctx>,
     q: &QueryGraph,
     universe: &RoaringBitmap,
 ) -> Result<RoaringBitmap> {
@@ -214,10 +214,10 @@ pub fn resolve_query_graph<'search>(
     panic!()
 }
 
-pub fn resolve_phrase<'search>(
+pub fn resolve_phrase<'ctx>(
     index: &Index,
-    txn: &'search RoTxn,
-    db_cache: &mut DatabaseCache<'search>,
+    txn: &'ctx RoTxn,
+    db_cache: &mut DatabaseCache<'ctx>,
     word_interner: &Interner<String>,
     phrase_interner: &Interner<Phrase>,
     phrase: Interned<Phrase>,

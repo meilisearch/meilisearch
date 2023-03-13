@@ -3,21 +3,19 @@ use roaring::RoaringBitmap;
 use super::logger::SearchLogger;
 use super::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait, SearchContext};
 
-pub trait RankingRuleOutputIter<'search, Query> {
+pub trait RankingRuleOutputIter<'ctx, Query> {
     fn next_bucket(&mut self) -> Result<Option<RankingRuleOutput<Query>>>;
 }
 
-pub struct RankingRuleOutputIterWrapper<'search, Query> {
-    iter: Box<dyn Iterator<Item = Result<RankingRuleOutput<Query>>> + 'search>,
+pub struct RankingRuleOutputIterWrapper<'ctx, Query> {
+    iter: Box<dyn Iterator<Item = Result<RankingRuleOutput<Query>>> + 'ctx>,
 }
-impl<'search, Query> RankingRuleOutputIterWrapper<'search, Query> {
-    pub fn new(iter: Box<dyn Iterator<Item = Result<RankingRuleOutput<Query>>> + 'search>) -> Self {
+impl<'ctx, Query> RankingRuleOutputIterWrapper<'ctx, Query> {
+    pub fn new(iter: Box<dyn Iterator<Item = Result<RankingRuleOutput<Query>>> + 'ctx>) -> Self {
         Self { iter }
     }
 }
-impl<'search, Query> RankingRuleOutputIter<'search, Query>
-    for RankingRuleOutputIterWrapper<'search, Query>
-{
+impl<'ctx, Query> RankingRuleOutputIter<'ctx, Query> for RankingRuleOutputIterWrapper<'ctx, Query> {
     fn next_bucket(&mut self) -> Result<Option<RankingRuleOutput<Query>>> {
         match self.iter.next() {
             Some(x) => x.map(Some),
@@ -35,17 +33,17 @@ use crate::{
     Result,
 };
 
-pub struct Sort<'search, Query> {
+pub struct Sort<'ctx, Query> {
     field_name: String,
     field_id: Option<FieldId>,
     is_ascending: bool,
     original_query: Option<Query>,
-    iter: Option<RankingRuleOutputIterWrapper<'search, Query>>,
+    iter: Option<RankingRuleOutputIterWrapper<'ctx, Query>>,
 }
-impl<'search, Query> Sort<'search, Query> {
+impl<'ctx, Query> Sort<'ctx, Query> {
     pub fn _new(
         index: &Index,
-        rtxn: &'search heed::RoTxn,
+        rtxn: &'ctx heed::RoTxn,
         field_name: String,
         is_ascending: bool,
     ) -> Result<Self> {
@@ -56,14 +54,14 @@ impl<'search, Query> Sort<'search, Query> {
     }
 }
 
-impl<'search, Query: RankingRuleQueryTrait> RankingRule<'search, Query> for Sort<'search, Query> {
+impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx, Query> {
     fn id(&self) -> String {
         let Self { field_name, is_ascending, .. } = self;
         format!("{field_name}:{}", if *is_ascending { "asc" } else { "desc " })
     }
     fn start_iteration(
         &mut self,
-        ctx: &mut SearchContext<'search>,
+        ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<Query>,
         parent_candidates: &RoaringBitmap,
         parent_query_graph: &Query,
@@ -106,7 +104,7 @@ impl<'search, Query: RankingRuleQueryTrait> RankingRule<'search, Query> for Sort
 
     fn next_bucket(
         &mut self,
-        _ctx: &mut SearchContext<'search>,
+        _ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<Query>,
         universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<Query>>> {
@@ -123,7 +121,7 @@ impl<'search, Query: RankingRuleQueryTrait> RankingRule<'search, Query> for Sort
 
     fn end_iteration(
         &mut self,
-        _ctx: &mut SearchContext<'search>,
+        _ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<Query>,
     ) {
         self.original_query = None;

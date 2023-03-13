@@ -92,8 +92,8 @@ pub struct GraphBasedRankingRuleState<G: RankingRuleGraphTrait> {
 /// Traverse each edge of the graph, computes its associated document ids,
 /// and remove this edge from the graph if its docids are disjoint with the
 /// given universe.
-fn remove_empty_edges<'search, G: RankingRuleGraphTrait>(
-    ctx: &mut SearchContext<'search>,
+fn remove_empty_edges<'ctx, G: RankingRuleGraphTrait>(
+    ctx: &mut SearchContext<'ctx>,
     graph: &mut RankingRuleGraph<G>,
     edge_docids_cache: &mut EdgeConditionsCache<G>,
     universe: &RoaringBitmap,
@@ -121,15 +121,13 @@ fn remove_empty_edges<'search, G: RankingRuleGraphTrait>(
     Ok(())
 }
 
-impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
-    for GraphBasedRankingRule<G>
-{
+impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBasedRankingRule<G> {
     fn id(&self) -> String {
         self.id.clone()
     }
     fn start_iteration(
         &mut self,
-        ctx: &mut SearchContext<'search>,
+        ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<QueryGraph>,
         universe: &RoaringBitmap,
         query_graph: &QueryGraph,
@@ -166,7 +164,7 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
 
     fn next_bucket(
         &mut self,
-        ctx: &mut SearchContext<'search>,
+        ctx: &mut SearchContext<'ctx>,
         logger: &mut dyn SearchLogger<QueryGraph>,
         universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<QueryGraph>>> {
@@ -210,11 +208,11 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
             cur_distance_idx: _,
         } = &mut state;
 
-        // let original_universe = universe;
+        let original_universe = universe;
         let mut universe = universe.clone();
 
         // TODO: remove this unnecessary clone
-        // let original_graph = graph.clone();
+        let original_graph = graph.clone();
         // and this vector as well
         let mut paths = vec![];
 
@@ -297,15 +295,15 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
             },
         )?;
 
-        // G::log_state(
-        //     &original_graph,
-        //     &paths,
-        //     &state.empty_paths_cache,
-        //     original_universe,
-        //     &state.all_distances,
-        //     cost,
-        //     logger,
-        // );
+        G::log_state(
+            &original_graph,
+            &paths,
+            &state.empty_paths_cache,
+            original_universe,
+            &state.all_distances,
+            cost,
+            logger,
+        );
 
         // TODO: Graph-based ranking rules do not (yet) modify the query graph. We could, however,
         // remove nodes and/or terms within nodes that weren't present in any of the paths.
@@ -318,7 +316,7 @@ impl<'search, G: RankingRuleGraphTrait> RankingRule<'search, QueryGraph>
 
     fn end_iteration(
         &mut self,
-        _ctx: &mut SearchContext<'search>,
+        _ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
         self.state = None;

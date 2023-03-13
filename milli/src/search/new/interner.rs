@@ -33,6 +33,7 @@ impl<T> Interned<T> {
 /// is then identified by a lightweight index of type [`Interned<T>`], which can
 /// be copied, compared, and hashed efficiently. An immutable reference to the original value
 /// can be retrieved using `self.get(interned)`.
+#[derive(Clone)]
 pub struct Interner<T> {
     stable_store: Vec<T>,
     lookup: FxHashMap<T, Interned<T>>,

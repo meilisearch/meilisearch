@@ -28,8 +28,8 @@ impl RankingRuleGraphTrait for TypoGraph {
         }
     }
 
-    fn resolve_edge_condition<'db_cache, 'search>(
-        ctx: &mut SearchContext<'search>,
+    fn resolve_edge_condition<'db_cache, 'ctx>(
+        ctx: &mut SearchContext<'ctx>,
         edge: &Self::EdgeCondition,
         universe: &RoaringBitmap,
     ) -> Result<RoaringBitmap> {
@@ -69,15 +69,15 @@ impl RankingRuleGraphTrait for TypoGraph {
         }
     }
 
-    fn build_step_visit_source_node<'search>(
-        _ctx: &mut SearchContext<'search>,
+    fn build_step_visit_source_node<'ctx>(
+        _ctx: &mut SearchContext<'ctx>,
         _from_node: &QueryNode,
     ) -> Result<Option<Self::BuildVisitedFromNode>> {
         Ok(Some(()))
     }
 
-    fn build_step_visit_destination_node<'from_data, 'search: 'from_data>(
-        ctx: &mut SearchContext<'search>,
+    fn build_step_visit_destination_node<'from_data, 'ctx: 'from_data>(
+        ctx: &mut SearchContext<'ctx>,
         conditions_interner: &mut Interner<Self::EdgeCondition>,
         to_node: &QueryNode,
         _from_node_data: &'from_data Self::BuildVisitedFromNode,

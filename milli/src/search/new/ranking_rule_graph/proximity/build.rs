@@ -58,8 +58,8 @@ pub fn visit_from_node(
     }))
 }
 
-pub fn visit_to_node<'search, 'from_data>(
-    ctx: &mut SearchContext<'search>,
+pub fn visit_to_node<'ctx, 'from_data>(
+    ctx: &mut SearchContext<'ctx>,
     conditions_interner: &mut Interner<ProximityEdge>,
     to_node: &QueryNode,
     from_node_data: &'from_data (WordDerivations, i8),

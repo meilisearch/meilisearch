@@ -4,8 +4,8 @@ use super::{ProximityEdge, WordPair};
 use crate::search::new::SearchContext;
 use crate::{CboRoaringBitmapCodec, Result};
 
-pub fn compute_docids<'search>(
-    ctx: &mut SearchContext<'search>,
+pub fn compute_docids<'ctx>(
+    ctx: &mut SearchContext<'ctx>,
     edge: &ProximityEdge,
     universe: &RoaringBitmap,
 ) -> Result<RoaringBitmap> {

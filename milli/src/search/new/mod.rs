@@ -35,17 +35,17 @@ use crate::search::new::query_term::located_query_terms_from_string;
 use crate::search::new::words::Words;
 use crate::{Filter, Index, Result, TermsMatchingStrategy};
 
-pub struct SearchContext<'search> {
-    pub index: &'search Index,
-    pub txn: &'search RoTxn<'search>,
-    pub db_cache: DatabaseCache<'search>,
+pub struct SearchContext<'ctx> {
+    pub index: &'ctx Index,
+    pub txn: &'ctx RoTxn<'ctx>,
+    pub db_cache: DatabaseCache<'ctx>,
     pub word_interner: Interner<String>,
     pub phrase_interner: Interner<Phrase>,
     pub derivations_interner: Interner<WordDerivations>,
     pub query_term_docids: QueryTermDocIdsCache,
 }
-impl<'search> SearchContext<'search> {
-    pub fn new(index: &'search Index, txn: &'search RoTxn<'search>) -> Self {
+impl<'ctx> SearchContext<'ctx> {
+    pub fn new(index: &'ctx Index, txn: &'ctx RoTxn<'ctx>) -> Self {
         Self {
             index,
             txn,
@@ -59,8 +59,8 @@ impl<'search> SearchContext<'search> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn resolve_maximally_reduced_query_graph<'search>(
-    ctx: &mut SearchContext<'search>,
+fn resolve_maximally_reduced_query_graph<'ctx>(
+    ctx: &mut SearchContext<'ctx>,
     universe: &RoaringBitmap,
     query_graph: &QueryGraph,
     matching_strategy: TermsMatchingStrategy,
@@ -99,9 +99,9 @@ fn resolve_maximally_reduced_query_graph<'search>(
 
     Ok(docids)
 }
-fn get_ranking_rules_for_placeholder_search<'search>(
-    ctx: &SearchContext<'search>,
-) -> Result<Vec<Box<dyn RankingRule<'search, PlaceholderQuery>>>> {
+fn get_ranking_rules_for_placeholder_search<'ctx>(
+    ctx: &SearchContext<'ctx>,
+) -> Result<Vec<Box<dyn RankingRule<'ctx, PlaceholderQuery>>>> {
     // let sort = false;
     // let mut asc = HashSet::new();
     // let mut desc = HashSet::new();
@@ -122,10 +122,10 @@ fn get_ranking_rules_for_placeholder_search<'search>(
     }
     Ok(ranking_rules)
 }
-fn get_ranking_rules_for_query_graph_search<'search>(
-    ctx: &SearchContext<'search>,
+fn get_ranking_rules_for_query_graph_search<'ctx>(
+    ctx: &SearchContext<'ctx>,
     terms_matching_strategy: TermsMatchingStrategy,
-) -> Result<Vec<Box<dyn RankingRule<'search, QueryGraph>>>> {
+) -> Result<Vec<Box<dyn RankingRule<'ctx, QueryGraph>>>> {
     // query graph search
     let mut words = false;
     let mut typo = false;
@@ -215,8 +215,8 @@ fn get_ranking_rules_for_query_graph_search<'search>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn execute_search<'search>(
-    ctx: &mut SearchContext<'search>,
+pub fn execute_search<'ctx>(
+    ctx: &mut SearchContext<'ctx>,
     query: &str,
     terms_matching_strategy: TermsMatchingStrategy,
     filters: Option<Filter>,
@@ -295,45 +295,45 @@ mod tests {
 
         println!("nbr docids: {}", index.documents_ids(&txn).unwrap().len());
 
-        // loop {
-        let start = Instant::now();
+        loop {
+            let start = Instant::now();
 
-        let mut logger = crate::search::new::logger::detailed::DetailedSearchLogger::new("log");
-        let mut ctx = SearchContext::new(&index, &txn);
-        let results = execute_search(
-            &mut ctx,
-            "zero config",
-            TermsMatchingStrategy::Last,
-            None,
-            0,
-            20,
-            &mut DefaultSearchLogger,
-            &mut logger,
-        )
-        .unwrap();
+            // let mut logger = crate::search::new::logger::detailed::DetailedSearchLogger::new("log");
+            let mut ctx = SearchContext::new(&index, &txn);
+            let results = execute_search(
+                &mut ctx,
+                "zero config",
+                TermsMatchingStrategy::Last,
+                None,
+                0,
+                20,
+                &mut DefaultSearchLogger,
+                &mut DefaultSearchLogger,
+            )
+            .unwrap();
 
-        logger.write_d2_description(&mut ctx);
+            // logger.write_d2_description(&mut ctx);
 
-        let elapsed = start.elapsed();
-        println!("{}us", elapsed.as_micros());
+            let elapsed = start.elapsed();
+            println!("{}us", elapsed.as_micros());
 
-        let _documents = index
-            .documents(&txn, results.iter().copied())
-            .unwrap()
-            .into_iter()
-            .map(|(id, obkv)| {
-                let mut object = serde_json::Map::default();
-                for (fid, fid_name) in index.fields_ids_map(&txn).unwrap().iter() {
-                    let value = obkv.get(fid).unwrap();
-                    let value: serde_json::Value = serde_json::from_slice(value).unwrap();
-                    object.insert(fid_name.to_owned(), value);
-                }
-                (id, serde_json::to_string_pretty(&object).unwrap())
-            })
-            .collect::<Vec<_>>();
+            let _documents = index
+                .documents(&txn, results.iter().copied())
+                .unwrap()
+                .into_iter()
+                .map(|(id, obkv)| {
+                    let mut object = serde_json::Map::default();
+                    for (fid, fid_name) in index.fields_ids_map(&txn).unwrap().iter() {
+                        let value = obkv.get(fid).unwrap();
+                        let value: serde_json::Value = serde_json::from_slice(value).unwrap();
+                        object.insert(fid_name.to_owned(), value);
+                    }
+                    (id, serde_json::to_string_pretty(&object).unwrap())
+                })
+                .collect::<Vec<_>>();
 
-        println!("{}us: {:?}", elapsed.as_micros(), results);
-        // }
+            println!("{}us: {:?}", elapsed.as_micros(), results);
+        }
         // for (id, _document) in documents {
         //     println!("{id}:");
         //     // println!("{document}");

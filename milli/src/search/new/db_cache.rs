@@ -14,25 +14,25 @@ use crate::{Index, Result};
 /// database lookup and instead get a direct reference to the value using a fast
 /// local HashMap lookup.
 #[derive(Default)]
-pub struct DatabaseCache<'search> {
+pub struct DatabaseCache<'ctx> {
     pub word_pair_proximity_docids:
-        FxHashMap<(u8, Interned<String>, Interned<String>), Option<&'search [u8]>>,
+        FxHashMap<(u8, Interned<String>, Interned<String>), Option<&'ctx [u8]>>,
     pub word_prefix_pair_proximity_docids:
-        FxHashMap<(u8, Interned<String>, Interned<String>), Option<&'search [u8]>>,
+        FxHashMap<(u8, Interned<String>, Interned<String>), Option<&'ctx [u8]>>,
     pub prefix_word_pair_proximity_docids:
-        FxHashMap<(u8, Interned<String>, Interned<String>), Option<&'search [u8]>>,
-    pub word_docids: FxHashMap<Interned<String>, Option<&'search [u8]>>,
-    pub exact_word_docids: FxHashMap<Interned<String>, Option<&'search [u8]>>,
-    pub word_prefix_docids: FxHashMap<Interned<String>, Option<&'search [u8]>>,
+        FxHashMap<(u8, Interned<String>, Interned<String>), Option<&'ctx [u8]>>,
+    pub word_docids: FxHashMap<Interned<String>, Option<&'ctx [u8]>>,
+    pub exact_word_docids: FxHashMap<Interned<String>, Option<&'ctx [u8]>>,
+    pub word_prefix_docids: FxHashMap<Interned<String>, Option<&'ctx [u8]>>,
 }
-impl<'search> DatabaseCache<'search> {
+impl<'ctx> DatabaseCache<'ctx> {
     fn get_value<'v, K1, KC>(
-        txn: &'search RoTxn,
+        txn: &'ctx RoTxn,
         cache_key: K1,
         db_key: &'v KC::EItem,
-        cache: &mut FxHashMap<K1, Option<&'search [u8]>>,
+        cache: &mut FxHashMap<K1, Option<&'ctx [u8]>>,
         db: Database<KC, ByteSlice>,
-    ) -> Result<Option<&'search [u8]>>
+    ) -> Result<Option<&'ctx [u8]>>
     where
         K1: Copy + Eq + Hash,
         KC: BytesEncode<'v>,
@@ -52,10 +52,10 @@ impl<'search> DatabaseCache<'search> {
     pub fn get_word_docids(
         &mut self,
         index: &Index,
-        txn: &'search RoTxn,
+        txn: &'ctx RoTxn,
         word_interner: &Interner<String>,
         word: Interned<String>,
-    ) -> Result<Option<&'search [u8]>> {
+    ) -> Result<Option<&'ctx [u8]>> {
         Self::get_value(
             txn,
             word,
@@ -68,10 +68,10 @@ impl<'search> DatabaseCache<'search> {
     pub fn get_word_prefix_docids(
         &mut self,
         index: &Index,
-        txn: &'search RoTxn,
+        txn: &'ctx RoTxn,
         word_interner: &Interner<String>,
         prefix: Interned<String>,
-    ) -> Result<Option<&'search [u8]>> {
+    ) -> Result<Option<&'ctx [u8]>> {
         Self::get_value(
             txn,
             prefix,
@@ -84,12 +84,12 @@ impl<'search> DatabaseCache<'search> {
     pub fn get_word_pair_proximity_docids(
         &mut self,
         index: &Index,
-        txn: &'search RoTxn,
+        txn: &'ctx RoTxn,
         word_interner: &Interner<String>,
         word1: Interned<String>,
         word2: Interned<String>,
         proximity: u8,
-    ) -> Result<Option<&'search [u8]>> {
+    ) -> Result<Option<&'ctx [u8]>> {
         Self::get_value(
             txn,
             (proximity, word1, word2),
@@ -102,12 +102,12 @@ impl<'search> DatabaseCache<'search> {
     pub fn get_word_prefix_pair_proximity_docids(
         &mut self,
         index: &Index,
-        txn: &'search RoTxn,
+        txn: &'ctx RoTxn,
         word_interner: &Interner<String>,
         word1: Interned<String>,
         prefix2: Interned<String>,
         proximity: u8,
-    ) -> Result<Option<&'search [u8]>> {
+    ) -> Result<Option<&'ctx [u8]>> {
         Self::get_value(
             txn,
             (proximity, word1, prefix2),
@@ -119,12 +119,12 @@ impl<'search> DatabaseCache<'search> {
     pub fn get_prefix_word_pair_proximity_docids(
         &mut self,
         index: &Index,
-        txn: &'search RoTxn,
+        txn: &'ctx RoTxn,
         word_interner: &Interner<String>,
         left_prefix: Interned<String>,
         right: Interned<String>,
         proximity: u8,
-    ) -> Result<Option<&'search [u8]>> {
+    ) -> Result<Option<&'ctx [u8]>> {
         Self::get_value(
             txn,
             (proximity, left_prefix, right),

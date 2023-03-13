@@ -7,6 +7,12 @@ use crate::search::new::{QueryGraph, SearchContext};
 use crate::Result;
 
 impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
+    // TODO: here, the docids of all the edges should already be computed!
+    // an edge condition would then be reduced to a (ptr to) a roaring bitmap?
+    // we could build fewer of them by directly comparing them with the universe
+    // (e.g. for each word pairs?) with `deserialize_within_universe` maybe
+    //
+
     /// Build the ranking rule graph from the given query graph
     pub fn build(ctx: &mut SearchContext, query_graph: QueryGraph) -> Result<Self> {
         let QueryGraph { nodes: graph_nodes, edges: graph_edges, .. } = &query_graph;

@@ -17,10 +17,10 @@ impl RankingRuleQueryTrait for QueryGraph {}
 
 /// A trait that must be implemented by all ranking rules.
 ///
-/// It is generic over `'search`, the lifetime of the search context
+/// It is generic over `'ctx`, the lifetime of the search context
 /// (i.e. the read transaction and the cache) and over `Query`, which
 /// can be either [`PlaceholderQuery`] or [`QueryGraph`].
-pub trait RankingRule<'search, Query: RankingRuleQueryTrait> {
+pub trait RankingRule<'ctx, Query: RankingRuleQueryTrait> {
     fn id(&self) -> String;
 
     /// Prepare the ranking rule such that it can start iterating over its
@@ -29,7 +29,7 @@ pub trait RankingRule<'search, Query: RankingRuleQueryTrait> {
     /// The given universe is the universe that will be given to [`next_bucket`](RankingRule::next_bucket).
     fn start_iteration(
         &mut self,
-        ctx: &mut SearchContext<'search>,
+        ctx: &mut SearchContext<'ctx>,
         logger: &mut dyn SearchLogger<Query>,
         universe: &RoaringBitmap,
         query: &Query,
@@ -44,7 +44,7 @@ pub trait RankingRule<'search, Query: RankingRuleQueryTrait> {
     /// - the universe given to [`start_iteration`](RankingRule::start_iteration)
     fn next_bucket(
         &mut self,
-        ctx: &mut SearchContext<'search>,
+        ctx: &mut SearchContext<'ctx>,
         logger: &mut dyn SearchLogger<Query>,
         universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<Query>>>;
@@ -53,7 +53,7 @@ pub trait RankingRule<'search, Query: RankingRuleQueryTrait> {
     /// The next call to this ranking rule, if any, will be [`start_iteration`](RankingRule::start_iteration).
     fn end_iteration(
         &mut self,
-        ctx: &mut SearchContext<'search>,
+        ctx: &mut SearchContext<'ctx>,
         logger: &mut dyn SearchLogger<Query>,
     );
 }
@@ -68,15 +68,16 @@ pub struct RankingRuleOutput<Q> {
     pub candidates: RoaringBitmap,
 }
 
-pub fn bucket_sort<'search, Q: RankingRuleQueryTrait>(
-    ctx: &mut SearchContext<'search>,
-    mut ranking_rules: Vec<Box<dyn RankingRule<'search, Q>>>,
+pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
+    ctx: &mut SearchContext<'ctx>,
+    mut ranking_rules: Vec<Box<dyn RankingRule<'ctx, Q>>>,
     query: &Q,
     universe: &RoaringBitmap,
     from: usize,
     length: usize,
     logger: &mut dyn SearchLogger<Q>,
 ) -> Result<Vec<u32>> {
+    logger.initial_query(query);
     logger.ranking_rules(&ranking_rules);
     logger.initial_universe(universe);
 
