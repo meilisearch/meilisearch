@@ -114,9 +114,9 @@ impl<W: Write> DocumentsBatchBuilder<W> {
                 self.value_buffer.clear();
 
                 let value = &record[*i];
+                let trimmed_value = value.trim();
                 match type_ {
                     AllowedType::Number => {
-                        let trimmed_value = value.trim();
                         if trimmed_value.is_empty() {
                             to_writer(&mut self.value_buffer, &Value::Null)?;
                         } else if let Ok(integer) = trimmed_value.parse::<i64>() {
@@ -137,7 +137,6 @@ impl<W: Write> DocumentsBatchBuilder<W> {
                         }
                     }
                     AllowedType::Boolean => {
-                        let trimmed_value = value.trim();
                         if trimmed_value.is_empty() {
                             to_writer(&mut self.value_buffer, &Value::Null)?;
                         } else {
