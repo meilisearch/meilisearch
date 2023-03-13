@@ -7,16 +7,27 @@ use super::empty_paths_cache::EmptyPathsCache;
 use super::{EdgeCondition, RankingRuleGraphTrait};
 use crate::search::new::interner::{Interned, Interner};
 use crate::search::new::logger::SearchLogger;
-use crate::search::new::query_term::WordDerivations;
+use crate::search::new::query_term::Phrase;
 use crate::search::new::small_bitmap::SmallBitmap;
 use crate::search::new::{QueryGraph, QueryNode, SearchContext};
 use crate::Result;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum WordPair {
-    Words { left: Interned<String>, right: Interned<String> },
-    WordPrefix { left: Interned<String>, right_prefix: Interned<String> },
-    WordPrefixSwapped { left_prefix: Interned<String>, right: Interned<String> },
+    Words {
+        phrases: Vec<Interned<Phrase>>,
+        left: Interned<String>,
+        right: Interned<String>,
+    },
+    WordPrefix {
+        phrases: Vec<Interned<Phrase>>,
+        left: Interned<String>,
+        right_prefix: Interned<String>,
+    },
+    WordPrefixSwapped {
+        left_prefix: Interned<String>,
+        right: Interned<String>,
+    },
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -29,7 +40,7 @@ pub enum ProximityGraph {}
 
 impl RankingRuleGraphTrait for ProximityGraph {
     type EdgeCondition = ProximityEdge;
-    type BuildVisitedFromNode = (WordDerivations, i8);
+    type BuildVisitedFromNode = (Vec<(Option<Interned<Phrase>>, Interned<String>)>, i8);
 
     fn label_for_edge_condition(edge: &Self::EdgeCondition) -> String {
         let ProximityEdge { pairs, proximity } = edge;
@@ -54,10 +65,15 @@ impl RankingRuleGraphTrait for ProximityGraph {
     fn build_step_visit_destination_node<'from_data, 'ctx: 'from_data>(
         ctx: &mut SearchContext<'ctx>,
         conditions_interner: &mut Interner<Self::EdgeCondition>,
-        to_node: &QueryNode,
-        from_node_data: &'from_data Self::BuildVisitedFromNode,
+        dest_node: &QueryNode,
+        source_node_data: &'from_data Self::BuildVisitedFromNode,
     ) -> Result<Vec<(u8, EdgeCondition<Self::EdgeCondition>)>> {
-        build::visit_to_node(ctx, conditions_interner, to_node, from_node_data)
+        build::build_step_visit_destination_node(
+            ctx,
+            conditions_interner,
+            source_node_data,
+            dest_node,
+        )
     }
 
     fn log_state(

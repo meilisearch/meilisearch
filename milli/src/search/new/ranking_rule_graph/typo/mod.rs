@@ -84,7 +84,7 @@ impl RankingRuleGraphTrait for TypoGraph {
     ) -> Result<Vec<(u8, EdgeCondition<Self::EdgeCondition>)>> {
         let SearchContext { derivations_interner, .. } = ctx;
         match to_node {
-            QueryNode::Term(LocatedQueryTerm { value, .. }) => match *value {
+            QueryNode::Term(LocatedQueryTerm { value, positions }) => match *value {
                 QueryTerm::Phrase { phrase } => Ok(vec![(
                     0,
                     EdgeCondition::Conditional(
@@ -93,57 +93,62 @@ impl RankingRuleGraphTrait for TypoGraph {
                 )]),
                 QueryTerm::Word { derivations } => {
                     let mut edges = vec![];
+                    // Ngrams have a base typo cost
+                    // 2-gram -> equivalent to 1 typo
+                    // 3-gram -> equivalent to 2 typos
+                    let base_cost = positions.len().max(2) as u8;
 
                     for nbr_typos in 0..=2 {
                         let derivations = derivations_interner.get(derivations).clone();
                         let new_derivations = match nbr_typos {
-                            0 => {
-                                // TODO: think about how split words and synonyms should be handled here
-                                // TODO: what about ngrams?
-                                // Maybe 2grams should have one typo by default and 3grams 2 typos by default
-                                WordDerivations {
-                                    original: derivations.original,
-                                    synonyms: derivations.synonyms,
-                                    split_words: None,
-                                    zero_typo: derivations.zero_typo,
-                                    one_typo: Box::new([]),
-                                    two_typos: Box::new([]),
-                                    use_prefix_db: derivations.use_prefix_db,
-                                }
-                            }
+                            0 => WordDerivations {
+                                original: derivations.original,
+                                is_prefix: derivations.is_prefix,
+                                zero_typo: derivations.zero_typo,
+                                prefix_of: derivations.prefix_of,
+                                synonyms: derivations.synonyms,
+                                split_words: None,
+                                one_typo: Box::new([]),
+                                two_typos: Box::new([]),
+                                use_prefix_db: derivations.use_prefix_db,
+                            },
                             1 => {
                                 // What about split words and synonyms here?
                                 WordDerivations {
                                     original: derivations.original,
+                                    is_prefix: false,
+                                    zero_typo: None,
+                                    prefix_of: Box::new([]),
                                     synonyms: Box::new([]),
                                     split_words: derivations.split_words,
-                                    zero_typo: Box::new([]),
                                     one_typo: derivations.one_typo,
                                     two_typos: Box::new([]),
-                                    use_prefix_db: false, // false because all items from use_prefix_db haev 0 typos
+                                    use_prefix_db: None, // false because all items from use_prefix_db have 0 typos
                                 }
                             }
                             2 => {
                                 // What about split words and synonyms here?
                                 WordDerivations {
                                     original: derivations.original,
+                                    zero_typo: None,
+                                    is_prefix: false,
+                                    prefix_of: Box::new([]),
                                     synonyms: Box::new([]),
                                     split_words: None,
-                                    zero_typo: Box::new([]),
                                     one_typo: Box::new([]),
                                     two_typos: derivations.two_typos,
-                                    use_prefix_db: false, // false because all items from use_prefix_db haev 0 typos
+                                    use_prefix_db: None, // false because all items from use_prefix_db have 0 typos
                                 }
                             }
                             _ => panic!(),
                         };
                         if !new_derivations.is_empty() {
                             edges.push((
-                                nbr_typos,
+                                nbr_typos as u8 + base_cost,
                                 EdgeCondition::Conditional(conditions_interner.insert(
                                     TypoEdge::Word {
                                         derivations: derivations_interner.insert(new_derivations),
-                                        nbr_typos,
+                                        nbr_typos: nbr_typos as u8,
                                     },
                                 )),
                             ))

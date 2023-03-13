@@ -54,25 +54,31 @@ impl QueryTermDocIdsCache {
             return Ok(&self.derivations[&derivations]);
         };
         let WordDerivations {
-            original,
+            original: _,
+            is_prefix: _,
+            zero_typo,
+            prefix_of,
             synonyms,
             split_words,
-            zero_typo,
             one_typo,
             two_typos,
             use_prefix_db,
         } = derivations_interner.get(derivations);
         let mut or_docids = vec![];
-        for word in zero_typo.iter().chain(one_typo.iter()).chain(two_typos.iter()).copied() {
+        for word in zero_typo
+            .iter()
+            .chain(prefix_of.iter())
+            .chain(one_typo.iter())
+            .chain(two_typos.iter())
+            .copied()
+        {
             if let Some(word_docids) = db_cache.get_word_docids(index, txn, word_interner, word)? {
                 or_docids.push(word_docids);
             }
         }
-        if *use_prefix_db {
-            // TODO: this will change if we decide to change from (original, zero_typo) to:
-            // (debug_original, prefix_of, zero_typo)
+        if let Some(prefix) = use_prefix_db {
             if let Some(prefix_docids) =
-                db_cache.get_word_prefix_docids(index, txn, word_interner, *original)?
+                db_cache.get_word_prefix_docids(index, txn, word_interner, *prefix)?
             {
                 or_docids.push(prefix_docids);
             }

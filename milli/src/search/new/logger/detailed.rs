@@ -447,6 +447,8 @@ results.{random} {{
                         use_prefix_db,
                         synonyms,
                         split_words,
+                        prefix_of,
+                        is_prefix: _,
                     } = ctx.derivations_interner.get(*derivations);
 
                     let original = ctx.word_interner.get(*original);
@@ -459,6 +461,10 @@ shape: class"
                     for w in zero_typo.iter().copied() {
                         let w = ctx.word_interner.get(w);
                         writeln!(file, "\"{w}\" : 0").unwrap();
+                    }
+                    for w in prefix_of.iter().copied() {
+                        let w = ctx.word_interner.get(w);
+                        writeln!(file, "\"{w}\" : 0P").unwrap();
                     }
                     for w in one_typo.iter().copied() {
                         let w = ctx.word_interner.get(w);
@@ -478,8 +484,9 @@ shape: class"
                         let phrase_str = phrase.description(&ctx.word_interner);
                         writeln!(file, "\"{phrase_str}\" : synonym").unwrap();
                     }
-                    if *use_prefix_db {
-                        writeln!(file, "use prefix DB : true").unwrap();
+                    if let Some(use_prefix_db) = use_prefix_db {
+                        let p = ctx.word_interner.get(*use_prefix_db);
+                        writeln!(file, "use prefix DB : {p}").unwrap();
                     }
                     for (d, edges) in distances.iter() {
                         writeln!(file, "\"distance {d}\" : {:?}", edges.iter().collect::<Vec<_>>())

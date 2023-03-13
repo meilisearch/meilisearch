@@ -13,7 +13,7 @@ use super::interner::{Interned, Interner};
 use super::SearchContext;
 use crate::search::fst_utils::{Complement, Intersection, StartsWith, Union};
 use crate::search::{build_dfa, get_first};
-use crate::{CboRoaringBitmapLenCodec, Index, Result};
+use crate::{CboRoaringBitmapLenCodec, Index, Result, MAX_WORD_LENGTH};
 
 /// A phrase in the user's search query, consisting of several words
 /// that must appear side-by-side in the search results.
@@ -31,19 +31,19 @@ impl Phrase {
 /// a term in the user's search query.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct WordDerivations {
-    /// The original word
+    /// The original terms, for debugging purposes
     pub original: Interned<String>,
-    // TODO: original should only be used for debugging purposes?
-    // TODO: pub zero_typo: Option<Interned<String>>,
-    // TODO: pub prefix_of: Box<[Interned<String>]>,
+    pub is_prefix: bool,
+
+    /// A single word equivalent to the original one, with zero typos
+    pub zero_typo: Option<Interned<String>>,
+    /// All the words that contain the original word as prefix
+    pub prefix_of: Box<[Interned<String>]>,
     /// All the synonyms of the original word
     pub synonyms: Box<[Interned<Phrase>]>,
 
     /// The original word split into multiple consecutive words
     pub split_words: Option<Interned<Phrase>>,
-
-    /// The original words and words which are prefixed by it
-    pub zero_typo: Box<[Interned<String>]>,
 
     /// Words that are 1 typo away from the original word
     pub one_typo: Box<[Interned<String>]>,
@@ -51,26 +51,50 @@ pub struct WordDerivations {
     /// Words that are 2 typos away from the original word
     pub two_typos: Box<[Interned<String>]>,
 
-    /// True if the prefix databases must be used to retrieve
-    /// the words which are prefixed by the original word.
-    pub use_prefix_db: bool,
+    /// A prefix in the prefix databases matching the original word
+    pub use_prefix_db: Option<Interned<String>>,
 }
 impl WordDerivations {
+    pub fn empty(word_interner: &mut Interner<String>, original: &str) -> Self {
+        Self {
+            original: word_interner.insert(original.to_owned()),
+            is_prefix: false,
+            zero_typo: None,
+            prefix_of: Box::new([]),
+            synonyms: Box::new([]),
+            split_words: None,
+            one_typo: Box::new([]),
+            two_typos: Box::new([]),
+            use_prefix_db: None,
+        }
+    }
     /// Return an iterator over all the single words derived from the original word.
     ///
     /// This excludes synonyms, split words, and words stored in the prefix databases.
     pub fn all_single_word_derivations_except_prefix_db(
         &'_ self,
     ) -> impl Iterator<Item = Interned<String>> + Clone + '_ {
-        self.zero_typo.iter().chain(self.one_typo.iter()).chain(self.two_typos.iter()).copied()
+        self.zero_typo
+            .iter()
+            .chain(self.prefix_of.iter())
+            .chain(self.one_typo.iter())
+            .chain(self.two_typos.iter())
+            .copied()
+    }
+    /// Return an iterator over all the single words derived from the original word.
+    ///
+    /// This excludes synonyms, split words, and words stored in the prefix databases.
+    pub fn all_phrase_derivations(&'_ self) -> impl Iterator<Item = Interned<Phrase>> + Clone + '_ {
+        self.split_words.iter().chain(self.synonyms.iter()).copied()
     }
     pub fn is_empty(&self) -> bool {
-        self.zero_typo.is_empty()
+        self.zero_typo.is_none()
             && self.one_typo.is_empty()
             && self.two_typos.is_empty()
+            && self.prefix_of.is_empty()
             && self.synonyms.is_empty()
             && self.split_words.is_none()
-            && !self.use_prefix_db
+            && self.use_prefix_db.is_none()
     }
 }
 
@@ -80,7 +104,11 @@ pub fn word_derivations(
     word: &str,
     max_typo: u8,
     is_prefix: bool,
-) -> Result<Interned<WordDerivations>> {
+) -> Result<WordDerivations> {
+    if word.len() > MAX_WORD_LENGTH {
+        return Ok(WordDerivations::empty(&mut ctx.word_interner, word));
+    }
+
     let fst = ctx.index.words_fst(ctx.txn)?;
     let word_interned = ctx.word_interner.insert(word.to_owned());
 
@@ -91,23 +119,29 @@ pub fn word_derivations(
             .remap_data_type::<DecodeIgnore>()
             .get(ctx.txn, word)?
             .is_some();
+    let use_prefix_db = if use_prefix_db { Some(word_interned) } else { None };
 
-    let mut zero_typo = vec![];
+    let mut zero_typo = None;
+    let mut prefix_of = vec![];
     let mut one_typo = vec![];
     let mut two_typos = vec![];
 
+    if fst.contains(word) {
+        zero_typo = Some(word_interned);
+    }
+
     if max_typo == 0 {
-        if is_prefix && !use_prefix_db {
+        if is_prefix && use_prefix_db.is_none() {
             let prefix = Str::new(word).starts_with();
             let mut stream = fst.search(prefix).into_stream();
 
             while let Some(derived_word) = stream.next() {
                 let derived_word = std::str::from_utf8(derived_word)?.to_owned();
                 let derived_word_interned = ctx.word_interner.insert(derived_word);
-                zero_typo.push(derived_word_interned);
+                if derived_word_interned != word_interned {
+                    prefix_of.push(derived_word_interned);
+                }
             }
-        } else if fst.contains(word) {
-            zero_typo.push(word_interned);
         }
     } else if max_typo == 1 {
         let dfa = build_dfa(word, 1, is_prefix);
@@ -122,7 +156,9 @@ pub fn word_derivations(
             let derived_word_interned = ctx.word_interner.insert(derived_word.to_owned());
             match d.to_u8() {
                 0 => {
-                    zero_typo.push(derived_word_interned);
+                    if derived_word_interned != word_interned {
+                        prefix_of.push(derived_word_interned);
+                    }
                 }
                 1 => {
                     one_typo.push(derived_word_interned);
@@ -153,7 +189,9 @@ pub fn word_derivations(
                 let d = second_dfa.distance((state.1).0);
                 match d.to_u8() {
                     0 => {
-                        zero_typo.push(derived_word_interned);
+                        if derived_word_interned != word_interned {
+                            prefix_of.push(derived_word_interned);
+                        }
                     }
                     1 => {
                         one_typo.push(derived_word_interned);
@@ -185,17 +223,17 @@ pub fn word_derivations(
         })
         .collect();
 
-    let interned = ctx.derivations_interner.insert(WordDerivations {
-        original: ctx.word_interner.insert(word.to_owned()),
+    Ok(WordDerivations {
+        original: word_interned,
+        is_prefix,
+        zero_typo,
+        prefix_of: prefix_of.into_boxed_slice(),
         synonyms,
         split_words,
-        zero_typo: zero_typo.into_boxed_slice(),
         one_typo: one_typo.into_boxed_slice(),
         two_typos: two_typos.into_boxed_slice(),
         use_prefix_db,
-    });
-
-    Ok(interned)
+    })
 }
 
 /// Split the original word into the two words that appear the
@@ -236,12 +274,17 @@ pub enum QueryTerm {
 }
 
 impl QueryTerm {
+    pub fn is_prefix(&self, derivations_interner: &Interner<WordDerivations>) -> bool {
+        match self {
+            QueryTerm::Phrase { .. } => false,
+            QueryTerm::Word { derivations } => derivations_interner.get(*derivations).is_prefix,
+        }
+    }
     /// Return the original word from the given query term
-    pub fn original_single_word<'interner>(
+    pub fn original_single_word(
         &self,
-        word_interner: &'interner Interner<String>,
-        derivations_interner: &'interner Interner<WordDerivations>,
-    ) -> Option<&'interner str> {
+        derivations_interner: &Interner<WordDerivations>,
+    ) -> Option<Interned<String>> {
         match self {
             QueryTerm::Phrase { phrase: _ } => None,
             QueryTerm::Word { derivations } => {
@@ -249,7 +292,7 @@ impl QueryTerm {
                 if derivations.is_empty() {
                     None
                 } else {
-                    Some(word_interner.get(derivations.original))
+                    Some(derivations.original)
                 }
             }
         }
@@ -281,25 +324,7 @@ pub fn located_query_terms_from_string<'ctx>(
     query: NormalizedTokenIter<Vec<u8>>,
     words_limit: Option<usize>,
 ) -> Result<Vec<LocatedQueryTerm>> {
-    let authorize_typos = ctx.index.authorize_typos(ctx.txn)?;
-    let min_len_one_typo = ctx.index.min_word_len_one_typo(ctx.txn)?;
-    let min_len_two_typos = ctx.index.min_word_len_two_typos(ctx.txn)?;
-
-    // TODO: should `exact_words` also disable prefix search, ngrams, split words, or synonyms?
-    let exact_words = ctx.index.exact_words(ctx.txn)?;
-
-    let nbr_typos = |word: &str| {
-        if !authorize_typos
-            || word.len() < min_len_one_typo as usize
-            || exact_words.as_ref().map_or(false, |fst| fst.contains(word))
-        {
-            0
-        } else if word.len() < min_len_two_typos as usize {
-            1
-        } else {
-            2
-        }
-    };
+    let nbr_typos = number_of_typos_allowed(ctx)?;
 
     let mut located_terms = Vec::new();
 
@@ -344,7 +369,9 @@ pub fn located_query_terms_from_string<'ctx>(
                             let word = token.lemma();
                             let derivations = word_derivations(ctx, word, nbr_typos(word), false)?;
                             let located_term = LocatedQueryTerm {
-                                value: QueryTerm::Word { derivations },
+                                value: QueryTerm::Word {
+                                    derivations: ctx.derivations_interner.insert(derivations),
+                                },
                                 positions: position..=position,
                             };
                             located_terms.push(located_term);
@@ -355,7 +382,9 @@ pub fn located_query_terms_from_string<'ctx>(
                     let word = token.lemma();
                     let derivations = word_derivations(ctx, word, nbr_typos(word), true)?;
                     let located_term = LocatedQueryTerm {
-                        value: QueryTerm::Word { derivations },
+                        value: QueryTerm::Word {
+                            derivations: ctx.derivations_interner.insert(derivations),
+                        },
                         positions: position..=position,
                     };
                     located_terms.push(located_term);
@@ -407,54 +436,171 @@ pub fn located_query_terms_from_string<'ctx>(
     Ok(located_terms)
 }
 
-// TODO: return a word derivations instead?
-pub fn ngram2(
-    ctx: &mut SearchContext,
-    x: &LocatedQueryTerm,
-    y: &LocatedQueryTerm,
-) -> Option<(Interned<String>, RangeInclusive<i8>)> {
-    if *x.positions.end() != y.positions.start() - 1 {
-        return None;
-    }
-    match (
-        &x.value.original_single_word(&ctx.word_interner, &ctx.derivations_interner),
-        &y.value.original_single_word(&ctx.word_interner, &ctx.derivations_interner),
-    ) {
-        (Some(w1), Some(w2)) => {
-            let term = (
-                ctx.word_interner.insert(format!("{w1}{w2}")),
-                *x.positions.start()..=*y.positions.end(),
-            );
-            Some(term)
+pub fn number_of_typos_allowed<'ctx>(
+    ctx: &SearchContext<'ctx>,
+) -> Result<impl Fn(&str) -> u8 + 'ctx> {
+    let authorize_typos = ctx.index.authorize_typos(ctx.txn)?;
+    let min_len_one_typo = ctx.index.min_word_len_one_typo(ctx.txn)?;
+    let min_len_two_typos = ctx.index.min_word_len_two_typos(ctx.txn)?;
+
+    // TODO: should `exact_words` also disable prefix search, ngrams, split words, or synonyms?
+    let exact_words = ctx.index.exact_words(ctx.txn)?;
+
+    Ok(Box::new(move |word: &str| {
+        if !authorize_typos
+            || word.len() < min_len_one_typo as usize
+            || exact_words.as_ref().map_or(false, |fst| fst.contains(word))
+        {
+            0
+        } else if word.len() < min_len_two_typos as usize {
+            1
+        } else {
+            2
         }
-        _ => None,
-    }
+    }))
 }
 
-// TODO: return a word derivations instead?
-pub fn ngram3(
+pub fn make_ngram(
     ctx: &mut SearchContext,
-    x: &LocatedQueryTerm,
-    y: &LocatedQueryTerm,
-    z: &LocatedQueryTerm,
-) -> Option<(Interned<String>, RangeInclusive<i8>)> {
-    if *x.positions.end() != y.positions.start() - 1
-        || *y.positions.end() != z.positions.start() - 1
-    {
-        return None;
-    }
-    match (
-        &x.value.original_single_word(&ctx.word_interner, &ctx.derivations_interner),
-        &y.value.original_single_word(&ctx.word_interner, &ctx.derivations_interner),
-        &z.value.original_single_word(&ctx.word_interner, &ctx.derivations_interner),
-    ) {
-        (Some(w1), Some(w2), Some(w3)) => {
-            let term = (
-                ctx.word_interner.insert(format!("{w1}{w2}{w3}")),
-                *x.positions.start()..=*z.positions.end(),
-            );
-            Some(term)
+    terms: &[LocatedQueryTerm],
+    number_of_typos_allowed: &impl Fn(&str) -> u8,
+) -> Result<Option<LocatedQueryTerm>> {
+    assert!(!terms.is_empty());
+    for ts in terms.windows(2) {
+        let [t1, t2] = ts else { panic!() };
+        if *t1.positions.end() != t2.positions.start() - 1 {
+            return Ok(None);
         }
-        _ => None,
     }
+    let mut words_interned = vec![];
+    for term in terms {
+        if let Some(original_term_word) = term.value.original_single_word(&ctx.derivations_interner)
+        {
+            words_interned.push(original_term_word);
+        } else {
+            return Ok(None);
+        }
+    }
+    let words =
+        words_interned.iter().map(|&i| ctx.word_interner.get(i).to_owned()).collect::<Vec<_>>();
+
+    let start = *terms.first().as_ref().unwrap().positions.start();
+    let end = *terms.last().as_ref().unwrap().positions.end();
+    let is_prefix = terms.last().as_ref().unwrap().value.is_prefix(&ctx.derivations_interner);
+    let ngram_str = words.join("");
+    if ngram_str.len() > MAX_WORD_LENGTH {
+        return Ok(None);
+    }
+
+    let mut derivations = word_derivations(
+        ctx,
+        &ngram_str,
+        number_of_typos_allowed(ngram_str.as_str()).saturating_sub(terms.len() as u8),
+        is_prefix,
+    )?;
+    derivations.original = ctx.word_interner.insert(words.join(" "));
+    // Now add the synonyms
+    let index_synonyms = ctx.index.synonyms(ctx.txn)?;
+    let mut derivations_synonyms = derivations.synonyms.to_vec();
+    derivations_synonyms.extend(
+        index_synonyms.get(&words).cloned().unwrap_or_default().into_iter().map(|words| {
+            let words = words.into_iter().map(|w| Some(ctx.word_interner.insert(w))).collect();
+            ctx.phrase_interner.insert(Phrase { words })
+        }),
+    );
+    derivations.synonyms = derivations_synonyms.into_boxed_slice();
+    if let Some(split_words) = derivations.split_words {
+        let split_words = ctx.phrase_interner.get(split_words);
+        if split_words.words == words_interned.iter().map(|&i| Some(i)).collect::<Vec<_>>() {
+            derivations.split_words = None;
+        }
+    }
+    if derivations.is_empty() {
+        return Ok(None);
+    }
+    let term = LocatedQueryTerm {
+        value: QueryTerm::Word { derivations: ctx.derivations_interner.insert(derivations) },
+        positions: start..=end,
+    };
+
+    Ok(Some(term))
 }
+
+// // TODO: return a word derivations instead?
+// pub fn ngram2(
+//     ctx: &mut SearchContext,
+//     x: &LocatedQueryTerm,
+//     y: &LocatedQueryTerm,
+//     number_of_typos_allowed: impl Fn(&str) -> u8,
+// ) -> Result<Option<LocatedQueryTerm>> {
+//     if *x.positions.end() != y.positions.start() - 1 {
+//         return Ok(None);
+//     }
+//     match (
+//         x.value.original_single_word(&ctx.word_interner, &ctx.derivations_interner),
+//         y.value.original_single_word(&ctx.word_interner, &ctx.derivations_interner),
+//     ) {
+//         (Some(w1), Some(w2)) => {
+//             let ngram2_str = format!("{w1}{w2}");
+//             let mut derivations = word_derivations(
+//                 ctx,
+//                 &ngram2_str,
+//                 number_of_typos_allowed(ngram2_str.as_str()).saturating_sub(1),
+//                 y.value.is_prefix(&ctx.derivations_interner),
+//             )?;
+//             // Now add the synonyms
+//             let index_synonyms = ctx.index.synonyms(ctx.txn)?;
+//             let mut derivations_synonyms = derivations.synonyms.to_vec();
+//             derivations_synonyms.extend(
+//                 index_synonyms
+//                     .get(&vec![w1.to_owned(), w2.to_owned()])
+//                     .cloned()
+//                     .unwrap_or_default()
+//                     .into_iter()
+//                     .map(|words| {
+//                         let words =
+//                             words.into_iter().map(|w| Some(ctx.word_interner.insert(w))).collect();
+//                         ctx.phrase_interner.insert(Phrase { words })
+//                     }),
+//             );
+
+//             let term = LocatedQueryTerm {
+//                 value: QueryTerm::Word {
+//                     derivations: ctx.derivations_interner.insert(derivations),
+//                 },
+//                 positions: *x.positions.start()..=*y.positions.end(),
+//             };
+
+//             Ok(Some(term))
+//         }
+//         _ => Ok(None),
+//     }
+// }
+
+// // TODO: return a word derivations instead?
+// pub fn ngram3(
+//     ctx: &mut SearchContext,
+//     x: &LocatedQueryTerm,
+//     y: &LocatedQueryTerm,
+//     z: &LocatedQueryTerm,
+// ) -> Option<(Interned<String>, RangeInclusive<i8>)> {
+//     if *x.positions.end() != y.positions.start() - 1
+//         || *y.positions.end() != z.positions.start() - 1
+//     {
+//         return None;
+//     }
+//     match (
+//         &x.value.original_single_word(&ctx.word_interner, &ctx.derivations_interner),
+//         &y.value.original_single_word(&ctx.word_interner, &ctx.derivations_interner),
+//         &z.value.original_single_word(&ctx.word_interner, &ctx.derivations_interner),
+//     ) {
+//         (Some(w1), Some(w2), Some(w3)) => {
+//             let term = (
+//                 ctx.word_interner.insert(format!("{w1}{w2}{w3}")),
+//                 *x.positions.start()..=*z.positions.end(),
+//             );
+//             Some(term)
+//         }
+//         _ => None,
+//     }
+// }

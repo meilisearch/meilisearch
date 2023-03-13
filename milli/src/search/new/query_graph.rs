@@ -1,4 +1,4 @@
-use super::query_term::{self, LocatedQueryTerm, QueryTerm, WordDerivations};
+use super::query_term::{self, number_of_typos_allowed, LocatedQueryTerm};
 use super::small_bitmap::SmallBitmap;
 use super::SearchContext;
 use crate::Result;
@@ -132,18 +132,18 @@ impl QueryGraph {
 impl QueryGraph {
     /// Build the query graph from the parsed user search query.
     pub fn from_query(ctx: &mut SearchContext, terms: Vec<LocatedQueryTerm>) -> Result<QueryGraph> {
+        let nbr_typos = number_of_typos_allowed(ctx)?;
+
         let mut empty_nodes = vec![];
 
-        let word_set = ctx.index.words_fst(ctx.txn)?;
         let mut graph = QueryGraph::default();
 
+        // TODO: we could consider generalizing to 4,5,6,7,etc. ngrams
         let (mut prev2, mut prev1, mut prev0): (Vec<u16>, Vec<u16>, Vec<u16>) =
             (vec![], vec![], vec![graph.root_node]);
 
-        for length in 1..=terms.len() {
-            let query = &terms[..length];
-
-            let term0 = query.last().unwrap();
+        for term_idx in 0..terms.len() {
+            let term0 = &terms[term_idx];
 
             let mut new_nodes = vec![];
             let new_node_idx = graph.add_node(&prev0, QueryNode::Term(term0.clone()));
@@ -153,57 +153,19 @@ impl QueryGraph {
             }
 
             if !prev1.is_empty() {
-                if let Some((ngram2_str, ngram2_pos)) =
-                    query_term::ngram2(ctx, &query[length - 2], &query[length - 1])
+                if let Some(ngram) =
+                    query_term::make_ngram(ctx, &terms[term_idx - 1..=term_idx], &nbr_typos)?
                 {
-                    if word_set.contains(ctx.word_interner.get(ngram2_str)) {
-                        let ngram2 = LocatedQueryTerm {
-                            value: QueryTerm::Word {
-                                derivations: ctx.derivations_interner.insert(WordDerivations {
-                                    original: ngram2_str,
-                                    // TODO: could add a typo if it's an ngram?
-                                    zero_typo: Box::new([ngram2_str]),
-                                    one_typo: Box::new([]),
-                                    two_typos: Box::new([]),
-                                    use_prefix_db: false,
-                                    synonyms: Box::new([]), // TODO: ngram synonyms
-                                    split_words: None,      // TODO: maybe ngram split words?
-                                }),
-                            },
-                            positions: ngram2_pos,
-                        };
-                        let ngram2_idx = graph.add_node(&prev1, QueryNode::Term(ngram2));
-                        new_nodes.push(ngram2_idx);
-                    }
+                    let ngram_idx = graph.add_node(&prev1, QueryNode::Term(ngram));
+                    new_nodes.push(ngram_idx);
                 }
             }
             if !prev2.is_empty() {
-                if let Some((ngram3_str, ngram3_pos)) = query_term::ngram3(
-                    ctx,
-                    &query[length - 3],
-                    &query[length - 2],
-                    &query[length - 1],
-                ) {
-                    if word_set.contains(ctx.word_interner.get(ngram3_str)) {
-                        let ngram3 = LocatedQueryTerm {
-                            value: QueryTerm::Word {
-                                derivations: ctx.derivations_interner.insert(WordDerivations {
-                                    original: ngram3_str,
-                                    // TODO: could add a typo if it's an ngram?
-                                    zero_typo: Box::new([ngram3_str]),
-                                    one_typo: Box::new([]),
-                                    two_typos: Box::new([]),
-                                    use_prefix_db: false,
-                                    synonyms: Box::new([]), // TODO: ngram synonyms
-                                    split_words: None,      // TODO: maybe ngram split words?
-                                                            // would be nice for typos like su nflower
-                                }),
-                            },
-                            positions: ngram3_pos,
-                        };
-                        let ngram3_idx = graph.add_node(&prev2, QueryNode::Term(ngram3));
-                        new_nodes.push(ngram3_idx);
-                    }
+                if let Some(ngram) =
+                    query_term::make_ngram(ctx, &terms[term_idx - 2..=term_idx], &nbr_typos)?
+                {
+                    let ngram_idx = graph.add_node(&prev2, QueryNode::Term(ngram));
+                    new_nodes.push(ngram_idx);
                 }
             }
             (prev0, prev1, prev2) = (new_nodes, prev0, prev1);
