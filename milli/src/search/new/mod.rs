@@ -17,7 +17,7 @@ mod words;
 
 pub use logger::{DefaultSearchLogger, SearchLogger};
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 
 use charabia::Tokenize;
 use db_cache::DatabaseCache;
@@ -28,10 +28,10 @@ use roaring::RoaringBitmap;
 
 use self::interner::Interner;
 use self::query_term::{Phrase, WordDerivations};
+use self::ranking_rules::PlaceholderQuery;
 use self::resolve_query_graph::{resolve_query_graph, QueryTermDocIdsCache};
-use crate::search::new::graph_based_ranking_rule::GraphBasedRankingRule;
+use crate::search::new::graph_based_ranking_rule::{Proximity, Typo};
 use crate::search::new::query_term::located_query_terms_from_string;
-use crate::search::new::ranking_rule_graph::{ProximityGraph, TypoGraph};
 use crate::search::new::words::Words;
 use crate::{Filter, Index, Result, TermsMatchingStrategy};
 
@@ -88,7 +88,9 @@ fn resolve_maximally_reduced_query_graph<'search>(
         TermsMatchingStrategy::All => vec![],
     };
     // don't remove the first term
-    positions_to_remove.remove(0);
+    if !positions_to_remove.is_empty() {
+        positions_to_remove.remove(0);
+    }
     loop {
         if positions_to_remove.is_empty() {
             break;
@@ -102,21 +104,135 @@ fn resolve_maximally_reduced_query_graph<'search>(
 
     Ok(docids)
 }
+fn get_ranking_rules_for_placeholder_search<'search>(
+    ctx: &SearchContext<'search>,
+) -> Result<Vec<Box<dyn RankingRule<'search, PlaceholderQuery>>>> {
+    // let sort = false;
+    // let mut asc = HashSet::new();
+    // let mut desc = HashSet::new();
+    let /*mut*/ ranking_rules: Vec<Box<dyn RankingRule<PlaceholderQuery>>> = vec![];
+    let settings_ranking_rules = ctx.index.criteria(ctx.txn)?;
+    for rr in settings_ranking_rules {
+        // Add Words before any of: typo, proximity, attribute, exactness
+        match rr {
+            crate::Criterion::Words
+            | crate::Criterion::Typo
+            | crate::Criterion::Attribute
+            | crate::Criterion::Proximity
+            | crate::Criterion::Exactness => continue,
+            crate::Criterion::Sort => todo!(),
+            crate::Criterion::Asc(_) => todo!(),
+            crate::Criterion::Desc(_) => todo!(),
+        }
+    }
+    Ok(ranking_rules)
+}
+fn get_ranking_rules_for_query_graph_search<'search>(
+    ctx: &SearchContext<'search>,
+    terms_matching_strategy: TermsMatchingStrategy,
+) -> Result<Vec<Box<dyn RankingRule<'search, QueryGraph>>>> {
+    // query graph search
+    let mut words = false;
+    let mut typo = false;
+    let mut proximity = false;
+    let sort = false;
+    let attribute = false;
+    let exactness = false;
+    let mut asc = HashSet::new();
+    let mut desc = HashSet::new();
+
+    let mut ranking_rules: Vec<Box<dyn RankingRule<QueryGraph>>> = vec![];
+    let settings_ranking_rules = ctx.index.criteria(ctx.txn)?;
+    for rr in settings_ranking_rules {
+        // Add Words before any of: typo, proximity, attribute, exactness
+        match rr {
+            crate::Criterion::Typo
+            | crate::Criterion::Attribute
+            | crate::Criterion::Proximity
+            | crate::Criterion::Exactness => {
+                if !words {
+                    ranking_rules.push(Box::new(Words::new(terms_matching_strategy)));
+                    words = true;
+                }
+            }
+            _ => {}
+        }
+        match rr {
+            crate::Criterion::Words => {
+                if words {
+                    continue;
+                }
+                ranking_rules.push(Box::new(Words::new(terms_matching_strategy)));
+                words = true;
+            }
+            crate::Criterion::Typo => {
+                if typo {
+                    continue;
+                }
+                typo = true;
+                ranking_rules.push(Box::<Typo>::default());
+            }
+            crate::Criterion::Proximity => {
+                if proximity {
+                    continue;
+                }
+                proximity = true;
+                ranking_rules.push(Box::<Proximity>::default());
+            }
+            crate::Criterion::Attribute => {
+                if attribute {
+                    continue;
+                }
+                todo!();
+                // attribute = false;
+            }
+            crate::Criterion::Sort => {
+                if sort {
+                    continue;
+                }
+                todo!();
+                // sort = false;
+            }
+            crate::Criterion::Exactness => {
+                if exactness {
+                    continue;
+                }
+                todo!();
+                // exactness = false;
+            }
+            crate::Criterion::Asc(field) => {
+                if asc.contains(&field) {
+                    continue;
+                }
+                asc.insert(field);
+                todo!();
+            }
+            crate::Criterion::Desc(field) => {
+                if desc.contains(&field) {
+                    continue;
+                }
+                desc.insert(field);
+                todo!();
+            }
+        }
+    }
+    Ok(ranking_rules)
+}
 
 #[allow(clippy::too_many_arguments)]
 pub fn execute_search<'search>(
     ctx: &mut SearchContext<'search>,
     query: &str,
+    terms_matching_strategy: TermsMatchingStrategy,
     filters: Option<Filter>,
     from: usize,
     length: usize,
-    logger: &mut dyn SearchLogger<QueryGraph>,
+    placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery>,
+    query_graph_logger: &mut dyn SearchLogger<QueryGraph>,
 ) -> Result<Vec<u32>> {
     assert!(!query.is_empty());
     let query_terms = located_query_terms_from_string(ctx, query.tokenize(), None)?;
     let graph = QueryGraph::from_query(ctx, query_terms)?;
-
-    logger.initial_query(&graph);
 
     let universe = if let Some(filters) = filters {
         filters.evaluate(ctx.txn, ctx.index)?
@@ -124,26 +240,36 @@ pub fn execute_search<'search>(
         ctx.index.documents_ids(ctx.txn)?
     };
 
-    let universe = resolve_maximally_reduced_query_graph(
-        ctx,
-        &universe,
-        &graph,
-        TermsMatchingStrategy::Last,
-        logger,
-    )?;
-    // TODO: create ranking rules here
+    // TODO: other way to tell whether it is a placeholder search
+    // This way of doing things is not correct because if someone searches
+    // for a word that does not appear in any document, the word will be removed
+    // from the graph and thus its number of nodes will be == 2
+    // But in that case, we should return no results.
+    //
+    // The search is a placeholder search only if there are no tokens?
+    if graph.nodes.len() > 2 {
+        let universe = resolve_maximally_reduced_query_graph(
+            ctx,
+            &universe,
+            &graph,
+            terms_matching_strategy,
+            query_graph_logger,
+        )?;
 
-    logger.initial_universe(&universe);
-
-    let words = &mut Words::new(TermsMatchingStrategy::Last);
-    // let sort = &mut Sort::new(index, txn, "release_date".to_owned(), true)?;
-    let proximity = &mut GraphBasedRankingRule::<ProximityGraph>::new("proximity".to_owned());
-    let typo = &mut GraphBasedRankingRule::<TypoGraph>::new("typo".to_owned());
-    // TODO: ranking rules given as argument
-    let ranking_rules: Vec<&mut dyn RankingRule<'search, QueryGraph>> =
-        vec![words, typo, proximity /*sort*/];
-
-    bucket_sort(ctx, ranking_rules, &graph, &universe, from, length, logger)
+        let ranking_rules = get_ranking_rules_for_query_graph_search(ctx, terms_matching_strategy)?;
+        bucket_sort(ctx, ranking_rules, &graph, &universe, from, length, query_graph_logger)
+    } else {
+        let ranking_rules = get_ranking_rules_for_placeholder_search(ctx)?;
+        bucket_sort(
+            ctx,
+            ranking_rules,
+            &PlaceholderQuery,
+            &universe,
+            from,
+            length,
+            placeholder_search_logger,
+        )
+    }
 }
 
 #[cfg(test)]
@@ -182,10 +308,11 @@ mod tests {
         let results = execute_search(
             &mut ctx,
             "zero config",
+            TermsMatchingStrategy::Last,
             None,
             0,
             20,
-            // &mut DefaultSearchLogger,
+            &mut DefaultSearchLogger,
             &mut logger,
         )
         .unwrap();
@@ -279,10 +406,11 @@ mod tests {
         let results = execute_search(
             &mut ctx,
             "releases from poison by the government",
+            TermsMatchingStrategy::Last,
             None,
             0,
             20,
-            // &mut DefaultSearchLogger,
+            &mut DefaultSearchLogger,
             &mut logger,
         )
         .unwrap();

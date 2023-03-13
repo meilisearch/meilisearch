@@ -70,16 +70,15 @@ pub struct RankingRuleOutput<Q> {
 
 pub fn bucket_sort<'search, Q: RankingRuleQueryTrait>(
     ctx: &mut SearchContext<'search>,
-    mut ranking_rules: Vec<&mut dyn RankingRule<'search, Q>>,
-    query_graph: &Q,
+    mut ranking_rules: Vec<Box<dyn RankingRule<'search, Q>>>,
+    query: &Q,
     universe: &RoaringBitmap,
     from: usize,
     length: usize,
     logger: &mut dyn SearchLogger<Q>,
 ) -> Result<Vec<u32>> {
-    logger.initial_query(query_graph);
-
     logger.ranking_rules(&ranking_rules);
+    logger.initial_universe(universe);
 
     let distinct_fid = if let Some(field) = ctx.index.distinct_field(ctx.txn)? {
         ctx.index.fields_ids_map(ctx.txn)?.id(field)
@@ -92,8 +91,8 @@ pub fn bucket_sort<'search, Q: RankingRuleQueryTrait>(
     }
 
     let ranking_rules_len = ranking_rules.len();
-    logger.start_iteration_ranking_rule(0, ranking_rules[0], query_graph, universe);
-    ranking_rules[0].start_iteration(ctx, logger, universe, query_graph)?;
+    logger.start_iteration_ranking_rule(0, ranking_rules[0].as_ref(), query, universe);
+    ranking_rules[0].start_iteration(ctx, logger, universe, query)?;
 
     let mut ranking_rule_universes: Vec<RoaringBitmap> =
         vec![RoaringBitmap::default(); ranking_rules_len];
@@ -109,7 +108,7 @@ pub fn bucket_sort<'search, Q: RankingRuleQueryTrait>(
             assert!(ranking_rule_universes[cur_ranking_rule_index].is_empty());
             logger.end_iteration_ranking_rule(
                 cur_ranking_rule_index,
-                ranking_rules[cur_ranking_rule_index],
+                ranking_rules[cur_ranking_rule_index].as_ref(),
                 &ranking_rule_universes[cur_ranking_rule_index],
             );
             ranking_rule_universes[cur_ranking_rule_index].clear();
@@ -149,7 +148,7 @@ pub fn bucket_sort<'search, Q: RankingRuleQueryTrait>(
                         // then just skip the bucket
                         logger.skip_bucket_ranking_rule(
                             cur_ranking_rule_index,
-                            ranking_rules[cur_ranking_rule_index],
+                            ranking_rules[cur_ranking_rule_index].as_ref(),
                             &candidates,
                         );
                     } else {
@@ -159,7 +158,7 @@ pub fn bucket_sort<'search, Q: RankingRuleQueryTrait>(
                             all_candidates.split_at(from - cur_offset);
                         logger.skip_bucket_ranking_rule(
                             cur_ranking_rule_index,
-                            ranking_rules[cur_ranking_rule_index],
+                            ranking_rules[cur_ranking_rule_index].as_ref(),
                             &skipped_candidates.into_iter().collect(),
                         );
                         let candidates = candidates
@@ -186,7 +185,6 @@ pub fn bucket_sort<'search, Q: RankingRuleQueryTrait>(
         // anything, just extend the results and go back to the parent ranking rule.
         if ranking_rule_universes[cur_ranking_rule_index].len() <= 1 {
             maybe_add_to_results!(&ranking_rule_universes[cur_ranking_rule_index]);
-            ranking_rule_universes[cur_ranking_rule_index].clear();
             back!();
             continue;
         }
@@ -198,7 +196,7 @@ pub fn bucket_sort<'search, Q: RankingRuleQueryTrait>(
 
         logger.next_bucket_ranking_rule(
             cur_ranking_rule_index,
-            ranking_rules[cur_ranking_rule_index],
+            ranking_rules[cur_ranking_rule_index].as_ref(),
             &ranking_rule_universes[cur_ranking_rule_index],
             &next_bucket.candidates,
         );
@@ -218,7 +216,7 @@ pub fn bucket_sort<'search, Q: RankingRuleQueryTrait>(
         ranking_rule_universes[cur_ranking_rule_index] = next_bucket.candidates.clone();
         logger.start_iteration_ranking_rule(
             cur_ranking_rule_index,
-            ranking_rules[cur_ranking_rule_index],
+            ranking_rules[cur_ranking_rule_index].as_ref(),
             &next_bucket.query,
             &ranking_rule_universes[cur_ranking_rule_index],
         );

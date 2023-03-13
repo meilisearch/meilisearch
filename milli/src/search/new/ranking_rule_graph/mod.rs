@@ -9,7 +9,7 @@ mod build;
 mod cheapest_paths;
 mod edge_docids_cache;
 mod empty_paths_cache;
-mod paths_map;
+mod path_set;
 
 /// Implementation of the `proximity` ranking rule
 mod proximity;

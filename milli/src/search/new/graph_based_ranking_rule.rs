@@ -40,11 +40,24 @@ use roaring::RoaringBitmap;
 
 use super::logger::SearchLogger;
 use super::ranking_rule_graph::{
-    EdgeDocidsCache, EmptyPathsCache, RankingRuleGraph, RankingRuleGraphTrait,
+    EdgeDocidsCache, EmptyPathsCache, RankingRuleGraph, RankingRuleGraphTrait, TypoGraph, ProximityGraph,
 };
 use super::small_bitmap::SmallBitmap;
 use super::{BitmapOrAllRef, QueryGraph, RankingRule, RankingRuleOutput, SearchContext};
 use crate::Result;
+
+pub type Proximity = GraphBasedRankingRule<ProximityGraph>;
+impl Default for GraphBasedRankingRule<ProximityGraph> {
+    fn default() -> Self {
+        Self::new("proximity".to_owned())
+    }
+}
+pub type Typo = GraphBasedRankingRule<TypoGraph>;
+impl Default for GraphBasedRankingRule<TypoGraph> {
+    fn default() -> Self {
+        Self::new("typo".to_owned())
+    }
+}
 
 /// A generic graph-based ranking rule
 pub struct GraphBasedRankingRule<G: RankingRuleGraphTrait> {

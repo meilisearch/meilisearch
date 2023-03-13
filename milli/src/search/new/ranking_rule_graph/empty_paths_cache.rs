@@ -1,4 +1,4 @@
-use super::paths_map::PathSet;
+use super::path_set::PathSet;
 use crate::search::new::small_bitmap::SmallBitmap;
 
 /// A cache which stores sufficient conditions for a path
@@ -10,7 +10,7 @@ pub struct EmptyPathsCache {
     pub empty_edges: SmallBitmap,
     /// A set of path prefixes that resolve to no documents.
     pub empty_prefixes: PathSet,
-    /// A set of empty couple of edge indexes that resolve to no documents.
+    /// A set of empty couples of edge indexes that resolve to no documents.
     pub empty_couple_edges: Vec<SmallBitmap>,
 }
 impl EmptyPathsCache {
