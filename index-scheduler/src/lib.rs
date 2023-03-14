@@ -38,6 +38,7 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
+use cluster::{Consistency, Follower, Leader};
 use dump::{KindDump, TaskDump, UpdateFile};
 pub use error::Error;
 use file_store::FileStore;
@@ -302,6 +303,9 @@ pub struct IndexScheduler {
     /// The path to the version file of Meilisearch.
     pub(crate) version_file_path: PathBuf,
 
+    /// The role in the cluster
+    pub(crate) cluster: Option<Cluster>,
+
     // ================= test
     // The next entry is dedicated to the tests.
     /// Provide a way to set a breakpoint in multiple part of the scheduler.
@@ -319,6 +323,11 @@ pub struct IndexScheduler {
     /// A counter that is incremented before every call to [`tick`](IndexScheduler::tick)
     #[cfg(test)]
     run_loop_iteration: Arc<RwLock<usize>>,
+}
+
+enum Cluster {
+    Leader(Leader),
+    Follower(Follower),
 }
 
 impl IndexScheduler {
@@ -343,6 +352,7 @@ impl IndexScheduler {
             dumps_path: self.dumps_path.clone(),
             auth_path: self.auth_path.clone(),
             version_file_path: self.version_file_path.clone(),
+            cluster: None,
             #[cfg(test)]
             test_breakpoint_sdr: self.test_breakpoint_sdr.clone(),
             #[cfg(test)]
@@ -416,6 +426,7 @@ impl IndexScheduler {
             snapshots_path: options.snapshots_path,
             auth_path: options.auth_path,
             version_file_path: options.version_file_path,
+            cluster: None,
 
             #[cfg(test)]
             test_breakpoint_sdr,
@@ -1050,6 +1061,9 @@ impl IndexScheduler {
             self.breakpoint(Breakpoint::Start);
         }
 
+        // TODO cluster: If
+        // - I'm a leader => create the batch and send it to everyone
+        // - I'm a follower => get the batch from the leader and gather the tasks from my task queue
         let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
         let batch =
             match self.create_next_batch(&rtxn).map_err(|e| Error::CreateBatch(Box::new(e)))? {
@@ -1058,6 +1072,8 @@ impl IndexScheduler {
             };
         let index_uid = batch.index_uid().map(ToOwned::to_owned);
         drop(rtxn);
+
+        // TODO cluster: Should we send the starting date as well so everyone is in sync?
 
         // 1. store the starting date with the bitmap of processing tasks.
         let mut ids = batch.ids();
@@ -1072,6 +1088,9 @@ impl IndexScheduler {
 
         #[cfg(test)]
         self.breakpoint(Breakpoint::BatchCreated);
+
+        // TODO cluster: Inside the processing of the tasks we need to check if we should commit
+        // the batch or not
 
         // 2. Process the tasks
         let res = {

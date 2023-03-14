@@ -9,6 +9,7 @@ members = [
     "dump",
     "file-store",
     "permissive-json-pointer",
+    "cluster",
     "milli",
     "filter-parser",
     "flatten-serde-json",

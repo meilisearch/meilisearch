@@ -840,6 +840,7 @@ impl IndexScheduler {
 
                 let mut index_wtxn = index.write_txn()?;
                 let tasks = self.apply_index_operation(&mut index_wtxn, &index, op)?;
+                // TODO cluster: ready to commit
                 index_wtxn.commit()?;
 
                 Ok(tasks)
