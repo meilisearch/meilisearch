@@ -3,7 +3,11 @@ pub mod detailed;
 
 use roaring::RoaringBitmap;
 
-use super::ranking_rule_graph::{EmptyPathsCache, ProximityGraph, RankingRuleGraph, TypoGraph};
+use super::interner::MappedInterner;
+use super::query_graph::QueryNode;
+use super::ranking_rule_graph::{
+    DeadEndPathCache, ProximityEdge, ProximityGraph, RankingRuleGraph, TypoEdge, TypoGraph,
+};
 use super::small_bitmap::SmallBitmap;
 use super::{RankingRule, RankingRuleQueryTrait};
 
@@ -62,9 +66,9 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
         &mut self,
         query_graph: &RankingRuleGraph<ProximityGraph>,
         paths: &[Vec<u16>],
-        empty_paths_cache: &EmptyPathsCache,
+        empty_paths_cache: &DeadEndPathCache<ProximityGraph>,
         universe: &RoaringBitmap,
-        distances: Vec<Vec<(u16, SmallBitmap)>>,
+        distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityEdge>)>, QueryNode>,
         cost: u16,
     );
 
@@ -73,9 +77,9 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
         &mut self,
         query_graph: &RankingRuleGraph<TypoGraph>,
         paths: &[Vec<u16>],
-        empty_paths_cache: &EmptyPathsCache,
+        empty_paths_cache: &DeadEndPathCache<TypoGraph>,
         universe: &RoaringBitmap,
-        distances: Vec<Vec<(u16, SmallBitmap)>>,
+        distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoEdge>)>, QueryNode>,
         cost: u16,
     );
 }
@@ -133,9 +137,9 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
         &mut self,
         _query_graph: &RankingRuleGraph<ProximityGraph>,
         _paths_map: &[Vec<u16>],
-        _empty_paths_cache: &EmptyPathsCache,
+        _empty_paths_cache: &DeadEndPathCache<ProximityGraph>,
         _universe: &RoaringBitmap,
-        _distances: Vec<Vec<(u16, SmallBitmap)>>,
+        _distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityEdge>)>, QueryNode>,
         _cost: u16,
     ) {
     }
@@ -144,9 +148,9 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
         &mut self,
         _query_graph: &RankingRuleGraph<TypoGraph>,
         _paths: &[Vec<u16>],
-        _empty_paths_cache: &EmptyPathsCache,
+        _empty_paths_cache: &DeadEndPathCache<TypoGraph>,
         _universe: &RoaringBitmap,
-        _distances: Vec<Vec<(u16, SmallBitmap)>>,
+        _distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoEdge>)>, QueryNode>,
         _cost: u16,
     ) {
     }

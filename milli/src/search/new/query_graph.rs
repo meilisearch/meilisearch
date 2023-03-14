@@ -1,9 +1,10 @@
+use std::collections::HashSet;
+
+use super::interner::{FixedSizeInterner, Interned};
 use super::query_term::{self, number_of_typos_allowed, LocatedQueryTerm};
 use super::small_bitmap::SmallBitmap;
 use super::SearchContext;
 use crate::Result;
-
-pub const QUERY_GRAPH_NODE_LENGTH_LIMIT: u16 = 64;
 
 /// A node of the [`QueryGraph`].
 ///
@@ -15,20 +16,17 @@ pub const QUERY_GRAPH_NODE_LENGTH_LIMIT: u16 = 64;
 /// 4. `Term` is a regular node representing a word or combination of words
 /// from the user query.
 #[derive(Clone)]
-pub enum QueryNode {
+pub struct QueryNode {
+    pub data: QueryNodeData,
+    pub predecessors: SmallBitmap<QueryNode>,
+    pub successors: SmallBitmap<QueryNode>,
+}
+#[derive(Clone)]
+pub enum QueryNodeData {
     Term(LocatedQueryTerm),
     Deleted,
     Start,
     End,
-}
-
-/// The edges associated with a node in the query graph.
-#[derive(Clone)]
-pub struct Edges {
-    /// Set of nodes which have an edge going to the current node
-    pub predecessors: SmallBitmap,
-    /// Set of nodes which are reached by an edge from the current node
-    pub successors: SmallBitmap,
 }
 
 /**
@@ -78,54 +76,44 @@ and the transformations that were done on the query graph).
 #[derive(Clone)]
 pub struct QueryGraph {
     /// The index of the start node within `self.nodes`
-    pub root_node: u16,
+    pub root_node: Interned<QueryNode>,
     /// The index of the end node within `self.nodes`
-    pub end_node: u16,
+    pub end_node: Interned<QueryNode>,
     /// The list of all query nodes
-    pub nodes: Vec<QueryNode>,
-    /// The list of all node edges
-    pub edges: Vec<Edges>,
+    pub nodes: FixedSizeInterner<QueryNode>,
 }
 
-impl Default for QueryGraph {
-    /// Create a new QueryGraph with two disconnected nodes: the root and end nodes.
-    fn default() -> Self {
-        let nodes = vec![QueryNode::Start, QueryNode::End];
-        let edges = vec![
-            Edges {
-                predecessors: SmallBitmap::new(QUERY_GRAPH_NODE_LENGTH_LIMIT),
-                successors: SmallBitmap::new(QUERY_GRAPH_NODE_LENGTH_LIMIT),
-            },
-            Edges {
-                predecessors: SmallBitmap::new(QUERY_GRAPH_NODE_LENGTH_LIMIT),
-                successors: SmallBitmap::new(QUERY_GRAPH_NODE_LENGTH_LIMIT),
-            },
-        ];
+// impl Default for QueryGraph {
+//     /// Create a new QueryGraph with two disconnected nodes: the root and end nodes.
+//     fn default() -> Self {
+//         let nodes = vec![
+//             QueryNode {
+//                 data: QueryNodeData::Start,
+//                 predecessors: SmallBitmap::new(QUERY_GRAPH_NODE_LENGTH_LIMIT),
+//                 successors: SmallBitmap::new(QUERY_GRAPH_NODE_LENGTH_LIMIT),
+//             },
+//             QueryNode {
+//                 data: QueryNodeData::End,
+//                 predecessors: SmallBitmap::new(QUERY_GRAPH_NODE_LENGTH_LIMIT),
+//                 successors: SmallBitmap::new(QUERY_GRAPH_NODE_LENGTH_LIMIT),
+//             },
+//         ];
 
-        Self { root_node: 0, end_node: 1, nodes, edges }
-    }
-}
+//         Self { root_node: 0, end_node: 1, nodes }
+//     }
+// }
 
 impl QueryGraph {
     /// Connect all the given predecessor nodes to the given successor node
-    fn connect_to_node(&mut self, from_nodes: &[u16], to_node: u16) {
+    fn connect_to_node(
+        &mut self,
+        from_nodes: &[Interned<QueryNode>],
+        to_node: Interned<QueryNode>,
+    ) {
         for &from_node in from_nodes {
-            self.edges[from_node as usize].successors.insert(to_node);
-            self.edges[to_node as usize].predecessors.insert(from_node);
+            self.nodes.get_mut(from_node).successors.insert(to_node);
+            self.nodes.get_mut(to_node).predecessors.insert(from_node);
         }
-    }
-    /// Add the given node to the graph and connect it to all the given predecessor nodes
-    fn add_node(&mut self, from_nodes: &[u16], node: QueryNode) -> u16 {
-        let new_node_idx = self.nodes.len() as u16;
-        assert!(new_node_idx <= QUERY_GRAPH_NODE_LENGTH_LIMIT);
-        self.nodes.push(node);
-        self.edges.push(Edges {
-            predecessors: SmallBitmap::new(QUERY_GRAPH_NODE_LENGTH_LIMIT),
-            successors: SmallBitmap::new(QUERY_GRAPH_NODE_LENGTH_LIMIT),
-        });
-        self.connect_to_node(from_nodes, new_node_idx);
-
-        new_node_idx
     }
 }
 
@@ -136,17 +124,27 @@ impl QueryGraph {
 
         let mut empty_nodes = vec![];
 
-        let mut graph = QueryGraph::default();
+        let mut predecessors: Vec<HashSet<u16>> = vec![HashSet::new(), HashSet::new()];
+        let mut successors: Vec<HashSet<u16>> = vec![HashSet::new(), HashSet::new()];
+        let mut nodes_data: Vec<QueryNodeData> = vec![QueryNodeData::Start, QueryNodeData::End];
+        let root_node = 0;
+        let end_node = 1;
 
         // TODO: we could consider generalizing to 4,5,6,7,etc. ngrams
         let (mut prev2, mut prev1, mut prev0): (Vec<u16>, Vec<u16>, Vec<u16>) =
-            (vec![], vec![], vec![graph.root_node]);
+            (vec![], vec![], vec![root_node]);
 
         for term_idx in 0..terms.len() {
             let term0 = &terms[term_idx];
 
             let mut new_nodes = vec![];
-            let new_node_idx = graph.add_node(&prev0, QueryNode::Term(term0.clone()));
+            let new_node_idx = add_node(
+                &mut nodes_data,
+                QueryNodeData::Term(term0.clone()),
+                &prev0,
+                &mut successors,
+                &mut predecessors,
+            );
             new_nodes.push(new_node_idx);
             if term0.is_empty(&ctx.term_interner) {
                 empty_nodes.push(new_node_idx);
@@ -156,7 +154,13 @@ impl QueryGraph {
                 if let Some(ngram) =
                     query_term::make_ngram(ctx, &terms[term_idx - 1..=term_idx], &nbr_typos)?
                 {
-                    let ngram_idx = graph.add_node(&prev1, QueryNode::Term(ngram));
+                    let ngram_idx = add_node(
+                        &mut nodes_data,
+                        QueryNodeData::Term(ngram),
+                        &prev1,
+                        &mut successors,
+                        &mut predecessors,
+                    );
                     new_nodes.push(ngram_idx);
                 }
             }
@@ -164,53 +168,96 @@ impl QueryGraph {
                 if let Some(ngram) =
                     query_term::make_ngram(ctx, &terms[term_idx - 2..=term_idx], &nbr_typos)?
                 {
-                    let ngram_idx = graph.add_node(&prev2, QueryNode::Term(ngram));
+                    let ngram_idx = add_node(
+                        &mut nodes_data,
+                        QueryNodeData::Term(ngram),
+                        &prev2,
+                        &mut successors,
+                        &mut predecessors,
+                    );
                     new_nodes.push(ngram_idx);
                 }
             }
             (prev0, prev1, prev2) = (new_nodes, prev0, prev1);
         }
-        graph.connect_to_node(&prev0, graph.end_node);
 
+        let root_node = Interned::new(root_node);
+        let end_node = Interned::new(end_node);
+        let mut nodes = FixedSizeInterner::new(
+            nodes_data.len() as u16,
+            QueryNode {
+                data: QueryNodeData::Deleted,
+                predecessors: SmallBitmap::new(nodes_data.len() as u16),
+                successors: SmallBitmap::new(nodes_data.len() as u16),
+            },
+        );
+        for (node_idx, ((node_data, predecessors), successors)) in nodes_data
+            .into_iter()
+            .zip(predecessors.into_iter())
+            .zip(successors.into_iter())
+            .enumerate()
+        {
+            let node = nodes.get_mut(Interned::new(node_idx as u16));
+            node.data = node_data;
+            for x in predecessors {
+                node.predecessors.insert(Interned::new(x));
+            }
+            for x in successors {
+                node.successors.insert(Interned::new(x));
+            }
+        }
+        let mut graph = QueryGraph { root_node, end_node, nodes };
+
+        graph.connect_to_node(
+            prev0.into_iter().map(Interned::new).collect::<Vec<_>>().as_slice(),
+            end_node,
+        );
+        let empty_nodes = empty_nodes.into_iter().map(Interned::new).collect::<Vec<_>>();
         graph.remove_nodes_keep_edges(&empty_nodes);
 
         Ok(graph)
     }
 
     /// Remove the given nodes and all their edges from the query graph.
-    pub fn remove_nodes(&mut self, nodes: &[u16]) {
-        for &node in nodes {
-            self.nodes[node as usize] = QueryNode::Deleted;
-            let edges = self.edges[node as usize].clone();
-            for pred in edges.predecessors.iter() {
-                self.edges[pred as usize].successors.remove(node);
+    pub fn remove_nodes(&mut self, nodes: &[Interned<QueryNode>]) {
+        for &node_id in nodes {
+            let node = &self.nodes.get(node_id);
+            let old_node_pred = node.predecessors.clone();
+            let old_node_succ = node.successors.clone();
+
+            for pred in old_node_pred.iter() {
+                self.nodes.get_mut(pred).successors.remove(node_id);
             }
-            for succ in edges.successors.iter() {
-                self.edges[succ as usize].predecessors.remove(node);
+            for succ in old_node_succ.iter() {
+                self.nodes.get_mut(succ).predecessors.remove(node_id);
             }
-            self.edges[node as usize] = Edges {
-                predecessors: SmallBitmap::new(QUERY_GRAPH_NODE_LENGTH_LIMIT),
-                successors: SmallBitmap::new(QUERY_GRAPH_NODE_LENGTH_LIMIT),
-            };
+
+            let node = self.nodes.get_mut(node_id);
+            node.data = QueryNodeData::Deleted;
+            node.predecessors.clear();
+            node.successors.clear();
         }
     }
     /// Remove the given nodes, connecting all their predecessors to all their successors.
-    pub fn remove_nodes_keep_edges(&mut self, nodes: &[u16]) {
-        for &node in nodes {
-            self.nodes[node as usize] = QueryNode::Deleted;
-            let edges = self.edges[node as usize].clone();
-            for pred in edges.predecessors.iter() {
-                self.edges[pred as usize].successors.remove(node);
-                self.edges[pred as usize].successors.union(&edges.successors);
+    pub fn remove_nodes_keep_edges(&mut self, nodes: &[Interned<QueryNode>]) {
+        for &node_id in nodes {
+            let node = self.nodes.get(node_id);
+            let old_node_pred = node.predecessors.clone();
+            let old_node_succ = node.successors.clone();
+            for pred in old_node_pred.iter() {
+                let pred_successors = &mut self.nodes.get_mut(pred).successors;
+                pred_successors.remove(node_id);
+                pred_successors.union(&old_node_succ);
             }
-            for succ in edges.successors.iter() {
-                self.edges[succ as usize].predecessors.remove(node);
-                self.edges[succ as usize].predecessors.union(&edges.predecessors);
+            for succ in old_node_succ.iter() {
+                let succ_predecessors = &mut self.nodes.get_mut(succ).predecessors;
+                succ_predecessors.remove(node_id);
+                succ_predecessors.union(&old_node_pred);
             }
-            self.edges[node as usize] = Edges {
-                predecessors: SmallBitmap::new(QUERY_GRAPH_NODE_LENGTH_LIMIT),
-                successors: SmallBitmap::new(QUERY_GRAPH_NODE_LENGTH_LIMIT),
-            };
+            let node = self.nodes.get_mut(node_id);
+            node.data = QueryNodeData::Deleted;
+            node.predecessors.clear();
+            node.successors.clear();
         }
     }
 
@@ -219,9 +266,8 @@ impl QueryGraph {
     /// Return `true` if any node was removed.
     pub fn remove_words_starting_at_position(&mut self, position: i8) -> bool {
         let mut nodes_to_remove_keeping_edges = vec![];
-        for (node_idx, node) in self.nodes.iter().enumerate() {
-            let node_idx = node_idx as u16;
-            let QueryNode::Term(LocatedQueryTerm { value: _, positions }) = node else { continue };
+        for (node_idx, node) in self.nodes.iter() {
+            let QueryNodeData::Term(LocatedQueryTerm { value: _, positions }) = &node.data else { continue };
             if positions.start() == &position {
                 nodes_to_remove_keeping_edges.push(node_idx);
             }
@@ -238,13 +284,13 @@ impl QueryGraph {
     fn simplify(&mut self) {
         loop {
             let mut nodes_to_remove = vec![];
-            for (node_idx, node) in self.nodes.iter().enumerate() {
-                if (!matches!(node, QueryNode::End | QueryNode::Deleted)
-                    && self.edges[node_idx].successors.is_empty())
-                    || (!matches!(node, QueryNode::Start | QueryNode::Deleted)
-                        && self.edges[node_idx].predecessors.is_empty())
+            for (node_idx, node) in self.nodes.iter() {
+                if (!matches!(node.data, QueryNodeData::End | QueryNodeData::Deleted)
+                    && node.successors.is_empty())
+                    || (!matches!(node.data, QueryNodeData::Start | QueryNodeData::Deleted)
+                        && node.predecessors.is_empty())
                 {
-                    nodes_to_remove.push(node_idx as u16);
+                    nodes_to_remove.push(node_idx);
                 }
             }
             if nodes_to_remove.is_empty() {
@@ -254,4 +300,22 @@ impl QueryGraph {
             }
         }
     }
+}
+
+fn add_node(
+    nodes_data: &mut Vec<QueryNodeData>,
+    node_data: QueryNodeData,
+    from_nodes: &Vec<u16>,
+    successors: &mut Vec<HashSet<u16>>,
+    predecessors: &mut Vec<HashSet<u16>>,
+) -> u16 {
+    successors.push(HashSet::new());
+    predecessors.push(HashSet::new());
+    let new_node_idx = nodes_data.len() as u16;
+    nodes_data.push(node_data);
+    for &from_node in from_nodes {
+        successors[from_node as usize].insert(new_node_idx);
+        predecessors[new_node_idx as usize].insert(from_node);
+    }
+    new_node_idx
 }

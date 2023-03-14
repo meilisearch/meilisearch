@@ -186,6 +186,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         // anything, just extend the results and go back to the parent ranking rule.
         if ranking_rule_universes[cur_ranking_rule_index].len() <= 1 {
             maybe_add_to_results!(&ranking_rule_universes[cur_ranking_rule_index]);
+            ranking_rule_universes[cur_ranking_rule_index].clear();
             back!();
             continue;
         }

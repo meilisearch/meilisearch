@@ -7,11 +7,11 @@ use heed::{BytesDecode, RoTxn};
 use roaring::RoaringBitmap;
 
 use super::db_cache::DatabaseCache;
-use super::interner::{Interned, Interner};
-use super::query_graph::QUERY_GRAPH_NODE_LENGTH_LIMIT;
+use super::interner::{DedupInterner, Interned};
+use super::query_graph::QueryNodeData;
 use super::query_term::{Phrase, QueryTerm};
 use super::small_bitmap::SmallBitmap;
-use super::{QueryGraph, QueryNode, SearchContext};
+use super::{QueryGraph, SearchContext};
 use crate::{CboRoaringBitmapCodec, Index, Result, RoaringBitmapCodec};
 
 #[derive(Default)]
@@ -26,8 +26,8 @@ impl QueryTermDocIdsCache {
         index: &Index,
         txn: &'ctx RoTxn,
         db_cache: &mut DatabaseCache<'ctx>,
-        word_interner: &Interner<String>,
-        phrase_interner: &Interner<Phrase>,
+        word_interner: &DedupInterner<String>,
+        phrase_interner: &DedupInterner<Phrase>,
         phrase: Interned<Phrase>,
     ) -> Result<&'s RoaringBitmap> {
         if self.phrases.contains_key(&phrase) {
@@ -44,9 +44,9 @@ impl QueryTermDocIdsCache {
         index: &Index,
         txn: &'ctx RoTxn,
         db_cache: &mut DatabaseCache<'ctx>,
-        word_interner: &Interner<String>,
-        term_interner: &Interner<QueryTerm>,
-        phrase_interner: &Interner<Phrase>,
+        word_interner: &DedupInterner<String>,
+        term_interner: &DedupInterner<QueryTerm>,
+        phrase_interner: &DedupInterner<Phrase>,
         term_interned: Interned<QueryTerm>,
     ) -> Result<&'s RoaringBitmap> {
         if self.terms.contains_key(&term_interned) {
@@ -105,28 +105,27 @@ pub fn resolve_query_graph<'ctx>(
     // TODO: there is a faster way to compute this big
     // roaring bitmap expression
 
-    let mut nodes_resolved = SmallBitmap::new(QUERY_GRAPH_NODE_LENGTH_LIMIT);
-    let mut path_nodes_docids = vec![RoaringBitmap::new(); q.nodes.len()];
+    let mut nodes_resolved = SmallBitmap::for_interned_values_in(&q.nodes);
+    let mut path_nodes_docids = q.nodes.map(|_| RoaringBitmap::new());
 
     let mut next_nodes_to_visit = VecDeque::new();
     next_nodes_to_visit.push_back(q.root_node);
 
-    while let Some(node) = next_nodes_to_visit.pop_front() {
-        let predecessors = &q.edges[node as usize].predecessors;
+    while let Some(node_id) = next_nodes_to_visit.pop_front() {
+        let node = q.nodes.get(node_id);
+        let predecessors = &node.predecessors;
         if !predecessors.is_subset(&nodes_resolved) {
-            next_nodes_to_visit.push_back(node);
+            next_nodes_to_visit.push_back(node_id);
             continue;
         }
         // Take union of all predecessors
         let mut predecessors_docids = RoaringBitmap::new();
         for p in predecessors.iter() {
-            predecessors_docids |= &path_nodes_docids[p as usize];
+            predecessors_docids |= path_nodes_docids.get(p);
         }
 
-        let n = &q.nodes[node as usize];
-
-        let node_docids = match n {
-            QueryNode::Term(located_term) => {
+        let node_docids = match &node.data {
+            QueryNodeData::Term(located_term) => {
                 let term_docids = query_term_docids.get_query_term_docids(
                     index,
                     txn,
@@ -138,26 +137,26 @@ pub fn resolve_query_graph<'ctx>(
                 )?;
                 predecessors_docids & term_docids
             }
-            QueryNode::Deleted => {
+            QueryNodeData::Deleted => {
                 panic!()
             }
-            QueryNode::Start => universe.clone(),
-            QueryNode::End => {
+            QueryNodeData::Start => universe.clone(),
+            QueryNodeData::End => {
                 return Ok(predecessors_docids);
             }
         };
-        nodes_resolved.insert(node);
-        path_nodes_docids[node as usize] = node_docids;
+        nodes_resolved.insert(node_id);
+        *path_nodes_docids.get_mut(node_id) = node_docids;
 
-        for succ in q.edges[node as usize].successors.iter() {
+        for succ in node.successors.iter() {
             if !next_nodes_to_visit.contains(&succ) && !nodes_resolved.contains(succ) {
                 next_nodes_to_visit.push_back(succ);
             }
         }
 
-        for prec in q.edges[node as usize].predecessors.iter() {
-            if q.edges[prec as usize].successors.is_subset(&nodes_resolved) {
-                path_nodes_docids[prec as usize].clear();
+        for prec in node.predecessors.iter() {
+            if q.nodes.get(prec).successors.is_subset(&nodes_resolved) {
+                path_nodes_docids.get_mut(prec).clear();
             }
         }
     }
@@ -168,8 +167,8 @@ pub fn resolve_phrase<'ctx>(
     index: &Index,
     txn: &'ctx RoTxn,
     db_cache: &mut DatabaseCache<'ctx>,
-    word_interner: &Interner<String>,
-    phrase_interner: &Interner<Phrase>,
+    word_interner: &DedupInterner<String>,
+    phrase_interner: &DedupInterner<Phrase>,
     phrase: Interned<Phrase>,
 ) -> Result<RoaringBitmap> {
     let Phrase { words } = phrase_interner.get(phrase).clone();

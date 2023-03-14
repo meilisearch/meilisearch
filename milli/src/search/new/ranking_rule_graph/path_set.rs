@@ -27,10 +27,10 @@ impl PathSet {
         }
     }
 
-    pub fn remove_edge(&mut self, forbidden_edge: &u16) {
+    pub fn remove_edge(&mut self, forbidden_edge: u16) {
         let mut i = 0;
         while i < self.nodes.len() {
-            let should_remove = if &self.nodes[i].0 == forbidden_edge {
+            let should_remove = if self.nodes[i].0 == forbidden_edge {
                 true
             } else if !self.nodes[i].1.nodes.is_empty() {
                 self.nodes[i].1.remove_edge(forbidden_edge);

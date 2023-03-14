@@ -3,7 +3,8 @@ use std::collections::BTreeMap;
 
 use super::ProximityEdge;
 use crate::search::new::db_cache::DatabaseCache;
-use crate::search::new::interner::{Interned, Interner};
+use crate::search::new::interner::{DedupInterner, Interned};
+use crate::search::new::query_graph::QueryNodeData;
 use crate::search::new::query_term::{LocatedQueryTerm, Phrase, QueryTerm};
 use crate::search::new::ranking_rule_graph::proximity::WordPair;
 use crate::search::new::ranking_rule_graph::EdgeCondition;
@@ -13,7 +14,7 @@ use heed::RoTxn;
 
 fn last_word_of_term_iter<'t>(
     t: &'t QueryTerm,
-    phrase_interner: &'t Interner<Phrase>,
+    phrase_interner: &'t DedupInterner<Phrase>,
 ) -> impl Iterator<Item = (Option<Interned<Phrase>>, Interned<String>)> + 't {
     t.all_single_words_except_prefix_db().map(|w| (None, w)).chain(t.all_phrases().flat_map(
         move |p| {
@@ -24,7 +25,7 @@ fn last_word_of_term_iter<'t>(
 }
 fn first_word_of_term_iter<'t>(
     t: &'t QueryTerm,
-    phrase_interner: &'t Interner<Phrase>,
+    phrase_interner: &'t DedupInterner<Phrase>,
 ) -> impl Iterator<Item = (Interned<String>, Option<Interned<Phrase>>)> + 't {
     t.all_single_words_except_prefix_db().map(|w| (w, None)).chain(t.all_phrases().flat_map(
         move |p| {
@@ -36,7 +37,7 @@ fn first_word_of_term_iter<'t>(
 
 pub fn build_edges<'ctx>(
     ctx: &mut SearchContext<'ctx>,
-    conditions_interner: &mut Interner<ProximityEdge>,
+    conditions_interner: &mut DedupInterner<ProximityEdge>,
     from_node: &QueryNode,
     to_node: &QueryNode,
 ) -> Result<Vec<(u8, EdgeCondition<ProximityEdge>)>> {
@@ -50,19 +51,19 @@ pub fn build_edges<'ctx>(
         term_docids: _,
     } = ctx;
 
-    let (left_term, left_end_position) = match from_node {
-        QueryNode::Term(LocatedQueryTerm { value, positions }) => {
+    let (left_term, left_end_position) = match &from_node.data {
+        QueryNodeData::Term(LocatedQueryTerm { value, positions }) => {
             (term_interner.get(*value), *positions.end())
         }
-        QueryNode::Deleted => return Ok(vec![]),
-        QueryNode::Start => return Ok(vec![(0, EdgeCondition::Unconditional)]),
-        QueryNode::End => return Ok(vec![]),
+        QueryNodeData::Deleted => return Ok(vec![]),
+        QueryNodeData::Start => return Ok(vec![(0, EdgeCondition::Unconditional)]),
+        QueryNodeData::End => return Ok(vec![]),
     };
 
-    let right_term = match &to_node {
-        QueryNode::End => return Ok(vec![(0, EdgeCondition::Unconditional)]),
-        QueryNode::Deleted | QueryNode::Start => return Ok(vec![]),
-        QueryNode::Term(term) => term,
+    let right_term = match &to_node.data {
+        QueryNodeData::End => return Ok(vec![(0, EdgeCondition::Unconditional)]),
+        QueryNodeData::Deleted | QueryNodeData::Start => return Ok(vec![]),
+        QueryNodeData::Term(term) => term,
     };
     let LocatedQueryTerm { value: right_value, positions: right_positions } = right_term;
 
@@ -145,7 +146,7 @@ fn add_prefix_edges<'ctx>(
     index: &mut &crate::Index,
     txn: &'ctx RoTxn,
     db_cache: &mut DatabaseCache<'ctx>,
-    word_interner: &mut Interner<String>,
+    word_interner: &mut DedupInterner<String>,
     right_ngram_length: usize,
     left_word: Interned<String>,
     right_prefix: Interned<String>,
@@ -207,7 +208,7 @@ fn add_non_prefix_edges<'ctx>(
     index: &mut &crate::Index,
     txn: &'ctx RoTxn,
     db_cache: &mut DatabaseCache<'ctx>,
-    word_interner: &mut Interner<String>,
+    word_interner: &mut DedupInterner<String>,
     right_ngram_length: usize,
     word1: Interned<String>,
     word2: Interned<String>,

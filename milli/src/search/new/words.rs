@@ -3,8 +3,9 @@ use std::collections::BTreeSet;
 use roaring::RoaringBitmap;
 
 use super::logger::SearchLogger;
+use super::query_graph::QueryNodeData;
 use super::resolve_query_graph::resolve_query_graph;
-use super::{QueryGraph, QueryNode, RankingRule, RankingRuleOutput, SearchContext};
+use super::{QueryGraph, RankingRule, RankingRuleOutput, SearchContext};
 use crate::{Result, TermsMatchingStrategy};
 
 pub struct Words {
@@ -43,12 +44,12 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for Words {
         let positions_to_remove = match self.terms_matching_strategy {
             TermsMatchingStrategy::Last => {
                 let mut all_positions = BTreeSet::new();
-                for n in parent_query_graph.nodes.iter() {
-                    match n {
-                        QueryNode::Term(term) => {
+                for (_, n) in parent_query_graph.nodes.iter() {
+                    match &n.data {
+                        QueryNodeData::Term(term) => {
                             all_positions.extend(term.positions.clone().into_iter());
                         }
-                        QueryNode::Deleted | QueryNode::Start | QueryNode::End => {}
+                        QueryNodeData::Deleted | QueryNodeData::Start | QueryNodeData::End => {}
                     }
                 }
                 let mut r: Vec<i8> = all_positions.into_iter().collect();

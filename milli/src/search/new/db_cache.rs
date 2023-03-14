@@ -5,7 +5,7 @@ use fxhash::FxHashMap;
 use heed::types::ByteSlice;
 use heed::{BytesEncode, Database, RoTxn};
 
-use super::interner::{Interned, Interner};
+use super::interner::{DedupInterner, Interned};
 use crate::{Index, Result};
 
 /// A cache storing pointers to values in the LMDB databases.
@@ -53,7 +53,7 @@ impl<'ctx> DatabaseCache<'ctx> {
         &mut self,
         index: &Index,
         txn: &'ctx RoTxn,
-        word_interner: &Interner<String>,
+        word_interner: &DedupInterner<String>,
         word: Interned<String>,
     ) -> Result<Option<&'ctx [u8]>> {
         Self::get_value(
@@ -69,7 +69,7 @@ impl<'ctx> DatabaseCache<'ctx> {
         &mut self,
         index: &Index,
         txn: &'ctx RoTxn,
-        word_interner: &Interner<String>,
+        word_interner: &DedupInterner<String>,
         prefix: Interned<String>,
     ) -> Result<Option<&'ctx [u8]>> {
         Self::get_value(
@@ -85,7 +85,7 @@ impl<'ctx> DatabaseCache<'ctx> {
         &mut self,
         index: &Index,
         txn: &'ctx RoTxn,
-        word_interner: &Interner<String>,
+        word_interner: &DedupInterner<String>,
         word1: Interned<String>,
         word2: Interned<String>,
         proximity: u8,
@@ -103,7 +103,7 @@ impl<'ctx> DatabaseCache<'ctx> {
         &mut self,
         index: &Index,
         txn: &'ctx RoTxn,
-        word_interner: &Interner<String>,
+        word_interner: &DedupInterner<String>,
         word1: Interned<String>,
         prefix2: Interned<String>,
         proximity: u8,
@@ -120,7 +120,7 @@ impl<'ctx> DatabaseCache<'ctx> {
         &mut self,
         index: &Index,
         txn: &'ctx RoTxn,
-        word_interner: &Interner<String>,
+        word_interner: &DedupInterner<String>,
         left_prefix: Interned<String>,
         right: Interned<String>,
         proximity: u8,

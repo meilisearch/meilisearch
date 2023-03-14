@@ -9,17 +9,17 @@ use crate::search::new::SearchContext;
 use crate::Result;
 
 /// A cache storing the document ids associated with each ranking rule edge
-pub struct EdgeConditionsCache<G: RankingRuleGraphTrait> {
+pub struct EdgeConditionDocIdsCache<G: RankingRuleGraphTrait> {
     // TODO: should be FxHashMap<Interned<EdgeCondition>, RoaringBitmap>
     pub cache: FxHashMap<Interned<G::EdgeCondition>, RoaringBitmap>,
     _phantom: PhantomData<G>,
 }
-impl<G: RankingRuleGraphTrait> Default for EdgeConditionsCache<G> {
+impl<G: RankingRuleGraphTrait> Default for EdgeConditionDocIdsCache<G> {
     fn default() -> Self {
         Self { cache: Default::default(), _phantom: Default::default() }
     }
 }
-impl<G: RankingRuleGraphTrait> EdgeConditionsCache<G> {
+impl<G: RankingRuleGraphTrait> EdgeConditionDocIdsCache<G> {
     /// Retrieve the document ids for the given edge condition.
     ///
     /// If the cache does not yet contain these docids, they are computed

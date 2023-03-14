@@ -1,9 +1,10 @@
 use roaring::RoaringBitmap;
 
-use super::empty_paths_cache::EmptyPathsCache;
+use super::empty_paths_cache::DeadEndPathCache;
 use super::{EdgeCondition, RankingRuleGraph, RankingRuleGraphTrait};
-use crate::search::new::interner::{Interned, Interner};
+use crate::search::new::interner::{DedupInterner, Interned, MappedInterner};
 use crate::search::new::logger::SearchLogger;
+use crate::search::new::query_graph::QueryNodeData;
 use crate::search::new::query_term::{LocatedQueryTerm, QueryTerm};
 use crate::search::new::small_bitmap::SmallBitmap;
 use crate::search::new::{QueryGraph, QueryNode, SearchContext};
@@ -55,13 +56,13 @@ impl RankingRuleGraphTrait for TypoGraph {
 
     fn build_edges<'ctx>(
         ctx: &mut SearchContext<'ctx>,
-        conditions_interner: &mut Interner<Self::EdgeCondition>,
+        conditions_interner: &mut DedupInterner<Self::EdgeCondition>,
         _from_node: &QueryNode,
         to_node: &QueryNode,
     ) -> Result<Vec<(u8, EdgeCondition<Self::EdgeCondition>)>> {
         let SearchContext { term_interner, .. } = ctx;
-        match to_node {
-            QueryNode::Term(LocatedQueryTerm { value, positions }) => {
+        match &to_node.data {
+            QueryNodeData::Term(LocatedQueryTerm { value, positions }) => {
                 let mut edges = vec![];
                 // Ngrams have a base typo cost
                 // 2-gram -> equivalent to 1 typo
@@ -130,20 +131,20 @@ impl RankingRuleGraphTrait for TypoGraph {
                 }
                 Ok(edges)
             }
-            QueryNode::End => Ok(vec![(0, EdgeCondition::Unconditional)]),
-            QueryNode::Deleted | QueryNode::Start => panic!(),
+            QueryNodeData::End => Ok(vec![(0, EdgeCondition::Unconditional)]),
+            QueryNodeData::Deleted | QueryNodeData::Start => panic!(),
         }
     }
 
     fn log_state(
         graph: &RankingRuleGraph<Self>,
         paths: &[Vec<u16>],
-        empty_paths_cache: &EmptyPathsCache,
+        empty_paths_cache: &DeadEndPathCache<Self>,
         universe: &RoaringBitmap,
-        distances: &[Vec<(u16, SmallBitmap)>],
+        distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoEdge>)>, QueryNode>,
         cost: u16,
         logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
-        logger.log_typo_state(graph, paths, empty_paths_cache, universe, distances.to_vec(), cost);
+        logger.log_typo_state(graph, paths, empty_paths_cache, universe, distances, cost);
     }
 }

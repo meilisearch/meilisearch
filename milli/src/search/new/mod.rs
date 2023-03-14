@@ -26,7 +26,8 @@ use query_graph::{QueryGraph, QueryNode};
 pub use ranking_rules::{bucket_sort, RankingRule, RankingRuleOutput, RankingRuleQueryTrait};
 use roaring::RoaringBitmap;
 
-use self::interner::Interner;
+use self::interner::DedupInterner;
+use self::query_graph::QueryNodeData;
 use self::query_term::{Phrase, QueryTerm};
 use self::ranking_rules::PlaceholderQuery;
 use self::resolve_query_graph::{resolve_query_graph, QueryTermDocIdsCache};
@@ -39,9 +40,9 @@ pub struct SearchContext<'ctx> {
     pub index: &'ctx Index,
     pub txn: &'ctx RoTxn<'ctx>,
     pub db_cache: DatabaseCache<'ctx>,
-    pub word_interner: Interner<String>,
-    pub phrase_interner: Interner<Phrase>,
-    pub term_interner: Interner<QueryTerm>,
+    pub word_interner: DedupInterner<String>,
+    pub phrase_interner: DedupInterner<Phrase>,
+    pub term_interner: DedupInterner<QueryTerm>,
     pub term_docids: QueryTermDocIdsCache,
 }
 impl<'ctx> SearchContext<'ctx> {
@@ -70,12 +71,12 @@ fn resolve_maximally_reduced_query_graph<'ctx>(
     let mut positions_to_remove = match matching_strategy {
         TermsMatchingStrategy::Last => {
             let mut all_positions = BTreeSet::new();
-            for n in query_graph.nodes.iter() {
-                match n {
-                    QueryNode::Term(term) => {
+            for (_, n) in query_graph.nodes.iter() {
+                match &n.data {
+                    QueryNodeData::Term(term) => {
                         all_positions.extend(term.positions.clone().into_iter());
                     }
-                    QueryNode::Deleted | QueryNode::Start | QueryNode::End => {}
+                    QueryNodeData::Deleted | QueryNodeData::Start | QueryNodeData::End => {}
                 }
             }
             all_positions.into_iter().collect()
@@ -200,7 +201,7 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                     continue;
                 }
                 asc.insert(field);
-                todo!();
+                // TODO
             }
             crate::Criterion::Desc(field) => {
                 if desc.contains(&field) {
@@ -295,45 +296,48 @@ mod tests {
 
         println!("nbr docids: {}", index.documents_ids(&txn).unwrap().len());
 
-        // loop {
-        let start = Instant::now();
+        loop {
+            let start = Instant::now();
 
-        let mut logger = crate::search::new::logger::detailed::DetailedSearchLogger::new("log");
-        let mut ctx = SearchContext::new(&index, &txn);
-        let results = execute_search(
-            &mut ctx,
-            "sun flower s are the best",
-            TermsMatchingStrategy::Last,
-            None,
-            0,
-            20,
-            &mut DefaultSearchLogger,
-            &mut logger,
-        )
-        .unwrap();
+            // let mut logger = crate::search::new::logger::detailed::DetailedSearchLogger::new("log");
+            let mut ctx = SearchContext::new(&index, &txn);
+            let results = execute_search(
+                &mut ctx,
+                // "which a the releases from poison by the government",
+                // "sun flower s are the best",
+                "zero config",
+                TermsMatchingStrategy::Last,
+                None,
+                0,
+                20,
+                &mut DefaultSearchLogger,
+                &mut DefaultSearchLogger,
+                //&mut logger,
+            )
+            .unwrap();
 
-        logger.write_d2_description(&mut ctx);
+            // logger.write_d2_description(&mut ctx);
 
-        let elapsed = start.elapsed();
-        println!("{}us", elapsed.as_micros());
+            let elapsed = start.elapsed();
+            println!("{}us", elapsed.as_micros());
 
-        let _documents = index
-            .documents(&txn, results.iter().copied())
-            .unwrap()
-            .into_iter()
-            .map(|(id, obkv)| {
-                let mut object = serde_json::Map::default();
-                for (fid, fid_name) in index.fields_ids_map(&txn).unwrap().iter() {
-                    let value = obkv.get(fid).unwrap();
-                    let value: serde_json::Value = serde_json::from_slice(value).unwrap();
-                    object.insert(fid_name.to_owned(), value);
-                }
-                (id, serde_json::to_string_pretty(&object).unwrap())
-            })
-            .collect::<Vec<_>>();
+            let _documents = index
+                .documents(&txn, results.iter().copied())
+                .unwrap()
+                .into_iter()
+                .map(|(id, obkv)| {
+                    let mut object = serde_json::Map::default();
+                    for (fid, fid_name) in index.fields_ids_map(&txn).unwrap().iter() {
+                        let value = obkv.get(fid).unwrap();
+                        let value: serde_json::Value = serde_json::from_slice(value).unwrap();
+                        object.insert(fid_name.to_owned(), value);
+                    }
+                    (id, serde_json::to_string_pretty(&object).unwrap())
+                })
+                .collect::<Vec<_>>();
 
-        println!("{}us: {:?}", elapsed.as_micros(), results);
-        // }
+            println!("{}us: {:?}", elapsed.as_micros(), results);
+        }
         // for (id, _document) in documents {
         //     println!("{id}:");
         //     // println!("{document}");

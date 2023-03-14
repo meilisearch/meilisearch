@@ -9,7 +9,7 @@ use heed::types::DecodeIgnore;
 use heed::RoTxn;
 use itertools::Itertools;
 
-use super::interner::{Interned, Interner};
+use super::interner::{DedupInterner, Interned};
 use super::SearchContext;
 use crate::search::fst_utils::{Complement, Intersection, StartsWith, Union};
 use crate::search::{build_dfa, get_first};
@@ -22,7 +22,7 @@ pub struct Phrase {
     pub words: Vec<Option<Interned<String>>>,
 }
 impl Phrase {
-    pub fn description(&self, interner: &Interner<String>) -> String {
+    pub fn description(&self, interner: &DedupInterner<String>) -> String {
         self.words.iter().flatten().map(|w| interner.get(*w)).join(" ")
     }
 }
@@ -60,8 +60,8 @@ pub struct QueryTerm {
 }
 impl QueryTerm {
     pub fn phrase(
-        word_interner: &mut Interner<String>,
-        phrase_interner: &mut Interner<Phrase>,
+        word_interner: &mut DedupInterner<String>,
+        phrase_interner: &mut DedupInterner<Phrase>,
         phrase: Phrase,
     ) -> Self {
         Self {
@@ -78,7 +78,7 @@ impl QueryTerm {
             is_ngram: false,
         }
     }
-    pub fn empty(word_interner: &mut Interner<String>, original: &str) -> Self {
+    pub fn empty(word_interner: &mut DedupInterner<String>, original: &str) -> Self {
         Self {
             original: word_interner.insert(original.to_owned()),
             phrase: None,
@@ -313,7 +313,7 @@ pub struct LocatedQueryTerm {
 
 impl LocatedQueryTerm {
     /// Return `true` iff the term is empty
-    pub fn is_empty(&self, interner: &Interner<QueryTerm>) -> bool {
+    pub fn is_empty(&self, interner: &DedupInterner<QueryTerm>) -> bool {
         interner.get(self.value).is_empty()
     }
 }

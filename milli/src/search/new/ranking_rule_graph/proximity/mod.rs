@@ -3,9 +3,9 @@ pub mod compute_docids;
 
 use roaring::RoaringBitmap;
 
-use super::empty_paths_cache::EmptyPathsCache;
+use super::empty_paths_cache::DeadEndPathCache;
 use super::{EdgeCondition, RankingRuleGraphTrait};
-use crate::search::new::interner::{Interned, Interner};
+use crate::search::new::interner::{DedupInterner, Interned, MappedInterner};
 use crate::search::new::logger::SearchLogger;
 use crate::search::new::query_term::Phrase;
 use crate::search::new::small_bitmap::SmallBitmap;
@@ -56,7 +56,7 @@ impl RankingRuleGraphTrait for ProximityGraph {
 
     fn build_edges<'ctx>(
         ctx: &mut SearchContext<'ctx>,
-        conditions_interner: &mut Interner<Self::EdgeCondition>,
+        conditions_interner: &mut DedupInterner<Self::EdgeCondition>,
         source_node: &QueryNode,
         dest_node: &QueryNode,
     ) -> Result<Vec<(u8, EdgeCondition<Self::EdgeCondition>)>> {
@@ -66,19 +66,12 @@ impl RankingRuleGraphTrait for ProximityGraph {
     fn log_state(
         graph: &super::RankingRuleGraph<Self>,
         paths: &[Vec<u16>],
-        empty_paths_cache: &EmptyPathsCache,
+        empty_paths_cache: &DeadEndPathCache<Self>,
         universe: &RoaringBitmap,
-        distances: &[Vec<(u16, SmallBitmap)>],
+        distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityEdge>)>, QueryNode>,
         cost: u16,
         logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
-        logger.log_proximity_state(
-            graph,
-            paths,
-            empty_paths_cache,
-            universe,
-            distances.to_vec(),
-            cost,
-        );
+        logger.log_proximity_state(graph, paths, empty_paths_cache, universe, distances, cost);
     }
 }

@@ -38,13 +38,16 @@ That is we find the documents where either:
 
 use roaring::RoaringBitmap;
 
+use super::interner::MappedInterner;
 use super::logger::SearchLogger;
+use super::query_graph::QueryNode;
 use super::ranking_rule_graph::{
-    EdgeCondition, EdgeConditionsCache, EmptyPathsCache, ProximityGraph, RankingRuleGraph,
+    DeadEndPathCache, EdgeCondition, EdgeConditionDocIdsCache, ProximityGraph, RankingRuleGraph,
     RankingRuleGraphTrait, TypoGraph,
 };
 use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, RankingRule, RankingRuleOutput, SearchContext};
+use crate::search::new::interner::Interned;
 use crate::Result;
 
 pub type Proximity = GraphBasedRankingRule<ProximityGraph>;
@@ -79,12 +82,12 @@ pub struct GraphBasedRankingRuleState<G: RankingRuleGraphTrait> {
     /// The current graph
     graph: RankingRuleGraph<G>,
     /// Cache to retrieve the docids associated with each edge
-    edge_conditions_cache: EdgeConditionsCache<G>,
+    edge_conditions_cache: EdgeConditionDocIdsCache<G>,
     /// Cache used to optimistically discard paths that resolve to no documents.
-    empty_paths_cache: EmptyPathsCache,
+    empty_paths_cache: DeadEndPathCache<G>,
     /// A structure giving the list of possible costs from each node to the end node,
     /// along with a set of unavoidable edges that must be traversed to achieve that distance.
-    all_distances: Vec<Vec<(u16, SmallBitmap)>>,
+    all_distances: MappedInterner<Vec<(u16, SmallBitmap<G::EdgeCondition>)>, QueryNode>,
     /// An index in the first element of `all_distances`, giving the cost of the next bucket
     cur_distance_idx: usize,
 }
@@ -95,12 +98,12 @@ pub struct GraphBasedRankingRuleState<G: RankingRuleGraphTrait> {
 fn remove_empty_edges<'ctx, G: RankingRuleGraphTrait>(
     ctx: &mut SearchContext<'ctx>,
     graph: &mut RankingRuleGraph<G>,
-    edge_docids_cache: &mut EdgeConditionsCache<G>,
+    edge_docids_cache: &mut EdgeConditionDocIdsCache<G>,
     universe: &RoaringBitmap,
-    empty_paths_cache: &mut EmptyPathsCache,
+    empty_paths_cache: &mut DeadEndPathCache<G>,
 ) -> Result<()> {
-    for edge_index in 0..graph.edges_store.len() as u16 {
-        let Some(edge) = graph.edges_store[edge_index as usize].as_ref() else {
+    for edge_id in graph.edges_store.indexes() {
+        let Some(edge) = graph.edges_store.get(edge_id).as_ref() else {
             continue;
         };
         let condition = edge.condition;
@@ -110,8 +113,8 @@ fn remove_empty_edges<'ctx, G: RankingRuleGraphTrait>(
             EdgeCondition::Conditional(condition) => {
                 let docids = edge_docids_cache.get_edge_docids(ctx, condition, graph, universe)?;
                 if docids.is_disjoint(universe) {
-                    graph.remove_ranking_rule_edge(edge_index);
-                    empty_paths_cache.forbid_edge(edge_index);
+                    graph.remove_edges_with_condition(condition);
+                    empty_paths_cache.add_condition(condition);
                     edge_docids_cache.cache.remove(&condition);
                     continue;
                 }
@@ -133,8 +136,8 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         query_graph: &QueryGraph,
     ) -> Result<()> {
         let mut graph = RankingRuleGraph::build(ctx, query_graph.clone())?;
-        let mut edge_docids_cache = EdgeConditionsCache::default();
-        let mut empty_paths_cache = EmptyPathsCache::new(graph.edges_store.len() as u16);
+        let mut edge_docids_cache = EdgeConditionDocIdsCache::default();
+        let mut empty_paths_cache = DeadEndPathCache::new(&graph.conditions_interner);
 
         // First simplify the graph as much as possible, by computing the docids of the edges
         // within the rule's universe and removing the edges that have no associated docids.
@@ -187,7 +190,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         // If the cur_distance_idx does not point to a valid cost in the `all_distances`
         // structure, then we have computed all the buckets and can return.
         if state.cur_distance_idx
-            >= state.all_distances[state.graph.query_graph.root_node as usize].len()
+            >= state.all_distances.get(state.graph.query_graph.root_node).len()
         {
             self.state = None;
             return Ok(None);
@@ -195,7 +198,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
 
         // Retrieve the cost of the paths to compute
         let (cost, _) =
-            state.all_distances[state.graph.query_graph.root_node as usize][state.cur_distance_idx];
+            state.all_distances.get(state.graph.query_graph.root_node)[state.cur_distance_idx];
         state.cur_distance_idx += 1;
 
         let mut bucket = RoaringBitmap::new();
@@ -226,7 +229,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         // Updating the empty_paths_cache helps speed up the execution of `visit_paths_of_cost` and reduces
         // the number of future candidate paths given by that same function.
         graph.visit_paths_of_cost(
-            graph.query_graph.root_node as usize,
+            graph.query_graph.root_node,
             cost,
             all_distances,
             empty_paths_cache,
@@ -237,29 +240,27 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
 
                 // We store the edges and their docids in vectors in case the path turns out to be
                 // empty and we need to figure out why it was empty.
-                let mut visited_edges = vec![];
-                let mut cached_edge_docids = vec![];
+                let mut visited_conditions = vec![];
+                let mut cached_edge_docids =
+                    graph.conditions_interner.map(|_| RoaringBitmap::new());
 
-                for &edge_index in path {
-                    visited_edges.push(edge_index);
-                    let edge = graph.edges_store[edge_index as usize].as_ref().unwrap();
-                    let condition = match edge.condition {
-                        EdgeCondition::Unconditional => continue,
-                        EdgeCondition::Conditional(condition) => condition,
-                    };
+                for &condition_interned_raw in path {
+                    let condition = Interned::new(condition_interned_raw);
+                    visited_conditions.push(condition_interned_raw);
 
                     let edge_docids =
                         edge_docids_cache.get_edge_docids(ctx, condition, graph, &universe)?;
 
-                    cached_edge_docids.push((edge_index, edge_docids.clone()));
+                    *cached_edge_docids.get_mut(condition) = edge_docids.clone();
 
                     // If the edge is empty, then the path will be empty as well, we update the graph
                     // and caches accordingly and skip to the next candidate path.
                     if edge_docids.is_disjoint(&universe) {
                         // 1. Store in the cache that this edge is empty for this universe
-                        empty_paths_cache.forbid_edge(edge_index);
+                        empty_paths_cache.add_condition(condition);
                         // 2. remove this edge from the ranking rule graph
-                        graph.remove_ranking_rule_edge(edge_index);
+                        // ouch, no! :( need to link a condition to one or more ranking rule edges
+                        graph.remove_edges_with_condition(condition);
                         // 3. Also remove the entry from the edge_docids_cache, since we don't need it anymore
                         edge_docids_cache.cache.remove(&condition);
                         return Ok(());
@@ -270,17 +271,18 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                     if path_docids.is_disjoint(&universe) {
                         // First, we know that this path is empty, and thus any path
                         // that is a superset of it will also be empty.
-                        empty_paths_cache.forbid_prefix(&visited_edges);
+                        empty_paths_cache.add_prefix(&visited_conditions);
                         // Second, if the intersection between this edge and any
                         // previous one is disjoint with the universe,
                         // then we also know that any path containing the same couple of
                         // edges will also be empty.
-                        for (edge_index2, edge_docids2) in
-                            cached_edge_docids[..cached_edge_docids.len() - 1].iter()
-                        {
+                        for (past_condition, edge_docids2) in cached_edge_docids.iter() {
+                            if past_condition == condition {
+                                continue;
+                            };
                             let intersection = edge_docids & edge_docids2;
                             if intersection.is_disjoint(&universe) {
-                                empty_paths_cache.forbid_couple_edges(*edge_index2, edge_index);
+                                empty_paths_cache.add_condition_couple(past_condition, condition);
                             }
                         }
                         // We should maybe instead try to compute:
@@ -291,6 +293,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                 bucket |= &path_docids;
                 // Reduce the size of the universe so that we can more optimistically discard candidate paths
                 universe -= path_docids;
+                // TODO: if the universe is empty, stop iterating
                 Ok(())
             },
         )?;

@@ -6,10 +6,12 @@ use std::time::Instant;
 use rand::random;
 use roaring::RoaringBitmap;
 
+use crate::search::new::interner::{Interned, MappedInterner};
+use crate::search::new::query_graph::QueryNodeData;
 use crate::search::new::query_term::{LocatedQueryTerm, QueryTerm};
 use crate::search::new::ranking_rule_graph::{
-    Edge, EdgeCondition, EmptyPathsCache, ProximityGraph, RankingRuleGraph, RankingRuleGraphTrait,
-    TypoGraph,
+    DeadEndPathCache, Edge, EdgeCondition, ProximityEdge, ProximityGraph, RankingRuleGraph,
+    RankingRuleGraphTrait, TypoEdge, TypoGraph,
 };
 use crate::search::new::small_bitmap::SmallBitmap;
 use crate::search::new::{QueryGraph, QueryNode, SearchContext};
@@ -42,17 +44,17 @@ pub enum SearchEvents {
     ProximityState {
         graph: RankingRuleGraph<ProximityGraph>,
         paths: Vec<Vec<u16>>,
-        empty_paths_cache: EmptyPathsCache,
+        empty_paths_cache: DeadEndPathCache<ProximityGraph>,
         universe: RoaringBitmap,
-        distances: Vec<Vec<(u16, SmallBitmap)>>,
+        distances: MappedInterner<Vec<(u16, SmallBitmap<ProximityEdge>)>, QueryNode>,
         cost: u16,
     },
     TypoState {
         graph: RankingRuleGraph<TypoGraph>,
         paths: Vec<Vec<u16>>,
-        empty_paths_cache: EmptyPathsCache,
+        empty_paths_cache: DeadEndPathCache<TypoGraph>,
         universe: RoaringBitmap,
-        distances: Vec<Vec<(u16, SmallBitmap)>>,
+        distances: MappedInterner<Vec<(u16, SmallBitmap<TypoEdge>)>, QueryNode>,
         cost: u16,
     },
     RankingRuleSkipBucket {
@@ -168,9 +170,9 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         &mut self,
         query_graph: &RankingRuleGraph<ProximityGraph>,
         paths_map: &[Vec<u16>],
-        empty_paths_cache: &EmptyPathsCache,
+        empty_paths_cache: &DeadEndPathCache<ProximityGraph>,
         universe: &RoaringBitmap,
-        distances: Vec<Vec<(u16, SmallBitmap)>>,
+        distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityEdge>)>, QueryNode>,
         cost: u16,
     ) {
         self.events.push(SearchEvents::ProximityState {
@@ -178,7 +180,7 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
             paths: paths_map.to_vec(),
             empty_paths_cache: empty_paths_cache.clone(),
             universe: universe.clone(),
-            distances,
+            distances: distances.clone(),
             cost,
         })
     }
@@ -187,9 +189,9 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         &mut self,
         query_graph: &RankingRuleGraph<TypoGraph>,
         paths_map: &[Vec<u16>],
-        empty_paths_cache: &EmptyPathsCache,
+        empty_paths_cache: &DeadEndPathCache<TypoGraph>,
         universe: &RoaringBitmap,
-        distances: Vec<Vec<(u16, SmallBitmap)>>,
+        distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoEdge>)>, QueryNode>,
         cost: u16,
     ) {
         self.events.push(SearchEvents::TypoState {
@@ -197,7 +199,7 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
             paths: paths_map.to_vec(),
             empty_paths_cache: empty_paths_cache.clone(),
             universe: universe.clone(),
-            distances,
+            distances: distances.clone(),
             cost,
         })
     }
@@ -424,15 +426,15 @@ results.{random} {{
         writeln!(&mut file, "}}").unwrap();
     }
 
-    fn query_node_d2_desc(
+    fn query_node_d2_desc<R: RankingRuleGraphTrait>(
         ctx: &mut SearchContext,
-        node_idx: usize,
+        node_idx: Interned<QueryNode>,
         node: &QueryNode,
-        distances: &[(u16, SmallBitmap)],
+        distances: &[(u16, SmallBitmap<R::EdgeCondition>)],
         file: &mut File,
     ) {
-        match &node {
-            QueryNode::Term(LocatedQueryTerm { value, .. }) => {
+        match &node.data {
+            QueryNodeData::Term(LocatedQueryTerm { value, .. }) => {
                 let QueryTerm {
                     original,
                     zero_typo,
@@ -496,11 +498,11 @@ shape: class"
 
                 writeln!(file, "}}").unwrap();
             }
-            QueryNode::Deleted => panic!(),
-            QueryNode::Start => {
+            QueryNodeData::Deleted => panic!(),
+            QueryNodeData::Start => {
                 writeln!(file, "{node_idx} : START").unwrap();
             }
-            QueryNode::End => {
+            QueryNodeData::End => {
                 writeln!(file, "{node_idx} : END").unwrap();
             }
         }
@@ -511,14 +513,14 @@ shape: class"
         file: &mut File,
     ) {
         writeln!(file, "direction: right").unwrap();
-        for node in 0..query_graph.nodes.len() {
-            if matches!(query_graph.nodes[node], QueryNode::Deleted) {
+        for (node_id, node) in query_graph.nodes.iter() {
+            if matches!(node.data, QueryNodeData::Deleted) {
                 continue;
             }
-            Self::query_node_d2_desc(ctx, node, &query_graph.nodes[node], &[], file);
+            Self::query_node_d2_desc::<TypoGraph>(ctx, node_id, node, &[], file);
 
-            for edge in query_graph.edges[node].successors.iter() {
-                writeln!(file, "{node} -> {edge};\n").unwrap();
+            for edge in node.successors.iter() {
+                writeln!(file, "{node_id} -> {edge};\n").unwrap();
             }
         }
     }
@@ -526,31 +528,28 @@ shape: class"
         ctx: &mut SearchContext,
         graph: &RankingRuleGraph<R>,
         paths: &[Vec<u16>],
-        _empty_paths_cache: &EmptyPathsCache,
-        distances: Vec<Vec<(u16, SmallBitmap)>>,
+        _empty_paths_cache: &DeadEndPathCache<R>,
+        distances: MappedInterner<Vec<(u16, SmallBitmap<R::EdgeCondition>)>, QueryNode>,
         file: &mut File,
     ) {
         writeln!(file, "direction: right").unwrap();
 
         writeln!(file, "Proximity Graph {{").unwrap();
-        for (node_idx, node) in graph.query_graph.nodes.iter().enumerate() {
-            if matches!(node, QueryNode::Deleted) {
+        for (node_idx, node) in graph.query_graph.nodes.iter() {
+            if matches!(&node.data, QueryNodeData::Deleted) {
                 continue;
             }
-            let distances = &distances[node_idx];
-            Self::query_node_d2_desc(ctx, node_idx, node, distances.as_slice(), file);
+            let distances = &distances.get(node_idx);
+            Self::query_node_d2_desc::<R>(ctx, node_idx, node, distances, file);
         }
-        for edge in graph.edges_store.iter().flatten() {
-            let Edge { source_node, dest_node, condition: details, .. } = edge;
+        for (_edge_id, edge) in graph.edges_store.iter() {
+            let Some(edge) = edge else { continue };
+            let Edge { source_node, dest_node, condition: details, cost } = edge;
 
             match &details {
                 EdgeCondition::Unconditional => {
-                    writeln!(
-                        file,
-                        "{source_node} -> {dest_node} : \"always cost {cost}\"",
-                        cost = edge.cost,
-                    )
-                    .unwrap();
+                    writeln!(file, "{source_node} -> {dest_node} : \"always cost {cost}\"",)
+                        .unwrap();
                 }
                 EdgeCondition::Conditional(condition) => {
                     let condition = graph.conditions_interner.get(*condition);
@@ -590,39 +589,19 @@ shape: class"
         // }
         // writeln!(file, "}}").unwrap();
     }
-    fn edge_d2_description<R: RankingRuleGraphTrait>(
-        ctx: &mut SearchContext,
+    fn condition_d2_description<R: RankingRuleGraphTrait>(
+        _ctx: &mut SearchContext,
         graph: &RankingRuleGraph<R>,
-        edge_idx: u16,
+        condition_id: Interned<R::EdgeCondition>,
         file: &mut File,
     ) {
-        let Edge { source_node, dest_node, cost, .. } =
-            graph.edges_store[edge_idx as usize].as_ref().unwrap();
-        let source_node = &graph.query_graph.nodes[*source_node as usize];
-        let source_node_desc = match source_node {
-            QueryNode::Term(term) => {
-                let term = ctx.term_interner.get(term.value);
-                ctx.word_interner.get(term.original).to_owned()
-            }
-            QueryNode::Deleted => panic!(),
-            QueryNode::Start => "START".to_owned(),
-            QueryNode::End => "END".to_owned(),
-        };
-        let dest_node = &graph.query_graph.nodes[*dest_node as usize];
-        let dest_node_desc = match dest_node {
-            QueryNode::Term(term) => {
-                let term = ctx.term_interner.get(term.value);
-                ctx.word_interner.get(term.original).to_owned()
-            }
-            QueryNode::Deleted => panic!(),
-            QueryNode::Start => "START".to_owned(),
-            QueryNode::End => "END".to_owned(),
-        };
+        let condition = graph.conditions_interner.get(condition_id);
         writeln!(
             file,
-            "{edge_idx}: \"{source_node_desc}->{dest_node_desc} [{cost}]\" {{
+            "{condition_id}: \"{}\" {{
             shape: class
-        }}"
+        }}",
+            R::label_for_edge_condition(condition)
         )
         .unwrap();
     }
@@ -632,12 +611,12 @@ shape: class"
         paths: &[Vec<u16>],
         file: &mut File,
     ) {
-        for (path_idx, edge_indexes) in paths.iter().enumerate() {
+        for (path_idx, condition_indexes) in paths.iter().enumerate() {
             writeln!(file, "{path_idx} {{").unwrap();
-            for edge_idx in edge_indexes.iter() {
-                Self::edge_d2_description(ctx, graph, *edge_idx, file);
+            for condition in condition_indexes.iter() {
+                Self::condition_d2_description(ctx, graph, Interned::new(*condition), file);
             }
-            for couple_edges in edge_indexes.windows(2) {
+            for couple_edges in condition_indexes.windows(2) {
                 let [src_edge_idx, dest_edge_idx] = couple_edges else { panic!() };
                 writeln!(file, "{src_edge_idx} -> {dest_edge_idx}").unwrap();
             }
