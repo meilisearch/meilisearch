@@ -503,11 +503,11 @@ pub mod tests {
         insta::assert_display_snapshot!(p("NOT subscribers 100 TO 1000"), @"NOT ({subscribers} {100} TO {1000})");
 
         // Test NULL + NOT NULL
-        insta::assert_display_snapshot!(p("subscribers NULL"), @"{subscribers} NULL");
-        insta::assert_display_snapshot!(p("NOT subscribers NULL"), @"NOT ({subscribers} NULL)");
-        insta::assert_display_snapshot!(p("subscribers NOT NULL"), @"NOT ({subscribers} NULL)");
-        insta::assert_display_snapshot!(p("NOT subscribers NOT NULL"), @"{subscribers} NULL");
-        insta::assert_display_snapshot!(p("subscribers NOT   NULL"), @"NOT ({subscribers} NULL)");
+        insta::assert_display_snapshot!(p("subscribers IS NULL"), @"{subscribers} IS NULL");
+        insta::assert_display_snapshot!(p("NOT subscribers IS NULL"), @"NOT ({subscribers} IS NULL)");
+        insta::assert_display_snapshot!(p("subscribers IS NOT NULL"), @"NOT ({subscribers} IS NULL)");
+        insta::assert_display_snapshot!(p("NOT subscribers IS NOT NULL"), @"{subscribers} IS NULL");
+        insta::assert_display_snapshot!(p("subscribers  IS   NOT   NULL"), @"NOT ({subscribers} IS NULL)");
 
         // Test EXISTS + NOT EXITS
         insta::assert_display_snapshot!(p("subscribers EXISTS"), @"{subscribers} EXISTS");
@@ -587,7 +587,7 @@ pub mod tests {
         "###);
 
         insta::assert_display_snapshot!(p("'OR'"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `_geoRadius`, or `_geoBoundingBox` at `\'OR\'`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `_geoRadius`, or `_geoBoundingBox` at `\'OR\'`.
         1:5 'OR'
         "###);
 
@@ -597,12 +597,12 @@ pub mod tests {
         "###);
 
         insta::assert_display_snapshot!(p("channel Ponce"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `_geoRadius`, or `_geoBoundingBox` at `channel Ponce`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `_geoRadius`, or `_geoBoundingBox` at `channel Ponce`.
         1:14 channel Ponce
         "###);
 
         insta::assert_display_snapshot!(p("channel = Ponce OR"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `_geoRadius`, or `_geoBoundingBox` but instead got nothing.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `_geoRadius`, or `_geoBoundingBox` but instead got nothing.
         19:19 channel = Ponce OR
         "###);
 
@@ -667,12 +667,12 @@ pub mod tests {
         "###);
 
         insta::assert_display_snapshot!(p("colour NOT EXIST"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `_geoRadius`, or `_geoBoundingBox` at `colour NOT EXIST`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `_geoRadius`, or `_geoBoundingBox` at `colour NOT EXIST`.
         1:17 colour NOT EXIST
         "###);
 
         insta::assert_display_snapshot!(p("subscribers 100 TO1000"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `_geoRadius`, or `_geoBoundingBox` at `subscribers 100 TO1000`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `_geoRadius`, or `_geoBoundingBox` at `subscribers 100 TO1000`.
         1:23 subscribers 100 TO1000
         "###);
 

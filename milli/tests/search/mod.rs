@@ -205,11 +205,11 @@ fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
         } else if let Some(opt1) = &document.opt1 {
             id = contains_key_rec(opt1, "opt2").then(|| document.id.clone());
         }
-    } else if matches!(filter, "opt1 NULL" | "NOT opt1 NOT NULL") {
+    } else if matches!(filter, "opt1 IS NULL" | "NOT opt1 IS NOT NULL") {
         id = document.opt1.as_ref().map_or(false, |v| v.is_null()).then(|| document.id.clone());
-    } else if matches!(filter, "NOT opt1 NULL" | "opt1 NOT NULL") {
+    } else if matches!(filter, "NOT opt1 IS NULL" | "opt1 IS NOT NULL") {
         id = document.opt1.as_ref().map_or(true, |v| !v.is_null()).then(|| document.id.clone());
-    } else if matches!(filter, "opt1.opt2 NULL") {
+    } else if matches!(filter, "opt1.opt2 IS NULL") {
         if document.opt1opt2.as_ref().map_or(false, |v| v.is_null()) {
             id = Some(document.id.clone());
         } else if let Some(opt1) = &document.opt1 {

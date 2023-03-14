@@ -87,11 +87,11 @@ test_filter!(exists_filter_1_not, vec![Right("opt1 NOT EXISTS")]);
 test_filter!(exists_filter_1_not_alt, vec![Right("NOT opt1 EXISTS")]);
 test_filter!(exists_filter_1_double_not, vec![Right("NOT opt1 NOT EXISTS")]);
 
-test_filter!(null_filter_1, vec![Right("opt1 NULL")]);
-test_filter!(null_filter_2, vec![Right("opt1.opt2 NULL")]);
-test_filter!(null_filter_1_not, vec![Right("opt1 NOT NULL")]);
-test_filter!(null_filter_1_not_alt, vec![Right("NOT opt1 NULL")]);
-test_filter!(null_filter_1_double_not, vec![Right("NOT opt1 NOT NULL")]);
+test_filter!(null_filter_1, vec![Right("opt1 IS NULL")]);
+test_filter!(null_filter_2, vec![Right("opt1.opt2 IS NULL")]);
+test_filter!(null_filter_1_not, vec![Right("opt1 IS NOT NULL")]);
+test_filter!(null_filter_1_not_alt, vec![Right("NOT opt1 IS NULL")]);
+test_filter!(null_filter_1_double_not, vec![Right("NOT opt1 IS NOT NULL")]);
 
 test_filter!(in_filter, vec![Right("tag_in IN[1, 2, 3, four, five]")]);
 test_filter!(not_in_filter, vec![Right("tag_in NOT IN[1, 2, 3, four, five]")]);
