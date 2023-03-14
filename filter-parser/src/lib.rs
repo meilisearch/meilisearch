@@ -47,7 +47,7 @@ mod value;
 use std::fmt::Debug;
 
 pub use condition::{parse_condition, parse_to, Condition};
-use condition::{parse_exists, parse_not_exists, parse_not_null, parse_null};
+use condition::{parse_exists, parse_is_not_null, parse_is_null, parse_not_exists};
 use error::{cut_with_err, ExpectedValueKind, NomErrorExt};
 pub use error::{Error, ErrorKind};
 use nom::branch::alt;
@@ -414,8 +414,8 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
         parse_in,
         parse_not_in,
         parse_condition,
-        parse_null,
-        parse_not_null,
+        parse_is_null,
+        parse_is_not_null,
         parse_exists,
         parse_not_exists,
         parse_to,
@@ -811,7 +811,7 @@ impl<'a> std::fmt::Display for Condition<'a> {
             Condition::GreaterThanOrEqual(token) => write!(f, ">= {token}"),
             Condition::Equal(token) => write!(f, "= {token}"),
             Condition::NotEqual(token) => write!(f, "!= {token}"),
-            Condition::Null => write!(f, "NULL"),
+            Condition::Null => write!(f, "IS NULL"),
             Condition::Exists => write!(f, "EXISTS"),
             Condition::LowerThan(token) => write!(f, "< {token}"),
             Condition::LowerThanOrEqual(token) => write!(f, "<= {token}"),
