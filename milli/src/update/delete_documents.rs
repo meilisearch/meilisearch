@@ -246,6 +246,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             script_language_docids,
             facet_id_exists_docids,
             facet_id_is_null_docids,
+            facet_id_is_empty_docids,
             documents,
         } = self.index;
 
@@ -528,6 +529,13 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         remove_docids_from_facet_id_docids(
             self.wtxn,
             facet_id_is_null_docids,
+            &self.to_delete_docids,
+        )?;
+
+        // We delete the documents ids that are under the facet field id values.
+        remove_docids_from_facet_id_docids(
+            self.wtxn,
+            facet_id_is_empty_docids,
             &self.to_delete_docids,
         )?;
 

@@ -47,7 +47,10 @@ mod value;
 use std::fmt::Debug;
 
 pub use condition::{parse_condition, parse_to, Condition};
-use condition::{parse_exists, parse_is_not_null, parse_is_null, parse_not_exists};
+use condition::{
+    parse_exists, parse_is_empty, parse_is_not_empty, parse_is_not_null, parse_is_null,
+    parse_not_exists,
+};
 use error::{cut_with_err, ExpectedValueKind, NomErrorExt};
 pub use error::{Error, ErrorKind};
 use nom::branch::alt;
@@ -416,6 +419,8 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
         parse_condition,
         parse_is_null,
         parse_is_not_null,
+        parse_is_empty,
+        parse_is_not_empty,
         parse_exists,
         parse_not_exists,
         parse_to,
@@ -509,6 +514,13 @@ pub mod tests {
         insta::assert_display_snapshot!(p("NOT subscribers IS NOT NULL"), @"{subscribers} IS NULL");
         insta::assert_display_snapshot!(p("subscribers  IS   NOT   NULL"), @"NOT ({subscribers} IS NULL)");
 
+        // Test EMPTY + NOT EMPTY
+        insta::assert_display_snapshot!(p("subscribers IS EMPTY"), @"{subscribers} IS EMPTY");
+        insta::assert_display_snapshot!(p("NOT subscribers IS EMPTY"), @"NOT ({subscribers} IS EMPTY)");
+        insta::assert_display_snapshot!(p("subscribers IS NOT EMPTY"), @"NOT ({subscribers} IS EMPTY)");
+        insta::assert_display_snapshot!(p("NOT subscribers IS NOT EMPTY"), @"{subscribers} IS EMPTY");
+        insta::assert_display_snapshot!(p("subscribers  IS   NOT   EMPTY"), @"NOT ({subscribers} IS EMPTY)");
+
         // Test EXISTS + NOT EXITS
         insta::assert_display_snapshot!(p("subscribers EXISTS"), @"{subscribers} EXISTS");
         insta::assert_display_snapshot!(p("NOT subscribers EXISTS"), @"NOT ({subscribers} EXISTS)");
@@ -587,7 +599,7 @@ pub mod tests {
         "###);
 
         insta::assert_display_snapshot!(p("'OR'"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `_geoRadius`, or `_geoBoundingBox` at `\'OR\'`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` at `\'OR\'`.
         1:5 'OR'
         "###);
 
@@ -597,12 +609,12 @@ pub mod tests {
         "###);
 
         insta::assert_display_snapshot!(p("channel Ponce"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `_geoRadius`, or `_geoBoundingBox` at `channel Ponce`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` at `channel Ponce`.
         1:14 channel Ponce
         "###);
 
         insta::assert_display_snapshot!(p("channel = Ponce OR"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `_geoRadius`, or `_geoBoundingBox` but instead got nothing.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` but instead got nothing.
         19:19 channel = Ponce OR
         "###);
 
@@ -667,12 +679,12 @@ pub mod tests {
         "###);
 
         insta::assert_display_snapshot!(p("colour NOT EXIST"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `_geoRadius`, or `_geoBoundingBox` at `colour NOT EXIST`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` at `colour NOT EXIST`.
         1:17 colour NOT EXIST
         "###);
 
         insta::assert_display_snapshot!(p("subscribers 100 TO1000"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `_geoRadius`, or `_geoBoundingBox` at `subscribers 100 TO1000`.
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` at `subscribers 100 TO1000`.
         1:23 subscribers 100 TO1000
         "###);
 
@@ -812,6 +824,7 @@ impl<'a> std::fmt::Display for Condition<'a> {
             Condition::Equal(token) => write!(f, "= {token}"),
             Condition::NotEqual(token) => write!(f, "!= {token}"),
             Condition::Null => write!(f, "IS NULL"),
+            Condition::Empty => write!(f, "IS EMPTY"),
             Condition::Exists => write!(f, "EXISTS"),
             Condition::LowerThan(token) => write!(f, "< {token}"),
             Condition::LowerThanOrEqual(token) => write!(f, "<= {token}"),

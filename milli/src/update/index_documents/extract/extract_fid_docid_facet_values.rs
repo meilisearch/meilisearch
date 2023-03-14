@@ -21,6 +21,7 @@ pub struct ExtractedFacetValues {
     pub docid_fid_facet_numbers_chunk: grenad::Reader<File>,
     pub docid_fid_facet_strings_chunk: grenad::Reader<File>,
     pub fid_facet_is_null_docids_chunk: grenad::Reader<File>,
+    pub fid_facet_is_empty_docids_chunk: grenad::Reader<File>,
     pub fid_facet_exists_docids_chunk: grenad::Reader<File>,
 }
 
@@ -56,6 +57,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
 
     let mut facet_exists_docids = BTreeMap::<FieldId, RoaringBitmap>::new();
     let mut facet_is_null_docids = BTreeMap::<FieldId, RoaringBitmap>::new();
+    let mut facet_is_empty_docids = BTreeMap::<FieldId, RoaringBitmap>::new();
 
     let mut key_buffer = Vec::new();
     let mut cursor = obkv_documents.into_cursor()?;
@@ -80,9 +82,13 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
                 key_buffer.extend_from_slice(docid_bytes);
 
                 let value = from_slice(field_bytes).map_err(InternalError::SerdeJson)?;
+
                 match extract_facet_values(&value) {
                     FilterableValues::Null => {
                         facet_is_null_docids.entry(field_id).or_default().insert(document);
+                    }
+                    FilterableValues::Empty => {
+                        facet_is_empty_docids.entry(field_id).or_default().insert(document);
                     }
                     FilterableValues::Values { numbers, strings } => {
                         // insert facet numbers in sorter
@@ -140,22 +146,34 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     }
     let facet_is_null_docids_reader = writer_into_reader(facet_is_null_docids_writer)?;
 
+    let mut facet_is_empty_docids_writer = create_writer(
+        indexer.chunk_compression_type,
+        indexer.chunk_compression_level,
+        tempfile::tempfile()?,
+    );
+    for (fid, bitmap) in facet_is_empty_docids.into_iter() {
+        let bitmap_bytes = CboRoaringBitmapCodec::bytes_encode(&bitmap).unwrap();
+        facet_is_empty_docids_writer.insert(fid.to_be_bytes(), &bitmap_bytes)?;
+    }
+    let facet_is_empty_docids_reader = writer_into_reader(facet_is_empty_docids_writer)?;
+
     Ok(ExtractedFacetValues {
         docid_fid_facet_numbers_chunk: sorter_into_reader(fid_docid_facet_numbers_sorter, indexer)?,
         docid_fid_facet_strings_chunk: sorter_into_reader(fid_docid_facet_strings_sorter, indexer)?,
         fid_facet_is_null_docids_chunk: facet_is_null_docids_reader,
+        fid_facet_is_empty_docids_chunk: facet_is_empty_docids_reader,
         fid_facet_exists_docids_chunk: facet_exists_docids_reader,
     })
 }
 
 /// Represent what a document field contains.
 enum FilterableValues {
+    /// Corresponds to the JSON `null` value.
     Null,
+    /// Corresponds to either, an empty string `""`, an empty array `[]`, or an empty object `{}`.
+    Empty,
     /// Represents all the numbers and strings values found in this document field.
-    Values {
-        numbers: Vec<f64>,
-        strings: Vec<(String, String)>,
-    },
+    Values { numbers: Vec<f64>, strings: Vec<(String, String)> },
 }
 
 fn extract_facet_values(value: &Value) -> FilterableValues {
@@ -192,6 +210,9 @@ fn extract_facet_values(value: &Value) -> FilterableValues {
 
     match value {
         Value::Null => FilterableValues::Null,
+        Value::String(s) if s.is_empty() => FilterableValues::Empty,
+        Value::Array(a) if a.is_empty() => FilterableValues::Empty,
+        Value::Object(o) if o.is_empty() => FilterableValues::Empty,
         otherwise => {
             let mut numbers = Vec::new();
             let mut strings = Vec::new();
