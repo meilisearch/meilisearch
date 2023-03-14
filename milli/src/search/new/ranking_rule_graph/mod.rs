@@ -80,11 +80,6 @@ pub trait RankingRuleGraphTrait: Sized {
     /// in [`resolve_edge_condition`](RankingRuleGraphTrait::resolve_edge_condition).
     type EdgeCondition: Sized + Clone + PartialEq + Eq + Hash;
 
-    /// A structure used in the construction of the graph, created when a
-    /// query graph source node is visited. It is used to determine the cost
-    /// and condition of a ranking rule edge when the destination node is visited.
-    type BuildVisitedFromNode;
-
     /// Return the label of the given edge condition, to be used when visualising
     /// the ranking rule graph.
     fn label_for_edge_condition(edge: &Self::EdgeCondition) -> String;
@@ -97,22 +92,13 @@ pub trait RankingRuleGraphTrait: Sized {
         universe: &RoaringBitmap,
     ) -> Result<RoaringBitmap>;
 
-    /// Prepare to build the edges outgoing from `source_node`.
-    ///
-    /// This call is followed by zero, one or more calls to [`build_step_visit_destination_node`](RankingRuleGraphTrait::build_step_visit_destination_node),
-    /// which builds the actual edges.
-    fn build_step_visit_source_node<'ctx>(
-        ctx: &mut SearchContext<'ctx>,
-        source_node: &QueryNode,
-    ) -> Result<Option<Self::BuildVisitedFromNode>>;
-
     /// Return the cost and condition of the edges going from the previously visited node
     /// (with [`build_step_visit_source_node`](RankingRuleGraphTrait::build_step_visit_source_node)) to `dest_node`.
-    fn build_step_visit_destination_node<'from_data, 'ctx: 'from_data>(
+    fn build_edges<'ctx>(
         ctx: &mut SearchContext<'ctx>,
         conditions_interner: &mut Interner<Self::EdgeCondition>,
+        source_node: &QueryNode,
         dest_node: &QueryNode,
-        source_node_data: &'from_data Self::BuildVisitedFromNode,
     ) -> Result<Vec<(u8, EdgeCondition<Self::EdgeCondition>)>>;
 
     fn log_state(

@@ -30,16 +30,20 @@ impl Phrase {
 /// A structure storing all the different ways to match
 /// a term in the user's search query.
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct WordDerivations {
+pub struct QueryTerm {
     /// The original terms, for debugging purposes
     pub original: Interned<String>,
+    /// Whether the term is an ngram
+    pub is_ngram: bool,
+    /// Whether the term can be only the prefix of a word
     pub is_prefix: bool,
-
-    /// A single word equivalent to the original one, with zero typos
+    /// The original phrase, if any
+    pub phrase: Option<Interned<Phrase>>,
+    /// A single word equivalent to the original term, with zero typos
     pub zero_typo: Option<Interned<String>>,
     /// All the words that contain the original word as prefix
     pub prefix_of: Box<[Interned<String>]>,
-    /// All the synonyms of the original word
+    /// All the synonyms of the original word or phrase
     pub synonyms: Box<[Interned<Phrase>]>,
 
     /// The original word split into multiple consecutive words
@@ -54,10 +58,15 @@ pub struct WordDerivations {
     /// A prefix in the prefix databases matching the original word
     pub use_prefix_db: Option<Interned<String>>,
 }
-impl WordDerivations {
-    pub fn empty(word_interner: &mut Interner<String>, original: &str) -> Self {
+impl QueryTerm {
+    pub fn phrase(
+        word_interner: &mut Interner<String>,
+        phrase_interner: &mut Interner<Phrase>,
+        phrase: Phrase,
+    ) -> Self {
         Self {
-            original: word_interner.insert(original.to_owned()),
+            original: word_interner.insert(phrase.description(word_interner)),
+            phrase: Some(phrase_interner.insert(phrase)),
             is_prefix: false,
             zero_typo: None,
             prefix_of: Box::new([]),
@@ -66,12 +75,28 @@ impl WordDerivations {
             one_typo: Box::new([]),
             two_typos: Box::new([]),
             use_prefix_db: None,
+            is_ngram: false,
+        }
+    }
+    pub fn empty(word_interner: &mut Interner<String>, original: &str) -> Self {
+        Self {
+            original: word_interner.insert(original.to_owned()),
+            phrase: None,
+            is_prefix: false,
+            zero_typo: None,
+            prefix_of: Box::new([]),
+            synonyms: Box::new([]),
+            split_words: None,
+            one_typo: Box::new([]),
+            two_typos: Box::new([]),
+            use_prefix_db: None,
+            is_ngram: false,
         }
     }
     /// Return an iterator over all the single words derived from the original word.
     ///
     /// This excludes synonyms, split words, and words stored in the prefix databases.
-    pub fn all_single_word_derivations_except_prefix_db(
+    pub fn all_single_words_except_prefix_db(
         &'_ self,
     ) -> impl Iterator<Item = Interned<String>> + Clone + '_ {
         self.zero_typo
@@ -84,7 +109,7 @@ impl WordDerivations {
     /// Return an iterator over all the single words derived from the original word.
     ///
     /// This excludes synonyms, split words, and words stored in the prefix databases.
-    pub fn all_phrase_derivations(&'_ self) -> impl Iterator<Item = Interned<Phrase>> + Clone + '_ {
+    pub fn all_phrases(&'_ self) -> impl Iterator<Item = Interned<Phrase>> + Clone + '_ {
         self.split_words.iter().chain(self.synonyms.iter()).copied()
     }
     pub fn is_empty(&self) -> bool {
@@ -98,15 +123,15 @@ impl WordDerivations {
     }
 }
 
-/// Compute the word derivations for the given word
-pub fn word_derivations(
+/// Compute the query term for the given word
+pub fn query_term_from_word(
     ctx: &mut SearchContext,
     word: &str,
     max_typo: u8,
     is_prefix: bool,
-) -> Result<WordDerivations> {
+) -> Result<QueryTerm> {
     if word.len() > MAX_WORD_LENGTH {
-        return Ok(WordDerivations::empty(&mut ctx.word_interner, word));
+        return Ok(QueryTerm::empty(&mut ctx.word_interner, word));
     }
 
     let fst = ctx.index.words_fst(ctx.txn)?;
@@ -223,8 +248,9 @@ pub fn word_derivations(
         })
         .collect();
 
-    Ok(WordDerivations {
+    Ok(QueryTerm {
         original: word_interned,
+        phrase: None,
         is_prefix,
         zero_typo,
         prefix_of: prefix_of.into_boxed_slice(),
@@ -233,6 +259,7 @@ pub fn word_derivations(
         one_typo: one_typo.into_boxed_slice(),
         two_typos: two_typos.into_boxed_slice(),
         use_prefix_db,
+        is_ngram: false,
     })
 }
 
@@ -266,35 +293,13 @@ fn split_best_frequency(
     Ok(best.map(|(_, left, right)| (left.to_owned(), right.to_owned())))
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub enum QueryTerm {
-    Phrase { phrase: Interned<Phrase> },
-    // TODO: change to `Interned<WordDerivations>`?
-    Word { derivations: Interned<WordDerivations> },
-}
-
 impl QueryTerm {
-    pub fn is_prefix(&self, derivations_interner: &Interner<WordDerivations>) -> bool {
-        match self {
-            QueryTerm::Phrase { .. } => false,
-            QueryTerm::Word { derivations } => derivations_interner.get(*derivations).is_prefix,
-        }
-    }
     /// Return the original word from the given query term
-    pub fn original_single_word(
-        &self,
-        derivations_interner: &Interner<WordDerivations>,
-    ) -> Option<Interned<String>> {
-        match self {
-            QueryTerm::Phrase { phrase: _ } => None,
-            QueryTerm::Word { derivations } => {
-                let derivations = derivations_interner.get(*derivations);
-                if derivations.is_empty() {
-                    None
-                } else {
-                    Some(derivations.original)
-                }
-            }
+    pub fn original_single_word(&self) -> Option<Interned<String>> {
+        if self.phrase.is_some() || self.is_ngram {
+            None
+        } else {
+            Some(self.original)
         }
     }
 }
@@ -302,19 +307,14 @@ impl QueryTerm {
 /// A query term term coupled with its position in the user's search query.
 #[derive(Clone)]
 pub struct LocatedQueryTerm {
-    pub value: QueryTerm,
+    pub value: Interned<QueryTerm>,
     pub positions: RangeInclusive<i8>,
 }
 
 impl LocatedQueryTerm {
-    /// Return `true` iff the word derivations within the query term are empty
-    pub fn is_empty(&self, interner: &Interner<WordDerivations>) -> bool {
-        match self.value {
-            // TODO: phrases should be greedily computed, so that they can be excluded from
-            // the query graph right from the start?
-            QueryTerm::Phrase { phrase: _ } => false,
-            QueryTerm::Word { derivations, .. } => interner.get(derivations).is_empty(),
-        }
+    /// Return `true` iff the term is empty
+    pub fn is_empty(&self, interner: &Interner<QueryTerm>) -> bool {
+        interner.get(self.value).is_empty()
     }
 }
 
@@ -360,18 +360,16 @@ pub fn located_query_terms_from_string<'ctx>(
                     } else {
                         let word = ctx.word_interner.insert(token.lemma().to_string());
                         // TODO: in a phrase, check that every word exists
-                        // otherwise return WordDerivations::Empty
+                        // otherwise return an empty term
                         phrase.push(Some(word));
                     }
                 } else if peekable.peek().is_some() {
                     match token.kind {
                         TokenKind::Word => {
                             let word = token.lemma();
-                            let derivations = word_derivations(ctx, word, nbr_typos(word), false)?;
+                            let term = query_term_from_word(ctx, word, nbr_typos(word), false)?;
                             let located_term = LocatedQueryTerm {
-                                value: QueryTerm::Word {
-                                    derivations: ctx.derivations_interner.insert(derivations),
-                                },
+                                value: ctx.term_interner.insert(term),
                                 positions: position..=position,
                             };
                             located_terms.push(located_term);
@@ -380,11 +378,9 @@ pub fn located_query_terms_from_string<'ctx>(
                     }
                 } else {
                     let word = token.lemma();
-                    let derivations = word_derivations(ctx, word, nbr_typos(word), true)?;
+                    let term = query_term_from_word(ctx, word, nbr_typos(word), true)?;
                     let located_term = LocatedQueryTerm {
-                        value: QueryTerm::Word {
-                            derivations: ctx.derivations_interner.insert(derivations),
-                        },
+                        value: ctx.term_interner.insert(term),
                         positions: position..=position,
                     };
                     located_terms.push(located_term);
@@ -408,11 +404,11 @@ pub fn located_query_terms_from_string<'ctx>(
                 if !phrase.is_empty() && (quote_count > 0 || separator_kind == SeparatorKind::Hard)
                 {
                     let located_query_term = LocatedQueryTerm {
-                        value: QueryTerm::Phrase {
-                            phrase: ctx
-                                .phrase_interner
-                                .insert(Phrase { words: mem::take(&mut phrase) }),
-                        },
+                        value: ctx.term_interner.insert(QueryTerm::phrase(
+                            &mut ctx.word_interner,
+                            &mut ctx.phrase_interner,
+                            Phrase { words: mem::take(&mut phrase) },
+                        )),
                         positions: phrase_start..=phrase_end,
                     };
                     located_terms.push(located_query_term);
@@ -425,9 +421,11 @@ pub fn located_query_terms_from_string<'ctx>(
     // If a quote is never closed, we consider all of the end of the query as a phrase.
     if !phrase.is_empty() {
         let located_query_term = LocatedQueryTerm {
-            value: QueryTerm::Phrase {
-                phrase: ctx.phrase_interner.insert(Phrase { words: mem::take(&mut phrase) }),
-            },
+            value: ctx.term_interner.insert(QueryTerm::phrase(
+                &mut ctx.word_interner,
+                &mut ctx.phrase_interner,
+                Phrase { words: mem::take(&mut phrase) },
+            )),
             positions: phrase_start..=phrase_end,
         };
         located_terms.push(located_query_term);
@@ -474,8 +472,7 @@ pub fn make_ngram(
     }
     let mut words_interned = vec![];
     for term in terms {
-        if let Some(original_term_word) = term.value.original_single_word(&ctx.derivations_interner)
-        {
+        if let Some(original_term_word) = ctx.term_interner.get(term.value).original_single_word() {
             words_interned.push(original_term_word);
         } else {
             return Ok(None);
@@ -486,121 +483,40 @@ pub fn make_ngram(
 
     let start = *terms.first().as_ref().unwrap().positions.start();
     let end = *terms.last().as_ref().unwrap().positions.end();
-    let is_prefix = terms.last().as_ref().unwrap().value.is_prefix(&ctx.derivations_interner);
+    let is_prefix = ctx.term_interner.get(terms.last().as_ref().unwrap().value).is_prefix;
     let ngram_str = words.join("");
     if ngram_str.len() > MAX_WORD_LENGTH {
         return Ok(None);
     }
 
-    let mut derivations = word_derivations(
+    let mut term = query_term_from_word(
         ctx,
         &ngram_str,
         number_of_typos_allowed(ngram_str.as_str()).saturating_sub(terms.len() as u8),
         is_prefix,
     )?;
-    derivations.original = ctx.word_interner.insert(words.join(" "));
+    term.original = ctx.word_interner.insert(words.join(" "));
     // Now add the synonyms
     let index_synonyms = ctx.index.synonyms(ctx.txn)?;
-    let mut derivations_synonyms = derivations.synonyms.to_vec();
-    derivations_synonyms.extend(
-        index_synonyms.get(&words).cloned().unwrap_or_default().into_iter().map(|words| {
+    let mut term_synonyms = term.synonyms.to_vec();
+    term_synonyms.extend(index_synonyms.get(&words).cloned().unwrap_or_default().into_iter().map(
+        |words| {
             let words = words.into_iter().map(|w| Some(ctx.word_interner.insert(w))).collect();
             ctx.phrase_interner.insert(Phrase { words })
-        }),
-    );
-    derivations.synonyms = derivations_synonyms.into_boxed_slice();
-    if let Some(split_words) = derivations.split_words {
+        },
+    ));
+    term.synonyms = term_synonyms.into_boxed_slice();
+    if let Some(split_words) = term.split_words {
         let split_words = ctx.phrase_interner.get(split_words);
         if split_words.words == words_interned.iter().map(|&i| Some(i)).collect::<Vec<_>>() {
-            derivations.split_words = None;
+            term.split_words = None;
         }
     }
-    if derivations.is_empty() {
+    if term.is_empty() {
         return Ok(None);
     }
-    let term = LocatedQueryTerm {
-        value: QueryTerm::Word { derivations: ctx.derivations_interner.insert(derivations) },
-        positions: start..=end,
-    };
+    term.is_ngram = true;
+    let term = LocatedQueryTerm { value: ctx.term_interner.insert(term), positions: start..=end };
 
     Ok(Some(term))
 }
-
-// // TODO: return a word derivations instead?
-// pub fn ngram2(
-//     ctx: &mut SearchContext,
-//     x: &LocatedQueryTerm,
-//     y: &LocatedQueryTerm,
-//     number_of_typos_allowed: impl Fn(&str) -> u8,
-// ) -> Result<Option<LocatedQueryTerm>> {
-//     if *x.positions.end() != y.positions.start() - 1 {
-//         return Ok(None);
-//     }
-//     match (
-//         x.value.original_single_word(&ctx.word_interner, &ctx.derivations_interner),
-//         y.value.original_single_word(&ctx.word_interner, &ctx.derivations_interner),
-//     ) {
-//         (Some(w1), Some(w2)) => {
-//             let ngram2_str = format!("{w1}{w2}");
-//             let mut derivations = word_derivations(
-//                 ctx,
-//                 &ngram2_str,
-//                 number_of_typos_allowed(ngram2_str.as_str()).saturating_sub(1),
-//                 y.value.is_prefix(&ctx.derivations_interner),
-//             )?;
-//             // Now add the synonyms
-//             let index_synonyms = ctx.index.synonyms(ctx.txn)?;
-//             let mut derivations_synonyms = derivations.synonyms.to_vec();
-//             derivations_synonyms.extend(
-//                 index_synonyms
-//                     .get(&vec![w1.to_owned(), w2.to_owned()])
-//                     .cloned()
-//                     .unwrap_or_default()
-//                     .into_iter()
-//                     .map(|words| {
-//                         let words =
-//                             words.into_iter().map(|w| Some(ctx.word_interner.insert(w))).collect();
-//                         ctx.phrase_interner.insert(Phrase { words })
-//                     }),
-//             );
-
-//             let term = LocatedQueryTerm {
-//                 value: QueryTerm::Word {
-//                     derivations: ctx.derivations_interner.insert(derivations),
-//                 },
-//                 positions: *x.positions.start()..=*y.positions.end(),
-//             };
-
-//             Ok(Some(term))
-//         }
-//         _ => Ok(None),
-//     }
-// }
-
-// // TODO: return a word derivations instead?
-// pub fn ngram3(
-//     ctx: &mut SearchContext,
-//     x: &LocatedQueryTerm,
-//     y: &LocatedQueryTerm,
-//     z: &LocatedQueryTerm,
-// ) -> Option<(Interned<String>, RangeInclusive<i8>)> {
-//     if *x.positions.end() != y.positions.start() - 1
-//         || *y.positions.end() != z.positions.start() - 1
-//     {
-//         return None;
-//     }
-//     match (
-//         &x.value.original_single_word(&ctx.word_interner, &ctx.derivations_interner),
-//         &y.value.original_single_word(&ctx.word_interner, &ctx.derivations_interner),
-//         &z.value.original_single_word(&ctx.word_interner, &ctx.derivations_interner),
-//     ) {
-//         (Some(w1), Some(w2), Some(w3)) => {
-//             let term = (
-//                 ctx.word_interner.insert(format!("{w1}{w2}{w3}")),
-//                 *x.positions.start()..=*z.positions.end(),
-//             );
-//             Some(term)
-//         }
-//         _ => None,
-//     }
-// }

@@ -4,89 +4,40 @@ use std::collections::BTreeMap;
 use super::ProximityEdge;
 use crate::search::new::db_cache::DatabaseCache;
 use crate::search::new::interner::{Interned, Interner};
-use crate::search::new::query_term::{LocatedQueryTerm, Phrase, QueryTerm, WordDerivations};
+use crate::search::new::query_term::{LocatedQueryTerm, Phrase, QueryTerm};
 use crate::search::new::ranking_rule_graph::proximity::WordPair;
 use crate::search::new::ranking_rule_graph::EdgeCondition;
 use crate::search::new::{QueryNode, SearchContext};
 use crate::Result;
 use heed::RoTxn;
 
-pub fn visit_from_node(
-    ctx: &mut SearchContext,
-    from_node: &QueryNode,
-) -> Result<Option<(Vec<(Option<Interned<Phrase>>, Interned<String>)>, i8)>> {
-    let SearchContext { derivations_interner, .. } = ctx;
-
-    let (left_phrase, left_derivations, left_end_position) = match from_node {
-        QueryNode::Term(LocatedQueryTerm { value: value1, positions: pos1 }) => {
-            match value1 {
-                QueryTerm::Word { derivations } => {
-                    (None, derivations_interner.get(*derivations).clone(), *pos1.end())
-                }
-                QueryTerm::Phrase { phrase: phrase_interned } => {
-                    let phrase = ctx.phrase_interner.get(*phrase_interned);
-                    if let Some(original) = *phrase.words.last().unwrap() {
-                        (
-                            Some(*phrase_interned),
-                            WordDerivations {
-                                original,
-                                zero_typo: Some(original),
-                                one_typo: Box::new([]),
-                                two_typos: Box::new([]),
-                                use_prefix_db: None,
-                                synonyms: Box::new([]),
-                                split_words: None,
-                                is_prefix: false,
-                                prefix_of: Box::new([]),
-                            },
-                            *pos1.end(),
-                        )
-                    } else {
-                        // No word pairs if the phrase does not have a regular word as its last term
-                        return Ok(None);
-                    }
-                }
-            }
-        }
-        QueryNode::Start => (None, WordDerivations::empty(&mut ctx.word_interner, ""), -1),
-        _ => return Ok(None),
-    };
-
-    // left term cannot be a prefix
-    assert!(left_derivations.use_prefix_db.is_none() && !left_derivations.is_prefix);
-
-    let last_word_left_phrase = if let Some(left_phrase_interned) = left_phrase {
-        let left_phrase = ctx.phrase_interner.get(left_phrase_interned);
-        left_phrase.words.last().copied().unwrap()
-    } else {
-        None
-    };
-    let left_single_word_iter: Vec<(Option<Interned<Phrase>>, Interned<String>)> = left_derivations
-        .all_single_word_derivations_except_prefix_db()
-        .chain(last_word_left_phrase.iter().copied())
-        .map(|w| (left_phrase, w))
-        .collect();
-    let left_phrase_iter: Vec<(Option<Interned<Phrase>>, Interned<String>)> = left_derivations
-        .all_phrase_derivations()
-        .map(|left_phrase_interned: Interned<Phrase>| {
-            let left_phrase = ctx.phrase_interner.get(left_phrase_interned);
-            let last_word_left_phrase: Interned<String> =
-                left_phrase.words.last().unwrap().unwrap();
-            let r: (Option<Interned<Phrase>>, Interned<String>) =
-                (Some(left_phrase_interned), last_word_left_phrase);
-            r
-        })
-        .collect();
-    let mut left_word_iter = left_single_word_iter;
-    left_word_iter.extend(left_phrase_iter);
-
-    Ok(Some((left_word_iter, left_end_position)))
+fn last_word_of_term_iter<'t>(
+    t: &'t QueryTerm,
+    phrase_interner: &'t Interner<Phrase>,
+) -> impl Iterator<Item = (Option<Interned<Phrase>>, Interned<String>)> + 't {
+    t.all_single_words_except_prefix_db().map(|w| (None, w)).chain(t.all_phrases().flat_map(
+        move |p| {
+            let phrase = phrase_interner.get(p);
+            phrase.words.last().unwrap().map(|last| (Some(p), last))
+        },
+    ))
+}
+fn first_word_of_term_iter<'t>(
+    t: &'t QueryTerm,
+    phrase_interner: &'t Interner<Phrase>,
+) -> impl Iterator<Item = (Interned<String>, Option<Interned<Phrase>>)> + 't {
+    t.all_single_words_except_prefix_db().map(|w| (w, None)).chain(t.all_phrases().flat_map(
+        move |p| {
+            let phrase = phrase_interner.get(p);
+            phrase.words.first().unwrap().map(|first| (first, Some(p)))
+        },
+    ))
 }
 
-pub fn build_step_visit_destination_node<'ctx, 'from_data>(
+pub fn build_edges<'ctx>(
     ctx: &mut SearchContext<'ctx>,
     conditions_interner: &mut Interner<ProximityEdge>,
-    from_node_data: &'from_data (Vec<(Option<Interned<Phrase>>, Interned<String>)>, i8),
+    from_node: &QueryNode,
     to_node: &QueryNode,
 ) -> Result<Vec<(u8, EdgeCondition<ProximityEdge>)>> {
     let SearchContext {
@@ -95,9 +46,19 @@ pub fn build_step_visit_destination_node<'ctx, 'from_data>(
         db_cache,
         word_interner,
         phrase_interner,
-        derivations_interner,
-        query_term_docids: _,
+        term_interner,
+        term_docids: _,
     } = ctx;
+
+    let (left_term, left_end_position) = match from_node {
+        QueryNode::Term(LocatedQueryTerm { value, positions }) => {
+            (term_interner.get(*value), *positions.end())
+        }
+        QueryNode::Deleted => return Ok(vec![]),
+        QueryNode::Start => return Ok(vec![(0, EdgeCondition::Unconditional)]),
+        QueryNode::End => return Ok(vec![]),
+    };
+
     let right_term = match &to_node {
         QueryNode::End => return Ok(vec![(0, EdgeCondition::Unconditional)]),
         QueryNode::Deleted | QueryNode::Start => return Ok(vec![]),
@@ -105,47 +66,14 @@ pub fn build_step_visit_destination_node<'ctx, 'from_data>(
     };
     let LocatedQueryTerm { value: right_value, positions: right_positions } = right_term;
 
-    let (right_phrase, right_derivations, right_start_position, right_ngram_length) =
-        match right_value {
-            QueryTerm::Word { derivations } => (
-                None,
-                derivations_interner.get(*derivations).clone(),
-                *right_positions.start(),
-                right_positions.len(),
-            ),
-            QueryTerm::Phrase { phrase: right_phrase_interned } => {
-                let right_phrase = phrase_interner.get(*right_phrase_interned);
-                if let Some(original) = *right_phrase.words.first().unwrap() {
-                    (
-                        Some(*right_phrase_interned),
-                        WordDerivations {
-                            original,
-                            zero_typo: Some(original),
-                            one_typo: Box::new([]),
-                            two_typos: Box::new([]),
-                            use_prefix_db: None,
-                            synonyms: Box::new([]),
-                            split_words: None,
-                            is_prefix: false,
-                            prefix_of: Box::new([]),
-                        },
-                        *right_positions.start(),
-                        1,
-                    )
-                } else {
-                    // No word pairs if the phrase does not have a regular word as its first term
-                    return Ok(vec![]);
-                }
-            }
-        };
-
-    let (left_derivations, left_end_position) = from_node_data;
+    let (right_term, right_start_position, right_ngram_length) =
+        (term_interner.get(*right_value), *right_positions.start(), right_positions.len());
 
     if left_end_position + 1 != right_start_position {
         // We want to ignore this pair of terms
         // Unconditionally walk through the edge without computing the docids
         // This can happen when, in a query like `the sun flowers are beautiful`, the term
-        // `flowers` is removed by the words ranking rule due to the terms matching strategy.
+        // `flowers` is removed by the `words` ranking rule.
         // The remaining query graph represents `the sun .. are beautiful`
         // but `sun` and `are` have no proximity condition between them
         return Ok(vec![(0, EdgeCondition::Unconditional)]);
@@ -153,8 +81,8 @@ pub fn build_step_visit_destination_node<'ctx, 'from_data>(
 
     let mut cost_proximity_word_pairs = BTreeMap::<u8, BTreeMap<u8, Vec<WordPair>>>::new();
 
-    if let Some(right_prefix) = right_derivations.use_prefix_db {
-        for (left_phrase, left_word) in left_derivations.iter().copied() {
+    if let Some(right_prefix) = right_term.use_prefix_db {
+        for (left_phrase, left_word) in last_word_of_term_iter(left_term, phrase_interner) {
             add_prefix_edges(
                 index,
                 txn,
@@ -172,37 +100,12 @@ pub fn build_step_visit_destination_node<'ctx, 'from_data>(
     // TODO: add safeguard in case the cartesian product is too large!
     // even if we restrict the word derivations to a maximum of 100, the size of the
     // caterisan product could reach a maximum of 10_000 derivations, which is way too much.
-    // mMaybe prioritise the product of zero typo derivations, then the product of zero-typo/one-typo
+    // Maybe prioritise the product of zero typo derivations, then the product of zero-typo/one-typo
     // + one-typo/zero-typo, then one-typo/one-typo, then ... until an arbitrary limit has been
     // reached
-    let first_word_right_phrase = if let Some(right_phrase_interned) = right_phrase {
-        let right_phrase = phrase_interner.get(right_phrase_interned);
-        right_phrase.words.first().copied().unwrap()
-    } else {
-        None
-    };
-    let right_single_word_iter: Vec<(Option<Interned<Phrase>>, Interned<String>)> =
-        right_derivations
-            .all_single_word_derivations_except_prefix_db()
-            .chain(first_word_right_phrase.iter().copied())
-            .map(|w| (right_phrase, w))
-            .collect();
-    let right_phrase_iter: Vec<(Option<Interned<Phrase>>, Interned<String>)> = right_derivations
-        .all_phrase_derivations()
-        .map(|right_phrase_interned: Interned<Phrase>| {
-            let right_phrase = phrase_interner.get(right_phrase_interned);
-            let first_word_right_phrase: Interned<String> =
-                right_phrase.words.first().unwrap().unwrap();
-            let r: (Option<Interned<Phrase>>, Interned<String>) =
-                (Some(right_phrase_interned), first_word_right_phrase);
-            r
-        })
-        .collect();
-    let mut right_word_iter = right_single_word_iter;
-    right_word_iter.extend(right_phrase_iter);
 
-    for (left_phrase, left_word) in left_derivations.iter().copied() {
-        for (right_phrase, right_word) in right_word_iter.iter().copied() {
+    for (left_phrase, left_word) in last_word_of_term_iter(left_term, phrase_interner) {
+        for (right_word, right_phrase) in first_word_of_term_iter(right_term, phrase_interner) {
             add_non_prefix_edges(
                 index,
                 txn,

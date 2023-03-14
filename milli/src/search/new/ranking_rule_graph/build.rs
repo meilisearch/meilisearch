@@ -22,28 +22,21 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         let mut edges_store = vec![];
         let mut edges_of_node = vec![];
 
-        for (node_idx, node) in graph_nodes.iter().enumerate() {
+        for (source_idx, source_node) in graph_nodes.iter().enumerate() {
             edges_of_node.push(HashSet::new());
             let new_edges = edges_of_node.last_mut().unwrap();
 
-            let Some(source_node_data) = G::build_step_visit_source_node(ctx, node)? else { continue };
-
-            for successor_idx in graph_edges[node_idx].successors.iter() {
-                let dest_node = &graph_nodes[successor_idx as usize];
-                let edges = G::build_step_visit_destination_node(
-                    ctx,
-                    &mut conditions_interner,
-                    dest_node,
-                    &source_node_data,
-                )?;
+            for dest_idx in graph_edges[source_idx].successors.iter() {
+                let dest_node = &graph_nodes[dest_idx as usize];
+                let edges = G::build_edges(ctx, &mut conditions_interner, source_node, dest_node)?;
                 if edges.is_empty() {
                     continue;
                 }
 
                 for (cost, condition) in edges {
                     edges_store.push(Some(Edge {
-                        source_node: node_idx as u16,
-                        dest_node: successor_idx,
+                        source_node: source_idx as u16,
+                        dest_node: dest_idx,
                         cost,
                         condition,
                     }));

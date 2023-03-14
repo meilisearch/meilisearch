@@ -45,7 +45,7 @@ For the search query `sunflower`, we need to register the following things:
 - and also the couple of adjacent words `sun flower`
 - as well as all the user-defined synonyms of `sunflower`
 
-All these derivations of a word will be stored in [`WordDerivations`].
+All these derivations of a word will be stored in [`QueryTerm`].
 
 ## Example 2:
 For the search query `summer house by`.
@@ -148,7 +148,7 @@ impl QueryGraph {
             let mut new_nodes = vec![];
             let new_node_idx = graph.add_node(&prev0, QueryNode::Term(term0.clone()));
             new_nodes.push(new_node_idx);
-            if term0.is_empty(&ctx.derivations_interner) {
+            if term0.is_empty(&ctx.term_interner) {
                 empty_nodes.push(new_node_idx);
             }
 

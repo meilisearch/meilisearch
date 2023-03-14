@@ -40,7 +40,6 @@ pub enum ProximityGraph {}
 
 impl RankingRuleGraphTrait for ProximityGraph {
     type EdgeCondition = ProximityEdge;
-    type BuildVisitedFromNode = (Vec<(Option<Interned<Phrase>>, Interned<String>)>, i8);
 
     fn label_for_edge_condition(edge: &Self::EdgeCondition) -> String {
         let ProximityEdge { pairs, proximity } = edge;
@@ -55,25 +54,13 @@ impl RankingRuleGraphTrait for ProximityGraph {
         compute_docids::compute_docids(ctx, edge, universe)
     }
 
-    fn build_step_visit_source_node<'ctx>(
-        ctx: &mut SearchContext<'ctx>,
-        from_node: &QueryNode,
-    ) -> Result<Option<Self::BuildVisitedFromNode>> {
-        build::visit_from_node(ctx, from_node)
-    }
-
-    fn build_step_visit_destination_node<'from_data, 'ctx: 'from_data>(
+    fn build_edges<'ctx>(
         ctx: &mut SearchContext<'ctx>,
         conditions_interner: &mut Interner<Self::EdgeCondition>,
+        source_node: &QueryNode,
         dest_node: &QueryNode,
-        source_node_data: &'from_data Self::BuildVisitedFromNode,
     ) -> Result<Vec<(u8, EdgeCondition<Self::EdgeCondition>)>> {
-        build::build_step_visit_destination_node(
-            ctx,
-            conditions_interner,
-            source_node_data,
-            dest_node,
-        )
+        build::build_edges(ctx, conditions_interner, source_node, dest_node)
     }
 
     fn log_state(

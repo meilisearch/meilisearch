@@ -4,12 +4,12 @@ use std::collections::VecDeque;
 
 use fxhash::FxHashMap;
 use heed::{BytesDecode, RoTxn};
-use roaring::{MultiOps, RoaringBitmap};
+use roaring::RoaringBitmap;
 
 use super::db_cache::DatabaseCache;
 use super::interner::{Interned, Interner};
 use super::query_graph::QUERY_GRAPH_NODE_LENGTH_LIMIT;
-use super::query_term::{Phrase, QueryTerm, WordDerivations};
+use super::query_term::{Phrase, QueryTerm};
 use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, QueryNode, SearchContext};
 use crate::{CboRoaringBitmapCodec, Index, Result, RoaringBitmapCodec};
@@ -17,7 +17,7 @@ use crate::{CboRoaringBitmapCodec, Index, Result, RoaringBitmapCodec};
 #[derive(Default)]
 pub struct QueryTermDocIdsCache {
     pub phrases: FxHashMap<Interned<Phrase>, RoaringBitmap>,
-    pub derivations: FxHashMap<Interned<WordDerivations>, RoaringBitmap>,
+    pub terms: FxHashMap<Interned<QueryTerm>, RoaringBitmap>,
 }
 impl QueryTermDocIdsCache {
     /// Get the document ids associated with the given phrase
@@ -38,108 +38,52 @@ impl QueryTermDocIdsCache {
         let docids = &self.phrases[&phrase];
         Ok(docids)
     }
-
-    /// Get the document ids associated with the given word derivations
-    pub fn get_word_derivations_docids<'s, 'ctx>(
+    /// Get the document ids associated with the given term
+    pub fn get_query_term_docids<'s, 'ctx>(
         &'s mut self,
         index: &Index,
         txn: &'ctx RoTxn,
         db_cache: &mut DatabaseCache<'ctx>,
         word_interner: &Interner<String>,
-        derivations_interner: &Interner<WordDerivations>,
+        term_interner: &Interner<QueryTerm>,
         phrase_interner: &Interner<Phrase>,
-        derivations: Interned<WordDerivations>,
+        term_interned: Interned<QueryTerm>,
     ) -> Result<&'s RoaringBitmap> {
-        if self.derivations.contains_key(&derivations) {
-            return Ok(&self.derivations[&derivations]);
+        if self.terms.contains_key(&term_interned) {
+            return Ok(&self.terms[&term_interned]);
         };
-        let WordDerivations {
-            original: _,
-            is_prefix: _,
-            zero_typo,
-            prefix_of,
-            synonyms,
-            split_words,
-            one_typo,
-            two_typos,
-            use_prefix_db,
-        } = derivations_interner.get(derivations);
-        let mut or_docids = vec![];
-        for word in zero_typo
-            .iter()
-            .chain(prefix_of.iter())
-            .chain(one_typo.iter())
-            .chain(two_typos.iter())
-            .copied()
-        {
+        let mut docids = RoaringBitmap::new();
+
+        let term = term_interner.get(term_interned);
+        for word in term.all_single_words_except_prefix_db() {
             if let Some(word_docids) = db_cache.get_word_docids(index, txn, word_interner, word)? {
-                or_docids.push(word_docids);
+                docids |=
+                    RoaringBitmapCodec::bytes_decode(word_docids).ok_or(heed::Error::Decoding)?;
             }
         }
-        if let Some(prefix) = use_prefix_db {
+        for phrase in term.all_phrases() {
+            docids |= self.get_phrase_docids(
+                index,
+                txn,
+                db_cache,
+                word_interner,
+                phrase_interner,
+                phrase,
+            )?;
+        }
+
+        if let Some(prefix) = term.use_prefix_db {
             if let Some(prefix_docids) =
-                db_cache.get_word_prefix_docids(index, txn, word_interner, *prefix)?
+                db_cache.get_word_prefix_docids(index, txn, word_interner, prefix)?
             {
-                or_docids.push(prefix_docids);
+                docids |=
+                    RoaringBitmapCodec::bytes_decode(prefix_docids).ok_or(heed::Error::Decoding)?;
             }
         }
-        let mut docids = or_docids
-            .into_iter()
-            .map(|slice| RoaringBitmapCodec::bytes_decode(slice).unwrap())
-            .collect::<Vec<_>>();
-        for synonym in synonyms.iter().copied() {
-            // TODO: cache resolve_phrase?
-            docids.push(resolve_phrase(
-                index,
-                txn,
-                db_cache,
-                word_interner,
-                phrase_interner,
-                synonym,
-            )?);
-        }
-        if let Some(split_words) = split_words {
-            docids.push(resolve_phrase(
-                index,
-                txn,
-                db_cache,
-                word_interner,
-                phrase_interner,
-                *split_words,
-            )?);
-        }
 
-        let docids = MultiOps::union(docids);
-        let _ = self.derivations.insert(derivations, docids);
-        let docids = &self.derivations[&derivations];
+        let _ = self.terms.insert(term_interned, docids);
+        let docids = &self.terms[&term_interned];
         Ok(docids)
-    }
-
-    /// Get the document ids associated with the given query term.
-    fn get_query_term_docids<'s, 'ctx>(
-        &'s mut self,
-        index: &Index,
-        txn: &'ctx RoTxn,
-        db_cache: &mut DatabaseCache<'ctx>,
-        word_interner: &Interner<String>,
-        derivations_interner: &Interner<WordDerivations>,
-        phrase_interner: &Interner<Phrase>,
-        term: &QueryTerm,
-    ) -> Result<&'s RoaringBitmap> {
-        match *term {
-            QueryTerm::Phrase { phrase } => {
-                self.get_phrase_docids(index, txn, db_cache, word_interner, phrase_interner, phrase)
-            }
-            QueryTerm::Word { derivations } => self.get_word_derivations_docids(
-                index,
-                txn,
-                db_cache,
-                word_interner,
-                derivations_interner,
-                phrase_interner,
-                derivations,
-            ),
-        }
     }
 }
 
@@ -154,8 +98,8 @@ pub fn resolve_query_graph<'ctx>(
         db_cache,
         word_interner,
         phrase_interner,
-        derivations_interner,
-        query_term_docids,
+        term_interner,
+        term_docids: query_term_docids,
         ..
     } = ctx;
     // TODO: there is a faster way to compute this big
@@ -183,16 +127,16 @@ pub fn resolve_query_graph<'ctx>(
 
         let node_docids = match n {
             QueryNode::Term(located_term) => {
-                let derivations_docids = query_term_docids.get_query_term_docids(
+                let term_docids = query_term_docids.get_query_term_docids(
                     index,
                     txn,
                     db_cache,
                     word_interner,
-                    derivations_interner,
+                    term_interner,
                     phrase_interner,
-                    &located_term.value,
+                    located_term.value,
                 )?;
-                predecessors_docids & derivations_docids
+                predecessors_docids & term_docids
             }
             QueryNode::Deleted => {
                 panic!()

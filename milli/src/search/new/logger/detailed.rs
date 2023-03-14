@@ -6,7 +6,7 @@ use std::time::Instant;
 use rand::random;
 use roaring::RoaringBitmap;
 
-use crate::search::new::query_term::{LocatedQueryTerm, QueryTerm, WordDerivations};
+use crate::search::new::query_term::{LocatedQueryTerm, QueryTerm};
 use crate::search::new::ranking_rule_graph::{
     Edge, EdgeCondition, EmptyPathsCache, ProximityGraph, RankingRuleGraph, RankingRuleGraphTrait,
     TypoGraph,
@@ -432,70 +432,70 @@ results.{random} {{
         file: &mut File,
     ) {
         match &node {
-            QueryNode::Term(LocatedQueryTerm { value, .. }) => match value {
-                QueryTerm::Phrase { phrase } => {
+            QueryNode::Term(LocatedQueryTerm { value, .. }) => {
+                let QueryTerm {
+                    original,
+                    zero_typo,
+                    one_typo,
+                    two_typos,
+                    use_prefix_db,
+                    synonyms,
+                    split_words,
+                    prefix_of,
+                    is_prefix: _,
+                    is_ngram: _,
+                    phrase,
+                } = ctx.term_interner.get(*value);
+
+                let original = ctx.word_interner.get(*original);
+                writeln!(
+                    file,
+                    "{node_idx} : \"{original}\" {{
+shape: class"
+                )
+                .unwrap();
+                for w in zero_typo.iter().copied() {
+                    let w = ctx.word_interner.get(w);
+                    writeln!(file, "\"{w}\" : 0").unwrap();
+                }
+                for w in prefix_of.iter().copied() {
+                    let w = ctx.word_interner.get(w);
+                    writeln!(file, "\"{w}\" : 0P").unwrap();
+                }
+                for w in one_typo.iter().copied() {
+                    let w = ctx.word_interner.get(w);
+                    writeln!(file, "\"{w}\" : 1").unwrap();
+                }
+                for w in two_typos.iter().copied() {
+                    let w = ctx.word_interner.get(w);
+                    writeln!(file, "\"{w}\" : 2").unwrap();
+                }
+                if let Some(phrase) = phrase {
                     let phrase = ctx.phrase_interner.get(*phrase);
                     let phrase_str = phrase.description(&ctx.word_interner);
-                    writeln!(file, "{node_idx} : \"{phrase_str}\"").unwrap();
+                    writeln!(file, "\"{phrase_str}\" : phrase").unwrap();
                 }
-                QueryTerm::Word { derivations } => {
-                    let WordDerivations {
-                        original,
-                        zero_typo,
-                        one_typo,
-                        two_typos,
-                        use_prefix_db,
-                        synonyms,
-                        split_words,
-                        prefix_of,
-                        is_prefix: _,
-                    } = ctx.derivations_interner.get(*derivations);
-
-                    let original = ctx.word_interner.get(*original);
-                    writeln!(
-                        file,
-                        "{node_idx} : \"{original}\" {{
-shape: class"
-                    )
-                    .unwrap();
-                    for w in zero_typo.iter().copied() {
-                        let w = ctx.word_interner.get(w);
-                        writeln!(file, "\"{w}\" : 0").unwrap();
-                    }
-                    for w in prefix_of.iter().copied() {
-                        let w = ctx.word_interner.get(w);
-                        writeln!(file, "\"{w}\" : 0P").unwrap();
-                    }
-                    for w in one_typo.iter().copied() {
-                        let w = ctx.word_interner.get(w);
-                        writeln!(file, "\"{w}\" : 1").unwrap();
-                    }
-                    for w in two_typos.iter().copied() {
-                        let w = ctx.word_interner.get(w);
-                        writeln!(file, "\"{w}\" : 2").unwrap();
-                    }
-                    if let Some(split_words) = split_words {
-                        let phrase = ctx.phrase_interner.get(*split_words);
-                        let phrase_str = phrase.description(&ctx.word_interner);
-                        writeln!(file, "\"{phrase_str}\" : split_words").unwrap();
-                    }
-                    for synonym in synonyms.iter().copied() {
-                        let phrase = ctx.phrase_interner.get(synonym);
-                        let phrase_str = phrase.description(&ctx.word_interner);
-                        writeln!(file, "\"{phrase_str}\" : synonym").unwrap();
-                    }
-                    if let Some(use_prefix_db) = use_prefix_db {
-                        let p = ctx.word_interner.get(*use_prefix_db);
-                        writeln!(file, "use prefix DB : {p}").unwrap();
-                    }
-                    for (d, edges) in distances.iter() {
-                        writeln!(file, "\"distance {d}\" : {:?}", edges.iter().collect::<Vec<_>>())
-                            .unwrap();
-                    }
-
-                    writeln!(file, "}}").unwrap();
+                if let Some(split_words) = split_words {
+                    let phrase = ctx.phrase_interner.get(*split_words);
+                    let phrase_str = phrase.description(&ctx.word_interner);
+                    writeln!(file, "\"{phrase_str}\" : split_words").unwrap();
                 }
-            },
+                for synonym in synonyms.iter().copied() {
+                    let phrase = ctx.phrase_interner.get(synonym);
+                    let phrase_str = phrase.description(&ctx.word_interner);
+                    writeln!(file, "\"{phrase_str}\" : synonym").unwrap();
+                }
+                if let Some(use_prefix_db) = use_prefix_db {
+                    let p = ctx.word_interner.get(*use_prefix_db);
+                    writeln!(file, "use prefix DB : {p}").unwrap();
+                }
+                for (d, edges) in distances.iter() {
+                    writeln!(file, "\"distance {d}\" : {:?}", edges.iter().collect::<Vec<_>>())
+                        .unwrap();
+                }
+
+                writeln!(file, "}}").unwrap();
+            }
             QueryNode::Deleted => panic!(),
             QueryNode::Start => {
                 writeln!(file, "{node_idx} : START").unwrap();
@@ -600,32 +600,20 @@ shape: class"
             graph.edges_store[edge_idx as usize].as_ref().unwrap();
         let source_node = &graph.query_graph.nodes[*source_node as usize];
         let source_node_desc = match source_node {
-            QueryNode::Term(term) => match term.value {
-                QueryTerm::Phrase { phrase } => {
-                    let phrase = ctx.phrase_interner.get(phrase);
-                    phrase.description(&ctx.word_interner)
-                }
-                QueryTerm::Word { derivations } => {
-                    let derivations = ctx.derivations_interner.get(derivations);
-                    ctx.word_interner.get(derivations.original).to_owned()
-                }
-            },
+            QueryNode::Term(term) => {
+                let term = ctx.term_interner.get(term.value);
+                ctx.word_interner.get(term.original).to_owned()
+            }
             QueryNode::Deleted => panic!(),
             QueryNode::Start => "START".to_owned(),
             QueryNode::End => "END".to_owned(),
         };
         let dest_node = &graph.query_graph.nodes[*dest_node as usize];
         let dest_node_desc = match dest_node {
-            QueryNode::Term(term) => match term.value {
-                QueryTerm::Phrase { phrase } => {
-                    let phrase = ctx.phrase_interner.get(phrase);
-                    phrase.description(&ctx.word_interner)
-                }
-                QueryTerm::Word { derivations } => {
-                    let derivations = ctx.derivations_interner.get(derivations);
-                    ctx.word_interner.get(derivations.original).to_owned()
-                }
-            },
+            QueryNode::Term(term) => {
+                let term = ctx.term_interner.get(term.value);
+                ctx.word_interner.get(term.original).to_owned()
+            }
             QueryNode::Deleted => panic!(),
             QueryNode::Start => "START".to_owned(),
             QueryNode::End => "END".to_owned(),

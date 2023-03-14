@@ -27,7 +27,7 @@ pub use ranking_rules::{bucket_sort, RankingRule, RankingRuleOutput, RankingRule
 use roaring::RoaringBitmap;
 
 use self::interner::Interner;
-use self::query_term::{Phrase, WordDerivations};
+use self::query_term::{Phrase, QueryTerm};
 use self::ranking_rules::PlaceholderQuery;
 use self::resolve_query_graph::{resolve_query_graph, QueryTermDocIdsCache};
 use crate::search::new::graph_based_ranking_rule::{Proximity, Typo};
@@ -41,8 +41,8 @@ pub struct SearchContext<'ctx> {
     pub db_cache: DatabaseCache<'ctx>,
     pub word_interner: Interner<String>,
     pub phrase_interner: Interner<Phrase>,
-    pub derivations_interner: Interner<WordDerivations>,
-    pub query_term_docids: QueryTermDocIdsCache,
+    pub term_interner: Interner<QueryTerm>,
+    pub term_docids: QueryTermDocIdsCache,
 }
 impl<'ctx> SearchContext<'ctx> {
     pub fn new(index: &'ctx Index, txn: &'ctx RoTxn<'ctx>) -> Self {
@@ -52,8 +52,8 @@ impl<'ctx> SearchContext<'ctx> {
             db_cache: <_>::default(),
             word_interner: <_>::default(),
             phrase_interner: <_>::default(),
-            derivations_interner: <_>::default(),
-            query_term_docids: <_>::default(),
+            term_interner: <_>::default(),
+            term_docids: <_>::default(),
         }
     }
 }

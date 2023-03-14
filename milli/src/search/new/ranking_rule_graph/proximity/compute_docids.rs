@@ -29,7 +29,7 @@ pub fn compute_docids<'ctx>(
                     .unwrap_or_default();
                 if !docids.is_empty() {
                     for phrase in phrases {
-                        docids &= ctx.query_term_docids.get_phrase_docids(
+                        docids &= ctx.term_docids.get_phrase_docids(
                             index,
                             txn,
                             db_cache,
@@ -56,7 +56,7 @@ pub fn compute_docids<'ctx>(
                     .unwrap_or_default();
                 if !docids.is_empty() {
                     for phrase in phrases {
-                        docids &= ctx.query_term_docids.get_phrase_docids(
+                        docids &= ctx.term_docids.get_phrase_docids(
                             index,
                             txn,
                             db_cache,
