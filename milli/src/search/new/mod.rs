@@ -303,7 +303,8 @@ mod tests {
             let mut ctx = SearchContext::new(&index, &txn);
             let results = execute_search(
                 &mut ctx,
-                "which a the releases from poison by the government",
+                "released from prison by the government",
+                // "which a the releases from poison by the government",
                 // "sun flower s are the best",
                 // "zero config",
                 TermsMatchingStrategy::Last,
@@ -338,7 +339,7 @@ mod tests {
 
             println!("{}us: {:?}", elapsed.as_micros(), results);
         }
-        // for (id, _document) in documents {
+        // for (id, document) in documents {
         //     println!("{id}:");
         //     // println!("{document}");
         // }
@@ -359,9 +360,13 @@ mod tests {
         let start = Instant::now();
 
         let mut s = Search::new(&txn, &index);
-        s.query("which a the releases from poison by the government");
+        s.query(
+            // "which a the releases from poison by the government",
+            // "sun flower s are the best",
+            "zero config",
+        );
         s.terms_matching_strategy(TermsMatchingStrategy::Last);
-        // s.criterion_implementation_strategy(crate::CriterionImplementationStrategy::OnlySetBased);
+        // s.criterion_implementation_strategy(crate::CriterionImplementationStrategy::OnlyIterative);
         let docs = s.execute().unwrap();
 
         let elapsed = start.elapsed();

@@ -5,10 +5,13 @@ use super::{EdgeCondition, RankingRuleGraph, RankingRuleGraphTrait};
 use crate::search::new::interner::{DedupInterner, Interned, MappedInterner};
 use crate::search::new::logger::SearchLogger;
 use crate::search::new::query_graph::QueryNodeData;
-use crate::search::new::query_term::{LocatedQueryTerm, QueryTerm};
+use crate::search::new::query_term::{LocatedQueryTerm, Phrase, QueryTerm};
 use crate::search::new::small_bitmap::SmallBitmap;
 use crate::search::new::{QueryGraph, QueryNode, SearchContext};
 use crate::Result;
+use std::collections::HashSet;
+use std::fmt::Write;
+use std::iter::FromIterator;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct TypoEdge {
@@ -20,10 +23,6 @@ pub enum TypoGraph {}
 
 impl RankingRuleGraphTrait for TypoGraph {
     type EdgeCondition = TypoEdge;
-
-    fn label_for_edge_condition(edge: &Self::EdgeCondition) -> String {
-        format!(", {} typos", edge.nbr_typos)
-    }
 
     fn resolve_edge_condition<'db_cache, 'ctx>(
         ctx: &mut SearchContext<'ctx>,
@@ -146,5 +145,79 @@ impl RankingRuleGraphTrait for TypoGraph {
         logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
         logger.log_typo_state(graph, paths, empty_paths_cache, universe, distances, cost);
+    }
+
+    fn label_for_edge_condition<'ctx>(
+        ctx: &mut SearchContext<'ctx>,
+        edge: &Self::EdgeCondition,
+    ) -> Result<String> {
+        let TypoEdge { term, nbr_typos: _ } = edge;
+        let term = ctx.term_interner.get(*term);
+        let QueryTerm {
+            original: _,
+            is_ngram: _,
+            is_prefix: _,
+            phrase,
+            zero_typo,
+            prefix_of,
+            synonyms,
+            split_words,
+            one_typo,
+            two_typos,
+            use_prefix_db,
+        } = term;
+        let mut s = String::new();
+        if let Some(phrase) = phrase {
+            let phrase = ctx.phrase_interner.get(*phrase).description(&ctx.word_interner);
+            writeln!(&mut s, "\"{phrase}\" : phrase").unwrap();
+        }
+        if let Some(w) = zero_typo {
+            let w = ctx.word_interner.get(*w);
+            writeln!(&mut s, "\"{w}\" : 0 typo").unwrap();
+        }
+        for w in prefix_of.iter() {
+            let w = ctx.word_interner.get(*w);
+            writeln!(&mut s, "\"{w}\" : prefix").unwrap();
+        }
+        for w in one_typo.iter() {
+            let w = ctx.word_interner.get(*w);
+            writeln!(&mut s, "\"{w}\" : 1 typo").unwrap();
+        }
+        for w in two_typos.iter() {
+            let w = ctx.word_interner.get(*w);
+            writeln!(&mut s, "\"{w}\" : 2 typos").unwrap();
+        }
+        if let Some(phrase) = split_words {
+            let phrase = ctx.phrase_interner.get(*phrase).description(&ctx.word_interner);
+            writeln!(&mut s, "\"{phrase}\" : split words").unwrap();
+        }
+        for phrase in synonyms.iter() {
+            let phrase = ctx.phrase_interner.get(*phrase).description(&ctx.word_interner);
+            writeln!(&mut s, "\"{phrase}\" : synonym").unwrap();
+        }
+        if let Some(w) = use_prefix_db {
+            let w = ctx.word_interner.get(*w);
+            writeln!(&mut s, "\"{w}\" : use prefix db").unwrap();
+        }
+
+        Ok(s)
+    }
+
+    fn words_used_by_edge_condition<'ctx>(
+        ctx: &mut SearchContext<'ctx>,
+        edge: &Self::EdgeCondition,
+    ) -> Result<HashSet<Interned<String>>> {
+        let TypoEdge { term, .. } = edge;
+        let term = ctx.term_interner.get(*term);
+        Ok(HashSet::from_iter(term.all_single_words_except_prefix_db()))
+    }
+
+    fn phrases_used_by_edge_condition<'ctx>(
+        ctx: &mut SearchContext<'ctx>,
+        edge: &Self::EdgeCondition,
+    ) -> Result<HashSet<Interned<Phrase>>> {
+        let TypoEdge { term, .. } = edge;
+        let term = ctx.term_interner.get(*term);
+        Ok(HashSet::from_iter(term.all_phrases()))
     }
 }

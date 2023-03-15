@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::mem;
 use std::ops::RangeInclusive;
 
@@ -59,6 +60,111 @@ pub struct QueryTerm {
     pub use_prefix_db: Option<Interned<String>>,
 }
 impl QueryTerm {
+    pub fn removing_forbidden_terms(
+        &self,
+        allowed_words: &HashSet<Interned<String>>,
+        allowed_phrases: &HashSet<Interned<Phrase>>,
+    ) -> Option<Self> {
+        let QueryTerm {
+            original,
+            is_ngram,
+            is_prefix,
+            phrase,
+            zero_typo,
+            prefix_of,
+            synonyms,
+            split_words,
+            one_typo,
+            two_typos,
+            use_prefix_db,
+        } = self;
+
+        let mut changed = false;
+
+        let mut new_zero_typo = None;
+        if let Some(w) = zero_typo {
+            if allowed_words.contains(w) {
+                new_zero_typo = Some(*w);
+            } else {
+                changed = true;
+            }
+        }
+        // TODO: this is incorrect, prefix DB stuff should be treated separately
+        let mut new_use_prefix_db = None;
+        if let Some(w) = use_prefix_db {
+            if allowed_words.contains(w) {
+                new_use_prefix_db = Some(*w);
+            } else {
+                changed = true;
+            }
+        }
+        let mut new_prefix_of = vec![];
+        for w in prefix_of.iter() {
+            if allowed_words.contains(w) {
+                new_prefix_of.push(*w);
+            } else {
+                changed = true;
+            }
+        }
+        let mut new_one_typo = vec![];
+        for w in one_typo.iter() {
+            if allowed_words.contains(w) {
+                new_one_typo.push(*w);
+            } else {
+                changed = true;
+            }
+        }
+        let mut new_two_typos = vec![];
+        for w in two_typos.iter() {
+            if allowed_words.contains(w) {
+                new_two_typos.push(*w);
+            } else {
+                changed = true;
+            }
+        }
+        // TODO: this is incorrect, prefix DB stuff should be treated separately
+        let mut new_phrase = None;
+        if let Some(w) = phrase {
+            if !allowed_phrases.contains(w) {
+                new_phrase = Some(*w);
+            } else {
+                changed = true;
+            }
+        }
+        let mut new_split_words = None;
+        if let Some(w) = split_words {
+            if allowed_phrases.contains(w) {
+                new_split_words = Some(*w);
+            } else {
+                changed = true;
+            }
+        }
+        let mut new_synonyms = vec![];
+        for w in synonyms.iter() {
+            if allowed_phrases.contains(w) {
+                new_synonyms.push(*w);
+            } else {
+                changed = true;
+            }
+        }
+        if changed {
+            Some(QueryTerm {
+                original: *original,
+                is_ngram: *is_ngram,
+                is_prefix: *is_prefix,
+                phrase: new_phrase,
+                zero_typo: new_zero_typo,
+                prefix_of: new_prefix_of.into_boxed_slice(),
+                synonyms: new_synonyms.into_boxed_slice(),
+                split_words: new_split_words,
+                one_typo: new_one_typo.into_boxed_slice(),
+                two_typos: new_two_typos.into_boxed_slice(),
+                use_prefix_db: new_use_prefix_db,
+            })
+        } else {
+            None
+        }
+    }
     pub fn phrase(
         word_interner: &mut DedupInterner<String>,
         phrase_interner: &mut DedupInterner<Phrase>,

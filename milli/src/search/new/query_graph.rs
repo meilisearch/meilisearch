@@ -281,7 +281,7 @@ impl QueryGraph {
 
     /// Simplify the query graph by removing all nodes that are disconnected from
     /// the start or end nodes.
-    fn simplify(&mut self) {
+    pub fn simplify(&mut self) {
         loop {
             let mut nodes_to_remove = vec![];
             for (node_idx, node) in self.nodes.iter() {

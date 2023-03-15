@@ -16,6 +16,7 @@ mod proximity;
 /// Implementation of the `typo` ranking rule
 mod typo;
 
+use std::collections::HashSet;
 use std::hash::Hash;
 
 pub use edge_docids_cache::EdgeConditionDocIdsCache;
@@ -26,6 +27,7 @@ pub use typo::{TypoEdge, TypoGraph};
 
 use super::interner::{DedupInterner, FixedSizeInterner, Interned, MappedInterner};
 use super::logger::SearchLogger;
+use super::query_term::Phrase;
 use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, QueryNode, SearchContext};
 use crate::Result;
@@ -82,7 +84,19 @@ pub trait RankingRuleGraphTrait: Sized {
 
     /// Return the label of the given edge condition, to be used when visualising
     /// the ranking rule graph.
-    fn label_for_edge_condition(edge: &Self::EdgeCondition) -> String;
+    fn label_for_edge_condition<'ctx>(
+        ctx: &mut SearchContext<'ctx>,
+        edge: &Self::EdgeCondition,
+    ) -> Result<String>;
+
+    fn words_used_by_edge_condition<'ctx>(
+        ctx: &mut SearchContext<'ctx>,
+        edge: &Self::EdgeCondition,
+    ) -> Result<HashSet<Interned<String>>>;
+    fn phrases_used_by_edge_condition<'ctx>(
+        ctx: &mut SearchContext<'ctx>,
+        edge: &Self::EdgeCondition,
+    ) -> Result<HashSet<Interned<Phrase>>>;
 
     /// Compute the document ids associated with the given edge condition,
     /// restricted to the given universe.

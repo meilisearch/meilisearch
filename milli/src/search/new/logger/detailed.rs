@@ -528,7 +528,7 @@ shape: class"
         ctx: &mut SearchContext,
         graph: &RankingRuleGraph<R>,
         paths: &[Vec<u16>],
-        _empty_paths_cache: &DeadEndPathCache<R>,
+        dead_end_paths_cache: &DeadEndPathCache<R>,
         distances: MappedInterner<Vec<(u16, SmallBitmap<R::EdgeCondition>)>, QueryNode>,
         file: &mut File,
     ) {
@@ -552,12 +552,11 @@ shape: class"
                         .unwrap();
                 }
                 EdgeCondition::Conditional(condition) => {
-                    let condition = graph.conditions_interner.get(*condition);
+                    // let condition = graph.conditions_interner.get(*condition);
                     writeln!(
                         file,
-                        "{source_node} -> {dest_node} : \"cost {cost} {edge_label}\"",
+                        "{source_node} -> {dest_node} : \"{condition} cost {cost}\"",
                         cost = edge.cost,
-                        edge_label = R::label_for_edge_condition(condition)
                     )
                     .unwrap();
                 }
@@ -569,28 +568,33 @@ shape: class"
         // Self::paths_d2_description(graph, paths, file);
         // writeln!(file, "}}").unwrap();
 
-        writeln!(file, "Shortest Paths {{").unwrap();
+        writeln!(file, "Paths {{").unwrap();
         Self::paths_d2_description(ctx, graph, paths, file);
         writeln!(file, "}}").unwrap();
 
-        // writeln!(file, "Empty Edge Couples {{").unwrap();
-        // for (i, (e1, e2)) in empty_paths_cache.empty_couple_edges.iter().enumerate() {
-        //     writeln!(file, "{i} : \"\" {{").unwrap();
-        //     Self::edge_d2_description(graph, *e1, file);
-        //     Self::edge_d2_description(graph, *e2, file);
-        //     writeln!(file, "{e1} -- {e2}").unwrap();
-        //     writeln!(file, "}}").unwrap();
-        // }
-        // writeln!(file, "}}").unwrap();
+        writeln!(file, "Dead-end couples of conditions {{").unwrap();
+        for (i, (e1, e2)) in dead_end_paths_cache.condition_couples.iter().enumerate() {
+            writeln!(file, "{i} : \"\" {{").unwrap();
+            Self::condition_d2_description(ctx, graph, e1, file);
+            for e2 in e2.iter() {
+                Self::condition_d2_description(ctx, graph, e2, file);
+                writeln!(file, "{e1} -- {e2}").unwrap();
+            }
+            writeln!(file, "}}").unwrap();
+        }
+        writeln!(file, "}}").unwrap();
 
-        // writeln!(file, "Removed Edges {{").unwrap();
-        // for edge_idx in empty_paths_cache.empty_edges.iter() {
-        //     writeln!(file, "{edge_idx}").unwrap();
-        // }
+        writeln!(file, "Dead-end edges {{").unwrap();
+        for condition in dead_end_paths_cache.conditions.iter() {
+            writeln!(file, "{condition}").unwrap();
+        }
+        writeln!(file, "}}").unwrap();
+
+        // writeln!(file, "Dead-end prefixes {{").unwrap();
         // writeln!(file, "}}").unwrap();
     }
     fn condition_d2_description<R: RankingRuleGraphTrait>(
-        _ctx: &mut SearchContext,
+        ctx: &mut SearchContext,
         graph: &RankingRuleGraph<R>,
         condition_id: Interned<R::EdgeCondition>,
         file: &mut File,
@@ -598,10 +602,11 @@ shape: class"
         let condition = graph.conditions_interner.get(condition_id);
         writeln!(
             file,
-            "{condition_id}: \"{}\" {{
-            shape: class
-        }}",
-            R::label_for_edge_condition(condition)
+            "{condition_id} {{
+shape: class
+{}
+}}",
+            R::label_for_edge_condition(ctx, condition).unwrap()
         )
         .unwrap();
     }

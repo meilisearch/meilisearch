@@ -33,7 +33,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
             empty_paths_cache,
             &mut visit,
             &mut vec![],
-            &mut SmallBitmap::new(self.edges_store.len()),
+            &mut SmallBitmap::for_interned_values_in(&self.conditions_interner),
             &mut empty_paths_cache.conditions.clone(),
         )?;
         Ok(())

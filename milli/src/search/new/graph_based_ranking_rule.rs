@@ -36,6 +36,7 @@ That is we find the documents where either:
 - OR: `pretty` is 2-close to `house` AND `house` is 1-close to `by`
 */
 
+use std::collections::HashSet;
 use std::ops::ControlFlow;
 
 use roaring::RoaringBitmap;
@@ -50,6 +51,7 @@ use super::ranking_rule_graph::{
 use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, RankingRule, RankingRuleOutput, SearchContext};
 use crate::search::new::interner::Interned;
+use crate::search::new::query_graph::QueryNodeData;
 use crate::Result;
 
 pub type Proximity = GraphBasedRankingRule<ProximityGraph>;
@@ -216,9 +218,8 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         let original_universe = universe;
         let mut universe = universe.clone();
 
-        // TODO: remove this unnecessary clone
         let original_graph = graph.clone();
-        // and this vector as well
+        let mut used_conditions = SmallBitmap::for_interned_values_in(&graph.conditions_interner);
         let mut paths = vec![];
 
         // For each path of the given cost, we will compute its associated
@@ -243,8 +244,8 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                 // We store the edges and their docids in vectors in case the path turns out to be
                 // empty and we need to figure out why it was empty.
                 let mut visited_conditions = vec![];
-                let mut cached_edge_docids =
-                    graph.conditions_interner.map(|_| RoaringBitmap::new());
+                let mut cached_edge_docids = vec![];
+                // graph.conditions_interner.map(|_| RoaringBitmap::new());
 
                 for &condition_interned_raw in path {
                     let condition = Interned::new(condition_interned_raw);
@@ -253,7 +254,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                     let edge_docids =
                         edge_docids_cache.get_edge_docids(ctx, condition, graph, &universe)?;
 
-                    *cached_edge_docids.get_mut(condition) = edge_docids.clone();
+                    cached_edge_docids.push((condition, edge_docids.clone())); // .get_mut(condition) = edge_docids.clone();
 
                     // If the edge is empty, then the path will be empty as well, we update the graph
                     // and caches accordingly and skip to the next candidate path.
@@ -279,18 +280,22 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                         // then we also know that any path containing the same couple of
                         // edges will also be empty.
                         for (past_condition, edge_docids2) in cached_edge_docids.iter() {
-                            if past_condition == condition {
+                            if *past_condition == condition {
                                 continue;
                             };
                             let intersection = edge_docids & edge_docids2;
                             if intersection.is_disjoint(&universe) {
-                                empty_paths_cache.add_condition_couple(past_condition, condition);
+                                empty_paths_cache.add_condition_couple(*past_condition, condition);
                             }
                         }
                         // We should maybe instead try to compute:
                         // 0th & nth & 1st & n-1th & 2nd & etc...
                         return Ok(ControlFlow::Continue(()));
                     }
+                }
+                assert!(!path_docids.is_empty());
+                for condition in path {
+                    used_conditions.insert(Interned::new(*condition));
                 }
                 bucket |= &path_docids;
                 // Reduce the size of the universe so that we can more optimistically discard candidate paths
@@ -307,16 +312,50 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         G::log_state(
             &original_graph,
             &paths,
-            &state.empty_paths_cache,
+            empty_paths_cache,
             original_universe,
-            &state.all_distances,
+            all_distances,
             cost,
             logger,
         );
 
-        // TODO: Graph-based ranking rules do not (yet) modify the query graph. We could, however,
-        // remove nodes and/or terms within nodes that weren't present in any of the paths.
-        let next_query_graph = state.graph.query_graph.clone();
+        // We modify the next query graph so that it only contains the subgraph
+        // that was used to compute this bucket
+        // But we only do it in case the bucket length is >1, because otherwise
+        // we know the child ranking rule won't be called anyway
+        let mut next_query_graph = original_graph.query_graph;
+        next_query_graph.simplify();
+        if bucket.len() > 1 {
+            // 1. Gather all the words and phrases used in the computation of this bucket
+            let mut used_words = HashSet::new();
+            let mut used_phrases = HashSet::new();
+            for condition in used_conditions.iter() {
+                let condition = graph.conditions_interner.get(condition);
+                used_words.extend(G::words_used_by_edge_condition(ctx, condition)?);
+                used_phrases.extend(G::phrases_used_by_edge_condition(ctx, condition)?);
+            }
+            // 2. Remove the unused words and phrases from all the nodes in the graph
+            let mut nodes_to_remove = vec![];
+            for (node_id, node) in next_query_graph.nodes.iter_mut() {
+                let term = match &mut node.data {
+                    QueryNodeData::Term(term) => term,
+                    QueryNodeData::Deleted | QueryNodeData::Start | QueryNodeData::End => continue,
+                };
+                if let Some(new_term) = ctx
+                    .term_interner
+                    .get(term.value)
+                    .removing_forbidden_terms(&used_words, &used_phrases)
+                {
+                    if new_term.is_empty() {
+                        nodes_to_remove.push(node_id);
+                    } else {
+                        term.value = ctx.term_interner.insert(new_term);
+                    }
+                }
+            }
+            // 3. Remove the empty nodes from the graph
+            next_query_graph.remove_nodes(&nodes_to_remove);
+        }
 
         self.state = Some(state);
 
