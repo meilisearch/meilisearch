@@ -107,7 +107,7 @@ fn json_to_string<'a>(value: &'a Value, buffer: &'a mut String) -> Option<&'a st
     fn inner(value: &Value, output: &mut String) -> bool {
         use std::fmt::Write;
         match value {
-            Value::Null => false,
+            Value::Null | Value::Object(_) => false,
             Value::Bool(boolean) => write!(output, "{}", boolean).is_ok(),
             Value::Number(number) => write!(output, "{}", number).is_ok(),
             Value::String(string) => write!(output, "{}", string).is_ok(),
@@ -116,23 +116,6 @@ fn json_to_string<'a>(value: &'a Value, buffer: &'a mut String) -> Option<&'a st
                 for value in array {
                     if inner(value, output) {
                         output.push_str(". ");
-                        count += 1;
-                    }
-                }
-                // check that at least one value was written
-                count != 0
-            }
-            Value::Object(object) => {
-                let mut buffer = String::new();
-                let mut count = 0;
-                for (key, value) in object {
-                    buffer.clear();
-                    let _ = write!(&mut buffer, "{}: ", key);
-                    if inner(value, &mut buffer) {
-                        buffer.push_str(". ");
-                        // We write the "key: value. " pair only when
-                        // we are sure that the value can be written.
-                        output.push_str(&buffer);
                         count += 1;
                     }
                 }
