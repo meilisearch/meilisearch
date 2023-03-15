@@ -276,6 +276,11 @@ pub fn snap_facet_id_is_null_docids(index: &Index) -> String {
         &format!("{facet_id:<3} {}", display_bitmap(&docids))
     })
 }
+pub fn snap_facet_id_is_empty_docids(index: &Index) -> String {
+    make_db_snap_from_iter!(index, facet_id_is_empty_docids, |(facet_id, docids)| {
+        &format!("{facet_id:<3} {}", display_bitmap(&docids))
+    })
+}
 pub fn snap_facet_id_string_docids(index: &Index) -> String {
     make_db_snap_from_iter!(index, facet_id_string_docids, |(
         FacetGroupKey { field_id, level, left_bound },
@@ -502,6 +507,9 @@ macro_rules! full_snap_of_db {
     }};
     ($index:ident, facet_id_is_null_docids) => {{
         $crate::snapshot_tests::snap_facet_id_is_null_docids(&$index)
+    }};
+    ($index:ident, facet_id_is_empty_docids) => {{
+        $crate::snapshot_tests::snap_facet_id_is_empty_docids(&$index)
     }};
     ($index:ident, documents_ids) => {{
         $crate::snapshot_tests::snap_documents_ids(&$index)
