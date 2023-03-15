@@ -18,7 +18,7 @@ pub fn compute_docids<'ctx>(
         phrase_interner,
         term_interner,
     } = ctx;
-    let (pairs, proximity) = match edge {
+    let pairs = match edge {
         ProximityCondition::Term { term } => {
             return term_docids
                 .get_query_term_docids(
@@ -32,12 +32,12 @@ pub fn compute_docids<'ctx>(
                 )
                 .cloned()
         }
-        ProximityCondition::Pairs { pairs, proximity } => (pairs, proximity),
+        ProximityCondition::Pairs { pairs } => pairs,
     };
     let mut pair_docids = RoaringBitmap::new();
     for pair in pairs.iter() {
         let pair = match pair {
-            WordPair::Words { phrases, left, right } => {
+            WordPair::Words { phrases, left, right, proximity } => {
                 let mut docids = db_cache
                     .get_word_pair_proximity_docids(
                         index,
@@ -64,7 +64,7 @@ pub fn compute_docids<'ctx>(
                 }
                 docids
             }
-            WordPair::WordPrefix { phrases, left, right_prefix } => {
+            WordPair::WordPrefix { phrases, left, right_prefix, proximity } => {
                 let mut docids = db_cache
                     .get_word_prefix_pair_proximity_docids(
                         index,
@@ -91,7 +91,7 @@ pub fn compute_docids<'ctx>(
                 }
                 docids
             }
-            WordPair::WordPrefixSwapped { left_prefix, right } => db_cache
+            WordPair::WordPrefixSwapped { left_prefix, right, proximity } => db_cache
                 .get_prefix_word_pair_proximity_docids(
                     index,
                     txn,

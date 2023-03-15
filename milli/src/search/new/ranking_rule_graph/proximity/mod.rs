@@ -18,22 +18,25 @@ pub enum WordPair {
         phrases: Vec<Interned<Phrase>>,
         left: Interned<String>,
         right: Interned<String>,
+        proximity: u8,
     },
     WordPrefix {
         phrases: Vec<Interned<Phrase>>,
         left: Interned<String>,
         right_prefix: Interned<String>,
+        proximity: u8,
     },
     WordPrefixSwapped {
         left_prefix: Interned<String>,
         right: Interned<String>,
+        proximity: u8,
     },
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum ProximityCondition {
     Term { term: Interned<QueryTerm> },
-    Pairs { pairs: Box<[WordPair]>, proximity: u8 },
+    Pairs { pairs: Box<[WordPair]> },
 }
 
 pub enum ProximityGraph {}
@@ -46,8 +49,8 @@ impl RankingRuleGraphTrait for ProximityGraph {
             ProximityCondition::Term { term } => {
                 format!("term {term}")
             }
-            ProximityCondition::Pairs { pairs, proximity } => {
-                format!("prox {proximity}, {} pairs", pairs.len())
+            ProximityCondition::Pairs { pairs } => {
+                format!("pairs {}", pairs.len())
             }
         }
     }

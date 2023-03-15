@@ -94,7 +94,7 @@ pub fn build_edges<'ctx>(
         )]);
     }
 
-    let mut cost_proximity_word_pairs = BTreeMap::<u8, BTreeMap<u8, Vec<WordPair>>>::new();
+    let mut cost_word_pairs = BTreeMap::<u8, Vec<WordPair>>::new();
 
     if let Some(right_prefix) = right_term.use_prefix_db {
         for (left_phrase, left_word) in last_word_of_term_iter(left_term, phrase_interner) {
@@ -106,7 +106,7 @@ pub fn build_edges<'ctx>(
                 right_ngram_length,
                 left_word,
                 right_prefix,
-                &mut cost_proximity_word_pairs,
+                &mut cost_word_pairs,
                 left_phrase,
             )?;
         }
@@ -129,28 +129,22 @@ pub fn build_edges<'ctx>(
                 right_ngram_length,
                 left_word,
                 right_word,
-                &mut cost_proximity_word_pairs,
+                &mut cost_word_pairs,
                 &[left_phrase, right_phrase].iter().copied().flatten().collect::<Vec<_>>(),
             )?;
         }
     }
 
-    let mut new_edges = cost_proximity_word_pairs
+    let mut new_edges = cost_word_pairs
         .into_iter()
-        .flat_map(|(cost, proximity_word_pairs)| {
-            let mut edges = vec![];
-            for (proximity, word_pairs) in proximity_word_pairs {
-                edges.push((
-                    cost,
-                    EdgeCondition::Conditional(conditions_interner.insert(
-                        ProximityCondition::Pairs {
-                            pairs: word_pairs.into_boxed_slice(),
-                            proximity,
-                        },
-                    )),
-                ))
-            }
-            edges
+        .map(|(cost, word_pairs)| {
+            (
+                cost,
+                EdgeCondition::Conditional(
+                    conditions_interner
+                        .insert(ProximityCondition::Pairs { pairs: word_pairs.into_boxed_slice() }),
+                ),
+            )
         })
         .collect::<Vec<_>>();
     new_edges.push((
@@ -170,7 +164,7 @@ fn add_prefix_edges<'ctx>(
     right_ngram_length: usize,
     left_word: Interned<String>,
     right_prefix: Interned<String>,
-    cost_proximity_word_pairs: &mut BTreeMap<u8, BTreeMap<u8, Vec<WordPair>>>,
+    cost_proximity_word_pairs: &mut BTreeMap<u8, Vec<WordPair>>,
     left_phrase: Option<Interned<Phrase>>,
 ) -> Result<()> {
     for proximity in 1..=(8 - right_ngram_length) {
@@ -188,16 +182,12 @@ fn add_prefix_edges<'ctx>(
             )?
             .is_some()
         {
-            cost_proximity_word_pairs
-                .entry(cost)
-                .or_default()
-                .entry(proximity as u8)
-                .or_default()
-                .push(WordPair::WordPrefix {
-                    phrases: left_phrase.into_iter().collect(),
-                    left: left_word,
-                    right_prefix,
-                });
+            cost_proximity_word_pairs.entry(cost).or_default().push(WordPair::WordPrefix {
+                phrases: left_phrase.into_iter().collect(),
+                left: left_word,
+                right_prefix,
+                proximity: proximity as u8,
+            });
         }
 
         // No swapping when computing the proximity between a phrase and a word
@@ -213,12 +203,11 @@ fn add_prefix_edges<'ctx>(
                 )?
                 .is_some()
         {
-            cost_proximity_word_pairs
-                .entry(cost)
-                .or_default()
-                .entry(proximity as u8)
-                .or_default()
-                .push(WordPair::WordPrefixSwapped { left_prefix: right_prefix, right: left_word });
+            cost_proximity_word_pairs.entry(cost).or_default().push(WordPair::WordPrefixSwapped {
+                left_prefix: right_prefix,
+                right: left_word,
+                proximity: proximity as u8 - 1,
+            });
         }
     }
     Ok(())
@@ -232,7 +221,7 @@ fn add_non_prefix_edges<'ctx>(
     right_ngram_length: usize,
     word1: Interned<String>,
     word2: Interned<String>,
-    cost_proximity_word_pairs: &mut BTreeMap<u8, BTreeMap<u8, Vec<WordPair>>>,
+    cost_proximity_word_pairs: &mut BTreeMap<u8, Vec<WordPair>>,
     phrases: &[Interned<Phrase>],
 ) -> Result<()> {
     for proximity in 1..=(8 - right_ngram_length) {
@@ -248,12 +237,12 @@ fn add_non_prefix_edges<'ctx>(
             )?
             .is_some()
         {
-            cost_proximity_word_pairs
-                .entry(cost)
-                .or_default()
-                .entry(proximity as u8)
-                .or_default()
-                .push(WordPair::Words { phrases: phrases.to_vec(), left: word1, right: word2 });
+            cost_proximity_word_pairs.entry(cost).or_default().push(WordPair::Words {
+                phrases: phrases.to_vec(),
+                left: word1,
+                right: word2,
+                proximity: proximity as u8,
+            });
         }
         if proximity > 1
             // no swapping when either term is a phrase
@@ -269,12 +258,12 @@ fn add_non_prefix_edges<'ctx>(
                 )?
                 .is_some()
         {
-            cost_proximity_word_pairs
-                .entry(cost)
-                .or_default()
-                .entry(proximity as u8 - 1)
-                .or_default()
-                .push(WordPair::Words { phrases: vec![], left: word2, right: word1 });
+            cost_proximity_word_pairs.entry(cost).or_default().push(WordPair::Words {
+                phrases: vec![],
+                left: word2,
+                right: word1,
+                proximity: proximity as u8 - 1,
+            });
         }
     }
     Ok(())

@@ -303,7 +303,7 @@ mod tests {
             let mut ctx = SearchContext::new(&index, &txn);
             let results = execute_search(
                 &mut ctx,
-                "releases from poison by the government",
+                "which a the releases from poison by the government",
                 // "sun flower s are the best",
                 // "zero config",
                 TermsMatchingStrategy::Last,
@@ -359,7 +359,7 @@ mod tests {
         let start = Instant::now();
 
         let mut s = Search::new(&txn, &index);
-        s.query("releases from poison by the government");
+        s.query("which a the releases from poison by the government");
         s.terms_matching_strategy(TermsMatchingStrategy::Last);
         // s.criterion_implementation_strategy(crate::CriterionImplementationStrategy::OnlySetBased);
         let docs = s.execute().unwrap();
