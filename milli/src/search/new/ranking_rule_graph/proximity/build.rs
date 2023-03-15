@@ -1,7 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 use std::collections::BTreeMap;
 
-use super::ProximityEdge;
+use super::ProximityCondition;
 use crate::search::new::db_cache::DatabaseCache;
 use crate::search::new::interner::{DedupInterner, Interned};
 use crate::search::new::query_graph::QueryNodeData;
@@ -37,10 +37,10 @@ fn first_word_of_term_iter<'t>(
 
 pub fn build_edges<'ctx>(
     ctx: &mut SearchContext<'ctx>,
-    conditions_interner: &mut DedupInterner<ProximityEdge>,
+    conditions_interner: &mut DedupInterner<ProximityCondition>,
     from_node: &QueryNode,
     to_node: &QueryNode,
-) -> Result<Vec<(u8, EdgeCondition<ProximityEdge>)>> {
+) -> Result<Vec<(u8, EdgeCondition<ProximityCondition>)>> {
     let SearchContext {
         index,
         txn,
@@ -51,24 +51,33 @@ pub fn build_edges<'ctx>(
         term_docids: _,
     } = ctx;
 
-    let (left_term, left_end_position) = match &from_node.data {
-        QueryNodeData::Term(LocatedQueryTerm { value, positions }) => {
-            (term_interner.get(*value), *positions.end())
-        }
-        QueryNodeData::Deleted => return Ok(vec![]),
-        QueryNodeData::Start => return Ok(vec![(0, EdgeCondition::Unconditional)]),
-        QueryNodeData::End => return Ok(vec![]),
-    };
-
     let right_term = match &to_node.data {
         QueryNodeData::End => return Ok(vec![(0, EdgeCondition::Unconditional)]),
         QueryNodeData::Deleted | QueryNodeData::Start => return Ok(vec![]),
         QueryNodeData::Term(term) => term,
     };
-    let LocatedQueryTerm { value: right_value, positions: right_positions } = right_term;
+
+    let LocatedQueryTerm { value: right_term_interned, positions: right_positions } = right_term;
 
     let (right_term, right_start_position, right_ngram_length) =
-        (term_interner.get(*right_value), *right_positions.start(), right_positions.len());
+        (term_interner.get(*right_term_interned), *right_positions.start(), right_positions.len());
+
+    let (left_term, left_end_position) = match &from_node.data {
+        QueryNodeData::Term(LocatedQueryTerm { value, positions }) => {
+            (term_interner.get(*value), *positions.end())
+        }
+        QueryNodeData::Deleted => return Ok(vec![]),
+        QueryNodeData::Start => {
+            return Ok(vec![(
+                (right_ngram_length - 1) as u8,
+                EdgeCondition::Conditional(
+                    conditions_interner
+                        .insert(ProximityCondition::Term { term: *right_term_interned }),
+                ),
+            )])
+        }
+        QueryNodeData::End => return Ok(vec![]),
+    };
 
     if left_end_position + 1 != right_start_position {
         // We want to ignore this pair of terms
@@ -77,7 +86,12 @@ pub fn build_edges<'ctx>(
         // `flowers` is removed by the `words` ranking rule.
         // The remaining query graph represents `the sun .. are beautiful`
         // but `sun` and `are` have no proximity condition between them
-        return Ok(vec![(0, EdgeCondition::Unconditional)]);
+        return Ok(vec![(
+            (right_ngram_length - 1) as u8,
+            EdgeCondition::Conditional(
+                conditions_interner.insert(ProximityCondition::Term { term: *right_term_interned }),
+            ),
+        )]);
     }
 
     let mut cost_proximity_word_pairs = BTreeMap::<u8, BTreeMap<u8, Vec<WordPair>>>::new();
@@ -121,24 +135,30 @@ pub fn build_edges<'ctx>(
         }
     }
 
-    let mut new_edges =
-        cost_proximity_word_pairs
-            .into_iter()
-            .flat_map(|(cost, proximity_word_pairs)| {
-                let mut edges = vec![];
-                for (proximity, word_pairs) in proximity_word_pairs {
-                    edges.push((
-                        cost,
-                        EdgeCondition::Conditional(conditions_interner.insert(ProximityEdge {
+    let mut new_edges = cost_proximity_word_pairs
+        .into_iter()
+        .flat_map(|(cost, proximity_word_pairs)| {
+            let mut edges = vec![];
+            for (proximity, word_pairs) in proximity_word_pairs {
+                edges.push((
+                    cost,
+                    EdgeCondition::Conditional(conditions_interner.insert(
+                        ProximityCondition::Pairs {
                             pairs: word_pairs.into_boxed_slice(),
                             proximity,
-                        })),
-                    ))
-                }
-                edges
-            })
-            .collect::<Vec<_>>();
-    new_edges.push((8 + (right_ngram_length - 1) as u8, EdgeCondition::Unconditional));
+                        },
+                    )),
+                ))
+            }
+            edges
+        })
+        .collect::<Vec<_>>();
+    new_edges.push((
+        8 + (right_ngram_length - 1) as u8,
+        EdgeCondition::Conditional(
+            conditions_interner.insert(ProximityCondition::Term { term: *right_term_interned }),
+        ),
+    ));
     Ok(new_edges)
 }
 

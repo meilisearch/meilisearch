@@ -2,6 +2,7 @@
 
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, VecDeque};
+use std::ops::ControlFlow;
 
 use super::empty_paths_cache::DeadEndPathCache;
 use super::{EdgeCondition, RankingRuleGraph, RankingRuleGraphTrait};
@@ -23,7 +24,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         cost: u16,
         all_distances: &MappedInterner<Vec<(u16, SmallBitmap<G::EdgeCondition>)>, QueryNode>,
         empty_paths_cache: &mut DeadEndPathCache<G>,
-        mut visit: impl FnMut(&[u16], &mut Self, &mut DeadEndPathCache<G>) -> Result<()>,
+        mut visit: impl FnMut(&[u16], &mut Self, &mut DeadEndPathCache<G>) -> Result<ControlFlow<()>>,
     ) -> Result<()> {
         let _ = self.visit_paths_of_cost_rec(
             from,
@@ -43,7 +44,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         cost: u16,
         all_distances: &MappedInterner<Vec<(u16, SmallBitmap<G::EdgeCondition>)>, QueryNode>,
         empty_paths_cache: &mut DeadEndPathCache<G>,
-        visit: &mut impl FnMut(&[u16], &mut Self, &mut DeadEndPathCache<G>) -> Result<()>,
+        visit: &mut impl FnMut(&[u16], &mut Self, &mut DeadEndPathCache<G>) -> Result<ControlFlow<()>>,
         prev_conditions: &mut Vec<u16>,
         cur_path: &mut SmallBitmap<G::EdgeCondition>,
         forbidden_conditions: &mut SmallBitmap<G::EdgeCondition>,
@@ -60,7 +61,11 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                 EdgeCondition::Unconditional => {
                     if edge.dest_node == self.query_graph.end_node {
                         any_valid = true;
-                        visit(prev_conditions, self, empty_paths_cache)?;
+                        let control_flow = visit(prev_conditions, self, empty_paths_cache)?;
+                        match control_flow {
+                            ControlFlow::Continue(_) => {}
+                            ControlFlow::Break(_) => return Ok(true),
+                        }
                         true
                     } else {
                         self.visit_paths_of_cost_rec(
@@ -101,7 +106,11 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                     );
                     let next_any_valid = if edge.dest_node == self.query_graph.end_node {
                         any_valid = true;
-                        visit(prev_conditions, self, empty_paths_cache)?;
+                        let control_flow = visit(prev_conditions, self, empty_paths_cache)?;
+                        match control_flow {
+                            ControlFlow::Continue(_) => {}
+                            ControlFlow::Break(_) => return Ok(true),
+                        }
                         true
                     } else {
                         self.visit_paths_of_cost_rec(

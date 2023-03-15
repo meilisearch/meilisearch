@@ -10,7 +10,7 @@ use crate::search::new::interner::{Interned, MappedInterner};
 use crate::search::new::query_graph::QueryNodeData;
 use crate::search::new::query_term::{LocatedQueryTerm, QueryTerm};
 use crate::search::new::ranking_rule_graph::{
-    DeadEndPathCache, Edge, EdgeCondition, ProximityEdge, ProximityGraph, RankingRuleGraph,
+    DeadEndPathCache, Edge, EdgeCondition, ProximityCondition, ProximityGraph, RankingRuleGraph,
     RankingRuleGraphTrait, TypoEdge, TypoGraph,
 };
 use crate::search::new::small_bitmap::SmallBitmap;
@@ -46,7 +46,7 @@ pub enum SearchEvents {
         paths: Vec<Vec<u16>>,
         empty_paths_cache: DeadEndPathCache<ProximityGraph>,
         universe: RoaringBitmap,
-        distances: MappedInterner<Vec<(u16, SmallBitmap<ProximityEdge>)>, QueryNode>,
+        distances: MappedInterner<Vec<(u16, SmallBitmap<ProximityCondition>)>, QueryNode>,
         cost: u16,
     },
     TypoState {
@@ -172,7 +172,7 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         paths_map: &[Vec<u16>],
         empty_paths_cache: &DeadEndPathCache<ProximityGraph>,
         universe: &RoaringBitmap,
-        distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityEdge>)>, QueryNode>,
+        distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityCondition>)>, QueryNode>,
         cost: u16,
     ) {
         self.events.push(SearchEvents::ProximityState {

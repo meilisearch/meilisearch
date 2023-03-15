@@ -20,7 +20,7 @@ use std::hash::Hash;
 
 pub use edge_docids_cache::EdgeConditionDocIdsCache;
 pub use empty_paths_cache::DeadEndPathCache;
-pub use proximity::{ProximityEdge, ProximityGraph};
+pub use proximity::{ProximityCondition, ProximityGraph};
 use roaring::RoaringBitmap;
 pub use typo::{TypoEdge, TypoGraph};
 

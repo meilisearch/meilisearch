@@ -4,15 +4,15 @@ pub mod compute_docids;
 use roaring::RoaringBitmap;
 
 use super::empty_paths_cache::DeadEndPathCache;
-use super::{EdgeCondition, RankingRuleGraphTrait};
+use super::{EdgeCondition, RankingRuleGraph, RankingRuleGraphTrait};
 use crate::search::new::interner::{DedupInterner, Interned, MappedInterner};
 use crate::search::new::logger::SearchLogger;
-use crate::search::new::query_term::Phrase;
+use crate::search::new::query_term::{Phrase, QueryTerm};
 use crate::search::new::small_bitmap::SmallBitmap;
 use crate::search::new::{QueryGraph, QueryNode, SearchContext};
 use crate::Result;
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum WordPair {
     Words {
         phrases: Vec<Interned<Phrase>>,
@@ -31,27 +31,33 @@ pub enum WordPair {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct ProximityEdge {
-    pairs: Box<[WordPair]>,
-    proximity: u8,
+pub enum ProximityCondition {
+    Term { term: Interned<QueryTerm> },
+    Pairs { pairs: Box<[WordPair]>, proximity: u8 },
 }
 
 pub enum ProximityGraph {}
 
 impl RankingRuleGraphTrait for ProximityGraph {
-    type EdgeCondition = ProximityEdge;
+    type EdgeCondition = ProximityCondition;
 
     fn label_for_edge_condition(edge: &Self::EdgeCondition) -> String {
-        let ProximityEdge { pairs, proximity } = edge;
-        format!(", prox {proximity}, {} pairs", pairs.len())
+        match edge {
+            ProximityCondition::Term { term } => {
+                format!("term {term}")
+            }
+            ProximityCondition::Pairs { pairs, proximity } => {
+                format!("prox {proximity}, {} pairs", pairs.len())
+            }
+        }
     }
 
     fn resolve_edge_condition<'ctx>(
         ctx: &mut SearchContext<'ctx>,
-        edge: &Self::EdgeCondition,
+        condition: &Self::EdgeCondition,
         universe: &RoaringBitmap,
     ) -> Result<roaring::RoaringBitmap> {
-        compute_docids::compute_docids(ctx, edge, universe)
+        compute_docids::compute_docids(ctx, condition, universe)
     }
 
     fn build_edges<'ctx>(
@@ -64,11 +70,11 @@ impl RankingRuleGraphTrait for ProximityGraph {
     }
 
     fn log_state(
-        graph: &super::RankingRuleGraph<Self>,
+        graph: &RankingRuleGraph<Self>,
         paths: &[Vec<u16>],
         empty_paths_cache: &DeadEndPathCache<Self>,
         universe: &RoaringBitmap,
-        distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityEdge>)>, QueryNode>,
+        distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityCondition>)>, QueryNode>,
         cost: u16,
         logger: &mut dyn SearchLogger<QueryGraph>,
     ) {

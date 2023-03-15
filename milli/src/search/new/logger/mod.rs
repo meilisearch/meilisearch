@@ -6,7 +6,7 @@ use roaring::RoaringBitmap;
 use super::interner::MappedInterner;
 use super::query_graph::QueryNode;
 use super::ranking_rule_graph::{
-    DeadEndPathCache, ProximityEdge, ProximityGraph, RankingRuleGraph, TypoEdge, TypoGraph,
+    DeadEndPathCache, ProximityCondition, ProximityGraph, RankingRuleGraph, TypoEdge, TypoGraph,
 };
 use super::small_bitmap::SmallBitmap;
 use super::{RankingRule, RankingRuleQueryTrait};
@@ -68,7 +68,7 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
         paths: &[Vec<u16>],
         empty_paths_cache: &DeadEndPathCache<ProximityGraph>,
         universe: &RoaringBitmap,
-        distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityEdge>)>, QueryNode>,
+        distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityCondition>)>, QueryNode>,
         cost: u16,
     );
 
@@ -139,7 +139,7 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
         _paths_map: &[Vec<u16>],
         _empty_paths_cache: &DeadEndPathCache<ProximityGraph>,
         _universe: &RoaringBitmap,
-        _distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityEdge>)>, QueryNode>,
+        _distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityCondition>)>, QueryNode>,
         _cost: u16,
     ) {
     }

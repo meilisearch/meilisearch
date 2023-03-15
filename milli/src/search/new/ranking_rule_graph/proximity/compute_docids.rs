@@ -1,16 +1,39 @@
 use roaring::RoaringBitmap;
 
-use super::{ProximityEdge, WordPair};
+use super::{ProximityCondition, WordPair};
 use crate::search::new::SearchContext;
 use crate::{CboRoaringBitmapCodec, Result};
 
 pub fn compute_docids<'ctx>(
     ctx: &mut SearchContext<'ctx>,
-    edge: &ProximityEdge,
+    edge: &ProximityCondition,
     universe: &RoaringBitmap,
 ) -> Result<RoaringBitmap> {
-    let SearchContext { index, txn, db_cache, word_interner, .. } = ctx;
-    let ProximityEdge { pairs, proximity } = edge;
+    let SearchContext {
+        index,
+        txn,
+        db_cache,
+        word_interner,
+        term_docids,
+        phrase_interner,
+        term_interner,
+    } = ctx;
+    let (pairs, proximity) = match edge {
+        ProximityCondition::Term { term } => {
+            return term_docids
+                .get_query_term_docids(
+                    index,
+                    txn,
+                    db_cache,
+                    word_interner,
+                    term_interner,
+                    phrase_interner,
+                    *term,
+                )
+                .cloned()
+        }
+        ProximityCondition::Pairs { pairs, proximity } => (pairs, proximity),
+    };
     let mut pair_docids = RoaringBitmap::new();
     for pair in pairs.iter() {
         let pair = match pair {

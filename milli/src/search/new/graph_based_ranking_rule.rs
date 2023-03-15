@@ -36,6 +36,8 @@ That is we find the documents where either:
 - OR: `pretty` is 2-close to `house` AND `house` is 1-close to `by`
 */
 
+use std::ops::ControlFlow;
+
 use roaring::RoaringBitmap;
 
 use super::interner::MappedInterner;
@@ -263,7 +265,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                         graph.remove_edges_with_condition(condition);
                         // 3. Also remove the entry from the edge_docids_cache, since we don't need it anymore
                         edge_docids_cache.cache.remove(&condition);
-                        return Ok(());
+                        return Ok(ControlFlow::Continue(()));
                     }
                     path_docids &= edge_docids;
 
@@ -287,14 +289,18 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                         }
                         // We should maybe instead try to compute:
                         // 0th & nth & 1st & n-1th & 2nd & etc...
-                        return Ok(());
+                        return Ok(ControlFlow::Continue(()));
                     }
                 }
                 bucket |= &path_docids;
                 // Reduce the size of the universe so that we can more optimistically discard candidate paths
                 universe -= path_docids;
-                // TODO: if the universe is empty, stop iterating
-                Ok(())
+
+                if universe.is_empty() {
+                    Ok(ControlFlow::Break(()))
+                } else {
+                    Ok(ControlFlow::Continue(()))
+                }
             },
         )?;
 
