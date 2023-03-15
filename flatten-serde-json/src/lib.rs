@@ -3,7 +3,7 @@
 use serde_json::{Map, Value};
 
 pub fn flatten(json: &Map<String, Value>) -> Map<String, Value> {
-    let mut obj = json.clone();
+    let mut obj = Map::new();
     let mut all_entries = vec![];
     insert_object(&mut obj, None, json, &mut all_entries);
     for (key, old_val) in all_entries {
@@ -26,7 +26,7 @@ fn insert_object<'a>(
         } else if let Some(object) = value.as_object() {
             insert_object(base_json, Some(&new_key), object, all_entries);
         } else {
-            insert_value(base_json, &new_key, value.clone());
+            insert_value(base_json, &new_key, value.clone(), false);
         }
     }
 }
@@ -43,12 +43,17 @@ fn insert_array<'a>(
         } else if let Some(sub_array) = value.as_array() {
             insert_array(base_json, base_key, sub_array, all_entries);
         } else {
-            insert_value(base_json, base_key, value.clone());
+            insert_value(base_json, base_key, value.clone(), true);
         }
     }
 }
 
-fn insert_value(base_json: &mut Map<String, Value>, key: &str, to_insert: Value) {
+fn insert_value(
+    base_json: &mut Map<String, Value>,
+    key: &str,
+    to_insert: Value,
+    came_from_array: bool,
+) {
     debug_assert!(!to_insert.is_object());
     debug_assert!(!to_insert.is_array());
 
@@ -63,6 +68,8 @@ fn insert_value(base_json: &mut Map<String, Value>, key: &str, to_insert: Value)
             base_json[key] = Value::Array(vec![value, to_insert]);
         }
         // if it does not exist we can push the value untouched
+    } else if came_from_array {
+        base_json.insert(key.to_string(), Value::Array(vec![to_insert]));
     } else {
         base_json.insert(key.to_string(), to_insert);
     }
@@ -113,7 +120,11 @@ mod tests {
         assert_eq!(
             &flat,
             json!({
-                "a": [],
+                "a": {
+                  "b": "c",
+                  "d": "e",
+                  "f": "g"
+                },
                 "a.b": "c",
                 "a.d": "e",
                 "a.f": "g"
@@ -164,7 +175,7 @@ mod tests {
         assert_eq!(
             &flat,
             json!({
-                "a": 42,
+                "a": [42],
                 "a.b": ["c", "d", "e"],
             })
             .as_object()
@@ -186,7 +197,7 @@ mod tests {
         assert_eq!(
             &flat,
             json!({
-                "a": null,
+                "a": [null],
                 "a.b": ["c", "d", "e"],
             })
             .as_object()
@@ -208,7 +219,9 @@ mod tests {
         assert_eq!(
             &flat,
             json!({
-                "a": [],
+                "a": {
+                    "b": "c"
+                },
                 "a.b": ["c", "d"],
             })
             .as_object()
@@ -234,7 +247,7 @@ mod tests {
             json!({
                 "a.b": ["c", "d", "f"],
                 "a.c": "e",
-                "a": 35,
+                "a": [35],
             })
             .as_object()
             .unwrap()
@@ -310,8 +323,10 @@ mod tests {
                 "t1": "v1"
             },
             "prices": {
-                "p1": [null]
-            }
+                "p1": [null],
+                "p1000": {"tamo": {"le": {}}}
+            },
+            "kiki": [[]]
         });
         let json = std::mem::take(base.as_object_mut().unwrap());
         let flat = flatten(&json);
@@ -321,14 +336,29 @@ mod tests {
         assert_eq!(
             &flat,
             json!({
-                "tags": {
-                    "t1": "v1"
-                },
-                "tags.t1": "v1",
-                "prices": {
-                    "p1": [null]
-                },
-                "prices.p1": [null]
+              "prices": {
+                "p1": [null],
+                "p1000": {
+                  "tamo": {
+                    "le": {}
+                  }
+                }
+              },
+              "prices.p1": [null],
+              "prices.p1000": {
+                "tamo": {
+                  "le": {}
+                }
+              },
+              "prices.p1000.tamo": {
+                "le": {}
+              },
+              "prices.p1000.tamo.le": {},
+              "tags": {
+                "t1": "v1"
+              },
+              "tags.t1": "v1",
+              "kiki": [[]]
             })
             .as_object()
             .unwrap()
