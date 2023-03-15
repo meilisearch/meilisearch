@@ -212,13 +212,13 @@ fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
     } else if matches!(filter, "opt1.opt2 IS NULL") {
         if document.opt1opt2.as_ref().map_or(false, |v| v.is_null()) {
             id = Some(document.id.clone());
+        } else if let Some(opt1) = &document.opt1 {
+            if !opt1.is_null() {
+                id = contains_null_rec(opt1, "opt2").then(|| document.id.clone());
+            }
         }
     } else if matches!(filter, "opt1 IS EMPTY" | "NOT opt1 IS NOT EMPTY") {
-        id = document
-            .opt1
-            .as_ref()
-            .map_or(false, |v| is_empty_value(v))
-            .then(|| document.id.clone());
+        id = document.opt1.as_ref().map_or(false, is_empty_value).then(|| document.id.clone());
     } else if matches!(filter, "NOT opt1 IS EMPTY" | "opt1 IS NOT EMPTY") {
         id = document
             .opt1
@@ -226,7 +226,7 @@ fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
             .map_or(true, |v| !is_empty_value(v))
             .then(|| document.id.clone());
     } else if matches!(filter, "opt1.opt2 IS EMPTY") {
-        if document.opt1opt2.as_ref().map_or(false, |v| is_empty_value(v)) {
+        if document.opt1opt2.as_ref().map_or(false, is_empty_value) {
             id = Some(document.id.clone());
         }
     } else if matches!(
@@ -264,6 +264,28 @@ pub fn contains_key_rec(v: &serde_json::Value, key: &str) -> bool {
         serde_json::Value::Object(v) => {
             for (k, v) in v.iter() {
                 if k == key || contains_key_rec(v, key) {
+                    return true;
+                }
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
+pub fn contains_null_rec(v: &serde_json::Value, key: &str) -> bool {
+    match v {
+        serde_json::Value::Object(v) => {
+            for (k, v) in v.iter() {
+                if k == key && v.is_null() || contains_null_rec(v, key) {
+                    return true;
+                }
+            }
+            false
+        }
+        serde_json::Value::Array(v) => {
+            for v in v.iter() {
+                if contains_null_rec(v, key) {
                     return true;
                 }
             }
