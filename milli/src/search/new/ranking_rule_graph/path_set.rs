@@ -4,7 +4,7 @@
 
 use crate::search::new::interner::Interned;
 
-/// A set of [`Path`]
+/// A set of `Vec<Interned<T>>`.
 pub struct PathSet<T> {
     nodes: Vec<(Interned<T>, Self)>,
     is_end: bool,

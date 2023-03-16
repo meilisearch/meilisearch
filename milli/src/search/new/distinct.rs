@@ -20,10 +20,17 @@ pub struct DistinctOutput {
     pub excluded: RoaringBitmap,
 }
 
+/// Return a [`DistinctOutput`] containing:
+/// - `remaining`: a set of docids built such that exactly one element from `candidates`
+/// is kept for each distinct value inside the given field. If the field does not exist, it
+/// is considered unique.
+/// - `excluded`: the set of document ids that contain a value for the given field that occurs
+/// in the given candidates.
 pub fn apply_distinct_rule<'ctx>(
     ctx: &mut SearchContext<'ctx>,
     field_id: u16,
     candidates: &RoaringBitmap,
+    // TODO: add a universe here, such that the `excluded` are a subset of the universe?
 ) -> Result<DistinctOutput> {
     let mut excluded = RoaringBitmap::new();
     let mut remaining = RoaringBitmap::new();
@@ -37,6 +44,7 @@ pub fn apply_distinct_rule<'ctx>(
     Ok(DistinctOutput { remaining, excluded })
 }
 
+/// Apply the distinct rule defined by [`apply_distinct_rule`] for a single document id.
 fn distinct_single_docid(
     index: &Index,
     txn: &RoTxn,
@@ -69,6 +77,7 @@ fn distinct_single_docid(
     Ok(())
 }
 
+/// Return all the docids containing the given value in the given field
 fn facet_value_docids(
     database: Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     txn: &RoTxn,
@@ -79,13 +88,15 @@ fn facet_value_docids(
         .get(txn, &FacetGroupKey { field_id, level: 0, left_bound: facet_value })
         .map(|opt| opt.map(|v| v.bitmap))
 }
+
+/// Return an iterator over each number value in the given field of the given document.
 fn facet_number_values<'a>(
-    id: u32,
-    distinct: u16,
+    docid: u32,
+    field_id: u16,
     index: &Index,
     txn: &'a RoTxn,
 ) -> Result<RoPrefix<'a, FieldDocIdFacetCodec<ByteSliceRefCodec>, Unit>> {
-    let key = facet_values_prefix_key(distinct, id);
+    let key = facet_values_prefix_key(field_id, docid);
 
     let iter = index
         .field_id_docid_facet_f64s
@@ -96,13 +107,14 @@ fn facet_number_values<'a>(
     Ok(iter)
 }
 
+/// Return an iterator over each string value in the given field of the given document.
 fn facet_string_values<'a>(
     docid: u32,
-    distinct: u16,
+    field_id: u16,
     index: &Index,
     txn: &'a RoTxn,
 ) -> Result<RoPrefix<'a, FieldDocIdFacetCodec<ByteSliceRefCodec>, Str>> {
-    let key = facet_values_prefix_key(distinct, docid);
+    let key = facet_values_prefix_key(field_id, docid);
 
     let iter = index
         .field_id_docid_facet_strings

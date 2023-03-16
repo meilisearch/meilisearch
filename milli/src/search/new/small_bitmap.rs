@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use super::interner::{FixedSizeInterner, Interned};
 
+/// A compact set of [`Interned<T>`]
 pub struct SmallBitmap<T> {
     internal: SmallBitmapInternal,
     _phantom: PhantomData<T>,

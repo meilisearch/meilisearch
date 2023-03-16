@@ -36,6 +36,7 @@ use crate::search::new::query_term::located_query_terms_from_string;
 use crate::search::new::words::Words;
 use crate::{Filter, Index, Result, TermsMatchingStrategy};
 
+/// A structure used throughout the execution of a search query.
 pub struct SearchContext<'ctx> {
     pub index: &'ctx Index,
     pub txn: &'ctx RoTxn<'ctx>,
@@ -59,6 +60,7 @@ impl<'ctx> SearchContext<'ctx> {
     }
 }
 
+/// Apply the [`TermsMatchingStrategy`] to the query graph and resolve it.
 #[allow(clippy::too_many_arguments)]
 fn resolve_maximally_reduced_query_graph<'ctx>(
     ctx: &mut SearchContext<'ctx>,
@@ -100,6 +102,8 @@ fn resolve_maximally_reduced_query_graph<'ctx>(
 
     Ok(docids)
 }
+
+/// Return the list of initialised ranking rules to be used for a placeholder search.
 fn get_ranking_rules_for_placeholder_search<'ctx>(
     ctx: &SearchContext<'ctx>,
 ) -> Result<Vec<Box<dyn RankingRule<'ctx, PlaceholderQuery>>>> {
@@ -123,6 +127,8 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
     }
     Ok(ranking_rules)
 }
+
+/// Return the list of initialised ranking rules to be used for a query graph search.
 fn get_ranking_rules_for_query_graph_search<'ctx>(
     ctx: &SearchContext<'ctx>,
     terms_matching_strategy: TermsMatchingStrategy,

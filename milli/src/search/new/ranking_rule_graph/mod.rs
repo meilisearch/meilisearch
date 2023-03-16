@@ -7,8 +7,8 @@ the same but the edges are replaced.
 
 mod build;
 mod cheapest_paths;
-mod edge_docids_cache;
-mod empty_paths_cache;
+mod condition_docids_cache;
+mod dead_end_path_cache;
 mod path_set;
 
 /// Implementation of the `proximity` ranking rule
@@ -19,8 +19,8 @@ mod typo;
 use std::collections::HashSet;
 use std::hash::Hash;
 
-pub use edge_docids_cache::EdgeConditionDocIdsCache;
-pub use empty_paths_cache::DeadEndPathCache;
+pub use condition_docids_cache::EdgeConditionDocIdsCache;
+pub use dead_end_path_cache::DeadEndPathCache;
 pub use proximity::{ProximityCondition, ProximityGraph};
 use roaring::RoaringBitmap;
 pub use typo::{TypoEdge, TypoGraph};
@@ -31,31 +31,6 @@ use super::query_term::Phrase;
 use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, QueryNode, SearchContext};
 use crate::Result;
-
-/// The condition that is associated with an edge in the ranking rule graph.
-///
-/// Some edges are unconditional, which means that traversing them does not reduce
-/// the set of candidates.
-///
-/// Most edges, however, have a condition attached to them. For example, for the
-/// proximity ranking rule, the condition could be that a word is N-close to another one.
-/// When the edge is traversed, some database operations are executed to retrieve the set
-/// of documents that satisfy the condition, which reduces the list of candidate document ids.
-pub enum EdgeCondition<E> {
-    Unconditional,
-    Conditional(Interned<E>),
-}
-
-impl<E> Copy for EdgeCondition<E> {}
-
-impl<E> Clone for EdgeCondition<E> {
-    fn clone(&self) -> Self {
-        match self {
-            Self::Unconditional => Self::Unconditional,
-            Self::Conditional(arg0) => Self::Conditional(*arg0),
-        }
-    }
-}
 
 /// An edge in the ranking rule graph.
 ///
@@ -68,7 +43,27 @@ pub struct Edge<E> {
     pub source_node: Interned<QueryNode>,
     pub dest_node: Interned<QueryNode>,
     pub cost: u8,
-    pub condition: EdgeCondition<E>,
+    pub condition: Option<Interned<E>>,
+}
+
+impl<E> Hash for Edge<E> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.source_node.hash(state);
+        self.dest_node.hash(state);
+        self.cost.hash(state);
+        self.condition.hash(state);
+    }
+}
+
+impl<E> Eq for Edge<E> {}
+
+impl<E> PartialEq for Edge<E> {
+    fn eq(&self, other: &Self) -> bool {
+        self.source_node == other.source_node
+            && self.dest_node == other.dest_node
+            && self.cost == other.cost
+            && self.condition == other.condition
+    }
 }
 
 /// A trait to be implemented by a marker type to build a graph-based ranking rule.
@@ -113,12 +108,12 @@ pub trait RankingRuleGraphTrait: Sized {
         conditions_interner: &mut DedupInterner<Self::EdgeCondition>,
         source_node: &QueryNode,
         dest_node: &QueryNode,
-    ) -> Result<Vec<(u8, EdgeCondition<Self::EdgeCondition>)>>;
+    ) -> Result<Vec<(u8, Option<Interned<Self::EdgeCondition>>)>>;
 
     fn log_state(
         graph: &RankingRuleGraph<Self>,
         paths: &[Vec<Interned<Self::EdgeCondition>>],
-        empty_paths_cache: &DeadEndPathCache<Self>,
+        dead_end_path_cache: &DeadEndPathCache<Self>,
         universe: &RoaringBitmap,
         distances: &MappedInterner<Vec<(u16, SmallBitmap<Self::EdgeCondition>)>, QueryNode>,
         cost: u16,
@@ -151,15 +146,12 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
     pub fn remove_edges_with_condition(&mut self, condition_to_remove: Interned<G::EdgeCondition>) {
         for (edge_id, edge_opt) in self.edges_store.iter_mut() {
             let Some(edge) = edge_opt.as_mut() else { continue };
-            match edge.condition {
-                EdgeCondition::Unconditional => continue,
-                EdgeCondition::Conditional(condition) => {
-                    if condition == condition_to_remove {
-                        let (source_node, _dest_node) = (edge.source_node, edge.dest_node);
-                        *edge_opt = None;
-                        self.edges_of_node.get_mut(source_node).remove(edge_id);
-                    }
-                }
+            let Some(condition) = edge.condition else { continue };
+
+            if condition == condition_to_remove {
+                let (source_node, _dest_node) = (edge.source_node, edge.dest_node);
+                *edge_opt = None;
+                self.edges_of_node.get_mut(source_node).remove(edge_id);
             }
         }
     }

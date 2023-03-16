@@ -6,8 +6,8 @@ use std::iter::FromIterator;
 
 use roaring::RoaringBitmap;
 
-use super::empty_paths_cache::DeadEndPathCache;
-use super::{EdgeCondition, RankingRuleGraph, RankingRuleGraphTrait};
+use super::dead_end_path_cache::DeadEndPathCache;
+use super::{RankingRuleGraph, RankingRuleGraphTrait};
 use crate::search::new::interner::{DedupInterner, Interned, MappedInterner};
 use crate::search::new::logger::SearchLogger;
 use crate::search::new::query_term::{Phrase, QueryTerm};
@@ -60,20 +60,20 @@ impl RankingRuleGraphTrait for ProximityGraph {
         conditions_interner: &mut DedupInterner<Self::EdgeCondition>,
         source_node: &QueryNode,
         dest_node: &QueryNode,
-    ) -> Result<Vec<(u8, EdgeCondition<Self::EdgeCondition>)>> {
+    ) -> Result<Vec<(u8, Option<Interned<Self::EdgeCondition>>)>> {
         build::build_edges(ctx, conditions_interner, source_node, dest_node)
     }
 
     fn log_state(
         graph: &RankingRuleGraph<Self>,
         paths: &[Vec<Interned<ProximityCondition>>],
-        empty_paths_cache: &DeadEndPathCache<Self>,
+        dead_end_path_cache: &DeadEndPathCache<Self>,
         universe: &RoaringBitmap,
         distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityCondition>)>, QueryNode>,
         cost: u16,
         logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
-        logger.log_proximity_state(graph, paths, empty_paths_cache, universe, distances, cost);
+        logger.log_proximity_state(graph, paths, dead_end_path_cache, universe, distances, cost);
     }
 
     fn label_for_edge_condition<'ctx>(

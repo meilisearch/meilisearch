@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use super::{Edge, RankingRuleGraph, RankingRuleGraphTrait};
-use crate::search::new::interner::{DedupInterner, Interner};
+use crate::search::new::interner::DedupInterner;
 use crate::search::new::small_bitmap::SmallBitmap;
 use crate::search::new::{QueryGraph, SearchContext};
 use crate::Result;
@@ -19,7 +19,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
 
         let mut conditions_interner = DedupInterner::default();
 
-        let mut edges_store = Interner::default();
+        let mut edges_store = DedupInterner::default();
         let mut edges_of_node = query_graph.nodes.map(|_| HashSet::new());
 
         for (source_id, source_node) in graph_nodes.iter() {
@@ -33,7 +33,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                 }
 
                 for (cost, condition) in edges {
-                    let new_edge_id = edges_store.push(Some(Edge {
+                    let new_edge_id = edges_store.insert(Some(Edge {
                         source_node: source_id,
                         dest_node: dest_idx,
                         cost,

@@ -9,44 +9,43 @@ use crate::search::new::SearchContext;
 use crate::Result;
 
 /// A cache storing the document ids associated with each ranking rule edge
-pub struct EdgeConditionDocIdsCache<G: RankingRuleGraphTrait> {
+pub struct ConditionDocIdsCache<G: RankingRuleGraphTrait> {
     // TODO: should be FxHashMap<Interned<EdgeCondition>, RoaringBitmap>
-    pub cache: FxHashMap<Interned<G::EdgeCondition>, RoaringBitmap>,
+    pub cache: FxHashMap<Interned<G::Condition>, RoaringBitmap>,
     _phantom: PhantomData<G>,
 }
-impl<G: RankingRuleGraphTrait> Default for EdgeConditionDocIdsCache<G> {
+impl<G: RankingRuleGraphTrait> Default for ConditionDocIdsCache<G> {
     fn default() -> Self {
         Self { cache: Default::default(), _phantom: Default::default() }
     }
 }
-impl<G: RankingRuleGraphTrait> EdgeConditionDocIdsCache<G> {
+impl<G: RankingRuleGraphTrait> ConditionDocIdsCache<G> {
     /// Retrieve the document ids for the given edge condition.
     ///
     /// If the cache does not yet contain these docids, they are computed
     /// and inserted in the cache.
-    pub fn get_edge_docids<'s, 'ctx>(
+    pub fn get_condition_docids<'s, 'ctx>(
         &'s mut self,
         ctx: &mut SearchContext<'ctx>,
-        // TODO: should be Interned<EdgeCondition>
-        interned_edge_condition: Interned<G::EdgeCondition>,
+        interned_condition: Interned<G::Condition>,
         graph: &RankingRuleGraph<G>,
         // TODO: maybe universe doesn't belong here
         universe: &RoaringBitmap,
     ) -> Result<&'s RoaringBitmap> {
-        if self.cache.contains_key(&interned_edge_condition) {
+        if self.cache.contains_key(&interned_condition) {
             // TODO: should we update the bitmap in the cache if the new universe
             // reduces it?
             // TODO: maybe have a generation: u32 to track every time the universe was
             // reduced. Then only attempt to recompute the intersection when there is a chance
-            // that edge_docids & universe changed
-            return Ok(&self.cache[&interned_edge_condition]);
+            // that condition_docids & universe changed
+            return Ok(&self.cache[&interned_condition]);
         }
         // TODO: maybe universe doesn't belong here
-        let edge_condition = graph.conditions_interner.get(interned_edge_condition);
+        let condition = graph.conditions_interner.get(interned_condition);
         // TODO: faster way to do this?
-        let docids = universe & G::resolve_edge_condition(ctx, edge_condition, universe)?;
-        let _ = self.cache.insert(interned_edge_condition, docids);
-        let docids = &self.cache[&interned_edge_condition];
+        let docids = universe & G::resolve_condition(ctx, condition, universe)?;
+        let _ = self.cache.insert(interned_condition, docids);
+        let docids = &self.cache[&interned_condition];
         Ok(docids)
     }
 }

@@ -7,7 +7,6 @@ use crate::search::new::interner::{DedupInterner, Interned};
 use crate::search::new::query_graph::QueryNodeData;
 use crate::search::new::query_term::{LocatedQueryTerm, Phrase, QueryTerm};
 use crate::search::new::ranking_rule_graph::proximity::WordPair;
-use crate::search::new::ranking_rule_graph::EdgeCondition;
 use crate::search::new::{QueryNode, SearchContext};
 use crate::Result;
 use heed::RoTxn;
@@ -40,7 +39,7 @@ pub fn build_edges<'ctx>(
     conditions_interner: &mut DedupInterner<ProximityCondition>,
     from_node: &QueryNode,
     to_node: &QueryNode,
-) -> Result<Vec<(u8, EdgeCondition<ProximityCondition>)>> {
+) -> Result<Vec<(u8, Option<Interned<ProximityCondition>>)>> {
     let SearchContext {
         index,
         txn,
@@ -52,7 +51,7 @@ pub fn build_edges<'ctx>(
     } = ctx;
 
     let right_term = match &to_node.data {
-        QueryNodeData::End => return Ok(vec![(0, EdgeCondition::Unconditional)]),
+        QueryNodeData::End => return Ok(vec![(0, None)]),
         QueryNodeData::Deleted | QueryNodeData::Start => return Ok(vec![]),
         QueryNodeData::Term(term) => term,
     };
@@ -70,7 +69,7 @@ pub fn build_edges<'ctx>(
         QueryNodeData::Start => {
             return Ok(vec![(
                 (right_ngram_length - 1) as u8,
-                EdgeCondition::Conditional(
+                Some(
                     conditions_interner
                         .insert(ProximityCondition::Term { term: *right_term_interned }),
                 ),
@@ -88,7 +87,7 @@ pub fn build_edges<'ctx>(
         // but `sun` and `are` have no proximity condition between them
         return Ok(vec![(
             (right_ngram_length - 1) as u8,
-            EdgeCondition::Conditional(
+            Some(
                 conditions_interner.insert(ProximityCondition::Term { term: *right_term_interned }),
             ),
         )]);
@@ -140,7 +139,7 @@ pub fn build_edges<'ctx>(
         .map(|(cost, word_pairs)| {
             (
                 cost,
-                EdgeCondition::Conditional(
+                Some(
                     conditions_interner
                         .insert(ProximityCondition::Pairs { pairs: word_pairs.into_boxed_slice() }),
                 ),
@@ -149,9 +148,7 @@ pub fn build_edges<'ctx>(
         .collect::<Vec<_>>();
     new_edges.push((
         8 + (right_ngram_length - 1) as u8,
-        EdgeCondition::Conditional(
-            conditions_interner.insert(ProximityCondition::Term { term: *right_term_interned }),
-        ),
+        Some(conditions_interner.insert(ProximityCondition::Term { term: *right_term_interned })),
     ));
     Ok(new_edges)
 }

@@ -9,11 +9,11 @@ use crate::search::new::{
 /// universe.
 pub struct DeadEndPathCache<G: RankingRuleGraphTrait> {
     /// The set of edge conditions that resolve to no documents.
-    pub conditions: SmallBitmap<G::EdgeCondition>,
+    pub conditions: SmallBitmap<G::Condition>,
     /// A set of path prefixes that resolve to no documents.
-    pub prefixes: PathSet<G::EdgeCondition>,
+    pub prefixes: PathSet<G::Condition>,
     /// A set of empty couples of edge conditions that resolve to no documents.
-    pub condition_couples: MappedInterner<SmallBitmap<G::EdgeCondition>, G::EdgeCondition>,
+    pub condition_couples: MappedInterner<SmallBitmap<G::Condition>, G::Condition>,
 }
 impl<G: RankingRuleGraphTrait> Clone for DeadEndPathCache<G> {
     fn clone(&self) -> Self {
@@ -27,17 +27,17 @@ impl<G: RankingRuleGraphTrait> Clone for DeadEndPathCache<G> {
 
 impl<G: RankingRuleGraphTrait> DeadEndPathCache<G> {
     /// Create a new cache for a ranking rule graph containing at most `all_edges_len` edges.
-    pub fn new(all_edge_conditions: &FixedSizeInterner<G::EdgeCondition>) -> Self {
+    pub fn new(all_conditions: &FixedSizeInterner<G::Condition>) -> Self {
         Self {
-            conditions: SmallBitmap::for_interned_values_in(all_edge_conditions),
+            conditions: SmallBitmap::for_interned_values_in(all_conditions),
             prefixes: PathSet::default(),
-            condition_couples: all_edge_conditions
-                .map(|_| SmallBitmap::for_interned_values_in(all_edge_conditions)),
+            condition_couples: all_conditions
+                .map(|_| SmallBitmap::for_interned_values_in(all_conditions)),
         }
     }
 
     /// Store in the cache that every path containing the given edge resolves to no documents.
-    pub fn add_condition(&mut self, condition: Interned<G::EdgeCondition>) {
+    pub fn add_condition(&mut self, condition: Interned<G::Condition>) {
         self.conditions.insert(condition);
         self.condition_couples.get_mut(condition).clear();
         self.prefixes.remove_edge(condition);
@@ -46,7 +46,7 @@ impl<G: RankingRuleGraphTrait> DeadEndPathCache<G> {
         }
     }
     /// Store in the cache that every path containing the given prefix resolves to no documents.
-    pub fn add_prefix(&mut self, prefix: &[Interned<G::EdgeCondition>]) {
+    pub fn add_prefix(&mut self, prefix: &[Interned<G::Condition>]) {
         // TODO: typed PathSet
         self.prefixes.insert(prefix.iter().copied());
     }
@@ -54,8 +54,8 @@ impl<G: RankingRuleGraphTrait> DeadEndPathCache<G> {
     /// Store in the cache that every path containing the two given edges resolves to no documents.
     pub fn add_condition_couple(
         &mut self,
-        edge1: Interned<G::EdgeCondition>,
-        edge2: Interned<G::EdgeCondition>,
+        edge1: Interned<G::Condition>,
+        edge2: Interned<G::Condition>,
     ) {
         self.condition_couples.get_mut(edge1).insert(edge2);
     }
@@ -63,8 +63,8 @@ impl<G: RankingRuleGraphTrait> DeadEndPathCache<G> {
     /// Returns true if the cache can determine that the given path resolves to no documents.
     pub fn path_is_dead_end(
         &self,
-        path: &[Interned<G::EdgeCondition>],
-        path_bitmap: &SmallBitmap<G::EdgeCondition>,
+        path: &[Interned<G::Condition>],
+        path_bitmap: &SmallBitmap<G::Condition>,
     ) -> bool {
         if path_bitmap.intersects(&self.conditions) {
             return true;

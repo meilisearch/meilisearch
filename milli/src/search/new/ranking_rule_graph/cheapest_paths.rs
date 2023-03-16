@@ -4,8 +4,8 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, VecDeque};
 use std::ops::ControlFlow;
 
-use super::empty_paths_cache::DeadEndPathCache;
-use super::{EdgeCondition, RankingRuleGraph, RankingRuleGraphTrait};
+use super::dead_end_path_cache::DeadEndPathCache;
+use super::{RankingRuleGraph, RankingRuleGraphTrait};
 use crate::search::new::interner::{Interned, MappedInterner};
 use crate::search::new::query_graph::QueryNode;
 use crate::search::new::small_bitmap::SmallBitmap;
@@ -23,7 +23,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         from: Interned<QueryNode>,
         cost: u16,
         all_distances: &MappedInterner<Vec<(u16, SmallBitmap<G::EdgeCondition>)>, QueryNode>,
-        empty_paths_cache: &mut DeadEndPathCache<G>,
+        dead_end_path_cache: &mut DeadEndPathCache<G>,
         mut visit: impl FnMut(
             &[Interned<G::EdgeCondition>],
             &mut Self,
@@ -34,11 +34,11 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
             from,
             cost,
             all_distances,
-            empty_paths_cache,
+            dead_end_path_cache,
             &mut visit,
             &mut vec![],
             &mut SmallBitmap::for_interned_values_in(&self.conditions_interner),
-            &mut empty_paths_cache.conditions.clone(),
+            &mut dead_end_path_cache.conditions.clone(),
         )?;
         Ok(())
     }
@@ -47,7 +47,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         from: Interned<QueryNode>,
         cost: u16,
         all_distances: &MappedInterner<Vec<(u16, SmallBitmap<G::EdgeCondition>)>, QueryNode>,
-        empty_paths_cache: &mut DeadEndPathCache<G>,
+        dead_end_path_cache: &mut DeadEndPathCache<G>,
         visit: &mut impl FnMut(
             &[Interned<G::EdgeCondition>],
             &mut Self,
@@ -66,10 +66,10 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                 continue;
             }
             let next_any_valid = match edge.condition {
-                EdgeCondition::Unconditional => {
+                None => {
                     if edge.dest_node == self.query_graph.end_node {
                         any_valid = true;
-                        let control_flow = visit(prev_conditions, self, empty_paths_cache)?;
+                        let control_flow = visit(prev_conditions, self, dead_end_path_cache)?;
                         match control_flow {
                             ControlFlow::Continue(_) => {}
                             ControlFlow::Break(_) => return Ok(true),
@@ -80,7 +80,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                             edge.dest_node,
                             cost - edge.cost as u16,
                             all_distances,
-                            empty_paths_cache,
+                            dead_end_path_cache,
                             visit,
                             prev_conditions,
                             cur_path,
@@ -88,7 +88,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                         )?
                     }
                 }
-                EdgeCondition::Conditional(condition) => {
+                Some(condition) => {
                     if forbidden_conditions.contains(condition)
                         || !all_distances.get(edge.dest_node).iter().any(
                             |(next_cost, necessary_conditions)| {
@@ -104,8 +104,8 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
 
                     let mut new_forbidden_conditions = forbidden_conditions.clone();
                     new_forbidden_conditions
-                        .union(empty_paths_cache.condition_couples.get(condition));
-                    empty_paths_cache.prefixes.final_edges_after_prefix(
+                        .union(dead_end_path_cache.condition_couples.get(condition));
+                    dead_end_path_cache.prefixes.final_edges_after_prefix(
                         prev_conditions,
                         &mut |x| {
                             new_forbidden_conditions.insert(x);
@@ -113,7 +113,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                     );
                     let next_any_valid = if edge.dest_node == self.query_graph.end_node {
                         any_valid = true;
-                        let control_flow = visit(prev_conditions, self, empty_paths_cache)?;
+                        let control_flow = visit(prev_conditions, self, dead_end_path_cache)?;
                         match control_flow {
                             ControlFlow::Continue(_) => {}
                             ControlFlow::Break(_) => return Ok(true),
@@ -124,7 +124,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                             edge.dest_node,
                             cost - edge.cost as u16,
                             all_distances,
-                            empty_paths_cache,
+                            dead_end_path_cache,
                             visit,
                             prev_conditions,
                             cur_path,
@@ -139,15 +139,15 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
             any_valid |= next_any_valid;
 
             if next_any_valid {
-                if empty_paths_cache.path_is_dead_end(prev_conditions, cur_path) {
+                if dead_end_path_cache.path_is_dead_end(prev_conditions, cur_path) {
                     return Ok(any_valid);
                 }
-                forbidden_conditions.union(&empty_paths_cache.conditions);
+                forbidden_conditions.union(&dead_end_path_cache.conditions);
                 for prev_condition in prev_conditions.iter() {
                     forbidden_conditions
-                        .union(empty_paths_cache.condition_couples.get(*prev_condition));
+                        .union(dead_end_path_cache.condition_couples.get(*prev_condition));
                 }
-                empty_paths_cache.prefixes.final_edges_after_prefix(prev_conditions, &mut |x| {
+                dead_end_path_cache.prefixes.final_edges_after_prefix(prev_conditions, &mut |x| {
                     forbidden_conditions.insert(x);
                 });
             }
@@ -178,16 +178,14 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
             let cur_node_edges = &self.edges_of_node.get(cur_node);
             for edge_idx in cur_node_edges.iter() {
                 let edge = self.edges_store.get(edge_idx).as_ref().unwrap();
-                let condition = match edge.condition {
-                    EdgeCondition::Unconditional => None,
-                    EdgeCondition::Conditional(condition) => Some(condition),
-                };
                 let succ_node = edge.dest_node;
                 let succ_distances = distances_to_end.get(succ_node);
                 for (succ_distance, succ_necessary_conditions) in succ_distances {
                     let mut potential_necessary_edges =
                         SmallBitmap::for_interned_values_in(&self.conditions_interner);
-                    for condition in condition.into_iter().chain(succ_necessary_conditions.iter()) {
+                    for condition in
+                        edge.condition.into_iter().chain(succ_necessary_conditions.iter())
+                    {
                         potential_necessary_edges.insert(condition);
                     }
 

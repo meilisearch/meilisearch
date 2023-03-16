@@ -1,7 +1,7 @@
 use roaring::RoaringBitmap;
 
-use super::empty_paths_cache::DeadEndPathCache;
-use super::{EdgeCondition, RankingRuleGraph, RankingRuleGraphTrait};
+use super::dead_end_path_cache::DeadEndPathCache;
+use super::{RankingRuleGraph, RankingRuleGraphTrait};
 use crate::search::new::interner::{DedupInterner, Interned, MappedInterner};
 use crate::search::new::logger::SearchLogger;
 use crate::search::new::query_graph::QueryNodeData;
@@ -58,7 +58,7 @@ impl RankingRuleGraphTrait for TypoGraph {
         conditions_interner: &mut DedupInterner<Self::EdgeCondition>,
         _from_node: &QueryNode,
         to_node: &QueryNode,
-    ) -> Result<Vec<(u8, EdgeCondition<Self::EdgeCondition>)>> {
+    ) -> Result<Vec<(u8, Option<Interned<Self::EdgeCondition>>)>> {
         let SearchContext { term_interner, .. } = ctx;
         match &to_node.data {
             QueryNodeData::Term(LocatedQueryTerm { value, positions }) => {
@@ -121,7 +121,7 @@ impl RankingRuleGraphTrait for TypoGraph {
                     if !new_term.is_empty() {
                         edges.push((
                             nbr_typos as u8 + base_cost,
-                            EdgeCondition::Conditional(conditions_interner.insert(TypoEdge {
+                            Some(conditions_interner.insert(TypoEdge {
                                 term: term_interner.insert(new_term),
                                 nbr_typos: nbr_typos as u8,
                             })),
@@ -130,7 +130,7 @@ impl RankingRuleGraphTrait for TypoGraph {
                 }
                 Ok(edges)
             }
-            QueryNodeData::End => Ok(vec![(0, EdgeCondition::Unconditional)]),
+            QueryNodeData::End => Ok(vec![(0, None)]),
             QueryNodeData::Deleted | QueryNodeData::Start => panic!(),
         }
     }
@@ -138,13 +138,13 @@ impl RankingRuleGraphTrait for TypoGraph {
     fn log_state(
         graph: &RankingRuleGraph<Self>,
         paths: &[Vec<Interned<TypoEdge>>],
-        empty_paths_cache: &DeadEndPathCache<Self>,
+        dead_end_path_cache: &DeadEndPathCache<Self>,
         universe: &RoaringBitmap,
         distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoEdge>)>, QueryNode>,
         cost: u16,
         logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
-        logger.log_typo_state(graph, paths, empty_paths_cache, universe, distances, cost);
+        logger.log_typo_state(graph, paths, dead_end_path_cache, universe, distances, cost);
     }
 
     fn label_for_edge_condition<'ctx>(

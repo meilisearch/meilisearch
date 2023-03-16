@@ -10,7 +10,7 @@ use crate::search::new::interner::{Interned, MappedInterner};
 use crate::search::new::query_graph::QueryNodeData;
 use crate::search::new::query_term::{LocatedQueryTerm, QueryTerm};
 use crate::search::new::ranking_rule_graph::{
-    DeadEndPathCache, Edge, EdgeCondition, ProximityCondition, ProximityGraph, RankingRuleGraph,
+    DeadEndPathCache, Edge, ProximityCondition, ProximityGraph, RankingRuleGraph,
     RankingRuleGraphTrait, TypoEdge, TypoGraph,
 };
 use crate::search::new::small_bitmap::SmallBitmap;
@@ -44,7 +44,7 @@ pub enum SearchEvents {
     ProximityState {
         graph: RankingRuleGraph<ProximityGraph>,
         paths: Vec<Vec<Interned<ProximityCondition>>>,
-        empty_paths_cache: DeadEndPathCache<ProximityGraph>,
+        dead_end_path_cache: DeadEndPathCache<ProximityGraph>,
         universe: RoaringBitmap,
         distances: MappedInterner<Vec<(u16, SmallBitmap<ProximityCondition>)>, QueryNode>,
         cost: u16,
@@ -52,7 +52,7 @@ pub enum SearchEvents {
     TypoState {
         graph: RankingRuleGraph<TypoGraph>,
         paths: Vec<Vec<Interned<TypoEdge>>>,
-        empty_paths_cache: DeadEndPathCache<TypoGraph>,
+        dead_end_path_cache: DeadEndPathCache<TypoGraph>,
         universe: RoaringBitmap,
         distances: MappedInterner<Vec<(u16, SmallBitmap<TypoEdge>)>, QueryNode>,
         cost: u16,
@@ -170,7 +170,7 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         &mut self,
         query_graph: &RankingRuleGraph<ProximityGraph>,
         paths_map: &[Vec<Interned<ProximityCondition>>],
-        empty_paths_cache: &DeadEndPathCache<ProximityGraph>,
+        dead_end_path_cache: &DeadEndPathCache<ProximityGraph>,
         universe: &RoaringBitmap,
         distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityCondition>)>, QueryNode>,
         cost: u16,
@@ -178,7 +178,7 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         self.events.push(SearchEvents::ProximityState {
             graph: query_graph.clone(),
             paths: paths_map.to_vec(),
-            empty_paths_cache: empty_paths_cache.clone(),
+            dead_end_path_cache: dead_end_path_cache.clone(),
             universe: universe.clone(),
             distances: distances.clone(),
             cost,
@@ -189,7 +189,7 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         &mut self,
         query_graph: &RankingRuleGraph<TypoGraph>,
         paths_map: &[Vec<Interned<TypoEdge>>],
-        empty_paths_cache: &DeadEndPathCache<TypoGraph>,
+        dead_end_path_cache: &DeadEndPathCache<TypoGraph>,
         universe: &RoaringBitmap,
         distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoEdge>)>, QueryNode>,
         cost: u16,
@@ -197,7 +197,7 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         self.events.push(SearchEvents::TypoState {
             graph: query_graph.clone(),
             paths: paths_map.to_vec(),
-            empty_paths_cache: empty_paths_cache.clone(),
+            dead_end_path_cache: dead_end_path_cache.clone(),
             universe: universe.clone(),
             distances: distances.clone(),
             cost,
@@ -358,7 +358,7 @@ results.{random} {{
                 SearchEvents::ProximityState {
                     graph,
                     paths,
-                    empty_paths_cache,
+                    dead_end_path_cache,
                     universe,
                     distances,
                     cost,
@@ -374,7 +374,7 @@ results.{random} {{
                         ctx,
                         graph,
                         paths,
-                        empty_paths_cache,
+                        dead_end_path_cache,
                         distances.clone(),
                         &mut new_file,
                     );
@@ -391,7 +391,7 @@ results.{random} {{
                 SearchEvents::TypoState {
                     graph,
                     paths,
-                    empty_paths_cache,
+                    dead_end_path_cache,
                     universe,
                     distances,
                     cost,
@@ -407,7 +407,7 @@ results.{random} {{
                         ctx,
                         graph,
                         paths,
-                        empty_paths_cache,
+                        dead_end_path_cache,
                         distances.clone(),
                         &mut new_file,
                     );
@@ -547,11 +547,11 @@ shape: class"
             let Edge { source_node, dest_node, condition: details, cost } = edge;
 
             match &details {
-                EdgeCondition::Unconditional => {
+                None => {
                     writeln!(file, "{source_node} -> {dest_node} : \"always cost {cost}\"",)
                         .unwrap();
                 }
-                EdgeCondition::Conditional(condition) => {
+                Some(condition) => {
                     // let condition = graph.conditions_interner.get(*condition);
                     writeln!(
                         file,
