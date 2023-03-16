@@ -6,10 +6,12 @@ use bus::{Bus, BusReader};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use ductile::{ChannelReceiver, ChannelSender, ChannelServer};
 use log::info;
+use meilisearch_types::tasks::Task;
 
 use crate::batch::Batch;
 use crate::{Consistency, FollowerMsg, LeaderMsg};
 
+#[derive(Clone)]
 pub struct Leader {
     task_ready_to_commit: Receiver<u32>,
     broadcast_to_follower: Sender<LeaderMsg>,
@@ -148,5 +150,11 @@ impl Leader {
         self.broadcast_to_follower.send(LeaderMsg::Commit(self.batch_id)).unwrap();
 
         self.batch_id += 1;
+    }
+
+    pub fn register_new_task(&mut self, task: Task, update_file: Option<Vec<u8>>) {
+        self.broadcast_to_follower
+            .send(LeaderMsg::RegisterNewTask { task, update_file })
+            .expect("Main thread is dead");
     }
 }

@@ -12,8 +12,9 @@ pub mod search;
 
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
+use std::net::ToSocketAddrs;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 
@@ -25,10 +26,11 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest};
 use analytics::Analytics;
 use anyhow::bail;
+use cluster::{Follower, Leader};
 use error::PayloadError;
 use extractors::payload::PayloadConfig;
 use http::header::CONTENT_TYPE;
-use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
+use index_scheduler::{Cluster, IndexScheduler, IndexSchedulerOptions};
 use log::error;
 use meilisearch_auth::AuthController;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
@@ -220,22 +222,53 @@ fn open_or_create_database_unchecked(
     // we don't want to create anything in the data.ms yet, thus we
     // wrap our two builders in a closure that'll be executed later.
     let auth_controller = AuthController::new(&opt.db_path, &opt.master_key);
+
+    let cluster = if let Some(ref cluster) = opt.cluster_configuration.experimental_enable_ha {
+        match cluster.as_str() {
+            "leader" => {
+                let mut addr = opt.http_addr.to_socket_addrs().unwrap().next().unwrap();
+                addr.set_port(6666);
+                Some(Cluster::Leader(Arc::new(RwLock::new(Leader::new(addr)))))
+            }
+            "follower" => {
+                let mut addr = opt
+                    .cluster_configuration
+                    .leader
+                    .as_ref()
+                    .expect("Can't be a follower without a leader")
+                    .to_socket_addrs()
+                    .unwrap()
+                    .next()
+                    .unwrap();
+                addr.set_port(6666);
+                Some(Cluster::Follower(Arc::new(RwLock::new(Follower::join(addr)))))
+            }
+            _ => panic!("Available values for the cluster mode are leader and follower"),
+        }
+    } else {
+        None
+    };
+
     let index_scheduler_builder = || -> anyhow::Result<_> {
-        Ok(IndexScheduler::new(IndexSchedulerOptions {
-            version_file_path: opt.db_path.join(VERSION_FILE_NAME),
-            auth_path: opt.db_path.join("auth"),
-            tasks_path: opt.db_path.join("tasks"),
-            update_file_path: opt.db_path.join("update_files"),
-            indexes_path: opt.db_path.join("indexes"),
-            snapshots_path: opt.snapshot_dir.clone(),
-            dumps_path: opt.dump_dir.clone(),
-            task_db_size: opt.max_task_db_size.get_bytes() as usize,
-            index_base_map_size: opt.max_index_size.get_bytes() as usize,
-            indexer_config: (&opt.indexer_options).try_into()?,
-            autobatching_enabled: true,
-            index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().get_bytes() as usize,
-            index_count: DEFAULT_INDEX_COUNT,
-        })?)
+        Ok(IndexScheduler::new(
+            IndexSchedulerOptions {
+                version_file_path: opt.db_path.join(VERSION_FILE_NAME),
+                auth_path: opt.db_path.join("auth"),
+                tasks_path: opt.db_path.join("tasks"),
+                update_file_path: opt.db_path.join("update_files"),
+                indexes_path: opt.db_path.join("indexes"),
+                snapshots_path: opt.snapshot_dir.clone(),
+                dumps_path: opt.dump_dir.clone(),
+                task_db_size: opt.max_task_db_size.get_bytes() as usize,
+                index_base_map_size: opt.max_index_size.get_bytes() as usize,
+                indexer_config: (&opt.indexer_options).try_into()?,
+                autobatching_enabled: true,
+                index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().get_bytes()
+                    as usize,
+                index_count: DEFAULT_INDEX_COUNT,
+            },
+            cluster,
+        )?)
     };
 
     match (

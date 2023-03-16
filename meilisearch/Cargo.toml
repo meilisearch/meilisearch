@@ -24,6 +24,7 @@ bstr = "1.0.1"
 byte-unit = { version = "4.0.14", default-features = false, features = ["std", "serde"] }
 bytes = "1.2.1"
 clap = { version = "4.0.9", features = ["derive", "env"] }
+cluster = { path = "../cluster" }
 crossbeam-channel = "0.5.6"
 deserr = "0.5.0"
 dump = { path = "../dump" }

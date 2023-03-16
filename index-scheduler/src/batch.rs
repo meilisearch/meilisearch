@@ -1430,18 +1430,20 @@ impl IndexScheduler {
         Ok(match batch {
             CBatch::TaskCancelation { task, previous_started_at, previous_processing_tasks } => {
                 Batch::TaskCancelation {
-                    task: self.get_existing_tasks(rtxn, Some(task))?[0],
+                    task: self.get_existing_tasks(rtxn, Some(task))?[0].clone(),
                     previous_started_at,
                     previous_processing_tasks,
                 }
             }
             CBatch::TaskDeletion(task) => {
-                Batch::TaskDeletion(self.get_existing_tasks(rtxn, Some(task))?[0])
+                Batch::TaskDeletion(self.get_existing_tasks(rtxn, Some(task))?[0].clone())
             }
             CBatch::SnapshotCreation(tasks) => {
                 Batch::SnapshotCreation(self.get_existing_tasks(rtxn, tasks)?)
             }
-            CBatch::Dump(task) => Batch::Dump(self.get_existing_tasks(rtxn, Some(task))?[0]),
+            CBatch::Dump(task) => {
+                Batch::Dump(self.get_existing_tasks(rtxn, Some(task))?[0].clone())
+            }
             CBatch::IndexOperation { op, must_create_index } => Batch::IndexOperation {
                 op: self.get_index_op_from_cluster_index_op(rtxn, op)?,
                 must_create_index,
@@ -1449,12 +1451,12 @@ impl IndexScheduler {
             CBatch::IndexCreation { index_uid, primary_key, task } => Batch::IndexCreation {
                 index_uid,
                 primary_key,
-                task: self.get_existing_tasks(rtxn, Some(task))?[0],
+                task: self.get_existing_tasks(rtxn, Some(task))?[0].clone(),
             },
             CBatch::IndexUpdate { index_uid, primary_key, task } => Batch::IndexUpdate {
                 index_uid,
                 primary_key,
-                task: self.get_existing_tasks(rtxn, Some(task))?[0],
+                task: self.get_existing_tasks(rtxn, Some(task))?[0].clone(),
             },
             CBatch::IndexDeletion { index_uid, tasks, index_has_been_created } => {
                 Batch::IndexDeletion {
@@ -1464,7 +1466,7 @@ impl IndexScheduler {
                 }
             }
             CBatch::IndexSwap { task } => {
-                Batch::IndexSwap { task: self.get_existing_tasks(rtxn, Some(task))?[0] }
+                Batch::IndexSwap { task: self.get_existing_tasks(rtxn, Some(task))?[0].clone() }
             }
         })
     }
@@ -1559,10 +1561,20 @@ impl From<Batch> for cluster::batch::Batch {
             Batch::IndexOperation { op, must_create_index } => {
                 CBatch::IndexOperation { op: op.into(), must_create_index }
             }
-            Batch::IndexCreation { index_uid, primary_key, task } => todo!(),
-            Batch::IndexUpdate { index_uid, primary_key, task } => todo!(),
-            Batch::IndexDeletion { index_uid, tasks, index_has_been_created } => todo!(),
-            Batch::IndexSwap { task } => todo!(),
+            Batch::IndexCreation { index_uid, primary_key, task } => {
+                CBatch::IndexCreation { index_uid, primary_key, task: task.uid }
+            }
+            Batch::IndexUpdate { index_uid, primary_key, task } => {
+                CBatch::IndexUpdate { index_uid, primary_key, task: task.uid }
+            }
+            Batch::IndexDeletion { index_uid, tasks, index_has_been_created } => {
+                CBatch::IndexDeletion {
+                    index_uid,
+                    tasks: tasks.into_iter().map(|task| task.uid).collect(),
+                    index_has_been_created,
+                }
+            }
+            Batch::IndexSwap { task } => CBatch::IndexSwap { task: task.uid },
         }
     }
 }
