@@ -7,6 +7,7 @@ use crossbeam::channel::{unbounded, Receiver, Sender};
 use ductile::{ChannelReceiver, ChannelSender, ChannelServer};
 use log::info;
 
+use crate::batch::Batch;
 use crate::{Consistency, FollowerMsg, LeaderMsg};
 
 pub struct Leader {
@@ -110,7 +111,7 @@ impl Leader {
         info!("A follower left the cluster. {} members.", size);
     }
 
-    pub fn starts_batch(&mut self, batch: Vec<u32>) {
+    pub fn starts_batch(&mut self, batch: Batch) {
         assert!(
             self.batch_id % 2 == 0,
             "Tried to start processing a batch before commiting the previous one"

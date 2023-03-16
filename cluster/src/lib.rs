@@ -1,9 +1,11 @@
 use std::net::ToSocketAddrs;
 
+use batch::Batch;
 use ductile::{connect_channel, ChannelReceiver, ChannelSender};
 use meilisearch_types::tasks::KindWithContent;
 use serde::{Deserialize, Serialize};
 
+pub mod batch;
 mod leader;
 
 pub use leader::Leader;
@@ -19,7 +21,7 @@ pub enum Error {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LeaderMsg {
     // Starts a new batch
-    StartBatch { id: u32, batch: Vec<u32> },
+    StartBatch { id: u32, batch: Batch },
     // Tell the follower to commit the update asap
     Commit(u32),
 }
@@ -52,7 +54,7 @@ impl Follower {
         Follower { sender, receiver, batch_id: 0 }
     }
 
-    pub fn get_new_batch(&mut self) -> Vec<u32> {
+    pub fn get_new_batch(&mut self) -> Batch {
         loop {
             match self.receiver.recv() {
                 Ok(LeaderMsg::StartBatch { id, batch }) if id == self.batch_id => {

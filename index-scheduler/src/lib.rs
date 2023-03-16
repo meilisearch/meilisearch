@@ -38,6 +38,7 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
+use batch::Batch;
 use cluster::{Consistency, Follower, Leader};
 use dump::{KindDump, TaskDump, UpdateFile};
 pub use error::Error;
@@ -326,8 +327,8 @@ pub struct IndexScheduler {
 }
 
 enum Cluster {
-    Leader(Leader),
-    Follower(Follower),
+    Leader(RwLock<Leader>),
+    Follower(RwLock<Follower>),
 }
 
 impl IndexScheduler {
@@ -1061,17 +1062,11 @@ impl IndexScheduler {
             self.breakpoint(Breakpoint::Start);
         }
 
-        // TODO cluster: If
-        // - I'm a leader => create the batch and send it to everyone
-        // - I'm a follower => get the batch from the leader and gather the tasks from my task queue
-        let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
-        let batch =
-            match self.create_next_batch(&rtxn).map_err(|e| Error::CreateBatch(Box::new(e)))? {
-                Some(batch) => batch,
-                None => return Ok(TickOutcome::WaitForSignal),
-            };
+        let batch = match self.get_or_create_next_batch()? {
+            Some(batch) => batch,
+            None => return Ok(TickOutcome::WaitForSignal),
+        };
         let index_uid = batch.index_uid().map(ToOwned::to_owned);
-        drop(rtxn);
 
         // TODO cluster: Should we send the starting date as well so everyone is in sync?
 
@@ -1088,9 +1083,6 @@ impl IndexScheduler {
 
         #[cfg(test)]
         self.breakpoint(Breakpoint::BatchCreated);
-
-        // TODO cluster: Inside the processing of the tasks we need to check if we should commit
-        // the batch or not
 
         // 2. Process the tasks
         let res = {
@@ -1203,6 +1195,29 @@ impl IndexScheduler {
         self.breakpoint(Breakpoint::AfterProcessing);
 
         Ok(TickOutcome::TickAgain(processed_tasks))
+    }
+
+    /// If there is no cluster or if leader -> create a new batch
+    /// If follower -> wait till the leader gives us a batch to process
+    fn get_or_create_next_batch(&self) -> Result<Option<Batch>> {
+        let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
+
+        let batch = match &self.cluster {
+            None | Some(Cluster::Leader(_)) => {
+                self.create_next_batch(&rtxn).map_err(|e| Error::CreateBatch(Box::new(e)))?
+            }
+            Some(Cluster::Follower(follower)) => {
+                let batch = follower.write().unwrap().get_new_batch();
+                Some(self.get_batch_from_cluster_batch(&rtxn, batch)?)
+            }
+        };
+
+        if let Some(Cluster::Leader(leader)) = &self.cluster {
+            if let Some(ref batch) = batch {
+                leader.write().unwrap().starts_batch(batch.clone().into());
+            }
+        }
+        Ok(batch)
     }
 
     pub(crate) fn delete_persisted_task_data(&self, task: &Task) -> Result<()> {

@@ -815,6 +815,8 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "time",
+ "uuid 1.3.0",
 ]
 
 [[package]]
@@ -1232,7 +1234,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "time",
- "uuid 1.2.2",
+ "uuid 1.3.0",
 ]
 
 [[package]]
@@ -1438,7 +1440,7 @@ dependencies = [
  "faux",
  "tempfile",
  "thiserror",
- "uuid 1.2.2",
+ "uuid 1.3.0",
 ]
 
 [[package]]
@@ -1978,7 +1980,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "time",
- "uuid 1.2.2",
+ "uuid 1.3.0",
 ]
 
 [[package]]
@@ -2605,7 +2607,7 @@ dependencies = [
  "tokio-stream",
  "toml",
  "urlencoding",
- "uuid 1.2.2",
+ "uuid 1.3.0",
  "vergen",
  "walkdir",
  "yaup",
@@ -2628,7 +2630,7 @@ dependencies = [
  "sha2",
  "thiserror",
  "time",
- "uuid 1.2.2",
+ "uuid 1.3.0",
 ]
 
 [[package]]
@@ -2658,7 +2660,7 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
- "uuid 1.2.2",
+ "uuid 1.3.0",
 ]
 
 [[package]]
@@ -2733,7 +2735,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "time",
- "uuid 1.2.2",
+ "uuid 1.3.0",
 ]
 
 [[package]]
@@ -3908,9 +3910,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.17"
+version = "0.3.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a561bf4617eebd33bca6434b988f39ed798e527f51a1e797d0ee4f61c0a38376"
+checksum = "cd0cbfecb4d19b5ea75bb31ad904eb5b9fa13f21079c3b92017ebdf4999a5890"
 dependencies = [
  "itoa 1.0.5",
  "serde",
@@ -3926,9 +3928,9 @@ checksum = "2e153e1f1acaef8acc537e68b44906d2db6436e2b35ac2c6b42640fff91f00fd"
 
 [[package]]
 name = "time-macros"
-version = "0.2.6"
+version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d967f99f534ca7e495c575c62638eebc2898a8c84c119b89e250477bc4ba16b2"
+checksum = "fd80a657e71da814b8e5d60d3374fc6d35045062245d80224748ae522dd76f36"
 dependencies = [
  "time-core",
 ]
@@ -4173,9 +4175,9 @@ dependencies = [
 
 [[package]]
 name = "uuid"
-version = "1.2.2"
+version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "422ee0de9031b5b948b97a8fc04e3aa35230001a722ddd27943e0be31564ce4c"
+checksum = "1674845326ee10d37ca60470760d4288a6f80f304007d92e5c53bab78c9cfd79"
 dependencies = [
  "getrandom",
  "serde",
