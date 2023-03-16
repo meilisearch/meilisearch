@@ -18,3 +18,5 @@ thiserror = "1.0.39"
 meilisearch-types = { path = "../meilisearch-types" }
 roaring = "0.10.1"
 log = "0.4.17"
+crossbeam = "0.8.2"
+bus = "2.3.0"

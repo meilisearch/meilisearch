@@ -16,7 +16,7 @@ pub enum Error {
     SerdeJson(#[from] serde_json::Error),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LeaderMsg {
     // Starts a new batch
     StartBatch { id: u32, batch: Vec<u32> },

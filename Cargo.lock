@@ -524,6 +524,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "572f695136211188308f16ad2ca5c851a712c464060ae6974944458eb83880ba"
 
 [[package]]
+name = "bus"
+version = "2.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "80cb4625f5b60155ff1018c9d4ce2e38bf5ae3e5780dfab9fa68bb44a6b751e2"
+dependencies = [
+ "crossbeam-channel",
+ "num_cpus",
+ "parking_lot_core",
+]
+
+[[package]]
 name = "byte-unit"
 version = "4.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -795,6 +806,8 @@ dependencies = [
 name = "cluster"
 version = "1.1.0"
 dependencies = [
+ "bus",
+ "crossbeam",
  "ductile",
  "log",
  "meilisearch-types",
