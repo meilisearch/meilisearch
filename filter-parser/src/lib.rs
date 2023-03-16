@@ -745,6 +745,39 @@ pub mod tests {
         Was expecting a value but instead got `OR`, which is a reserved keyword. To use `OR` as a field name or a value, surround it by quotes.
         5:7 NOT OR EXISTS AND EXISTS NOT EXISTS
         "###);
+
+        insta::assert_display_snapshot!(p(r#"value NULL"#), @r###"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` at `value NULL`.
+        1:11 value NULL
+        "###);
+        insta::assert_display_snapshot!(p(r#"value NOT NULL"#), @r###"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` at `value NOT NULL`.
+        1:15 value NOT NULL
+        "###);
+        insta::assert_display_snapshot!(p(r#"value EMPTY"#), @r###"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` at `value EMPTY`.
+        1:12 value EMPTY
+        "###);
+        insta::assert_display_snapshot!(p(r#"value NOT EMPTY"#), @r###"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` at `value NOT EMPTY`.
+        1:16 value NOT EMPTY
+        "###);
+        insta::assert_display_snapshot!(p(r#"value IS"#), @r###"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` at `value IS`.
+        1:9 value IS
+        "###);
+        insta::assert_display_snapshot!(p(r#"value IS NOT"#), @r###"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` at `value IS NOT`.
+        1:13 value IS NOT
+        "###);
+        insta::assert_display_snapshot!(p(r#"value IS EXISTS"#), @r###"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` at `value IS EXISTS`.
+        1:16 value IS EXISTS
+        "###);
+        insta::assert_display_snapshot!(p(r#"value IS NOT EXISTS"#), @r###"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` at `value IS NOT EXISTS`.
+        1:20 value IS NOT EXISTS
+        "###);
     }
 
     #[test]
