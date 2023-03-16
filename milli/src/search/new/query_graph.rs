@@ -181,8 +181,8 @@ impl QueryGraph {
             (prev0, prev1, prev2) = (new_nodes, prev0, prev1);
         }
 
-        let root_node = Interned::new(root_node);
-        let end_node = Interned::new(end_node);
+        let root_node = Interned::from_raw(root_node);
+        let end_node = Interned::from_raw(end_node);
         let mut nodes = FixedSizeInterner::new(
             nodes_data.len() as u16,
             QueryNode {
@@ -197,22 +197,22 @@ impl QueryGraph {
             .zip(successors.into_iter())
             .enumerate()
         {
-            let node = nodes.get_mut(Interned::new(node_idx as u16));
+            let node = nodes.get_mut(Interned::from_raw(node_idx as u16));
             node.data = node_data;
             for x in predecessors {
-                node.predecessors.insert(Interned::new(x));
+                node.predecessors.insert(Interned::from_raw(x));
             }
             for x in successors {
-                node.successors.insert(Interned::new(x));
+                node.successors.insert(Interned::from_raw(x));
             }
         }
         let mut graph = QueryGraph { root_node, end_node, nodes };
 
         graph.connect_to_node(
-            prev0.into_iter().map(Interned::new).collect::<Vec<_>>().as_slice(),
+            prev0.into_iter().map(Interned::from_raw).collect::<Vec<_>>().as_slice(),
             end_node,
         );
-        let empty_nodes = empty_nodes.into_iter().map(Interned::new).collect::<Vec<_>>();
+        let empty_nodes = empty_nodes.into_iter().map(Interned::from_raw).collect::<Vec<_>>();
         graph.remove_nodes_keep_edges(&empty_nodes);
 
         Ok(graph)

@@ -66,7 +66,7 @@ impl RankingRuleGraphTrait for ProximityGraph {
 
     fn log_state(
         graph: &RankingRuleGraph<Self>,
-        paths: &[Vec<u16>],
+        paths: &[Vec<Interned<ProximityCondition>>],
         empty_paths_cache: &DeadEndPathCache<Self>,
         universe: &RoaringBitmap,
         distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityCondition>)>, QueryNode>,

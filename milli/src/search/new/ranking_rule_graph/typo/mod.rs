@@ -137,7 +137,7 @@ impl RankingRuleGraphTrait for TypoGraph {
 
     fn log_state(
         graph: &RankingRuleGraph<Self>,
-        paths: &[Vec<u16>],
+        paths: &[Vec<Interned<TypoEdge>>],
         empty_paths_cache: &DeadEndPathCache<Self>,
         universe: &RoaringBitmap,
         distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoEdge>)>, QueryNode>,

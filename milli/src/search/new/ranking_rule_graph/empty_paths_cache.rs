@@ -11,7 +11,7 @@ pub struct DeadEndPathCache<G: RankingRuleGraphTrait> {
     /// The set of edge conditions that resolve to no documents.
     pub conditions: SmallBitmap<G::EdgeCondition>,
     /// A set of path prefixes that resolve to no documents.
-    pub prefixes: PathSet,
+    pub prefixes: PathSet<G::EdgeCondition>,
     /// A set of empty couples of edge conditions that resolve to no documents.
     pub condition_couples: MappedInterner<SmallBitmap<G::EdgeCondition>, G::EdgeCondition>,
 }
@@ -40,13 +40,13 @@ impl<G: RankingRuleGraphTrait> DeadEndPathCache<G> {
     pub fn add_condition(&mut self, condition: Interned<G::EdgeCondition>) {
         self.conditions.insert(condition);
         self.condition_couples.get_mut(condition).clear();
-        self.prefixes.remove_edge(condition.into_inner()); // TODO: typed PathSet
+        self.prefixes.remove_edge(condition);
         for (_, edges2) in self.condition_couples.iter_mut() {
             edges2.remove(condition);
         }
     }
     /// Store in the cache that every path containing the given prefix resolves to no documents.
-    pub fn add_prefix(&mut self, prefix: &[u16]) {
+    pub fn add_prefix(&mut self, prefix: &[Interned<G::EdgeCondition>]) {
         // TODO: typed PathSet
         self.prefixes.insert(prefix.iter().copied());
     }
@@ -63,15 +63,15 @@ impl<G: RankingRuleGraphTrait> DeadEndPathCache<G> {
     /// Returns true if the cache can determine that the given path resolves to no documents.
     pub fn path_is_dead_end(
         &self,
-        path: &[u16],
+        path: &[Interned<G::EdgeCondition>],
         path_bitmap: &SmallBitmap<G::EdgeCondition>,
     ) -> bool {
         if path_bitmap.intersects(&self.conditions) {
             return true;
         }
-        for edge in path.iter() {
+        for condition in path.iter() {
             // TODO: typed path
-            let forbidden_other_edges = self.condition_couples.get(Interned::new(*edge));
+            let forbidden_other_edges = self.condition_couples.get(*condition);
             if path_bitmap.intersects(forbidden_other_edges) {
                 return true;
             }

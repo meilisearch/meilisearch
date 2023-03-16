@@ -117,7 +117,7 @@ pub trait RankingRuleGraphTrait: Sized {
 
     fn log_state(
         graph: &RankingRuleGraph<Self>,
-        paths: &[Vec<u16>],
+        paths: &[Vec<Interned<Self::EdgeCondition>>],
         empty_paths_cache: &DeadEndPathCache<Self>,
         universe: &RoaringBitmap,
         distances: &MappedInterner<Vec<(u16, SmallBitmap<Self::EdgeCondition>)>, QueryNode>,

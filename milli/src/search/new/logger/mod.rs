@@ -3,7 +3,7 @@ pub mod detailed;
 
 use roaring::RoaringBitmap;
 
-use super::interner::MappedInterner;
+use super::interner::{Interned, MappedInterner};
 use super::query_graph::QueryNode;
 use super::ranking_rule_graph::{
     DeadEndPathCache, ProximityCondition, ProximityGraph, RankingRuleGraph, TypoEdge, TypoGraph,
@@ -65,7 +65,7 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
     fn log_proximity_state(
         &mut self,
         query_graph: &RankingRuleGraph<ProximityGraph>,
-        paths: &[Vec<u16>],
+        paths: &[Vec<Interned<ProximityCondition>>],
         empty_paths_cache: &DeadEndPathCache<ProximityGraph>,
         universe: &RoaringBitmap,
         distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityCondition>)>, QueryNode>,
@@ -76,7 +76,7 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
     fn log_typo_state(
         &mut self,
         query_graph: &RankingRuleGraph<TypoGraph>,
-        paths: &[Vec<u16>],
+        paths: &[Vec<Interned<TypoEdge>>],
         empty_paths_cache: &DeadEndPathCache<TypoGraph>,
         universe: &RoaringBitmap,
         distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoEdge>)>, QueryNode>,
@@ -136,7 +136,7 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
     fn log_proximity_state(
         &mut self,
         _query_graph: &RankingRuleGraph<ProximityGraph>,
-        _paths_map: &[Vec<u16>],
+        _paths_map: &[Vec<Interned<ProximityCondition>>],
         _empty_paths_cache: &DeadEndPathCache<ProximityGraph>,
         _universe: &RoaringBitmap,
         _distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityCondition>)>, QueryNode>,
@@ -147,7 +147,7 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
     fn log_typo_state(
         &mut self,
         _query_graph: &RankingRuleGraph<TypoGraph>,
-        _paths: &[Vec<u16>],
+        _paths: &[Vec<Interned<TypoEdge>>],
         _empty_paths_cache: &DeadEndPathCache<TypoGraph>,
         _universe: &RoaringBitmap,
         _distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoEdge>)>, QueryNode>,

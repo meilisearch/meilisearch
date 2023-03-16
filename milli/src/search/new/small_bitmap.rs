@@ -32,10 +32,7 @@ impl<T> SmallBitmap<T> {
         for_interner: &FixedSizeInterner<T>,
     ) -> Self {
         Self {
-            internal: SmallBitmapInternal::from_iter(
-                xs.map(|x| x.into_inner()),
-                for_interner.len(),
-            ),
+            internal: SmallBitmapInternal::from_iter(xs.map(|x| x.into_raw()), for_interner.len()),
             _phantom: PhantomData,
         }
     }
@@ -46,13 +43,13 @@ impl<T> SmallBitmap<T> {
         self.internal.clear()
     }
     pub fn contains(&self, x: Interned<T>) -> bool {
-        self.internal.contains(x.into_inner())
+        self.internal.contains(x.into_raw())
     }
     pub fn insert(&mut self, x: Interned<T>) {
-        self.internal.insert(x.into_inner())
+        self.internal.insert(x.into_raw())
     }
     pub fn remove(&mut self, x: Interned<T>) {
-        self.internal.remove(x.into_inner())
+        self.internal.remove(x.into_raw())
     }
 
     pub fn intersection(&mut self, other: &Self) {
@@ -71,7 +68,7 @@ impl<T> SmallBitmap<T> {
         self.internal.intersects(&other.internal)
     }
     pub fn iter(&self) -> impl Iterator<Item = Interned<T>> + '_ {
-        self.internal.iter().map(|x| Interned::new(x))
+        self.internal.iter().map(|x| Interned::from_raw(x))
     }
 }
 #[derive(Clone)]
@@ -80,14 +77,14 @@ pub enum SmallBitmapInternal {
     Small(Box<[u64]>),
 }
 impl SmallBitmapInternal {
-    pub fn new(universe_length: u16) -> Self {
+    fn new(universe_length: u16) -> Self {
         if universe_length <= 64 {
             Self::Tiny(0)
         } else {
             Self::Small(vec![0; 1 + universe_length as usize / 64].into_boxed_slice())
         }
     }
-    pub fn from_iter(xs: impl Iterator<Item = u16>, universe_length: u16) -> Self {
+    fn from_iter(xs: impl Iterator<Item = u16>, universe_length: u16) -> Self {
         let mut s = Self::new(universe_length);
         for x in xs {
             s.insert(x);

@@ -4,38 +4,27 @@ use std::marker::PhantomData;
 
 use fxhash::FxHashMap;
 
-/// An index within a [`Interner<T>`] structure.
+/// An index within an interner ([`FixedSizeInterner`], [`DedupInterner`], or [`MappedInterner`]).
 pub struct Interned<T> {
     idx: u16,
     _phantom: PhantomData<T>,
 }
 impl<T> Interned<T> {
-    pub fn new(idx: u16) -> Self {
+    /// Create an interned value manually from its raw index within the interner.
+    pub fn from_raw(idx: u16) -> Self {
         Self { idx, _phantom: PhantomData }
     }
-    pub fn into_inner(self) -> u16 {
+    /// Get the raw index from the interned value
+    pub fn into_raw(self) -> u16 {
         self.idx
     }
 }
 
-// TODO: the stable store should be replaced by a bump allocator
-// and the interned value should be a pointer wrapper
-// then we can get its value with `interned.get()` instead of `interner.get(interned)`
-// and as a bonus, its validity is tracked with Rust's lifetime system
-// one problem is that we need two lifetimes: one for the bump allocator, one for the
-// hashmap
-// but that's okay, we can use:
-// ```
-// struct Interner<'bump> {
-//      bump: &'bump Bump,
-//      lookup: FxHashMap
-// }
-// ```
-
-/// An [`Interner`] is used to store a unique copy of a value of type `T`. This value
+/// A [`DedupInterner`] is used to store a unique copy of a value of type `T`. This value
 /// is then identified by a lightweight index of type [`Interned<T>`], which can
 /// be copied, compared, and hashed efficiently. An immutable reference to the original value
-/// can be retrieved using `self.get(interned)`.
+/// can be retrieved using `self.get(interned)`. A set of values within the interner can be
+/// efficiently managed using [`SmallBitmap<T>`](super::small_bitmap::SmallBitmap).
 #[derive(Clone)]
 pub struct DedupInterner<T> {
     stable_store: Vec<T>,
@@ -47,6 +36,7 @@ impl<T> Default for DedupInterner<T> {
     }
 }
 impl<T> DedupInterner<T> {
+    ///
     pub fn freeze(self) -> FixedSizeInterner<T> {
         FixedSizeInterner { stable_store: self.stable_store }
     }
@@ -62,7 +52,7 @@ where
         } else {
             assert!(self.stable_store.len() < u16::MAX as usize);
             self.stable_store.push(s.clone());
-            let interned = Interned::new(self.stable_store.len() as u16 - 1);
+            let interned = Interned::from_raw(self.stable_store.len() as u16 - 1);
             self.lookup.insert(s, interned);
             interned
         }
@@ -87,7 +77,7 @@ impl<T> Interner<T> {
     pub fn push(&mut self, s: T) -> Interned<T> {
         assert!(self.stable_store.len() < u16::MAX as usize);
         self.stable_store.push(s);
-        Interned::new(self.stable_store.len() as u16 - 1)
+        Interned::from_raw(self.stable_store.len() as u16 - 1)
     }
 }
 
@@ -123,13 +113,13 @@ impl<T> FixedSizeInterner<T> {
         }
     }
     pub fn indexes(&self) -> impl Iterator<Item = Interned<T>> {
-        (0..self.stable_store.len()).map(|i| Interned::new(i as u16))
+        (0..self.stable_store.len()).map(|i| Interned::from_raw(i as u16))
     }
     pub fn iter(&self) -> impl Iterator<Item = (Interned<T>, &T)> {
-        self.stable_store.iter().enumerate().map(|(i, x)| (Interned::new(i as u16), x))
+        self.stable_store.iter().enumerate().map(|(i, x)| (Interned::from_raw(i as u16), x))
     }
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (Interned<T>, &mut T)> {
-        self.stable_store.iter_mut().enumerate().map(|(i, x)| (Interned::new(i as u16), x))
+        self.stable_store.iter_mut().enumerate().map(|(i, x)| (Interned::from_raw(i as u16), x))
     }
 }
 #[derive(Clone)]
@@ -152,10 +142,10 @@ impl<T, From> MappedInterner<T, From> {
         }
     }
     pub fn iter(&self) -> impl Iterator<Item = (Interned<From>, &T)> {
-        self.stable_store.iter().enumerate().map(|(i, x)| (Interned::new(i as u16), x))
+        self.stable_store.iter().enumerate().map(|(i, x)| (Interned::from_raw(i as u16), x))
     }
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (Interned<From>, &mut T)> {
-        self.stable_store.iter_mut().enumerate().map(|(i, x)| (Interned::new(i as u16), x))
+        self.stable_store.iter_mut().enumerate().map(|(i, x)| (Interned::from_raw(i as u16), x))
     }
 }
 // Interned<T> boilerplate implementations

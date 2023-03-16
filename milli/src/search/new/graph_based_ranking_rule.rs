@@ -50,7 +50,6 @@ use super::ranking_rule_graph::{
 };
 use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, RankingRule, RankingRuleOutput, SearchContext};
-use crate::search::new::interner::Interned;
 use crate::search::new::query_graph::QueryNodeData;
 use crate::Result;
 
@@ -247,9 +246,8 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                 let mut cached_edge_docids = vec![];
                 // graph.conditions_interner.map(|_| RoaringBitmap::new());
 
-                for &condition_interned_raw in path {
-                    let condition = Interned::new(condition_interned_raw);
-                    visited_conditions.push(condition_interned_raw);
+                for &condition in path {
+                    visited_conditions.push(condition);
 
                     let edge_docids =
                         edge_docids_cache.get_edge_docids(ctx, condition, graph, &universe)?;
@@ -295,7 +293,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                 }
                 assert!(!path_docids.is_empty());
                 for condition in path {
-                    used_conditions.insert(Interned::new(*condition));
+                    used_conditions.insert(*condition);
                 }
                 bucket |= &path_docids;
                 // Reduce the size of the universe so that we can more optimistically discard candidate paths
