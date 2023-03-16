@@ -44,6 +44,7 @@ use cluster::{Follower, Leader};
 use dump::{KindDump, TaskDump, UpdateFile};
 pub use error::Error;
 use file_store::FileStore;
+use log::info;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{self, Database, Env, RoTxn};
@@ -1142,10 +1143,12 @@ impl IndexScheduler {
             self.breakpoint(Breakpoint::Start);
         }
 
+        info!("before getting a new batch");
         let batch = match self.get_or_create_next_batch()? {
             Some(batch) => batch,
             None => return Ok(TickOutcome::WaitForSignal),
         };
+        info!("after getting a new batch");
         let index_uid = batch.index_uid().map(ToOwned::to_owned);
 
         // TODO cluster: Should we send the starting date as well so everyone is in sync?

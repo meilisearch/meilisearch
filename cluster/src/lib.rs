@@ -107,12 +107,15 @@ impl Follower {
     }
 
     pub fn get_new_batch(&mut self) -> Batch {
+        info!("Get new batch called");
         let (id, batch) = self.get_batch.recv().expect("Lost connection to the leader");
+        info!("Got a new batch");
         self.batch_id = id;
         batch
     }
 
     pub fn ready_to_commit(&mut self) {
+        info!("I'm ready to commit");
         self.sender.send(FollowerMsg::ReadyToCommit(self.batch_id)).unwrap();
 
         loop {
@@ -124,6 +127,7 @@ impl Follower {
                 panic!("We missed a batch");
             }
         }
+        info!("I got the right to commit");
     }
 
     pub fn get_new_task(&mut self) -> (Task, Option<Vec<u8>>) {
