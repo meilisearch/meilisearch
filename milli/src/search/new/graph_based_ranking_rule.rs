@@ -45,7 +45,7 @@ use super::interner::MappedInterner;
 use super::logger::SearchLogger;
 use super::query_graph::QueryNode;
 use super::ranking_rule_graph::{
-    DeadEndPathCache, EdgeConditionDocIdsCache, ProximityGraph, RankingRuleGraph,
+    ConditionDocIdsCache, DeadEndPathCache, ProximityGraph, RankingRuleGraph,
     RankingRuleGraphTrait, TypoGraph,
 };
 use super::small_bitmap::SmallBitmap;
@@ -85,12 +85,12 @@ pub struct GraphBasedRankingRuleState<G: RankingRuleGraphTrait> {
     /// The current graph
     graph: RankingRuleGraph<G>,
     /// Cache to retrieve the docids associated with each edge
-    edge_conditions_cache: EdgeConditionDocIdsCache<G>,
+    conditions_cache: ConditionDocIdsCache<G>,
     /// Cache used to optimistically discard paths that resolve to no documents.
     dead_end_path_cache: DeadEndPathCache<G>,
     /// A structure giving the list of possible costs from each node to the end node,
     /// along with a set of unavoidable edges that must be traversed to achieve that distance.
-    all_distances: MappedInterner<Vec<(u16, SmallBitmap<G::EdgeCondition>)>, QueryNode>,
+    all_distances: MappedInterner<Vec<(u16, SmallBitmap<G::Condition>)>, QueryNode>,
     /// An index in the first element of `all_distances`, giving the cost of the next bucket
     cur_distance_idx: usize,
 }
@@ -101,7 +101,7 @@ pub struct GraphBasedRankingRuleState<G: RankingRuleGraphTrait> {
 fn remove_empty_edges<'ctx, G: RankingRuleGraphTrait>(
     ctx: &mut SearchContext<'ctx>,
     graph: &mut RankingRuleGraph<G>,
-    condition_docids_cache: &mut EdgeConditionDocIdsCache<G>,
+    condition_docids_cache: &mut ConditionDocIdsCache<G>,
     universe: &RoaringBitmap,
     dead_end_path_cache: &mut DeadEndPathCache<G>,
 ) -> Result<()> {
@@ -135,7 +135,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         query_graph: &QueryGraph,
     ) -> Result<()> {
         let mut graph = RankingRuleGraph::build(ctx, query_graph.clone())?;
-        let mut condition_docids_cache = EdgeConditionDocIdsCache::default();
+        let mut condition_docids_cache = ConditionDocIdsCache::default();
         let mut dead_end_path_cache = DeadEndPathCache::new(&graph.conditions_interner);
 
         // First simplify the graph as much as possible, by computing the docids of all the conditions
@@ -153,7 +153,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
 
         let state = GraphBasedRankingRuleState {
             graph,
-            edge_conditions_cache: condition_docids_cache,
+            conditions_cache: condition_docids_cache,
             dead_end_path_cache,
             all_distances,
             cur_distance_idx: 0,
@@ -181,7 +181,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         remove_empty_edges(
             ctx,
             &mut state.graph,
-            &mut state.edge_conditions_cache,
+            &mut state.conditions_cache,
             universe,
             &mut state.dead_end_path_cache,
         )?;
@@ -204,7 +204,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
 
         let GraphBasedRankingRuleState {
             graph,
-            edge_conditions_cache: condition_docids_cache,
+            conditions_cache: condition_docids_cache,
             dead_end_path_cache,
             all_distances,
             cur_distance_idx: _,
@@ -326,8 +326,8 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
             let mut used_phrases = HashSet::new();
             for condition in used_conditions.iter() {
                 let condition = graph.conditions_interner.get(condition);
-                used_words.extend(G::words_used_by_edge_condition(ctx, condition)?);
-                used_phrases.extend(G::phrases_used_by_edge_condition(ctx, condition)?);
+                used_words.extend(G::words_used_by_condition(ctx, condition)?);
+                used_phrases.extend(G::phrases_used_by_condition(ctx, condition)?);
             }
             // 2. Remove the unused words and phrases from all the nodes in the graph
             let mut nodes_to_remove = vec![];

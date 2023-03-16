@@ -19,11 +19,11 @@ mod typo;
 use std::collections::HashSet;
 use std::hash::Hash;
 
-pub use condition_docids_cache::EdgeConditionDocIdsCache;
+pub use condition_docids_cache::ConditionDocIdsCache;
 pub use dead_end_path_cache::DeadEndPathCache;
 pub use proximity::{ProximityCondition, ProximityGraph};
 use roaring::RoaringBitmap;
-pub use typo::{TypoEdge, TypoGraph};
+pub use typo::{TypoCondition, TypoGraph};
 
 use super::interner::{DedupInterner, FixedSizeInterner, Interned, MappedInterner};
 use super::logger::SearchLogger;
@@ -74,48 +74,48 @@ impl<E> PartialEq for Edge<E> {
 pub trait RankingRuleGraphTrait: Sized {
     /// The condition of an edge connecting two query nodes. The condition
     /// should be sufficient to compute the edge's cost and associated document ids
-    /// in [`resolve_edge_condition`](RankingRuleGraphTrait::resolve_edge_condition).
-    type EdgeCondition: Sized + Clone + PartialEq + Eq + Hash;
+    /// in [`resolve_condition`](RankingRuleGraphTrait::resolve_condition).
+    type Condition: Sized + Clone + PartialEq + Eq + Hash;
 
     /// Return the label of the given edge condition, to be used when visualising
     /// the ranking rule graph.
-    fn label_for_edge_condition<'ctx>(
+    fn label_for_condition<'ctx>(
         ctx: &mut SearchContext<'ctx>,
-        edge: &Self::EdgeCondition,
+        condition: &Self::Condition,
     ) -> Result<String>;
 
-    fn words_used_by_edge_condition<'ctx>(
+    fn words_used_by_condition<'ctx>(
         ctx: &mut SearchContext<'ctx>,
-        edge: &Self::EdgeCondition,
+        condition: &Self::Condition,
     ) -> Result<HashSet<Interned<String>>>;
-    fn phrases_used_by_edge_condition<'ctx>(
+
+    fn phrases_used_by_condition<'ctx>(
         ctx: &mut SearchContext<'ctx>,
-        edge: &Self::EdgeCondition,
+        condition: &Self::Condition,
     ) -> Result<HashSet<Interned<Phrase>>>;
 
     /// Compute the document ids associated with the given edge condition,
     /// restricted to the given universe.
-    fn resolve_edge_condition<'ctx>(
+    fn resolve_condition<'ctx>(
         ctx: &mut SearchContext<'ctx>,
-        edge_condition: &Self::EdgeCondition,
+        condition: &Self::Condition,
         universe: &RoaringBitmap,
     ) -> Result<RoaringBitmap>;
 
-    /// Return the cost and condition of the edges going from the previously visited node
-    /// (with [`build_step_visit_source_node`](RankingRuleGraphTrait::build_step_visit_source_node)) to `dest_node`.
+    /// Return the costs and conditions of the edges going from the source node to the destination node
     fn build_edges<'ctx>(
         ctx: &mut SearchContext<'ctx>,
-        conditions_interner: &mut DedupInterner<Self::EdgeCondition>,
+        conditions_interner: &mut DedupInterner<Self::Condition>,
         source_node: &QueryNode,
         dest_node: &QueryNode,
-    ) -> Result<Vec<(u8, Option<Interned<Self::EdgeCondition>>)>>;
+    ) -> Result<Vec<(u8, Option<Interned<Self::Condition>>)>>;
 
     fn log_state(
         graph: &RankingRuleGraph<Self>,
-        paths: &[Vec<Interned<Self::EdgeCondition>>],
+        paths: &[Vec<Interned<Self::Condition>>],
         dead_end_path_cache: &DeadEndPathCache<Self>,
         universe: &RoaringBitmap,
-        distances: &MappedInterner<Vec<(u16, SmallBitmap<Self::EdgeCondition>)>, QueryNode>,
+        distances: &MappedInterner<Vec<(u16, SmallBitmap<Self::Condition>)>, QueryNode>,
         cost: u16,
         logger: &mut dyn SearchLogger<QueryGraph>,
     );
@@ -127,9 +127,9 @@ pub trait RankingRuleGraphTrait: Sized {
 /// but replacing the edges.
 pub struct RankingRuleGraph<G: RankingRuleGraphTrait> {
     pub query_graph: QueryGraph,
-    pub edges_store: FixedSizeInterner<Option<Edge<G::EdgeCondition>>>,
-    pub edges_of_node: MappedInterner<SmallBitmap<Option<Edge<G::EdgeCondition>>>, QueryNode>,
-    pub conditions_interner: FixedSizeInterner<G::EdgeCondition>,
+    pub edges_store: FixedSizeInterner<Option<Edge<G::Condition>>>,
+    pub edges_of_node: MappedInterner<SmallBitmap<Option<Edge<G::Condition>>>, QueryNode>,
+    pub conditions_interner: FixedSizeInterner<G::Condition>,
 }
 impl<G: RankingRuleGraphTrait> Clone for RankingRuleGraph<G> {
     fn clone(&self) -> Self {
@@ -143,7 +143,7 @@ impl<G: RankingRuleGraphTrait> Clone for RankingRuleGraph<G> {
 }
 impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
     /// Remove all edges with the given condition
-    pub fn remove_edges_with_condition(&mut self, condition_to_remove: Interned<G::EdgeCondition>) {
+    pub fn remove_edges_with_condition(&mut self, condition_to_remove: Interned<G::Condition>) {
         for (edge_id, edge_opt) in self.edges_store.iter_mut() {
             let Some(edge) = edge_opt.as_mut() else { continue };
             let Some(condition) = edge.condition else { continue };

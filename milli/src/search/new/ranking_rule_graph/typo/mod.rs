@@ -14,19 +14,18 @@ use std::fmt::Write;
 use std::iter::FromIterator;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct TypoEdge {
+pub struct TypoCondition {
     term: Interned<QueryTerm>,
-    nbr_typos: u8,
 }
 
 pub enum TypoGraph {}
 
 impl RankingRuleGraphTrait for TypoGraph {
-    type EdgeCondition = TypoEdge;
+    type Condition = TypoCondition;
 
-    fn resolve_edge_condition<'db_cache, 'ctx>(
+    fn resolve_condition<'db_cache, 'ctx>(
         ctx: &mut SearchContext<'ctx>,
-        edge: &Self::EdgeCondition,
+        condition: &Self::Condition,
         universe: &RoaringBitmap,
     ) -> Result<RoaringBitmap> {
         let SearchContext {
@@ -47,7 +46,7 @@ impl RankingRuleGraphTrait for TypoGraph {
                 word_interner,
                 term_interner,
                 phrase_interner,
-                edge.term,
+                condition.term,
             )?;
 
         Ok(docids)
@@ -55,10 +54,10 @@ impl RankingRuleGraphTrait for TypoGraph {
 
     fn build_edges<'ctx>(
         ctx: &mut SearchContext<'ctx>,
-        conditions_interner: &mut DedupInterner<Self::EdgeCondition>,
+        conditions_interner: &mut DedupInterner<Self::Condition>,
         _from_node: &QueryNode,
         to_node: &QueryNode,
-    ) -> Result<Vec<(u8, Option<Interned<Self::EdgeCondition>>)>> {
+    ) -> Result<Vec<(u8, Option<Interned<Self::Condition>>)>> {
         let SearchContext { term_interner, .. } = ctx;
         match &to_node.data {
             QueryNodeData::Term(LocatedQueryTerm { value, positions }) => {
@@ -121,10 +120,10 @@ impl RankingRuleGraphTrait for TypoGraph {
                     if !new_term.is_empty() {
                         edges.push((
                             nbr_typos as u8 + base_cost,
-                            Some(conditions_interner.insert(TypoEdge {
-                                term: term_interner.insert(new_term),
-                                nbr_typos: nbr_typos as u8,
-                            })),
+                            Some(
+                                conditions_interner
+                                    .insert(TypoCondition { term: term_interner.insert(new_term) }),
+                            ),
                         ))
                     }
                 }
@@ -137,21 +136,21 @@ impl RankingRuleGraphTrait for TypoGraph {
 
     fn log_state(
         graph: &RankingRuleGraph<Self>,
-        paths: &[Vec<Interned<TypoEdge>>],
+        paths: &[Vec<Interned<TypoCondition>>],
         dead_end_path_cache: &DeadEndPathCache<Self>,
         universe: &RoaringBitmap,
-        distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoEdge>)>, QueryNode>,
+        distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoCondition>)>, QueryNode>,
         cost: u16,
         logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
         logger.log_typo_state(graph, paths, dead_end_path_cache, universe, distances, cost);
     }
 
-    fn label_for_edge_condition<'ctx>(
+    fn label_for_condition<'ctx>(
         ctx: &mut SearchContext<'ctx>,
-        edge: &Self::EdgeCondition,
+        condition: &Self::Condition,
     ) -> Result<String> {
-        let TypoEdge { term, nbr_typos: _ } = edge;
+        let TypoCondition { term } = condition;
         let term = ctx.term_interner.get(*term);
         let QueryTerm {
             original: _,
@@ -203,20 +202,20 @@ impl RankingRuleGraphTrait for TypoGraph {
         Ok(s)
     }
 
-    fn words_used_by_edge_condition<'ctx>(
+    fn words_used_by_condition<'ctx>(
         ctx: &mut SearchContext<'ctx>,
-        edge: &Self::EdgeCondition,
+        condition: &Self::Condition,
     ) -> Result<HashSet<Interned<String>>> {
-        let TypoEdge { term, .. } = edge;
+        let TypoCondition { term, .. } = condition;
         let term = ctx.term_interner.get(*term);
         Ok(HashSet::from_iter(term.all_single_words_except_prefix_db()))
     }
 
-    fn phrases_used_by_edge_condition<'ctx>(
+    fn phrases_used_by_condition<'ctx>(
         ctx: &mut SearchContext<'ctx>,
-        edge: &Self::EdgeCondition,
+        condition: &Self::Condition,
     ) -> Result<HashSet<Interned<Phrase>>> {
-        let TypoEdge { term, .. } = edge;
+        let TypoCondition { term, .. } = condition;
         let term = ctx.term_interner.get(*term);
         Ok(HashSet::from_iter(term.all_phrases()))
     }

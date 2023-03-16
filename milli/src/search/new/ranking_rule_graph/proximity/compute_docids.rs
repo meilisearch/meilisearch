@@ -6,7 +6,7 @@ use crate::{CboRoaringBitmapCodec, Result};
 
 pub fn compute_docids<'ctx>(
     ctx: &mut SearchContext<'ctx>,
-    edge: &ProximityCondition,
+    condition: &ProximityCondition,
     universe: &RoaringBitmap,
 ) -> Result<RoaringBitmap> {
     let SearchContext {
@@ -18,7 +18,7 @@ pub fn compute_docids<'ctx>(
         phrase_interner,
         term_interner,
     } = ctx;
-    let pairs = match edge {
+    let pairs = match condition {
         ProximityCondition::Term { term } => {
             return term_docids
                 .get_query_term_docids(

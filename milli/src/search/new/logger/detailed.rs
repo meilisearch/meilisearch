@@ -11,7 +11,7 @@ use crate::search::new::query_graph::QueryNodeData;
 use crate::search::new::query_term::{LocatedQueryTerm, QueryTerm};
 use crate::search::new::ranking_rule_graph::{
     DeadEndPathCache, Edge, ProximityCondition, ProximityGraph, RankingRuleGraph,
-    RankingRuleGraphTrait, TypoEdge, TypoGraph,
+    RankingRuleGraphTrait, TypoCondition, TypoGraph,
 };
 use crate::search::new::small_bitmap::SmallBitmap;
 use crate::search::new::{QueryGraph, QueryNode, SearchContext};
@@ -51,10 +51,10 @@ pub enum SearchEvents {
     },
     TypoState {
         graph: RankingRuleGraph<TypoGraph>,
-        paths: Vec<Vec<Interned<TypoEdge>>>,
+        paths: Vec<Vec<Interned<TypoCondition>>>,
         dead_end_path_cache: DeadEndPathCache<TypoGraph>,
         universe: RoaringBitmap,
-        distances: MappedInterner<Vec<(u16, SmallBitmap<TypoEdge>)>, QueryNode>,
+        distances: MappedInterner<Vec<(u16, SmallBitmap<TypoCondition>)>, QueryNode>,
         cost: u16,
     },
     RankingRuleSkipBucket {
@@ -188,10 +188,10 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
     fn log_typo_state(
         &mut self,
         query_graph: &RankingRuleGraph<TypoGraph>,
-        paths_map: &[Vec<Interned<TypoEdge>>],
+        paths_map: &[Vec<Interned<TypoCondition>>],
         dead_end_path_cache: &DeadEndPathCache<TypoGraph>,
         universe: &RoaringBitmap,
-        distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoEdge>)>, QueryNode>,
+        distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoCondition>)>, QueryNode>,
         cost: u16,
     ) {
         self.events.push(SearchEvents::TypoState {
@@ -430,7 +430,7 @@ results.{random} {{
         ctx: &mut SearchContext,
         node_idx: Interned<QueryNode>,
         node: &QueryNode,
-        distances: &[(u16, SmallBitmap<R::EdgeCondition>)],
+        distances: &[(u16, SmallBitmap<R::Condition>)],
         file: &mut File,
     ) {
         match &node.data {
@@ -527,9 +527,9 @@ shape: class"
     fn ranking_rule_graph_d2_description<R: RankingRuleGraphTrait>(
         ctx: &mut SearchContext,
         graph: &RankingRuleGraph<R>,
-        paths: &[Vec<Interned<R::EdgeCondition>>],
+        paths: &[Vec<Interned<R::Condition>>],
         dead_end_paths_cache: &DeadEndPathCache<R>,
-        distances: MappedInterner<Vec<(u16, SmallBitmap<R::EdgeCondition>)>, QueryNode>,
+        distances: MappedInterner<Vec<(u16, SmallBitmap<R::Condition>)>, QueryNode>,
         file: &mut File,
     ) {
         writeln!(file, "direction: right").unwrap();
@@ -596,7 +596,7 @@ shape: class"
     fn condition_d2_description<R: RankingRuleGraphTrait>(
         ctx: &mut SearchContext,
         graph: &RankingRuleGraph<R>,
-        condition_id: Interned<R::EdgeCondition>,
+        condition_id: Interned<R::Condition>,
         file: &mut File,
     ) {
         let condition = graph.conditions_interner.get(condition_id);
@@ -606,14 +606,14 @@ shape: class"
 shape: class
 {}
 }}",
-            R::label_for_edge_condition(ctx, condition).unwrap()
+            R::label_for_condition(ctx, condition).unwrap()
         )
         .unwrap();
     }
     fn paths_d2_description<R: RankingRuleGraphTrait>(
         ctx: &mut SearchContext,
         graph: &RankingRuleGraph<R>,
-        paths: &[Vec<Interned<R::EdgeCondition>>],
+        paths: &[Vec<Interned<R::Condition>>],
         file: &mut File,
     ) {
         for (path_idx, condition_indexes) in paths.iter().enumerate() {

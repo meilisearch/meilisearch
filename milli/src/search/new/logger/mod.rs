@@ -6,7 +6,8 @@ use roaring::RoaringBitmap;
 use super::interner::{Interned, MappedInterner};
 use super::query_graph::QueryNode;
 use super::ranking_rule_graph::{
-    DeadEndPathCache, ProximityCondition, ProximityGraph, RankingRuleGraph, TypoEdge, TypoGraph,
+    DeadEndPathCache, ProximityCondition, ProximityGraph, RankingRuleGraph, TypoCondition,
+    TypoGraph,
 };
 use super::small_bitmap::SmallBitmap;
 use super::{RankingRule, RankingRuleQueryTrait};
@@ -76,10 +77,10 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
     fn log_typo_state(
         &mut self,
         query_graph: &RankingRuleGraph<TypoGraph>,
-        paths: &[Vec<Interned<TypoEdge>>],
+        paths: &[Vec<Interned<TypoCondition>>],
         dead_end_path_cache: &DeadEndPathCache<TypoGraph>,
         universe: &RoaringBitmap,
-        distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoEdge>)>, QueryNode>,
+        distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoCondition>)>, QueryNode>,
         cost: u16,
     );
 }
@@ -147,10 +148,10 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
     fn log_typo_state(
         &mut self,
         _query_graph: &RankingRuleGraph<TypoGraph>,
-        _paths: &[Vec<Interned<TypoEdge>>],
+        _paths: &[Vec<Interned<TypoCondition>>],
         _dead_end_path_cache: &DeadEndPathCache<TypoGraph>,
         _universe: &RoaringBitmap,
-        _distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoEdge>)>, QueryNode>,
+        _distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoCondition>)>, QueryNode>,
         _cost: u16,
     ) {
     }

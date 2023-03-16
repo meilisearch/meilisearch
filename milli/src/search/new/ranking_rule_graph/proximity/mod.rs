@@ -45,11 +45,11 @@ pub enum ProximityCondition {
 pub enum ProximityGraph {}
 
 impl RankingRuleGraphTrait for ProximityGraph {
-    type EdgeCondition = ProximityCondition;
+    type Condition = ProximityCondition;
 
-    fn resolve_edge_condition<'ctx>(
+    fn resolve_condition<'ctx>(
         ctx: &mut SearchContext<'ctx>,
-        condition: &Self::EdgeCondition,
+        condition: &Self::Condition,
         universe: &RoaringBitmap,
     ) -> Result<roaring::RoaringBitmap> {
         compute_docids::compute_docids(ctx, condition, universe)
@@ -57,10 +57,10 @@ impl RankingRuleGraphTrait for ProximityGraph {
 
     fn build_edges<'ctx>(
         ctx: &mut SearchContext<'ctx>,
-        conditions_interner: &mut DedupInterner<Self::EdgeCondition>,
+        conditions_interner: &mut DedupInterner<Self::Condition>,
         source_node: &QueryNode,
         dest_node: &QueryNode,
-    ) -> Result<Vec<(u8, Option<Interned<Self::EdgeCondition>>)>> {
+    ) -> Result<Vec<(u8, Option<Interned<Self::Condition>>)>> {
         build::build_edges(ctx, conditions_interner, source_node, dest_node)
     }
 
@@ -76,11 +76,11 @@ impl RankingRuleGraphTrait for ProximityGraph {
         logger.log_proximity_state(graph, paths, dead_end_path_cache, universe, distances, cost);
     }
 
-    fn label_for_edge_condition<'ctx>(
+    fn label_for_condition<'ctx>(
         ctx: &mut SearchContext<'ctx>,
-        edge: &Self::EdgeCondition,
+        condition: &Self::Condition,
     ) -> Result<String> {
-        match edge {
+        match condition {
             ProximityCondition::Term { term } => {
                 let term = ctx.term_interner.get(*term);
                 Ok(format!("{} : exists", ctx.word_interner.get(term.original)))
@@ -117,11 +117,11 @@ impl RankingRuleGraphTrait for ProximityGraph {
         }
     }
 
-    fn words_used_by_edge_condition<'ctx>(
+    fn words_used_by_condition<'ctx>(
         ctx: &mut SearchContext<'ctx>,
-        edge: &Self::EdgeCondition,
+        condition: &Self::Condition,
     ) -> Result<HashSet<Interned<String>>> {
-        match edge {
+        match condition {
             ProximityCondition::Term { term } => {
                 let term = ctx.term_interner.get(*term);
                 Ok(HashSet::from_iter(term.all_single_words_except_prefix_db()))
@@ -153,11 +153,11 @@ impl RankingRuleGraphTrait for ProximityGraph {
         }
     }
 
-    fn phrases_used_by_edge_condition<'ctx>(
+    fn phrases_used_by_condition<'ctx>(
         ctx: &mut SearchContext<'ctx>,
-        edge: &Self::EdgeCondition,
+        condition: &Self::Condition,
     ) -> Result<HashSet<Interned<Phrase>>> {
-        match edge {
+        match condition {
             ProximityCondition::Term { term } => {
                 let term = ctx.term_interner.get(*term);
                 Ok(HashSet::from_iter(term.all_phrases()))

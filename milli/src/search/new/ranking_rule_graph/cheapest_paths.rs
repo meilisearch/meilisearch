@@ -22,10 +22,10 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         &mut self,
         from: Interned<QueryNode>,
         cost: u16,
-        all_distances: &MappedInterner<Vec<(u16, SmallBitmap<G::EdgeCondition>)>, QueryNode>,
+        all_distances: &MappedInterner<Vec<(u16, SmallBitmap<G::Condition>)>, QueryNode>,
         dead_end_path_cache: &mut DeadEndPathCache<G>,
         mut visit: impl FnMut(
-            &[Interned<G::EdgeCondition>],
+            &[Interned<G::Condition>],
             &mut Self,
             &mut DeadEndPathCache<G>,
         ) -> Result<ControlFlow<()>>,
@@ -46,16 +46,16 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         &mut self,
         from: Interned<QueryNode>,
         cost: u16,
-        all_distances: &MappedInterner<Vec<(u16, SmallBitmap<G::EdgeCondition>)>, QueryNode>,
+        all_distances: &MappedInterner<Vec<(u16, SmallBitmap<G::Condition>)>, QueryNode>,
         dead_end_path_cache: &mut DeadEndPathCache<G>,
         visit: &mut impl FnMut(
-            &[Interned<G::EdgeCondition>],
+            &[Interned<G::Condition>],
             &mut Self,
             &mut DeadEndPathCache<G>,
         ) -> Result<ControlFlow<()>>,
-        prev_conditions: &mut Vec<Interned<G::EdgeCondition>>,
-        cur_path: &mut SmallBitmap<G::EdgeCondition>,
-        forbidden_conditions: &mut SmallBitmap<G::EdgeCondition>,
+        prev_conditions: &mut Vec<Interned<G::Condition>>,
+        cur_path: &mut SmallBitmap<G::Condition>,
+        forbidden_conditions: &mut SmallBitmap<G::Condition>,
     ) -> Result<bool> {
         let mut any_valid = false;
 
@@ -158,7 +158,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
 
     pub fn initialize_distances_with_necessary_edges(
         &self,
-    ) -> MappedInterner<Vec<(u16, SmallBitmap<G::EdgeCondition>)>, QueryNode> {
+    ) -> MappedInterner<Vec<(u16, SmallBitmap<G::Condition>)>, QueryNode> {
         let mut distances_to_end = self.query_graph.nodes.map(|_| vec![]);
         let mut enqueued = SmallBitmap::new(self.query_graph.nodes.len());
 
@@ -173,7 +173,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         }
 
         while let Some(cur_node) = node_stack.pop_front() {
-            let mut self_distances = BTreeMap::<u16, SmallBitmap<G::EdgeCondition>>::new();
+            let mut self_distances = BTreeMap::<u16, SmallBitmap<G::Condition>>::new();
 
             let cur_node_edges = &self.edges_of_node.get(cur_node);
             for edge_idx in cur_node_edges.iter() {
