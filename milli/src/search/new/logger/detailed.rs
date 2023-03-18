@@ -3,7 +3,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use rand::random;
+// use rand::random;
 use roaring::RoaringBitmap;
 
 use crate::search::new::interner::{Interned, MappedInterner};
@@ -323,12 +323,11 @@ impl DetailedSearchLogger {
                     let cur_activated_id = activated_id(&timestamp);
                     let docids = new.iter().collect::<Vec<_>>();
                     let len = new.len();
-                    let random = random::<u64>();
 
                     writeln!(
                         &mut file,
-                        "{cur_ranking_rule}.{cur_activated_id} -> results.{random} : \"add {len}\"
-results.{random} {{
+                        "{cur_ranking_rule}.{cur_activated_id} -> results.{cur_ranking_rule}{cur_activated_id} : \"add {len}\"
+results.{cur_ranking_rule}{cur_activated_id} {{
     tooltip: \"{docids:?}\"
     style {{
         fill: \"#B6E2D3\"
@@ -572,17 +571,17 @@ shape: class"
         Self::paths_d2_description(ctx, graph, paths, file);
         writeln!(file, "}}").unwrap();
 
-        writeln!(file, "Dead-end couples of conditions {{").unwrap();
-        for (i, (e1, e2)) in dead_end_paths_cache.condition_couples.iter().enumerate() {
-            writeln!(file, "{i} : \"\" {{").unwrap();
-            Self::condition_d2_description(ctx, graph, e1, file);
-            for e2 in e2.iter() {
-                Self::condition_d2_description(ctx, graph, e2, file);
-                writeln!(file, "{e1} -- {e2}").unwrap();
-            }
-            writeln!(file, "}}").unwrap();
-        }
-        writeln!(file, "}}").unwrap();
+        // writeln!(file, "Dead-end couples of conditions {{").unwrap();
+        // for (i, (e1, e2)) in dead_end_paths_cache.condition_couples.iter().enumerate() {
+        //     writeln!(file, "{i} : \"\" {{").unwrap();
+        //     Self::condition_d2_description(ctx, graph, e1, file);
+        //     for e2 in e2.iter() {
+        //         Self::condition_d2_description(ctx, graph, e2, file);
+        //         writeln!(file, "{e1} -- {e2}").unwrap();
+        //     }
+        //     writeln!(file, "}}").unwrap();
+        // }
+        // writeln!(file, "}}").unwrap();
 
         writeln!(file, "Dead-end edges {{").unwrap();
         for condition in dead_end_paths_cache.conditions.iter() {

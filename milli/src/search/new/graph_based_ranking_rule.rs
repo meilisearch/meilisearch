@@ -45,8 +45,8 @@ use super::interner::MappedInterner;
 use super::logger::SearchLogger;
 use super::query_graph::QueryNode;
 use super::ranking_rule_graph::{
-    ConditionDocIdsCache, DeadEndPathCache, ProximityGraph, RankingRuleGraph,
-    RankingRuleGraphTrait, TypoGraph,
+    ConditionDocIdsCache, DeadEndsCache, ProximityGraph, RankingRuleGraph, RankingRuleGraphTrait,
+    TypoGraph,
 };
 use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, RankingRule, RankingRuleOutput, SearchContext};
@@ -87,7 +87,7 @@ pub struct GraphBasedRankingRuleState<G: RankingRuleGraphTrait> {
     /// Cache to retrieve the docids associated with each edge
     conditions_cache: ConditionDocIdsCache<G>,
     /// Cache used to optimistically discard paths that resolve to no documents.
-    dead_end_path_cache: DeadEndPathCache<G>,
+    dead_end_path_cache: DeadEndsCache<G::Condition>,
     /// A structure giving the list of possible costs from each node to the end node,
     /// along with a set of unavoidable edges that must be traversed to achieve that distance.
     all_distances: MappedInterner<Vec<(u16, SmallBitmap<G::Condition>)>, QueryNode>,
@@ -103,7 +103,7 @@ fn remove_empty_edges<'ctx, G: RankingRuleGraphTrait>(
     graph: &mut RankingRuleGraph<G>,
     condition_docids_cache: &mut ConditionDocIdsCache<G>,
     universe: &RoaringBitmap,
-    dead_end_path_cache: &mut DeadEndPathCache<G>,
+    dead_end_path_cache: &mut DeadEndsCache<G::Condition>,
 ) -> Result<()> {
     for edge_id in graph.edges_store.indexes() {
         let Some(edge) = graph.edges_store.get(edge_id).as_ref() else {
@@ -113,9 +113,9 @@ fn remove_empty_edges<'ctx, G: RankingRuleGraphTrait>(
 
         let docids =
             condition_docids_cache.get_condition_docids(ctx, condition, graph, universe)?;
-        if docids.is_disjoint(universe) {
+        if docids.is_empty() {
             graph.remove_edges_with_condition(condition);
-            dead_end_path_cache.add_condition(condition);
+            dead_end_path_cache.forbid_condition(condition); // add_condition(condition);
             condition_docids_cache.cache.remove(&condition);
             continue;
         }
@@ -135,8 +135,8 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         query_graph: &QueryGraph,
     ) -> Result<()> {
         let mut graph = RankingRuleGraph::build(ctx, query_graph.clone())?;
-        let mut condition_docids_cache = ConditionDocIdsCache::default();
-        let mut dead_end_path_cache = DeadEndPathCache::new(&graph.conditions_interner);
+        let mut condition_docids_cache = ConditionDocIdsCache::new(universe);
+        let mut dead_end_path_cache = DeadEndsCache::new(&graph.conditions_interner);
 
         // First simplify the graph as much as possible, by computing the docids of all the conditions
         // within the rule's universe and removing the edges that have no associated docids.
@@ -230,62 +230,79 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
             graph.query_graph.root_node,
             cost,
             all_distances,
+            dead_end_path_cache.forbidden.clone(),
+            |condition, forbidden_conditions| {},
             dead_end_path_cache,
             |path, graph, dead_end_path_cache| {
                 // Accumulate the path for logging purposes only
                 paths.push(path.to_vec());
+
                 let mut path_docids = universe.clone();
 
                 // We store the edges and their docids in vectors in case the path turns out to be
                 // empty and we need to figure out why it was empty.
                 let mut visited_conditions = vec![];
                 let mut cached_condition_docids = vec![];
-                // graph.conditions_interner.map(|_| RoaringBitmap::new());
 
-                for &condition in path {
-                    visited_conditions.push(condition);
+                for &latest_condition in path {
+                    visited_conditions.push(latest_condition);
 
-                    let condition_docids = condition_docids_cache
-                        .get_condition_docids(ctx, condition, graph, &universe)?;
+                    let condition_docids = condition_docids_cache.get_condition_docids(
+                        ctx,
+                        latest_condition,
+                        graph,
+                        &universe,
+                    )?;
 
-                    cached_condition_docids.push((condition, condition_docids.clone())); // .get_mut(condition) = condition_docids.clone();
+                    cached_condition_docids.push((latest_condition, condition_docids.clone()));
 
                     // If the edge is empty, then the path will be empty as well, we update the graph
                     // and caches accordingly and skip to the next candidate path.
                     if condition_docids.is_disjoint(&universe) {
                         // 1. Store in the cache that this edge is empty for this universe
-                        dead_end_path_cache.add_condition(condition);
-                        // 2. remove this edge from the ranking rule graph
-                        // ouch, no! :( need to link a condition to one or more ranking rule edges
-                        graph.remove_edges_with_condition(condition);
+                        dead_end_path_cache.forbid_condition(latest_condition);
+                        // 2. remove all the edges with this condition from the ranking rule graph
+                        graph.remove_edges_with_condition(latest_condition);
                         // 3. Also remove the entry from the condition_docids_cache, since we don't need it anymore
-                        condition_docids_cache.cache.remove(&condition);
+                        condition_docids_cache.cache.remove(&latest_condition);
                         return Ok(ControlFlow::Continue(()));
                     }
-                    path_docids &= condition_docids;
-
                     // If the (sub)path is empty, we try to figure out why and update the caches accordingly.
-                    if path_docids.is_disjoint(&universe) {
+                    if path_docids.is_disjoint(condition_docids) {
                         // First, we know that this path is empty, and thus any path
                         // that is a superset of it will also be empty.
-                        dead_end_path_cache.add_prefix(&visited_conditions);
+                        dead_end_path_cache.forbid_condition_after_prefix(
+                            visited_conditions[..visited_conditions.len() - 1].iter().copied(),
+                            latest_condition,
+                        );
+
+                        let mut dead_end_cache_cursor = dead_end_path_cache;
+
                         // Second, if the intersection between this edge and any
-                        // previous one is disjoint with the universe,
-                        // then we also know that any path containing the same couple of
-                        // edges will also be empty.
-                        for (past_condition, condition_docids2) in cached_condition_docids.iter() {
-                            if *past_condition == condition {
+                        // previous prefix is disjoint with the universe, then... TODO
+                        for (past_condition, past_condition_docids) in
+                            cached_condition_docids.iter()
+                        {
+                            // TODO: should ensure that it is simply not possible to have twice
+                            // the same condition in the cached_condition_docids. Maybe it is
+                            // already the case?
+                            dead_end_cache_cursor =
+                                dead_end_cache_cursor.advance(*past_condition).unwrap();
+                            // TODO: check how that interacts with the dead end cache?
+                            if *past_condition == latest_condition {
+                                // TODO: should we break instead?
+                                // Is it even possible?
                                 continue;
                             };
-                            let intersection = condition_docids & condition_docids2;
-                            if intersection.is_disjoint(&universe) {
-                                dead_end_path_cache
-                                    .add_condition_couple(*past_condition, condition);
+                            if condition_docids.is_disjoint(past_condition_docids) {
+                                dead_end_cache_cursor.forbid_condition(latest_condition);
                             }
                         }
                         // We should maybe instead try to compute:
                         // 0th & nth & 1st & n-1th & 2nd & etc...
                         return Ok(ControlFlow::Continue(()));
+                    } else {
+                        path_docids &= condition_docids;
                     }
                 }
                 assert!(!path_docids.is_empty());
@@ -303,7 +320,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                 }
             },
         )?;
-
+        // println!("  {} paths of cost {} in {}", paths.len(), cost, self.id);
         G::log_state(
             &original_graph,
             &paths,

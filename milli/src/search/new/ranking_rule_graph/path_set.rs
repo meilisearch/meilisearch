@@ -2,104 +2,165 @@
 // For the empty_prefixes field in the EmptyPathsCache only :/
 // but it could be used for more, like efficient computing of a set of paths
 
-use crate::search::new::interner::Interned;
+use crate::search::new::{
+    interner::{FixedSizeInterner, Interned},
+    small_bitmap::SmallBitmap,
+};
 
-/// A set of `Vec<Interned<T>>` implemented as a prefix tree.
-pub struct PathSet<T> {
+pub struct DeadEndsCache<T> {
     nodes: Vec<(Interned<T>, Self)>,
-    is_end: bool,
+    pub forbidden: SmallBitmap<T>,
 }
-
-impl<T> Clone for PathSet<T> {
-    fn clone(&self) -> Self {
-        Self { nodes: self.nodes.clone(), is_end: self.is_end }
+impl<T> DeadEndsCache<T> {
+    pub fn new(for_interner: &FixedSizeInterner<T>) -> Self {
+        Self { nodes: vec![], forbidden: SmallBitmap::for_interned_values_in(for_interner) }
     }
-}
-
-impl<T> std::fmt::Debug for PathSet<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PathSet").field("nodes", &self.nodes).field("is_end", &self.is_end).finish()
+    pub fn forbid_condition(&mut self, condition: Interned<T>) {
+        self.forbidden.insert(condition);
     }
-}
-
-impl<T> Default for PathSet<T> {
-    fn default() -> Self {
-        Self { nodes: Default::default(), is_end: Default::default() }
-    }
-}
-
-impl<T> PathSet<T> {
-    pub fn insert(&mut self, mut edges: impl Iterator<Item = Interned<T>>) {
-        match edges.next() {
-            None => {
-                self.is_end = true;
-            }
-            Some(first_edge) => {
-                for (edge, next_node) in &mut self.nodes {
-                    if edge == &first_edge {
-                        return next_node.insert(edges);
-                    }
-                }
-                let mut rest = PathSet::default();
-                rest.insert(edges);
-                self.nodes.push((first_edge, rest));
+    fn advance(&mut self, condition: Interned<T>) -> Option<&mut Self> {
+        for (e, next_node) in &mut self.nodes {
+            if condition == *e {
+                return Some(next_node);
             }
         }
+        None
     }
-
-    pub fn remove_edge(&mut self, forbidden_edge: Interned<T>) {
-        let mut i = 0;
-        while i < self.nodes.len() {
-            let should_remove = if self.nodes[i].0 == forbidden_edge {
-                true
-            } else if !self.nodes[i].1.nodes.is_empty() {
-                self.nodes[i].1.remove_edge(forbidden_edge);
-                self.nodes[i].1.nodes.is_empty()
+    pub fn forbidden_conditions_after_prefix(
+        &mut self,
+        mut prefix: &[Interned<T>],
+    ) -> Option<SmallBitmap<T>> {
+        let mut cursor = self;
+        for c in prefix.iter() {
+            if let Some(next) = cursor.advance(*c) {
+                cursor = next;
             } else {
-                false
-            };
-            if should_remove {
-                self.nodes.remove(i);
-            } else {
-                i += 1;
+                return None;
             }
         }
+        Some(cursor.forbidden.clone())
     }
-
-    pub fn final_edges_after_prefix(
-        &self,
-        prefix: &[Interned<T>],
-        visit: &mut impl FnMut(Interned<T>),
+    pub fn forbid_condition_after_prefix(
+        &mut self,
+        mut prefix: impl Iterator<Item = Interned<T>>,
+        forbidden: Interned<T>,
     ) {
-        let [first_edge, remaining_prefix @ ..] = prefix else {
-            for node in self.nodes.iter() {
-                if node.1.is_end {
-                    visit(node.0)
-                }
+        match prefix.next() {
+            None => {
+                self.forbidden.insert(forbidden);
             }
-            return
-        };
-        for (edge, rest) in self.nodes.iter() {
-            if edge == first_edge {
-                return rest.final_edges_after_prefix(remaining_prefix, visit);
-            }
-        }
-    }
-
-    pub fn contains_prefix_of_path(&self, path: &[Interned<T>]) -> bool {
-        if self.is_end {
-            return true;
-        }
-        match path {
-            [] => false,
-            [first_edge, remaining_path @ ..] => {
-                for (edge, rest) in self.nodes.iter() {
-                    if edge == first_edge {
-                        return rest.contains_prefix_of_path(remaining_path);
+            Some(first_condition) => {
+                for (condition, next_node) in &mut self.nodes {
+                    if condition == &first_condition {
+                        return next_node.forbid_condition_after_prefix(prefix, forbidden);
                     }
                 }
-                false
+                let mut rest = DeadEndsCache {
+                    nodes: vec![],
+                    forbidden: SmallBitmap::new(self.forbidden.universe_length()),
+                };
+                rest.forbid_condition_after_prefix(prefix, forbidden);
+                self.nodes.push((first_condition, rest));
             }
         }
     }
 }
+// /// A set of `Vec<Interned<T>>` implemented as a prefix tree.
+// pub struct PathSet<T> {
+//     nodes: Vec<(Interned<T>, Self)>,
+//     is_end: bool,
+// }
+
+// impl<T> Clone for PathSet<T> {
+//     fn clone(&self) -> Self {
+//         Self { nodes: self.nodes.clone(), is_end: self.is_end }
+//     }
+// }
+
+// impl<T> std::fmt::Debug for PathSet<T> {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         f.debug_struct("PathSet").field("nodes", &self.nodes).field("is_end", &self.is_end).finish()
+//     }
+// }
+
+// impl<T> Default for PathSet<T> {
+//     fn default() -> Self {
+//         Self { nodes: Default::default(), is_end: Default::default() }
+//     }
+// }
+
+// impl<T> PathSet<T> {
+//     pub fn insert(&mut self, mut conditions: impl Iterator<Item = Interned<T>>) {
+//         match conditions.next() {
+//             None => {
+//                 self.is_end = true;
+//             }
+//             Some(first_condition) => {
+//                 for (condition, next_node) in &mut self.nodes {
+//                     if condition == &first_condition {
+//                         return next_node.insert(conditions);
+//                     }
+//                 }
+//                 let mut rest = PathSet::default();
+//                 rest.insert(conditions);
+//                 self.nodes.push((first_condition, rest));
+//             }
+//         }
+//     }
+
+//     pub fn remove_condition(&mut self, forbidden_condition: Interned<T>) {
+//         let mut i = 0;
+//         while i < self.nodes.len() {
+//             let should_remove = if self.nodes[i].0 == forbidden_condition {
+//                 true
+//             } else if !self.nodes[i].1.nodes.is_empty() {
+//                 self.nodes[i].1.remove_condition(forbidden_condition);
+//                 self.nodes[i].1.nodes.is_empty()
+//             } else {
+//                 false
+//             };
+//             if should_remove {
+//                 self.nodes.remove(i);
+//             } else {
+//                 i += 1;
+//             }
+//         }
+//     }
+
+//     pub fn final_conditions_after_prefix(
+//         &self,
+//         prefix: &[Interned<T>],
+//         visit: &mut impl FnMut(Interned<T>),
+//     ) {
+//         let [first_condition, remaining_prefix @ ..] = prefix else {
+//             for node in self.nodes.iter() {
+//                 if node.1.is_end {
+//                     visit(node.0)
+//                 }
+//             }
+//             return
+//         };
+//         for (condition, rest) in self.nodes.iter() {
+//             if condition == first_condition {
+//                 return rest.final_conditions_after_prefix(remaining_prefix, visit);
+//             }
+//         }
+//     }
+
+//     pub fn contains_prefix_of_path(&self, path: &[Interned<T>]) -> bool {
+//         if self.is_end {
+//             return true;
+//         }
+//         match path {
+//             [] => false,
+//             [first_condition, remaining_path @ ..] => {
+//                 for (condition, rest) in self.nodes.iter() {
+//                     if condition == first_condition {
+//                         return rest.contains_prefix_of_path(remaining_path);
+//                     }
+//                 }
+//                 false
+//             }
+//         }
+//     }
+// }

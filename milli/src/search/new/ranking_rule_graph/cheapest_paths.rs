@@ -4,8 +4,7 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, VecDeque};
 use std::ops::ControlFlow;
 
-use super::dead_end_path_cache::DeadEndPathCache;
-use super::{RankingRuleGraph, RankingRuleGraphTrait};
+use super::{DeadEndsCache, RankingRuleGraph, RankingRuleGraphTrait};
 use crate::search::new::interner::{Interned, MappedInterner};
 use crate::search::new::query_graph::QueryNode;
 use crate::search::new::small_bitmap::SmallBitmap;
@@ -23,11 +22,11 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         from: Interned<QueryNode>,
         cost: u16,
         all_distances: &MappedInterner<Vec<(u16, SmallBitmap<G::Condition>)>, QueryNode>,
-        dead_end_path_cache: &mut DeadEndPathCache<G>,
+        dead_end_path_cache: &mut DeadEndsCache<G::Condition>,
         mut visit: impl FnMut(
             &[Interned<G::Condition>],
             &mut Self,
-            &mut DeadEndPathCache<G>,
+            &mut DeadEndsCache<G::Condition>,
         ) -> Result<ControlFlow<()>>,
     ) -> Result<()> {
         let _ = self.visit_paths_of_cost_rec(
@@ -38,7 +37,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
             &mut visit,
             &mut vec![],
             &mut SmallBitmap::for_interned_values_in(&self.conditions_interner),
-            &mut dead_end_path_cache.conditions.clone(),
+            &mut dead_end_path_cache.forbidden.clone(),
         )?;
         Ok(())
     }
@@ -47,11 +46,11 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         from: Interned<QueryNode>,
         cost: u16,
         all_distances: &MappedInterner<Vec<(u16, SmallBitmap<G::Condition>)>, QueryNode>,
-        dead_end_path_cache: &mut DeadEndPathCache<G>,
+        dead_end_path_cache: &mut DeadEndsCache<G::Condition>,
         visit: &mut impl FnMut(
             &[Interned<G::Condition>],
             &mut Self,
-            &mut DeadEndPathCache<G>,
+            &mut DeadEndsCache<G::Condition>,
         ) -> Result<ControlFlow<()>>,
         prev_conditions: &mut Vec<Interned<G::Condition>>,
         cur_path: &mut SmallBitmap<G::Condition>,
@@ -74,7 +73,6 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                             ControlFlow::Continue(_) => {}
                             ControlFlow::Break(_) => return Ok(true),
                         }
-                        true
                     } else {
                         self.visit_paths_of_cost_rec(
                             edge.dest_node,
@@ -85,7 +83,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                             prev_conditions,
                             cur_path,
                             forbidden_conditions,
-                        )?
+                        )?;
                     }
                 }
                 Some(condition) => {
@@ -101,24 +99,20 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                     }
                     cur_path.insert(condition);
                     prev_conditions.push(condition);
-
                     let mut new_forbidden_conditions = forbidden_conditions.clone();
-                    new_forbidden_conditions
-                        .union(dead_end_path_cache.condition_couples.get(condition));
-                    dead_end_path_cache.prefixes.final_edges_after_prefix(
-                        prev_conditions,
-                        &mut |x| {
-                            new_forbidden_conditions.insert(x);
-                        },
-                    );
-                    let next_any_valid = if edge.dest_node == self.query_graph.end_node {
+                    if let Some(next_forbidden) =
+                        dead_end_path_cache.forbidden_conditions_after_prefix(&prev_conditions)
+                    {
+                        new_forbidden_conditions.union(&next_forbidden);
+                    }
+
+                    if edge.dest_node == self.query_graph.end_node {
                         any_valid = true;
                         let control_flow = visit(prev_conditions, self, dead_end_path_cache)?;
                         match control_flow {
                             ControlFlow::Continue(_) => {}
                             ControlFlow::Break(_) => return Ok(true),
                         }
-                        true
                     } else {
                         self.visit_paths_of_cost_rec(
                             edge.dest_node,
@@ -129,28 +123,12 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                             prev_conditions,
                             cur_path,
                             &mut new_forbidden_conditions,
-                        )?
-                    };
+                        )?;
+                    }
                     cur_path.remove(condition);
                     prev_conditions.pop();
-                    next_any_valid
                 }
             };
-            any_valid |= next_any_valid;
-
-            if next_any_valid {
-                if dead_end_path_cache.path_is_dead_end(prev_conditions, cur_path) {
-                    return Ok(any_valid);
-                }
-                forbidden_conditions.union(&dead_end_path_cache.conditions);
-                for prev_condition in prev_conditions.iter() {
-                    forbidden_conditions
-                        .union(dead_end_path_cache.condition_couples.get(*prev_condition));
-                }
-                dead_end_path_cache.prefixes.final_edges_after_prefix(prev_conditions, &mut |x| {
-                    forbidden_conditions.insert(x);
-                });
-            }
         }
 
         Ok(any_valid)

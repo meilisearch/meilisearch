@@ -28,6 +28,12 @@ impl<T> SmallBitmap<T> {
             }
         }
     }
+    pub fn universe_length(&self) -> u16 {
+        match &self.internal {
+            SmallBitmapInternal::Tiny(_) => 64,
+            SmallBitmapInternal::Small(xs) => 64 * xs.len() as u16,
+        }
+    }
     pub fn from_iter(
         xs: impl Iterator<Item = Interned<T>>,
         for_interner: &FixedSizeInterner<T>,

@@ -6,8 +6,7 @@ use std::iter::FromIterator;
 
 use roaring::RoaringBitmap;
 
-use super::dead_end_path_cache::DeadEndPathCache;
-use super::{RankingRuleGraph, RankingRuleGraphTrait};
+use super::{RankingRuleGraph, RankingRuleGraphTrait, DeadEndsCache};
 use crate::search::new::interner::{DedupInterner, Interned, MappedInterner};
 use crate::search::new::logger::SearchLogger;
 use crate::search::new::query_term::{Phrase, QueryTerm};
@@ -67,7 +66,7 @@ impl RankingRuleGraphTrait for ProximityGraph {
     fn log_state(
         graph: &RankingRuleGraph<Self>,
         paths: &[Vec<Interned<ProximityCondition>>],
-        dead_end_path_cache: &DeadEndPathCache<Self>,
+        dead_end_path_cache: &DeadEndsCache<Self::Condition>,
         universe: &RoaringBitmap,
         distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityCondition>)>, QueryNode>,
         cost: u16,

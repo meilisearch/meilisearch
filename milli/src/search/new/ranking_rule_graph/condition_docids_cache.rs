@@ -12,11 +12,16 @@ use crate::Result;
 pub struct ConditionDocIdsCache<G: RankingRuleGraphTrait> {
     // TODO: should be FxHashMap<Interned<EdgeCondition>, RoaringBitmap>
     pub cache: FxHashMap<Interned<G::Condition>, RoaringBitmap>,
+    pub universe_length: u64,
     _phantom: PhantomData<G>,
 }
-impl<G: RankingRuleGraphTrait> Default for ConditionDocIdsCache<G> {
-    fn default() -> Self {
-        Self { cache: Default::default(), _phantom: Default::default() }
+impl<G: RankingRuleGraphTrait> ConditionDocIdsCache<G> {
+    pub fn new(universe: &RoaringBitmap) -> Self {
+        Self {
+            cache: Default::default(),
+            _phantom: Default::default(),
+            universe_length: universe.len(),
+        }
     }
 }
 impl<G: RankingRuleGraphTrait> ConditionDocIdsCache<G> {
@@ -33,6 +38,9 @@ impl<G: RankingRuleGraphTrait> ConditionDocIdsCache<G> {
         universe: &RoaringBitmap,
     ) -> Result<&'s RoaringBitmap> {
         if self.cache.contains_key(&interned_condition) {
+            // TODO compare length of universe compared to the one in self
+            // if it is smaller, then update the value
+
             // TODO: should we update the bitmap in the cache if the new universe
             // reduces it?
             // TODO: maybe have a generation: u32 to track every time the universe was

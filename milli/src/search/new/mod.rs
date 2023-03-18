@@ -15,26 +15,26 @@ mod sort;
 // TODO: documentation + comments
 mod words;
 
+// #[cfg(test)]
+pub use logger::detailed::DetailedSearchLogger;
 pub use logger::{DefaultSearchLogger, SearchLogger};
 
 use std::collections::{BTreeSet, HashSet};
 
+use crate::{Filter, Index, MatchingWords, Result, Search, SearchResult, TermsMatchingStrategy};
 use charabia::Tokenize;
 use db_cache::DatabaseCache;
+use graph_based_ranking_rule::{Proximity, Typo};
 use heed::RoTxn;
-use query_graph::{QueryGraph, QueryNode};
-pub use ranking_rules::{bucket_sort, RankingRule, RankingRuleOutput, RankingRuleQueryTrait};
+use interner::DedupInterner;
+use query_graph::{QueryGraph, QueryNode, QueryNodeData};
+use query_term::{located_query_terms_from_string, Phrase, QueryTerm};
+use ranking_rules::{bucket_sort, PlaceholderQuery, RankingRuleOutput, RankingRuleQueryTrait};
+use resolve_query_graph::{resolve_query_graph, QueryTermDocIdsCache};
 use roaring::RoaringBitmap;
+use words::Words;
 
-use self::interner::DedupInterner;
-use self::query_graph::QueryNodeData;
-use self::query_term::{Phrase, QueryTerm};
-use self::ranking_rules::PlaceholderQuery;
-use self::resolve_query_graph::{resolve_query_graph, QueryTermDocIdsCache};
-use crate::search::new::graph_based_ranking_rule::{Proximity, Typo};
-use crate::search::new::query_term::located_query_terms_from_string;
-use crate::search::new::words::Words;
-use crate::{Filter, Index, Result, TermsMatchingStrategy};
+use self::ranking_rules::RankingRule;
 
 /// A structure used throughout the execution of a search query.
 pub struct SearchContext<'ctx> {
@@ -231,12 +231,12 @@ pub fn execute_search<'ctx>(
     length: usize,
     placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery>,
     query_graph_logger: &mut dyn SearchLogger<QueryGraph>,
-) -> Result<Vec<u32>> {
+) -> Result<SearchResult> {
     assert!(!query.is_empty());
     let query_terms = located_query_terms_from_string(ctx, query.tokenize(), None)?;
     let graph = QueryGraph::from_query(ctx, query_terms)?;
 
-    let universe = if let Some(filters) = filters {
+    let mut universe = if let Some(filters) = filters {
         filters.evaluate(ctx.txn, ctx.index)?
     } else {
         ctx.index.documents_ids(ctx.txn)?
@@ -249,8 +249,8 @@ pub fn execute_search<'ctx>(
     // But in that case, we should return no results.
     //
     // The search is a placeholder search only if there are no tokens?
-    if graph.nodes.len() > 2 {
-        let universe = resolve_maximally_reduced_query_graph(
+    let documents_ids = if graph.nodes.len() > 2 {
+        universe = resolve_maximally_reduced_query_graph(
             ctx,
             &universe,
             &graph,
@@ -259,7 +259,7 @@ pub fn execute_search<'ctx>(
         )?;
 
         let ranking_rules = get_ranking_rules_for_query_graph_search(ctx, terms_matching_strategy)?;
-        bucket_sort(ctx, ranking_rules, &graph, &universe, from, length, query_graph_logger)
+        bucket_sort(ctx, ranking_rules, &graph, &universe, from, length, query_graph_logger)?
     } else {
         let ranking_rules = get_ranking_rules_for_placeholder_search(ctx)?;
         bucket_sort(
@@ -270,7 +270,22 @@ pub fn execute_search<'ctx>(
             from,
             length,
             placeholder_search_logger,
-        )
+        )?
+    };
+
+    Ok(SearchResult {
+        // TODO: correct matching words
+        matching_words: MatchingWords::default(),
+        // TODO: candidates with distinct
+        candidates: universe,
+        documents_ids,
+    })
+}
+
+impl<'a> Search<'a> {
+    // TODO
+    pub fn execute_new(&self) -> Result<SearchResult> {
+        todo!()
     }
 }
 
@@ -329,7 +344,7 @@ mod tests {
             println!("{}us", elapsed.as_micros());
 
             let _documents = index
-                .documents(&txn, results.iter().copied())
+                .documents(&txn, results.documents_ids.iter().copied())
                 .unwrap()
                 .into_iter()
                 .map(|(id, obkv)| {

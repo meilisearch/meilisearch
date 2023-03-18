@@ -1,7 +1,6 @@
 use roaring::RoaringBitmap;
 
-use super::dead_end_path_cache::DeadEndPathCache;
-use super::{RankingRuleGraph, RankingRuleGraphTrait};
+use super::{RankingRuleGraph, RankingRuleGraphTrait, DeadEndsCache};
 use crate::search::new::interner::{DedupInterner, Interned, MappedInterner};
 use crate::search::new::logger::SearchLogger;
 use crate::search::new::query_graph::QueryNodeData;
@@ -137,7 +136,7 @@ impl RankingRuleGraphTrait for TypoGraph {
     fn log_state(
         graph: &RankingRuleGraph<Self>,
         paths: &[Vec<Interned<TypoCondition>>],
-        dead_end_path_cache: &DeadEndPathCache<Self>,
+        dead_end_path_cache: &DeadEndsCache<TypoCondition>,
         universe: &RoaringBitmap,
         distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoCondition>)>, QueryNode>,
         cost: u16,

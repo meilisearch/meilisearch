@@ -20,7 +20,8 @@ use std::collections::HashSet;
 use std::hash::Hash;
 
 pub use condition_docids_cache::ConditionDocIdsCache;
-pub use dead_end_path_cache::DeadEndPathCache;
+// pub use dead_end_path_cache::DeadEndPathCache;
+pub use path_set::DeadEndsCache;
 pub use proximity::{ProximityCondition, ProximityGraph};
 use roaring::RoaringBitmap;
 pub use typo::{TypoCondition, TypoGraph};
@@ -113,7 +114,7 @@ pub trait RankingRuleGraphTrait: Sized {
     fn log_state(
         graph: &RankingRuleGraph<Self>,
         paths: &[Vec<Interned<Self::Condition>>],
-        dead_end_path_cache: &DeadEndPathCache<Self>,
+        dead_end_path_cache: &DeadEndsCache<Self::Condition>,
         universe: &RoaringBitmap,
         distances: &MappedInterner<Vec<(u16, SmallBitmap<Self::Condition>)>, QueryNode>,
         cost: u16,

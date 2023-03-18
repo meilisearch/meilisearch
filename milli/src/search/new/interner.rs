@@ -152,7 +152,7 @@ impl<T> Hash for Interned<T> {
     }
 }
 
-impl<T: Ord> Ord for Interned<T> {
+impl<T> Ord for Interned<T> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.idx.cmp(&other.idx)
     }
