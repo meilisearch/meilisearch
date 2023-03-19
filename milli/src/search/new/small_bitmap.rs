@@ -22,7 +22,7 @@ impl<T> SmallBitmap<T> {
         } else {
             Self {
                 internal: SmallBitmapInternal::Small(
-                    vec![0; 1 + universe_length as usize / 64].into_boxed_slice(),
+                    vec![0; 1 + (universe_length - 1) as usize / 64].into_boxed_slice(),
                 ),
                 _phantom: PhantomData,
             }
