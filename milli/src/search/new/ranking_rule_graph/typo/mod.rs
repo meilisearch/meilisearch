@@ -1,6 +1,6 @@
 use roaring::RoaringBitmap;
 
-use super::{RankingRuleGraph, RankingRuleGraphTrait, DeadEndsCache};
+use super::{DeadEndsCache, RankingRuleGraph, RankingRuleGraphTrait};
 use crate::search::new::interner::{DedupInterner, Interned, MappedInterner};
 use crate::search::new::logger::SearchLogger;
 use crate::search::new::query_graph::QueryNodeData;
@@ -64,7 +64,7 @@ impl RankingRuleGraphTrait for TypoGraph {
                 // Ngrams have a base typo cost
                 // 2-gram -> equivalent to 1 typo
                 // 3-gram -> equivalent to 2 typos
-                let base_cost = positions.len().max(2) as u8;
+                let base_cost = positions.len().min(2) as u8;
 
                 for nbr_typos in 0..=2 {
                     let term = term_interner.get(*value).clone();
