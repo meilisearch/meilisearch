@@ -10,12 +10,6 @@ use crate::search::new::query_graph::QueryNode;
 use crate::search::new::small_bitmap::SmallBitmap;
 use crate::Result;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Path {
-    pub edges: Vec<u16>,
-    pub cost: u64,
-}
-
 impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
     pub fn visit_paths_of_cost(
         &mut self,

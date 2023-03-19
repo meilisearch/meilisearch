@@ -87,40 +87,12 @@ pub struct GraphBasedRankingRuleState<G: RankingRuleGraphTrait> {
     /// Cache to retrieve the docids associated with each edge
     conditions_cache: ConditionDocIdsCache<G>,
     /// Cache used to optimistically discard paths that resolve to no documents.
-    dead_end_path_cache: DeadEndsCache<G::Condition>,
+    dead_ends_cache: DeadEndsCache<G::Condition>,
     /// A structure giving the list of possible costs from each node to the end node,
     /// along with a set of unavoidable edges that must be traversed to achieve that distance.
     all_distances: MappedInterner<Vec<(u16, SmallBitmap<G::Condition>)>, QueryNode>,
     /// An index in the first element of `all_distances`, giving the cost of the next bucket
     cur_distance_idx: usize,
-}
-
-/// Traverse each edge of the graph, computes its associated document ids,
-/// and remove this edge from the graph if its docids are disjoint with the
-/// given universe.
-fn remove_empty_edges<'ctx, G: RankingRuleGraphTrait>(
-    ctx: &mut SearchContext<'ctx>,
-    graph: &mut RankingRuleGraph<G>,
-    condition_docids_cache: &mut ConditionDocIdsCache<G>,
-    universe: &RoaringBitmap,
-    dead_end_path_cache: &mut DeadEndsCache<G::Condition>,
-) -> Result<()> {
-    for edge_id in graph.edges_store.indexes() {
-        let Some(edge) = graph.edges_store.get(edge_id).as_ref() else {
-            continue;
-        };
-        let Some(condition) = edge.condition else { continue };
-
-        let docids =
-            condition_docids_cache.get_condition_docids(ctx, condition, graph, universe)?;
-        if docids.is_empty() {
-            graph.remove_edges_with_condition(condition);
-            dead_end_path_cache.forbid_condition(condition); // add_condition(condition);
-            condition_docids_cache.cache.remove(&condition);
-            continue;
-        }
-    }
-    Ok(())
 }
 
 impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBasedRankingRule<G> {
@@ -131,22 +103,12 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         &mut self,
         ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<QueryGraph>,
-        universe: &RoaringBitmap,
+        _universe: &RoaringBitmap,
         query_graph: &QueryGraph,
     ) -> Result<()> {
-        let mut graph = RankingRuleGraph::build(ctx, query_graph.clone())?;
-        let mut condition_docids_cache = ConditionDocIdsCache::default();
-        let mut dead_end_path_cache = DeadEndsCache::new(&graph.conditions_interner);
-
-        // First simplify the graph as much as possible, by computing the docids of all the conditions
-        // within the rule's universe and removing the edges that have no associated docids.
-        remove_empty_edges(
-            ctx,
-            &mut graph,
-            &mut condition_docids_cache,
-            universe,
-            &mut dead_end_path_cache,
-        )?;
+        let graph = RankingRuleGraph::build(ctx, query_graph.clone())?;
+        let condition_docids_cache = ConditionDocIdsCache::default();
+        let dead_end_path_cache = DeadEndsCache::new(&graph.conditions_interner);
 
         // Then pre-compute the cost of all paths from each node to the end node
         let all_distances = graph.initialize_distances_with_necessary_edges();
@@ -154,7 +116,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         let state = GraphBasedRankingRuleState {
             graph,
             conditions_cache: condition_docids_cache,
-            dead_end_path_cache,
+            dead_ends_cache: dead_end_path_cache,
             all_distances,
             cur_distance_idx: 0,
         };
@@ -177,15 +139,6 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         // should never happen
         let mut state = self.state.take().unwrap();
 
-        // TODO: does this have a real positive performance impact?
-        remove_empty_edges(
-            ctx,
-            &mut state.graph,
-            &mut state.conditions_cache,
-            universe,
-            &mut state.dead_end_path_cache,
-        )?;
-
         // If the cur_distance_idx does not point to a valid cost in the `all_distances`
         // structure, then we have computed all the buckets and can return.
         if state.cur_distance_idx
@@ -205,7 +158,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         let GraphBasedRankingRuleState {
             graph,
             conditions_cache: condition_docids_cache,
-            dead_end_path_cache,
+            dead_ends_cache: dead_end_path_cache,
             all_distances,
             cur_distance_idx: _,
         } = &mut state;
