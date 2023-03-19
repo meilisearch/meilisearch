@@ -16,17 +16,15 @@ mod sort;
 mod words;
 
 // #[cfg(test)]
-pub use logger::detailed::DetailedSearchLogger;
-pub use logger::{DefaultSearchLogger, SearchLogger};
-
 use std::collections::{BTreeSet, HashSet};
 
-use crate::{Filter, Index, MatchingWords, Result, Search, SearchResult, TermsMatchingStrategy};
 use charabia::Tokenize;
 use db_cache::DatabaseCache;
 use graph_based_ranking_rule::{Proximity, Typo};
 use heed::RoTxn;
 use interner::DedupInterner;
+pub use logger::detailed::DetailedSearchLogger;
+pub use logger::{DefaultSearchLogger, SearchLogger};
 use query_graph::{QueryGraph, QueryNode, QueryNodeData};
 use query_term::{located_query_terms_from_string, Phrase, QueryTerm};
 use ranking_rules::{bucket_sort, PlaceholderQuery, RankingRuleOutput, RankingRuleQueryTrait};
@@ -35,6 +33,7 @@ use roaring::RoaringBitmap;
 use words::Words;
 
 use self::ranking_rules::RankingRule;
+use crate::{Filter, Index, MatchingWords, Result, Search, SearchResult, TermsMatchingStrategy};
 
 /// A structure used throughout the execution of a search query.
 pub struct SearchContext<'ctx> {

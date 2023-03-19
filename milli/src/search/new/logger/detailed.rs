@@ -13,9 +13,7 @@ use crate::search::new::ranking_rule_graph::{
     DeadEndsCache, Edge, ProximityCondition, ProximityGraph, RankingRuleGraph,
     RankingRuleGraphTrait, TypoCondition, TypoGraph,
 };
-use crate::search::new::small_bitmap::SmallBitmap;
-use crate::search::new::{QueryGraph, QueryNode, SearchContext};
-use crate::search::new::{RankingRule, SearchLogger};
+use crate::search::new::{QueryGraph, QueryNode, RankingRule, SearchContext, SearchLogger};
 
 pub enum SearchEvents {
     RankingRuleStartIteration {

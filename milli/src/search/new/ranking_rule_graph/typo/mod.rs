@@ -1,3 +1,7 @@
+use std::collections::HashSet;
+use std::fmt::Write;
+use std::iter::FromIterator;
+
 use roaring::RoaringBitmap;
 
 use super::{DeadEndsCache, RankingRuleGraph, RankingRuleGraphTrait};
@@ -7,9 +11,6 @@ use crate::search::new::query_graph::QueryNodeData;
 use crate::search::new::query_term::{LocatedQueryTerm, Phrase, QueryTerm};
 use crate::search::new::{QueryGraph, QueryNode, SearchContext};
 use crate::Result;
-use std::collections::HashSet;
-use std::fmt::Write;
-use std::iter::FromIterator;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct TypoCondition {

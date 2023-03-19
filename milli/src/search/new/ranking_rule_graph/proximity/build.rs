@@ -1,6 +1,8 @@
 #![allow(clippy::too_many_arguments)]
 use std::collections::BTreeMap;
 
+use heed::RoTxn;
+
 use super::ProximityCondition;
 use crate::search::new::db_cache::DatabaseCache;
 use crate::search::new::interner::{DedupInterner, Interned};
@@ -9,7 +11,6 @@ use crate::search::new::query_term::{LocatedQueryTerm, Phrase, QueryTerm};
 use crate::search::new::ranking_rule_graph::proximity::WordPair;
 use crate::search::new::{QueryNode, SearchContext};
 use crate::Result;
-use heed::RoTxn;
 
 fn last_word_of_term_iter<'t>(
     t: &'t QueryTerm,

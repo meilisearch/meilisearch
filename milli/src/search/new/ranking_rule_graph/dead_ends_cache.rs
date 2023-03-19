@@ -1,7 +1,5 @@
-use crate::search::new::{
-    interner::{FixedSizeInterner, Interned},
-    small_bitmap::SmallBitmap,
-};
+use crate::search::new::interner::{FixedSizeInterner, Interned};
+use crate::search::new::small_bitmap::SmallBitmap;
 
 pub struct DeadEndsCache<T> {
     conditions: Vec<Interned<T>>,

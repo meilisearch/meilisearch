@@ -70,10 +70,6 @@ pub mod update;
 #[macro_use]
 pub mod snapshot_tests;
 
-pub use search::new::DetailedSearchLogger;
-
-pub use search::new::{execute_search, DefaultSearchLogger, SearchContext};
-
 use std::collections::{BTreeMap, HashMap};
 use std::convert::{TryFrom, TryInto};
 use std::hash::BuildHasherDefault;
@@ -81,6 +77,7 @@ use std::hash::BuildHasherDefault;
 pub use filter_parser::{Condition, FilterCondition, Span, Token};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
+pub use search::new::{execute_search, DefaultSearchLogger, DetailedSearchLogger, SearchContext};
 use serde_json::Value;
 pub use {charabia as tokenizer, heed};
 
