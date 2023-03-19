@@ -8,7 +8,6 @@ use super::query_graph::QueryNode;
 use super::ranking_rule_graph::{
     DeadEndsCache, ProximityCondition, ProximityGraph, RankingRuleGraph, TypoCondition, TypoGraph,
 };
-use super::small_bitmap::SmallBitmap;
 use super::{RankingRule, RankingRuleQueryTrait};
 
 /// Trait for structure logging the execution of a search query.
@@ -66,9 +65,9 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
         &mut self,
         query_graph: &RankingRuleGraph<ProximityGraph>,
         paths: &[Vec<Interned<ProximityCondition>>],
-        dead_end_path_cache: &DeadEndsCache<ProximityCondition>,
+        dead_ends_cache: &DeadEndsCache<ProximityCondition>,
         universe: &RoaringBitmap,
-        distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityCondition>)>, QueryNode>,
+        distances: &MappedInterner<Vec<u16>, QueryNode>,
         cost: u16,
     );
 
@@ -77,9 +76,9 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
         &mut self,
         query_graph: &RankingRuleGraph<TypoGraph>,
         paths: &[Vec<Interned<TypoCondition>>],
-        dead_end_path_cache: &DeadEndsCache<TypoCondition>,
+        dead_ends_cache: &DeadEndsCache<TypoCondition>,
         universe: &RoaringBitmap,
-        distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoCondition>)>, QueryNode>,
+        distances: &MappedInterner<Vec<u16>, QueryNode>,
         cost: u16,
     );
 }
@@ -137,9 +136,9 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
         &mut self,
         _query_graph: &RankingRuleGraph<ProximityGraph>,
         _paths_map: &[Vec<Interned<ProximityCondition>>],
-        _dead_end_path_cache: &DeadEndsCache<ProximityCondition>,
+        _dead_ends_cache: &DeadEndsCache<ProximityCondition>,
         _universe: &RoaringBitmap,
-        _distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityCondition>)>, QueryNode>,
+        _distances: &MappedInterner<Vec<u16>, QueryNode>,
         _cost: u16,
     ) {
     }
@@ -148,9 +147,9 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
         &mut self,
         _query_graph: &RankingRuleGraph<TypoGraph>,
         _paths: &[Vec<Interned<TypoCondition>>],
-        _dead_end_path_cache: &DeadEndsCache<TypoCondition>,
+        _dead_ends_cache: &DeadEndsCache<TypoCondition>,
         _universe: &RoaringBitmap,
-        _distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoCondition>)>, QueryNode>,
+        _distances: &MappedInterner<Vec<u16>, QueryNode>,
         _cost: u16,
     ) {
     }

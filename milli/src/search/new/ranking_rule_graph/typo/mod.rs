@@ -5,7 +5,6 @@ use crate::search::new::interner::{DedupInterner, Interned, MappedInterner};
 use crate::search::new::logger::SearchLogger;
 use crate::search::new::query_graph::QueryNodeData;
 use crate::search::new::query_term::{LocatedQueryTerm, Phrase, QueryTerm};
-use crate::search::new::small_bitmap::SmallBitmap;
 use crate::search::new::{QueryGraph, QueryNode, SearchContext};
 use crate::Result;
 use std::collections::HashSet;
@@ -136,13 +135,13 @@ impl RankingRuleGraphTrait for TypoGraph {
     fn log_state(
         graph: &RankingRuleGraph<Self>,
         paths: &[Vec<Interned<TypoCondition>>],
-        dead_end_path_cache: &DeadEndsCache<TypoCondition>,
+        dead_ends_cache: &DeadEndsCache<TypoCondition>,
         universe: &RoaringBitmap,
-        distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoCondition>)>, QueryNode>,
+        distances: &MappedInterner<Vec<u16>, QueryNode>,
         cost: u16,
         logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
-        logger.log_typo_state(graph, paths, dead_end_path_cache, universe, distances, cost);
+        logger.log_typo_state(graph, paths, dead_ends_cache, universe, distances, cost);
     }
 
     fn label_for_condition<'ctx>(

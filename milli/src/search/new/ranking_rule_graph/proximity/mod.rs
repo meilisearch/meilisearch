@@ -6,11 +6,10 @@ use std::iter::FromIterator;
 
 use roaring::RoaringBitmap;
 
-use super::{RankingRuleGraph, RankingRuleGraphTrait, DeadEndsCache};
+use super::{DeadEndsCache, RankingRuleGraph, RankingRuleGraphTrait};
 use crate::search::new::interner::{DedupInterner, Interned, MappedInterner};
 use crate::search::new::logger::SearchLogger;
 use crate::search::new::query_term::{Phrase, QueryTerm};
-use crate::search::new::small_bitmap::SmallBitmap;
 use crate::search::new::{QueryGraph, QueryNode, SearchContext};
 use crate::Result;
 
@@ -66,13 +65,13 @@ impl RankingRuleGraphTrait for ProximityGraph {
     fn log_state(
         graph: &RankingRuleGraph<Self>,
         paths: &[Vec<Interned<ProximityCondition>>],
-        dead_end_path_cache: &DeadEndsCache<Self::Condition>,
+        dead_ends_cache: &DeadEndsCache<Self::Condition>,
         universe: &RoaringBitmap,
-        distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityCondition>)>, QueryNode>,
+        distances: &MappedInterner<Vec<u16>, QueryNode>,
         cost: u16,
         logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
-        logger.log_proximity_state(graph, paths, dead_end_path_cache, universe, distances, cost);
+        logger.log_proximity_state(graph, paths, dead_ends_cache, universe, distances, cost);
     }
 
     fn label_for_condition<'ctx>(

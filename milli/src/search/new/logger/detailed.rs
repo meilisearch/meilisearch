@@ -44,17 +44,17 @@ pub enum SearchEvents {
     ProximityState {
         graph: RankingRuleGraph<ProximityGraph>,
         paths: Vec<Vec<Interned<ProximityCondition>>>,
-        dead_end_path_cache: DeadEndsCache<ProximityCondition>,
+        dead_ends_cache: DeadEndsCache<ProximityCondition>,
         universe: RoaringBitmap,
-        distances: MappedInterner<Vec<(u16, SmallBitmap<ProximityCondition>)>, QueryNode>,
+        distances: MappedInterner<Vec<u16>, QueryNode>,
         cost: u16,
     },
     TypoState {
         graph: RankingRuleGraph<TypoGraph>,
         paths: Vec<Vec<Interned<TypoCondition>>>,
-        dead_end_path_cache: DeadEndsCache<TypoCondition>,
+        dead_ends_cache: DeadEndsCache<TypoCondition>,
         universe: RoaringBitmap,
-        distances: MappedInterner<Vec<(u16, SmallBitmap<TypoCondition>)>, QueryNode>,
+        distances: MappedInterner<Vec<u16>, QueryNode>,
         cost: u16,
     },
     RankingRuleSkipBucket {
@@ -170,15 +170,15 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         &mut self,
         query_graph: &RankingRuleGraph<ProximityGraph>,
         paths_map: &[Vec<Interned<ProximityCondition>>],
-        dead_end_path_cache: &DeadEndsCache<ProximityCondition>,
+        dead_ends_cache: &DeadEndsCache<ProximityCondition>,
         universe: &RoaringBitmap,
-        distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityCondition>)>, QueryNode>,
+        distances: &MappedInterner<Vec<u16>, QueryNode>,
         cost: u16,
     ) {
         self.events.push(SearchEvents::ProximityState {
             graph: query_graph.clone(),
             paths: paths_map.to_vec(),
-            dead_end_path_cache: dead_end_path_cache.clone(),
+            dead_ends_cache: dead_ends_cache.clone(),
             universe: universe.clone(),
             distances: distances.clone(),
             cost,
@@ -189,15 +189,15 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         &mut self,
         query_graph: &RankingRuleGraph<TypoGraph>,
         paths_map: &[Vec<Interned<TypoCondition>>],
-        dead_end_path_cache: &DeadEndsCache<TypoCondition>,
+        dead_ends_cache: &DeadEndsCache<TypoCondition>,
         universe: &RoaringBitmap,
-        distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoCondition>)>, QueryNode>,
+        distances: &MappedInterner<Vec<u16>, QueryNode>,
         cost: u16,
     ) {
         self.events.push(SearchEvents::TypoState {
             graph: query_graph.clone(),
             paths: paths_map.to_vec(),
-            dead_end_path_cache: dead_end_path_cache.clone(),
+            dead_ends_cache: dead_ends_cache.clone(),
             universe: universe.clone(),
             distances: distances.clone(),
             cost,
@@ -357,7 +357,7 @@ results.{cur_ranking_rule}{cur_activated_id} {{
                 SearchEvents::ProximityState {
                     graph,
                     paths,
-                    dead_end_path_cache,
+                    dead_ends_cache,
                     universe,
                     distances,
                     cost,
@@ -373,7 +373,7 @@ results.{cur_ranking_rule}{cur_activated_id} {{
                         ctx,
                         graph,
                         paths,
-                        dead_end_path_cache,
+                        dead_ends_cache,
                         distances.clone(),
                         &mut new_file,
                     );
@@ -390,7 +390,7 @@ results.{cur_ranking_rule}{cur_activated_id} {{
                 SearchEvents::TypoState {
                     graph,
                     paths,
-                    dead_end_path_cache,
+                    dead_ends_cache,
                     universe,
                     distances,
                     cost,
@@ -406,7 +406,7 @@ results.{cur_ranking_rule}{cur_activated_id} {{
                         ctx,
                         graph,
                         paths,
-                        dead_end_path_cache,
+                        dead_ends_cache,
                         distances.clone(),
                         &mut new_file,
                     );
@@ -429,7 +429,7 @@ results.{cur_ranking_rule}{cur_activated_id} {{
         ctx: &mut SearchContext,
         node_idx: Interned<QueryNode>,
         node: &QueryNode,
-        distances: &[(u16, SmallBitmap<R::Condition>)],
+        distances: &[u16],
         file: &mut File,
     ) {
         match &node.data {
@@ -490,9 +490,8 @@ shape: class"
                     let p = ctx.word_interner.get(*use_prefix_db);
                     writeln!(file, "use prefix DB : {p}").unwrap();
                 }
-                for (d, edges) in distances.iter() {
-                    writeln!(file, "\"distance {d}\" : {:?}", edges.iter().collect::<Vec<_>>())
-                        .unwrap();
+                for d in distances.iter() {
+                    writeln!(file, "\"d_{d}\" : distance").unwrap();
                 }
 
                 writeln!(file, "}}").unwrap();
@@ -527,8 +526,8 @@ shape: class"
         ctx: &mut SearchContext,
         graph: &RankingRuleGraph<R>,
         paths: &[Vec<Interned<R::Condition>>],
-        dead_end_paths_cache: &DeadEndsCache<R::Condition>,
-        distances: MappedInterner<Vec<(u16, SmallBitmap<R::Condition>)>, QueryNode>,
+        _dead_ends_cache: &DeadEndsCache<R::Condition>,
+        distances: MappedInterner<Vec<u16>, QueryNode>,
         file: &mut File,
     ) {
         writeln!(file, "direction: right").unwrap();

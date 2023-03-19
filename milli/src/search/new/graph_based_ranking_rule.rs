@@ -88,9 +88,8 @@ pub struct GraphBasedRankingRuleState<G: RankingRuleGraphTrait> {
     conditions_cache: ConditionDocIdsCache<G>,
     /// Cache used to optimistically discard paths that resolve to no documents.
     dead_ends_cache: DeadEndsCache<G::Condition>,
-    /// A structure giving the list of possible costs from each node to the end node,
-    /// along with a set of unavoidable edges that must be traversed to achieve that distance.
-    all_distances: MappedInterner<Vec<(u16, SmallBitmap<G::Condition>)>, QueryNode>,
+    /// A structure giving the list of possible costs from each node to the end node
+    all_distances: MappedInterner<Vec<u16>, QueryNode>,
     /// An index in the first element of `all_distances`, giving the cost of the next bucket
     cur_distance_idx: usize,
 }
@@ -108,7 +107,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
     ) -> Result<()> {
         let graph = RankingRuleGraph::build(ctx, query_graph.clone())?;
         let condition_docids_cache = ConditionDocIdsCache::default();
-        let dead_end_path_cache = DeadEndsCache::new(&graph.conditions_interner);
+        let dead_ends_cache = DeadEndsCache::new(&graph.conditions_interner);
 
         // Then pre-compute the cost of all paths from each node to the end node
         let all_distances = graph.initialize_distances_with_necessary_edges();
@@ -116,7 +115,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         let state = GraphBasedRankingRuleState {
             graph,
             conditions_cache: condition_docids_cache,
-            dead_ends_cache: dead_end_path_cache,
+            dead_ends_cache,
             all_distances,
             cur_distance_idx: 0,
         };
@@ -149,7 +148,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         }
 
         // Retrieve the cost of the paths to compute
-        let (cost, _) =
+        let cost =
             state.all_distances.get(state.graph.query_graph.root_node)[state.cur_distance_idx];
         state.cur_distance_idx += 1;
 
@@ -158,7 +157,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         let GraphBasedRankingRuleState {
             graph,
             conditions_cache: condition_docids_cache,
-            dead_ends_cache: dead_end_path_cache,
+            dead_ends_cache,
             all_distances,
             cur_distance_idx: _,
         } = &mut state;
@@ -174,15 +173,15 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         // For each path of the given cost, we will compute its associated
         // document ids.
         // In case the path does not resolve to any document id, we try to figure out why
-        // and update the `dead_end_path_cache` accordingly.
-        // Updating the dead_end_path_cache helps speed up the execution of `visit_paths_of_cost` and reduces
+        // and update the `dead_ends_cache` accordingly.
+        // Updating the dead_ends_cache helps speed up the execution of `visit_paths_of_cost` and reduces
         // the number of future candidate paths given by that same function.
         graph.visit_paths_of_cost(
             graph.query_graph.root_node,
             cost,
             all_distances,
-            dead_end_path_cache,
-            |path, graph, dead_end_path_cache| {
+            dead_ends_cache,
+            |path, graph, dead_ends_cache| {
                 if universe.is_empty() {
                     return Ok(ControlFlow::Break(()));
                 }
@@ -211,7 +210,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                     // and caches accordingly and skip to the next candidate path.
                     if condition_docids.is_empty() {
                         // 1. Store in the cache that this edge is empty for this universe
-                        dead_end_path_cache.forbid_condition(latest_condition);
+                        dead_ends_cache.forbid_condition(latest_condition);
                         // 2. remove all the edges with this condition from the ranking rule graph
                         graph.remove_edges_with_condition(latest_condition);
                         // 3. Also remove the entry from the condition_docids_cache, since we don't need it anymore
@@ -226,7 +225,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                         let len_prefix = subpath_docids.len() - 1;
                         // First, we know that this path is empty, and thus any path
                         // that is a superset of it will also be empty.
-                        dead_end_path_cache.forbid_condition_after_prefix(
+                        dead_ends_cache.forbid_condition_after_prefix(
                             visited_conditions[..len_prefix].iter().copied(),
                             latest_condition,
                         );
@@ -244,7 +243,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                                 };
                                 subprefix.push(*past_condition);
                                 if condition_docids.is_disjoint(subpath_docids) {
-                                    dead_end_path_cache.forbid_condition_after_prefix(
+                                    dead_ends_cache.forbid_condition_after_prefix(
                                         subprefix.iter().copied(),
                                         latest_condition,
                                     );
@@ -253,8 +252,8 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
 
                             // keep the same prefix and check the intersection with
                             // all the remaining conditions
-                            let mut forbidden = dead_end_path_cache.forbidden.clone();
-                            let mut cursor = dead_end_path_cache;
+                            let mut forbidden = dead_ends_cache.forbidden.clone();
+                            let mut cursor = dead_ends_cache;
                             for &c in visited_conditions[..len_prefix].iter() {
                                 cursor = cursor.advance(c).unwrap();
                                 forbidden.union(&cursor.forbidden);
@@ -301,7 +300,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         G::log_state(
             &original_graph,
             &good_paths,
-            dead_end_path_cache,
+            dead_ends_cache,
             original_universe,
             all_distances,
             cost,

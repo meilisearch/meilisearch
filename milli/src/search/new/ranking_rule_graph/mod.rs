@@ -112,9 +112,9 @@ pub trait RankingRuleGraphTrait: Sized {
     fn log_state(
         graph: &RankingRuleGraph<Self>,
         paths: &[Vec<Interned<Self::Condition>>],
-        dead_end_path_cache: &DeadEndsCache<Self::Condition>,
+        dead_ends_cache: &DeadEndsCache<Self::Condition>,
         universe: &RoaringBitmap,
-        distances: &MappedInterner<Vec<(u16, SmallBitmap<Self::Condition>)>, QueryNode>,
+        distances: &MappedInterner<Vec<u16>, QueryNode>,
         cost: u16,
         logger: &mut dyn SearchLogger<QueryGraph>,
     );
