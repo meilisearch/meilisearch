@@ -8,8 +8,7 @@ the same but the edges are replaced.
 mod build;
 mod cheapest_paths;
 mod condition_docids_cache;
-mod dead_end_path_cache;
-mod path_set;
+mod dead_ends_cache;
 
 /// Implementation of the `proximity` ranking rule
 mod proximity;
@@ -20,8 +19,7 @@ use std::collections::HashSet;
 use std::hash::Hash;
 
 pub use condition_docids_cache::ConditionDocIdsCache;
-// pub use dead_end_path_cache::DeadEndPathCache;
-pub use path_set::DeadEndsCache;
+pub use dead_ends_cache::DeadEndsCache;
 pub use proximity::{ProximityCondition, ProximityGraph};
 use roaring::RoaringBitmap;
 pub use typo::{TypoCondition, TypoGraph};

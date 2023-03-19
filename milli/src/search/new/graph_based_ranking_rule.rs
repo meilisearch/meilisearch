@@ -135,7 +135,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         query_graph: &QueryGraph,
     ) -> Result<()> {
         let mut graph = RankingRuleGraph::build(ctx, query_graph.clone())?;
-        let mut condition_docids_cache = ConditionDocIdsCache::new(universe);
+        let mut condition_docids_cache = ConditionDocIdsCache::default();
         let mut dead_end_path_cache = DeadEndsCache::new(&graph.conditions_interner);
 
         // First simplify the graph as much as possible, by computing the docids of all the conditions
@@ -215,36 +215,36 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
 
         let original_graph = graph.clone();
         let mut used_conditions = SmallBitmap::for_interned_values_in(&graph.conditions_interner);
-        let mut paths = vec![];
+        let mut considered_paths = vec![];
+        let mut good_paths = vec![];
 
         // For each path of the given cost, we will compute its associated
         // document ids.
         // In case the path does not resolve to any document id, we try to figure out why
         // and update the `dead_end_path_cache` accordingly.
-        // For example, it may be that the path is empty because one of its edges is disjoint
-        // with the universe, or because a prefix of the path is disjoint with the universe, or because
-        // the path contains two edges that are disjoint from each other within the universe.
         // Updating the dead_end_path_cache helps speed up the execution of `visit_paths_of_cost` and reduces
         // the number of future candidate paths given by that same function.
         graph.visit_paths_of_cost(
             graph.query_graph.root_node,
             cost,
             all_distances,
-            dead_end_path_cache.forbidden.clone(),
-            |condition, forbidden_conditions| {},
             dead_end_path_cache,
             |path, graph, dead_end_path_cache| {
+                if universe.is_empty() {
+                    return Ok(ControlFlow::Break(()));
+                }
                 // Accumulate the path for logging purposes only
-                paths.push(path.to_vec());
+                considered_paths.push(path.to_vec());
 
                 let mut path_docids = universe.clone();
 
                 // We store the edges and their docids in vectors in case the path turns out to be
                 // empty and we need to figure out why it was empty.
                 let mut visited_conditions = vec![];
-                let mut cached_condition_docids = vec![];
+                // let mut cached_condition_docids = vec![];
+                let mut subpath_docids = vec![];
 
-                for &latest_condition in path {
+                for (latest_condition_path_idx, &latest_condition) in path.iter().enumerate() {
                     visited_conditions.push(latest_condition);
 
                     let condition_docids = condition_docids_cache.get_condition_docids(
@@ -254,11 +254,9 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                         &universe,
                     )?;
 
-                    cached_condition_docids.push((latest_condition, condition_docids.clone()));
-
                     // If the edge is empty, then the path will be empty as well, we update the graph
                     // and caches accordingly and skip to the next candidate path.
-                    if condition_docids.is_disjoint(&universe) {
+                    if condition_docids.is_empty() {
                         // 1. Store in the cache that this edge is empty for this universe
                         dead_end_path_cache.forbid_condition(latest_condition);
                         // 2. remove all the edges with this condition from the ranking rule graph
@@ -267,45 +265,71 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                         condition_docids_cache.cache.remove(&latest_condition);
                         return Ok(ControlFlow::Continue(()));
                     }
+                    path_docids &= condition_docids;
+                    subpath_docids.push(path_docids.clone());
+
                     // If the (sub)path is empty, we try to figure out why and update the caches accordingly.
-                    if path_docids.is_disjoint(condition_docids) {
+                    if path_docids.is_empty() {
+                        let len_prefix = subpath_docids.len() - 1;
                         // First, we know that this path is empty, and thus any path
                         // that is a superset of it will also be empty.
                         dead_end_path_cache.forbid_condition_after_prefix(
-                            visited_conditions[..visited_conditions.len() - 1].iter().copied(),
+                            visited_conditions[..len_prefix].iter().copied(),
                             latest_condition,
                         );
 
-                        let mut dead_end_cache_cursor = dead_end_path_cache;
+                        if visited_conditions.len() > 1 {
+                            let mut subprefix = vec![];
+                            // Deadend if the intersection between this edge and any
+                            // previous prefix is disjoint with the universe
+                            for (past_condition, subpath_docids) in visited_conditions[..len_prefix]
+                                .iter()
+                                .zip(subpath_docids[..len_prefix].iter())
+                            {
+                                if *past_condition == latest_condition {
+                                    todo!();
+                                };
+                                subprefix.push(*past_condition);
+                                if condition_docids.is_disjoint(subpath_docids) {
+                                    dead_end_path_cache.forbid_condition_after_prefix(
+                                        subprefix.iter().copied(),
+                                        latest_condition,
+                                    );
+                                }
+                            }
 
-                        // Second, if the intersection between this edge and any
-                        // previous prefix is disjoint with the universe, then... TODO
-                        for (past_condition, past_condition_docids) in
-                            cached_condition_docids.iter()
-                        {
-                            // TODO: should ensure that it is simply not possible to have twice
-                            // the same condition in the cached_condition_docids. Maybe it is
-                            // already the case?
-                            dead_end_cache_cursor =
-                                dead_end_cache_cursor.advance(*past_condition).unwrap();
-                            // TODO: check how that interacts with the dead end cache?
-                            if *past_condition == latest_condition {
-                                // TODO: should we break instead?
-                                // Is it even possible?
-                                continue;
-                            };
-                            if condition_docids.is_disjoint(past_condition_docids) {
-                                dead_end_cache_cursor.forbid_condition(latest_condition);
+                            // keep the same prefix and check the intersection with
+                            // all the remaining conditions
+                            let mut forbidden = dead_end_path_cache.forbidden.clone();
+                            let mut cursor = dead_end_path_cache;
+                            for &c in visited_conditions[..len_prefix].iter() {
+                                cursor = cursor.advance(c).unwrap();
+                                forbidden.union(&cursor.forbidden);
+                            }
+
+                            let past_path_docids = &subpath_docids[subpath_docids.len() - 2];
+
+                            let remaining_conditions =
+                                path[latest_condition_path_idx..].iter().skip(1);
+                            for next_condition in remaining_conditions {
+                                if forbidden.contains(*next_condition) {
+                                    continue;
+                                }
+                                let next_condition_docids = condition_docids_cache
+                                    .get_condition_docids(ctx, *next_condition, graph, &universe)?;
+
+                                if past_path_docids.is_disjoint(next_condition_docids) {
+                                    cursor.forbid_condition(*next_condition);
+                                }
                             }
                         }
-                        // We should maybe instead try to compute:
-                        // 0th & nth & 1st & n-1th & 2nd & etc...
+
                         return Ok(ControlFlow::Continue(()));
-                    } else {
-                        path_docids &= condition_docids;
                     }
                 }
                 assert!(!path_docids.is_empty());
+                // Accumulate the path for logging purposes only
+                good_paths.push(path.to_vec());
                 for condition in path {
                     used_conditions.insert(*condition);
                 }
@@ -323,7 +347,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         // println!("  {} paths of cost {} in {}", paths.len(), cost, self.id);
         G::log_state(
             &original_graph,
-            &paths,
+            &good_paths,
             dead_end_path_cache,
             original_universe,
             all_distances,

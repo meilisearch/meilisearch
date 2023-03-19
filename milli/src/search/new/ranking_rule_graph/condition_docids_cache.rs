@@ -8,20 +8,17 @@ use crate::search::new::interner::Interned;
 use crate::search::new::SearchContext;
 use crate::Result;
 
+// TODO: give a generation to each universe, then be able to get the exact
+// delta of docids between two universes of different generations!
+
 /// A cache storing the document ids associated with each ranking rule edge
 pub struct ConditionDocIdsCache<G: RankingRuleGraphTrait> {
-    // TODO: should be FxHashMap<Interned<EdgeCondition>, RoaringBitmap>
-    pub cache: FxHashMap<Interned<G::Condition>, RoaringBitmap>,
-    pub universe_length: u64,
+    pub cache: FxHashMap<Interned<G::Condition>, (u64, RoaringBitmap)>,
     _phantom: PhantomData<G>,
 }
-impl<G: RankingRuleGraphTrait> ConditionDocIdsCache<G> {
-    pub fn new(universe: &RoaringBitmap) -> Self {
-        Self {
-            cache: Default::default(),
-            _phantom: Default::default(),
-            universe_length: universe.len(),
-        }
+impl<G: RankingRuleGraphTrait> Default for ConditionDocIdsCache<G> {
+    fn default() -> Self {
+        Self { cache: Default::default(), _phantom: Default::default() }
     }
 }
 impl<G: RankingRuleGraphTrait> ConditionDocIdsCache<G> {
@@ -40,20 +37,21 @@ impl<G: RankingRuleGraphTrait> ConditionDocIdsCache<G> {
         if self.cache.contains_key(&interned_condition) {
             // TODO compare length of universe compared to the one in self
             // if it is smaller, then update the value
-
-            // TODO: should we update the bitmap in the cache if the new universe
-            // reduces it?
-            // TODO: maybe have a generation: u32 to track every time the universe was
-            // reduced. Then only attempt to recompute the intersection when there is a chance
-            // that condition_docids & universe changed
-            return Ok(&self.cache[&interned_condition]);
+            let (universe_len, docids) = self.cache.entry(interned_condition).or_default();
+            if *universe_len == universe.len() {
+                return Ok(docids);
+            } else {
+                *docids &= universe;
+                *universe_len = universe.len();
+                return Ok(docids);
+            }
         }
         // TODO: maybe universe doesn't belong here
         let condition = graph.conditions_interner.get(interned_condition);
         // TODO: faster way to do this?
-        let docids = universe & G::resolve_condition(ctx, condition, universe)?;
-        let _ = self.cache.insert(interned_condition, docids);
-        let docids = &self.cache[&interned_condition];
+        let docids = G::resolve_condition(ctx, condition, universe)?;
+        let _ = self.cache.insert(interned_condition, (universe.len(), docids));
+        let (_, docids) = &self.cache[&interned_condition];
         Ok(docids)
     }
 }

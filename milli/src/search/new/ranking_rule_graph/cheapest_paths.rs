@@ -37,7 +37,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
             &mut visit,
             &mut vec![],
             &mut SmallBitmap::for_interned_values_in(&self.conditions_interner),
-            &mut dead_end_path_cache.forbidden.clone(),
+            dead_end_path_cache.forbidden.clone(),
         )?;
         Ok(())
     }
@@ -54,12 +54,12 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         ) -> Result<ControlFlow<()>>,
         prev_conditions: &mut Vec<Interned<G::Condition>>,
         cur_path: &mut SmallBitmap<G::Condition>,
-        forbidden_conditions: &mut SmallBitmap<G::Condition>,
+        mut forbidden_conditions: SmallBitmap<G::Condition>,
     ) -> Result<bool> {
         let mut any_valid = false;
 
         let edges = self.edges_of_node.get(from).clone();
-        for edge_idx in edges.iter() {
+        'edges_loop: for edge_idx in edges.iter() {
             let Some(edge) = self.edges_store.get(edge_idx).as_ref() else { continue };
             if cost < edge.cost as u16 {
                 continue;
@@ -73,6 +73,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                             ControlFlow::Continue(_) => {}
                             ControlFlow::Break(_) => return Ok(true),
                         }
+                        true
                     } else {
                         self.visit_paths_of_cost_rec(
                             edge.dest_node,
@@ -82,8 +83,8 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                             visit,
                             prev_conditions,
                             cur_path,
-                            forbidden_conditions,
-                        )?;
+                            forbidden_conditions.clone(),
+                        )?
                     }
                 }
                 Some(condition) => {
@@ -101,18 +102,19 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                     prev_conditions.push(condition);
                     let mut new_forbidden_conditions = forbidden_conditions.clone();
                     if let Some(next_forbidden) =
-                        dead_end_path_cache.forbidden_conditions_after_prefix(&prev_conditions)
+                        dead_end_path_cache.forbidden_conditions_after_prefix(prev_conditions)
                     {
                         new_forbidden_conditions.union(&next_forbidden);
                     }
 
-                    if edge.dest_node == self.query_graph.end_node {
+                    let next_any_valid = if edge.dest_node == self.query_graph.end_node {
                         any_valid = true;
                         let control_flow = visit(prev_conditions, self, dead_end_path_cache)?;
                         match control_flow {
                             ControlFlow::Continue(_) => {}
                             ControlFlow::Break(_) => return Ok(true),
                         }
+                        true
                     } else {
                         self.visit_paths_of_cost_rec(
                             edge.dest_node,
@@ -122,13 +124,23 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                             visit,
                             prev_conditions,
                             cur_path,
-                            &mut new_forbidden_conditions,
-                        )?;
-                    }
+                            new_forbidden_conditions,
+                        )?
+                    };
                     cur_path.remove(condition);
                     prev_conditions.pop();
+                    next_any_valid
                 }
             };
+            any_valid |= next_any_valid;
+
+            if next_any_valid {
+                forbidden_conditions = dead_end_path_cache
+                    .forbidden_conditions_for_all_prefixes_up_to(prev_conditions);
+                if cur_path.intersects(&forbidden_conditions) {
+                    break 'edges_loop;
+                }
+            }
         }
 
         Ok(any_valid)

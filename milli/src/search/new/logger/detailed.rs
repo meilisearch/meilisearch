@@ -10,7 +10,7 @@ use crate::search::new::interner::{Interned, MappedInterner};
 use crate::search::new::query_graph::QueryNodeData;
 use crate::search::new::query_term::{LocatedQueryTerm, QueryTerm};
 use crate::search::new::ranking_rule_graph::{
-    DeadEndPathCache, Edge, ProximityCondition, ProximityGraph, RankingRuleGraph,
+    DeadEndsCache, Edge, ProximityCondition, ProximityGraph, RankingRuleGraph,
     RankingRuleGraphTrait, TypoCondition, TypoGraph,
 };
 use crate::search::new::small_bitmap::SmallBitmap;
@@ -44,7 +44,7 @@ pub enum SearchEvents {
     ProximityState {
         graph: RankingRuleGraph<ProximityGraph>,
         paths: Vec<Vec<Interned<ProximityCondition>>>,
-        dead_end_path_cache: DeadEndPathCache<ProximityGraph>,
+        dead_end_path_cache: DeadEndsCache<ProximityCondition>,
         universe: RoaringBitmap,
         distances: MappedInterner<Vec<(u16, SmallBitmap<ProximityCondition>)>, QueryNode>,
         cost: u16,
@@ -52,7 +52,7 @@ pub enum SearchEvents {
     TypoState {
         graph: RankingRuleGraph<TypoGraph>,
         paths: Vec<Vec<Interned<TypoCondition>>>,
-        dead_end_path_cache: DeadEndPathCache<TypoGraph>,
+        dead_end_path_cache: DeadEndsCache<TypoCondition>,
         universe: RoaringBitmap,
         distances: MappedInterner<Vec<(u16, SmallBitmap<TypoCondition>)>, QueryNode>,
         cost: u16,
@@ -170,7 +170,7 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         &mut self,
         query_graph: &RankingRuleGraph<ProximityGraph>,
         paths_map: &[Vec<Interned<ProximityCondition>>],
-        dead_end_path_cache: &DeadEndPathCache<ProximityGraph>,
+        dead_end_path_cache: &DeadEndsCache<ProximityCondition>,
         universe: &RoaringBitmap,
         distances: &MappedInterner<Vec<(u16, SmallBitmap<ProximityCondition>)>, QueryNode>,
         cost: u16,
@@ -189,7 +189,7 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         &mut self,
         query_graph: &RankingRuleGraph<TypoGraph>,
         paths_map: &[Vec<Interned<TypoCondition>>],
-        dead_end_path_cache: &DeadEndPathCache<TypoGraph>,
+        dead_end_path_cache: &DeadEndsCache<TypoCondition>,
         universe: &RoaringBitmap,
         distances: &MappedInterner<Vec<(u16, SmallBitmap<TypoCondition>)>, QueryNode>,
         cost: u16,
@@ -527,7 +527,7 @@ shape: class"
         ctx: &mut SearchContext,
         graph: &RankingRuleGraph<R>,
         paths: &[Vec<Interned<R::Condition>>],
-        dead_end_paths_cache: &DeadEndPathCache<R>,
+        dead_end_paths_cache: &DeadEndsCache<R::Condition>,
         distances: MappedInterner<Vec<(u16, SmallBitmap<R::Condition>)>, QueryNode>,
         file: &mut File,
     ) {
@@ -583,11 +583,11 @@ shape: class"
         // }
         // writeln!(file, "}}").unwrap();
 
-        writeln!(file, "Dead-end edges {{").unwrap();
-        for condition in dead_end_paths_cache.conditions.iter() {
-            writeln!(file, "{condition}").unwrap();
-        }
-        writeln!(file, "}}").unwrap();
+        // writeln!(file, "Dead-end edges {{").unwrap();
+        // for condition in dead_end_paths_cache.conditions.iter() {
+        //     writeln!(file, "{condition}").unwrap();
+        // }
+        // writeln!(file, "}}").unwrap();
 
         // writeln!(file, "Dead-end prefixes {{").unwrap();
         // writeln!(file, "}}").unwrap();
