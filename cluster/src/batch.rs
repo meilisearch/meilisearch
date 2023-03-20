@@ -103,3 +103,46 @@ pub enum IndexOperation {
         settings_tasks: Vec<TaskId>,
     },
 }
+
+impl Batch {
+    pub fn ids(&self) -> impl Iterator<Item = TaskId> {
+        type Ret = Box<dyn Iterator<Item = TaskId>>;
+
+        match self {
+            Batch::TaskCancelation { task, .. } => Box::new(std::iter::once(*task)) as Ret,
+            Batch::TaskDeletion(task) => Box::new(std::iter::once(*task)) as Ret,
+            Batch::SnapshotCreation(tasks) => Box::new(tasks.clone().into_iter()) as Ret,
+            Batch::Dump(task) => Box::new(std::iter::once(*task)) as Ret,
+            Batch::IndexOperation { op, .. } => match op {
+                IndexOperation::DocumentOperation { tasks, .. } => {
+                    Box::new(tasks.clone().into_iter()) as Ret
+                }
+                IndexOperation::DocumentDeletion { tasks, .. } => {
+                    Box::new(tasks.clone().into_iter()) as Ret
+                }
+                IndexOperation::DocumentClear { tasks, .. } => {
+                    Box::new(tasks.clone().into_iter()) as Ret
+                }
+                IndexOperation::Settings { tasks, .. } => {
+                    Box::new(tasks.clone().into_iter()) as Ret
+                }
+                IndexOperation::DocumentClearAndSetting {
+                    cleared_tasks, settings_tasks, ..
+                } => {
+                    Box::new(cleared_tasks.clone().into_iter().chain(settings_tasks.clone())) as Ret
+                }
+                IndexOperation::SettingsAndDocumentOperation {
+                    document_import_tasks,
+                    settings_tasks,
+                    ..
+                } => Box::new(
+                    document_import_tasks.clone().into_iter().chain(settings_tasks.clone()),
+                ) as Ret,
+            },
+            Batch::IndexCreation { task, .. } => Box::new(std::iter::once(*task)) as Ret,
+            Batch::IndexUpdate { task, .. } => Box::new(std::iter::once(*task)) as Ret,
+            Batch::IndexDeletion { tasks, .. } => Box::new(tasks.clone().into_iter()) as Ret,
+            Batch::IndexSwap { task } => Box::new(std::iter::once(*task)) as Ret,
+        }
+    }
+}

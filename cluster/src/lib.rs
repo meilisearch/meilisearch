@@ -1,4 +1,5 @@
 use std::net::ToSocketAddrs;
+use std::sync::{Arc, RwLock};
 
 use batch::Batch;
 use crossbeam::channel::{unbounded, Receiver, Sender};
@@ -39,7 +40,6 @@ pub enum FollowerMsg {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Consistency {
-    Zero,
     One,
     Two,
     Quorum,
@@ -54,7 +54,7 @@ pub struct Follower {
     must_commit: Receiver<u32>,
     register_new_task: Receiver<(Task, Option<Vec<u8>>)>,
 
-    batch_id: u32,
+    batch_id: Arc<RwLock<u32>>,
 }
 
 impl Follower {
@@ -76,7 +76,7 @@ impl Follower {
             get_batch: get_batch_receiver,
             must_commit: must_commit_receiver,
             register_new_task: register_task_receiver,
-            batch_id: 0,
+            batch_id: Arc::default(),
         }
     }
 
@@ -106,31 +106,33 @@ impl Follower {
         }
     }
 
-    pub fn get_new_batch(&mut self) -> Batch {
+    pub fn get_new_batch(&self) -> Batch {
         info!("Get new batch called");
         let (id, batch) = self.get_batch.recv().expect("Lost connection to the leader");
         info!("Got a new batch");
-        self.batch_id = id;
+        *self.batch_id.write().unwrap() = id;
         batch
     }
 
-    pub fn ready_to_commit(&mut self) {
+    pub fn ready_to_commit(&self) {
         info!("I'm ready to commit");
-        self.sender.send(FollowerMsg::ReadyToCommit(self.batch_id)).unwrap();
+        let batch_id = self.batch_id.read().unwrap();
+
+        self.sender.send(FollowerMsg::ReadyToCommit(*batch_id)).unwrap();
 
         loop {
             let id = self.must_commit.recv().expect("Lost connection to the leader");
             #[allow(clippy::comparison_chain)]
-            if id == self.batch_id {
+            if id == *batch_id {
                 break;
-            } else if id > self.batch_id {
+            } else if id > *batch_id {
                 panic!("We missed a batch");
             }
         }
         info!("I got the right to commit");
     }
 
-    pub fn get_new_task(&mut self) -> (Task, Option<Vec<u8>>) {
+    pub fn get_new_task(&self) -> (Task, Option<Vec<u8>>) {
         self.register_new_task.recv().unwrap()
     }
 }

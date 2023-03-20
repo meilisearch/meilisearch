@@ -349,8 +349,8 @@ impl std::str::FromStr for ClusterMode {
 
 #[derive(Clone)]
 pub enum Cluster {
-    Leader(Arc<RwLock<Leader>>),
-    Follower(Arc<RwLock<Follower>>),
+    Leader(Leader),
+    Follower(Follower),
 }
 
 impl IndexScheduler {
@@ -375,7 +375,7 @@ impl IndexScheduler {
             dumps_path: self.dumps_path.clone(),
             auth_path: self.auth_path.clone(),
             version_file_path: self.version_file_path.clone(),
-            cluster: None,
+            cluster: self.cluster.clone(),
             #[cfg(test)]
             test_breakpoint_sdr: self.test_breakpoint_sdr.clone(),
             #[cfg(test)]
@@ -544,11 +544,22 @@ impl IndexScheduler {
     fn run(&self) {
         let run = self.private_clone();
 
+        if run.cluster.is_some() {
+            log::warn!("Run in a cluster");
+        } else {
+            log::warn!("Run not in a cluster");
+        }
+
         // if we're a follower we starts a thread to register the tasks coming from the leader
         if let Some(Cluster::Follower(follower)) = self.cluster.clone() {
             let this = self.private_clone();
+            if this.cluster.is_some() {
+                log::warn!("this in a cluster");
+            } else {
+                log::warn!("this not in a cluster");
+            }
             std::thread::spawn(move || loop {
-                let (task, content) = follower.write().unwrap().get_new_task();
+                let (task, content) = follower.get_new_task();
                 this.register_raw_task(task, content);
             });
         }
@@ -917,7 +928,7 @@ impl IndexScheduler {
             } else {
                 None
             };
-            leader.write().unwrap().register_new_task(task.clone(), update_file);
+            leader.register_new_task(task.clone(), update_file);
         }
 
         // If the registered task is a task cancelation
@@ -1283,21 +1294,30 @@ impl IndexScheduler {
     /// If there is no cluster or if leader -> create a new batch
     /// If follower -> wait till the leader gives us a batch to process
     fn get_or_create_next_batch(&self) -> Result<Option<Batch>> {
-        let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
+        info!("inside get or create next batch");
 
         let batch = match &self.cluster {
             None | Some(Cluster::Leader(_)) => {
+                let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
                 self.create_next_batch(&rtxn).map_err(|e| Error::CreateBatch(Box::new(e)))?
             }
             Some(Cluster::Follower(follower)) => {
-                let batch = follower.write().unwrap().get_new_batch();
-                Some(self.get_batch_from_cluster_batch(&rtxn, batch)?)
+                let batch = follower.get_new_batch();
+                Some(self.get_batch_from_cluster_batch(batch)?)
             }
         };
 
+        if self.cluster.is_some() {
+            println!("HERE: Part of a cluster");
+        } else if self.cluster.is_none() {
+            println!("HERE: Not part of a cluster");
+        }
+        info!("before checking if i’m a leader");
         if let Some(Cluster::Leader(leader)) = &self.cluster {
+            info!("I'm a leader");
             if let Some(ref batch) = batch {
-                leader.write().unwrap().starts_batch(batch.clone().into());
+                info!("I'm a leader and I got a batch to process");
+                leader.starts_batch(batch.clone().into());
             }
         }
         Ok(batch)

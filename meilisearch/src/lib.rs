@@ -31,7 +31,7 @@ use error::PayloadError;
 use extractors::payload::PayloadConfig;
 use http::header::CONTENT_TYPE;
 use index_scheduler::{Cluster, IndexScheduler, IndexSchedulerOptions};
-use log::error;
+use log::{error, info};
 use meilisearch_auth::AuthController;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod};
@@ -226,11 +226,13 @@ fn open_or_create_database_unchecked(
     let cluster = if let Some(ref cluster) = opt.cluster_configuration.experimental_enable_ha {
         match cluster.as_str() {
             "leader" => {
+                info!("Starting as a leader");
                 let mut addr = opt.http_addr.to_socket_addrs().unwrap().next().unwrap();
                 addr.set_port(6666);
-                Some(Cluster::Leader(Arc::new(RwLock::new(Leader::new(addr)))))
+                Some(Cluster::Leader(Leader::new(addr)))
             }
             "follower" => {
+                info!("Starting as a follower");
                 let mut addr = opt
                     .cluster_configuration
                     .leader
@@ -241,7 +243,7 @@ fn open_or_create_database_unchecked(
                     .next()
                     .unwrap();
                 addr.set_port(6666);
-                Some(Cluster::Follower(Arc::new(RwLock::new(Follower::join(addr)))))
+                Some(Cluster::Follower(Follower::join(addr)))
             }
             _ => panic!("Available values for the cluster mode are leader and follower"),
         }

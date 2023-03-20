@@ -23,6 +23,7 @@ use std::fs::{self, File};
 use std::io::BufWriter;
 
 use cluster::Consistency;
+use crossbeam::utils::Backoff;
 use dump::IndexMetadata;
 use log::{debug, error, info};
 use meilisearch_types::heed::{RoTxn, RwTxn};
@@ -588,12 +589,8 @@ impl IndexScheduler {
                 }
 
                 match &self.cluster {
-                    Some(Cluster::Leader(leader)) => {
-                        leader.write().unwrap().commit(Consistency::All)
-                    }
-                    Some(Cluster::Follower(follower)) => {
-                        follower.write().unwrap().ready_to_commit()
-                    }
+                    Some(Cluster::Leader(leader)) => leader.commit(Consistency::All),
+                    Some(Cluster::Follower(follower)) => follower.ready_to_commit(),
                     None => (),
                 }
 
@@ -642,12 +639,8 @@ impl IndexScheduler {
                 }
 
                 match &self.cluster {
-                    Some(Cluster::Leader(leader)) => {
-                        leader.write().unwrap().commit(Consistency::All)
-                    }
-                    Some(Cluster::Follower(follower)) => {
-                        follower.write().unwrap().ready_to_commit()
-                    }
+                    Some(Cluster::Leader(leader)) => leader.commit(Consistency::All),
+                    Some(Cluster::Follower(follower)) => follower.ready_to_commit(),
                     None => (),
                 }
 
@@ -864,12 +857,8 @@ impl IndexScheduler {
                 let tasks = self.apply_index_operation(&mut index_wtxn, &index, op)?;
 
                 match &self.cluster {
-                    Some(Cluster::Leader(leader)) => {
-                        leader.write().unwrap().commit(Consistency::All)
-                    }
-                    Some(Cluster::Follower(follower)) => {
-                        follower.write().unwrap().ready_to_commit()
-                    }
+                    Some(Cluster::Leader(leader)) => leader.commit(Consistency::All),
+                    Some(Cluster::Follower(follower)) => follower.ready_to_commit(),
                     None => (),
                 }
 
@@ -973,12 +962,8 @@ impl IndexScheduler {
                 }
 
                 match &self.cluster {
-                    Some(Cluster::Leader(leader)) => {
-                        leader.write().unwrap().commit(Consistency::All)
-                    }
-                    Some(Cluster::Follower(follower)) => {
-                        follower.write().unwrap().ready_to_commit()
-                    }
+                    Some(Cluster::Leader(leader)) => leader.commit(Consistency::All),
+                    Some(Cluster::Follower(follower)) => follower.ready_to_commit(),
                     None => (),
                 }
 
@@ -1422,51 +1407,69 @@ impl IndexScheduler {
 
     pub(crate) fn get_batch_from_cluster_batch(
         &self,
-        rtxn: &RoTxn,
         batch: cluster::batch::Batch,
     ) -> Result<Batch> {
         use cluster::batch::Batch as CBatch;
 
+        let mut rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
+
+        for id in batch.ids() {
+            let backoff = Backoff::new();
+            let id = BEU32::new(id);
+
+            loop {
+                if self.all_tasks.get(&rtxn, &id)?.is_some() {
+                    info!("Found the task_id");
+                    break;
+                }
+                info!("The task is not present in the task queue, we wait");
+                // we need to drop the txn to make a write visible
+                drop(rtxn);
+                backoff.spin();
+                rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
+            }
+        }
+
         Ok(match batch {
             CBatch::TaskCancelation { task, previous_started_at, previous_processing_tasks } => {
                 Batch::TaskCancelation {
-                    task: self.get_existing_tasks(rtxn, Some(task))?[0].clone(),
+                    task: self.get_existing_tasks(&rtxn, Some(task))?[0].clone(),
                     previous_started_at,
                     previous_processing_tasks,
                 }
             }
             CBatch::TaskDeletion(task) => {
-                Batch::TaskDeletion(self.get_existing_tasks(rtxn, Some(task))?[0].clone())
+                Batch::TaskDeletion(self.get_existing_tasks(&rtxn, Some(task))?[0].clone())
             }
             CBatch::SnapshotCreation(tasks) => {
-                Batch::SnapshotCreation(self.get_existing_tasks(rtxn, tasks)?)
+                Batch::SnapshotCreation(self.get_existing_tasks(&rtxn, tasks)?)
             }
             CBatch::Dump(task) => {
-                Batch::Dump(self.get_existing_tasks(rtxn, Some(task))?[0].clone())
+                Batch::Dump(self.get_existing_tasks(&rtxn, Some(task))?[0].clone())
             }
             CBatch::IndexOperation { op, must_create_index } => Batch::IndexOperation {
-                op: self.get_index_op_from_cluster_index_op(rtxn, op)?,
+                op: self.get_index_op_from_cluster_index_op(&rtxn, op)?,
                 must_create_index,
             },
             CBatch::IndexCreation { index_uid, primary_key, task } => Batch::IndexCreation {
                 index_uid,
                 primary_key,
-                task: self.get_existing_tasks(rtxn, Some(task))?[0].clone(),
+                task: self.get_existing_tasks(&rtxn, Some(task))?[0].clone(),
             },
             CBatch::IndexUpdate { index_uid, primary_key, task } => Batch::IndexUpdate {
                 index_uid,
                 primary_key,
-                task: self.get_existing_tasks(rtxn, Some(task))?[0].clone(),
+                task: self.get_existing_tasks(&rtxn, Some(task))?[0].clone(),
             },
             CBatch::IndexDeletion { index_uid, tasks, index_has_been_created } => {
                 Batch::IndexDeletion {
                     index_uid,
-                    tasks: self.get_existing_tasks(rtxn, tasks)?,
+                    tasks: self.get_existing_tasks(&rtxn, tasks)?,
                     index_has_been_created,
                 }
             }
             CBatch::IndexSwap { task } => {
-                Batch::IndexSwap { task: self.get_existing_tasks(rtxn, Some(task))?[0].clone() }
+                Batch::IndexSwap { task: self.get_existing_tasks(&rtxn, Some(task))?[0].clone() }
             }
         })
     }

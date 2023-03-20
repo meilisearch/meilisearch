@@ -1,6 +1,6 @@
 use std::net::ToSocketAddrs;
-use std::sync::atomic::AtomicUsize;
-use std::sync::{atomic, Arc, Mutex};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{atomic, Arc, Mutex, RwLock};
 
 use bus::{Bus, BusReader};
 use crossbeam::channel::{unbounded, Receiver, Sender};
@@ -11,14 +11,14 @@ use meilisearch_types::tasks::Task;
 use crate::batch::Batch;
 use crate::{Consistency, FollowerMsg, LeaderMsg};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Leader {
     task_ready_to_commit: Receiver<u32>,
     broadcast_to_follower: Sender<LeaderMsg>,
 
     cluster_size: Arc<AtomicUsize>,
 
-    batch_id: u32,
+    batch_id: Arc<RwLock<u32>>,
 }
 
 impl Leader {
@@ -36,7 +36,7 @@ impl Leader {
             task_ready_to_commit: task_finished_receiver,
             broadcast_to_follower: process_batch_sender,
             cluster_size,
-            batch_id: 0,
+            batch_id: Arc::default(),
         }
     }
 
@@ -113,46 +113,62 @@ impl Leader {
         info!("A follower left the cluster. {} members.", size);
     }
 
-    pub fn starts_batch(&mut self, batch: Batch) {
+    pub fn starts_batch(&self, batch: Batch) {
+        let mut batch_id = self.batch_id.write().unwrap();
+
         assert!(
-            self.batch_id % 2 == 0,
+            *batch_id % 2 == 0,
             "Tried to start processing a batch before commiting the previous one"
         );
-        self.batch_id += 1;
+        info!("Send the batch to process to the followers");
+        *batch_id += 1;
 
         self.broadcast_to_follower
-            .send(LeaderMsg::StartBatch { id: self.batch_id, batch })
+            .send(LeaderMsg::StartBatch { id: *batch_id, batch })
             .expect("Can't reach the cluster");
     }
 
-    pub fn commit(&mut self, consistency_level: Consistency) {
+    pub fn commit(&self, consistency_level: Consistency) {
+        info!("Wait until enough followers are ready to commit a batch");
+
+        let mut batch_id = self.batch_id.write().unwrap();
+
         // if zero nodes needs to be sync we can commit right away and early exit
-        if consistency_level != Consistency::Zero {
+        if consistency_level != Consistency::One {
             // else, we wait till enough nodes are ready to commit
-            for (ready_to_commit, _id) in self
+            for ready_to_commit in self
                 .task_ready_to_commit
                 .iter()
                 // we need to filter out the messages from the old batches
-                .filter(|id| *id == self.batch_id)
+                .filter(|id| *id == *batch_id)
                 .enumerate()
+                // we do a +2 because enumerate starts at 1 and we must includes ourselves in the count
+                .map(|(id, _)| id + 2)
             {
+                // TODO: if the last node dies we're stuck on the iterator
+
+                // we need to reload the cluster size everytime in case a node dies
                 let cluster_size = self.cluster_size.load(atomic::Ordering::Relaxed);
 
+                info!("{ready_to_commit} nodes are ready to commit for a cluster size of {cluster_size}");
                 match consistency_level {
-                    Consistency::One if ready_to_commit >= 1 => break,
-                    Consistency::Two if ready_to_commit >= 2 => break,
+                    Consistency::Two if ready_to_commit >= 1 => break,
                     Consistency::Quorum if ready_to_commit >= (cluster_size / 2) => break,
+                    Consistency::All if ready_to_commit == cluster_size => break,
                     _ => (),
                 }
             }
         }
 
-        self.broadcast_to_follower.send(LeaderMsg::Commit(self.batch_id)).unwrap();
+        info!("Tells all the follower to commit");
 
-        self.batch_id += 1;
+        self.broadcast_to_follower.send(LeaderMsg::Commit(*batch_id)).unwrap();
+
+        *batch_id += 1;
     }
 
-    pub fn register_new_task(&mut self, task: Task, update_file: Option<Vec<u8>>) {
+    pub fn register_new_task(&self, task: Task, update_file: Option<Vec<u8>>) {
+        info!("Tells all the follower to register a new task");
         self.broadcast_to_follower
             .send(LeaderMsg::RegisterNewTask { task, update_file })
             .expect("Main thread is dead");
