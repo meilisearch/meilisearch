@@ -26,7 +26,7 @@ edition = "2021"
 license = "MIT"
 
 [profile.release]
-codegen-units = 1
+# codegen-units = 1
 
 [profile.dev.package.flate2]
 opt-level = 3
