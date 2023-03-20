@@ -488,9 +488,9 @@ shape: class"
                     let p = ctx.word_interner.get(*use_prefix_db);
                     writeln!(file, "use prefix DB : {p}").unwrap();
                 }
-                for d in distances.iter() {
-                    writeln!(file, "\"d_{d}\" : distance").unwrap();
-                }
+                // for d in distances.iter() {
+                //     writeln!(file, "\"d_{d}\" : distance").unwrap();
+                // }
 
                 writeln!(file, "}}").unwrap();
             }

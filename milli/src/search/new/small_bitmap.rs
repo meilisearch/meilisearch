@@ -272,24 +272,3 @@ impl<'b> Iterator for SmallBitmapInternalIter<'b> {
         }
     }
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use super::SmallBitmap;
-
-//     #[test]
-//     fn test_small_bitmap() {
-//         let mut bitmap1 = SmallBitmap::new(32);
-//         for x in 0..16 {
-//             bitmap1.insert(x * 2);
-//         }
-//         let mut bitmap2 = SmallBitmap::new(32);
-//         for x in 0..=10 {
-//             bitmap2.insert(x * 3);
-//         }
-//         bitmap1.intersection(&bitmap2);
-//         for v in bitmap1.iter() {
-//             println!("{v}");
-//         }
-//     }
-// }

@@ -71,9 +71,6 @@ impl<E> PartialEq for Edge<E> {
 /// 1. Retrieve the set of edges (their cost and condition) between two nodes.
 /// 2. Compute the document ids satisfying a condition
 pub trait RankingRuleGraphTrait: Sized {
-    /// The condition of an edge connecting two query nodes. The condition
-    /// should be sufficient to compute the edge's cost and associated document ids
-    /// in [`resolve_condition`](RankingRuleGraphTrait::resolve_condition).
     type Condition: Sized + Clone + PartialEq + Eq + Hash;
 
     /// Return the label of the given edge condition, to be used when visualising

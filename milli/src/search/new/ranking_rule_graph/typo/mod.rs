@@ -74,6 +74,7 @@ impl RankingRuleGraphTrait for TypoGraph {
                             is_prefix: term.is_prefix,
                             zero_typo: term.zero_typo,
                             prefix_of: term.prefix_of,
+                            // TOOD: debatable
                             synonyms: term.synonyms,
                             split_words: None,
                             one_typo: Box::new([]),
