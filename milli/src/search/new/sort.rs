@@ -2,6 +2,10 @@ use roaring::RoaringBitmap;
 
 use super::logger::SearchLogger;
 use super::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait, SearchContext};
+use crate::heed_codec::facet::FacetGroupKeyCodec;
+use crate::heed_codec::ByteSliceRefCodec;
+use crate::search::facet::{ascending_facet_sort, descending_facet_sort};
+use crate::{FieldId, Index, Result};
 
 pub trait RankingRuleOutputIter<'ctx, Query> {
     fn next_bucket(&mut self) -> Result<Option<RankingRuleOutput<Query>>>;
@@ -23,15 +27,6 @@ impl<'ctx, Query> RankingRuleOutputIter<'ctx, Query> for RankingRuleOutputIterWr
         }
     }
 }
-
-use crate::{
-    // facet::FacetType,
-    heed_codec::{facet::FacetGroupKeyCodec, ByteSliceRefCodec},
-    search::facet::{ascending_facet_sort, descending_facet_sort},
-    FieldId,
-    Index,
-    Result,
-};
 
 pub struct Sort<'ctx, Query> {
     field_name: String,
@@ -64,7 +59,7 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
         ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<Query>,
         parent_candidates: &RoaringBitmap,
-        parent_query_graph: &Query,
+        parent_query: &Query,
     ) -> Result<()> {
         let iter: RankingRuleOutputIterWrapper<Query> = match self.field_id {
             Some(field_id) => {
@@ -109,7 +104,7 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
                     (itertools::Either::Right(number_iter), itertools::Either::Right(string_iter))
                 };
 
-                let query_graph = parent_query_graph.clone();
+                let query_graph = parent_query.clone();
                 RankingRuleOutputIterWrapper::new(Box::new(number_iter.chain(string_iter).map(
                     move |r| {
                         let (docids, _) = r?;
@@ -119,7 +114,7 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
             }
             None => RankingRuleOutputIterWrapper::new(Box::new(std::iter::empty())),
         };
-        self.original_query = Some(parent_query_graph.clone());
+        self.original_query = Some(parent_query.clone());
         self.iter = Some(iter);
         Ok(())
     }
