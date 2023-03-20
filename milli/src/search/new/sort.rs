@@ -68,30 +68,52 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
     ) -> Result<()> {
         let iter: RankingRuleOutputIterWrapper<Query> = match self.field_id {
             Some(field_id) => {
-                let make_iter =
-                    if self.is_ascending { ascending_facet_sort } else { descending_facet_sort };
+                let number_db = ctx
+                    .index
+                    .facet_id_f64_docids
+                    .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>();
+                let string_db = ctx
+                    .index
+                    .facet_id_string_docids
+                    .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>();
 
-                let number_iter = make_iter(
-                    ctx.txn,
-                    ctx.index
-                        .facet_id_f64_docids
-                        .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
-                    field_id,
-                    parent_candidates.clone(),
-                )?;
+                let (number_iter, string_iter) = if self.is_ascending {
+                    let number_iter = ascending_facet_sort(
+                        ctx.txn,
+                        number_db,
+                        field_id,
+                        parent_candidates.clone(),
+                    )?;
+                    let string_iter = ascending_facet_sort(
+                        ctx.txn,
+                        string_db,
+                        field_id,
+                        parent_candidates.clone(),
+                    )?;
 
-                let string_iter = make_iter(
-                    ctx.txn,
-                    ctx.index
-                        .facet_id_string_docids
-                        .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
-                    field_id,
-                    parent_candidates.clone(),
-                )?;
+                    (itertools::Either::Left(number_iter), itertools::Either::Left(string_iter))
+                } else {
+                    let number_iter = descending_facet_sort(
+                        ctx.txn,
+                        number_db,
+                        field_id,
+                        parent_candidates.clone(),
+                    )?;
+                    let string_iter = descending_facet_sort(
+                        ctx.txn,
+                        string_db,
+                        field_id,
+                        parent_candidates.clone(),
+                    )?;
+
+                    (itertools::Either::Right(number_iter), itertools::Either::Right(string_iter))
+                };
+
                 let query_graph = parent_query_graph.clone();
                 RankingRuleOutputIterWrapper::new(Box::new(number_iter.chain(string_iter).map(
-                    move |docids| {
-                        Ok(RankingRuleOutput { query: query_graph.clone(), candidates: docids? })
+                    move |r| {
+                        let (docids, _) = r?;
+                        Ok(RankingRuleOutput { query: query_graph.clone(), candidates: docids })
                     },
                 )))
             }
