@@ -1,6 +1,14 @@
 #![cfg_attr(all(test, fuzzing), feature(no_coverage))]
+#![allow(unused, clippy::type_complexity)]
+
+#[cfg(test)]
+#[global_allocator]
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[macro_use]
 pub mod documents;
+
+pub use search::new;
 
 mod asc_desc;
 mod criterion;

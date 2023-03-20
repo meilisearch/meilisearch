@@ -58,6 +58,7 @@ logging_timer = "1.1.0"
 csv = "1.1.6"
 
 [dev-dependencies]
+mimalloc = { version = "0.1.29", default-features = false }
 big_s = "1.0.2"
 insta = "1.21.0"
 maplit = "1.0.2"
