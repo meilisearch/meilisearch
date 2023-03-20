@@ -14,7 +14,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         &mut self,
         from: Interned<QueryNode>,
         cost: u16,
-        all_distances: &MappedInterner<Vec<u16>, QueryNode>,
+        all_distances: &MappedInterner<QueryNode, Vec<u16>>,
         dead_ends_cache: &mut DeadEndsCache<G::Condition>,
         mut visit: impl FnMut(
             &[Interned<G::Condition>],
@@ -38,7 +38,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         &mut self,
         from: Interned<QueryNode>,
         cost: u16,
-        all_distances: &MappedInterner<Vec<u16>, QueryNode>,
+        all_distances: &MappedInterner<QueryNode, Vec<u16>>,
         dead_ends_cache: &mut DeadEndsCache<G::Condition>,
         visit: &mut impl FnMut(
             &[Interned<G::Condition>],
@@ -137,7 +137,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         Ok(any_valid)
     }
 
-    pub fn initialize_distances_with_necessary_edges(&self) -> MappedInterner<Vec<u16>, QueryNode> {
+    pub fn initialize_distances_with_necessary_edges(&self) -> MappedInterner<QueryNode, Vec<u16>> {
         let mut distances_to_end = self.query_graph.nodes.map(|_| vec![]);
         let mut enqueued = SmallBitmap::new(self.query_graph.nodes.len());
 

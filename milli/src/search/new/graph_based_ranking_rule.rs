@@ -89,7 +89,7 @@ pub struct GraphBasedRankingRuleState<G: RankingRuleGraphTrait> {
     /// Cache used to optimistically discard paths that resolve to no documents.
     dead_ends_cache: DeadEndsCache<G::Condition>,
     /// A structure giving the list of possible costs from each node to the end node
-    all_distances: MappedInterner<Vec<u16>, QueryNode>,
+    all_distances: MappedInterner<QueryNode, Vec<u16>>,
     /// An index in the first element of `all_distances`, giving the cost of the next bucket
     cur_distance_idx: usize,
 }

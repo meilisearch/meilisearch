@@ -138,7 +138,7 @@ impl RankingRuleGraphTrait for TypoGraph {
         paths: &[Vec<Interned<TypoCondition>>],
         dead_ends_cache: &DeadEndsCache<TypoCondition>,
         universe: &RoaringBitmap,
-        distances: &MappedInterner<Vec<u16>, QueryNode>,
+        distances: &MappedInterner<QueryNode, Vec<u16>>,
         cost: u16,
         logger: &mut dyn SearchLogger<QueryGraph>,
     ) {

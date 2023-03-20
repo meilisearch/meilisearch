@@ -96,7 +96,7 @@ impl<T> FixedSizeInterner<T> {
     pub fn len(&self) -> u16 {
         self.stable_store.len() as u16
     }
-    pub fn map<U>(&self, map_f: impl Fn(&T) -> U) -> MappedInterner<U, T> {
+    pub fn map<U>(&self, map_f: impl Fn(&T) -> U) -> MappedInterner<T, U> {
         MappedInterner {
             stable_store: self.stable_store.iter().map(map_f).collect(),
             _phantom: PhantomData,
@@ -119,19 +119,19 @@ impl<T> FixedSizeInterner<T> {
 ///
 /// Values in this interner are indexed with [`Interned<From>`].
 #[derive(Clone)]
-pub struct MappedInterner<T, From> {
+pub struct MappedInterner<From, T> {
     stable_store: Vec<T>,
     _phantom: PhantomData<From>,
 }
 
-impl<T, From> MappedInterner<T, From> {
+impl<From, T> MappedInterner<From, T> {
     pub fn get(&self, interned: Interned<From>) -> &T {
         &self.stable_store[interned.idx as usize]
     }
     pub fn get_mut(&mut self, interned: Interned<From>) -> &mut T {
         &mut self.stable_store[interned.idx as usize]
     }
-    pub fn map<U>(&self, map_f: impl Fn(&T) -> U) -> MappedInterner<U, From> {
+    pub fn map<U>(&self, map_f: impl Fn(&T) -> U) -> MappedInterner<From, U> {
         MappedInterner {
             stable_store: self.stable_store.iter().map(map_f).collect(),
             _phantom: PhantomData,

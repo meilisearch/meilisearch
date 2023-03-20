@@ -114,7 +114,7 @@ pub trait RankingRuleGraphTrait: Sized {
         paths: &[Vec<Interned<Self::Condition>>],
         dead_ends_cache: &DeadEndsCache<Self::Condition>,
         universe: &RoaringBitmap,
-        distances: &MappedInterner<Vec<u16>, QueryNode>,
+        distances: &MappedInterner<QueryNode, Vec<u16>>,
         cost: u16,
         logger: &mut dyn SearchLogger<QueryGraph>,
     );
@@ -127,7 +127,7 @@ pub trait RankingRuleGraphTrait: Sized {
 pub struct RankingRuleGraph<G: RankingRuleGraphTrait> {
     pub query_graph: QueryGraph,
     pub edges_store: FixedSizeInterner<Option<Edge<G::Condition>>>,
-    pub edges_of_node: MappedInterner<SmallBitmap<Option<Edge<G::Condition>>>, QueryNode>,
+    pub edges_of_node: MappedInterner<QueryNode, SmallBitmap<Option<Edge<G::Condition>>>>,
     pub conditions_interner: FixedSizeInterner<G::Condition>,
 }
 impl<G: RankingRuleGraphTrait> Clone for RankingRuleGraph<G> {

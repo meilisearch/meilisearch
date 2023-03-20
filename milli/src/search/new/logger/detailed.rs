@@ -44,7 +44,7 @@ pub enum SearchEvents {
         paths: Vec<Vec<Interned<ProximityCondition>>>,
         dead_ends_cache: DeadEndsCache<ProximityCondition>,
         universe: RoaringBitmap,
-        distances: MappedInterner<Vec<u16>, QueryNode>,
+        distances: MappedInterner<QueryNode, Vec<u16>>,
         cost: u16,
     },
     TypoState {
@@ -52,7 +52,7 @@ pub enum SearchEvents {
         paths: Vec<Vec<Interned<TypoCondition>>>,
         dead_ends_cache: DeadEndsCache<TypoCondition>,
         universe: RoaringBitmap,
-        distances: MappedInterner<Vec<u16>, QueryNode>,
+        distances: MappedInterner<QueryNode, Vec<u16>>,
         cost: u16,
     },
     RankingRuleSkipBucket {
@@ -170,7 +170,7 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         paths_map: &[Vec<Interned<ProximityCondition>>],
         dead_ends_cache: &DeadEndsCache<ProximityCondition>,
         universe: &RoaringBitmap,
-        distances: &MappedInterner<Vec<u16>, QueryNode>,
+        distances: &MappedInterner<QueryNode, Vec<u16>>,
         cost: u16,
     ) {
         self.events.push(SearchEvents::ProximityState {
@@ -189,7 +189,7 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         paths_map: &[Vec<Interned<TypoCondition>>],
         dead_ends_cache: &DeadEndsCache<TypoCondition>,
         universe: &RoaringBitmap,
-        distances: &MappedInterner<Vec<u16>, QueryNode>,
+        distances: &MappedInterner<QueryNode, Vec<u16>>,
         cost: u16,
     ) {
         self.events.push(SearchEvents::TypoState {
@@ -525,7 +525,7 @@ shape: class"
         graph: &RankingRuleGraph<R>,
         paths: &[Vec<Interned<R::Condition>>],
         _dead_ends_cache: &DeadEndsCache<R::Condition>,
-        distances: MappedInterner<Vec<u16>, QueryNode>,
+        distances: MappedInterner<QueryNode, Vec<u16>>,
         file: &mut File,
     ) {
         writeln!(file, "direction: right").unwrap();

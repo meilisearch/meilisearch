@@ -67,7 +67,7 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
         paths: &[Vec<Interned<ProximityCondition>>],
         dead_ends_cache: &DeadEndsCache<ProximityCondition>,
         universe: &RoaringBitmap,
-        distances: &MappedInterner<Vec<u16>, QueryNode>,
+        distances: &MappedInterner<QueryNode, Vec<u16>>,
         cost: u16,
     );
 
@@ -78,7 +78,7 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
         paths: &[Vec<Interned<TypoCondition>>],
         dead_ends_cache: &DeadEndsCache<TypoCondition>,
         universe: &RoaringBitmap,
-        distances: &MappedInterner<Vec<u16>, QueryNode>,
+        distances: &MappedInterner<QueryNode, Vec<u16>>,
         cost: u16,
     );
 }
@@ -138,7 +138,7 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
         _paths_map: &[Vec<Interned<ProximityCondition>>],
         _dead_ends_cache: &DeadEndsCache<ProximityCondition>,
         _universe: &RoaringBitmap,
-        _distances: &MappedInterner<Vec<u16>, QueryNode>,
+        _distances: &MappedInterner<QueryNode, Vec<u16>>,
         _cost: u16,
     ) {
     }
@@ -149,7 +149,7 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
         _paths: &[Vec<Interned<TypoCondition>>],
         _dead_ends_cache: &DeadEndsCache<TypoCondition>,
         _universe: &RoaringBitmap,
-        _distances: &MappedInterner<Vec<u16>, QueryNode>,
+        _distances: &MappedInterner<QueryNode, Vec<u16>>,
         _cost: u16,
     ) {
     }
