@@ -1,0 +1,47 @@
+---
+source: meilisearch/tests/dumps/mod.rs
+---
+{
+  "results": [
+    {
+      "uid": 0,
+      "indexUid": "rubygems",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "displayedAttributes": [
+          "name",
+          "summary",
+          "description",
+          "version",
+          "total_downloads"
+        ],
+        "searchableAttributes": [
+          "name",
+          "summary"
+        ],
+        "filterableAttributes": [
+          "version"
+        ],
+        "rankingRules": [
+          "typo",
+          "words",
+          "fame:desc",
+          "proximity",
+          "attribute",
+          "exactness",
+          "total_downloads:desc"
+        ]
+      },
+      "error": null,
+      "duration": "PT0.008886S",
+      "enqueuedAt": "2021-09-08T08:40:28.660188Z",
+      "startedAt": "2021-09-08T08:40:28.660766Z",
+      "finishedAt": "2021-09-08T08:40:28.669652Z"
+    }
+  ],
+  "limit": 1,
+  "from": 0,
+  "next": null
+}

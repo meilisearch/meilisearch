@@ -1,5 +1,6 @@
 mod data;
 
+use meili_snap::{json_string, snapshot};
 use meilisearch::Opt;
 use serde_json::json;
 
@@ -66,6 +67,35 @@ async fn import_dump_v1_movie_raw() {
         document,
         json!({"id": 10006, "title": "Wild Seven", "overview": "In this darkly karmic vision of Arizona, a man who breathes nothing but ill will begins a noxious domino effect as quickly as an uncontrollable virus kills. As he exits Arizona State Penn after twenty-one long years, Wilson has only one thing on the brain, leveling the score with career criminal, Mackey Willis.", "genres": ["Action", "Crime", "Drama"], "poster": "https://image.tmdb.org/t/p/w500/y114dTPoqn8k2Txps4P2tI95YCS.jpg", "release_date": 1136073600})
     );
+
+    // We're going to ensure that every reverse index of the task queue has been well built while importing the dump
+    let (tasks, code) = server.tasks_filter("uids=0&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("types=documentAdditionOrUpdate&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("statuses=succeeded&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("indexUids=indexUID&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterEnqueuedAt=2021-09-05&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterStartedAt=2021-09-06&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterFinishedAt=2021-09-07&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
 }
 
 #[actix_rt::test]
@@ -129,6 +159,35 @@ async fn import_dump_v1_movie_with_settings() {
         document,
         json!({ "id": 10006, "title": "Wild Seven", "genres": ["Action", "Crime", "Drama"], "overview": "In this darkly karmic vision of Arizona, a man who breathes nothing but ill will begins a noxious domino effect as quickly as an uncontrollable virus kills. As he exits Arizona State Penn after twenty-one long years, Wilson has only one thing on the brain, leveling the score with career criminal, Mackey Willis.", "poster": "https://image.tmdb.org/t/p/w500/y114dTPoqn8k2Txps4P2tI95YCS.jpg", "release_date": 1136073600})
     );
+
+    // We're going to ensure that every reverse index of the task queue has been well built while importing the dump
+    let (tasks, code) = server.tasks_filter("uids=0&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("types=documentAdditionOrUpdate&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("statuses=succeeded&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("indexUids=indexUID&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterEnqueuedAt=2021-09-05&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterStartedAt=2021-09-06&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterFinishedAt=2021-09-07&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
 }
 
 #[actix_rt::test]
@@ -192,6 +251,35 @@ async fn import_dump_v1_rubygems_with_settings() {
         document,
         json!({ "name": "vortex-of-agony", "summary": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "description": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "id": "159227", "version": "0.1.0", "total_downloads": "1007"})
     );
+
+    // We're going to ensure that every reverse index of the task queue has been well built while importing the dump
+    let (tasks, code) = server.tasks_filter("uids=0&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("types=documentAdditionOrUpdate&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("statuses=succeeded&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("indexUids=rubygems&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterEnqueuedAt=2021-09-05&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterStartedAt=2021-09-06&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterFinishedAt=2021-09-07&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
 }
 
 #[actix_rt::test]
@@ -253,6 +341,35 @@ async fn import_dump_v2_movie_raw() {
         document,
         json!({"id": 10006, "title": "Wild Seven", "overview": "In this darkly karmic vision of Arizona, a man who breathes nothing but ill will begins a noxious domino effect as quickly as an uncontrollable virus kills. As he exits Arizona State Penn after twenty-one long years, Wilson has only one thing on the brain, leveling the score with career criminal, Mackey Willis.", "genres": ["Action", "Crime", "Drama"], "poster": "https://image.tmdb.org/t/p/w500/y114dTPoqn8k2Txps4P2tI95YCS.jpg", "release_date": 1136073600})
     );
+
+    // We're going to ensure that every reverse index of the task queue has been well built while importing the dump
+    let (tasks, code) = server.tasks_filter("uids=0&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("types=documentAdditionOrUpdate&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("statuses=succeeded&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("indexUids=indexUID&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterEnqueuedAt=2021-09-05&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterStartedAt=2021-09-06&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterFinishedAt=2021-09-07&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
 }
 
 #[actix_rt::test]
@@ -316,6 +433,35 @@ async fn import_dump_v2_movie_with_settings() {
         document,
         json!({ "id": 10006, "title": "Wild Seven", "genres": ["Action", "Crime", "Drama"], "overview": "In this darkly karmic vision of Arizona, a man who breathes nothing but ill will begins a noxious domino effect as quickly as an uncontrollable virus kills. As he exits Arizona State Penn after twenty-one long years, Wilson has only one thing on the brain, leveling the score with career criminal, Mackey Willis.", "poster": "https://image.tmdb.org/t/p/w500/y114dTPoqn8k2Txps4P2tI95YCS.jpg", "release_date": 1136073600})
     );
+
+    // We're going to ensure that every reverse index of the task queue has been well built while importing the dump
+    let (tasks, code) = server.tasks_filter("uids=0&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("types=documentAdditionOrUpdate&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("statuses=succeeded&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("indexUids=indexUID&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterEnqueuedAt=2021-09-05&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterStartedAt=2021-09-06&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterFinishedAt=2021-09-07&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
 }
 
 #[actix_rt::test]
@@ -379,6 +525,35 @@ async fn import_dump_v2_rubygems_with_settings() {
         document,
         json!({ "name": "vortex-of-agony", "summary": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "description": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "id": "159227", "version": "0.1.0", "total_downloads": "1007"})
     );
+
+    // We're going to ensure that every reverse index of the task queue has been well built while importing the dump
+    let (tasks, code) = server.tasks_filter("uids=0&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("types=documentAdditionOrUpdate&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("statuses=succeeded&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("indexUids=rubygems&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterEnqueuedAt=2021-09-05&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterStartedAt=2021-09-06&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterFinishedAt=2021-09-07&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
 }
 
 #[actix_rt::test]
@@ -440,6 +615,35 @@ async fn import_dump_v3_movie_raw() {
         document,
         json!({"id": 10006, "title": "Wild Seven", "overview": "In this darkly karmic vision of Arizona, a man who breathes nothing but ill will begins a noxious domino effect as quickly as an uncontrollable virus kills. As he exits Arizona State Penn after twenty-one long years, Wilson has only one thing on the brain, leveling the score with career criminal, Mackey Willis.", "genres": ["Action", "Crime", "Drama"], "poster": "https://image.tmdb.org/t/p/w500/y114dTPoqn8k2Txps4P2tI95YCS.jpg", "release_date": 1136073600})
     );
+
+    // We're going to ensure that every reverse index of the task queue has been well built while importing the dump
+    let (tasks, code) = server.tasks_filter("uids=0&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("types=documentAdditionOrUpdate&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("statuses=succeeded&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("indexUids=indexUID&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterEnqueuedAt=2021-09-05&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterStartedAt=2021-09-06&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterFinishedAt=2021-09-07&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
 }
 
 #[actix_rt::test]
@@ -503,6 +707,35 @@ async fn import_dump_v3_movie_with_settings() {
         document,
         json!({ "id": 10006, "title": "Wild Seven", "genres": ["Action", "Crime", "Drama"], "overview": "In this darkly karmic vision of Arizona, a man who breathes nothing but ill will begins a noxious domino effect as quickly as an uncontrollable virus kills. As he exits Arizona State Penn after twenty-one long years, Wilson has only one thing on the brain, leveling the score with career criminal, Mackey Willis.", "poster": "https://image.tmdb.org/t/p/w500/y114dTPoqn8k2Txps4P2tI95YCS.jpg", "release_date": 1136073600})
     );
+
+    // We're going to ensure that every reverse index of the task queue has been well built while importing the dump
+    let (tasks, code) = server.tasks_filter("uids=0&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("types=documentAdditionOrUpdate&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("statuses=succeeded&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("indexUids=indexUID&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterEnqueuedAt=2021-09-05&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterStartedAt=2021-09-06&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterFinishedAt=2021-09-07&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
 }
 
 #[actix_rt::test]
@@ -566,6 +799,35 @@ async fn import_dump_v3_rubygems_with_settings() {
         document,
         json!({ "name": "vortex-of-agony", "summary": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "description": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "id": "159227", "version": "0.1.0", "total_downloads": "1007"})
     );
+
+    // We're going to ensure that every reverse index of the task queue has been well built while importing the dump
+    let (tasks, code) = server.tasks_filter("uids=0&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("types=documentAdditionOrUpdate&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("statuses=succeeded&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("indexUids=rubygems&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterEnqueuedAt=2021-09-05&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterStartedAt=2021-09-06&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterFinishedAt=2021-09-07&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
 }
 
 #[actix_rt::test]
@@ -627,6 +889,35 @@ async fn import_dump_v4_movie_raw() {
         document,
         json!({ "id": 10006, "title": "Wild Seven", "overview": "In this darkly karmic vision of Arizona, a man who breathes nothing but ill will begins a noxious domino effect as quickly as an uncontrollable virus kills. As he exits Arizona State Penn after twenty-one long years, Wilson has only one thing on the brain, leveling the score with career criminal, Mackey Willis.", "genres": ["Action", "Crime", "Drama"], "poster": "https://image.tmdb.org/t/p/w500/y114dTPoqn8k2Txps4P2tI95YCS.jpg", "release_date": 1136073600})
     );
+
+    // We're going to ensure that every reverse index of the task queue has been well built while importing the dump
+    let (tasks, code) = server.tasks_filter("uids=0&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("types=documentAdditionOrUpdate&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("statuses=succeeded&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("indexUids=indexUID&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterEnqueuedAt=2021-09-05&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterStartedAt=2021-09-06&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterFinishedAt=2021-09-07&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
 }
 
 #[actix_rt::test]
@@ -690,6 +981,35 @@ async fn import_dump_v4_movie_with_settings() {
         document,
         json!({ "id": 10006, "title": "Wild Seven", "genres": ["Action", "Crime", "Drama"], "overview": "In this darkly karmic vision of Arizona, a man who breathes nothing but ill will begins a noxious domino effect as quickly as an uncontrollable virus kills. As he exits Arizona State Penn after twenty-one long years, Wilson has only one thing on the brain, leveling the score with career criminal, Mackey Willis.", "poster": "https://image.tmdb.org/t/p/w500/y114dTPoqn8k2Txps4P2tI95YCS.jpg", "release_date": 1136073600})
     );
+
+    // We're going to ensure that every reverse index of the task queue has been well built while importing the dump
+    let (tasks, code) = server.tasks_filter("uids=0&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("types=documentAdditionOrUpdate&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("statuses=succeeded&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("indexUids=indexUID&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterEnqueuedAt=2021-09-05&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterStartedAt=2021-09-06&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterFinishedAt=2021-09-07&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
 }
 
 #[actix_rt::test]
@@ -753,6 +1073,35 @@ async fn import_dump_v4_rubygems_with_settings() {
         document,
         json!({ "name": "vortex-of-agony", "summary": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "description": "You dont need to use nodejs or go, just install this plugin. It will crash your application at random", "id": "159227", "version": "0.1.0", "total_downloads": "1007"})
     );
+
+    // We're going to ensure that every reverse index of the task queue has been well built while importing the dump
+    let (tasks, code) = server.tasks_filter("uids=0&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("types=documentAdditionOrUpdate&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("statuses=succeeded&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("indexUids=rubygems&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterEnqueuedAt=2021-09-05&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterStartedAt=2021-09-06&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("afterFinishedAt=2021-09-07&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
 }
 
 #[actix_rt::test]
@@ -816,4 +1165,43 @@ async fn import_dump_v5() {
     let key = &keys["results"][0];
 
     assert_eq!(key["name"], "my key");
+
+    // We're going to ensure that every reverse index of the task queue has been well built while importing the dump
+    let (tasks, code) = server.tasks_filter("uids=0&limit=1&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("types=documentAdditionOrUpdate&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(tasks));
+
+    let (tasks, code) = server.tasks_filter("statuses=succeeded&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(
+        json_string!(tasks, { ".results[].details.dumpUid" => "[uid]",  ".results[].duration" => "[duration]" ,  ".results[].startedAt" => "[date]" ,  ".results[].finishedAt" => "[date]"  })
+    );
+
+    let (tasks, code) = server.tasks_filter("indexUids=test&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(
+        json_string!(tasks, { ".results[].details.dumpUid" => "[uid]",  ".results[].duration" => "[duration]" ,  ".results[].startedAt" => "[date]" ,  ".results[].finishedAt" => "[date]"  })
+    );
+
+    let (tasks, code) = server.tasks_filter("afterEnqueuedAt=2021-09-05&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(
+        json_string!(tasks, { ".results[].details.dumpUid" => "[uid]",  ".results[].duration" => "[duration]" ,  ".results[].startedAt" => "[date]" ,  ".results[].finishedAt" => "[date]"  })
+    );
+
+    let (tasks, code) = server.tasks_filter("afterStartedAt=2021-09-06&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(
+        json_string!(tasks, { ".results[].details.dumpUid" => "[uid]",  ".results[].duration" => "[duration]" ,  ".results[].startedAt" => "[date]" ,  ".results[].finishedAt" => "[date]"  })
+    );
+
+    let (tasks, code) = server.tasks_filter("afterFinishedAt=2021-09-07&limit=1").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(
+        json_string!(tasks, { ".results[].details.dumpUid" => "[uid]",  ".results[].duration" => "[duration]" ,  ".results[].startedAt" => "[date]" ,  ".results[].finishedAt" => "[date]"  })
+    );
 }
