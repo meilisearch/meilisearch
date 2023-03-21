@@ -213,8 +213,6 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                         dead_ends_cache.forbid_condition(latest_condition);
                         // 2. remove all the edges with this condition from the ranking rule graph
                         graph.remove_edges_with_condition(latest_condition);
-                        // 3. Also remove the entry from the condition_docids_cache, since we don't need it anymore
-                        condition_docids_cache.cache.remove(&latest_condition);
                         return Ok(ControlFlow::Continue(()));
                     }
                     path_docids &= condition_docids;

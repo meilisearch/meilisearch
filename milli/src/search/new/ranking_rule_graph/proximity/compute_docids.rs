@@ -2,47 +2,37 @@
 
 use std::iter::FromIterator;
 
-use fxhash::FxHashSet;
-use heed::RoTxn;
-use roaring::RoaringBitmap;
-
 use super::ProximityCondition;
 use crate::search::new::db_cache::DatabaseCache;
 use crate::search::new::interner::{DedupInterner, Interned};
 use crate::search::new::query_term::{Phrase, QueryTerm};
+use crate::search::new::resolve_query_graph::QueryTermDocIdsCache;
 use crate::search::new::SearchContext;
-use crate::{CboRoaringBitmapCodec, Result};
+use crate::{CboRoaringBitmapCodec, Index, Result};
+use fxhash::FxHashSet;
+use heed::RoTxn;
+use roaring::RoaringBitmap;
 
 pub fn compute_docids<'ctx>(
     ctx: &mut SearchContext<'ctx>,
     condition: &ProximityCondition,
     universe: &RoaringBitmap,
 ) -> Result<(RoaringBitmap, FxHashSet<Interned<String>>, FxHashSet<Interned<Phrase>>)> {
-    let SearchContext {
-        index,
-        txn,
-        db_cache,
-        word_interner,
-        term_docids,
-        phrase_interner,
-        term_interner,
-    } = ctx;
-
     let (left_term, right_term, right_term_ngram_len, cost) = match condition {
         ProximityCondition::Uninit { left_term, right_term, right_term_ngram_len, cost } => {
             (*left_term, *right_term, *right_term_ngram_len, *cost)
         }
         ProximityCondition::Term { term } => {
-            let term_v = term_interner.get(*term);
+            let term_v = ctx.term_interner.get(*term);
             return Ok((
-                term_docids
+                ctx.term_docids
                     .get_query_term_docids(
-                        index,
-                        txn,
-                        db_cache,
-                        word_interner,
-                        term_interner,
-                        phrase_interner,
+                        ctx.index,
+                        ctx.txn,
+                        &mut ctx.db_cache,
+                        &ctx.word_interner,
+                        &ctx.term_interner,
+                        &ctx.phrase_interner,
                         *term,
                     )?
                     .clone(),
@@ -52,8 +42,8 @@ pub fn compute_docids<'ctx>(
         }
     };
 
-    let left_term = term_interner.get(left_term);
-    let right_term = term_interner.get(right_term);
+    let left_term = ctx.term_interner.get(left_term);
+    let right_term = ctx.term_interner.get(right_term);
 
     // e.g. for the simple words `sun .. flower`
     // the cost is 5
@@ -73,12 +63,14 @@ pub fn compute_docids<'ctx>(
     let mut docids = RoaringBitmap::new();
 
     if let Some(right_prefix) = right_term.use_prefix_db {
-        for (left_phrase, left_word) in last_word_of_term_iter(left_term, phrase_interner) {
+        for (left_phrase, left_word) in last_word_of_term_iter(left_term, &ctx.phrase_interner) {
             compute_prefix_edges(
-                index,
-                txn,
-                db_cache,
-                word_interner,
+                ctx.index,
+                ctx.txn,
+                &mut ctx.db_cache,
+                &mut ctx.term_docids,
+                &ctx.word_interner,
+                &ctx.phrase_interner,
                 left_word,
                 right_prefix,
                 left_phrase,
@@ -99,13 +91,16 @@ pub fn compute_docids<'ctx>(
     // + one-typo/zero-typo, then one-typo/one-typo, then ... until an arbitrary limit has been
     // reached
 
-    for (left_phrase, left_word) in last_word_of_term_iter(left_term, phrase_interner) {
-        for (right_word, right_phrase) in first_word_of_term_iter(right_term, phrase_interner) {
+    for (left_phrase, left_word) in last_word_of_term_iter(left_term, &ctx.phrase_interner) {
+        for (right_word, right_phrase) in first_word_of_term_iter(right_term, &ctx.phrase_interner)
+        {
             compute_non_prefix_edges(
-                index,
-                txn,
-                db_cache,
-                word_interner,
+                ctx.index,
+                ctx.txn,
+                &mut ctx.db_cache,
+                &mut ctx.term_docids,
+                &ctx.word_interner,
+                &ctx.phrase_interner,
                 left_word,
                 right_word,
                 &[left_phrase, right_phrase].iter().copied().flatten().collect::<Vec<_>>(),
@@ -123,10 +118,12 @@ pub fn compute_docids<'ctx>(
 }
 
 fn compute_prefix_edges<'ctx>(
-    index: &mut &crate::Index,
+    index: &Index,
     txn: &'ctx RoTxn,
     db_cache: &mut DatabaseCache<'ctx>,
-    word_interner: &mut DedupInterner<String>,
+    term_docids: &mut QueryTermDocIdsCache,
+    word_interner: &DedupInterner<String>,
+    phrase_interner: &DedupInterner<Phrase>,
     left_word: Interned<String>,
     right_prefix: Interned<String>,
     left_phrase: Option<Interned<Phrase>>,
@@ -137,10 +134,23 @@ fn compute_prefix_edges<'ctx>(
     used_words: &mut FxHashSet<Interned<String>>,
     used_phrases: &mut FxHashSet<Interned<Phrase>>,
 ) -> Result<()> {
+    let mut universe = universe.clone();
     if let Some(phrase) = left_phrase {
-        // TODO: compute the phrase, take the intersection between
-        // the phrase and the docids
-        used_phrases.insert(phrase); // This is not fully correct
+        let phrase_docids = term_docids.get_phrase_docids(
+            index,
+            txn,
+            db_cache,
+            word_interner,
+            phrase_interner,
+            phrase,
+        )?;
+        if !phrase_docids.is_empty() {
+            used_phrases.insert(phrase);
+        }
+        universe &= phrase_docids;
+        if universe.is_empty() {
+            return Ok(());
+        }
     }
 
     if let Some(new_docids) = db_cache.get_word_prefix_pair_proximity_docids(
@@ -151,7 +161,7 @@ fn compute_prefix_edges<'ctx>(
         right_prefix,
         forward_proximity,
     )? {
-        let new_docids = universe & CboRoaringBitmapCodec::deserialize_from(new_docids)?;
+        let new_docids = &universe & CboRoaringBitmapCodec::deserialize_from(new_docids)?;
         if !new_docids.is_empty() {
             used_words.insert(left_word);
             used_words.insert(right_prefix);
@@ -169,7 +179,7 @@ fn compute_prefix_edges<'ctx>(
             left_word,
             backward_proximity,
         )? {
-            let new_docids = universe & CboRoaringBitmapCodec::deserialize_from(new_docids)?;
+            let new_docids = &universe & CboRoaringBitmapCodec::deserialize_from(new_docids)?;
             if !new_docids.is_empty() {
                 used_words.insert(left_word);
                 used_words.insert(right_prefix);
@@ -182,10 +192,12 @@ fn compute_prefix_edges<'ctx>(
 }
 
 fn compute_non_prefix_edges<'ctx>(
-    index: &mut &crate::Index,
+    index: &Index,
     txn: &'ctx RoTxn,
     db_cache: &mut DatabaseCache<'ctx>,
-    word_interner: &mut DedupInterner<String>,
+    term_docids: &mut QueryTermDocIdsCache,
+    word_interner: &DedupInterner<String>,
+    phrase_interner: &DedupInterner<Phrase>,
     word1: Interned<String>,
     word2: Interned<String>,
     phrases: &[Interned<Phrase>],
@@ -196,10 +208,23 @@ fn compute_non_prefix_edges<'ctx>(
     used_words: &mut FxHashSet<Interned<String>>,
     used_phrases: &mut FxHashSet<Interned<Phrase>>,
 ) -> Result<()> {
-    if !phrases.is_empty() {
-        // TODO: compute the docids associated with these phrases
-        // take their intersection with the new docids
-        used_phrases.extend(phrases); // This is not fully correct
+    let mut universe = universe.clone();
+    for phrase in phrases {
+        let phrase_docids = term_docids.get_phrase_docids(
+            index,
+            txn,
+            db_cache,
+            word_interner,
+            phrase_interner,
+            *phrase,
+        )?;
+        if !phrase_docids.is_empty() {
+            used_phrases.insert(*phrase);
+        }
+        universe &= phrase_docids;
+        if universe.is_empty() {
+            return Ok(());
+        }
     }
     if let Some(new_docids) = db_cache.get_word_pair_proximity_docids(
         index,
@@ -209,7 +234,7 @@ fn compute_non_prefix_edges<'ctx>(
         word2,
         forward_proximity,
     )? {
-        let new_docids = universe & CboRoaringBitmapCodec::deserialize_from(new_docids)?;
+        let new_docids = &universe & CboRoaringBitmapCodec::deserialize_from(new_docids)?;
         if !new_docids.is_empty() {
             used_words.insert(word1);
             used_words.insert(word2);
@@ -228,7 +253,7 @@ fn compute_non_prefix_edges<'ctx>(
             word1,
             backward_proximity,
         )? {
-            let new_docids = universe & CboRoaringBitmapCodec::deserialize_from(new_docids)?;
+            let new_docids = &universe & CboRoaringBitmapCodec::deserialize_from(new_docids)?;
             if !new_docids.is_empty() {
                 used_words.insert(word1);
                 used_words.insert(word2);
