@@ -544,20 +544,9 @@ impl IndexScheduler {
     fn run(&self) {
         let run = self.private_clone();
 
-        if run.cluster.is_some() {
-            log::warn!("Run in a cluster");
-        } else {
-            log::warn!("Run not in a cluster");
-        }
-
         // if we're a follower we starts a thread to register the tasks coming from the leader
         if let Some(Cluster::Follower(ref follower)) = self.cluster {
             let this = self.private_clone();
-            if this.cluster.is_some() {
-                log::warn!("this in a cluster");
-            } else {
-                log::warn!("this not in a cluster");
-            }
             let follower = follower.clone();
             std::thread::spawn(move || loop {
                 let (task, content) = follower.get_new_task();
