@@ -987,6 +987,18 @@ impl IndexScheduler {
             (bitmap.insert(task.uid));
         })?;
 
+        utils::insert_task_datetime(&mut wtxn, self.enqueued_at, task.enqueued_at, task.uid)?;
+
+        // we can't override the started_at & finished_at, so we must only set it if the tasks is finished and won't change
+        if matches!(task.status, Status::Succeeded | Status::Failed | Status::Canceled) {
+            if let Some(started_at) = task.started_at {
+                utils::insert_task_datetime(&mut wtxn, self.started_at, started_at, task.uid)?;
+            }
+            if let Some(finished_at) = task.finished_at {
+                utils::insert_task_datetime(&mut wtxn, self.finished_at, finished_at, task.uid)?;
+            }
+        }
+
         wtxn.commit()?;
         self.wake_up.signal();
 
