@@ -1,7 +1,8 @@
-use std::collections::HashSet;
+// use std::collections::HashSet;
 use std::fmt::Write;
 use std::iter::FromIterator;
 
+use fxhash::FxHashSet;
 use roaring::RoaringBitmap;
 
 use super::{DeadEndsCache, RankingRuleGraph, RankingRuleGraphTrait};
@@ -26,7 +27,7 @@ impl RankingRuleGraphTrait for TypoGraph {
         ctx: &mut SearchContext<'ctx>,
         condition: &Self::Condition,
         universe: &RoaringBitmap,
-    ) -> Result<RoaringBitmap> {
+    ) -> Result<(RoaringBitmap, FxHashSet<Interned<String>>, FxHashSet<Interned<Phrase>>)> {
         let SearchContext {
             index,
             txn,
@@ -48,7 +49,12 @@ impl RankingRuleGraphTrait for TypoGraph {
                 condition.term,
             )?;
 
-        Ok(docids)
+        let term = term_interner.get(condition.term);
+        Ok((
+            docids,
+            FxHashSet::from_iter(term.all_single_words_except_prefix_db()),
+            FxHashSet::from_iter(term.all_phrases()),
+        ))
     }
 
     fn build_edges<'ctx>(
@@ -202,21 +208,21 @@ impl RankingRuleGraphTrait for TypoGraph {
         Ok(s)
     }
 
-    fn words_used_by_condition<'ctx>(
-        ctx: &mut SearchContext<'ctx>,
-        condition: &Self::Condition,
-    ) -> Result<HashSet<Interned<String>>> {
-        let TypoCondition { term, .. } = condition;
-        let term = ctx.term_interner.get(*term);
-        Ok(HashSet::from_iter(term.all_single_words_except_prefix_db()))
-    }
+    // fn words_used_by_condition<'ctx>(
+    //     ctx: &mut SearchContext<'ctx>,
+    //     condition: &Self::Condition,
+    // ) -> Result<HashSet<Interned<String>>> {
+    //     let TypoCondition { term, .. } = condition;
+    //     let term = ctx.term_interner.get(*term);
+    //     Ok(HashSet::from_iter(term.all_single_words_except_prefix_db()))
+    // }
 
-    fn phrases_used_by_condition<'ctx>(
-        ctx: &mut SearchContext<'ctx>,
-        condition: &Self::Condition,
-    ) -> Result<HashSet<Interned<Phrase>>> {
-        let TypoCondition { term, .. } = condition;
-        let term = ctx.term_interner.get(*term);
-        Ok(HashSet::from_iter(term.all_phrases()))
-    }
+    // fn phrases_used_by_condition<'ctx>(
+    //     ctx: &mut SearchContext<'ctx>,
+    //     condition: &Self::Condition,
+    // ) -> Result<HashSet<Interned<Phrase>>> {
+    //     let TypoCondition { term, .. } = condition;
+    //     let term = ctx.term_interner.get(*term);
+    //     Ok(HashSet::from_iter(term.all_phrases()))
+    // }
 }

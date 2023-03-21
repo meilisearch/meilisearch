@@ -318,9 +318,10 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
             let mut used_words = HashSet::new();
             let mut used_phrases = HashSet::new();
             for condition in used_conditions.iter() {
-                let condition = graph.conditions_interner.get(condition);
-                used_words.extend(G::words_used_by_condition(ctx, condition)?);
-                used_phrases.extend(G::phrases_used_by_condition(ctx, condition)?);
+                let (ws, ps) =
+                    condition_docids_cache.get_condition_used_words_and_phrases(condition);
+                used_words.extend(ws);
+                used_phrases.extend(ps);
             }
             // 2. Remove the unused words and phrases from all the nodes in the graph
             let mut nodes_to_remove = vec![];

@@ -367,6 +367,7 @@ pub fn word_derivations<'c>(
     match cache.entry((word.to_string(), is_prefix, max_typo)) {
         Entry::Occupied(entry) => Ok(entry.into_mut()),
         Entry::Vacant(entry) => {
+            // println!("word derivations {word} {is_prefix} {max_typo}");
             let mut derived_words = Vec::new();
             if max_typo == 0 {
                 if is_prefix {

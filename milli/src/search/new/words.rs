@@ -9,9 +9,9 @@ use super::{QueryGraph, RankingRule, RankingRuleOutput, SearchContext};
 use crate::{Result, TermsMatchingStrategy};
 
 pub struct Words {
-    exhausted: bool,
+    exhausted: bool, // TODO: remove
     query_graph: Option<QueryGraph>,
-    iterating: bool,
+    iterating: bool, // TODO: remove
     positions_to_remove: Vec<i8>,
     terms_matching_strategy: TermsMatchingStrategy,
 }

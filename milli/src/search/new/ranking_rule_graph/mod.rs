@@ -15,11 +15,11 @@ mod proximity;
 /// Implementation of the `typo` ranking rule
 mod typo;
 
-use std::collections::HashSet;
 use std::hash::Hash;
 
 pub use condition_docids_cache::ConditionDocIdsCache;
 pub use dead_ends_cache::DeadEndsCache;
+use fxhash::FxHashSet;
 pub use proximity::{ProximityCondition, ProximityGraph};
 use roaring::RoaringBitmap;
 pub use typo::{TypoCondition, TypoGraph};
@@ -80,23 +80,13 @@ pub trait RankingRuleGraphTrait: Sized {
         condition: &Self::Condition,
     ) -> Result<String>;
 
-    fn words_used_by_condition<'ctx>(
-        ctx: &mut SearchContext<'ctx>,
-        condition: &Self::Condition,
-    ) -> Result<HashSet<Interned<String>>>;
-
-    fn phrases_used_by_condition<'ctx>(
-        ctx: &mut SearchContext<'ctx>,
-        condition: &Self::Condition,
-    ) -> Result<HashSet<Interned<Phrase>>>;
-
     /// Compute the document ids associated with the given edge condition,
     /// restricted to the given universe.
     fn resolve_condition<'ctx>(
         ctx: &mut SearchContext<'ctx>,
         condition: &Self::Condition,
         universe: &RoaringBitmap,
-    ) -> Result<RoaringBitmap>;
+    ) -> Result<(RoaringBitmap, FxHashSet<Interned<String>>, FxHashSet<Interned<Phrase>>)>;
 
     /// Return the costs and conditions of the edges going from the source node to the destination node
     fn build_edges<'ctx>(

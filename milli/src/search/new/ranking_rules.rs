@@ -125,7 +125,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     let mut results = vec![];
     let mut cur_offset = 0usize;
 
-    /// Add the candidates to the results. Take `distinct`, `from`, `limit`, and `cur_offset`
+    /// Add the candidates to the results. Take `distinct`, `from`, `length`, and `cur_offset`
     /// into account and inform the logger.
     macro_rules! maybe_add_to_results {
         ($candidates:expr) => {
@@ -181,6 +181,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
             cur_offset += len as usize;
         };
     }
+
     while results.len() < length {
         // The universe for this bucket is zero or one element, so we don't need to sort
         // anything, just extend the results and go back to the parent ranking rule.
