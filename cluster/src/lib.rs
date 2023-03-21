@@ -1,4 +1,5 @@
 use std::net::ToSocketAddrs;
+use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 
 use batch::Batch;
@@ -40,12 +41,28 @@ pub enum FollowerMsg {
     RegisterNewTask(KindWithContent),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Consistency {
+    #[default]
     One,
     Two,
     Quorum,
     All,
+}
+
+impl std::fmt::Display for Consistency {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = serde_json::to_string(self).unwrap();
+        write!(f, "{s}")
+    }
+}
+
+impl FromStr for Consistency {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s)
+    }
 }
 
 #[derive(Clone)]

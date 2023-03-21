@@ -40,7 +40,7 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use batch::Batch;
-use cluster::{Follower, Leader};
+use cluster::{Consistency, Follower, Leader};
 use dump::{KindDump, TaskDump, UpdateFile};
 pub use error::Error;
 use file_store::FileStore;
@@ -309,6 +309,8 @@ pub struct IndexScheduler {
 
     /// The role in the cluster
     pub(crate) cluster: Option<Cluster>,
+    /// The Consistency level used by the leader. Ignored if the node is not in a leader in cluster mode.
+    pub(crate) consistency_level: Consistency,
 
     // ================= test
     // The next entry is dedicated to the tests.
@@ -376,6 +378,7 @@ impl IndexScheduler {
             auth_path: self.auth_path.clone(),
             version_file_path: self.version_file_path.clone(),
             cluster: self.cluster.clone(),
+            consistency_level: self.consistency_level,
             #[cfg(test)]
             test_breakpoint_sdr: self.test_breakpoint_sdr.clone(),
             #[cfg(test)]
@@ -391,6 +394,7 @@ impl IndexScheduler {
     pub fn new(
         options: IndexSchedulerOptions,
         cluster: Option<Cluster>,
+        consistency_level: Consistency,
         #[cfg(test)] test_breakpoint_sdr: crossbeam::channel::Sender<(Breakpoint, bool)>,
         #[cfg(test)] planned_failures: Vec<(usize, tests::FailureLocation)>,
     ) -> Result<Self> {
@@ -451,6 +455,7 @@ impl IndexScheduler {
             auth_path: options.auth_path,
             version_file_path: options.version_file_path,
             cluster,
+            consistency_level,
 
             #[cfg(test)]
             test_breakpoint_sdr,
@@ -1461,7 +1466,8 @@ mod tests {
                 autobatching_enabled,
             };
 
-            let index_scheduler = Self::new(options, None, sender, planned_failures).unwrap();
+            let index_scheduler =
+                Self::new(options, None, Consistency::default(), sender, planned_failures).unwrap();
 
             // To be 100% consistent between all test we're going to start the scheduler right now
             // and ensure it's in the expected starting state.

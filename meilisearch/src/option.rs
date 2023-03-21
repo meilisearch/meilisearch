@@ -12,7 +12,7 @@ use std::{env, fmt, fs};
 
 use byte_unit::{Byte, ByteError};
 use clap::Parser;
-use index_scheduler::ClusterMode;
+use cluster::Consistency;
 use meilisearch_types::milli::update::IndexerConfig;
 use rustls::server::{
     AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, ServerSessionMemoryCache,
@@ -390,7 +390,7 @@ impl Opt {
             #[cfg(all(not(debug_assertions), feature = "analytics"))]
             no_analytics,
             experimental_enable_metrics: enable_metrics_route,
-            cluster_configuration,
+            cluster_configuration: _,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
         export_to_env_if_not_present(MEILI_HTTP_ADDR, http_addr);
@@ -533,6 +533,10 @@ pub struct ClusterOpts {
     #[clap(long)]
     #[serde(default)]
     pub leader: Option<String>,
+
+    #[clap(long, default_value_t)]
+    #[serde(default)]
+    pub consistency: Consistency,
 }
 
 impl TryFrom<&IndexerOpts> for IndexerConfig {

@@ -291,6 +291,7 @@ fn open_or_create_database_unchecked(
                 index_count: DEFAULT_INDEX_COUNT,
             },
             cluster,
+            opt.cluster_configuration.consistency,
         )?)
     };
 

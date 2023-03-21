@@ -22,7 +22,6 @@ use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::BufWriter;
 
-use cluster::Consistency;
 use crossbeam::utils::Backoff;
 use dump::{DumpWriter, IndexMetadata};
 use log::{debug, error, info};
@@ -589,7 +588,7 @@ impl IndexScheduler {
                 }
 
                 match &self.cluster {
-                    Some(Cluster::Leader(leader)) => leader.commit(Consistency::All),
+                    Some(Cluster::Leader(leader)) => leader.commit(self.consistency_level),
                     Some(Cluster::Follower(follower)) => follower.ready_to_commit(),
                     None => (),
                 }
@@ -639,7 +638,7 @@ impl IndexScheduler {
                 }
 
                 match &self.cluster {
-                    Some(Cluster::Leader(leader)) => leader.commit(Consistency::All),
+                    Some(Cluster::Leader(leader)) => leader.commit(self.consistency_level),
                     Some(Cluster::Follower(follower)) => follower.ready_to_commit(),
                     None => (),
                 }
@@ -770,7 +769,7 @@ impl IndexScheduler {
                 let tasks = self.apply_index_operation(&mut index_wtxn, &index, op)?;
 
                 match &self.cluster {
-                    Some(Cluster::Leader(leader)) => leader.commit(Consistency::All),
+                    Some(Cluster::Leader(leader)) => leader.commit(self.consistency_level),
                     Some(Cluster::Follower(follower)) => follower.ready_to_commit(),
                     None => (),
                 }
@@ -875,7 +874,7 @@ impl IndexScheduler {
                 }
 
                 match &self.cluster {
-                    Some(Cluster::Leader(leader)) => leader.commit(Consistency::All),
+                    Some(Cluster::Leader(leader)) => leader.commit(self.consistency_level),
                     Some(Cluster::Follower(follower)) => follower.ready_to_commit(),
                     None => (),
                 }
