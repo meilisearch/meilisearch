@@ -22,3 +22,4 @@ crossbeam = "0.8.2"
 bus = "2.3.0"
 time = "0.3.20"
 uuid = { version = "1.3.0", features = ["v4"] }
+synchronoise = "1.0.1"

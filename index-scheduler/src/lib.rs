@@ -551,16 +551,26 @@ impl IndexScheduler {
         }
 
         // if we're a follower we starts a thread to register the tasks coming from the leader
-        if let Some(Cluster::Follower(follower)) = self.cluster.clone() {
+        if let Some(Cluster::Follower(ref follower)) = self.cluster {
             let this = self.private_clone();
             if this.cluster.is_some() {
                 log::warn!("this in a cluster");
             } else {
                 log::warn!("this not in a cluster");
             }
+            let follower = follower.clone();
             std::thread::spawn(move || loop {
                 let (task, content) = follower.get_new_task();
                 this.register_raw_task(task, content);
+            });
+        } else if let Some(Cluster::Leader(ref leader)) = self.cluster {
+            // we need a way to let the leader come out of its loop if a new follower joins the cluster
+            let cluster = leader.wake_up.clone();
+            let scheduler = self.wake_up.clone();
+
+            std::thread::spawn(move || loop {
+                cluster.wait();
+                scheduler.signal();
             });
         }
 
@@ -1307,16 +1317,40 @@ impl IndexScheduler {
             }
         };
 
-        if self.cluster.is_some() {
-            println!("HERE: Part of a cluster");
-        } else if self.cluster.is_none() {
-            println!("HERE: Not part of a cluster");
-        }
-        info!("before checking if i’m a leader");
         if let Some(Cluster::Leader(leader)) = &self.cluster {
-            info!("I'm a leader");
+            if leader.has_new_followers() {
+                info!("New followers are trying to join the cluster");
+                let started_at = OffsetDateTime::now_utc();
+                let dump = self
+                    .create_dump(
+                        &Task {
+                            uid: TaskId::MAX,
+                            enqueued_at: started_at,
+                            started_at: Some(started_at),
+                            finished_at: Some(started_at),
+                            error: None,
+                            canceled_by: None,
+                            details: None,
+                            status: Status::Enqueued,
+                            kind: KindWithContent::DumpCreation {
+                                // TODO cluster: handle the keys
+                                keys: vec![],
+                                // TODO cluster: should we unify the instance_uid between every instances?
+                                instance_uid: None,
+                            },
+                        },
+                        &started_at,
+                    )
+                    .unwrap();
+
+                let mut buffer = Vec::new();
+                // TODO cluster: stop writing everything in RAM
+                dump.persist_to(&mut buffer).unwrap();
+
+                leader.join_me(buffer);
+            }
+
             if let Some(ref batch) = batch {
-                info!("I'm a leader and I got a batch to process");
                 leader.starts_batch(batch.clone().into());
             }
         }

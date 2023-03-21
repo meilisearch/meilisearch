@@ -24,7 +24,7 @@ use std::io::BufWriter;
 
 use cluster::Consistency;
 use crossbeam::utils::Backoff;
-use dump::IndexMetadata;
+use dump::{DumpWriter, IndexMetadata};
 use log::{debug, error, info};
 use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
@@ -738,96 +738,9 @@ impl IndexScheduler {
                 Ok(tasks)
             }
             Batch::Dump(mut task) => {
+                // TODO: It would be better to use the started_at from the task instead of generating a new one
                 let started_at = OffsetDateTime::now_utc();
-                let (keys, instance_uid) =
-                    if let KindWithContent::DumpCreation { keys, instance_uid } = &task.kind {
-                        (keys, instance_uid)
-                    } else {
-                        unreachable!();
-                    };
-                let dump = dump::DumpWriter::new(*instance_uid)?;
-
-                // 1. dump the keys
-                let mut dump_keys = dump.create_keys()?;
-                for key in keys {
-                    dump_keys.push_key(key)?;
-                }
-                dump_keys.flush()?;
-
-                let rtxn = self.env.read_txn()?;
-
-                // 2. dump the tasks
-                let mut dump_tasks = dump.create_tasks_queue()?;
-                for ret in self.all_tasks.iter(&rtxn)? {
-                    let (_, mut t) = ret?;
-                    let status = t.status;
-                    let content_file = t.content_uuid();
-
-                    // In the case we're dumping ourselves we want to be marked as finished
-                    // to not loop over ourselves indefinitely.
-                    if t.uid == task.uid {
-                        let finished_at = OffsetDateTime::now_utc();
-
-                        // We're going to fake the date because we don't know if everything is going to go well.
-                        // But we need to dump the task as finished and successful.
-                        // If something fail everything will be set appropriately in the end.
-                        t.status = Status::Succeeded;
-                        t.started_at = Some(started_at);
-                        t.finished_at = Some(finished_at);
-                    }
-                    let mut dump_content_file = dump_tasks.push_task(&t.into())?;
-
-                    // 2.1. Dump the `content_file` associated with the task if there is one and the task is not finished yet.
-                    if let Some(content_file) = content_file {
-                        if status == Status::Enqueued {
-                            let content_file = self.file_store.get_update(content_file)?;
-
-                            let reader = DocumentsBatchReader::from_reader(content_file)
-                                .map_err(milli::Error::from)?;
-
-                            let (mut cursor, documents_batch_index) =
-                                reader.into_cursor_and_fields_index();
-
-                            while let Some(doc) =
-                                cursor.next_document().map_err(milli::Error::from)?
-                            {
-                                dump_content_file.push_document(&obkv_to_object(
-                                    &doc,
-                                    &documents_batch_index,
-                                )?)?;
-                            }
-                            dump_content_file.flush()?;
-                        }
-                    }
-                }
-                dump_tasks.flush()?;
-
-                // 3. Dump the indexes
-                self.index_mapper.try_for_each_index(&rtxn, |uid, index| -> Result<()> {
-                    let rtxn = index.read_txn()?;
-                    let metadata = IndexMetadata {
-                        uid: uid.to_owned(),
-                        primary_key: index.primary_key(&rtxn)?.map(String::from),
-                        created_at: index.created_at(&rtxn)?,
-                        updated_at: index.updated_at(&rtxn)?,
-                    };
-                    let mut index_dumper = dump.create_index(uid, &metadata)?;
-
-                    let fields_ids_map = index.fields_ids_map(&rtxn)?;
-                    let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
-
-                    // 3.1. Dump the documents
-                    for ret in index.all_documents(&rtxn)? {
-                        let (_id, doc) = ret?;
-                        let document = milli::obkv_to_json(&all_fields, &fields_ids_map, doc)?;
-                        index_dumper.push_document(&document)?;
-                    }
-
-                    // 3.2. Dump the settings
-                    let settings = meilisearch_types::settings::settings(index, &rtxn)?;
-                    index_dumper.settings(&settings)?;
-                    Ok(())
-                })?;
+                let dump = self.create_dump(&task, &started_at)?;
 
                 let dump_uid = started_at.format(format_description!(
                     "[year repr:full][month repr:numerical][day padding:zero]-[hour padding:zero][minute padding:zero][second padding:zero][subsecond digits:3]"
@@ -972,6 +885,99 @@ impl IndexScheduler {
                 Ok(vec![task])
             }
         }
+    }
+
+    pub(crate) fn create_dump(
+        &self,
+        task: &Task,
+        started_at: &OffsetDateTime,
+    ) -> Result<DumpWriter> {
+        let (keys, instance_uid) =
+            if let KindWithContent::DumpCreation { keys, instance_uid } = &task.kind {
+                (keys, instance_uid)
+            } else {
+                unreachable!();
+            };
+        let dump = dump::DumpWriter::new(*instance_uid)?;
+
+        // 1. dump the keys
+        let mut dump_keys = dump.create_keys()?;
+        for key in keys {
+            dump_keys.push_key(key)?;
+        }
+        dump_keys.flush()?;
+
+        let rtxn = self.env.read_txn()?;
+
+        // 2. dump the tasks
+        let mut dump_tasks = dump.create_tasks_queue()?;
+        for ret in self.all_tasks.iter(&rtxn)? {
+            let (_, mut t) = ret?;
+            let status = t.status;
+            let content_file = t.content_uuid();
+
+            // In the case we're dumping ourselves we want to be marked as finished
+            // to not loop over ourselves indefinitely.
+            if t.uid == task.uid {
+                let finished_at = OffsetDateTime::now_utc();
+
+                // We're going to fake the date because we don't know if everything is going to go well.
+                // But we need to dump the task as finished and successful.
+                // If something fail everything will be set appropriately in the end.
+                t.status = Status::Succeeded;
+                t.started_at = Some(*started_at);
+                t.finished_at = Some(finished_at);
+            }
+            let mut dump_content_file = dump_tasks.push_task(&t.into())?;
+
+            // 2.1. Dump the `content_file` associated with the task if there is one and the task is not finished yet.
+            if let Some(content_file) = content_file {
+                if status == Status::Enqueued {
+                    let content_file = self.file_store.get_update(content_file)?;
+
+                    let reader = DocumentsBatchReader::from_reader(content_file)
+                        .map_err(milli::Error::from)?;
+
+                    let (mut cursor, documents_batch_index) = reader.into_cursor_and_fields_index();
+
+                    while let Some(doc) = cursor.next_document().map_err(milli::Error::from)? {
+                        dump_content_file
+                            .push_document(&obkv_to_object(&doc, &documents_batch_index)?)?;
+                    }
+                    dump_content_file.flush()?;
+                }
+            }
+        }
+        dump_tasks.flush()?;
+
+        // 3. Dump the indexes
+        self.index_mapper.try_for_each_index(&rtxn, |uid, index| -> Result<()> {
+            let rtxn = index.read_txn()?;
+            let metadata = IndexMetadata {
+                uid: uid.to_owned(),
+                primary_key: index.primary_key(&rtxn)?.map(String::from),
+                created_at: index.created_at(&rtxn)?,
+                updated_at: index.updated_at(&rtxn)?,
+            };
+            let mut index_dumper = dump.create_index(uid, &metadata)?;
+
+            let fields_ids_map = index.fields_ids_map(&rtxn)?;
+            let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
+
+            // 3.1. Dump the documents
+            for ret in index.all_documents(&rtxn)? {
+                let (_id, doc) = ret?;
+                let document = milli::obkv_to_json(&all_fields, &fields_ids_map, doc)?;
+                index_dumper.push_document(&document)?;
+            }
+
+            // 3.2. Dump the settings
+            let settings = meilisearch_types::settings::settings(index, &rtxn)?;
+            index_dumper.settings(&settings)?;
+            Ok(())
+        })?;
+
+        Ok(dump)
     }
 
     /// Swap the index `lhs` with the index `rhs`.

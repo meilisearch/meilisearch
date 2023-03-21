@@ -23,6 +23,8 @@ pub enum Error {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LeaderMsg {
+    // A dump to join the cluster
+    JoinFromDump(Vec<u8>),
     // Starts a new batch
     StartBatch { id: u32, batch: Batch },
     // Tell the follower to commit the update asap
@@ -58,10 +60,18 @@ pub struct Follower {
 }
 
 impl Follower {
-    pub fn join(leader: impl ToSocketAddrs) -> Follower {
+    pub fn join(leader: impl ToSocketAddrs) -> (Follower, Vec<u8>) {
         let (sender, receiver) = connect_channel(leader).unwrap();
 
         info!("Connection to the leader established");
+
+        info!("Waiting for the leader to contact us");
+        let state = receiver.recv().unwrap();
+
+        let dump = match state {
+            LeaderMsg::JoinFromDump(dump) => dump,
+            msg => panic!("Received unexpected message {msg:?}"),
+        };
 
         let (get_batch_sender, get_batch_receiver) = unbounded();
         let (must_commit_sender, must_commit_receiver) = unbounded();
@@ -71,13 +81,16 @@ impl Follower {
             Self::router(receiver, get_batch_sender, must_commit_sender, register_task_sender);
         });
 
-        Follower {
-            sender,
-            get_batch: get_batch_receiver,
-            must_commit: must_commit_receiver,
-            register_new_task: register_task_receiver,
-            batch_id: Arc::default(),
-        }
+        (
+            Follower {
+                sender,
+                get_batch: get_batch_receiver,
+                must_commit: must_commit_receiver,
+                register_new_task: register_task_receiver,
+                batch_id: Arc::default(),
+            },
+            dump,
+        )
     }
 
     fn router(
@@ -88,6 +101,9 @@ impl Follower {
     ) {
         loop {
             match receiver.recv().expect("Lost connection to the leader") {
+                LeaderMsg::JoinFromDump(_) => {
+                    panic!("Received a join from dump msg but I’m already running")
+                }
                 LeaderMsg::StartBatch { id, batch } => {
                     info!("Starting to process a new batch");
                     get_batch.send((id, batch)).expect("Lost connection to the main thread")
