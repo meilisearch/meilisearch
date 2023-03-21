@@ -116,10 +116,6 @@ impl Leader {
     pub fn starts_batch(&self, batch: Batch) {
         let mut batch_id = self.batch_id.write().unwrap();
 
-        assert!(
-            *batch_id % 2 == 0,
-            "Tried to start processing a batch before commiting the previous one"
-        );
         info!("Send the batch to process to the followers");
         *batch_id += 1;
 
@@ -163,8 +159,6 @@ impl Leader {
         info!("Tells all the follower to commit");
 
         self.broadcast_to_follower.send(LeaderMsg::Commit(*batch_id)).unwrap();
-
-        *batch_id += 1;
     }
 
     pub fn register_new_task(&self, task: Task, update_file: Option<Vec<u8>>) {
