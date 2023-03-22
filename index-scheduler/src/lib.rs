@@ -1306,6 +1306,7 @@ impl IndexScheduler {
         };
 
         if let Some(Cluster::Leader(leader)) = &self.cluster {
+            // first, onboard the new followers
             if leader.has_new_followers() {
                 info!("New followers are trying to join the cluster");
                 let started_at = OffsetDateTime::now_utc();
@@ -1321,8 +1322,7 @@ impl IndexScheduler {
                             details: None,
                             status: Status::Enqueued,
                             kind: KindWithContent::DumpCreation {
-                                // TODO cluster: handle the keys
-                                keys: vec![],
+                                keys: leader.get_keys(),
                                 // TODO cluster: should we unify the instance_uid between every instances?
                                 instance_uid: None,
                             },
@@ -1338,6 +1338,7 @@ impl IndexScheduler {
                 leader.join_me(buffer);
             }
 
+            // second, starts processing the batch
             if let Some(ref batch) = batch {
                 leader.starts_batch(batch.clone().into());
             }

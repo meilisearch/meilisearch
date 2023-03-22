@@ -19,6 +19,8 @@ use crate::{ApiKeyOperation, Consistency, FollowerMsg, LeaderMsg};
 pub struct Leader {
     task_ready_to_commit: Receiver<u32>,
     broadcast_to_follower: Sender<LeaderMsg>,
+    needs_key_sender: Sender<Sender<Vec<Key>>>,
+    needs_key_receiver: Receiver<Sender<Vec<Key>>>,
 
     pub wake_up: Arc<SignalEvent>,
 
@@ -35,6 +37,7 @@ impl Leader {
         let wake_up = Arc::new(SignalEvent::auto(true));
         let (broadcast_to_follower, process_batch_receiver) = unbounded();
         let (task_finished_sender, task_finished_receiver) = unbounded();
+        let (needs_key_sender, needs_key_receiver) = unbounded();
 
         let nf = new_followers.clone();
         let af = active_followers.clone();
@@ -46,6 +49,8 @@ impl Leader {
         Leader {
             task_ready_to_commit: task_finished_receiver,
             broadcast_to_follower,
+            needs_key_sender,
+            needs_key_receiver,
 
             wake_up,
 
@@ -231,5 +236,15 @@ impl Leader {
         self.broadcast_to_follower
             .send(LeaderMsg::ApiKeyOperation(ApiKeyOperation::Delete(uuid)))
             .unwrap()
+    }
+
+    pub fn needs_keys(&self) -> Sender<Vec<Key>> {
+        self.needs_key_receiver.recv().expect("The cluster is dead")
+    }
+
+    pub fn get_keys(&self) -> Vec<Key> {
+        let (send, rcv) = crossbeam::channel::bounded(1);
+        self.needs_key_sender.send(send).expect("The cluster is dead");
+        rcv.recv().expect("The auth controller is dead")
     }
 }

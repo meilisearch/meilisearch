@@ -57,6 +57,14 @@ impl AuthController {
                     }
                 }
             });
+        } else if let Some(Cluster::Leader(leader)) = cluster {
+            let this = this.clone();
+
+            std::thread::spawn(move || loop {
+                let channel = leader.needs_keys();
+                let keys = this.list_keys().expect("auth controller is dead");
+                channel.send(keys).expect("Cluster is dead");
+            });
         }
 
         Ok(this)
