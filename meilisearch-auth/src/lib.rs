@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 
+use cluster::Cluster;
 use error::{AuthControllerError, Result};
 use maplit::hashset;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
@@ -21,17 +22,22 @@ use uuid::Uuid;
 pub struct AuthController {
     store: Arc<HeedAuthStore>,
     master_key: Option<String>,
+    cluster: Option<Cluster>,
 }
 
 impl AuthController {
-    pub fn new(db_path: impl AsRef<Path>, master_key: &Option<String>) -> Result<Self> {
+    pub fn new(
+        db_path: impl AsRef<Path>,
+        master_key: &Option<String>,
+        cluster: Option<Cluster>,
+    ) -> Result<Self> {
         let store = HeedAuthStore::new(db_path)?;
 
         if store.is_empty()? {
             generate_default_keys(&store)?;
         }
 
-        Ok(Self { store: Arc::new(store), master_key: master_key.clone() })
+        Ok(Self { store: Arc::new(store), master_key: master_key.clone(), cluster })
     }
 
     /// Return the size of the `AuthController` database in bytes.

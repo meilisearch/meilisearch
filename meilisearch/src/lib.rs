@@ -26,11 +26,11 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest};
 use analytics::Analytics;
 use anyhow::bail;
-use cluster::{Follower, Leader};
+use cluster::{Cluster, Follower, Leader};
 use error::PayloadError;
 use extractors::payload::PayloadConfig;
 use http::header::CONTENT_TYPE;
-use index_scheduler::{Cluster, IndexScheduler, IndexSchedulerOptions};
+use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use log::{error, info};
 use meilisearch_auth::AuthController;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
@@ -270,7 +270,7 @@ fn open_or_create_database_unchecked(
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
     // we don't want to create anything in the data.ms yet, thus we
     // wrap our two builders in a closure that'll be executed later.
-    let auth_controller = AuthController::new(&opt.db_path, &opt.master_key);
+    let auth_controller = AuthController::new(&opt.db_path, &opt.master_key, cluster.clone());
 
     let index_scheduler_builder = || -> anyhow::Result<_> {
         Ok(IndexScheduler::new(

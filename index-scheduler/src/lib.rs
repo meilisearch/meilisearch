@@ -40,7 +40,7 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use batch::Batch;
-use cluster::{Consistency, Follower, Leader};
+use cluster::{Cluster, Consistency};
 use dump::{KindDump, TaskDump, UpdateFile};
 pub use error::Error;
 use file_store::FileStore;
@@ -347,12 +347,6 @@ impl std::str::FromStr for ClusterMode {
             _ => Err(()),
         }
     }
-}
-
-#[derive(Clone)]
-pub enum Cluster {
-    Leader(Leader),
-    Follower(Follower),
 }
 
 impl IndexScheduler {

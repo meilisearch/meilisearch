@@ -42,27 +42,46 @@ pub enum FollowerMsg {
 }
 
 #[derive(Default, Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
 pub enum Consistency {
-    #[default]
     One,
     Two,
     Quorum,
+    #[default]
     All,
 }
 
 impl std::fmt::Display for Consistency {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = serde_json::to_string(self).unwrap();
-        write!(f, "{s}")
+        match self {
+            Consistency::One => write!(f, "one"),
+            Consistency::Two => write!(f, "two"),
+            Consistency::Quorum => write!(f, "quorum"),
+            Consistency::All => write!(f, "all"),
+        }
     }
 }
 
 impl FromStr for Consistency {
-    type Err = serde_json::Error;
+    type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_json::from_str(s)
+        match s {
+            "one" => Ok(Consistency::One),
+            "two" => Ok(Consistency::Two),
+            "quorum" => Ok(Consistency::Quorum),
+            "all" => Ok(Consistency::All),
+            s => Err(format!(
+                "Unexpected value `{s}`, expected one of `one`, `two`, `quorum`, `all`"
+            )),
+        }
     }
+}
+
+#[derive(Clone)]
+pub enum Cluster {
+    Leader(Leader),
+    Follower(Follower),
 }
 
 #[derive(Clone)]

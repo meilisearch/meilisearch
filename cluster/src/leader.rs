@@ -1,6 +1,7 @@
 use std::net::ToSocketAddrs;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{atomic, Arc, Mutex, RwLock};
+use std::time::Duration;
 
 use bus::{Bus, BusReader};
 use crossbeam::channel::{unbounded, Receiver, Sender};
@@ -182,31 +183,27 @@ impl Leader {
 
         let batch_id = self.batch_id.write().unwrap();
 
-        // if zero nodes needs to be sync we can commit right away and early exit
-        if consistency_level != Consistency::One {
-            // else, we wait till enough nodes are ready to commit
-            for ready_to_commit in self
-                .task_ready_to_commit
-                .iter()
-                // we need to filter out the messages from the old batches
-                .filter(|id| *id == *batch_id)
-                .enumerate()
-                // we do a +2 because enumerate starts at 1 and we must includes ourselves in the count
-                .map(|(id, _)| id + 2)
-            {
-                // TODO: if the last node dies we're stuck on the iterator
+        let mut nodes_ready_to_commit = 1;
 
-                // we need to reload the cluster size everytime in case a node dies
-                let size = self.active_followers.load(atomic::Ordering::Relaxed);
+        loop {
+            let size = self.active_followers.load(atomic::Ordering::Relaxed);
 
-                info!("{ready_to_commit} nodes are ready to commit for a cluster size of {size}");
-                match consistency_level {
-                    Consistency::Two if ready_to_commit >= 1 => break,
-                    Consistency::Quorum if ready_to_commit >= (size / 2) => break,
-                    Consistency::All if ready_to_commit == size => break,
-                    _ => (),
-                }
+            info!("{nodes_ready_to_commit} nodes are ready to commit for a cluster size of {size}");
+            let all = nodes_ready_to_commit == size;
+
+            match consistency_level {
+                Consistency::One if nodes_ready_to_commit >= 1 || all => break,
+                Consistency::Two if nodes_ready_to_commit >= 2 || all => break,
+                Consistency::Quorum if nodes_ready_to_commit >= (size / 2) || all => break,
+                Consistency::All if all => break,
+                _ => (),
             }
+
+            // we can't wait forever here because the cluster size might get updated while we wait if a node dies
+            match self.task_ready_to_commit.recv_timeout(Duration::new(1, 0)) {
+                Ok(id) if id == *batch_id => nodes_ready_to_commit += 1,
+                _ => continue,
+            };
         }
 
         info!("Tells all the follower to commit");
