@@ -157,10 +157,6 @@ impl Leader {
         info!("A follower left the cluster. {} members.", size);
     }
 
-    pub fn wake_up(&self) {
-        todo!()
-    }
-
     pub fn join_me(&self, dump: Vec<u8>) {
         self.broadcast_to_follower
             .send(LeaderMsg::JoinFromDump(dump))
