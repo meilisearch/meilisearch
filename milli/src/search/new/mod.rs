@@ -150,6 +150,7 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
             crate::Criterion::Typo
             | crate::Criterion::Attribute
             | crate::Criterion::Proximity
+            // TODO: no exactness
             | crate::Criterion::Exactness => {
                 if !words {
                     ranking_rules.push(Box::new(Words::new(terms_matching_strategy)));

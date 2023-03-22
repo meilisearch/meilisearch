@@ -216,6 +216,7 @@ impl QueryTerm {
     ///
     /// This excludes synonyms, split words, and words stored in the prefix databases.
     pub fn all_phrases(&'_ self) -> impl Iterator<Item = Interned<Phrase>> + Clone + '_ {
+        todo!("self.phrase");
         self.split_words.iter().chain(self.synonyms.iter()).copied()
     }
     pub fn is_empty(&self) -> bool {

@@ -15,6 +15,8 @@ mod proximity;
 /// Implementation of the `typo` ranking rule
 mod typo;
 
+mod attribute_rank;
+
 use std::hash::Hash;
 
 pub use condition_docids_cache::ConditionDocIdsCache;
