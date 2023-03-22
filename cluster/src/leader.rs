@@ -7,11 +7,13 @@ use bus::{Bus, BusReader};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use ductile::{ChannelReceiver, ChannelSender, ChannelServer};
 use log::info;
+use meilisearch_types::keys::Key;
 use meilisearch_types::tasks::Task;
 use synchronoise::SignalEvent;
+use uuid::Uuid;
 
 use crate::batch::Batch;
-use crate::{Consistency, FollowerMsg, LeaderMsg};
+use crate::{ApiKeyOperation, Consistency, FollowerMsg, LeaderMsg};
 
 #[derive(Clone)]
 pub struct Leader {
@@ -157,11 +159,14 @@ impl Leader {
         info!("A follower left the cluster. {} members.", size);
     }
 
+    // ============= Everything related to the setup of the cluster
     pub fn join_me(&self, dump: Vec<u8>) {
         self.broadcast_to_follower
             .send(LeaderMsg::JoinFromDump(dump))
             .expect("Lost the link with the followers");
     }
+
+    // ============= Everything related to the scheduler
 
     pub fn starts_batch(&self, batch: Batch) {
         let mut batch_id = self.batch_id.write().unwrap();
@@ -195,7 +200,7 @@ impl Leader {
                 _ => (),
             }
 
-            // we can't wait forever here because the cluster size might get updated while we wait if a node dies
+            // we can't wait forever here because if a node dies the cluster size might get updated while we're stuck
             match self.task_ready_to_commit.recv_timeout(Duration::new(1, 0)) {
                 Ok(id) if id == *batch_id => nodes_ready_to_commit += 1,
                 _ => continue,
@@ -212,5 +217,19 @@ impl Leader {
         self.broadcast_to_follower
             .send(LeaderMsg::RegisterNewTask { task, update_file })
             .expect("Main thread is dead");
+    }
+
+    // ============= Everything related to the api-keys
+
+    pub fn insert_key(&self, key: Key) {
+        self.broadcast_to_follower
+            .send(LeaderMsg::ApiKeyOperation(ApiKeyOperation::Insert(key)))
+            .unwrap()
+    }
+
+    pub fn delete_key(&self, uuid: Uuid) {
+        self.broadcast_to_follower
+            .send(LeaderMsg::ApiKeyOperation(ApiKeyOperation::Delete(uuid)))
+            .unwrap()
     }
 }

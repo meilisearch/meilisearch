@@ -6,6 +6,7 @@ use batch::Batch;
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use ductile::{connect_channel, ChannelReceiver, ChannelSender};
 use log::info;
+use meilisearch_types::keys::Key;
 use meilisearch_types::tasks::{KindWithContent, Task};
 use serde::{Deserialize, Serialize};
 
@@ -13,6 +14,7 @@ pub mod batch;
 mod leader;
 
 pub use leader::Leader;
+use uuid::Uuid;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -24,14 +26,17 @@ pub enum Error {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LeaderMsg {
-    // A dump to join the cluster
+    /// A dump to join the cluster
     JoinFromDump(Vec<u8>),
-    // Starts a new batch
+    /// Starts a new batch
     StartBatch { id: u32, batch: Batch },
-    // Tell the follower to commit the update asap
+    /// Tell the follower to commit the update asap
     Commit(u32),
-    // Tell the follower to commit the update asap
+    /// Tell the follower to commit the update asap
     RegisterNewTask { task: Task, update_file: Option<Vec<u8>> },
+
+    /// Tell the follower to commit the update asap
+    ApiKeyOperation(ApiKeyOperation),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,6 +54,12 @@ pub enum Consistency {
     Quorum,
     #[default]
     All,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ApiKeyOperation {
+    Insert(Key),
+    Delete(Uuid),
 }
 
 impl std::fmt::Display for Consistency {
@@ -92,6 +103,8 @@ pub struct Follower {
     must_commit: Receiver<u32>,
     register_new_task: Receiver<(Task, Option<Vec<u8>>)>,
 
+    api_key_op: Receiver<ApiKeyOperation>,
+
     batch_id: Arc<RwLock<u32>>,
 }
 
@@ -112,9 +125,16 @@ impl Follower {
         let (get_batch_sender, get_batch_receiver) = unbounded();
         let (must_commit_sender, must_commit_receiver) = unbounded();
         let (register_task_sender, register_task_receiver) = unbounded();
+        let (create_api_key_sender, create_api_key_receiver) = unbounded();
 
         std::thread::spawn(move || {
-            Self::router(receiver, get_batch_sender, must_commit_sender, register_task_sender);
+            Self::router(
+                receiver,
+                get_batch_sender,
+                must_commit_sender,
+                register_task_sender,
+                create_api_key_sender,
+            );
         });
 
         (
@@ -123,6 +143,7 @@ impl Follower {
                 get_batch: get_batch_receiver,
                 must_commit: must_commit_receiver,
                 register_new_task: register_task_receiver,
+                api_key_op: create_api_key_receiver,
                 batch_id: Arc::default(),
             },
             dump,
@@ -134,6 +155,7 @@ impl Follower {
         get_batch: Sender<(u32, Batch)>,
         must_commit: Sender<u32>,
         register_new_task: Sender<(Task, Option<Vec<u8>>)>,
+        api_key_op: Sender<ApiKeyOperation>,
     ) {
         loop {
             match receiver.recv().expect("Lost connection to the leader") {
@@ -153,6 +175,9 @@ impl Follower {
                     register_new_task
                         .send((task, update_file))
                         .expect("Lost connection to the main thread")
+                }
+                LeaderMsg::ApiKeyOperation(key) => {
+                    api_key_op.send(key).expect("Lost connection to the main thread")
                 }
             }
         }
@@ -185,6 +210,11 @@ impl Follower {
     }
 
     pub fn get_new_task(&self) -> (Task, Option<Vec<u8>>) {
-        self.register_new_task.recv().unwrap()
+        self.register_new_task.recv().expect("Lost connection to the leader")
+    }
+
+    pub fn api_key_operation(&self) -> ApiKeyOperation {
+        info!("Creating a new api key");
+        self.api_key_op.recv().expect("Lost connection to the leader")
     }
 }
