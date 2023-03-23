@@ -1613,7 +1613,6 @@ mod tests {
         // Create 200 documents with a long text
         let content = {
             let documents_iter = (0..200i32)
-                .into_iter()
                 .map(|i| serde_json::json!({ "id": i, "script": script }))
                 .filter_map(|json| match json {
                     serde_json::Value::Object(object) => Some(object),

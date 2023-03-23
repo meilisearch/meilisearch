@@ -109,7 +109,8 @@ impl<'a> Search<'a> {
         self
     }
 
-    fn is_typo_authorized(&self) -> Result<bool> {
+    // TODO!
+    fn _is_typo_authorized(&self) -> Result<bool> {
         let index_authorizes_typos = self.index.authorize_typos(self.rtxn)?;
         // only authorize typos if both the index and the query allow it.
         Ok(self.authorize_typos && index_authorizes_typos)

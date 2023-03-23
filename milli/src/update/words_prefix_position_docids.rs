@@ -14,7 +14,7 @@ use crate::update::index_documents::{
     create_sorter, merge_cbo_roaring_bitmaps, sorter_into_lmdb_database, valid_lmdb_key,
     CursorClonableMmap, MergeFn,
 };
-use crate::{bucketed_position, relative_from_absolute_position, Index, Result};
+use crate::{relative_from_absolute_position, Index, Result};
 
 pub struct WordPrefixPositionDocids<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
