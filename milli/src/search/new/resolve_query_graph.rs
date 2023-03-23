@@ -53,7 +53,7 @@ impl QueryTermDocIdsCache {
             return Ok(&self.terms[&term_interned]);
         };
         let mut docids = RoaringBitmap::new();
-
+        // TODO: use a MultiOps?
         let term = term_interner.get(term_interned);
         for word in term.all_single_words_except_prefix_db() {
             if let Some(word_docids) = db_cache.get_word_docids(index, txn, word_interner, word)? {

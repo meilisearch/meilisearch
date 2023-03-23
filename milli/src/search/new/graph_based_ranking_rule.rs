@@ -185,6 +185,43 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                 if universe.is_empty() {
                     return Ok(ControlFlow::Break(()));
                 }
+
+                /* TODO: there are a couple ways to improve the speed of path computation.
+
+                1. Since the `visit_paths_of_cost` method uses a depth-first-search, we know that
+                consecutive calls to this closure have a high chance of giving paths sharing
+                some prefix. It would be good to reuse `subpath_docids` and `visited_conditions`
+                to find out what this common prefix is, to avoid recomputing it. In a way, doing
+                this serves as the dual of the DeadEndsCache: it takes advantage of our knowledge that
+                some paths *aren't* deadends. There is however a subtlety in that the universe might
+                have changed between the two consecutive calls. This is why we should subtract the docids
+                of the previous path (if successful) to the `subpath_docids`, at the same time as we do
+                it for the universe.
+
+                2. We perform way too many intersections with the universe. For the first visited path,
+                the operation we do is essentially:
+                        universe & (c1 & universe) & (c2 & universe) & (c3 & universe) & etc.
+                This is a good idea *only if the universe is very small*. But if the universe is (almost)
+                a superset of each condition, then these intersections serve no purpose and slow down the search.
+                Maybe in the future we have a `deserialize_within_universe` method, which would speed up
+                these intersections. But for now, we have to be careful.
+
+                3. We could know in advance how many paths of a certain cost exist, and only update the
+                DeadEndsCache if (m)any remaining paths exist. There is a subtlety here because
+                on the next call of `next_bucket`, we will want an updated and correct DeadEndsCache.
+                We need to think about that. We could also avoid putting forbidden edges in this cache
+                if we know, somehow, that we won't visit this edge again.
+
+                4. Finally, but that will be a long term difficult project. We should compute the path *lazily*.
+                That is, when we do `path_docids &= condition`. We shouldn't *actually* perform the intersection,
+                but simply register that operation. It's only when we ask if the path_docids is empty that
+                **the minimum amount of work to determine whether the path is empty** is carried out. In practice,
+                that means performing a MultiOps on each container, in order or not, until any resulting container
+                is found to be non-empty. (In fact, when we ask `is_empty`, we should probably find the container
+                that has the highest chance of being non-empty and compute that one first).
+
+                */
+
                 // Accumulate the path for logging purposes only
                 considered_paths.push(path.to_vec());
 
