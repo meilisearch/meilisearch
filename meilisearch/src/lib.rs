@@ -197,7 +197,11 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Auth
                 info!("Starting as a leader");
                 let mut addr = opt.http_addr.to_socket_addrs().unwrap().next().unwrap();
                 addr.set_port(6666);
-                open_or_create_database(opt, empty_db, Some(Cluster::Leader(Leader::new(addr))))?
+                open_or_create_database(
+                    opt,
+                    empty_db,
+                    Some(Cluster::Leader(Leader::new(addr, opt.master_key.clone()))),
+                )?
             }
             "follower" => {
                 info!("Starting as a follower");
@@ -215,7 +219,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Auth
                     .unwrap();
                 addr.set_port(6666);
 
-                let (follower, dump) = Follower::join(addr);
+                let (follower, dump) = Follower::join(addr, opt.master_key.clone());
                 let mut dump_file = tempfile::NamedTempFile::new().unwrap();
                 dump_file.write_all(&dump).unwrap();
 

@@ -4,8 +4,8 @@ use std::sync::{Arc, RwLock};
 
 use batch::Batch;
 use crossbeam::channel::{unbounded, Receiver, Sender};
-use ductile::{connect_channel, ChannelReceiver, ChannelSender};
-use log::info;
+use ductile::{connect_channel, connect_channel_with_enc, ChannelReceiver, ChannelSender};
+use log::{info, warn};
 use meilisearch_types::keys::Key;
 use meilisearch_types::tasks::{KindWithContent, Task};
 use serde::{Deserialize, Serialize};
@@ -109,8 +109,19 @@ pub struct Follower {
 }
 
 impl Follower {
-    pub fn join(leader: impl ToSocketAddrs) -> (Follower, Vec<u8>) {
-        let (sender, receiver) = connect_channel(leader).unwrap();
+    pub fn join(leader: impl ToSocketAddrs, master_key: Option<String>) -> (Follower, Vec<u8>) {
+        let (sender, receiver) = if let Some(master_key) = master_key {
+            let mut enc = [0; 32];
+            let master_key = master_key.as_bytes();
+            if master_key.len() < 32 {
+                warn!("Master key is not secure, use a longer master key (at least 32 bytes long)");
+            }
+            enc.iter_mut().zip(master_key).for_each(|(enc, mk)| *enc = *mk);
+            info!("Connecting with encryption enabled");
+            connect_channel_with_enc(leader, &enc).unwrap()
+        } else {
+            connect_channel(leader).unwrap()
+        };
 
         info!("Connection to the leader established");
 
@@ -160,7 +171,7 @@ impl Follower {
         loop {
             match receiver.recv().expect("Lost connection to the leader") {
                 LeaderMsg::JoinFromDump(_) => {
-                    panic!("Received a join from dump msg but I’m already running")
+                    warn!("Received a join from dump msg but I’m already running : ignoring the message")
                 }
                 LeaderMsg::StartBatch { id, batch } => {
                     info!("Starting to process a new batch");

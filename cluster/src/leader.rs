@@ -6,7 +6,7 @@ use std::time::Duration;
 use bus::{Bus, BusReader};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use ductile::{ChannelReceiver, ChannelSender, ChannelServer};
-use log::info;
+use log::{info, warn};
 use meilisearch_types::keys::Key;
 use meilisearch_types::tasks::Task;
 use synchronoise::SignalEvent;
@@ -31,7 +31,10 @@ pub struct Leader {
 }
 
 impl Leader {
-    pub fn new(listen_on: impl ToSocketAddrs + Send + 'static) -> Leader {
+    pub fn new(
+        listen_on: impl ToSocketAddrs + Send + 'static,
+        master_key: Option<String>,
+    ) -> Leader {
         let new_followers = Arc::new(AtomicUsize::new(0));
         let active_followers = Arc::new(AtomicUsize::new(1));
         let wake_up = Arc::new(SignalEvent::auto(true));
@@ -43,7 +46,15 @@ impl Leader {
         let af = active_followers.clone();
         let wu = wake_up.clone();
         std::thread::spawn(move || {
-            Self::listener(listen_on, nf, af, wu, process_batch_receiver, task_finished_sender)
+            Self::listener(
+                listen_on,
+                master_key,
+                nf,
+                af,
+                wu,
+                process_batch_receiver,
+                task_finished_sender,
+            )
         });
 
         Leader {
@@ -68,14 +79,29 @@ impl Leader {
     /// to each new followers
     fn listener(
         listen_on: impl ToSocketAddrs,
+        master_key: Option<String>,
         new_followers: Arc<AtomicUsize>,
         active_followers: Arc<AtomicUsize>,
         wake_up: Arc<SignalEvent>,
         broadcast_to_follower: Receiver<LeaderMsg>,
         task_finished: Sender<u32>,
     ) {
-        let listener: ChannelServer<LeaderMsg, FollowerMsg> =
-            ChannelServer::bind(listen_on).unwrap();
+        let listener: ChannelServer<LeaderMsg, FollowerMsg> = if let Some(ref master_key) =
+            master_key
+        {
+            let mut enc = [0; 32];
+            let master_key = master_key.as_bytes();
+            if master_key.len() < 32 {
+                warn!("Master key is not secure, use a longer master key (at least 32 bytes long)");
+            }
+            enc.iter_mut().zip(master_key).for_each(|(enc, mk)| *enc = *mk);
+            info!("Listening with encryption enabled");
+            ChannelServer::bind_with_enc(listen_on, enc).unwrap()
+        } else {
+            ChannelServer::bind(listen_on).unwrap()
+        };
+
+        info!("Ready to the receive connections");
 
         // We're going to broadcast all the batches to all our follower
         let bus: Bus<LeaderMsg> = Bus::new(10);
