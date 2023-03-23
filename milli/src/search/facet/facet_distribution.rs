@@ -73,7 +73,7 @@ impl<'a> FacetDistribution<'a> {
 
                 let distribution_prelength = distribution.len();
                 let db = self.index.field_id_docid_facet_f64s;
-                for docid in candidates.into_iter() {
+                for docid in candidates {
                     key_buffer.truncate(mem::size_of::<FieldId>());
                     key_buffer.extend_from_slice(&docid.to_be_bytes());
                     let iter = db
@@ -97,7 +97,7 @@ impl<'a> FacetDistribution<'a> {
                 let mut key_buffer: Vec<_> = field_id.to_be_bytes().to_vec();
 
                 let db = self.index.field_id_docid_facet_strings;
-                'outer: for docid in candidates.into_iter() {
+                'outer: for docid in candidates {
                     key_buffer.truncate(mem::size_of::<FieldId>());
                     key_buffer.extend_from_slice(&docid.to_be_bytes());
                     let iter = db
@@ -505,7 +505,7 @@ mod tests {
 
         let map = FacetDistribution::new(&txn, &index)
             .facets(std::iter::once("colour"))
-            .candidates((0..10_000).into_iter().collect())
+            .candidates((0..10_000).collect())
             .execute()
             .unwrap();
 
@@ -513,7 +513,7 @@ mod tests {
 
         let map = FacetDistribution::new(&txn, &index)
             .facets(std::iter::once("colour"))
-            .candidates((0..5_000).into_iter().collect())
+            .candidates((0..5_000).collect())
             .execute()
             .unwrap();
 
@@ -521,7 +521,7 @@ mod tests {
 
         let map = FacetDistribution::new(&txn, &index)
             .facets(std::iter::once("colour"))
-            .candidates((0..5_000).into_iter().collect())
+            .candidates((0..5_000).collect())
             .execute()
             .unwrap();
 
@@ -529,7 +529,7 @@ mod tests {
 
         let map = FacetDistribution::new(&txn, &index)
             .facets(std::iter::once("colour"))
-            .candidates((0..5_000).into_iter().collect())
+            .candidates((0..5_000).collect())
             .max_values_per_facet(1)
             .execute()
             .unwrap();
@@ -546,7 +546,7 @@ mod tests {
             .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
             .unwrap();
 
-        let facet_values = (0..1000).into_iter().map(|x| format!("{x:x}")).collect::<Vec<_>>();
+        let facet_values = (0..1000).map(|x| format!("{x:x}")).collect::<Vec<_>>();
 
         let mut documents = vec![];
         for i in 0..10_000 {
@@ -582,7 +582,7 @@ mod tests {
 
         let map = FacetDistribution::new(&txn, &index)
             .facets(std::iter::once("colour"))
-            .candidates((0..10_000).into_iter().collect())
+            .candidates((0..10_000).collect())
             .execute()
             .unwrap();
 
@@ -590,7 +590,7 @@ mod tests {
 
         let map = FacetDistribution::new(&txn, &index)
             .facets(std::iter::once("colour"))
-            .candidates((0..5_000).into_iter().collect())
+            .candidates((0..5_000).collect())
             .execute()
             .unwrap();
 
@@ -606,7 +606,7 @@ mod tests {
             .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
             .unwrap();
 
-        let facet_values = (0..1000).into_iter().collect::<Vec<_>>();
+        let facet_values = (0..1000).collect::<Vec<_>>();
 
         let mut documents = vec![];
         for i in 0..1000 {
@@ -634,7 +634,7 @@ mod tests {
 
         let map = FacetDistribution::new(&txn, &index)
             .facets(std::iter::once("colour"))
-            .candidates((0..1000).into_iter().collect())
+            .candidates((0..1000).collect())
             .compute_stats()
             .unwrap();
 
@@ -642,7 +642,7 @@ mod tests {
 
         let map = FacetDistribution::new(&txn, &index)
             .facets(std::iter::once("colour"))
-            .candidates((217..777).into_iter().collect())
+            .candidates((217..777).collect())
             .compute_stats()
             .unwrap();
 
@@ -658,7 +658,7 @@ mod tests {
             .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
             .unwrap();
 
-        let facet_values = (0..1000).into_iter().collect::<Vec<_>>();
+        let facet_values = (0..1000).collect::<Vec<_>>();
 
         let mut documents = vec![];
         for i in 0..1000 {
@@ -686,7 +686,7 @@ mod tests {
 
         let map = FacetDistribution::new(&txn, &index)
             .facets(std::iter::once("colour"))
-            .candidates((0..1000).into_iter().collect())
+            .candidates((0..1000).collect())
             .compute_stats()
             .unwrap();
 
@@ -694,7 +694,7 @@ mod tests {
 
         let map = FacetDistribution::new(&txn, &index)
             .facets(std::iter::once("colour"))
-            .candidates((217..777).into_iter().collect())
+            .candidates((217..777).collect())
             .compute_stats()
             .unwrap();
 
@@ -710,7 +710,7 @@ mod tests {
             .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
             .unwrap();
 
-        let facet_values = (0..1000).into_iter().collect::<Vec<_>>();
+        let facet_values = (0..1000).collect::<Vec<_>>();
 
         let mut documents = vec![];
         for i in 0..1000 {
@@ -738,7 +738,7 @@ mod tests {
 
         let map = FacetDistribution::new(&txn, &index)
             .facets(std::iter::once("colour"))
-            .candidates((0..1000).into_iter().collect())
+            .candidates((0..1000).collect())
             .compute_stats()
             .unwrap();
 
@@ -746,7 +746,7 @@ mod tests {
 
         let map = FacetDistribution::new(&txn, &index)
             .facets(std::iter::once("colour"))
-            .candidates((217..777).into_iter().collect())
+            .candidates((217..777).collect())
             .compute_stats()
             .unwrap();
 
@@ -762,7 +762,7 @@ mod tests {
             .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
             .unwrap();
 
-        let facet_values = (0..1000).into_iter().collect::<Vec<_>>();
+        let facet_values = (0..1000).collect::<Vec<_>>();
 
         let mut documents = vec![];
         for i in 0..1000 {
@@ -794,7 +794,7 @@ mod tests {
 
         let map = FacetDistribution::new(&txn, &index)
             .facets(std::iter::once("colour"))
-            .candidates((0..1000).into_iter().collect())
+            .candidates((0..1000).collect())
             .compute_stats()
             .unwrap();
 
@@ -802,7 +802,7 @@ mod tests {
 
         let map = FacetDistribution::new(&txn, &index)
             .facets(std::iter::once("colour"))
-            .candidates((217..777).into_iter().collect())
+            .candidates((217..777).collect())
             .compute_stats()
             .unwrap();
 

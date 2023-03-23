@@ -15,10 +15,9 @@ mod sort;
 // TODO: documentation + comments
 mod words;
 
-// #[cfg(test)]
 use std::collections::{BTreeSet, HashSet};
 
-use charabia::{Tokenize, TokenizerBuilder};
+use charabia::TokenizerBuilder;
 use db_cache::DatabaseCache;
 use graph_based_ranking_rule::{Proximity, Typo};
 use heed::RoTxn;
@@ -254,7 +253,7 @@ pub fn execute_search(
         }
 
         let tokenizer = tokbuilder.build();
-        let tokens = tokenizer.tokenize(&query);
+        let tokens = tokenizer.tokenize(query);
 
         let query_terms = located_query_terms_from_string(ctx, tokens, words_limit)?;
         let graph = QueryGraph::from_query(ctx, query_terms)?;
