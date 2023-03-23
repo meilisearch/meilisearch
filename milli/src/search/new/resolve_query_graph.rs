@@ -87,8 +87,8 @@ impl QueryTermDocIdsCache {
     }
 }
 
-pub fn resolve_query_graph<'ctx>(
-    ctx: &mut SearchContext<'ctx>,
+pub fn resolve_query_graph(
+    ctx: &mut SearchContext,
     q: &QueryGraph,
     universe: &RoaringBitmap,
 ) -> Result<RoaringBitmap> {

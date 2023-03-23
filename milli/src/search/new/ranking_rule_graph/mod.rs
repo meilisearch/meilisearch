@@ -77,22 +77,19 @@ pub trait RankingRuleGraphTrait: Sized {
 
     /// Return the label of the given edge condition, to be used when visualising
     /// the ranking rule graph.
-    fn label_for_condition<'ctx>(
-        ctx: &mut SearchContext<'ctx>,
-        condition: &Self::Condition,
-    ) -> Result<String>;
+    fn label_for_condition(ctx: &mut SearchContext, condition: &Self::Condition) -> Result<String>;
 
     /// Compute the document ids associated with the given edge condition,
     /// restricted to the given universe.
-    fn resolve_condition<'ctx>(
-        ctx: &mut SearchContext<'ctx>,
+    fn resolve_condition(
+        ctx: &mut SearchContext,
         condition: &Self::Condition,
         universe: &RoaringBitmap,
     ) -> Result<(RoaringBitmap, FxHashSet<Interned<String>>, FxHashSet<Interned<Phrase>>)>;
 
     /// Return the costs and conditions of the edges going from the source node to the destination node
-    fn build_edges<'ctx>(
-        ctx: &mut SearchContext<'ctx>,
+    fn build_edges(
+        ctx: &mut SearchContext,
         conditions_interner: &mut DedupInterner<Self::Condition>,
         source_node: &QueryNode,
         dest_node: &QueryNode,

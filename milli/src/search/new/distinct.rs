@@ -22,8 +22,8 @@ pub struct DistinctOutput {
 /// is considered unique.
 /// - `excluded`: the set of document ids that contain a value for the given field that occurs
 /// in the given candidates.
-pub fn apply_distinct_rule<'ctx>(
-    ctx: &mut SearchContext<'ctx>,
+pub fn apply_distinct_rule(
+    ctx: &mut SearchContext,
     field_id: u16,
     candidates: &RoaringBitmap,
     // TODO: add a universe here, such that the `excluded` are a subset of the universe?

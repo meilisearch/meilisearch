@@ -591,8 +591,7 @@ fn create_matching_words(
             }
             // create a CONSECUTIVE matchings words wrapping all word in the phrase
             PrimitiveQueryPart::Phrase(words) => {
-                let ids: Vec<_> =
-                    (0..words.len()).into_iter().map(|i| id + i as PrimitiveWordId).collect();
+                let ids: Vec<_> = (0..words.len()).map(|i| id + i as PrimitiveWordId).collect();
                 // Require that all words of the phrase have a corresponding MatchingWord
                 // before adding any of them to the matching_words result
                 if let Some(phrase_matching_words) = words
@@ -649,10 +648,8 @@ fn create_matching_words(
                                     }
                                 })
                                 .collect();
-                            let ids: Vec<_> = (0..words.len())
-                                .into_iter()
-                                .map(|i| id + i as PrimitiveWordId)
-                                .collect();
+                            let ids: Vec<_> =
+                                (0..words.len()).map(|i| id + i as PrimitiveWordId).collect();
 
                             if let Some(synonyms) = ctx.synonyms(&words)? {
                                 for synonym in synonyms {

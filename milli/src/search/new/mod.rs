@@ -61,8 +61,8 @@ impl<'ctx> SearchContext<'ctx> {
 
 /// Apply the [`TermsMatchingStrategy`] to the query graph and resolve it.
 #[allow(clippy::too_many_arguments)]
-fn resolve_maximally_reduced_query_graph<'ctx>(
-    ctx: &mut SearchContext<'ctx>,
+fn resolve_maximally_reduced_query_graph(
+    ctx: &mut SearchContext,
     universe: &RoaringBitmap,
     query_graph: &QueryGraph,
     matching_strategy: TermsMatchingStrategy,
@@ -75,7 +75,7 @@ fn resolve_maximally_reduced_query_graph<'ctx>(
             for (_, n) in query_graph.nodes.iter() {
                 match &n.data {
                     QueryNodeData::Term(term) => {
-                        all_positions.extend(term.positions.clone().into_iter());
+                        all_positions.extend(term.positions.clone());
                     }
                     QueryNodeData::Deleted | QueryNodeData::Start | QueryNodeData::End => {}
                 }
@@ -222,8 +222,8 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn execute_search<'ctx>(
-    ctx: &mut SearchContext<'ctx>,
+pub fn execute_search(
+    ctx: &mut SearchContext,
     query: &str,
     terms_matching_strategy: TermsMatchingStrategy,
     filters: Option<Filter>,

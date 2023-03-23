@@ -13,8 +13,8 @@ use fxhash::FxHashSet;
 use heed::RoTxn;
 use roaring::RoaringBitmap;
 
-pub fn compute_docids<'ctx>(
-    ctx: &mut SearchContext<'ctx>,
+pub fn compute_docids(
+    ctx: &mut SearchContext,
     condition: &ProximityCondition,
     universe: &RoaringBitmap,
 ) -> Result<(RoaringBitmap, FxHashSet<Interned<String>>, FxHashSet<Interned<Phrase>>)> {

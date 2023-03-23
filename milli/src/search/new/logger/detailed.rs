@@ -102,10 +102,10 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         self.ranking_rules_ids = Some(rr.iter().map(|rr| rr.id()).collect());
     }
 
-    fn start_iteration_ranking_rule<'transaction>(
+    fn start_iteration_ranking_rule(
         &mut self,
         ranking_rule_idx: usize,
-        _ranking_rule: &dyn RankingRule<'transaction, QueryGraph>,
+        _ranking_rule: &dyn RankingRule<QueryGraph>,
         query: &QueryGraph,
         universe: &RoaringBitmap,
     ) {
@@ -117,10 +117,10 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         })
     }
 
-    fn next_bucket_ranking_rule<'transaction>(
+    fn next_bucket_ranking_rule(
         &mut self,
         ranking_rule_idx: usize,
-        _ranking_rule: &dyn RankingRule<'transaction, QueryGraph>,
+        _ranking_rule: &dyn RankingRule<QueryGraph>,
         universe: &RoaringBitmap,
         candidates: &RoaringBitmap,
     ) {
@@ -131,10 +131,10 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
             time: Instant::now(),
         })
     }
-    fn skip_bucket_ranking_rule<'transaction>(
+    fn skip_bucket_ranking_rule(
         &mut self,
         ranking_rule_idx: usize,
-        _ranking_rule: &dyn RankingRule<'transaction, QueryGraph>,
+        _ranking_rule: &dyn RankingRule<QueryGraph>,
         candidates: &RoaringBitmap,
     ) {
         self.events.push(SearchEvents::RankingRuleSkipBucket {
@@ -144,10 +144,10 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         })
     }
 
-    fn end_iteration_ranking_rule<'transaction>(
+    fn end_iteration_ranking_rule(
         &mut self,
         ranking_rule_idx: usize,
-        _ranking_rule: &dyn RankingRule<'transaction, QueryGraph>,
+        _ranking_rule: &dyn RankingRule<QueryGraph>,
         universe: &RoaringBitmap,
     ) {
         self.events.push(SearchEvents::RankingRuleEndIteration {
@@ -427,7 +427,7 @@ results.{cur_ranking_rule}{cur_activated_id} {{
         ctx: &mut SearchContext,
         node_idx: Interned<QueryNode>,
         node: &QueryNode,
-        distances: &[u16],
+        _distances: &[u16],
         file: &mut File,
     ) {
         match &node.data {

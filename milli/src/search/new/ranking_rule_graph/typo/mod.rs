@@ -23,8 +23,8 @@ pub enum TypoGraph {}
 impl RankingRuleGraphTrait for TypoGraph {
     type Condition = TypoCondition;
 
-    fn resolve_condition<'db_cache, 'ctx>(
-        ctx: &mut SearchContext<'ctx>,
+    fn resolve_condition<'db_cache>(
+        ctx: &mut SearchContext,
         condition: &Self::Condition,
         universe: &RoaringBitmap,
     ) -> Result<(RoaringBitmap, FxHashSet<Interned<String>>, FxHashSet<Interned<Phrase>>)> {
@@ -57,8 +57,8 @@ impl RankingRuleGraphTrait for TypoGraph {
         ))
     }
 
-    fn build_edges<'ctx>(
-        ctx: &mut SearchContext<'ctx>,
+    fn build_edges(
+        ctx: &mut SearchContext,
         conditions_interner: &mut DedupInterner<Self::Condition>,
         _from_node: &QueryNode,
         to_node: &QueryNode,
@@ -152,10 +152,7 @@ impl RankingRuleGraphTrait for TypoGraph {
         logger.log_typo_state(graph, paths, dead_ends_cache, universe, distances, cost);
     }
 
-    fn label_for_condition<'ctx>(
-        ctx: &mut SearchContext<'ctx>,
-        condition: &Self::Condition,
-    ) -> Result<String> {
+    fn label_for_condition(ctx: &mut SearchContext, condition: &Self::Condition) -> Result<String> {
         let TypoCondition { term } = condition;
         let term = ctx.term_interner.get(*term);
         let QueryTerm {

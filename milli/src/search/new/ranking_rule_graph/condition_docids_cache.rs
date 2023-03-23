@@ -43,9 +43,9 @@ impl<G: RankingRuleGraphTrait> ConditionDocIdsCache<G> {
     ///
     /// If the cache does not yet contain these docids, they are computed
     /// and inserted in the cache.
-    pub fn get_condition_docids<'s, 'ctx>(
+    pub fn get_condition_docids<'s>(
         &'s mut self,
-        ctx: &mut SearchContext<'ctx>,
+        ctx: &mut SearchContext,
         interned_condition: Interned<G::Condition>,
         graph: &mut RankingRuleGraph<G>,
         universe: &RoaringBitmap,

@@ -47,7 +47,7 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for Words {
                 for (_, n) in parent_query_graph.nodes.iter() {
                     match &n.data {
                         QueryNodeData::Term(term) => {
-                            all_positions.extend(term.positions.clone().into_iter());
+                            all_positions.extend(term.positions.clone());
                         }
                         QueryNodeData::Deleted | QueryNodeData::Start | QueryNodeData::End => {}
                     }

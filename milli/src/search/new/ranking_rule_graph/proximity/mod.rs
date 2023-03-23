@@ -29,8 +29,8 @@ pub enum ProximityGraph {}
 impl RankingRuleGraphTrait for ProximityGraph {
     type Condition = ProximityCondition;
 
-    fn resolve_condition<'ctx>(
-        ctx: &mut SearchContext<'ctx>,
+    fn resolve_condition(
+        ctx: &mut SearchContext,
         condition: &Self::Condition,
         universe: &RoaringBitmap,
     ) -> Result<(roaring::RoaringBitmap, FxHashSet<Interned<String>>, FxHashSet<Interned<Phrase>>)>
@@ -38,8 +38,8 @@ impl RankingRuleGraphTrait for ProximityGraph {
         compute_docids::compute_docids(ctx, condition, universe)
     }
 
-    fn build_edges<'ctx>(
-        ctx: &mut SearchContext<'ctx>,
+    fn build_edges(
+        ctx: &mut SearchContext,
         conditions_interner: &mut DedupInterner<Self::Condition>,
         source_node: &QueryNode,
         dest_node: &QueryNode,
@@ -59,10 +59,7 @@ impl RankingRuleGraphTrait for ProximityGraph {
         logger.log_proximity_state(graph, paths, dead_ends_cache, universe, distances, cost);
     }
 
-    fn label_for_condition<'ctx>(
-        ctx: &mut SearchContext<'ctx>,
-        condition: &Self::Condition,
-    ) -> Result<String> {
+    fn label_for_condition(ctx: &mut SearchContext, condition: &Self::Condition) -> Result<String> {
         match condition {
             ProximityCondition::Uninit { cost, .. } => {
                 //  TODO

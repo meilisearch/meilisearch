@@ -7,8 +7,8 @@ use crate::search::new::query_term::LocatedQueryTerm;
 use crate::search::new::{QueryNode, SearchContext};
 use crate::Result;
 
-pub fn build_edges<'ctx>(
-    _ctx: &mut SearchContext<'ctx>,
+pub fn build_edges(
+    _ctx: &mut SearchContext,
     conditions_interner: &mut DedupInterner<ProximityCondition>,
     from_node: &QueryNode,
     to_node: &QueryNode,

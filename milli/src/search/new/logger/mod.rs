@@ -25,33 +25,33 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
     fn ranking_rules(&mut self, rr: &[Box<dyn RankingRule<Q>>]);
 
     /// Logs the start of a ranking rule's iteration.
-    fn start_iteration_ranking_rule<'transaction>(
+    fn start_iteration_ranking_rule(
         &mut self,
         ranking_rule_idx: usize,
-        ranking_rule: &dyn RankingRule<'transaction, Q>,
+        ranking_rule: &dyn RankingRule<Q>,
         query: &Q,
         universe: &RoaringBitmap,
     );
     /// Logs the end of the computation of a ranking rule bucket
-    fn next_bucket_ranking_rule<'transaction>(
+    fn next_bucket_ranking_rule(
         &mut self,
         ranking_rule_idx: usize,
-        ranking_rule: &dyn RankingRule<'transaction, Q>,
+        ranking_rule: &dyn RankingRule<Q>,
         universe: &RoaringBitmap,
         candidates: &RoaringBitmap,
     );
     /// Logs the skipping of a ranking rule bucket
-    fn skip_bucket_ranking_rule<'transaction>(
+    fn skip_bucket_ranking_rule(
         &mut self,
         ranking_rule_idx: usize,
-        ranking_rule: &dyn RankingRule<'transaction, Q>,
+        ranking_rule: &dyn RankingRule<Q>,
         candidates: &RoaringBitmap,
     );
     /// Logs the end of a ranking rule's iteration.
-    fn end_iteration_ranking_rule<'transaction>(
+    fn end_iteration_ranking_rule(
         &mut self,
         ranking_rule_idx: usize,
-        ranking_rule: &dyn RankingRule<'transaction, Q>,
+        ranking_rule: &dyn RankingRule<Q>,
         universe: &RoaringBitmap,
     );
     /// Logs the addition of document ids to the final results
@@ -95,35 +95,35 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
 
     fn ranking_rules(&mut self, _rr: &[Box<dyn RankingRule<Q>>]) {}
 
-    fn start_iteration_ranking_rule<'transaction>(
+    fn start_iteration_ranking_rule(
         &mut self,
         _ranking_rule_idx: usize,
-        _ranking_rule: &dyn RankingRule<'transaction, Q>,
+        _ranking_rule: &dyn RankingRule<Q>,
         _query: &Q,
         _universe: &RoaringBitmap,
     ) {
     }
 
-    fn next_bucket_ranking_rule<'transaction>(
+    fn next_bucket_ranking_rule(
         &mut self,
         _ranking_rule_idx: usize,
-        _ranking_rule: &dyn RankingRule<'transaction, Q>,
+        _ranking_rule: &dyn RankingRule<Q>,
         _universe: &RoaringBitmap,
         _candidates: &RoaringBitmap,
     ) {
     }
-    fn skip_bucket_ranking_rule<'transaction>(
+    fn skip_bucket_ranking_rule(
         &mut self,
         _ranking_rule_idx: usize,
-        _ranking_rule: &dyn RankingRule<'transaction, Q>,
+        _ranking_rule: &dyn RankingRule<Q>,
         _candidates: &RoaringBitmap,
     ) {
     }
 
-    fn end_iteration_ranking_rule<'transaction>(
+    fn end_iteration_ranking_rule(
         &mut self,
         _ranking_rule_idx: usize,
-        _ranking_rule: &dyn RankingRule<'transaction, Q>,
+        _ranking_rule: &dyn RankingRule<Q>,
         _universe: &RoaringBitmap,
     ) {
     }
