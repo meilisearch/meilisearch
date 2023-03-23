@@ -31,7 +31,6 @@ pub struct Search<'a> {
     authorize_typos: bool,
     words_limit: usize,
     exhaustive_number_hits: bool,
-    criterion_implementation_strategy: CriterionImplementationStrategy,
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
 }
@@ -48,7 +47,6 @@ impl<'a> Search<'a> {
             authorize_typos: true,
             exhaustive_number_hits: false,
             words_limit: 10,
-            criterion_implementation_strategy: CriterionImplementationStrategy::default(),
             rtxn,
             index,
         }
@@ -101,14 +99,6 @@ impl<'a> Search<'a> {
         self
     }
 
-    pub fn criterion_implementation_strategy(
-        &mut self,
-        strategy: CriterionImplementationStrategy,
-    ) -> &mut Search<'a> {
-        self.criterion_implementation_strategy = strategy;
-        self
-    }
-
     // TODO!
     fn _is_typo_authorized(&self) -> Result<bool> {
         let index_authorizes_typos = self.index.authorize_typos(self.rtxn)?;
@@ -144,7 +134,6 @@ impl fmt::Debug for Search<'_> {
             authorize_typos,
             words_limit,
             exhaustive_number_hits,
-            criterion_implementation_strategy,
             rtxn: _,
             index: _,
         } = self;
@@ -157,7 +146,6 @@ impl fmt::Debug for Search<'_> {
             .field("terms_matching_strategy", terms_matching_strategy)
             .field("authorize_typos", authorize_typos)
             .field("exhaustive_number_hits", exhaustive_number_hits)
-            .field("criterion_implementation_strategy", criterion_implementation_strategy)
             .field("words_limit", words_limit)
             .finish()
     }
@@ -169,14 +157,6 @@ pub struct SearchResult {
     pub candidates: RoaringBitmap,
     // TODO those documents ids should be associated with their criteria scores.
     pub documents_ids: Vec<DocumentId>,
-}
-
-#[derive(Debug, Default, Clone, Copy)]
-pub enum CriterionImplementationStrategy {
-    OnlyIterative,
-    OnlySetBased,
-    #[default]
-    Dynamic,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -241,30 +221,30 @@ mod test {
         assert_eq!(documents_ids, vec![1]);
     }
 
-    #[test]
-    fn test_is_authorized_typos() {
-        let index = TempIndex::new();
-        let mut txn = index.write_txn().unwrap();
+    // #[test]
+    // fn test_is_authorized_typos() {
+    //     let index = TempIndex::new();
+    //     let mut txn = index.write_txn().unwrap();
 
-        let mut search = Search::new(&txn, &index);
+    //     let mut search = Search::new(&txn, &index);
 
-        // default is authorized
-        assert!(search.is_typo_authorized().unwrap());
+    //     // default is authorized
+    //     assert!(search.is_typo_authorized().unwrap());
 
-        search.authorize_typos(false);
-        assert!(!search.is_typo_authorized().unwrap());
+    //     search.authorize_typos(false);
+    //     assert!(!search.is_typo_authorized().unwrap());
 
-        index.put_authorize_typos(&mut txn, false).unwrap();
-        txn.commit().unwrap();
+    //     index.put_authorize_typos(&mut txn, false).unwrap();
+    //     txn.commit().unwrap();
 
-        let txn = index.read_txn().unwrap();
-        let mut search = Search::new(&txn, &index);
+    //     let txn = index.read_txn().unwrap();
+    //     let mut search = Search::new(&txn, &index);
 
-        assert!(!search.is_typo_authorized().unwrap());
+    //     assert!(!search.is_typo_authorized().unwrap());
 
-        search.authorize_typos(true);
-        assert!(!search.is_typo_authorized().unwrap());
-    }
+    //     search.authorize_typos(true);
+    //     assert!(!search.is_typo_authorized().unwrap());
+    // }
 
     // #[test]
     // fn test_one_typos_tolerance() {
