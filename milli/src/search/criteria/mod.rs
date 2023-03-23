@@ -171,7 +171,7 @@ pub trait Context<'c> {
         &self,
         word: &str,
         in_prefix_cache: bool,
-    ) -> heed::Result<Box<dyn Iterator<Item = heed::Result<((&'c str, u32), RoaringBitmap)>> + 'c>>;
+    ) -> heed::Result<Box<dyn Iterator<Item = heed::Result<((&'c str, u16), RoaringBitmap)>> + 'c>>;
     fn synonyms(&self, word: &str) -> heed::Result<Option<Vec<Vec<String>>>>;
     fn searchable_fields_ids(&self) -> Result<Vec<FieldId>>;
     fn field_id_word_count_docids(
@@ -322,11 +322,11 @@ impl<'c> Context<'c> for CriteriaBuilder<'c> {
         &self,
         word: &str,
         in_prefix_cache: bool,
-    ) -> heed::Result<Box<dyn Iterator<Item = heed::Result<((&'c str, u32), RoaringBitmap)>> + 'c>>
+    ) -> heed::Result<Box<dyn Iterator<Item = heed::Result<((&'c str, u16), RoaringBitmap)>> + 'c>>
     {
         let range = {
-            let left = u32::min_value();
-            let right = u32::max_value();
+            let left = u16::min_value(); // TODO: this is wrong
+            let right = u16::max_value(); // TODO: this is wrong
             let left = (word, left);
             let right = (word, right);
             left..=right
@@ -360,7 +360,7 @@ impl<'c> Context<'c> for CriteriaBuilder<'c> {
     }
 
     fn word_position_docids(&self, word: &str, pos: u32) -> heed::Result<Option<RoaringBitmap>> {
-        let key = (word, pos);
+        let key = (word, pos as u16); // TODO: this is wrong
         self.index.word_position_docids.get(self.rtxn, &key)
     }
 }
@@ -899,7 +899,7 @@ pub mod test {
             _word: &str,
             _in_prefix_cache: bool,
         ) -> heed::Result<
-            Box<dyn Iterator<Item = heed::Result<((&'c str, u32), RoaringBitmap)>> + 'c>,
+            Box<dyn Iterator<Item = heed::Result<((&'c str, u16), RoaringBitmap)>> + 'c>,
         > {
             todo!()
         }

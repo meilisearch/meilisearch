@@ -2,8 +2,8 @@ use std::collections::btree_map::Entry;
 use std::collections::{HashMap, HashSet};
 
 use fst::IntoStreamer;
-use heed::types::{ByteSlice, DecodeIgnore, Str};
-use heed::Database;
+use heed::types::{ByteSlice, DecodeIgnore, Str, UnalignedSlice};
+use heed::{BytesDecode, BytesEncode, Database, RwIter};
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -239,6 +239,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             prefix_word_pair_proximity_docids,
             word_position_docids,
             word_prefix_position_docids,
+            word_fid_docids,
+            word_prefix_fid_docids,
             facet_id_f64_docids: _,
             facet_id_string_docids: _,
             field_id_docid_facet_f64s: _,
@@ -361,97 +363,34 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         for db in [word_prefix_pair_proximity_docids, prefix_word_pair_proximity_docids] {
             // We delete the documents ids from the word prefix pair proximity database docids
             // and remove the empty pairs too.
-            let db = db.remap_key_type::<ByteSlice>();
-            let mut iter = db.iter_mut(self.wtxn)?;
-            while let Some(result) = iter.next() {
-                let (key, mut docids) = result?;
-                let previous_len = docids.len();
-                docids -= &self.to_delete_docids;
-                if docids.is_empty() {
-                    // safety: we don't keep references from inside the LMDB database.
-                    unsafe { iter.del_current()? };
-                } else if docids.len() != previous_len {
-                    let key = key.to_owned();
-                    // safety: we don't keep references from inside the LMDB database.
-                    unsafe { iter.put_current(&key, &docids)? };
-                }
-            }
+            Self::delete_from_db(db.iter_mut(self.wtxn)?.remap_key_type(), &self.to_delete_docids)?;
         }
-
-        // We delete the documents ids that are under the pairs of words,
-        // it is faster and use no memory to iterate over all the words pairs than
-        // to compute the cartesian product of every words of the deleted documents.
-        let mut iter =
-            word_pair_proximity_docids.remap_key_type::<ByteSlice>().iter_mut(self.wtxn)?;
-        while let Some(result) = iter.next() {
-            let (bytes, mut docids) = result?;
-            let previous_len = docids.len();
-            docids -= &self.to_delete_docids;
-            if docids.is_empty() {
-                // safety: we don't keep references from inside the LMDB database.
-                unsafe { iter.del_current()? };
-            } else if docids.len() != previous_len {
-                let bytes = bytes.to_owned();
-                // safety: we don't keep references from inside the LMDB database.
-                unsafe { iter.put_current(&bytes, &docids)? };
-            }
-        }
-
-        drop(iter);
-
-        // We delete the documents ids that are under the word level position docids.
-        let mut iter = word_position_docids.iter_mut(self.wtxn)?.remap_key_type::<ByteSlice>();
-        while let Some(result) = iter.next() {
-            let (bytes, mut docids) = result?;
-            let previous_len = docids.len();
-            docids -= &self.to_delete_docids;
-            if docids.is_empty() {
-                // safety: we don't keep references from inside the LMDB database.
-                unsafe { iter.del_current()? };
-            } else if docids.len() != previous_len {
-                let bytes = bytes.to_owned();
-                // safety: we don't keep references from inside the LMDB database.
-                unsafe { iter.put_current(&bytes, &docids)? };
-            }
-        }
-
-        drop(iter);
-
-        // We delete the documents ids that are under the word prefix level position docids.
-        let mut iter =
-            word_prefix_position_docids.iter_mut(self.wtxn)?.remap_key_type::<ByteSlice>();
-        while let Some(result) = iter.next() {
-            let (bytes, mut docids) = result?;
-            let previous_len = docids.len();
-            docids -= &self.to_delete_docids;
-            if docids.is_empty() {
-                // safety: we don't keep references from inside the LMDB database.
-                unsafe { iter.del_current()? };
-            } else if docids.len() != previous_len {
-                let bytes = bytes.to_owned();
-                // safety: we don't keep references from inside the LMDB database.
-                unsafe { iter.put_current(&bytes, &docids)? };
-            }
-        }
-
-        drop(iter);
+        Self::delete_from_db(
+            word_pair_proximity_docids.iter_mut(self.wtxn)?.remap_key_type(),
+            &self.to_delete_docids,
+        )?;
+        Self::delete_from_db(
+            word_position_docids.iter_mut(self.wtxn)?.remap_key_type(),
+            &self.to_delete_docids,
+        )?;
+        Self::delete_from_db(
+            word_prefix_position_docids.iter_mut(self.wtxn)?.remap_key_type(),
+            &self.to_delete_docids,
+        )?;
+        Self::delete_from_db(
+            word_fid_docids.iter_mut(self.wtxn)?.remap_key_type(),
+            &self.to_delete_docids,
+        )?;
+        Self::delete_from_db(
+            word_prefix_fid_docids.iter_mut(self.wtxn)?.remap_key_type(),
+            &self.to_delete_docids,
+        )?;
 
         // Remove the documents ids from the field id word count database.
-        let mut iter = field_id_word_count_docids.iter_mut(self.wtxn)?;
-        while let Some((key, mut docids)) = iter.next().transpose()? {
-            let previous_len = docids.len();
-            docids -= &self.to_delete_docids;
-            if docids.is_empty() {
-                // safety: we don't keep references from inside the LMDB database.
-                unsafe { iter.del_current()? };
-            } else if docids.len() != previous_len {
-                let key = key.to_owned();
-                // safety: we don't keep references from inside the LMDB database.
-                unsafe { iter.put_current(&key, &docids)? };
-            }
-        }
-
-        drop(iter);
+        Self::delete_from_db(
+            field_id_word_count_docids.iter_mut(self.wtxn)?.remap_key_type(),
+            &self.to_delete_docids,
+        )?;
 
         if let Some(mut rtree) = self.index.geo_rtree(self.wtxn)? {
             let mut geo_faceted_doc_ids = self.index.geo_faceted_documents_ids(self.wtxn)?;
@@ -501,21 +440,10 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         }
 
         // Remove the documents ids from the script language database.
-        let mut iter = script_language_docids.iter_mut(self.wtxn)?;
-        while let Some((key, mut docids)) = iter.next().transpose()? {
-            let previous_len = docids.len();
-            docids -= &self.to_delete_docids;
-            if docids.is_empty() {
-                // safety: we don't keep references from inside the LMDB database.
-                unsafe { iter.del_current()? };
-            } else if docids.len() != previous_len {
-                let key = key.to_owned();
-                // safety: we don't keep references from inside the LMDB database.
-                unsafe { iter.put_current(&key, &docids)? };
-            }
-        }
-
-        drop(iter);
+        Self::delete_from_db(
+            script_language_docids.iter_mut(self.wtxn)?.remap_key_type(),
+            &self.to_delete_docids,
+        )?;
         // We delete the documents ids that are under the facet field id values.
         remove_docids_from_facet_id_exists_docids(
             self.wtxn,
@@ -530,6 +458,30 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             remaining_documents: documents_ids.len(),
             soft_deletion_used: false,
         })
+    }
+
+    fn delete_from_db<C>(
+        mut iter: RwIter<UnalignedSlice<u8>, C>,
+        to_delete_docids: &RoaringBitmap,
+    ) -> Result<()>
+    where
+        C: for<'a> BytesDecode<'a, DItem = RoaringBitmap>
+            + for<'a> BytesEncode<'a, EItem = RoaringBitmap>,
+    {
+        while let Some(result) = iter.next() {
+            let (bytes, mut docids) = result?;
+            let previous_len = docids.len();
+            docids -= to_delete_docids;
+            if docids.is_empty() {
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.del_current()? };
+            } else if docids.len() != previous_len {
+                let bytes = bytes.to_owned();
+                // safety: we don't keep references from inside the LMDB database.
+                unsafe { iter.put_current(&bytes, &docids)? };
+            }
+        }
+        Ok(())
     }
 }
 

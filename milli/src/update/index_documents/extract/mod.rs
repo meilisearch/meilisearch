@@ -23,7 +23,7 @@ use self::extract_fid_word_count_docids::extract_fid_word_count_docids;
 use self::extract_geo_points::extract_geo_points;
 use self::extract_word_docids::extract_word_docids;
 use self::extract_word_pair_proximity_docids::extract_word_pair_proximity_docids;
-use self::extract_word_position_docids::extract_word_position_docids;
+use self::extract_word_position_docids::extract_word_fid_and_position_docids;
 use super::helpers::{
     as_cloneable_grenad, merge_cbo_roaring_bitmaps, merge_roaring_bitmaps, CursorClonableMmap,
     GrenadParameters, MergeFn, MergeableReader,
@@ -133,7 +133,7 @@ pub(crate) fn data_from_obkv_documents(
         docid_word_positions_chunks,
         indexer,
         lmdb_writer_sx.clone(),
-        extract_word_position_docids,
+        extract_word_fid_and_position_docids,
         merge_cbo_roaring_bitmaps,
         TypedChunk::WordPositionDocids,
         "word-position-docids",

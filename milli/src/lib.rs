@@ -152,6 +152,23 @@ pub fn relative_from_absolute_position(absolute: Position) -> (FieldId, Relative
 pub fn absolute_from_relative_position(field_id: FieldId, relative: RelativePosition) -> Position {
     (field_id as u32) << 16 | (relative as u32)
 }
+// TODO: this is wrong, but will do for now
+/// Compute the "bucketed" absolute position from the field id and relative position in the field.
+///
+/// In a bucketed position, the accuracy of the relative position is reduced exponentially as it gets larger.
+pub fn bucketed_position(relative: u16) -> u16 {
+    // The first few relative positions are kept intact.
+    if relative < 16 {
+        relative
+    } else if relative < 24 {
+        // Relative positions between 16 and 24 all become equal to 24
+        24
+    } else {
+        // Then, groups of positions that have the same base-2 logarithm are reduced to
+        // the same relative position: the smallest power of 2 that is greater than them
+        (relative as f64).log2().ceil().exp2() as u16
+    }
+}
 
 /// Transform a raw obkv store into a JSON Object.
 pub fn obkv_to_json(

@@ -199,7 +199,7 @@ impl<'t> Criterion for Attribute<'t> {
 struct QueryPositionIterator<'t> {
     #[allow(clippy::type_complexity)]
     inner:
-        Vec<Peekable<Box<dyn Iterator<Item = heed::Result<((&'t str, u32), RoaringBitmap)>> + 't>>>,
+        Vec<Peekable<Box<dyn Iterator<Item = heed::Result<((&'t str, u16), RoaringBitmap)>> + 't>>>,
 }
 
 impl<'t> QueryPositionIterator<'t> {
@@ -241,7 +241,7 @@ impl<'t> QueryPositionIterator<'t> {
 }
 
 impl<'t> Iterator for QueryPositionIterator<'t> {
-    type Item = heed::Result<(u32, RoaringBitmap)>;
+    type Item = heed::Result<(u16, RoaringBitmap)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // sort inner words from the closest next position to the farthest next position.
@@ -281,9 +281,9 @@ impl<'t> Iterator for QueryPositionIterator<'t> {
 /// A Branch is represent a possible alternative of the original query and is build with the Query Tree,
 /// This branch allows us to iterate over meta-interval of positions.
 struct Branch<'t> {
-    query_level_iterator: Vec<(u32, RoaringBitmap, Peekable<QueryPositionIterator<'t>>)>,
-    last_result: (u32, RoaringBitmap),
-    branch_size: u32,
+    query_level_iterator: Vec<(u16, RoaringBitmap, Peekable<QueryPositionIterator<'t>>)>,
+    last_result: (u16, RoaringBitmap),
+    branch_size: u16,
 }
 
 impl<'t> Branch<'t> {
@@ -303,7 +303,7 @@ impl<'t> Branch<'t> {
         let mut branch = Self {
             query_level_iterator,
             last_result: (0, RoaringBitmap::new()),
-            branch_size: flatten_branch.len() as u32,
+            branch_size: flatten_branch.len() as u16,
         };
 
         branch.update_last_result();
@@ -342,7 +342,7 @@ impl<'t> Branch<'t> {
                         Some(result) => {
                             result.as_ref().map(|(next_pos, _)| *next_pos - *pos).unwrap_or(0)
                         }
-                        None => u32::MAX,
+                        None => u16::MAX,
                     }
                 }
             })
@@ -378,7 +378,8 @@ impl<'t> Branch<'t> {
     fn compute_rank(&self) -> u32 {
         // we compute a rank from the position.
         let (pos, _) = self.last_result;
-        pos.saturating_sub((0..self.branch_size).sum()) * LCM_10_FIRST_NUMBERS / self.branch_size
+        pos.saturating_sub((0..self.branch_size).sum()) as u32 * LCM_10_FIRST_NUMBERS
+            / self.branch_size as u32
     }
 
     fn cmp(&self, other: &Self) -> Ordering {

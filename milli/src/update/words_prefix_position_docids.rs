@@ -8,13 +8,13 @@ use heed::{BytesDecode, BytesEncode};
 use log::debug;
 
 use crate::error::SerializationError;
-use crate::heed_codec::StrBEU32Codec;
+use crate::heed_codec::{StrBEU16Codec, StrBEU32Codec};
 use crate::index::main_key::WORDS_PREFIXES_FST_KEY;
 use crate::update::index_documents::{
     create_sorter, merge_cbo_roaring_bitmaps, sorter_into_lmdb_database, valid_lmdb_key,
     CursorClonableMmap, MergeFn,
 };
-use crate::{Index, Result};
+use crate::{bucketed_position, relative_from_absolute_position, Index, Result};
 
 pub struct WordPrefixPositionDocids<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -82,6 +82,7 @@ impl<'t, 'u, 'i> WordPrefixPositionDocids<'t, 'u, 'i> {
             let mut prefixes_cache = HashMap::new();
             while let Some((key, data)) = new_word_position_docids_iter.move_on_next()? {
                 let (word, pos) = StrBEU32Codec::bytes_decode(key).ok_or(heed::Error::Decoding)?;
+                let (_fid, pos) = relative_from_absolute_position(pos);
 
                 current_prefixes = match current_prefixes.take() {
                     Some(prefixes) if word.starts_with(&prefixes[0]) => Some(prefixes),
@@ -127,12 +128,12 @@ impl<'t, 'u, 'i> WordPrefixPositionDocids<'t, 'u, 'i> {
             let iter = db
                 .remap_key_type::<ByteSlice>()
                 .prefix_iter(self.wtxn, prefix_bytes.as_bytes())?
-                .remap_key_type::<StrBEU32Codec>();
+                .remap_key_type::<StrBEU16Codec>();
             for result in iter {
                 let ((word, pos), data) = result?;
                 if word.starts_with(prefix) {
                     let key = (prefix, pos);
-                    let bytes = StrBEU32Codec::bytes_encode(&key).unwrap();
+                    let bytes = StrBEU16Codec::bytes_encode(&key).unwrap();
                     prefix_position_docids_sorter.insert(bytes, data)?;
                 }
             }
