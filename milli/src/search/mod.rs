@@ -1,38 +1,27 @@
-use std::borrow::Cow;
-use std::collections::hash_map::{Entry, HashMap};
-use std::fmt;
-use std::mem::take;
-use std::result::Result as StdResult;
-use std::str::Utf8Error;
-use std::time::Instant;
-
-use charabia::TokenizerBuilder;
-use distinct::{Distinct, DocIter, FacetDistinct, NoopDistinct};
-use fst::automaton::Str;
-use fst::{Automaton, IntoStreamer, Streamer};
-use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
-use log::debug;
-use once_cell::sync::Lazy;
-use roaring::bitmap::RoaringBitmap;
-
 pub use self::facet::{FacetDistribution, Filter, DEFAULT_VALUES_PER_FACET};
 use self::fst_utils::{Complement, Intersection, StartsWith, Union};
 pub use self::matches::{
     FormatOptions, MatchBounds, Matcher, MatcherBuilder, MatchingWord, MatchingWords,
 };
-use self::query_tree::QueryTreeBuilder;
-use crate::error::UserError;
-use crate::search::criteria::r#final::{Final, FinalResult};
-use crate::search::criteria::InitialCandidates;
-use crate::{AscDesc, Criterion, DocumentId, Index, Member, Result};
+use crate::{
+    execute_search, AscDesc, DefaultSearchLogger, DocumentId, Index, Result, SearchContext,
+};
+use fst::automaton::Str;
+use fst::{Automaton, IntoStreamer, Streamer};
+use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
+use once_cell::sync::Lazy;
+use roaring::bitmap::RoaringBitmap;
+use std::borrow::Cow;
+use std::collections::hash_map::{Entry, HashMap};
+use std::fmt;
+use std::result::Result as StdResult;
+use std::str::Utf8Error;
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
 static LEVDIST1: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(1, true));
 static LEVDIST2: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(2, true));
 
-mod criteria;
-mod distinct;
 pub mod facet;
 mod fst_utils;
 mod matches;
@@ -135,162 +124,18 @@ impl<'a> Search<'a> {
     }
 
     pub fn execute(&self) -> Result<SearchResult> {
-        // We create the query tree by spliting the query into tokens.
-        let before = Instant::now();
-        let (query_tree, primitive_query, matching_words) = match self.query.as_ref() {
-            Some(query) => {
-                let mut builder = QueryTreeBuilder::new(self.rtxn, self.index)?;
-                builder.terms_matching_strategy(self.terms_matching_strategy);
-
-                builder.authorize_typos(self.is_typo_authorized()?);
-
-                builder.words_limit(self.words_limit);
-                // We make sure that the analyzer is aware of the stop words
-                // this ensures that the query builder is able to properly remove them.
-                let mut tokbuilder = TokenizerBuilder::new();
-                let stop_words = self.index.stop_words(self.rtxn)?;
-                if let Some(ref stop_words) = stop_words {
-                    tokbuilder.stop_words(stop_words);
-                }
-
-                let script_lang_map = self.index.script_language(self.rtxn)?;
-                if !script_lang_map.is_empty() {
-                    tokbuilder.allow_list(&script_lang_map);
-                }
-
-                let tokenizer = tokbuilder.build();
-                let tokens = tokenizer.tokenize(query);
-                builder
-                    .build(tokens)?
-                    .map_or((None, None, None), |(qt, pq, mw)| (Some(qt), Some(pq), Some(mw)))
-            }
-            None => (None, None, None),
-        };
-
-        debug!("query tree: {:?} took {:.02?}", query_tree, before.elapsed());
-
-        // We create the original candidates with the facet conditions results.
-        let before = Instant::now();
-        let filtered_candidates = match &self.filter {
-            Some(condition) => Some(condition.evaluate(self.rtxn, self.index)?),
-            None => None,
-        };
-
-        debug!("facet candidates: {:?} took {:.02?}", filtered_candidates, before.elapsed());
-
-        // We check that we are allowed to use the sort criteria, we check
-        // that they are declared in the sortable fields.
-        if let Some(sort_criteria) = &self.sort_criteria {
-            let sortable_fields = self.index.sortable_fields(self.rtxn)?;
-            for asc_desc in sort_criteria {
-                match asc_desc.member() {
-                    Member::Field(ref field) if !crate::is_faceted(field, &sortable_fields) => {
-                        return Err(UserError::InvalidSortableAttribute {
-                            field: field.to_string(),
-                            valid_fields: sortable_fields.into_iter().collect(),
-                        })?
-                    }
-                    Member::Geo(_) if !sortable_fields.contains("_geo") => {
-                        return Err(UserError::InvalidSortableAttribute {
-                            field: "_geo".to_string(),
-                            valid_fields: sortable_fields.into_iter().collect(),
-                        })?
-                    }
-                    _ => (),
-                }
-            }
-        }
-
-        // We check that the sort ranking rule exists and throw an
-        // error if we try to use it and that it doesn't.
-        let sort_ranking_rule_missing = !self.index.criteria(self.rtxn)?.contains(&Criterion::Sort);
-        let empty_sort_criteria = self.sort_criteria.as_ref().map_or(true, |s| s.is_empty());
-        if sort_ranking_rule_missing && !empty_sort_criteria {
-            return Err(UserError::SortRankingRuleMissing.into());
-        }
-
-        let criteria_builder = criteria::CriteriaBuilder::new(self.rtxn, self.index)?;
-
-        match self.index.distinct_field(self.rtxn)? {
-            None => {
-                let criteria = criteria_builder.build::<NoopDistinct>(
-                    query_tree,
-                    primitive_query,
-                    filtered_candidates,
-                    self.sort_criteria.clone(),
-                    self.exhaustive_number_hits,
-                    None,
-                    self.criterion_implementation_strategy,
-                )?;
-                self.perform_sort(NoopDistinct, matching_words.unwrap_or_default(), criteria)
-            }
-            Some(name) => {
-                let field_ids_map = self.index.fields_ids_map(self.rtxn)?;
-                match field_ids_map.id(name) {
-                    Some(fid) => {
-                        let distinct = FacetDistinct::new(fid, self.index, self.rtxn);
-
-                        let criteria = criteria_builder.build(
-                            query_tree,
-                            primitive_query,
-                            filtered_candidates,
-                            self.sort_criteria.clone(),
-                            self.exhaustive_number_hits,
-                            Some(distinct.clone()),
-                            self.criterion_implementation_strategy,
-                        )?;
-                        self.perform_sort(distinct, matching_words.unwrap_or_default(), criteria)
-                    }
-                    None => Ok(SearchResult::default()),
-                }
-            }
-        }
-    }
-
-    fn perform_sort<D: Distinct>(
-        &self,
-        mut distinct: D,
-        matching_words: MatchingWords,
-        mut criteria: Final,
-    ) -> Result<SearchResult> {
-        let mut offset = self.offset;
-        let mut initial_candidates = InitialCandidates::Estimated(RoaringBitmap::new());
-        let mut excluded_candidates = self.index.soft_deleted_documents_ids(self.rtxn)?;
-        let mut documents_ids = Vec::new();
-
-        while let Some(FinalResult { candidates, initial_candidates: ic, .. }) =
-            criteria.next(&excluded_candidates)?
-        {
-            debug!("Number of candidates found {}", candidates.len());
-
-            let excluded = take(&mut excluded_candidates);
-            let mut candidates = distinct.distinct(candidates, excluded);
-
-            initial_candidates |= ic;
-
-            if offset != 0 {
-                let discarded = candidates.by_ref().take(offset).count();
-                offset = offset.saturating_sub(discarded);
-            }
-
-            for candidate in candidates.by_ref().take(self.limit - documents_ids.len()) {
-                documents_ids.push(candidate?);
-            }
-
-            excluded_candidates |= candidates.into_excluded();
-
-            if documents_ids.len() == self.limit {
-                break;
-            }
-        }
-
-        initial_candidates.map_inplace(|c| c - excluded_candidates);
-
-        Ok(SearchResult {
-            matching_words,
-            candidates: initial_candidates.into_inner(),
-            documents_ids,
-        })
+        let mut ctx = SearchContext::new(self.index, self.rtxn);
+        execute_search(
+            &mut ctx,
+            &self.query,
+            self.terms_matching_strategy,
+            &self.filter,
+            self.offset,
+            self.limit,
+            Some(self.words_limit),
+            &mut DefaultSearchLogger,
+            &mut DefaultSearchLogger,
+        )
     }
 }
 

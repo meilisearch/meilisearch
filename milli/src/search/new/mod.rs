@@ -18,7 +18,7 @@ mod words;
 // #[cfg(test)]
 use std::collections::{BTreeSet, HashSet};
 
-use charabia::Tokenize;
+use charabia::{Tokenize, TokenizerBuilder};
 use db_cache::DatabaseCache;
 use graph_based_ranking_rule::{Proximity, Typo};
 use heed::RoTxn;
@@ -224,32 +224,41 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
 #[allow(clippy::too_many_arguments)]
 pub fn execute_search(
     ctx: &mut SearchContext,
-    query: &str,
+    query: &Option<String>,
     terms_matching_strategy: TermsMatchingStrategy,
-    filters: Option<Filter>,
+    filters: &Option<Filter>,
     from: usize,
     length: usize,
+    words_limit: Option<usize>,
     placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery>,
     query_graph_logger: &mut dyn SearchLogger<QueryGraph>,
 ) -> Result<SearchResult> {
-    assert!(!query.is_empty());
-    let query_terms = located_query_terms_from_string(ctx, query.tokenize(), None)?;
-    let graph = QueryGraph::from_query(ctx, query_terms)?;
-
     let mut universe = if let Some(filters) = filters {
         filters.evaluate(ctx.txn, ctx.index)?
     } else {
         ctx.index.documents_ids(ctx.txn)?
     };
 
-    // TODO: other way to tell whether it is a placeholder search
-    // This way of doing things is not correct because if someone searches
-    // for a word that does not appear in any document, the word will be removed
-    // from the graph and thus its number of nodes will be == 2
-    // But in that case, we should return no results.
-    //
-    // The search is a placeholder search only if there are no tokens?
-    let documents_ids = if graph.nodes.len() > 2 {
+    let documents_ids = if let Some(query) = query {
+        // We make sure that the analyzer is aware of the stop words
+        // this ensures that the query builder is able to properly remove them.
+        let mut tokbuilder = TokenizerBuilder::new();
+        let stop_words = ctx.index.stop_words(ctx.txn)?;
+        if let Some(ref stop_words) = stop_words {
+            tokbuilder.stop_words(stop_words);
+        }
+
+        let script_lang_map = ctx.index.script_language(ctx.txn)?;
+        if !script_lang_map.is_empty() {
+            tokbuilder.allow_list(&script_lang_map);
+        }
+
+        let tokenizer = tokbuilder.build();
+        let tokens = tokenizer.tokenize(&query);
+
+        let query_terms = located_query_terms_from_string(ctx, tokens, words_limit)?;
+        let graph = QueryGraph::from_query(ctx, query_terms)?;
+
         universe = resolve_maximally_reduced_query_graph(
             ctx,
             &universe,
@@ -259,6 +268,7 @@ pub fn execute_search(
         )?;
 
         let ranking_rules = get_ranking_rules_for_query_graph_search(ctx, terms_matching_strategy)?;
+
         bucket_sort(ctx, ranking_rules, &graph, &universe, from, length, query_graph_logger)?
     } else {
         let ranking_rules = get_ranking_rules_for_placeholder_search(ctx)?;

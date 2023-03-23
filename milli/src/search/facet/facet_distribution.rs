@@ -309,7 +309,7 @@ impl<'a> FacetDistribution<'a> {
         let mut distribution = BTreeMap::new();
         for (fid, name) in fields_ids_map.iter() {
             if crate::is_faceted(name, &fields) {
-                let min_value = if let Some(min_value) = crate::search::criteria::facet_min_value(
+                let min_value = if let Some(min_value) = crate::search::facet::facet_min_value(
                     self.index,
                     self.rtxn,
                     fid,
@@ -319,7 +319,7 @@ impl<'a> FacetDistribution<'a> {
                 } else {
                     continue;
                 };
-                let max_value = if let Some(max_value) = crate::search::criteria::facet_max_value(
+                let max_value = if let Some(max_value) = crate::search::facet::facet_max_value(
                     self.index,
                     self.rtxn,
                     fid,
