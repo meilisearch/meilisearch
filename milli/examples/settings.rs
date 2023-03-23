@@ -10,7 +10,7 @@ fn main() {
     let mut options = EnvOpenOptions::new();
     options.map_size(100 * 1024 * 1024 * 1024); // 100 GB
 
-    let index = Index::new(options, "data_wiki").unwrap();
+    let index = Index::new(options, "data_movies").unwrap();
     let mut wtxn = index.write_txn().unwrap();
 
     let config = IndexerConfig::default();
@@ -23,6 +23,8 @@ fn main() {
         Criterion::Words,
         Criterion::Typo,
         Criterion::Proximity,
+        Criterion::Attribute,
+        Criterion::Exactness,
         // Criterion::Asc("release_date".to_owned()),
     ]);
 

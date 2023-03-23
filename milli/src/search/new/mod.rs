@@ -185,21 +185,21 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                 if attribute {
                     continue;
                 }
-                todo!();
+                // todo!();
                 // attribute = false;
             }
             crate::Criterion::Sort => {
                 if sort {
                     continue;
                 }
-                todo!();
+                // todo!();
                 // sort = false;
             }
             crate::Criterion::Exactness => {
                 if exactness {
                     continue;
                 }
-                todo!();
+                // todo!();
                 // exactness = false;
             }
             crate::Criterion::Asc(field) => {
@@ -214,7 +214,7 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                     continue;
                 }
                 desc.insert(field);
-                todo!();
+                // todo!();
             }
         }
     }

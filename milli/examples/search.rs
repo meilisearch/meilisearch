@@ -35,7 +35,25 @@ fn main() -> Result<(), Box<dyn Error>> {
     let txn = index.read_txn()?;
     let mut query = String::new();
     while stdin().read_line(&mut query)? > 0 {
-        for _ in 0..10 {
+        for _ in 0..2 {
+            let start = Instant::now();
+            let mut s = Search::new(&txn, &index);
+            s.query(
+                // "which a the releases from poison by the government",
+                // "sun flower s are the best",
+                query.trim(),
+            );
+            s.terms_matching_strategy(TermsMatchingStrategy::Last);
+            s.offset(0);
+            // s.limit(1);
+            // s.criterion_implementation_strategy(
+            //     milli::CriterionImplementationStrategy::OnlySetBased,
+            // );
+
+            let docs = s.execute().unwrap();
+            let elapsed = start.elapsed();
+            println!("old: {}us, docids: {:?}", elapsed.as_micros(), docs.documents_ids);
+
             let start = Instant::now();
             // let mut logger = milli::DetailedSearchLogger::new("log");
             let mut ctx = SearchContext::new(&index, &txn);
@@ -75,23 +93,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             //     println!("{id}:");
             //     println!("{document}");
             // }
-
-            let start = Instant::now();
-            let mut s = Search::new(&txn, &index);
-            s.query(
-                // "which a the releases from poison by the government",
-                // "sun flower s are the best",
-                query.trim(),
-            );
-            s.terms_matching_strategy(TermsMatchingStrategy::Last);
-            // s.limit(1);
-            // s.criterion_implementation_strategy(
-            //     milli::CriterionImplementationStrategy::OnlySetBased,
-            // );
-
-            let docs = s.execute().unwrap();
-            let elapsed = start.elapsed();
-            println!("old: {}us, docids: {:?}", elapsed.as_micros(), docs.documents_ids);
 
             // let documents = index
             //     .documents(&txn, docs.documents_ids.iter().copied())
