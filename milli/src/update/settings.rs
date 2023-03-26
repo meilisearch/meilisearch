@@ -565,8 +565,12 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                     self.index.put_primary_key(self.wtxn, primary_key)?;
                     Ok(())
                 } else {
-                    let primary_key = self.index.primary_key(self.wtxn)?.unwrap();
-                    Err(UserError::PrimaryKeyCannotBeChanged(primary_key.to_string()).into())
+                    let curr_primary_key = self.index.primary_key(self.wtxn)?.unwrap().to_string();
+                    if primary_key == &curr_primary_key {
+                        Ok(())
+                    } else {
+                        Err(UserError::PrimaryKeyCannotBeChanged(curr_primary_key).into())
+                    }
                 }
             }
             Setting::Reset => {
@@ -1332,6 +1336,17 @@ mod tests {
             .unwrap();
         wtxn.commit().unwrap();
 
+        // Updating settings with the same primary key should do nothing
+        let mut wtxn = index.write_txn().unwrap();
+        index
+            .update_settings_using_wtxn(&mut wtxn, |settings| {
+                settings.set_primary_key(S("mykey"));
+            })
+            .unwrap();
+        assert_eq!(index.primary_key(&wtxn).unwrap(), Some("mykey"));
+        wtxn.commit().unwrap();
+
+        // Updating the settings with a different (or no) primary key causes an error
         let mut wtxn = index.write_txn().unwrap();
         let error = index
             .update_settings_using_wtxn(&mut wtxn, |settings| {
