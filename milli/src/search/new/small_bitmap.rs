@@ -16,6 +16,9 @@ impl<T> SmallBitmap<T> {
     pub fn for_interned_values_in(interner: &FixedSizeInterner<T>) -> Self {
         Self::new(interner.len())
     }
+    // universe_length not stored anywhere, only used to decide between tiny/small
+    // universe_length: passed 63, actual length will be rounded up 64
+    // passed 66, actual 64 * xs.len() as u16 = 128, passed sized rounded up to the next 64
     pub fn new(universe_length: u16) -> Self {
         if universe_length <= 64 {
             Self { internal: SmallBitmapInternal::Tiny(0), _phantom: PhantomData }

@@ -119,6 +119,8 @@ impl QueryGraph {
 
 impl QueryGraph {
     /// Build the query graph from the parsed user search query.
+    ///
+    /// The ngrams are made at this point.
     pub fn from_query(ctx: &mut SearchContext, terms: Vec<LocatedQueryTerm>) -> Result<QueryGraph> {
         let nbr_typos = number_of_typos_allowed(ctx)?;
 
@@ -219,6 +221,7 @@ impl QueryGraph {
     }
 
     /// Remove the given nodes and all their edges from the query graph.
+    /// TODO: need to check where this is used, and if this is correct.
     pub fn remove_nodes(&mut self, nodes: &[Interned<QueryNode>]) {
         for &node_id in nodes {
             let node = &self.nodes.get(node_id);

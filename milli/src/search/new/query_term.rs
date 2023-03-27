@@ -414,6 +414,7 @@ impl QueryTerm {
 #[derive(Clone)]
 pub struct LocatedQueryTerm {
     pub value: Interned<QueryTerm>,
+    // TODO: consider changing to u8, or even a u16
     pub positions: RangeInclusive<i8>,
 }
 
@@ -425,6 +426,8 @@ impl LocatedQueryTerm {
 }
 
 /// Convert the tokenised search query into a list of located query terms.
+// TODO: checking if the positions are correct for phrases, separators, ngrams
+// hard-limit the number of tokens that are considered
 pub fn located_query_terms_from_string(
     ctx: &mut SearchContext,
     query: NormalizedTokenIter<&[u8]>,
@@ -484,6 +487,7 @@ pub fn located_query_terms_from_string(
                     }
                 } else {
                     let word = token.lemma();
+                    // eagerly compute all derivations
                     let term = query_term_from_word(ctx, word, nbr_typos(word), true)?;
                     let located_term = LocatedQueryTerm {
                         value: ctx.term_interner.insert(term),
@@ -507,6 +511,7 @@ pub fn located_query_terms_from_string(
                     quoted = !quoted;
                 }
                 // if there is a quote or a hard separator we close the phrase.
+                // TODO: limit phrase size?
                 if !phrase.is_empty() && (quote_count > 0 || separator_kind == SeparatorKind::Hard)
                 {
                     let located_query_term = LocatedQueryTerm {

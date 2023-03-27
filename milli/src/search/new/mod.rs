@@ -11,6 +11,7 @@ mod resolve_query_graph;
 // TODO: documentation + comments
 mod small_bitmap;
 // TODO: documentation + comments
+// implementation is currently an adaptation of the previous implementation to fit with the new model
 mod sort;
 // TODO: documentation + comments
 mod words;
@@ -42,6 +43,7 @@ pub struct SearchContext<'ctx> {
     pub word_interner: DedupInterner<String>,
     pub phrase_interner: DedupInterner<Phrase>,
     pub term_interner: DedupInterner<QueryTerm>,
+    // think about memory usage of that field (roaring bitmaps in a hashmap)
     pub term_docids: QueryTermDocIdsCache,
 }
 impl<'ctx> SearchContext<'ctx> {

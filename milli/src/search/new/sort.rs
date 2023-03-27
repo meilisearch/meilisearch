@@ -28,6 +28,21 @@ impl<'ctx, Query> RankingRuleOutputIter<'ctx, Query> for RankingRuleOutputIterWr
     }
 }
 
+// `Query` type parameter: the same as the type parameter to bucket_sort
+// implements RankingRuleQuery trait, either querygraph or placeholdersearch
+// The sort ranking rule doesn't need the query parameter, it is doing the same thing
+// whether we're doing a querygraph or placeholder search.
+//
+// Query Stored anyway because every ranking rule must return a query from next_bucket
+// ---
+// "Mismatch" between new/old impl.:
+// - old impl: roaring bitmap as input, ranking rule iterates other all the buckets
+// - new impl: still works like that but it shouldn't, because the universe may change for every call to next_bucket, itself due to:
+//    1. elements that were already returned by the ranking rule are subtracted from the universe, also done in the old impl (subtracted from the candidates)
+//    2. NEW in the new impl.: distinct rule might have been applied btwn calls to next_bucket
+// new impl ignores docs removed in (2), which is a missed perf opt issue, see `next_bucket`
+// this perf problem is P2
+// mostly happens when many documents map to the same distinct attribute value.
 pub struct Sort<'ctx, Query> {
     field_name: String,
     field_id: Option<FieldId>,
@@ -127,6 +142,9 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
     ) -> Result<Option<RankingRuleOutput<Query>>> {
         let iter = self.iter.as_mut().unwrap();
         // TODO: we should make use of the universe in the function below
+        // good for correctness, but ideally iter.next_bucket would take the current universe into account,
+        // as right now it could return buckets that don't intersect with the universe, meaning we will make many
+        // unneeded calls.
         if let Some(mut bucket) = iter.next_bucket()? {
             bucket.candidates &= universe;
             Ok(Some(bucket))
