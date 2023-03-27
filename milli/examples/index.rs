@@ -1,41 +1,55 @@
-use std::{
-    error::Error,
-    fs::File,
-    io::{BufRead, BufReader, Cursor, Seek},
-    time::Duration,
-};
+use std::error::Error;
+use std::fs::File;
+use std::io::{BufRead, BufReader, Cursor, Seek};
+use std::path::Path;
 
 use heed::EnvOpenOptions;
-use milli::{
-    documents::{DocumentsBatchBuilder, DocumentsBatchReader},
-    update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings},
-    Criterion, Index, Object,
-};
+use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
+use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
+use milli::{Criterion, Index, Object};
+
+fn usage(error: &str, program_name: &str) -> String {
+    format!(
+        "{}. Usage: {} <PATH-TO-INDEX> <PATH-TO-DATASET> [searchable_fields] [filterable_fields]",
+        error, program_name
+    )
+}
 
 fn main() -> Result<(), Box<dyn Error>> {
+    let mut args = std::env::args();
+    let program_name = args.next().expect("No program name");
+    let index_path =
+        args.next().unwrap_or_else(|| panic!("{}", usage("Missing path to index.", &program_name)));
+    let dataset_path = args
+        .next()
+        .unwrap_or_else(|| panic!("{}", usage("Missing path to source dataset.", &program_name)));
+    let primary_key = args.next().unwrap_or_else(|| "id".into());
+    // "title overview"
+    let searchable_fields: Vec<String> = args
+        .next()
+        .map(|arg| arg.split_whitespace().map(ToString::to_string).collect())
+        .unwrap_or_default();
+    // "release_date genres"
+    let filterable_fields: Vec<String> = args
+        .next()
+        .map(|arg| arg.split_whitespace().map(ToString::to_string).collect())
+        .unwrap_or_default();
+
     let mut options = EnvOpenOptions::new();
     options.map_size(100 * 1024 * 1024 * 1024); // 100 GB
 
-    let index = Index::new(options, "data_organizations").unwrap();
+    std::fs::create_dir_all(&index_path).unwrap();
+    let index = Index::new(options, index_path).unwrap();
     let mut wtxn = index.write_txn().unwrap();
-
-    let primary_key = "uuid";
-    //  let searchable_fields = vec!["body", "title", "url"];
-    // let searchable_fields = vec!["title", "overview"];
-    let searchable_fields =
-        vec!["name", "primary_role", "city", "region", "country_code", "short_description"];
-    // let filterable_fields = vec!["release_date", "genres"];
 
     let config = IndexerConfig::default();
     let mut builder = Settings::new(&mut wtxn, &index, &config);
-    builder.set_primary_key(primary_key.to_owned());
+    builder.set_primary_key(primary_key);
     let searchable_fields = searchable_fields.iter().map(|s| s.to_string()).collect();
     builder.set_searchable_fields(searchable_fields);
-    // let filterable_fields = filterable_fields.iter().map(|s| s.to_string()).collect();
-    // builder.set_filterable_fields(filterable_fields);
+    let filterable_fields = filterable_fields.iter().map(|s| s.to_string()).collect();
+    builder.set_filterable_fields(filterable_fields);
 
-    // builder.set_min_word_len_one_typo(5);
-    // builder.set_min_word_len_two_typos(100);
     builder.set_criteria(vec![Criterion::Words, Criterion::Typo, Criterion::Proximity]);
     builder.execute(|_| (), || false).unwrap();
 
@@ -45,34 +59,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| (), || false).unwrap();
 
     let documents = documents_from(
-        // "/Users/meilisearch/Documents/milli2/benchmarks/datasets/movies.json",
-        "/Users/meilisearch/Documents/datasets/organizations.csv",
-        // "json"
-        "csv",
+        &dataset_path,
+        Path::new(&dataset_path).extension().unwrap_or_default().to_str().unwrap_or_default(),
     );
     let (builder, user_error) = builder.add_documents(documents).unwrap();
     user_error.unwrap();
     builder.execute().unwrap();
     wtxn.commit().unwrap();
-
-    // let rtxn = index.read_txn().unwrap();
-
-    // let mut wtxn = index.write_txn().unwrap();
-    // let config = IndexerConfig::default();
-    // let indexing_config = IndexDocumentsConfig::default();
-    // let builder =
-    //     IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| (), || false).unwrap();
-
-    // let documents = documents_from("test_doc.json", "json");
-    // let (builder, user_error) = builder.add_documents(documents).unwrap();
-    // user_error.unwrap();
-    // builder.execute().unwrap();
-    // wtxn.commit().unwrap();
-
-    // let _ = index.all_documents(&rtxn)?;
-
-    // println!("done!");
-    // std::thread::sleep(Duration::from_secs(100));
 
     index.prepare_for_closing().wait();
     Ok(())
