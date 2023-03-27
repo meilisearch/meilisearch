@@ -14,7 +14,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut args = std::env::args();
     let program_name = args.next().expect("No program name");
     let dataset = args.next().unwrap_or_else(|| {
-        format!(
+        panic!(
             "Missing path to index. Usage: {} <PATH-TO-INDEX> [<logger-dir>] [print-documents]",
             program_name
         )
