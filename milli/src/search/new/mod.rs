@@ -33,7 +33,7 @@ use roaring::RoaringBitmap;
 use words::Words;
 
 use self::ranking_rules::RankingRule;
-use crate::{Filter, Index, MatchingWords, Result, Search, SearchResult, TermsMatchingStrategy};
+use crate::{Filter, Index, MatchingWords, Result, SearchResult, TermsMatchingStrategy};
 
 /// A structure used throughout the execution of a search query.
 pub struct SearchContext<'ctx> {
@@ -291,11 +291,4 @@ pub fn execute_search(
         candidates: universe,
         documents_ids,
     })
-}
-
-impl<'a> Search<'a> {
-    // TODO
-    pub fn execute_new(&self) -> Result<SearchResult> {
-        todo!()
-    }
 }
