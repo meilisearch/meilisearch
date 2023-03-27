@@ -31,6 +31,7 @@ impl<T> SmallBitmap<T> {
             }
         }
     }
+
     pub fn universe_length(&self) -> u16 {
         match &self.internal {
             SmallBitmapInternal::Tiny(_) => 64,
@@ -82,7 +83,7 @@ impl<T> SmallBitmap<T> {
     }
 }
 #[derive(Clone)]
-pub enum SmallBitmapInternal {
+enum SmallBitmapInternal {
     Tiny(u64),
     Small(Box<[u64]>),
 }
@@ -182,11 +183,7 @@ impl SmallBitmapInternal {
             }
         }
     }
-    pub fn all_satisfy_op(
-        &self,
-        other: &SmallBitmapInternal,
-        op: impl Fn(u64, u64) -> bool,
-    ) -> bool {
+    fn all_satisfy_op(&self, other: &SmallBitmapInternal, op: impl Fn(u64, u64) -> bool) -> bool {
         match (self, other) {
             (SmallBitmapInternal::Tiny(a), SmallBitmapInternal::Tiny(b)) => op(*a, *b),
             (SmallBitmapInternal::Small(a), SmallBitmapInternal::Small(b)) => {
@@ -203,11 +200,7 @@ impl SmallBitmapInternal {
             }
         }
     }
-    pub fn any_satisfy_op(
-        &self,
-        other: &SmallBitmapInternal,
-        op: impl Fn(u64, u64) -> bool,
-    ) -> bool {
+    fn any_satisfy_op(&self, other: &SmallBitmapInternal, op: impl Fn(u64, u64) -> bool) -> bool {
         match (self, other) {
             (SmallBitmapInternal::Tiny(a), SmallBitmapInternal::Tiny(b)) => op(*a, *b),
             (SmallBitmapInternal::Small(a), SmallBitmapInternal::Small(b)) => {
