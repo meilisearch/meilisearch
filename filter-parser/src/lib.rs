@@ -141,7 +141,7 @@ pub enum FilterCondition<'a> {
     Or(Vec<Self>),
     And(Vec<Self>),
     GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a> },
-    GeoBoundingBox { top_left_point: [Token<'a>; 2], bottom_right_point: [Token<'a>; 2] },
+    GeoBoundingBox { top_right_point: [Token<'a>; 2], bottom_left_point: [Token<'a>; 2] },
 }
 
 impl<'a> FilterCondition<'a> {
@@ -362,8 +362,8 @@ fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
     }
 
     let res = FilterCondition::GeoBoundingBox {
-        top_left_point: [args[0][0].into(), args[0][1].into()],
-        bottom_right_point: [args[1][0].into(), args[1][1].into()],
+        top_right_point: [args[0][0].into(), args[0][1].into()],
+        bottom_left_point: [args[1][0].into(), args[1][1].into()],
     };
     Ok((input, res))
 }
@@ -780,7 +780,10 @@ impl<'a> std::fmt::Display for FilterCondition<'a> {
             FilterCondition::GeoLowerThan { point, radius } => {
                 write!(f, "_geoRadius({}, {}, {})", point[0], point[1], radius)
             }
-            FilterCondition::GeoBoundingBox { top_left_point, bottom_right_point } => {
+            FilterCondition::GeoBoundingBox {
+                top_right_point: top_left_point,
+                bottom_left_point: bottom_right_point,
+            } => {
                 write!(
                     f,
                     "_geoBoundingBox([{}, {}], [{}, {}])",
