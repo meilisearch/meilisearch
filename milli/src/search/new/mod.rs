@@ -132,8 +132,20 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
                 resolve_sort_criteria(sort_criteria, ctx, &mut ranking_rules, &mut asc, &mut desc)?;
                 sort = true;
             }
-            crate::Criterion::Asc(_) => todo!(),
-            crate::Criterion::Desc(_) => todo!(),
+            crate::Criterion::Asc(field_name) => {
+                if asc.contains(&field_name) {
+                    continue;
+                }
+                asc.insert(field_name.clone());
+                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, true)?));
+            }
+            crate::Criterion::Desc(field_name) => {
+                if desc.contains(&field_name) {
+                    continue;
+                }
+                desc.insert(field_name.clone());
+                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, false)?));
+            }
         }
     }
     Ok(ranking_rules)
@@ -215,19 +227,19 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                 // todo!();
                 // exactness = false;
             }
-            crate::Criterion::Asc(field) => {
-                if asc.contains(&field) {
+            crate::Criterion::Asc(field_name) => {
+                if asc.contains(&field_name) {
                     continue;
                 }
-                asc.insert(field);
-                // TODO
+                asc.insert(field_name.clone());
+                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, true)?));
             }
-            crate::Criterion::Desc(field) => {
-                if desc.contains(&field) {
+            crate::Criterion::Desc(field_name) => {
+                if desc.contains(&field_name) {
                     continue;
                 }
-                desc.insert(field);
-                // todo!();
+                desc.insert(field_name.clone());
+                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, false)?));
             }
         }
     }
