@@ -53,6 +53,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // what a the from which when there is
                 TermsMatchingStrategy::Last,
                 &None,
+                &None,
                 0,
                 20,
                 None,
