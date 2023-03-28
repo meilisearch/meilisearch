@@ -112,10 +112,10 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
     ctx: &SearchContext<'ctx>,
     sort_criteria: &Option<Vec<AscDesc>>,
 ) -> Result<Vec<BoxRankingRule<'ctx, PlaceholderQuery>>> {
-    // let sort = false;
-    // let mut asc = HashSet::new();
-    // let mut desc = HashSet::new();
-    let /*mut*/ ranking_rules: Vec<BoxRankingRule<PlaceholderQuery>> = vec![];
+    let mut sort = false;
+    let mut asc = HashSet::new();
+    let mut desc = HashSet::new();
+    let mut ranking_rules: Vec<BoxRankingRule<PlaceholderQuery>> = vec![];
     let settings_ranking_rules = ctx.index.criteria(ctx.txn)?;
     for rr in settings_ranking_rules {
         // Add Words before any of: typo, proximity, attribute, exactness
@@ -125,7 +125,13 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
             | crate::Criterion::Attribute
             | crate::Criterion::Proximity
             | crate::Criterion::Exactness => continue,
-            crate::Criterion::Sort => todo!(),
+            crate::Criterion::Sort => {
+                if sort {
+                    continue;
+                }
+                resolve_sort_criteria(sort_criteria, ctx, &mut ranking_rules, &mut asc, &mut desc)?;
+                sort = true;
+            }
             crate::Criterion::Asc(_) => todo!(),
             crate::Criterion::Desc(_) => todo!(),
         }
@@ -199,32 +205,7 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                 if sort {
                     continue;
                 }
-
-                for criterion in sort_criteria.clone().unwrap_or_default() {
-                    let sort_ranking_rule = match criterion {
-                        AscDesc::Asc(Member::Field(field_name)) => {
-                            if asc.contains(&field_name) {
-                                continue;
-                            }
-                            asc.insert(field_name.clone());
-                            Sort::new(ctx.index, ctx.txn, field_name, true)?
-                        }
-                        AscDesc::Desc(Member::Field(field_name)) => {
-                            if desc.contains(&field_name) {
-                                continue;
-                            }
-                            desc.insert(field_name.clone());
-                            Sort::new(ctx.index, ctx.txn, field_name, false)?
-                        }
-                        _ => {
-                            return Err(CriterionError::ReservedNameForSort {
-                                name: "_geoPoint".to_string(),
-                            }
-                            .into())
-                        }
-                    };
-                    ranking_rules.push(Box::new(sort_ranking_rule));
-                }
+                resolve_sort_criteria(sort_criteria, ctx, &mut ranking_rules, &mut asc, &mut desc)?;
                 sort = true;
             }
             crate::Criterion::Exactness => {
@@ -251,6 +232,42 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
         }
     }
     Ok(ranking_rules)
+}
+
+fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
+    sort_criteria: &Option<Vec<AscDesc>>,
+    ctx: &SearchContext<'ctx>,
+    ranking_rules: &mut Vec<BoxRankingRule<'ctx, Query>>,
+    asc: &mut HashSet<String>,
+    desc: &mut HashSet<String>,
+) -> Result<()> {
+    let sort_criteria = sort_criteria.clone().unwrap_or_default();
+    ranking_rules.reserve(sort_criteria.len());
+    for criterion in sort_criteria {
+        let sort_ranking_rule = match criterion {
+            AscDesc::Asc(Member::Field(field_name)) => {
+                if asc.contains(&field_name) {
+                    continue;
+                }
+                asc.insert(field_name.clone());
+                Sort::new(ctx.index, ctx.txn, field_name, true)?
+            }
+            AscDesc::Desc(Member::Field(field_name)) => {
+                if desc.contains(&field_name) {
+                    continue;
+                }
+                desc.insert(field_name.clone());
+                Sort::new(ctx.index, ctx.txn, field_name, false)?
+            }
+            _ => {
+                return Err(
+                    CriterionError::ReservedNameForSort { name: "_geoPoint".to_string() }.into()
+                )
+            }
+        };
+        ranking_rules.push(Box::new(sort_ranking_rule));
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
