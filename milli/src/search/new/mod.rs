@@ -32,7 +32,7 @@ use resolve_query_graph::{resolve_query_graph, QueryTermDocIdsCache};
 use roaring::RoaringBitmap;
 use words::Words;
 
-use self::ranking_rules::RankingRule;
+use self::ranking_rules::{BoxRankingRule, RankingRule};
 use crate::{Filter, Index, MatchingWords, Result, SearchResult, TermsMatchingStrategy};
 
 /// A structure used throughout the execution of a search query.
@@ -106,11 +106,11 @@ fn resolve_maximally_reduced_query_graph(
 /// Return the list of initialised ranking rules to be used for a placeholder search.
 fn get_ranking_rules_for_placeholder_search<'ctx>(
     ctx: &SearchContext<'ctx>,
-) -> Result<Vec<Box<dyn RankingRule<'ctx, PlaceholderQuery>>>> {
+) -> Result<Vec<BoxRankingRule<'ctx, PlaceholderQuery>>> {
     // let sort = false;
     // let mut asc = HashSet::new();
     // let mut desc = HashSet::new();
-    let /*mut*/ ranking_rules: Vec<Box<dyn RankingRule<PlaceholderQuery>>> = vec![];
+    let /*mut*/ ranking_rules: Vec<BoxRankingRule<PlaceholderQuery>> = vec![];
     let settings_ranking_rules = ctx.index.criteria(ctx.txn)?;
     for rr in settings_ranking_rules {
         // Add Words before any of: typo, proximity, attribute, exactness
@@ -132,7 +132,7 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
 fn get_ranking_rules_for_query_graph_search<'ctx>(
     ctx: &SearchContext<'ctx>,
     terms_matching_strategy: TermsMatchingStrategy,
-) -> Result<Vec<Box<dyn RankingRule<'ctx, QueryGraph>>>> {
+) -> Result<Vec<BoxRankingRule<'ctx, QueryGraph>>> {
     // query graph search
     let mut words = false;
     let mut typo = false;
@@ -143,7 +143,7 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
     let mut asc = HashSet::new();
     let mut desc = HashSet::new();
 
-    let mut ranking_rules: Vec<Box<dyn RankingRule<QueryGraph>>> = vec![];
+    let mut ranking_rules: Vec<BoxRankingRule<QueryGraph>> = vec![];
     let settings_ranking_rules = ctx.index.criteria(ctx.txn)?;
     for rr in settings_ranking_rules {
         // Add Words before any of: typo, proximity, attribute, exactness

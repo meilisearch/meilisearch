@@ -15,6 +15,8 @@ pub struct PlaceholderQuery;
 impl RankingRuleQueryTrait for PlaceholderQuery {}
 impl RankingRuleQueryTrait for QueryGraph {}
 
+pub type BoxRankingRule<'ctx, Query> = Box<dyn RankingRule<'ctx, Query> + 'ctx>;
+
 /// A trait that must be implemented by all ranking rules.
 ///
 /// It is generic over `'ctx`, the lifetime of the search context
@@ -70,7 +72,7 @@ pub struct RankingRuleOutput<Q> {
 
 pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     ctx: &mut SearchContext<'ctx>,
-    mut ranking_rules: Vec<Box<dyn RankingRule<'ctx, Q>>>,
+    mut ranking_rules: Vec<BoxRankingRule<'ctx, Q>>,
     query: &Q,
     universe: &RoaringBitmap,
     from: usize,

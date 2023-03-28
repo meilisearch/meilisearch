@@ -13,6 +13,7 @@ use crate::search::new::ranking_rule_graph::{
     DeadEndsCache, Edge, ProximityCondition, ProximityGraph, RankingRuleGraph,
     RankingRuleGraphTrait, TypoCondition, TypoGraph,
 };
+use crate::search::new::ranking_rules::BoxRankingRule;
 use crate::search::new::{QueryGraph, QueryNode, RankingRule, SearchContext, SearchLogger};
 
 pub enum SearchEvents {
@@ -98,7 +99,7 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
     fn initial_universe(&mut self, universe: &RoaringBitmap) {
         self.initial_universe = Some(universe.clone());
     }
-    fn ranking_rules(&mut self, rr: &[Box<dyn RankingRule<QueryGraph>>]) {
+    fn ranking_rules(&mut self, rr: &[BoxRankingRule<QueryGraph>]) {
         self.ranking_rules_ids = Some(rr.iter().map(|rr| rr.id()).collect());
     }
 

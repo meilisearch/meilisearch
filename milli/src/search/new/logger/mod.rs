@@ -8,6 +8,7 @@ use super::query_graph::QueryNode;
 use super::ranking_rule_graph::{
     DeadEndsCache, ProximityCondition, ProximityGraph, RankingRuleGraph, TypoCondition, TypoGraph,
 };
+use super::ranking_rules::BoxRankingRule;
 use super::{RankingRule, RankingRuleQueryTrait};
 
 /// Trait for structure logging the execution of a search query.
@@ -22,7 +23,7 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
     fn initial_universe(&mut self, universe: &RoaringBitmap);
 
     /// Logs the ranking rules used to perform the search query
-    fn ranking_rules(&mut self, rr: &[Box<dyn RankingRule<Q>>]);
+    fn ranking_rules(&mut self, rr: &[BoxRankingRule<Q>]);
 
     /// Logs the start of a ranking rule's iteration.
     fn start_iteration_ranking_rule(
@@ -93,7 +94,7 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
 
     fn initial_universe(&mut self, _universe: &RoaringBitmap) {}
 
-    fn ranking_rules(&mut self, _rr: &[Box<dyn RankingRule<Q>>]) {}
+    fn ranking_rules(&mut self, _rr: &[BoxRankingRule<Q>]) {}
 
     fn start_iteration_ranking_rule(
         &mut self,
