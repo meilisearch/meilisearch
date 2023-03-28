@@ -43,7 +43,7 @@ use dump::{KindDump, TaskDump, UpdateFile};
 pub use error::Error;
 use file_store::FileStore;
 use meilisearch_types::error::ResponseError;
-use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
+use meilisearch_types::heed::types::{OwnedType, SerdeBincode, Str};
 use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn};
 use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::update::IndexerConfig;
@@ -52,7 +52,9 @@ use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use synchronoise::SignalEvent;
 use time::OffsetDateTime;
-use utils::{filter_out_references_to_newer_tasks, keep_tasks_within_datetimes, map_bound};
+use utils::{
+    filter_out_references_to_newer_tasks, keep_tasks_within_datetimes, map_bound, Bincode,
+};
 use uuid::Uuid;
 
 use crate::index_mapper::IndexMapper;
@@ -259,7 +261,7 @@ pub struct IndexScheduler {
     pub(crate) file_store: FileStore,
 
     // The main database, it contains all the tasks accessible by their Id.
-    pub(crate) all_tasks: Database<OwnedType<BEU32>, SerdeJson<Task>>,
+    pub(crate) all_tasks: Database<OwnedType<BEU32>, Bincode<Task>>,
 
     /// All the tasks ids grouped by their status.
     // TODO we should not be able to serialize a `Status::Processing` in this database.

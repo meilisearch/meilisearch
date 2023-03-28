@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use std::fmt::{Display, Write};
 use std::str::FromStr;
 
+use bincode::{Decode, Encode};
 use enum_iterator::Sequence;
 use milli::update::IndexDocumentsMethod;
 use roaring::RoaringBitmap;
@@ -17,16 +18,19 @@ use crate::InstanceUid;
 
 pub type TaskId = u32;
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Encode, Decode)]
 #[serde(rename_all = "camelCase")]
 pub struct Task {
     pub uid: TaskId,
 
     #[serde(with = "time::serde::rfc3339")]
+    #[bincode(with_serde)]
     pub enqueued_at: OffsetDateTime,
     #[serde(with = "time::serde::rfc3339::option")]
+    #[bincode(with_serde)]
     pub started_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339::option")]
+    #[bincode(with_serde)]
     pub finished_at: Option<OffsetDateTime>,
 
     pub error: Option<ResponseError>,
@@ -81,13 +85,14 @@ impl Task {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode)]
 #[serde(rename_all = "camelCase")]
 pub enum KindWithContent {
     DocumentAdditionOrUpdate {
         index_uid: String,
         primary_key: Option<String>,
         method: IndexDocumentsMethod,
+        #[bincode(with_serde)]
         content_file: Uuid,
         documents_count: u64,
         allow_index_creation: bool,
@@ -121,20 +126,23 @@ pub enum KindWithContent {
     },
     TaskCancelation {
         query: String,
+        #[bincode(with_serde)]
         tasks: RoaringBitmap,
     },
     TaskDeletion {
         query: String,
+        #[bincode(with_serde)]
         tasks: RoaringBitmap,
     },
     DumpCreation {
         keys: Vec<Key>,
+        #[bincode(with_serde)]
         instance_uid: Option<InstanceUid>,
     },
     SnapshotCreation,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexSwap {
     pub indexes: (String, String),
@@ -310,7 +318,8 @@ impl From<&KindWithContent> for Option<Details> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Sequence)] // Basic derive
+#[derive(Serialize, Deserialize, Encode, Decode)] // Serialize derive
 #[serde(rename_all = "camelCase")]
 pub enum Status {
     Enqueued,
@@ -472,7 +481,7 @@ impl fmt::Display for ParseTaskKindError {
 }
 impl std::error::Error for ParseTaskKindError {}
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize, Encode, Decode)]
 pub enum Details {
     DocumentAdditionOrUpdate { received_documents: u64, indexed_documents: Option<u64> },
     SettingsUpdate { settings: Box<Settings<Unchecked>> },

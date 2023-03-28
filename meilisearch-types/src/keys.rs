@@ -2,6 +2,7 @@ use std::convert::Infallible;
 use std::hash::Hash;
 use std::str::FromStr;
 
+use bincode::{Decode, Encode};
 use deserr::{DeserializeError, Deserr, MergeWithError, ValuePointerRef};
 use enum_iterator::Sequence;
 use milli::update::Setting;
@@ -95,20 +96,24 @@ pub struct PatchApiKey {
     pub name: Setting<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode)]
 pub struct Key {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[bincode(with_serde)]
     pub uid: KeyId,
     pub actions: Vec<Action>,
     pub indexes: Vec<IndexUidPattern>,
     #[serde(with = "time::serde::rfc3339::option")]
+    #[bincode(with_serde)]
     pub expires_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339")]
+    #[bincode(with_serde)]
     pub created_at: OffsetDateTime,
     #[serde(with = "time::serde::rfc3339")]
+    #[bincode(with_serde)]
     pub updated_at: OffsetDateTime,
 }
 
@@ -181,7 +186,8 @@ fn parse_expiration_date(
     }
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Hash, Sequence, Deserr)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Sequence)] // Basic derive
+#[derive(Serialize, Deserialize, Deserr, Encode, Decode)] // Serialize derive
 #[repr(u8)]
 pub enum Action {
     #[serde(rename = "*")]

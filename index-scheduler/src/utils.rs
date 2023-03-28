@@ -1,10 +1,12 @@
 //! Utility functions on the DBs. Mainly getter and setters.
 
+use std::borrow::Cow;
 use std::collections::{BTreeSet, HashSet};
 use std::ops::Bound;
 
+pub use bincode::{Decode, Encode};
 use meilisearch_types::heed::types::{DecodeIgnore, OwnedType};
-use meilisearch_types::heed::{Database, RoTxn, RwTxn};
+use meilisearch_types::heed::{BytesDecode, BytesEncode, Database, RoTxn, RwTxn};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status};
 use roaring::{MultiOps, RoaringBitmap};
@@ -572,3 +574,30 @@ pub fn dichotomic_search(start_point: usize, mut is_good: impl FnMut(usize) -> b
         }
     }
 }
+
+pub struct Bincode<T>(std::marker::PhantomData<T>);
+
+impl<'a, T: 'a> BytesEncode<'a> for Bincode<T>
+where
+    T: Encode,
+{
+    type EItem = T;
+
+    fn bytes_encode(item: &'a Self::EItem) -> Option<Cow<[u8]>> {
+        bincode::encode_to_vec(item, bincode::config::standard()).ok().map(Cow::Owned)
+    }
+}
+
+impl<'a, T: 'a> BytesDecode<'a> for Bincode<T>
+where
+    T: Decode,
+{
+    type DItem = T;
+
+    fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
+        bincode::decode_from_slice(bytes, bincode::config::standard()).ok().map(|opt| opt.0)
+    }
+}
+
+unsafe impl<T> Send for Bincode<T> {}
+unsafe impl<T> Sync for Bincode<T> {}

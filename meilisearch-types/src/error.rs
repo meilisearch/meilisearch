@@ -3,6 +3,7 @@ use std::{fmt, io};
 use actix_web::http::StatusCode;
 use actix_web::{self as aweb, HttpResponseBuilder};
 use aweb::rt::task::JoinError;
+use bincode::{impl_borrow_decode, Decode, Encode};
 use convert_case::Casing;
 use milli::heed::{Error as HeedError, MdbError};
 use serde::{Deserialize, Serialize};
@@ -20,6 +21,34 @@ pub struct ResponseError {
     #[serde(rename = "link")]
     error_link: String,
 }
+
+impl Encode for ResponseError {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        bincode::Encode::encode(&self.message, encoder)?;
+        bincode::Encode::encode(&self.error_code, encoder)?;
+        bincode::Encode::encode(&self.error_type, encoder)?;
+        bincode::Encode::encode(&self.error_link, encoder)?;
+        Ok(())
+    }
+}
+
+impl Decode for ResponseError {
+    fn decode<D: bincode::de::Decoder>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        Ok(Self {
+            code: StatusCode::default(),
+            message: bincode::Decode::decode(decoder)?,
+            error_code: bincode::Decode::decode(decoder)?,
+            error_type: bincode::Decode::decode(decoder)?,
+            error_link: bincode::Decode::decode(decoder)?,
+        })
+    }
+}
+impl_borrow_decode!(ResponseError);
 
 impl ResponseError {
     pub fn from_msg(mut message: String, code: Code) -> Self {

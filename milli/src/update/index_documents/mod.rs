@@ -52,7 +52,8 @@ pub struct DocumentAdditionResult {
     pub number_of_documents: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] // Basic derive
+#[derive(Serialize, Deserialize, bincode::Encode, bincode::Decode)] // Serialize derive
 #[non_exhaustive]
 pub enum IndexDocumentsMethod {
     /// Replace the previous document with the new one,

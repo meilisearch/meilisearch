@@ -16,7 +16,7 @@ use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
 use crate::{FieldsIdsMap, Index, Result};
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, bincode::Encode, bincode::Decode)]
 pub enum Setting<T> {
     Set(T),
     Reset,

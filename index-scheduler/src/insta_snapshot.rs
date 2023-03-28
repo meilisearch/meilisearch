@@ -1,14 +1,14 @@
 use std::collections::BTreeSet;
 use std::fmt::Write;
 
-use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
+use meilisearch_types::heed::types::{OwnedType, SerdeBincode, Str};
 use meilisearch_types::heed::{Database, RoTxn};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Details, Task};
 use roaring::RoaringBitmap;
 
 use crate::index_mapper::IndexMapper;
-use crate::{IndexScheduler, Kind, Status, BEI128};
+use crate::{Bincode, IndexScheduler, Kind, Status, BEI128};
 
 pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     scheduler.assert_internally_consistent();
@@ -111,7 +111,7 @@ pub fn snapshot_bitmap(r: &RoaringBitmap) -> String {
     snap
 }
 
-pub fn snapshot_all_tasks(rtxn: &RoTxn, db: Database<OwnedType<BEU32>, SerdeJson<Task>>) -> String {
+pub fn snapshot_all_tasks(rtxn: &RoTxn, db: Database<OwnedType<BEU32>, Bincode<Task>>) -> String {
     let mut snap = String::new();
     let iter = db.iter(rtxn).unwrap();
     for next in iter {

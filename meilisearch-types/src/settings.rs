@@ -6,6 +6,7 @@ use std::num::NonZeroUsize;
 use std::ops::ControlFlow;
 use std::str::FromStr;
 
+use bincode::{Decode, Encode};
 use deserr::{DeserializeError, Deserr, ErrorKind, MergeWithError, ValuePointerRef};
 use fst::IntoStreamer;
 use milli::update::Setting;
@@ -35,10 +36,10 @@ where
     .serialize(s)
 }
 
-#[derive(Clone, Default, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, Serialize, PartialEq, Eq, Encode, Decode)]
 pub struct Checked;
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq, Encode, Decode)]
 pub struct Unchecked;
 
 impl<E> Deserr<E> for Unchecked
@@ -65,7 +66,7 @@ fn validate_min_word_size_for_typo_setting<E: DeserializeError>(
     Ok(s)
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, Encode, Decode)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(deny_unknown_fields, rename_all = camelCase, validate = validate_min_word_size_for_typo_setting -> DeserrJsonError<InvalidSettingsTypoTolerance>)]
 pub struct MinWordSizeTyposSetting {
@@ -77,7 +78,7 @@ pub struct MinWordSizeTyposSetting {
     pub two_typos: Setting<u8>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, Encode, Decode)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(deny_unknown_fields, rename_all = camelCase, where_predicate = __Deserr_E: deserr::MergeWithError<DeserrJsonError<InvalidSettingsTypoTolerance>>)]
 pub struct TypoSettings {
@@ -95,7 +96,7 @@ pub struct TypoSettings {
     pub disable_on_attributes: Setting<BTreeSet<String>>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, Encode, Decode)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct FacetingSettings {
@@ -104,7 +105,7 @@ pub struct FacetingSettings {
     pub max_values_per_facet: Setting<usize>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, Encode, Decode)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct PaginationSettings {
@@ -130,7 +131,7 @@ impl MergeWithError<milli::CriterionError> for DeserrJsonError<InvalidSettingsRa
 /// Holds all the settings for an index. `T` can either be `Checked` if they represents settings
 /// whose validity is guaranteed, or `Unchecked` if they need to be validated. In the later case, a
 /// call to `check` will return a `Settings<Checked>` from a `Settings<Unchecked>`.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, Encode, Decode)]
 #[serde(
     deny_unknown_fields,
     rename_all = "camelCase",
@@ -509,7 +510,7 @@ pub fn settings(
     })
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserr)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserr, Encode, Decode)]
 #[deserr(try_from(&String) = FromStr::from_str -> CriterionError)]
 pub enum RankingRuleView {
     /// Sorted by decreasing number of matched query terms.
