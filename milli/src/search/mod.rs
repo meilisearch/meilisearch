@@ -113,6 +113,7 @@ impl<'a> Search<'a> {
             &self.query,
             self.terms_matching_strategy,
             &self.filter,
+            &self.sort_criteria,
             self.offset,
             self.limit,
             Some(self.words_limit),

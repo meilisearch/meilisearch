@@ -33,7 +33,11 @@ use roaring::RoaringBitmap;
 use words::Words;
 
 use self::ranking_rules::{BoxRankingRule, RankingRule};
-use crate::{Filter, Index, MatchingWords, Result, SearchResult, TermsMatchingStrategy};
+use self::sort::Sort;
+use crate::{
+    AscDesc, CriterionError, Filter, Index, MatchingWords, Member, Result, SearchResult,
+    TermsMatchingStrategy,
+};
 
 /// A structure used throughout the execution of a search query.
 pub struct SearchContext<'ctx> {
@@ -106,6 +110,7 @@ fn resolve_maximally_reduced_query_graph(
 /// Return the list of initialised ranking rules to be used for a placeholder search.
 fn get_ranking_rules_for_placeholder_search<'ctx>(
     ctx: &SearchContext<'ctx>,
+    sort_criteria: &Option<Vec<AscDesc>>,
 ) -> Result<Vec<BoxRankingRule<'ctx, PlaceholderQuery>>> {
     // let sort = false;
     // let mut asc = HashSet::new();
@@ -131,13 +136,14 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
 /// Return the list of initialised ranking rules to be used for a query graph search.
 fn get_ranking_rules_for_query_graph_search<'ctx>(
     ctx: &SearchContext<'ctx>,
+    sort_criteria: &Option<Vec<AscDesc>>,
     terms_matching_strategy: TermsMatchingStrategy,
 ) -> Result<Vec<BoxRankingRule<'ctx, QueryGraph>>> {
     // query graph search
     let mut words = false;
     let mut typo = false;
     let mut proximity = false;
-    let sort = false;
+    let mut sort = false;
     let attribute = false;
     let exactness = false;
     let mut asc = HashSet::new();
@@ -193,8 +199,33 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                 if sort {
                     continue;
                 }
-                // todo!();
-                // sort = false;
+
+                for criterion in sort_criteria.clone().unwrap_or_default() {
+                    let sort_ranking_rule = match criterion {
+                        AscDesc::Asc(Member::Field(field_name)) => {
+                            if asc.contains(&field_name) {
+                                continue;
+                            }
+                            asc.insert(field_name.clone());
+                            Sort::new(ctx.index, ctx.txn, field_name, true)?
+                        }
+                        AscDesc::Desc(Member::Field(field_name)) => {
+                            if desc.contains(&field_name) {
+                                continue;
+                            }
+                            desc.insert(field_name.clone());
+                            Sort::new(ctx.index, ctx.txn, field_name, false)?
+                        }
+                        _ => {
+                            return Err(CriterionError::ReservedNameForSort {
+                                name: "_geoPoint".to_string(),
+                            }
+                            .into())
+                        }
+                    };
+                    ranking_rules.push(Box::new(sort_ranking_rule));
+                }
+                sort = true;
             }
             crate::Criterion::Exactness => {
                 if exactness {
@@ -228,6 +259,7 @@ pub fn execute_search(
     query: &Option<String>,
     terms_matching_strategy: TermsMatchingStrategy,
     filters: &Option<Filter>,
+    sort_criteria: &Option<Vec<AscDesc>>,
     from: usize,
     length: usize,
     words_limit: Option<usize>,
@@ -268,11 +300,12 @@ pub fn execute_search(
             query_graph_logger,
         )?;
 
-        let ranking_rules = get_ranking_rules_for_query_graph_search(ctx, terms_matching_strategy)?;
+        let ranking_rules =
+            get_ranking_rules_for_query_graph_search(ctx, sort_criteria, terms_matching_strategy)?;
 
         bucket_sort(ctx, ranking_rules, &graph, &universe, from, length, query_graph_logger)?
     } else {
-        let ranking_rules = get_ranking_rules_for_placeholder_search(ctx)?;
+        let ranking_rules = get_ranking_rules_for_placeholder_search(ctx, sort_criteria)?;
         bucket_sort(
             ctx,
             ranking_rules,

@@ -51,7 +51,7 @@ pub struct Sort<'ctx, Query> {
     iter: Option<RankingRuleOutputIterWrapper<'ctx, Query>>,
 }
 impl<'ctx, Query> Sort<'ctx, Query> {
-    pub fn _new(
+    pub fn new(
         index: &Index,
         rtxn: &'ctx heed::RoTxn,
         field_name: String,
