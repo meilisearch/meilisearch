@@ -230,7 +230,7 @@ impl<'a> Filter<'a> {
                         &FacetGroupKey {
                             field_id,
                             level: 0,
-                            left_bound: &val.value().to_lowercase(),
+                            left_bound: &crate::normalize_facet(val.value()),
                         },
                     )?
                     .map(|v| v.bitmap)
