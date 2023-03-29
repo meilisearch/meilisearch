@@ -31,6 +31,7 @@ mod uuid_codec;
 pub type Result<T> = std::result::Result<T, Error>;
 pub type TaskId = u32;
 
+use std::io::Write;
 use std::ops::{Bound, RangeBounds};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -38,9 +39,12 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
+use batch::Batch;
+use cluster::{Cluster, Consistency};
 use dump::{KindDump, TaskDump, UpdateFile};
 pub use error::Error;
 use file_store::FileStore;
+use log::info;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{self, Database, Env, RoTxn};
@@ -50,6 +54,7 @@ use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::{CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
+use serde::Deserialize;
 use synchronoise::SignalEvent;
 use time::OffsetDateTime;
 use utils::{filter_out_references_to_newer_tasks, keep_tasks_within_datetimes, map_bound};
@@ -302,6 +307,11 @@ pub struct IndexScheduler {
     /// The path to the version file of Meilisearch.
     pub(crate) version_file_path: PathBuf,
 
+    /// The role in the cluster
+    pub(crate) cluster: Option<Cluster>,
+    /// The Consistency level used by the leader. Ignored if the node is not in a leader in cluster mode.
+    pub(crate) consistency_level: Consistency,
+
     // ================= test
     // The next entry is dedicated to the tests.
     /// Provide a way to set a breakpoint in multiple part of the scheduler.
@@ -319,6 +329,24 @@ pub struct IndexScheduler {
     /// A counter that is incremented before every call to [`tick`](IndexScheduler::tick)
     #[cfg(test)]
     run_loop_iteration: Arc<RwLock<usize>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub enum ClusterMode {
+    Leader,
+    Follower,
+}
+
+impl std::str::FromStr for ClusterMode {
+    type Err = ();
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "leader" => Ok(ClusterMode::Leader),
+            "follower" => Ok(ClusterMode::Follower),
+            _ => Err(()),
+        }
+    }
 }
 
 impl IndexScheduler {
@@ -343,6 +371,8 @@ impl IndexScheduler {
             dumps_path: self.dumps_path.clone(),
             auth_path: self.auth_path.clone(),
             version_file_path: self.version_file_path.clone(),
+            cluster: self.cluster.clone(),
+            consistency_level: self.consistency_level,
             #[cfg(test)]
             test_breakpoint_sdr: self.test_breakpoint_sdr.clone(),
             #[cfg(test)]
@@ -357,6 +387,8 @@ impl IndexScheduler {
     /// Create an index scheduler and start its run loop.
     pub fn new(
         options: IndexSchedulerOptions,
+        cluster: Option<Cluster>,
+        consistency_level: Consistency,
         #[cfg(test)] test_breakpoint_sdr: crossbeam::channel::Sender<(Breakpoint, bool)>,
         #[cfg(test)] planned_failures: Vec<(usize, tests::FailureLocation)>,
     ) -> Result<Self> {
@@ -416,6 +448,8 @@ impl IndexScheduler {
             snapshots_path: options.snapshots_path,
             auth_path: options.auth_path,
             version_file_path: options.version_file_path,
+            cluster,
+            consistency_level,
 
             #[cfg(test)]
             test_breakpoint_sdr,
@@ -508,6 +542,26 @@ impl IndexScheduler {
     /// only once per index scheduler.
     fn run(&self) {
         let run = self.private_clone();
+
+        // if we're a follower we starts a thread to register the tasks coming from the leader
+        if let Some(Cluster::Follower(ref follower)) = self.cluster {
+            let this = self.private_clone();
+            let follower = follower.clone();
+            std::thread::spawn(move || loop {
+                let (task, content) = follower.get_new_task();
+                this.register_raw_task(task, content);
+            });
+        } else if let Some(Cluster::Leader(ref leader)) = self.cluster {
+            // we need a way to let the leader come out of its loop if a new follower joins the cluster
+            let cluster = leader.wake_up.clone();
+            let scheduler = self.wake_up.clone();
+
+            std::thread::spawn(move || loop {
+                cluster.wait();
+                scheduler.signal();
+            });
+        }
+
         std::thread::Builder::new()
             .name(String::from("scheduler"))
             .spawn(move || {
@@ -865,6 +919,16 @@ impl IndexScheduler {
             return Err(e.into());
         }
 
+        if let Some(Cluster::Leader(leader)) = &self.cluster {
+            let update_file = if let Some(uuid) = task.content_uuid() {
+                let path = self.file_store.get_update_path(uuid);
+                Some(std::fs::read(path).unwrap())
+            } else {
+                None
+            };
+            leader.register_new_task(task.clone(), update_file);
+        }
+
         // If the registered task is a task cancelation
         // we inform the processing tasks to stop (if necessary).
         if let KindWithContent::TaskCancelation { tasks, .. } = kind {
@@ -994,6 +1058,44 @@ impl IndexScheduler {
         Ok(task)
     }
 
+    /// /!\ should only be used when you're a follower in cluster mode
+    pub fn register_raw_task(&self, task: Task, content_file: Option<Vec<u8>>) {
+        if let Some(content) = content_file {
+            let uuid = task.content_uuid().expect("bad task");
+            let (_, mut file) = self.file_store.new_update_with_uuid(uuid.as_u128()).unwrap();
+            file.write_all(&content).unwrap();
+            file.persist().unwrap();
+        }
+
+        let mut wtxn = self.env.write_txn().unwrap();
+
+        self.all_tasks.put(&mut wtxn, &BEU32::new(task.uid), &task).unwrap();
+
+        for index in task.indexes() {
+            self.update_index(&mut wtxn, index, |bitmap| {
+                bitmap.insert(task.uid);
+            })
+            .unwrap();
+        }
+
+        self.update_status(&mut wtxn, task.status, |bitmap| {
+            bitmap.insert(task.uid);
+        })
+        .unwrap();
+
+        self.update_kind(&mut wtxn, task.kind.as_kind(), |bitmap| {
+            (bitmap.insert(task.uid));
+        })
+        .unwrap();
+
+        utils::insert_task_datetime(&mut wtxn, self.enqueued_at, task.enqueued_at, task.uid)
+            .unwrap();
+
+        wtxn.commit().unwrap();
+
+        self.wake_up.signal();
+    }
+
     /// Create a new index without any associated task.
     pub fn create_raw_index(
         &self,
@@ -1050,14 +1152,15 @@ impl IndexScheduler {
             self.breakpoint(Breakpoint::Start);
         }
 
-        let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
-        let batch =
-            match self.create_next_batch(&rtxn).map_err(|e| Error::CreateBatch(Box::new(e)))? {
-                Some(batch) => batch,
-                None => return Ok(TickOutcome::WaitForSignal),
-            };
+        info!("before getting a new batch");
+        let batch = match self.get_or_create_next_batch()? {
+            Some(batch) => batch,
+            None => return Ok(TickOutcome::WaitForSignal),
+        };
+        info!("after getting a new batch");
         let index_uid = batch.index_uid().map(ToOwned::to_owned);
-        drop(rtxn);
+
+        // TODO cluster: Should we send the starting date as well so everyone is in sync?
 
         // 1. store the starting date with the bitmap of processing tasks.
         let mut ids = batch.ids();
@@ -1186,6 +1289,63 @@ impl IndexScheduler {
         Ok(TickOutcome::TickAgain(processed_tasks))
     }
 
+    /// If there is no cluster or if leader -> create a new batch
+    /// If follower -> wait till the leader gives us a batch to process
+    fn get_or_create_next_batch(&self) -> Result<Option<Batch>> {
+        info!("inside get or create next batch");
+
+        let batch = match &self.cluster {
+            None | Some(Cluster::Leader(_)) => {
+                let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
+                self.create_next_batch(&rtxn).map_err(|e| Error::CreateBatch(Box::new(e)))?
+            }
+            Some(Cluster::Follower(follower)) => {
+                let batch = follower.get_new_batch();
+                Some(self.get_batch_from_cluster_batch(batch)?)
+            }
+        };
+
+        if let Some(Cluster::Leader(leader)) = &self.cluster {
+            // first, onboard the new followers
+            if leader.has_new_followers() {
+                info!("New followers are trying to join the cluster");
+                let started_at = OffsetDateTime::now_utc();
+                let dump = self
+                    .create_dump(
+                        &Task {
+                            uid: TaskId::MAX,
+                            enqueued_at: started_at,
+                            started_at: Some(started_at),
+                            finished_at: Some(started_at),
+                            error: None,
+                            canceled_by: None,
+                            details: None,
+                            status: Status::Enqueued,
+                            kind: KindWithContent::DumpCreation {
+                                keys: leader.get_keys(),
+                                // TODO cluster: should we unify the instance_uid between every instances?
+                                instance_uid: None,
+                            },
+                        },
+                        &started_at,
+                    )
+                    .unwrap();
+
+                let mut buffer = Vec::new();
+                // TODO cluster: stop writing everything in RAM
+                dump.persist_to(&mut buffer).unwrap();
+
+                leader.join_me(buffer);
+            }
+
+            // second, starts processing the batch
+            if let Some(ref batch) = batch {
+                leader.starts_batch(batch.clone().into());
+            }
+        }
+        Ok(batch)
+    }
+
     pub(crate) fn delete_persisted_task_data(&self, task: &Task) -> Result<()> {
         match task.content_uuid() {
             Some(content_file) => self.delete_update_file(content_file),
@@ -1301,7 +1461,8 @@ mod tests {
                 autobatching_enabled,
             };
 
-            let index_scheduler = Self::new(options, sender, planned_failures).unwrap();
+            let index_scheduler =
+                Self::new(options, None, Consistency::default(), sender, planned_failures).unwrap();
 
             // To be 100% consistent between all test we're going to start the scheduler right now
             // and ensure it's in the expected starting state.

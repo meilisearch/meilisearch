@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 
+use cluster::Cluster;
 use error::{AuthControllerError, Result};
 use maplit::hashset;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
@@ -21,17 +22,52 @@ use uuid::Uuid;
 pub struct AuthController {
     store: Arc<HeedAuthStore>,
     master_key: Option<String>,
+
+    cluster: Option<Cluster>,
 }
 
 impl AuthController {
-    pub fn new(db_path: impl AsRef<Path>, master_key: &Option<String>) -> Result<Self> {
+    pub fn new(
+        db_path: impl AsRef<Path>,
+        master_key: &Option<String>,
+        cluster: Option<Cluster>,
+    ) -> Result<Self> {
         let store = HeedAuthStore::new(db_path)?;
 
         if store.is_empty()? {
             generate_default_keys(&store)?;
         }
 
-        Ok(Self { store: Arc::new(store), master_key: master_key.clone() })
+        let this = Self {
+            store: Arc::new(store),
+            master_key: master_key.clone(),
+            cluster: cluster.clone(),
+        };
+
+        if let Some(Cluster::Follower(follower)) = cluster {
+            let this = this.clone();
+
+            std::thread::spawn(move || loop {
+                match follower.api_key_operation() {
+                    cluster::ApiKeyOperation::Insert(key) => {
+                        this.store.put_api_key(key).expect("Inconsistency with the leader");
+                    }
+                    cluster::ApiKeyOperation::Delete(uuid) => {
+                        this.store.delete_api_key(uuid).expect("Inconsistency with the leader");
+                    }
+                }
+            });
+        } else if let Some(Cluster::Leader(leader)) = cluster {
+            let this = this.clone();
+
+            std::thread::spawn(move || loop {
+                let channel = leader.needs_keys();
+                let keys = this.list_keys().expect("auth controller is dead");
+                channel.send(keys).expect("Cluster is dead");
+            });
+        }
+
+        Ok(this)
     }
 
     /// Return the size of the `AuthController` database in bytes.
@@ -42,7 +78,13 @@ impl AuthController {
     pub fn create_key(&self, create_key: CreateApiKey) -> Result<Key> {
         match self.store.get_api_key(create_key.uid)? {
             Some(_) => Err(AuthControllerError::ApiKeyAlreadyExists(create_key.uid.to_string())),
-            None => self.store.put_api_key(create_key.to_key()),
+            None => {
+                let key = self.store.put_api_key(create_key.to_key())?;
+                if let Some(Cluster::Leader(ref leader)) = self.cluster {
+                    leader.insert_key(key.clone());
+                }
+                Ok(key)
+            }
         }
     }
 
@@ -57,7 +99,12 @@ impl AuthController {
             name => key.name = name.set(),
         };
         key.updated_at = OffsetDateTime::now_utc();
-        self.store.put_api_key(key)
+
+        let key = self.store.put_api_key(key)?;
+        if let Some(Cluster::Leader(ref leader)) = self.cluster {
+            leader.insert_key(key.clone());
+        }
+        Ok(key)
     }
 
     pub fn get_key(&self, uid: Uuid) -> Result<Key> {
@@ -100,6 +147,9 @@ impl AuthController {
 
     pub fn delete_key(&self, uid: Uuid) -> Result<()> {
         if self.store.delete_api_key(uid)? {
+            if let Some(Cluster::Leader(ref leader)) = self.cluster {
+                leader.delete_key(uid);
+            }
             Ok(())
         } else {
             Err(AuthControllerError::ApiKeyNotFound(uid.to_string()))

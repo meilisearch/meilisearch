@@ -11,7 +11,8 @@ pub mod routes;
 pub mod search;
 
 use std::fs::File;
-use std::io::{BufReader, BufWriter};
+use std::io::{BufReader, BufWriter, Write};
+use std::net::ToSocketAddrs;
 use std::path::Path;
 use std::sync::Arc;
 use std::thread;
@@ -25,11 +26,12 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest};
 use analytics::Analytics;
 use anyhow::bail;
+use cluster::{Cluster, Follower, Leader};
 use error::PayloadError;
 use extractors::payload::PayloadConfig;
 use http::header::CONTENT_TYPE;
 use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
-use log::error;
+use log::{error, info};
 use meilisearch_auth::AuthController;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod};
@@ -143,7 +145,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Auth
         // the db is empty and the snapshot exists, import it
         if empty_db && snapshot_path_exists {
             match compression::from_tar_gz(snapshot_path, &opt.db_path) {
-                Ok(()) => open_or_create_database_unchecked(opt, OnFailure::RemoveDb)?,
+                Ok(()) => open_or_create_database_unchecked(opt, None, OnFailure::RemoveDb)?,
                 Err(e) => {
                     std::fs::remove_dir_all(&opt.db_path)?;
                     return Err(e);
@@ -160,14 +162,14 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Auth
             bail!("snapshot doesn't exist at {}", snapshot_path.display())
         // the snapshot and the db exist, and we can ignore the snapshot because of the ignore_snapshot_if_db_exists flag
         } else {
-            open_or_create_database(opt, empty_db)?
+            open_or_create_database(opt, empty_db, None)?
         }
     } else if let Some(ref path) = opt.import_dump {
         let src_path_exists = path.exists();
         // the db is empty and the dump exists, import it
         if empty_db && src_path_exists {
             let (mut index_scheduler, mut auth_controller) =
-                open_or_create_database_unchecked(opt, OnFailure::RemoveDb)?;
+                open_or_create_database_unchecked(opt, None, OnFailure::RemoveDb)?;
             match import_dump(&opt.db_path, path, &mut index_scheduler, &mut auth_controller) {
                 Ok(()) => (index_scheduler, auth_controller),
                 Err(e) => {
@@ -187,10 +189,62 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Auth
         // the dump and the db exist and we can ignore the dump because of the ignore_dump_if_db_exists flag
         // or, the dump is missing but we can ignore that because of the ignore_missing_dump flag
         } else {
-            open_or_create_database(opt, empty_db)?
+            open_or_create_database(opt, empty_db, None)?
+        }
+    } else if let Some(ref cluster) = opt.cluster_configuration.experimental_enable_ha {
+        match cluster.as_str() {
+            "leader" => {
+                info!("Starting as a leader");
+                let mut addr = opt.http_addr.to_socket_addrs().unwrap().next().unwrap();
+                addr.set_port(6666);
+                open_or_create_database(
+                    opt,
+                    empty_db,
+                    Some(Cluster::Leader(Leader::new(addr, opt.master_key.clone()))),
+                )?
+            }
+            "follower" => {
+                info!("Starting as a follower");
+                if !empty_db {
+                    panic!("Can't start as a follower with an already existing data.ms");
+                }
+                let mut addr = opt
+                    .cluster_configuration
+                    .leader
+                    .as_ref()
+                    .expect("Can't be a follower without a leader")
+                    .to_socket_addrs()
+                    .unwrap()
+                    .next()
+                    .unwrap();
+                addr.set_port(6666);
+
+                let (follower, dump) = Follower::join(addr, opt.master_key.clone());
+                let mut dump_file = tempfile::NamedTempFile::new().unwrap();
+                dump_file.write_all(&dump).unwrap();
+
+                let (mut index_scheduler, mut auth_controller) = open_or_create_database_unchecked(
+                    opt,
+                    Some(Cluster::Follower(follower)),
+                    OnFailure::RemoveDb,
+                )?;
+                match import_dump(
+                    &opt.db_path,
+                    dump_file.path(),
+                    &mut index_scheduler,
+                    &mut auth_controller,
+                ) {
+                    Ok(()) => (index_scheduler, auth_controller),
+                    Err(e) => {
+                        std::fs::remove_dir_all(&opt.db_path)?;
+                        return Err(e);
+                    }
+                }
+            }
+            _ => panic!("Available values for the cluster mode are leader and follower"),
         }
     } else {
-        open_or_create_database(opt, empty_db)?
+        open_or_create_database(opt, empty_db, None)?
     };
 
     // We create a loop in a thread that registers snapshotCreation tasks
@@ -215,27 +269,34 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Auth
 /// Try to start the IndexScheduler and AuthController without checking the VERSION file or anything.
 fn open_or_create_database_unchecked(
     opt: &Opt,
+    cluster: Option<Cluster>,
     on_failure: OnFailure,
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
     // we don't want to create anything in the data.ms yet, thus we
     // wrap our two builders in a closure that'll be executed later.
-    let auth_controller = AuthController::new(&opt.db_path, &opt.master_key);
+    let auth_controller = AuthController::new(&opt.db_path, &opt.master_key, cluster.clone());
+
     let index_scheduler_builder = || -> anyhow::Result<_> {
-        Ok(IndexScheduler::new(IndexSchedulerOptions {
-            version_file_path: opt.db_path.join(VERSION_FILE_NAME),
-            auth_path: opt.db_path.join("auth"),
-            tasks_path: opt.db_path.join("tasks"),
-            update_file_path: opt.db_path.join("update_files"),
-            indexes_path: opt.db_path.join("indexes"),
-            snapshots_path: opt.snapshot_dir.clone(),
-            dumps_path: opt.dump_dir.clone(),
-            task_db_size: opt.max_task_db_size.get_bytes() as usize,
-            index_base_map_size: opt.max_index_size.get_bytes() as usize,
-            indexer_config: (&opt.indexer_options).try_into()?,
-            autobatching_enabled: true,
-            index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().get_bytes() as usize,
-            index_count: DEFAULT_INDEX_COUNT,
-        })?)
+        Ok(IndexScheduler::new(
+            IndexSchedulerOptions {
+                version_file_path: opt.db_path.join(VERSION_FILE_NAME),
+                auth_path: opt.db_path.join("auth"),
+                tasks_path: opt.db_path.join("tasks"),
+                update_file_path: opt.db_path.join("update_files"),
+                indexes_path: opt.db_path.join("indexes"),
+                snapshots_path: opt.snapshot_dir.clone(),
+                dumps_path: opt.dump_dir.clone(),
+                task_db_size: opt.max_task_db_size.get_bytes() as usize,
+                index_base_map_size: opt.max_index_size.get_bytes() as usize,
+                indexer_config: (&opt.indexer_options).try_into()?,
+                autobatching_enabled: true,
+                index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().get_bytes()
+                    as usize,
+                index_count: DEFAULT_INDEX_COUNT,
+            },
+            cluster,
+            opt.cluster_configuration.consistency,
+        )?)
     };
 
     match (
@@ -257,12 +318,13 @@ fn open_or_create_database_unchecked(
 fn open_or_create_database(
     opt: &Opt,
     empty_db: bool,
+    cluster: Option<Cluster>,
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
     if !empty_db {
         check_version_file(&opt.db_path)?;
     }
 
-    open_or_create_database_unchecked(opt, OnFailure::KeepDb)
+    open_or_create_database_unchecked(opt, cluster, OnFailure::KeepDb)
 }
 
 fn import_dump(

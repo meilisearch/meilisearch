@@ -12,6 +12,7 @@ use std::{env, fmt, fs};
 
 use byte_unit::{Byte, ByteError};
 use clap::Parser;
+use cluster::Consistency;
 use meilisearch_types::milli::update::IndexerConfig;
 use rustls::server::{
     AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, ServerSessionMemoryCache,
@@ -297,6 +298,10 @@ pub struct Opt {
     #[clap(flatten)]
     pub indexer_options: IndexerOpts,
 
+    #[serde(flatten)]
+    #[clap(flatten)]
+    pub cluster_configuration: ClusterOpts,
+
     /// Set the path to a configuration file that should be used to setup the engine.
     /// Format must be TOML.
     #[clap(long)]
@@ -385,6 +390,7 @@ impl Opt {
             #[cfg(all(not(debug_assertions), feature = "analytics"))]
             no_analytics,
             experimental_enable_metrics: enable_metrics_route,
+            cluster_configuration: _,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
         export_to_env_if_not_present(MEILI_HTTP_ADDR, http_addr);
@@ -516,6 +522,21 @@ impl IndexerOpts {
             max_indexing_threads.0.to_string(),
         );
     }
+}
+
+#[derive(Debug, Default, Clone, Parser, Deserialize)]
+pub struct ClusterOpts {
+    #[clap(long)]
+    #[serde(default)]
+    pub experimental_enable_ha: Option<String>,
+
+    #[clap(long)]
+    #[serde(default)]
+    pub leader: Option<String>,
+
+    #[clap(long, default_value_t)]
+    #[serde(default)]
+    pub consistency: Consistency,
 }
 
 impl TryFrom<&IndexerOpts> for IndexerConfig {

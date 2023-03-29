@@ -282,6 +282,7 @@ impl From<Opt> for Infos {
             dump_dir,
             log_level,
             indexer_options,
+            cluster_configuration: _,
             config_file_path,
             #[cfg(all(not(debug_assertions), feature = "analytics"))]
                 no_analytics: _,

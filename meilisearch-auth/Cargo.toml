@@ -12,6 +12,7 @@ license.workspace = true
 
 [dependencies]
 base64 = "0.13.1"
+cluster = { path = "../cluster" }
 enum-iterator = "1.1.3"
 hmac = "0.12.1"
 maplit = "1.0.2"

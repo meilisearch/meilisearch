@@ -22,7 +22,8 @@ use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::BufWriter;
 
-use dump::IndexMetadata;
+use crossbeam::utils::Backoff;
+use dump::{DumpWriter, IndexMetadata};
 use log::{debug, error, info};
 use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
@@ -41,14 +42,14 @@ use uuid::Uuid;
 
 use crate::autobatcher::{self, BatchKind};
 use crate::utils::{self, swap_index_uid_in_task};
-use crate::{Error, IndexScheduler, ProcessingTasks, Result, TaskId};
+use crate::{Cluster, Error, IndexScheduler, ProcessingTasks, Result, TaskId};
 
 /// Represents a combination of tasks that can all be processed at the same time.
 ///
 /// A batch contains the set of tasks that it represents (accessible through
 /// [`self.ids()`](Batch::ids)), as well as additional information on how to
 /// be processed.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum Batch {
     TaskCancelation {
         /// The task cancelation itself.
@@ -85,14 +86,14 @@ pub(crate) enum Batch {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum DocumentOperation {
     Add(Uuid),
     Delete(Vec<String>),
 }
 
 /// A [batch](Batch) that combines multiple tasks operating on an index.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum IndexOperation {
     DocumentOperation {
         index_uid: String,
@@ -586,6 +587,12 @@ impl IndexScheduler {
                     _ => unreachable!(),
                 }
 
+                match &self.cluster {
+                    Some(Cluster::Leader(leader)) => leader.commit(self.consistency_level),
+                    Some(Cluster::Follower(follower)) => follower.ready_to_commit(),
+                    None => (),
+                }
+
                 // We must only remove the content files if the transaction is successfully committed
                 // and if errors occurs when we are deleting files we must do our best to delete
                 // everything. We do not return the encountered errors when deleting the content
@@ -629,6 +636,13 @@ impl IndexScheduler {
                     }
                     _ => unreachable!(),
                 }
+
+                match &self.cluster {
+                    Some(Cluster::Leader(leader)) => leader.commit(self.consistency_level),
+                    Some(Cluster::Follower(follower)) => follower.ready_to_commit(),
+                    None => (),
+                }
+
                 wtxn.commit()?;
                 Ok(vec![task])
             }
@@ -723,96 +737,9 @@ impl IndexScheduler {
                 Ok(tasks)
             }
             Batch::Dump(mut task) => {
+                // TODO: It would be better to use the started_at from the task instead of generating a new one
                 let started_at = OffsetDateTime::now_utc();
-                let (keys, instance_uid) =
-                    if let KindWithContent::DumpCreation { keys, instance_uid } = &task.kind {
-                        (keys, instance_uid)
-                    } else {
-                        unreachable!();
-                    };
-                let dump = dump::DumpWriter::new(*instance_uid)?;
-
-                // 1. dump the keys
-                let mut dump_keys = dump.create_keys()?;
-                for key in keys {
-                    dump_keys.push_key(key)?;
-                }
-                dump_keys.flush()?;
-
-                let rtxn = self.env.read_txn()?;
-
-                // 2. dump the tasks
-                let mut dump_tasks = dump.create_tasks_queue()?;
-                for ret in self.all_tasks.iter(&rtxn)? {
-                    let (_, mut t) = ret?;
-                    let status = t.status;
-                    let content_file = t.content_uuid();
-
-                    // In the case we're dumping ourselves we want to be marked as finished
-                    // to not loop over ourselves indefinitely.
-                    if t.uid == task.uid {
-                        let finished_at = OffsetDateTime::now_utc();
-
-                        // We're going to fake the date because we don't know if everything is going to go well.
-                        // But we need to dump the task as finished and successful.
-                        // If something fail everything will be set appropriately in the end.
-                        t.status = Status::Succeeded;
-                        t.started_at = Some(started_at);
-                        t.finished_at = Some(finished_at);
-                    }
-                    let mut dump_content_file = dump_tasks.push_task(&t.into())?;
-
-                    // 2.1. Dump the `content_file` associated with the task if there is one and the task is not finished yet.
-                    if let Some(content_file) = content_file {
-                        if status == Status::Enqueued {
-                            let content_file = self.file_store.get_update(content_file)?;
-
-                            let reader = DocumentsBatchReader::from_reader(content_file)
-                                .map_err(milli::Error::from)?;
-
-                            let (mut cursor, documents_batch_index) =
-                                reader.into_cursor_and_fields_index();
-
-                            while let Some(doc) =
-                                cursor.next_document().map_err(milli::Error::from)?
-                            {
-                                dump_content_file.push_document(&obkv_to_object(
-                                    &doc,
-                                    &documents_batch_index,
-                                )?)?;
-                            }
-                            dump_content_file.flush()?;
-                        }
-                    }
-                }
-                dump_tasks.flush()?;
-
-                // 3. Dump the indexes
-                self.index_mapper.try_for_each_index(&rtxn, |uid, index| -> Result<()> {
-                    let rtxn = index.read_txn()?;
-                    let metadata = IndexMetadata {
-                        uid: uid.to_owned(),
-                        primary_key: index.primary_key(&rtxn)?.map(String::from),
-                        created_at: index.created_at(&rtxn)?,
-                        updated_at: index.updated_at(&rtxn)?,
-                    };
-                    let mut index_dumper = dump.create_index(uid, &metadata)?;
-
-                    let fields_ids_map = index.fields_ids_map(&rtxn)?;
-                    let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
-
-                    // 3.1. Dump the documents
-                    for ret in index.all_documents(&rtxn)? {
-                        let (_id, doc) = ret?;
-                        let document = milli::obkv_to_json(&all_fields, &fields_ids_map, doc)?;
-                        index_dumper.push_document(&document)?;
-                    }
-
-                    // 3.2. Dump the settings
-                    let settings = meilisearch_types::settings::settings(index, &rtxn)?;
-                    index_dumper.settings(&settings)?;
-                    Ok(())
-                })?;
+                let dump = self.create_dump(&task, &started_at)?;
 
                 let dump_uid = started_at.format(format_description!(
                     "[year repr:full][month repr:numerical][day padding:zero]-[hour padding:zero][minute padding:zero][second padding:zero][subsecond digits:3]"
@@ -840,6 +767,13 @@ impl IndexScheduler {
 
                 let mut index_wtxn = index.write_txn()?;
                 let tasks = self.apply_index_operation(&mut index_wtxn, &index, op)?;
+
+                match &self.cluster {
+                    Some(Cluster::Leader(leader)) => leader.commit(self.consistency_level),
+                    Some(Cluster::Follower(follower)) => follower.ready_to_commit(),
+                    None => (),
+                }
+
                 index_wtxn.commit()?;
 
                 Ok(tasks)
@@ -938,11 +872,111 @@ impl IndexScheduler {
                 for swap in swaps {
                     self.apply_index_swap(&mut wtxn, task.uid, &swap.indexes.0, &swap.indexes.1)?;
                 }
+
+                match &self.cluster {
+                    Some(Cluster::Leader(leader)) => leader.commit(self.consistency_level),
+                    Some(Cluster::Follower(follower)) => follower.ready_to_commit(),
+                    None => (),
+                }
+
                 wtxn.commit()?;
                 task.status = Status::Succeeded;
                 Ok(vec![task])
             }
         }
+    }
+
+    pub(crate) fn create_dump(
+        &self,
+        task: &Task,
+        started_at: &OffsetDateTime,
+    ) -> Result<DumpWriter> {
+        let (keys, instance_uid) =
+            if let KindWithContent::DumpCreation { keys, instance_uid } = &task.kind {
+                (keys, instance_uid)
+            } else {
+                unreachable!();
+            };
+        let dump = dump::DumpWriter::new(*instance_uid)?;
+
+        // 1. dump the keys
+        let mut dump_keys = dump.create_keys()?;
+        for key in keys {
+            dump_keys.push_key(key)?;
+        }
+        dump_keys.flush()?;
+
+        let rtxn = self.env.read_txn()?;
+
+        // 2. dump the tasks
+        let mut dump_tasks = dump.create_tasks_queue()?;
+        for ret in self.all_tasks.iter(&rtxn)? {
+            let (_, mut t) = ret?;
+            let status = t.status;
+            let content_file = t.content_uuid();
+
+            // In the case we're dumping ourselves we want to be marked as finished
+            // to not loop over ourselves indefinitely.
+            if t.uid == task.uid {
+                let finished_at = OffsetDateTime::now_utc();
+
+                // We're going to fake the date because we don't know if everything is going to go well.
+                // But we need to dump the task as finished and successful.
+                // If something fail everything will be set appropriately in the end.
+                t.status = Status::Succeeded;
+                t.started_at = Some(*started_at);
+                t.finished_at = Some(finished_at);
+            }
+            let mut dump_content_file = dump_tasks.push_task(&t.into())?;
+
+            // 2.1. Dump the `content_file` associated with the task if there is one and the task is not finished yet.
+            if let Some(content_file) = content_file {
+                if status == Status::Enqueued {
+                    let content_file = self.file_store.get_update(content_file)?;
+
+                    let reader = DocumentsBatchReader::from_reader(content_file)
+                        .map_err(milli::Error::from)?;
+
+                    let (mut cursor, documents_batch_index) = reader.into_cursor_and_fields_index();
+
+                    while let Some(doc) = cursor.next_document().map_err(milli::Error::from)? {
+                        dump_content_file
+                            .push_document(&obkv_to_object(&doc, &documents_batch_index)?)?;
+                    }
+                    dump_content_file.flush()?;
+                }
+            }
+        }
+        dump_tasks.flush()?;
+
+        // 3. Dump the indexes
+        self.index_mapper.try_for_each_index(&rtxn, |uid, index| -> Result<()> {
+            let rtxn = index.read_txn()?;
+            let metadata = IndexMetadata {
+                uid: uid.to_owned(),
+                primary_key: index.primary_key(&rtxn)?.map(String::from),
+                created_at: index.created_at(&rtxn)?,
+                updated_at: index.updated_at(&rtxn)?,
+            };
+            let mut index_dumper = dump.create_index(uid, &metadata)?;
+
+            let fields_ids_map = index.fields_ids_map(&rtxn)?;
+            let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
+
+            // 3.1. Dump the documents
+            for ret in index.all_documents(&rtxn)? {
+                let (_id, doc) = ret?;
+                let document = milli::obkv_to_json(&all_fields, &fields_ids_map, doc)?;
+                index_dumper.push_document(&document)?;
+            }
+
+            // 3.2. Dump the settings
+            let settings = meilisearch_types::settings::settings(index, &rtxn)?;
+            index_dumper.settings(&settings)?;
+            Ok(())
+        })?;
+
+        Ok(dump)
     }
 
     /// Swap the index `lhs` with the index `rhs`.
@@ -1374,5 +1408,275 @@ impl IndexScheduler {
         self.canceled_by.put(wtxn, &BEU32::new(cancel_task_id), &tasks_to_cancel)?;
 
         Ok(content_files_to_delete)
+    }
+
+    pub(crate) fn get_batch_from_cluster_batch(
+        &self,
+        batch: cluster::batch::Batch,
+    ) -> Result<Batch> {
+        use cluster::batch::Batch as CBatch;
+
+        let mut rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
+
+        for id in batch.ids() {
+            let backoff = Backoff::new();
+            let id = BEU32::new(id);
+
+            loop {
+                if self.all_tasks.get(&rtxn, &id)?.is_some() {
+                    info!("Found the task_id");
+                    break;
+                }
+                info!("The task is not present in the task queue, we wait");
+                // we need to drop the txn to make a write visible
+                drop(rtxn);
+                backoff.spin();
+                rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
+            }
+        }
+
+        Ok(match batch {
+            CBatch::TaskCancelation { task, previous_started_at, previous_processing_tasks } => {
+                Batch::TaskCancelation {
+                    task: self.get_existing_tasks(&rtxn, Some(task))?[0].clone(),
+                    previous_started_at,
+                    previous_processing_tasks,
+                }
+            }
+            CBatch::TaskDeletion(task) => {
+                Batch::TaskDeletion(self.get_existing_tasks(&rtxn, Some(task))?[0].clone())
+            }
+            CBatch::SnapshotCreation(tasks) => {
+                Batch::SnapshotCreation(self.get_existing_tasks(&rtxn, tasks)?)
+            }
+            CBatch::Dump(task) => {
+                Batch::Dump(self.get_existing_tasks(&rtxn, Some(task))?[0].clone())
+            }
+            CBatch::IndexOperation { op, must_create_index } => Batch::IndexOperation {
+                op: self.get_index_op_from_cluster_index_op(&rtxn, op)?,
+                must_create_index,
+            },
+            CBatch::IndexCreation { index_uid, primary_key, task } => Batch::IndexCreation {
+                index_uid,
+                primary_key,
+                task: self.get_existing_tasks(&rtxn, Some(task))?[0].clone(),
+            },
+            CBatch::IndexUpdate { index_uid, primary_key, task } => Batch::IndexUpdate {
+                index_uid,
+                primary_key,
+                task: self.get_existing_tasks(&rtxn, Some(task))?[0].clone(),
+            },
+            CBatch::IndexDeletion { index_uid, tasks, index_has_been_created } => {
+                Batch::IndexDeletion {
+                    index_uid,
+                    tasks: self.get_existing_tasks(&rtxn, tasks)?,
+                    index_has_been_created,
+                }
+            }
+            CBatch::IndexSwap { task } => {
+                Batch::IndexSwap { task: self.get_existing_tasks(&rtxn, Some(task))?[0].clone() }
+            }
+        })
+    }
+
+    pub(crate) fn get_index_op_from_cluster_index_op(
+        &self,
+        rtxn: &RoTxn,
+        op: cluster::batch::IndexOperation,
+    ) -> Result<IndexOperation> {
+        use cluster::batch::IndexOperation as COp;
+
+        Ok(match op {
+            COp::DocumentOperation {
+                index_uid,
+                primary_key,
+                method,
+                documents_counts,
+                operations,
+                tasks,
+            } => IndexOperation::DocumentOperation {
+                index_uid,
+                primary_key,
+                method,
+                documents_counts,
+                operations: operations.into_iter().map(|op| op.into()).collect(),
+                tasks: self.get_existing_tasks(rtxn, tasks)?,
+            },
+            COp::DocumentDeletion { index_uid, documents, tasks } => {
+                IndexOperation::DocumentDeletion {
+                    index_uid,
+                    documents,
+                    tasks: self.get_existing_tasks(rtxn, tasks)?,
+                }
+            }
+            COp::DocumentClear { index_uid, tasks } => IndexOperation::DocumentClear {
+                index_uid,
+                tasks: self.get_existing_tasks(rtxn, tasks)?,
+            },
+            COp::Settings { index_uid, settings, tasks } => IndexOperation::Settings {
+                index_uid,
+                settings,
+                tasks: self.get_existing_tasks(rtxn, tasks)?,
+            },
+            COp::DocumentClearAndSetting { index_uid, cleared_tasks, settings, settings_tasks } => {
+                IndexOperation::DocumentClearAndSetting {
+                    index_uid,
+                    cleared_tasks: self.get_existing_tasks(rtxn, cleared_tasks)?,
+                    settings,
+                    settings_tasks: self.get_existing_tasks(rtxn, settings_tasks)?,
+                }
+            }
+            COp::SettingsAndDocumentOperation {
+                index_uid,
+                primary_key,
+                method,
+                documents_counts,
+                operations,
+                document_import_tasks,
+                settings,
+                settings_tasks,
+            } => IndexOperation::SettingsAndDocumentOperation {
+                index_uid,
+                primary_key,
+                method,
+                documents_counts,
+                operations: operations.into_iter().map(|op| op.into()).collect(),
+                document_import_tasks: self.get_existing_tasks(rtxn, document_import_tasks)?,
+                settings,
+                settings_tasks: self.get_existing_tasks(rtxn, settings_tasks)?,
+            },
+        })
+    }
+}
+
+impl From<Batch> for cluster::batch::Batch {
+    fn from(batch: Batch) -> Self {
+        use cluster::batch::Batch as CBatch;
+
+        match batch {
+            Batch::TaskCancelation { task, previous_started_at, previous_processing_tasks } => {
+                CBatch::TaskCancelation {
+                    task: task.uid,
+                    previous_started_at,
+                    previous_processing_tasks,
+                }
+            }
+            Batch::TaskDeletion(task) => CBatch::TaskDeletion(task.uid),
+            Batch::SnapshotCreation(task) => {
+                CBatch::SnapshotCreation(task.into_iter().map(|task| task.uid).collect())
+            }
+            Batch::Dump(task) => CBatch::Dump(task.uid),
+            Batch::IndexOperation { op, must_create_index } => {
+                CBatch::IndexOperation { op: op.into(), must_create_index }
+            }
+            Batch::IndexCreation { index_uid, primary_key, task } => {
+                CBatch::IndexCreation { index_uid, primary_key, task: task.uid }
+            }
+            Batch::IndexUpdate { index_uid, primary_key, task } => {
+                CBatch::IndexUpdate { index_uid, primary_key, task: task.uid }
+            }
+            Batch::IndexDeletion { index_uid, tasks, index_has_been_created } => {
+                CBatch::IndexDeletion {
+                    index_uid,
+                    tasks: tasks.into_iter().map(|task| task.uid).collect(),
+                    index_has_been_created,
+                }
+            }
+            Batch::IndexSwap { task } => CBatch::IndexSwap { task: task.uid },
+        }
+    }
+}
+
+impl From<IndexOperation> for cluster::batch::IndexOperation {
+    fn from(op: IndexOperation) -> Self {
+        use cluster::batch::IndexOperation as COp;
+        match op {
+            IndexOperation::DocumentOperation {
+                index_uid,
+                primary_key,
+                method,
+                documents_counts,
+                operations,
+                tasks,
+            } => COp::DocumentOperation {
+                index_uid,
+                primary_key,
+                method,
+                documents_counts,
+                operations: operations.into_iter().map(|op| op.into()).collect(),
+                tasks: tasks.into_iter().map(|task| task.uid).collect(),
+            },
+            IndexOperation::DocumentDeletion { index_uid, documents, tasks } => {
+                COp::DocumentDeletion {
+                    index_uid,
+                    documents,
+                    tasks: tasks.into_iter().map(|task| task.uid).collect(),
+                }
+            }
+            IndexOperation::DocumentClear { index_uid, tasks } => COp::DocumentClear {
+                index_uid,
+                tasks: tasks.into_iter().map(|task| task.uid).collect(),
+            },
+            IndexOperation::Settings { index_uid, settings, tasks } => COp::Settings {
+                index_uid,
+                settings,
+                tasks: tasks.into_iter().map(|task| task.uid).collect(),
+            },
+            IndexOperation::DocumentClearAndSetting {
+                index_uid,
+                cleared_tasks,
+                settings,
+                settings_tasks,
+            } => COp::DocumentClearAndSetting {
+                index_uid,
+                cleared_tasks: cleared_tasks.into_iter().map(|task| task.uid).collect(),
+                settings,
+                settings_tasks: settings_tasks.into_iter().map(|task| task.uid).collect(),
+            },
+            IndexOperation::SettingsAndDocumentOperation {
+                index_uid,
+                primary_key,
+                method,
+                documents_counts,
+                operations,
+                document_import_tasks,
+                settings,
+                settings_tasks,
+            } => COp::SettingsAndDocumentOperation {
+                index_uid,
+                primary_key,
+                method,
+                documents_counts,
+                operations: operations.into_iter().map(|op| op.into()).collect(),
+                document_import_tasks: document_import_tasks
+                    .into_iter()
+                    .map(|task| task.uid)
+                    .collect(),
+                settings,
+                settings_tasks: settings_tasks.into_iter().map(|task| task.uid).collect(),
+            },
+        }
+    }
+}
+
+impl From<DocumentOperation> for cluster::batch::DocumentOperation {
+    fn from(op: DocumentOperation) -> Self {
+        use cluster::batch::DocumentOperation as COp;
+
+        match op {
+            DocumentOperation::Add(uuid) => COp::Add(uuid),
+            DocumentOperation::Delete(docs) => COp::Delete(docs),
+        }
+    }
+}
+
+impl From<cluster::batch::DocumentOperation> for DocumentOperation {
+    fn from(op: cluster::batch::DocumentOperation) -> Self {
+        use cluster::batch::DocumentOperation as COp;
+
+        match op {
+            COp::Add(uuid) => DocumentOperation::Add(uuid),
+            COp::Delete(docs) => DocumentOperation::Delete(docs),
+        }
     }
 }
