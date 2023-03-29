@@ -35,8 +35,8 @@ use words::Words;
 use self::ranking_rules::{BoxRankingRule, RankingRule};
 use self::sort::Sort;
 use crate::{
-    AscDesc, CriterionError, Filter, Index, MatchingWords, Member, Result, SearchResult,
-    TermsMatchingStrategy,
+    AscDesc, Filter, Index, MatchingWords, Member, Result, SearchResult, TermsMatchingStrategy,
+    UserError,
 };
 
 /// A structure used throughout the execution of a search query.
@@ -271,10 +271,9 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
                 desc.insert(field_name.clone());
                 Sort::new(ctx.index, ctx.txn, field_name, false)?
             }
+            // geosearch
             _ => {
-                return Err(
-                    CriterionError::ReservedNameForSort { name: "_geoPoint".to_string() }.into()
-                )
+                todo!()
             }
         };
         ranking_rules.push(Box::new(sort_ranking_rule));
