@@ -1,0 +1,26 @@
+---
+source: meilisearch/tests/dumps/mod.rs
+---
+{
+  "results": [
+    {
+      "uid": 0,
+      "indexUid": "test",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 10,
+        "indexedDocuments": 10
+      },
+      "error": null,
+      "duration": "PT0.079460S",
+      "enqueuedAt": "2022-06-08T14:59:24.724025Z",
+      "startedAt": "2022-06-08T14:59:24.724983Z",
+      "finishedAt": "2022-06-08T14:59:24.804443Z"
+    }
+  ],
+  "limit": 1,
+  "from": 0,
+  "next": null
+}
