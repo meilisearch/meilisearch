@@ -320,6 +320,8 @@ pub fn execute_search(
         let query_terms = located_query_terms_from_string(ctx, tokens, words_limit)?;
         let graph = QueryGraph::from_query(ctx, query_terms)?;
 
+        check_sort_criteria(ctx, sort_criteria.as_ref())?;
+
         universe = resolve_maximally_reduced_query_graph(
             ctx,
             &universe,
@@ -352,4 +354,46 @@ pub fn execute_search(
         candidates: universe,
         documents_ids,
     })
+}
+
+fn check_sort_criteria(ctx: &SearchContext, sort_criteria: Option<&Vec<AscDesc>>) -> Result<()> {
+    let sort_criteria = if let Some(sort_criteria) = sort_criteria {
+        sort_criteria
+    } else {
+        return Ok(());
+    };
+
+    if sort_criteria.is_empty() {
+        return Ok(());
+    }
+
+    // We check that the sort ranking rule exists and throw an
+    // error if we try to use it and that it doesn't.
+    let sort_ranking_rule_missing = !ctx.index.criteria(ctx.txn)?.contains(&crate::Criterion::Sort);
+    if sort_ranking_rule_missing {
+        return Err(UserError::SortRankingRuleMissing.into());
+    }
+
+    // We check that we are allowed to use the sort criteria, we check
+    // that they are declared in the sortable fields.
+    let sortable_fields = ctx.index.sortable_fields(ctx.txn)?;
+    for asc_desc in sort_criteria {
+        match asc_desc.member() {
+            Member::Field(ref field) if !crate::is_faceted(field, &sortable_fields) => {
+                return Err(UserError::InvalidSortableAttribute {
+                    field: field.to_string(),
+                    valid_fields: sortable_fields.into_iter().collect(),
+                })?
+            }
+            Member::Geo(_) if !sortable_fields.contains("_geo") => {
+                return Err(UserError::InvalidSortableAttribute {
+                    field: "_geo".to_string(),
+                    valid_fields: sortable_fields.into_iter().collect(),
+                })?
+            }
+            _ => (),
+        }
+    }
+
+    Ok(())
 }
