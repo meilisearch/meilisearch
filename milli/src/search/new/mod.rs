@@ -118,8 +118,8 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
     let mut ranking_rules: Vec<BoxRankingRule<PlaceholderQuery>> = vec![];
     let settings_ranking_rules = ctx.index.criteria(ctx.txn)?;
     for rr in settings_ranking_rules {
-        // Add Words before any of: typo, proximity, attribute, exactness
         match rr {
+            // These rules need a query to have an effect; ignore them in placeholder search
             crate::Criterion::Words
             | crate::Criterion::Typo
             | crate::Criterion::Attribute
