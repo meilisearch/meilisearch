@@ -3,22 +3,37 @@ use std::marker::PhantomData;
 use super::interner::{FixedSizeInterner, Interned};
 
 /// A compact set of [`Interned<T>`]
+///
+/// This set optimizes storage by storing the set of values in a bitmap, and further optimizes
+/// for bitmaps where the highest possible index (describing the limits of the "universe")
+/// is smaller than 64 by storing them as a `u64`.
 pub struct SmallBitmap<T> {
+    // internals are not typed as they only represent the indexes that are set
     internal: SmallBitmapInternal,
+    // restores typing with a tag
     _phantom: PhantomData<T>,
 }
+
+// manual implementation for when `T` is not Clone.
 impl<T> Clone for SmallBitmap<T> {
     fn clone(&self) -> Self {
         Self { internal: self.internal.clone(), _phantom: PhantomData }
     }
 }
+
 impl<T> SmallBitmap<T> {
+    /// Constructs a new, **empty**, `SmallBitmap<T>` with an universe large enough to hold all elements
+    /// from `interner`.
+    ///
+    /// The constructed bitmap does not refer to any element in the interner, use [`from_iter`] if there should be
+    /// some interned values in the bitmap after construction.
     pub fn for_interned_values_in(interner: &FixedSizeInterner<T>) -> Self {
         Self::new(interner.len())
     }
-    // universe_length not stored anywhere, only used to decide between tiny/small
-    // universe_length: passed 63, actual length will be rounded up 64
-    // passed 66, actual 64 * xs.len() as u16 = 128, passed sized rounded up to the next 64
+
+    /// Constructs a new, **empty**, `SmallBitmap<T>` with an universe at least as large as specified.
+    ///
+    /// If the passed universe length is not a multiple of 64, it will be rounded up to the next multiple of 64.
     pub fn new(universe_length: u16) -> Self {
         if universe_length <= 64 {
             Self { internal: SmallBitmapInternal::Tiny(0), _phantom: PhantomData }
@@ -32,12 +47,24 @@ impl<T> SmallBitmap<T> {
         }
     }
 
+    /// The highest index that can be set in this bitmap.
+    ///
+    /// The universe length is always a multiple of 64, and may be higher than the value passed to [`Self::new`].
     pub fn universe_length(&self) -> u16 {
         match &self.internal {
             SmallBitmapInternal::Tiny(_) => 64,
             SmallBitmapInternal::Small(xs) => 64 * xs.len() as u16,
         }
     }
+
+    /// Constructs a new `SmallBitmap<T>` with an universe large enough to hold all elements
+    /// from `from_interner`, and containing all the `Interned<T>` produced by `xs`.
+    ///
+    /// It is a logic error to pass an iterator producing `Interned<T>`s that don't belong to the passed interner.
+    ///
+    /// # Panics
+    ///
+    /// - If `xs` produces an element that doesn't fit the universe length obtained from `for_interner`.
     pub fn from_iter(
         xs: impl Iterator<Item = Interned<T>>,
         for_interner: &FixedSizeInterner<T>,
@@ -47,37 +74,96 @@ impl<T> SmallBitmap<T> {
             _phantom: PhantomData,
         }
     }
+
+    /// Returns `true` if this bitmap does not contain any `Interned<T>`.
     pub fn is_empty(&self) -> bool {
         self.internal.is_empty()
     }
+
+    /// Removes all `Interned<T>` from this bitmap, such that it [`is_empty`] returns `true` after this call.
     pub fn clear(&mut self) {
         self.internal.clear()
     }
+
+    /// Whether `x` is part of the bitmap.
+    ///
+    /// It is a logic error to pass an `Interned<T>` from a different interner that the one this bitmap references.
+    ///
+    /// # Panics
+    ///
+    /// - if `x` does not fit in [`universe_length`]
     pub fn contains(&self, x: Interned<T>) -> bool {
         self.internal.contains(x.into_raw())
     }
+
+    /// Adds `x` to the bitmap, such that [`contains(x)`] returns `true` after this call.
+    ///
+    /// It is a logic error to pass an `Interned<T>` from a different interner that the one this bitmap references.
+    ///
+    /// # Panics
+    ///
+    /// - if `x` does not fit in [`universe_length`]
     pub fn insert(&mut self, x: Interned<T>) {
         self.internal.insert(x.into_raw())
     }
+
+    /// Removes `x` from the bitmap, such that [`contains(x)`] returns `false` after this call.
+    ///
+    /// It is a logic error to pass an `Interned<T>` from a different interner that the one this bitmap references.
+    ///
+    /// # Panics
+    ///
+    /// - if `x` does not fit in [`universe_length`]
     pub fn remove(&mut self, x: Interned<T>) {
         self.internal.remove(x.into_raw())
     }
 
+    /// Modifies in place this bitmap to retain only the elements that are also present in `other`.
+    ///
+    /// # Panics
+    ///
+    /// - if the universe lengths of `self` and `other` differ
     pub fn intersection(&mut self, other: &Self) {
         self.internal.intersection(&other.internal)
     }
+
+    /// Modifies in place this bitmap to add the elements that are present in `other`.
+    ///
+    /// # Panics
+    ///
+    /// - if the universe lengths of `self` and `other` differ
     pub fn union(&mut self, other: &Self) {
         self.internal.union(&other.internal)
     }
+
+    /// Modifies in place this bitmap to remove the elements that are also present in `other`.
+    ///
+    /// # Panics
+    ///
+    /// - if the universe lengths of `self` and `other` differ
     pub fn subtract(&mut self, other: &Self) {
         self.internal.subtract(&other.internal)
     }
+
+    /// Whether all the elements of `self` are contained in `other`.
+    ///
+    /// # Panics
+    ///
+    /// - if the universe lengths of `self` and `other` differ
     pub fn is_subset(&self, other: &Self) -> bool {
         self.internal.is_subset(&other.internal)
     }
+
+    /// Whether any element of `self` is contained in `other`.
+    ///
+    /// # Panics
+    ///
+    /// - if the universe lengths of `self` and `other` differ
     pub fn intersects(&self, other: &Self) -> bool {
         self.internal.intersects(&other.internal)
     }
+
+    /// Returns an iterator of the `Interned<T>` that are present in this bitmap.
     pub fn iter(&self) -> impl Iterator<Item = Interned<T>> + '_ {
         self.internal.iter().map(|x| Interned::from_raw(x))
     }
