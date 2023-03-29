@@ -51,10 +51,7 @@ impl<T> SmallBitmap<T> {
     ///
     /// The universe length is always a multiple of 64, and may be higher than the value passed to [`Self::new`].
     pub fn universe_length(&self) -> u16 {
-        match &self.internal {
-            SmallBitmapInternal::Tiny(_) => 64,
-            SmallBitmapInternal::Small(xs) => 64 * xs.len() as u16,
-        }
+        self.internal.universe_length()
     }
 
     /// Constructs a new `SmallBitmap<T>` with an universe large enough to hold all elements
@@ -211,37 +208,71 @@ impl SmallBitmapInternal {
             }
         }
     }
-    pub fn contains(&self, mut x: u16) -> bool {
-        let set = match self {
-            SmallBitmapInternal::Tiny(set) => *set,
-            SmallBitmapInternal::Small(set) => {
-                let idx = x / 64;
-                x %= 64;
-                set[idx as usize]
+    pub fn universe_length(&self) -> u16 {
+        match &self {
+            SmallBitmapInternal::Tiny(_) => 64,
+            SmallBitmapInternal::Small(xs) => 64 * xs.len() as u16,
+        }
+    }
+
+    fn get_set_index(&self, x: u16) -> (u64, u16) {
+        match self {
+            SmallBitmapInternal::Tiny(set) => {
+                assert!(
+                    x < 64,
+                    "index out of bounds: the universe length is 64 but the index is {}",
+                    x
+                );
+                (*set, x)
             }
-        };
+            SmallBitmapInternal::Small(set) => {
+                let idx = (x as usize) / 64;
+                assert!(
+                    idx < set.len(),
+                    "index out of bounds: the universe length is {} but the index is {}",
+                    self.universe_length(),
+                    x
+                );
+                (set[idx], x % 64)
+            }
+        }
+    }
+
+    fn get_set_index_mut(&mut self, x: u16) -> (&mut u64, u16) {
+        match self {
+            SmallBitmapInternal::Tiny(set) => {
+                assert!(
+                    x < 64,
+                    "index out of bounds: the universe length is 64 but the index is {}",
+                    x
+                );
+                (set, x)
+            }
+            SmallBitmapInternal::Small(set) => {
+                let idx = (x as usize) / 64;
+                assert!(
+                    idx < set.len(),
+                    "index out of bounds: the universe length is {} but the index is {}",
+                    64 * set.len() as u16,
+                    x
+                );
+                (&mut set[idx], x % 64)
+            }
+        }
+    }
+
+    pub fn contains(&self, x: u16) -> bool {
+        let (set, x) = self.get_set_index(x);
         set & 0b1 << x != 0
     }
-    pub fn insert(&mut self, mut x: u16) {
-        let set = match self {
-            SmallBitmapInternal::Tiny(set) => set,
-            SmallBitmapInternal::Small(set) => {
-                let idx = x / 64;
-                x %= 64;
-                &mut set[idx as usize]
-            }
-        };
+
+    pub fn insert(&mut self, x: u16) {
+        let (set, x) = self.get_set_index_mut(x);
         *set |= 0b1 << x;
     }
-    pub fn remove(&mut self, mut x: u16) {
-        let set = match self {
-            SmallBitmapInternal::Tiny(set) => set,
-            SmallBitmapInternal::Small(set) => {
-                let idx = x / 64;
-                x %= 64;
-                &mut set[idx as usize]
-            }
-        };
+
+    pub fn remove(&mut self, x: u16) {
+        let (set, x) = self.get_set_index_mut(x);
         *set &= !(0b1 << x);
     }
 
@@ -259,13 +290,22 @@ impl SmallBitmapInternal {
         match (self, other) {
             (SmallBitmapInternal::Tiny(a), SmallBitmapInternal::Tiny(b)) => op(a, *b),
             (SmallBitmapInternal::Small(a), SmallBitmapInternal::Small(b)) => {
-                assert!(a.len() == b.len(),);
+                assert!(
+                    a.len() == b.len(),
+                    "universe length mismatch: left is {}, but right is {}",
+                    a.len() * 64,
+                    other.universe_length()
+                );
                 for (a, b) in a.iter_mut().zip(b.iter()) {
                     op(a, *b);
                 }
             }
-            _ => {
-                panic!();
+            (this, other) => {
+                panic!(
+                    "universe length mismatch: left is {}, but right is {}",
+                    this.universe_length(),
+                    other.universe_length()
+                );
             }
         }
     }
@@ -273,7 +313,12 @@ impl SmallBitmapInternal {
         match (self, other) {
             (SmallBitmapInternal::Tiny(a), SmallBitmapInternal::Tiny(b)) => op(*a, *b),
             (SmallBitmapInternal::Small(a), SmallBitmapInternal::Small(b)) => {
-                assert!(a.len() == b.len());
+                assert!(
+                    a.len() == b.len(),
+                    "universe length mismatch: left is {}, but right is {}",
+                    a.len() * 64,
+                    other.universe_length()
+                );
                 for (a, b) in a.iter().zip(b.iter()) {
                     if !op(*a, *b) {
                         return false;
@@ -282,7 +327,11 @@ impl SmallBitmapInternal {
                 true
             }
             _ => {
-                panic!();
+                panic!(
+                    "universe length mismatch: left is {}, but right is {}",
+                    self.universe_length(),
+                    other.universe_length()
+                );
             }
         }
     }
@@ -290,7 +339,12 @@ impl SmallBitmapInternal {
         match (self, other) {
             (SmallBitmapInternal::Tiny(a), SmallBitmapInternal::Tiny(b)) => op(*a, *b),
             (SmallBitmapInternal::Small(a), SmallBitmapInternal::Small(b)) => {
-                assert!(a.len() == b.len());
+                assert!(
+                    a.len() == b.len(),
+                    "universe length mismatch: left is {}, but right is {}",
+                    a.len() * 64,
+                    other.universe_length()
+                );
                 for (a, b) in a.iter().zip(b.iter()) {
                     if op(*a, *b) {
                         return true;
@@ -299,7 +353,11 @@ impl SmallBitmapInternal {
                 false
             }
             _ => {
-                panic!();
+                panic!(
+                    "universe length mismatch: left is {}, but right is {}",
+                    self.universe_length(),
+                    other.universe_length()
+                );
             }
         }
     }
