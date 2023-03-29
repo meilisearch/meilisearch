@@ -22,6 +22,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::convert::{TryFrom, TryInto};
 use std::hash::BuildHasherDefault;
 
+use charabia::normalizer::{CharNormalizer, CompatibilityDecompositionNormalizer};
 pub use filter_parser::{Condition, FilterCondition, Span, Token};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
@@ -250,6 +251,10 @@ pub fn is_faceted(field: &str, faceted_fields: impl IntoIterator<Item = impl AsR
 pub fn is_faceted_by(field: &str, facet: &str) -> bool {
     field.starts_with(facet)
         && field[facet.len()..].chars().next().map(|c| c == '.').unwrap_or(true)
+}
+
+pub fn normalize_facet(original: &str) -> String {
+    CompatibilityDecompositionNormalizer.normalize_str(original.trim()).to_lowercase()
 }
 
 #[cfg(test)]

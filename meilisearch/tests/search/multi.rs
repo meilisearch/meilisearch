@@ -71,7 +71,7 @@ async fn simple_search_single_index() {
         "indexUid": "test",
         "hits": [
           {
-            "title": "Glass",
+            "title": "Gläss",
             "id": "450465"
           }
         ],
@@ -166,7 +166,7 @@ async fn simple_search_two_indexes() {
     let (response, code) = server
         .multi_search(json!({"queries": [
         {"indexUid" : "test", "q": "glass"},
-        {"indexUid": "nested", "q": "pesti"},
+        {"indexUid": "nested", "q": "pésti"},
         ]}))
         .await;
     snapshot!(code, @"200 OK");
@@ -176,7 +176,7 @@ async fn simple_search_two_indexes() {
         "indexUid": "test",
         "hits": [
           {
-            "title": "Glass",
+            "title": "Gläss",
             "id": "450465"
           }
         ],
@@ -203,7 +203,7 @@ async fn simple_search_two_indexes() {
                 "age": 4
               }
             ],
-            "cattos": "pesti"
+            "cattos": "pésti"
           },
           {
             "id": 654,
@@ -221,7 +221,7 @@ async fn simple_search_two_indexes() {
             ]
           }
         ],
-        "query": "pesti",
+        "query": "pésti",
         "processingTimeMs": "[time]",
         "limit": 20,
         "offset": 0,
@@ -243,7 +243,7 @@ async fn search_one_index_doesnt_exist() {
     let (response, code) = server
         .multi_search(json!({"queries": [
         {"indexUid" : "test", "q": "glass"},
-        {"indexUid": "nested", "q": "pesti"},
+        {"indexUid": "nested", "q": "pésti"},
         ]}))
         .await;
     snapshot!(code, @"400 Bad Request");
@@ -264,7 +264,7 @@ async fn search_multiple_indexes_dont_exist() {
     let (response, code) = server
         .multi_search(json!({"queries": [
         {"indexUid" : "test", "q": "glass"},
-        {"indexUid": "nested", "q": "pesti"},
+        {"indexUid": "nested", "q": "pésti"},
         ]}))
         .await;
     snapshot!(code, @"400 Bad Request");
@@ -296,7 +296,7 @@ async fn search_one_query_error() {
     let (response, code) = server
         .multi_search(json!({"queries": [
         {"indexUid" : "test", "q": "glass", "facets": ["title"]},
-        {"indexUid": "nested", "q": "pesti"},
+        {"indexUid": "nested", "q": "pésti"},
         ]}))
         .await;
     snapshot!(code, @"400 Bad Request");
@@ -328,7 +328,7 @@ async fn search_multiple_query_errors() {
     let (response, code) = server
         .multi_search(json!({"queries": [
         {"indexUid" : "test", "q": "glass", "facets": ["title"]},
-        {"indexUid": "nested", "q": "pesti", "facets": ["doggos"]},
+        {"indexUid": "nested", "q": "pésti", "facets": ["doggos"]},
         ]}))
         .await;
     snapshot!(code, @"400 Bad Request");
