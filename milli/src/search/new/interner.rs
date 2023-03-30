@@ -4,6 +4,8 @@ use std::marker::PhantomData;
 
 use fxhash::FxHashMap;
 
+use super::small_bitmap::SmallBitmap;
+
 /// An index within an interner ([`FixedSizeInterner`], [`DedupInterner`], or [`MappedInterner`]).
 pub struct Interned<T> {
     idx: u16,
@@ -86,6 +88,13 @@ impl<T> FixedSizeInterner<T> {
     pub fn from_vec(store: Vec<T>) -> Self {
         Self { stable_store: store }
     }
+    pub fn all_interned_values(&self) -> SmallBitmap<T> {
+        let mut b = SmallBitmap::for_interned_values_in(self);
+        for i in self.indexes() {
+            b.insert(i);
+        }
+        b
+    }
     pub fn get(&self, interned: Interned<T>) -> &T {
         &self.stable_store[interned.idx as usize]
     }
@@ -96,11 +105,67 @@ impl<T> FixedSizeInterner<T> {
     pub fn len(&self) -> u16 {
         self.stable_store.len() as u16
     }
+    pub fn map_move<U>(self, map_f: impl Fn(T) -> U) -> FixedSizeInterner<U> {
+        FixedSizeInterner { stable_store: self.stable_store.into_iter().map(map_f).collect() }
+    }
     pub fn map<U>(&self, map_f: impl Fn(&T) -> U) -> MappedInterner<T, U> {
         MappedInterner {
             stable_store: self.stable_store.iter().map(map_f).collect(),
             _phantom: PhantomData,
         }
+    }
+    pub fn map_indexes<U>(&self, map_f: impl Fn(Interned<T>) -> U) -> MappedInterner<T, U> {
+        MappedInterner { stable_store: self.indexes().map(map_f).collect(), _phantom: PhantomData }
+    }
+    pub fn indexes(&self) -> impl Iterator<Item = Interned<T>> {
+        (0..self.stable_store.len()).map(|i| Interned::from_raw(i as u16))
+    }
+    pub fn iter(&self) -> impl Iterator<Item = (Interned<T>, &T)> {
+        self.stable_store.iter().enumerate().map(|(i, x)| (Interned::from_raw(i as u16), x))
+    }
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (Interned<T>, &mut T)> {
+        self.stable_store.iter_mut().enumerate().map(|(i, x)| (Interned::from_raw(i as u16), x))
+    }
+}
+
+/// A fixed-length store for values of type `T`, where each value is identified
+/// by an index of type [`Interned<T>`].
+#[derive(Clone)]
+pub struct Interner<T> {
+    stable_store: Vec<T>,
+}
+impl<T> Default for Interner<T> {
+    fn default() -> Self {
+        Self { stable_store: vec![] }
+    }
+}
+
+impl<T> Interner<T> {
+    pub fn from_vec(v: Vec<T>) -> Self {
+        Self { stable_store: v }
+    }
+    pub fn get(&self, interned: Interned<T>) -> &T {
+        &self.stable_store[interned.idx as usize]
+    }
+    pub fn get_mut(&mut self, interned: Interned<T>) -> &mut T {
+        &mut self.stable_store[interned.idx as usize]
+    }
+    pub fn push(&mut self, value: T) -> Interned<T> {
+        assert!(self.stable_store.len() < u16::MAX as usize);
+        self.stable_store.push(value);
+        Interned::from_raw(self.stable_store.len() as u16 - 1)
+    }
+    pub fn len(&self) -> u16 {
+        self.stable_store.len() as u16
+    }
+    pub fn map<U>(&self, map_f: impl Fn(&T) -> U) -> MappedInterner<T, U> {
+        MappedInterner {
+            stable_store: self.stable_store.iter().map(map_f).collect(),
+            _phantom: PhantomData,
+        }
+    }
+    pub fn map_indexes<U>(&self, map_f: impl Fn(Interned<T>) -> U) -> MappedInterner<T, U> {
+        MappedInterner { stable_store: self.indexes().map(map_f).collect(), _phantom: PhantomData }
     }
     pub fn indexes(&self) -> impl Iterator<Item = Interned<T>> {
         (0..self.stable_store.len()).map(|i| Interned::from_raw(i as u16))
