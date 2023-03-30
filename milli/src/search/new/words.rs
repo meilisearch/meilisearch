@@ -4,7 +4,7 @@ use roaring::RoaringBitmap;
 
 use super::logger::SearchLogger;
 use super::query_graph::QueryNodeData;
-use super::resolve_query_graph::resolve_query_graph;
+use super::resolve_query_graph::compute_query_graph_docids;
 use super::{QueryGraph, RankingRule, RankingRuleOutput, SearchContext};
 use crate::{Result, TermsMatchingStrategy};
 
@@ -80,7 +80,7 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for Words {
 
         logger.log_words_state(query_graph);
 
-        let this_bucket = resolve_query_graph(ctx, query_graph, universe)?;
+        let this_bucket = compute_query_graph_docids(ctx, query_graph, universe)?;
 
         let child_query_graph = query_graph.clone();
         loop {

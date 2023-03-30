@@ -28,12 +28,13 @@ pub use logger::{DefaultSearchLogger, SearchLogger};
 use query_graph::{QueryGraph, QueryNode, QueryNodeData};
 use query_term::{located_query_terms_from_string, Phrase, QueryTerm};
 use ranking_rules::{bucket_sort, PlaceholderQuery, RankingRuleOutput, RankingRuleQueryTrait};
-use resolve_query_graph::{resolve_query_graph, QueryTermDocIdsCache};
+use resolve_query_graph::PhraseDocIdsCache;
 use roaring::RoaringBitmap;
 use words::Words;
 
 use self::interner::Interner;
 use self::ranking_rules::{BoxRankingRule, RankingRule};
+use self::resolve_query_graph::compute_query_graph_docids;
 use self::sort::Sort;
 use crate::{
     AscDesc, Filter, Index, MatchingWords, Member, Result, SearchResult, TermsMatchingStrategy,
@@ -48,8 +49,7 @@ pub struct SearchContext<'ctx> {
     pub word_interner: DedupInterner<String>,
     pub phrase_interner: DedupInterner<Phrase>,
     pub term_interner: Interner<QueryTerm>,
-    // think about memory usage of that field (roaring bitmaps in a hashmap)
-    pub term_docids: QueryTermDocIdsCache,
+    pub phrase_docids: PhraseDocIdsCache,
 }
 impl<'ctx> SearchContext<'ctx> {
     pub fn new(index: &'ctx Index, txn: &'ctx RoTxn<'ctx>) -> Self {
@@ -60,7 +60,7 @@ impl<'ctx> SearchContext<'ctx> {
             word_interner: <_>::default(),
             phrase_interner: <_>::default(),
             term_interner: <_>::default(),
-            term_docids: <_>::default(),
+            phrase_docids: <_>::default(),
         }
     }
 }
@@ -103,7 +103,7 @@ fn resolve_maximally_reduced_query_graph(
         }
     }
     logger.query_for_universe(&graph);
-    let docids = resolve_query_graph(ctx, &graph, universe)?;
+    let docids = compute_query_graph_docids(ctx, &graph, universe)?;
 
     Ok(docids)
 }
@@ -319,7 +319,7 @@ pub fn execute_search(
         let tokens = tokenizer.tokenize(query);
 
         let query_terms = located_query_terms_from_string(ctx, tokens, words_limit)?;
-        let graph = QueryGraph::from_query(ctx, query_terms)?;
+        let graph = QueryGraph::from_query(ctx, &query_terms)?;
 
         check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
