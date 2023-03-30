@@ -1,27 +1,20 @@
 use std::marker::PhantomData;
 
-use fxhash::{FxHashMap, FxHashSet};
+use fxhash::FxHashMap;
 use roaring::RoaringBitmap;
 
-use super::{RankingRuleGraph, RankingRuleGraphTrait};
+use super::{ComputedCondition, RankingRuleGraph, RankingRuleGraphTrait};
 use crate::search::new::interner::Interned;
-use crate::search::new::query_term::Phrase;
+use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::search::new::SearchContext;
 use crate::Result;
 
 // TODO: give a generation to each universe, then be able to get the exact
 // delta of docids between two universes of different generations!
 
-#[derive(Default)]
-pub struct ComputedCondition {
-    docids: RoaringBitmap,
-    universe_len: u64,
-    used_words: FxHashSet<Interned<String>>,
-    used_phrases: FxHashSet<Interned<Phrase>>,
-}
-
 /// A cache storing the document ids associated with each ranking rule edge
 pub struct ConditionDocIdsCache<G: RankingRuleGraphTrait> {
+    // TOOD: should be a mapped interner?
     pub cache: FxHashMap<Interned<G::Condition>, ComputedCondition>,
     _phantom: PhantomData<G>,
 }
@@ -31,45 +24,39 @@ impl<G: RankingRuleGraphTrait> Default for ConditionDocIdsCache<G> {
     }
 }
 impl<G: RankingRuleGraphTrait> ConditionDocIdsCache<G> {
-    pub fn get_condition_used_words_and_phrases(
+    pub fn get_subsets_used_by_condition(
         &mut self,
         interned_condition: Interned<G::Condition>,
-    ) -> (&FxHashSet<Interned<String>>, &FxHashSet<Interned<Phrase>>) {
-        let ComputedCondition { used_words, used_phrases, .. } = &self.cache[&interned_condition];
-        (used_words, used_phrases)
+    ) -> (&Option<LocatedQueryTermSubset>, &LocatedQueryTermSubset) {
+        let c = &self.cache[&interned_condition];
+        (&c.start_term_subset, &c.end_term_subset)
     }
-
     /// Retrieve the document ids for the given edge condition.
     ///
     /// If the cache does not yet contain these docids, they are computed
     /// and inserted in the cache.
-    pub fn get_condition_docids<'s>(
+    pub fn get_computed_condition<'s>(
         &'s mut self,
         ctx: &mut SearchContext,
         interned_condition: Interned<G::Condition>,
         graph: &mut RankingRuleGraph<G>,
         universe: &RoaringBitmap,
-    ) -> Result<&'s RoaringBitmap> {
+    ) -> Result<&'s ComputedCondition> {
         if self.cache.contains_key(&interned_condition) {
-            // TODO compare length of universe compared to the one in self
-            // if it is smaller, then update the value
-            let ComputedCondition { docids, universe_len, .. } =
-                self.cache.entry(interned_condition).or_default();
-            if *universe_len == universe.len() {
-                return Ok(docids);
+            let computed = self.cache.get_mut(&interned_condition).unwrap();
+            if computed.universe_len == universe.len() {
+                return Ok(computed);
             } else {
-                *docids &= universe;
-                *universe_len = universe.len();
-                return Ok(docids);
+                computed.docids &= universe;
+                computed.universe_len = universe.len();
+                return Ok(computed);
             }
         }
         let condition = graph.conditions_interner.get_mut(interned_condition);
-        let (docids, used_words, used_phrases) = G::resolve_condition(ctx, condition, universe)?;
-        let _ = self.cache.insert(
-            interned_condition,
-            ComputedCondition { docids, universe_len: universe.len(), used_words, used_phrases },
-        );
-        let ComputedCondition { docids, .. } = &self.cache[&interned_condition];
-        Ok(docids)
+        let computed = G::resolve_condition(ctx, condition, universe)?;
+        // TODO: if computed.universe_len != universe.len() ?
+        let _ = self.cache.insert(interned_condition, computed);
+        let computed = &self.cache[&interned_condition];
+        Ok(computed)
     }
 }
