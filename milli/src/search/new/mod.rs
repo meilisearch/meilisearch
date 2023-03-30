@@ -34,6 +34,7 @@ use words::Words;
 
 use self::ranking_rules::{BoxRankingRule, RankingRule};
 use self::sort::Sort;
+use crate::search::new::distinct::{apply_distinct_rule, DistinctOutput};
 use crate::{
     AscDesc, Filter, Index, MatchingWords, Member, Result, SearchResult, TermsMatchingStrategy,
     UserError,
@@ -286,6 +287,7 @@ pub fn execute_search(
     ctx: &mut SearchContext,
     query: &Option<String>,
     terms_matching_strategy: TermsMatchingStrategy,
+    exhaustive_number_hits: bool,
     filters: &Option<Filter>,
     sort_criteria: &Option<Vec<AscDesc>>,
     from: usize,
@@ -347,11 +349,21 @@ pub fn execute_search(
         )?
     };
 
+    // The candidates is the universe unless the exhaustive number of hits
+    // is requested and a distinct attribute is set.
+    let mut candidates = universe;
+    if exhaustive_number_hits {
+        if let Some(f) = ctx.index.distinct_field(ctx.txn)? {
+            if let Some(distinct_fid) = ctx.index.fields_ids_map(ctx.txn)?.id(f) {
+                candidates = apply_distinct_rule(ctx, distinct_fid, &candidates)?.remaining;
+            }
+        }
+    }
+
     Ok(SearchResult {
         // TODO: correct matching words
         matching_words: MatchingWords::default(),
-        // TODO: candidates with distinct
-        candidates: universe,
+        candidates,
         documents_ids,
     })
 }
