@@ -36,9 +36,6 @@ pub enum QueryNodeData {
 /**
 A graph representing all the ways to interpret the user's search query.
 
-## Important
-At the moment, a query graph has a hardcoded limit of [`QUERY_GRAPH_NODE_LENGTH_LIMIT`] nodes.
-
 ## Example 1
 For the search query `sunflower`, we need to register the following things:
 - we need to look for the exact word `sunflower`
