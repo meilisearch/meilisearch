@@ -110,7 +110,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
             match terms_matching_strategy {
                 TermsMatchingStrategy::Last => {
                     let removal_order =
-                        query_graph.removal_order_for_terms_matching_strategy_last();
+                        query_graph.removal_order_for_terms_matching_strategy_last(ctx);
                     let mut forbidden_nodes =
                         SmallBitmap::for_interned_values_in(&query_graph.nodes);
                     let mut costs = query_graph.nodes.map(|_| None);

@@ -31,7 +31,7 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for Words {
     }
     fn start_iteration(
         &mut self,
-        _ctx: &mut SearchContext<'ctx>,
+        ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<QueryGraph>,
         _parent_candidates: &RoaringBitmap,
         parent_query_graph: &QueryGraph,
@@ -40,7 +40,7 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for Words {
         self.query_graph = Some(parent_query_graph.clone());
         self.nodes_to_remove = match self.terms_matching_strategy {
             TermsMatchingStrategy::Last => {
-                let mut ns = parent_query_graph.removal_order_for_terms_matching_strategy_last();
+                let mut ns = parent_query_graph.removal_order_for_terms_matching_strategy_last(ctx);
                 ns.reverse();
                 ns
             }

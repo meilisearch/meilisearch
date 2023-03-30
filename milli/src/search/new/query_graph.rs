@@ -296,7 +296,10 @@ impl QueryGraph {
         }
     }
 
-    pub fn removal_order_for_terms_matching_strategy_last(&self) -> Vec<SmallBitmap<QueryNode>> {
+    pub fn removal_order_for_terms_matching_strategy_last(
+        &self,
+        ctx: &SearchContext,
+    ) -> Vec<SmallBitmap<QueryNode>> {
         let (first_term_idx, last_term_idx) = {
             let mut first_term_idx = u8::MAX;
             let mut last_term_idx = 0u8;
@@ -329,6 +332,9 @@ impl QueryGraph {
         let mut nodes_to_remove = BTreeMap::<u16, SmallBitmap<QueryNode>>::new();
         'outer: for (node_id, node) in self.nodes.iter() {
             let QueryNodeData::Term(t) = &node.data else { continue };
+            if ctx.term_interner.get(t.term_subset.original).zero_typo.phrase.is_some() {
+                continue;
+            }
             let mut cost = 0;
             for id in t.term_ids.clone() {
                 if let Some(t_cost) = cost_of_term_idx(id) {

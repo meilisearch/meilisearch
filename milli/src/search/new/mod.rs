@@ -78,7 +78,7 @@ fn resolve_maximally_reduced_query_graph(
 
     let nodes_to_remove = match matching_strategy {
         TermsMatchingStrategy::Last => query_graph
-            .removal_order_for_terms_matching_strategy_last()
+            .removal_order_for_terms_matching_strategy_last(ctx)
             .iter()
             .flat_map(|x| x.iter())
             .collect(),
