@@ -1,3 +1,9 @@
+use std::fmt;
+
+use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
+use once_cell::sync::Lazy;
+use roaring::bitmap::RoaringBitmap;
+
 pub use self::facet::{FacetDistribution, Filter, DEFAULT_VALUES_PER_FACET};
 pub use self::matches::{
     FormatOptions, MatchBounds, Matcher, MatcherBuilder, MatchingWord, MatchingWords,
@@ -5,10 +11,6 @@ pub use self::matches::{
 use crate::{
     execute_search, AscDesc, DefaultSearchLogger, DocumentId, Index, Result, SearchContext,
 };
-use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
-use once_cell::sync::Lazy;
-use roaring::bitmap::RoaringBitmap;
-use std::fmt;
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
@@ -112,6 +114,7 @@ impl<'a> Search<'a> {
             &mut ctx,
             &self.query,
             self.terms_matching_strategy,
+            self.exhaustive_number_hits,
             &self.filter,
             &self.sort_criteria,
             self.offset,
