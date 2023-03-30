@@ -270,7 +270,10 @@ mod tests {
             ("_geo(12, -2021):asc", ReservedKeyword { name: S("_geo(12, -2021)") }),
             ("_geo(12, -2021):desc", ReservedKeyword { name: S("_geo(12, -2021)") }),
             ("_geoDistance(12, -2021):asc", ReservedKeyword { name: S("_geoDistance(12, -2021)") }),
-            ("_geoDistance(12, -2021):desc", ReservedKeyword { name: S("_geoDistance(12, -2021)") }),
+            (
+                "_geoDistance(12, -2021):desc",
+                ReservedKeyword { name: S("_geoDistance(12, -2021)") },
+            ),
         ];
 
         for (req, expected_error) in invalid_req {
