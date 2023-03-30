@@ -373,7 +373,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                     if new_term.is_empty() {
                         nodes_to_remove.push(node_id);
                     } else {
-                        term.value = ctx.term_interner.insert(new_term);
+                        term.value = ctx.term_interner.push(new_term);
                     }
                 }
             }

@@ -32,6 +32,7 @@ use resolve_query_graph::{resolve_query_graph, QueryTermDocIdsCache};
 use roaring::RoaringBitmap;
 use words::Words;
 
+use self::interner::Interner;
 use self::ranking_rules::{BoxRankingRule, RankingRule};
 use self::sort::Sort;
 use crate::{
@@ -46,7 +47,7 @@ pub struct SearchContext<'ctx> {
     pub db_cache: DatabaseCache<'ctx>,
     pub word_interner: DedupInterner<String>,
     pub phrase_interner: DedupInterner<Phrase>,
-    pub term_interner: DedupInterner<QueryTerm>,
+    pub term_interner: Interner<QueryTerm>,
     // think about memory usage of that field (roaring bitmaps in a hashmap)
     pub term_docids: QueryTermDocIdsCache,
 }

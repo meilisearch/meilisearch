@@ -128,7 +128,7 @@ impl RankingRuleGraphTrait for TypoGraph {
                             nbr_typos as u8 + base_cost,
                             Some(
                                 conditions_interner
-                                    .insert(TypoCondition { term: term_interner.insert(new_term) }),
+                                    .insert(TypoCondition { term: term_interner.push(new_term) }),
                             ),
                         ))
                     }

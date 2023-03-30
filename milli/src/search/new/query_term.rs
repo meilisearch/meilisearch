@@ -1,4 +1,5 @@
-use std::collections::HashSet;
+use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::mem;
 use std::ops::RangeInclusive;
 
@@ -28,143 +29,341 @@ impl Phrase {
     }
 }
 
-/// A structure storing all the different ways to match
-/// a term in the user's search query.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub enum Lazy<T> {
+    Uninit,
+    Init(T),
+}
+impl<T> Lazy<T> {
+    pub fn is_init(&self) -> bool {
+        match self {
+            Lazy::Uninit => false,
+            Lazy::Init(_) => true,
+        }
+    }
+    pub fn is_uninit(&self) -> bool {
+        match self {
+            Lazy::Uninit => true,
+            Lazy::Init(_) => false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum NTypoTermSubset {
+    All,
+    Subset {
+        words: BTreeSet<Interned<String>>,
+        phrases: BTreeSet<Interned<Phrase>>,
+        // TODO: prefixes: BTreeSet<Interned<String>>,
+    },
+    Nothing,
+}
+
+impl NTypoTermSubset {
+    pub fn contains_word(&self, word: Interned<String>) -> bool {
+        match self {
+            NTypoTermSubset::All => true,
+            NTypoTermSubset::Subset { words, phrases: _ } => words.contains(&word),
+            NTypoTermSubset::Nothing => false,
+        }
+    }
+    pub fn contains_phrase(&self, phrase: Interned<Phrase>) -> bool {
+        match self {
+            NTypoTermSubset::All => true,
+            NTypoTermSubset::Subset { words: _, phrases } => phrases.contains(&phrase),
+            NTypoTermSubset::Nothing => false,
+        }
+    }
+    pub fn is_empty(&self) -> bool {
+        match self {
+            NTypoTermSubset::All => false,
+            NTypoTermSubset::Subset { words, phrases } => words.is_empty() && phrases.is_empty(),
+            NTypoTermSubset::Nothing => true,
+        }
+    }
+    pub fn union(&mut self, other: &Self) {
+        match self {
+            Self::All => {}
+            Self::Subset { words, phrases } => match other {
+                Self::All => {
+                    *self = Self::All;
+                }
+                Self::Subset { words: w2, phrases: p2 } => {
+                    words.extend(w2);
+                    phrases.extend(p2);
+                }
+                Self::Nothing => {}
+            },
+            Self::Nothing => {
+                *self = other.clone();
+            }
+        }
+    }
+    pub fn intersect(&mut self, other: &Self) {
+        match self {
+            Self::All => *self = other.clone(),
+            Self::Subset { words, phrases } => match other {
+                Self::All => {}
+                Self::Subset { words: w2, phrases: p2 } => {
+                    let mut ws = BTreeSet::new();
+                    for w in words.intersection(w2) {
+                        ws.insert(*w);
+                    }
+                    let mut ps = BTreeSet::new();
+                    for p in phrases.intersection(p2) {
+                        ps.insert(*p);
+                    }
+                    *words = ws;
+                    *phrases = ps;
+                }
+                Self::Nothing => *self = Self::Nothing,
+            },
+            Self::Nothing => {}
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct QueryTermSubset {
+    pub original: Interned<QueryTerm>,
+    pub zero_typo_subset: NTypoTermSubset,
+    pub one_typo_subset: NTypoTermSubset,
+    pub two_typo_subset: NTypoTermSubset,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct LocatedQueryTermSubset {
+    pub term_subset: QueryTermSubset,
+    pub positions: RangeInclusive<i8>,
+    pub term_ids: RangeInclusive<u8>,
+}
+
+impl QueryTermSubset {
+    pub fn empty(for_term: Interned<QueryTerm>) -> Self {
+        Self {
+            original: for_term,
+            zero_typo_subset: NTypoTermSubset::Nothing,
+            one_typo_subset: NTypoTermSubset::Nothing,
+            two_typo_subset: NTypoTermSubset::Nothing,
+        }
+    }
+    pub fn full(for_term: Interned<QueryTerm>) -> Self {
+        Self {
+            original: for_term,
+            zero_typo_subset: NTypoTermSubset::All,
+            one_typo_subset: NTypoTermSubset::All,
+            two_typo_subset: NTypoTermSubset::All,
+        }
+    }
+
+    pub fn union(&mut self, other: &Self) {
+        assert!(self.original == other.original);
+        self.zero_typo_subset.union(&other.zero_typo_subset);
+        self.one_typo_subset.union(&other.one_typo_subset);
+        self.two_typo_subset.union(&other.two_typo_subset);
+    }
+    pub fn intersect(&mut self, other: &Self) {
+        assert!(self.original == other.original);
+        self.zero_typo_subset.intersect(&other.zero_typo_subset);
+        self.one_typo_subset.intersect(&other.one_typo_subset);
+        self.two_typo_subset.intersect(&other.two_typo_subset);
+    }
+
+    pub fn use_prefix_db(&self, ctx: &SearchContext) -> Option<Interned<String>> {
+        let original = ctx.term_interner.get(self.original);
+        let Some(use_prefix_db) = original.zero_typo.use_prefix_db else {
+            return None
+        };
+        match &self.zero_typo_subset {
+            NTypoTermSubset::All => Some(use_prefix_db),
+            NTypoTermSubset::Subset { words, phrases: _ } => {
+                // TODO: use a subset of prefix words instead
+                if words.contains(&use_prefix_db) {
+                    Some(use_prefix_db)
+                } else {
+                    None
+                }
+            }
+            NTypoTermSubset::Nothing => None,
+        }
+    }
+    pub fn all_single_words_except_prefix_db(
+        &self,
+        ctx: &mut SearchContext,
+    ) -> Result<BTreeSet<Interned<String>>> {
+        let original = ctx.term_interner.get_mut(self.original);
+        let mut result = BTreeSet::default();
+        // TODO: a compute_partially funtion
+        if !self.one_typo_subset.is_empty() || !self.two_typo_subset.is_empty() {
+            original.compute_fully_if_needed(
+                ctx.index,
+                ctx.txn,
+                &mut ctx.word_interner,
+                &mut ctx.phrase_interner,
+            )?;
+        }
+
+        if !self.zero_typo_subset.is_empty() {
+            let ZeroTypoTerm { phrase: _, zero_typo, prefix_of, synonyms: _, use_prefix_db: _ } =
+                &original.zero_typo;
+            result.extend(zero_typo.iter().copied());
+            result.extend(prefix_of.iter().copied());
+        };
+
+        match &self.one_typo_subset {
+            NTypoTermSubset::All => {
+                let Lazy::Init(OneTypoTerm { split_words: _, one_typo }) = &original.one_typo else {
+                    panic!()
+                };
+                result.extend(one_typo.iter().copied())
+            }
+            NTypoTermSubset::Subset { words, phrases: _ } => {
+                let Lazy::Init(OneTypoTerm { split_words: _, one_typo }) = &original.one_typo else {
+                    panic!()
+                };
+                result.extend(one_typo.intersection(words));
+            }
+            NTypoTermSubset::Nothing => {}
+        };
+
+        match &self.two_typo_subset {
+            NTypoTermSubset::All => {
+                let Lazy::Init(TwoTypoTerm { two_typos }) = &original.two_typo else {
+                    panic!()
+                };
+                result.extend(two_typos.iter().copied());
+            }
+            NTypoTermSubset::Subset { words, phrases: _ } => {
+                let Lazy::Init(TwoTypoTerm { two_typos }) = &original.two_typo else {
+                    panic!()
+                };
+                result.extend(two_typos.intersection(words));
+            }
+            NTypoTermSubset::Nothing => {}
+        };
+
+        Ok(result)
+    }
+    pub fn all_phrases(&self, ctx: &mut SearchContext) -> Result<BTreeSet<Interned<Phrase>>> {
+        let original = ctx.term_interner.get_mut(self.original);
+        let mut result = BTreeSet::default();
+
+        if !self.one_typo_subset.is_empty() {
+            // TODO: compute less than fully if possible
+            original.compute_fully_if_needed(
+                ctx.index,
+                ctx.txn,
+                &mut ctx.word_interner,
+                &mut ctx.phrase_interner,
+            )?;
+        }
+
+        let ZeroTypoTerm { phrase, zero_typo: _, prefix_of: _, synonyms, use_prefix_db: _ } =
+            &original.zero_typo;
+        result.extend(phrase.iter().copied());
+        result.extend(synonyms.iter().copied());
+
+        if !self.one_typo_subset.is_empty() {
+            let Lazy::Init(OneTypoTerm { split_words, one_typo: _ }) = &original.one_typo else {
+                panic!();
+            };
+            result.extend(split_words.iter().copied());
+        }
+
+        Ok(result)
+    }
+}
+
+impl QueryTerm {
+    pub fn compute_fully_if_needed(
+        &mut self,
+        index: &Index,
+        txn: &RoTxn,
+        word_interner: &mut DedupInterner<String>,
+        phrase_interner: &mut DedupInterner<Phrase>,
+    ) -> Result<()> {
+        if self.max_nbr_typos == 0 {
+            self.one_typo = Lazy::Init(OneTypoTerm::default());
+            self.two_typo = Lazy::Init(TwoTypoTerm::default());
+        } else if self.max_nbr_typos == 1 && self.one_typo.is_uninit() {
+            assert!(self.two_typo.is_uninit());
+            self.initialize_one_typo_subterm(index, txn, word_interner, phrase_interner)?;
+            assert!(self.one_typo.is_init());
+            self.two_typo = Lazy::Init(TwoTypoTerm::default());
+        } else if self.max_nbr_typos > 1 && self.two_typo.is_uninit() {
+            assert!(self.two_typo.is_uninit());
+            self.initialize_one_and_two_typo_subterm(index, txn, word_interner, phrase_interner)?;
+            assert!(self.one_typo.is_init() && self.two_typo.is_init());
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct QueryTerm {
-    /// The original terms, for debugging purposes
     pub original: Interned<String>,
-    /// Whether the term is an ngram
-    pub is_ngram: bool,
-    /// Whether the term can be only the prefix of a word
+    pub is_multiple_words: bool,
+    pub max_nbr_typos: u8,
     pub is_prefix: bool,
+    pub zero_typo: ZeroTypoTerm,
+    // May not be computed yet
+    pub one_typo: Lazy<OneTypoTerm>,
+    // May not be computed yet
+    pub two_typo: Lazy<TwoTypoTerm>,
+}
+
+// SubTerms will be in a dedup interner
+#[derive(Default, Clone, PartialEq, Eq, Hash)]
+pub struct ZeroTypoTerm {
     /// The original phrase, if any
     pub phrase: Option<Interned<Phrase>>,
     /// A single word equivalent to the original term, with zero typos
     pub zero_typo: Option<Interned<String>>,
     /// All the words that contain the original word as prefix
-    pub prefix_of: Box<[Interned<String>]>,
+    pub prefix_of: BTreeSet<Interned<String>>,
     /// All the synonyms of the original word or phrase
-    pub synonyms: Box<[Interned<Phrase>]>,
-
-    /// The original word split into multiple consecutive words
-    pub split_words: Option<Interned<Phrase>>,
-
-    /// Words that are 1 typo away from the original word
-    pub one_typo: Box<[Interned<String>]>,
-
-    /// Words that are 2 typos away from the original word
-    pub two_typos: Box<[Interned<String>]>,
-
+    pub synonyms: BTreeSet<Interned<Phrase>>,
     /// A prefix in the prefix databases matching the original word
     pub use_prefix_db: Option<Interned<String>>,
 }
-impl QueryTerm {
-    pub fn removing_forbidden_terms(
-        &self,
-        allowed_words: &HashSet<Interned<String>>,
-        allowed_phrases: &HashSet<Interned<Phrase>>,
-    ) -> Option<Self> {
-        let QueryTerm {
-            original,
-            is_ngram,
-            is_prefix,
-            phrase,
-            zero_typo,
-            prefix_of,
-            synonyms,
-            split_words,
-            one_typo,
-            two_typos,
-            use_prefix_db,
-        } = self;
+#[derive(Default, Clone, PartialEq, Eq, Hash)]
+pub struct OneTypoTerm {
+    /// The original word split into multiple consecutive words
+    pub split_words: Option<Interned<Phrase>>,
+    /// Words that are 1 typo away from the original word
+    pub one_typo: BTreeSet<Interned<String>>,
+}
+#[derive(Default, Clone, PartialEq, Eq, Hash)]
+pub struct TwoTypoTerm {
+    /// Words that are 2 typos away from the original word
+    pub two_typos: BTreeSet<Interned<String>>,
+}
 
-        let mut changed = false;
-
-        let mut new_zero_typo = None;
-        if let Some(w) = zero_typo {
-            if allowed_words.contains(w) {
-                new_zero_typo = Some(*w);
-            } else {
-                changed = true;
-            }
-        }
-        // TODO: this is incorrect, prefix DB stuff should be treated separately
-        let mut new_use_prefix_db = None;
-        if let Some(w) = use_prefix_db {
-            if allowed_words.contains(w) {
-                new_use_prefix_db = Some(*w);
-            } else {
-                changed = true;
-            }
-        }
-        let mut new_prefix_of = vec![];
-        for w in prefix_of.iter() {
-            if allowed_words.contains(w) {
-                new_prefix_of.push(*w);
-            } else {
-                changed = true;
-            }
-        }
-        let mut new_one_typo = vec![];
-        for w in one_typo.iter() {
-            if allowed_words.contains(w) {
-                new_one_typo.push(*w);
-            } else {
-                changed = true;
-            }
-        }
-        let mut new_two_typos = vec![];
-        for w in two_typos.iter() {
-            if allowed_words.contains(w) {
-                new_two_typos.push(*w);
-            } else {
-                changed = true;
-            }
-        }
-        // TODO: this is incorrect, prefix DB stuff should be treated separately
-        let mut new_phrase = None;
-        if let Some(w) = phrase {
-            if !allowed_phrases.contains(w) {
-                new_phrase = Some(*w);
-            } else {
-                changed = true;
-            }
-        }
-        let mut new_split_words = None;
-        if let Some(w) = split_words {
-            if allowed_phrases.contains(w) {
-                new_split_words = Some(*w);
-            } else {
-                changed = true;
-            }
-        }
-        let mut new_synonyms = vec![];
-        for w in synonyms.iter() {
-            if allowed_phrases.contains(w) {
-                new_synonyms.push(*w);
-            } else {
-                changed = true;
-            }
-        }
-        if changed {
-            Some(QueryTerm {
-                original: *original,
-                is_ngram: *is_ngram,
-                is_prefix: *is_prefix,
-                phrase: new_phrase,
-                zero_typo: new_zero_typo,
-                prefix_of: new_prefix_of.into_boxed_slice(),
-                synonyms: new_synonyms.into_boxed_slice(),
-                split_words: new_split_words,
-                one_typo: new_one_typo.into_boxed_slice(),
-                two_typos: new_two_typos.into_boxed_slice(),
-                use_prefix_db: new_use_prefix_db,
-            })
-        } else {
-            None
-        }
+impl ZeroTypoTerm {
+    fn is_empty(&self) -> bool {
+        let ZeroTypoTerm { phrase, zero_typo, prefix_of, synonyms, use_prefix_db } = self;
+        phrase.is_none()
+            && zero_typo.is_none()
+            && prefix_of.is_empty()
+            && synonyms.is_empty()
+            && use_prefix_db.is_none()
     }
+}
+impl OneTypoTerm {
+    fn is_empty(&self) -> bool {
+        let OneTypoTerm { split_words, one_typo } = self;
+        one_typo.is_empty() && split_words.is_none()
+    }
+}
+impl TwoTypoTerm {
+    fn is_empty(&self) -> bool {
+        let TwoTypoTerm { two_typos } = self;
+        two_typos.is_empty()
+    }
+}
+
+impl QueryTerm {
     pub fn phrase(
         word_interner: &mut DedupInterner<String>,
         phrase_interner: &mut DedupInterner<Phrase>,
@@ -172,76 +371,172 @@ impl QueryTerm {
     ) -> Self {
         Self {
             original: word_interner.insert(phrase.description(word_interner)),
-            phrase: Some(phrase_interner.insert(phrase)),
+            is_multiple_words: false,
+            max_nbr_typos: 0,
             is_prefix: false,
-            zero_typo: None,
-            prefix_of: Box::new([]),
-            synonyms: Box::new([]),
-            split_words: None,
-            one_typo: Box::new([]),
-            two_typos: Box::new([]),
-            use_prefix_db: None,
-            is_ngram: false,
+            zero_typo: ZeroTypoTerm {
+                phrase: Some(phrase_interner.insert(phrase)),
+                zero_typo: None,
+                prefix_of: BTreeSet::default(),
+                synonyms: BTreeSet::default(),
+                use_prefix_db: None,
+            },
+            one_typo: Lazy::Uninit,
+            two_typo: Lazy::Uninit,
         }
     }
     pub fn empty(word_interner: &mut DedupInterner<String>, original: &str) -> Self {
         Self {
             original: word_interner.insert(original.to_owned()),
-            phrase: None,
+            is_multiple_words: false,
             is_prefix: false,
-            zero_typo: None,
-            prefix_of: Box::new([]),
-            synonyms: Box::new([]),
-            split_words: None,
-            one_typo: Box::new([]),
-            two_typos: Box::new([]),
-            use_prefix_db: None,
-            is_ngram: false,
+            max_nbr_typos: 0,
+            zero_typo: <_>::default(),
+            one_typo: Lazy::Init(<_>::default()),
+            two_typo: Lazy::Init(<_>::default()),
         }
     }
-    /// Return an iterator over all the single words derived from the original word.
-    ///
-    /// This excludes synonyms, split words, and words stored in the prefix databases.
-    pub fn all_single_words_except_prefix_db(
-        &'_ self,
-    ) -> impl Iterator<Item = Interned<String>> + Clone + '_ {
-        self.zero_typo
-            .iter()
-            .chain(self.prefix_of.iter())
-            .chain(self.one_typo.iter())
-            .chain(self.two_typos.iter())
-            .copied()
-    }
-    /// Return an iterator over all the single words derived from the original word.
-    ///
-    /// This excludes synonyms, split words, and words stored in the prefix databases.
-    pub fn all_phrases(&'_ self) -> impl Iterator<Item = Interned<Phrase>> + Clone + '_ {
-        self.split_words.iter().chain(self.synonyms.iter()).copied()
-    }
+
     pub fn is_empty(&self) -> bool {
-        self.zero_typo.is_none()
-            && self.one_typo.is_empty()
-            && self.two_typos.is_empty()
-            && self.prefix_of.is_empty()
-            && self.synonyms.is_empty()
-            && self.split_words.is_none()
-            && self.use_prefix_db.is_none()
+        let Lazy::Init(one_typo) = &self.one_typo else {
+            return false;
+        };
+        let Lazy::Init(two_typo) = &self.two_typo else {
+            return false;
+        };
+
+        self.zero_typo.is_empty() && one_typo.is_empty() && two_typo.is_empty()
     }
 }
 
-/// Compute the query term for the given word
-pub fn query_term_from_word(
+pub enum ZeroOrOneTypo {
+    Zero,
+    One,
+}
+
+fn find_zero_typo_prefix_derivations(
+    word_interned: Interned<String>,
+    fst: fst::Set<Cow<[u8]>>,
+    word_interner: &mut DedupInterner<String>,
+    mut visit: impl FnMut(Interned<String>) -> Result<()>,
+) -> Result<()> {
+    let word = word_interner.get(word_interned).to_owned();
+    let word = word.as_str();
+    let prefix = Str::new(word).starts_with();
+    let mut stream = fst.search(prefix).into_stream();
+
+    while let Some(derived_word) = stream.next() {
+        let derived_word = std::str::from_utf8(derived_word)?.to_owned();
+        let derived_word_interned = word_interner.insert(derived_word);
+        if derived_word_interned != word_interned {
+            visit(derived_word_interned)?;
+        }
+    }
+    Ok(())
+}
+
+fn find_zero_one_typo_derivations(
+    word_interned: Interned<String>,
+    is_prefix: bool,
+    fst: fst::Set<Cow<[u8]>>,
+    word_interner: &mut DedupInterner<String>,
+    mut visit: impl FnMut(Interned<String>, ZeroOrOneTypo) -> Result<()>,
+) -> Result<()> {
+    let word = word_interner.get(word_interned).to_owned();
+    let word = word.as_str();
+
+    let dfa = build_dfa(word, 1, is_prefix);
+    let starts = StartsWith(Str::new(get_first(word)));
+    let mut stream = fst.search_with_state(Intersection(starts, &dfa)).into_stream();
+    // TODO: There may be wayyy too many matches (e.g. in the thousands), how to reduce them?
+
+    while let Some((derived_word, state)) = stream.next() {
+        let derived_word = std::str::from_utf8(derived_word)?;
+        let derived_word = word_interner.insert(derived_word.to_owned());
+        let d = dfa.distance(state.1);
+        match d.to_u8() {
+            0 => {
+                if derived_word != word_interned {
+                    visit(derived_word, ZeroOrOneTypo::Zero)?;
+                }
+            }
+            1 => {
+                visit(derived_word, ZeroOrOneTypo::One)?;
+            }
+            _ => panic!(),
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum NumberOfTypos {
+    Zero,
+    One,
+    Two,
+}
+fn find_zero_one_two_typo_derivations(
+    word_interned: Interned<String>,
+    is_prefix: bool,
+    fst: fst::Set<Cow<[u8]>>,
+    word_interner: &mut DedupInterner<String>,
+    mut visit: impl FnMut(Interned<String>, NumberOfTypos) -> Result<()>,
+) -> Result<()> {
+    let word = word_interner.get(word_interned).to_owned();
+    let word = word.as_str();
+
+    let starts = StartsWith(Str::new(get_first(word)));
+    let first = Intersection(build_dfa(word, 1, is_prefix), Complement(&starts));
+    let second_dfa = build_dfa(word, 2, is_prefix);
+    let second = Intersection(&second_dfa, &starts);
+    let automaton = Union(first, &second);
+
+    let mut stream = fst.search_with_state(automaton).into_stream();
+    // TODO: There may be wayyy too many matches (e.g. in the thousands), how to reduce them?
+
+    while let Some((derived_word, state)) = stream.next() {
+        let derived_word = std::str::from_utf8(derived_word)?;
+        let derived_word_interned = word_interner.insert(derived_word.to_owned());
+        // in the case the typo is on the first letter, we know the number of typo
+        // is two
+        if get_first(derived_word) != get_first(word) {
+            visit(derived_word_interned, NumberOfTypos::Two)?;
+        } else {
+            // Else, we know that it is the second dfa that matched and compute the
+            // correct distance
+            let d = second_dfa.distance((state.1).0);
+            match d.to_u8() {
+                0 => {
+                    if derived_word_interned != word_interned {
+                        visit(derived_word_interned, NumberOfTypos::Zero)?;
+                    }
+                }
+                1 => {
+                    visit(derived_word_interned, NumberOfTypos::One)?;
+                }
+                2 => {
+                    visit(derived_word_interned, NumberOfTypos::Two)?;
+                }
+                _ => panic!(),
+            }
+        }
+    }
+    Ok(())
+}
+
+fn partially_initialized_term_from_word(
     ctx: &mut SearchContext,
     word: &str,
     max_typo: u8,
     is_prefix: bool,
 ) -> Result<QueryTerm> {
+    let word_interned = ctx.word_interner.insert(word.to_owned());
+
     if word.len() > MAX_WORD_LENGTH {
         return Ok(QueryTerm::empty(&mut ctx.word_interner, word));
     }
 
     let fst = ctx.index.words_fst(ctx.txn)?;
-    let word_interned = ctx.word_interner.insert(word.to_owned());
 
     let use_prefix_db = is_prefix
         && ctx
@@ -253,94 +548,23 @@ pub fn query_term_from_word(
     let use_prefix_db = if use_prefix_db { Some(word_interned) } else { None };
 
     let mut zero_typo = None;
-    let mut prefix_of = vec![];
-    let mut one_typo = vec![];
-    let mut two_typos = vec![];
+    let mut prefix_of = BTreeSet::new();
 
     if fst.contains(word) {
         zero_typo = Some(word_interned);
     }
 
-    if max_typo == 0 {
-        if is_prefix && use_prefix_db.is_none() {
-            let prefix = Str::new(word).starts_with();
-            let mut stream = fst.search(prefix).into_stream();
-
-            while let Some(derived_word) = stream.next() {
-                let derived_word = std::str::from_utf8(derived_word)?.to_owned();
-                let derived_word_interned = ctx.word_interner.insert(derived_word);
-                if derived_word_interned != word_interned {
-                    prefix_of.push(derived_word_interned);
-                }
-            }
-        }
-    } else if max_typo == 1 {
-        let dfa = build_dfa(word, 1, is_prefix);
-        let starts = StartsWith(Str::new(get_first(word)));
-        let mut stream = fst.search_with_state(Intersection(starts, &dfa)).into_stream();
-        // TODO: There may be wayyy too many matches (e.g. in the thousands), how to reduce them?
-
-        while let Some((derived_word, state)) = stream.next() {
-            let derived_word = std::str::from_utf8(derived_word)?;
-
-            let d = dfa.distance(state.1);
-            let derived_word_interned = ctx.word_interner.insert(derived_word.to_owned());
-            match d.to_u8() {
-                0 => {
-                    if derived_word_interned != word_interned {
-                        prefix_of.push(derived_word_interned);
-                    }
-                }
-                1 => {
-                    one_typo.push(derived_word_interned);
-                }
-                _ => panic!(),
-            }
-        }
-    } else {
-        let starts = StartsWith(Str::new(get_first(word)));
-        let first = Intersection(build_dfa(word, 1, is_prefix), Complement(&starts));
-        let second_dfa = build_dfa(word, 2, is_prefix);
-        let second = Intersection(&second_dfa, &starts);
-        let automaton = Union(first, &second);
-
-        let mut stream = fst.search_with_state(automaton).into_stream();
-        // TODO: There may be wayyy too many matches (e.g. in the thousands), how to reduce them?
-
-        while let Some((derived_word, state)) = stream.next() {
-            let derived_word = std::str::from_utf8(derived_word)?;
-            let derived_word_interned = ctx.word_interner.insert(derived_word.to_owned());
-            // in the case the typo is on the first letter, we know the number of typo
-            // is two
-            if get_first(derived_word) != get_first(word) {
-                two_typos.push(derived_word_interned);
-            } else {
-                // Else, we know that it is the second dfa that matched and compute the
-                // correct distance
-                let d = second_dfa.distance((state.1).0);
-                match d.to_u8() {
-                    0 => {
-                        if derived_word_interned != word_interned {
-                            prefix_of.push(derived_word_interned);
-                        }
-                    }
-                    1 => {
-                        one_typo.push(derived_word_interned);
-                    }
-                    2 => {
-                        two_typos.push(derived_word_interned);
-                    }
-                    _ => panic!(),
-                }
-            }
-        }
+    if is_prefix && use_prefix_db.is_none() {
+        find_zero_typo_prefix_derivations(
+            word_interned,
+            fst,
+            &mut ctx.word_interner,
+            |derived_word| {
+                prefix_of.insert(derived_word);
+                Ok(())
+            },
+        )?;
     }
-    let split_words = split_best_frequency(ctx.index, ctx.txn, word)?.map(|(l, r)| {
-        ctx.phrase_interner.insert(Phrase {
-            words: vec![Some(ctx.word_interner.insert(l)), Some(ctx.word_interner.insert(r))],
-        })
-    });
-
     let synonyms = ctx.index.synonyms(ctx.txn)?;
 
     let synonyms = synonyms
@@ -353,20 +577,116 @@ pub fn query_term_from_word(
             ctx.phrase_interner.insert(Phrase { words })
         })
         .collect();
+    let zero_typo = ZeroTypoTerm { phrase: None, zero_typo, prefix_of, synonyms, use_prefix_db };
 
     Ok(QueryTerm {
         original: word_interned,
-        phrase: None,
+        is_multiple_words: false,
+        max_nbr_typos: max_typo,
         is_prefix,
         zero_typo,
-        prefix_of: prefix_of.into_boxed_slice(),
-        synonyms,
-        split_words,
-        one_typo: one_typo.into_boxed_slice(),
-        two_typos: two_typos.into_boxed_slice(),
-        use_prefix_db,
-        is_ngram: false,
+        one_typo: Lazy::Uninit,
+        two_typo: Lazy::Uninit,
     })
+}
+
+fn find_split_words(
+    index: &Index,
+    txn: &RoTxn,
+    word_interner: &mut DedupInterner<String>,
+    phrase_interner: &mut DedupInterner<Phrase>,
+    word: &str,
+) -> Result<Option<Interned<Phrase>>> {
+    let split_words = split_best_frequency(index, txn, word)?.map(|(l, r)| {
+        phrase_interner.insert(Phrase {
+            words: vec![Some(word_interner.insert(l)), Some(word_interner.insert(r))],
+        })
+    });
+    Ok(split_words)
+}
+
+impl QueryTerm {
+    fn initialize_one_typo_subterm(
+        &mut self,
+        index: &Index,
+        txn: &RoTxn,
+        word_interner: &mut DedupInterner<String>,
+        phrase_interner: &mut DedupInterner<Phrase>,
+    ) -> Result<()> {
+        let QueryTerm { original, is_prefix, one_typo, .. } = self;
+        let original_str = word_interner.get(*original).to_owned();
+        if one_typo.is_init() {
+            return Ok(());
+        }
+        let mut one_typo_words = BTreeSet::new();
+
+        find_zero_one_typo_derivations(
+            *original,
+            *is_prefix,
+            index.words_fst(txn)?,
+            word_interner,
+            |derived_word, nbr_typos| {
+                match nbr_typos {
+                    ZeroOrOneTypo::Zero => {}
+                    ZeroOrOneTypo::One => {
+                        one_typo_words.insert(derived_word);
+                    }
+                }
+                Ok(())
+            },
+        )?;
+        let split_words =
+            find_split_words(index, txn, word_interner, phrase_interner, original_str.as_str())?;
+        let one_typo = OneTypoTerm { split_words, one_typo: one_typo_words };
+
+        self.one_typo = Lazy::Init(one_typo);
+
+        Ok(())
+    }
+    fn initialize_one_and_two_typo_subterm(
+        &mut self,
+        index: &Index,
+        txn: &RoTxn,
+        word_interner: &mut DedupInterner<String>,
+        phrase_interner: &mut DedupInterner<Phrase>,
+    ) -> Result<()> {
+        let QueryTerm { original, is_prefix, two_typo, .. } = self;
+        let original_str = word_interner.get(*original).to_owned();
+        if two_typo.is_init() {
+            return Ok(());
+        }
+        let mut one_typo_words = BTreeSet::new();
+        let mut two_typo_words = BTreeSet::new();
+
+        find_zero_one_two_typo_derivations(
+            *original,
+            *is_prefix,
+            index.words_fst(txn)?,
+            word_interner,
+            |derived_word, nbr_typos| {
+                match nbr_typos {
+                    NumberOfTypos::Zero => {}
+                    NumberOfTypos::One => {
+                        one_typo_words.insert(derived_word);
+                    }
+                    NumberOfTypos::Two => {
+                        two_typo_words.insert(derived_word);
+                    }
+                }
+                Ok(())
+            },
+        )?;
+        let split_words =
+            find_split_words(index, txn, word_interner, phrase_interner, original_str.as_str())?;
+        let one_typo = OneTypoTerm { one_typo: one_typo_words, split_words };
+
+        let two_typo = TwoTypoTerm { two_typos: two_typo_words };
+
+        self.one_typo = Lazy::Init(one_typo);
+        self.two_typo = Lazy::Init(two_typo);
+
+        Ok(())
+    }
 }
 
 /// Split the original word into the two words that appear the
@@ -402,7 +722,7 @@ fn split_best_frequency(
 impl QueryTerm {
     /// Return the original word from the given query term
     pub fn original_single_word(&self) -> Option<Interned<String>> {
-        if self.phrase.is_some() || self.is_ngram {
+        if self.is_multiple_words {
             None
         } else {
             Some(self.original)
@@ -413,21 +733,13 @@ impl QueryTerm {
 /// A query term term coupled with its position in the user's search query.
 #[derive(Clone)]
 pub struct LocatedQueryTerm {
+    // should the query term subset really be interned?
+    // possibly, yes
     pub value: Interned<QueryTerm>,
-    // TODO: consider changing to u8, or even a u16
     pub positions: RangeInclusive<i8>,
 }
 
-impl LocatedQueryTerm {
-    /// Return `true` iff the term is empty
-    pub fn is_empty(&self, interner: &DedupInterner<QueryTerm>) -> bool {
-        interner.get(self.value).is_empty()
-    }
-}
-
 /// Convert the tokenised search query into a list of located query terms.
-// TODO: checking if the positions are correct for phrases, separators, ngrams
-// hard-limit the number of tokens that are considered
 pub fn located_query_terms_from_string(
     ctx: &mut SearchContext,
     query: NormalizedTokenIter<&[u8]>,
@@ -476,9 +788,14 @@ pub fn located_query_terms_from_string(
                     match token.kind {
                         TokenKind::Word => {
                             let word = token.lemma();
-                            let term = query_term_from_word(ctx, word, nbr_typos(word), false)?;
+                            let term = partially_initialized_term_from_word(
+                                ctx,
+                                word,
+                                nbr_typos(word),
+                                false,
+                            )?;
                             let located_term = LocatedQueryTerm {
-                                value: ctx.term_interner.insert(term),
+                                value: ctx.term_interner.push(term),
                                 positions: position..=position,
                             };
                             located_terms.push(located_term);
@@ -487,10 +804,10 @@ pub fn located_query_terms_from_string(
                     }
                 } else {
                     let word = token.lemma();
-                    // eagerly compute all derivations
-                    let term = query_term_from_word(ctx, word, nbr_typos(word), true)?;
+                    let term =
+                        partially_initialized_term_from_word(ctx, word, nbr_typos(word), true)?;
                     let located_term = LocatedQueryTerm {
-                        value: ctx.term_interner.insert(term),
+                        value: ctx.term_interner.push(term),
                         positions: position..=position,
                     };
                     located_terms.push(located_term);
@@ -511,11 +828,10 @@ pub fn located_query_terms_from_string(
                     quoted = !quoted;
                 }
                 // if there is a quote or a hard separator we close the phrase.
-                // TODO: limit phrase size?
                 if !phrase.is_empty() && (quote_count > 0 || separator_kind == SeparatorKind::Hard)
                 {
                     let located_query_term = LocatedQueryTerm {
-                        value: ctx.term_interner.insert(QueryTerm::phrase(
+                        value: ctx.term_interner.push(QueryTerm::phrase(
                             &mut ctx.word_interner,
                             &mut ctx.phrase_interner,
                             Phrase { words: mem::take(&mut phrase) },
@@ -532,7 +848,7 @@ pub fn located_query_terms_from_string(
     // If a quote is never closed, we consider all of the end of the query as a phrase.
     if !phrase.is_empty() {
         let located_query_term = LocatedQueryTerm {
-            value: ctx.term_interner.insert(QueryTerm::phrase(
+            value: ctx.term_interner.push(QueryTerm::phrase(
                 &mut ctx.word_interner,
                 &mut ctx.phrase_interner,
                 Phrase { words: mem::take(&mut phrase) },
@@ -600,34 +916,36 @@ pub fn make_ngram(
         return Ok(None);
     }
 
-    let mut term = query_term_from_word(
-        ctx,
-        &ngram_str,
-        number_of_typos_allowed(ngram_str.as_str()).saturating_sub(terms.len() as u8),
-        is_prefix,
-    )?;
-    term.original = ctx.word_interner.insert(words.join(" "));
+    let max_nbr_typos =
+        number_of_typos_allowed(ngram_str.as_str()).saturating_sub(terms.len() as u8 - 1);
+
+    let mut term = partially_initialized_term_from_word(ctx, &ngram_str, max_nbr_typos, is_prefix)?;
+
+    // let (_, mut zero_typo, mut one_typo, two_typo) =
+    //     all_subterms_from_word(ctx, &ngram_str, max_nbr_typos, is_prefix)?;
+    let original = ctx.word_interner.insert(words.join(" "));
+
     // Now add the synonyms
     let index_synonyms = ctx.index.synonyms(ctx.txn)?;
-    let mut term_synonyms = term.synonyms.to_vec();
-    term_synonyms.extend(index_synonyms.get(&words).cloned().unwrap_or_default().into_iter().map(
-        |words| {
+
+    term.zero_typo.synonyms.extend(
+        index_synonyms.get(&words).cloned().unwrap_or_default().into_iter().map(|words| {
             let words = words.into_iter().map(|w| Some(ctx.word_interner.insert(w))).collect();
             ctx.phrase_interner.insert(Phrase { words })
-        },
-    ));
-    term.synonyms = term_synonyms.into_boxed_slice();
-    if let Some(split_words) = term.split_words {
-        let split_words = ctx.phrase_interner.get(split_words);
-        if split_words.words == words_interned.iter().map(|&i| Some(i)).collect::<Vec<_>>() {
-            term.split_words = None;
-        }
-    }
-    if term.is_empty() {
-        return Ok(None);
-    }
-    term.is_ngram = true;
-    let term = LocatedQueryTerm { value: ctx.term_interner.insert(term), positions: start..=end };
+        }),
+    );
+
+    let term = QueryTerm {
+        original,
+        is_multiple_words: true,
+        is_prefix,
+        max_nbr_typos,
+        zero_typo: term.zero_typo,
+        one_typo: Lazy::Uninit,
+        two_typo: Lazy::Uninit,
+    };
+
+    let term = LocatedQueryTerm { value: ctx.term_interner.push(term), positions: start..=end };
 
     Ok(Some(term))
 }
