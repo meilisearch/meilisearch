@@ -40,7 +40,9 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for Words {
         self.query_graph = Some(parent_query_graph.clone());
         self.nodes_to_remove = match self.terms_matching_strategy {
             TermsMatchingStrategy::Last => {
-                parent_query_graph.removal_order_for_terms_matching_strategy_last()
+                let mut ns = parent_query_graph.removal_order_for_terms_matching_strategy_last();
+                ns.reverse();
+                ns
             }
             TermsMatchingStrategy::All => {
                 vec![]

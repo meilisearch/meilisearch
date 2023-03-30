@@ -300,14 +300,14 @@ impl QueryGraph {
             }
         };
         let mut nodes_to_remove = BTreeMap::<u16, SmallBitmap<QueryNode>>::new();
-        for (node_id, node) in self.nodes.iter() {
+        'outer: for (node_id, node) in self.nodes.iter() {
             let QueryNodeData::Term(t) = &node.data else { continue };
             let mut cost = 0;
             for id in t.term_ids.clone() {
                 if let Some(t_cost) = cost_of_term_idx(id) {
-                    cost += t_cost;
+                    cost = std::cmp::max(cost, t_cost);
                 } else {
-                    continue;
+                    continue 'outer;
                 }
             }
             nodes_to_remove

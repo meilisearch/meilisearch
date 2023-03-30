@@ -107,9 +107,6 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         query_graph: &QueryGraph,
     ) -> Result<()> {
         let removal_cost = if let Some(terms_matching_strategy) = self.terms_matching_strategy {
-            // oh no this is wrong!
-            // because
-            // skipping the second node should require that the first one be skipped too
             match terms_matching_strategy {
                 TermsMatchingStrategy::Last => {
                     let removal_order =
@@ -123,7 +120,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                             *costs.get_mut(n) = Some((cost, forbidden_nodes.clone()));
                         }
                         forbidden_nodes.union(&ns);
-                        cost = 1000;
+                        cost += 100;
                     }
                     costs
                 }
