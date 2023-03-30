@@ -82,6 +82,7 @@ impl FromStr for Member {
                     || text.starts_with("_geoRadius(")
                     || text.starts_with("_geoBoundingBox(")
                     || text.starts_with("_geo(")
+                    || text.starts_with("_geoDistance(")
                 {
                     return Err(AscDescError::ReservedKeyword { name: text.to_string() })?;
                 }
@@ -268,6 +269,8 @@ mod tests {
             ("_geoPoint(12, -2021):desc", GeoError(BadGeoError::Lng(-2021.))),
             ("_geo(12, -2021):asc", ReservedKeyword { name: S("_geo(12, -2021)") }),
             ("_geo(12, -2021):desc", ReservedKeyword { name: S("_geo(12, -2021)") }),
+            ("_geoDistance(12, -2021):asc", ReservedKeyword { name: S("_geoDistance(12, -2021)") }),
+            ("_geoDistance(12, -2021):desc", ReservedKeyword { name: S("_geoDistance(12, -2021)") }),
         ];
 
         for (req, expected_error) in invalid_req {
