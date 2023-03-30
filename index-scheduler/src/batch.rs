@@ -17,7 +17,7 @@ tasks individally, but should be much faster since we are only performing
 one indexing operation.
 */
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::BufWriter;
@@ -1278,19 +1278,56 @@ impl IndexScheduler {
         to_delete_tasks -= processing_tasks;
         to_delete_tasks -= enqueued_tasks;
 
-        // 2. We now have a list of tasks to delete, delete them
+        let mut indexes = self.index_tasks.iter_mut(wtxn)?;
+        while let Some((key, bitmap)) = indexes.next().transpose()? {
+            let ret = &bitmap - &to_delete_tasks;
+            if bitmap.len() != ret.len() {
+                if ret.is_empty() {
+                    // safe because we don't own any references to the db
+                    unsafe {
+                        indexes.del_current()?;
+                    }
+                } else {
+                    let key = key.to_string();
+                    // safe because the key has been copied
+                    unsafe {
+                        indexes.put_current(&key, &ret)?;
+                    }
+                }
+            }
+        }
+        drop(indexes);
 
-        let mut affected_indexes = HashSet::new();
-        let mut affected_statuses = HashSet::new();
-        let mut affected_kinds = HashSet::new();
+        let mut statuses = self.status.iter_mut(wtxn)?;
+        while let Some((key, bitmap)) = statuses.next().transpose()? {
+            let ret = &bitmap - &to_delete_tasks;
+            if bitmap.len() != ret.len() {
+                // safe because the key has been copied
+                unsafe {
+                    statuses.put_current(&key, &ret)?;
+                }
+            }
+        }
+        drop(statuses);
+
+        let mut kinds = self.kind.iter_mut(wtxn)?;
+        while let Some((key, bitmap)) = kinds.next().transpose()? {
+            let ret = &bitmap - &to_delete_tasks;
+            if bitmap.len() != ret.len() {
+                // safe because the key has been copied
+                unsafe {
+                    kinds.put_current(&key, &ret)?;
+                }
+            }
+        }
+        drop(kinds);
+
+        // 2. We now have a list of tasks to delete, delete them
         let mut affected_canceled_by = RoaringBitmap::new();
 
         for task_id in to_delete_tasks.iter() {
             let task = self.get_task(wtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
 
-            affected_indexes.extend(task.indexes().into_iter().map(|x| x.to_owned()));
-            affected_statuses.insert(task.status);
-            affected_kinds.insert(task.kind.as_kind());
             // Note: don't delete the persisted task data since
             // we can only delete succeeded, failed, and canceled tasks.
             // In each of those cases, the persisted data is supposed to
@@ -1305,18 +1342,6 @@ impl IndexScheduler {
             if let Some(canceled_by) = task.canceled_by {
                 affected_canceled_by.insert(canceled_by);
             }
-        }
-
-        for index in affected_indexes {
-            self.update_index(wtxn, &index, |bitmap| *bitmap -= &to_delete_tasks)?;
-        }
-
-        for status in affected_statuses {
-            self.update_status(wtxn, status, |bitmap| *bitmap -= &to_delete_tasks)?;
-        }
-
-        for kind in affected_kinds {
-            self.update_kind(wtxn, kind, |bitmap| *bitmap -= &to_delete_tasks)?;
         }
 
         for task in to_delete_tasks.iter() {
