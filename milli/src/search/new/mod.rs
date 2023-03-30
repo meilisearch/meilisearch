@@ -16,7 +16,7 @@ mod sort;
 // TODO: documentation + comments
 mod words;
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::HashSet;
 
 use charabia::TokenizerBuilder;
 use db_cache::DatabaseCache;
@@ -25,7 +25,7 @@ use heed::RoTxn;
 use interner::DedupInterner;
 pub use logger::detailed::DetailedSearchLogger;
 pub use logger::{DefaultSearchLogger, SearchLogger};
-use query_graph::{QueryGraph, QueryNode, QueryNodeData};
+use query_graph::{QueryGraph, QueryNode};
 use query_term::{located_query_terms_from_string, Phrase, QueryTerm};
 use ranking_rules::{bucket_sort, PlaceholderQuery, RankingRuleOutput, RankingRuleQueryTrait};
 use resolve_query_graph::PhraseDocIdsCache;
@@ -75,33 +75,17 @@ fn resolve_maximally_reduced_query_graph(
     logger: &mut dyn SearchLogger<QueryGraph>,
 ) -> Result<RoaringBitmap> {
     let mut graph = query_graph.clone();
-    let mut positions_to_remove = match matching_strategy {
-        TermsMatchingStrategy::Last => {
-            let mut all_positions = BTreeSet::new();
-            for (_, n) in query_graph.nodes.iter() {
-                match &n.data {
-                    QueryNodeData::Term(term) => {
-                        all_positions.extend(term.positions.clone());
-                    }
-                    QueryNodeData::Deleted | QueryNodeData::Start | QueryNodeData::End => {}
-                }
-            }
-            all_positions.into_iter().collect()
-        }
+
+    let nodes_to_remove = match matching_strategy {
+        TermsMatchingStrategy::Last => query_graph
+            .removal_order_for_terms_matching_strategy_last()
+            .iter()
+            .flat_map(|x| x.iter())
+            .collect(),
         TermsMatchingStrategy::All => vec![],
     };
-    // don't remove the first term
-    if !positions_to_remove.is_empty() {
-        positions_to_remove.remove(0);
-    }
-    loop {
-        if positions_to_remove.is_empty() {
-            break;
-        } else {
-            let position_to_remove = positions_to_remove.pop().unwrap();
-            let _ = graph.remove_words_starting_at_position(position_to_remove);
-        }
-    }
+    graph.remove_nodes(&nodes_to_remove);
+
     logger.query_for_universe(&graph);
     let docids = compute_query_graph_docids(ctx, &graph, universe)?;
 
