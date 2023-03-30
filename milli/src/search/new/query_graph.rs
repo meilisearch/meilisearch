@@ -267,7 +267,7 @@ impl QueryGraph {
     /// Remove all the nodes that correspond to a word starting at the given position, and connect
     /// the predecessors of these nodes to their successors.
     /// Return `true` if any node was removed.
-    pub fn remove_words_starting_at_position(&mut self, position: i8) -> bool {
+    pub fn remove_words_starting_at_position(&mut self, position: u16) -> bool {
         let mut nodes_to_remove_keeping_edges = vec![];
         for (node_idx, node) in self.nodes.iter() {
             let QueryNodeData::Term(LocatedQueryTerm { value: _, positions }) = &node.data else { continue };

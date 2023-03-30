@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::mem;
 use std::ops::RangeInclusive;
 
 use charabia::normalizer::NormalizedTokenIter;
@@ -414,8 +413,7 @@ impl QueryTerm {
 #[derive(Clone)]
 pub struct LocatedQueryTerm {
     pub value: Interned<QueryTerm>,
-    // TODO: consider changing to u8, or even a u16
-    pub positions: RangeInclusive<i8>,
+    pub positions: RangeInclusive<u16>,
 }
 
 impl LocatedQueryTerm {
@@ -425,9 +423,55 @@ impl LocatedQueryTerm {
     }
 }
 
+struct PhraseBuilder {
+    words: Vec<Option<Interned<String>>>,
+    start: u16,
+    end: u16,
+}
+
+impl PhraseBuilder {
+    fn empty() -> Self {
+        Self { words: Default::default(), start: u16::MAX, end: u16::MAX }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.words.is_empty()
+    }
+
+    // precondition: token has kind Word or StopWord
+    fn push_word(&mut self, ctx: &mut SearchContext, token: &charabia::Token, position: u16) {
+        if self.is_empty() {
+            self.start = position;
+        }
+        self.end = position;
+        if let TokenKind::StopWord = token.kind {
+            self.words.push(None);
+        } else {
+            // token has kind Word
+            let word = ctx.word_interner.insert(token.lemma().to_string());
+            // TODO: in a phrase, check that every word exists
+            // otherwise return an empty term
+            self.words.push(Some(word));
+        }
+    }
+
+    fn build(self, ctx: &mut SearchContext) -> Option<LocatedQueryTerm> {
+        if self.is_empty() {
+            return None;
+        }
+        Some(LocatedQueryTerm {
+            value: ctx.term_interner.insert(QueryTerm::phrase(
+                &mut ctx.word_interner,
+                &mut ctx.phrase_interner,
+                Phrase { words: self.words },
+            )),
+            positions: self.start..=self.end,
+        })
+    }
+}
+
 /// Convert the tokenised search query into a list of located query terms.
 // TODO: checking if the positions are correct for phrases, separators, ngrams
-// hard-limit the number of tokens that are considered
 pub fn located_query_terms_from_string(
     ctx: &mut SearchContext,
     query: NormalizedTokenIter<&[u8]>,
@@ -437,16 +481,17 @@ pub fn located_query_terms_from_string(
 
     let mut located_terms = Vec::new();
 
-    let mut phrase = Vec::new();
-    let mut quoted = false;
+    let mut phrase: Option<PhraseBuilder> = None;
 
     let parts_limit = words_limit.unwrap_or(usize::MAX);
 
-    let mut position = -1i8;
-    let mut phrase_start = -1i8;
-    let mut phrase_end = -1i8;
+    // start with the last position as we will wrap around to position 0 at the beginning of the loop below.
+    let mut position = u16::MAX;
 
-    let mut peekable = query.peekable();
+    // TODO: Loic, find proper value here so we don't overflow the interner.
+    const MAX_TOKEN_COUNT: usize = 1_000;
+
+    let mut peekable = query.take(MAX_TOKEN_COUNT).peekable();
     while let Some(token) = peekable.next() {
         // early return if word limit is exceeded
         if located_terms.len() >= parts_limit {
@@ -455,23 +500,14 @@ pub fn located_query_terms_from_string(
 
         match token.kind {
             TokenKind::Word | TokenKind::StopWord => {
-                position += 1;
+                // On first loop, goes from u16::MAX to 0, then normal increment.
+                position = position.wrapping_add(1);
+
                 // 1. if the word is quoted we push it in a phrase-buffer waiting for the ending quote,
                 // 2. if the word is not the last token of the query and is not a stop_word we push it as a non-prefix word,
                 // 3. if the word is the last token of the query we push it as a prefix word.
-                if quoted {
-                    phrase_end = position;
-                    if phrase.is_empty() {
-                        phrase_start = position;
-                    }
-                    if let TokenKind::StopWord = token.kind {
-                        phrase.push(None);
-                    } else {
-                        let word = ctx.word_interner.insert(token.lemma().to_string());
-                        // TODO: in a phrase, check that every word exists
-                        // otherwise return an empty term
-                        phrase.push(Some(word));
-                    }
+                if let Some(phrase) = &mut phrase {
+                    phrase.push_word(ctx, &token, position)
                 } else if peekable.peek().is_some() {
                     match token.kind {
                         TokenKind::Word => {
@@ -505,41 +541,52 @@ pub fn located_query_terms_from_string(
                         position += 0;
                     }
                 }
-                let quote_count = token.lemma().chars().filter(|&s| s == '"').count();
-                // swap quoted state if we encounter a double quote
-                if quote_count % 2 != 0 {
-                    quoted = !quoted;
-                }
-                // if there is a quote or a hard separator we close the phrase.
-                // TODO: limit phrase size?
-                if !phrase.is_empty() && (quote_count > 0 || separator_kind == SeparatorKind::Hard)
-                {
-                    let located_query_term = LocatedQueryTerm {
-                        value: ctx.term_interner.insert(QueryTerm::phrase(
-                            &mut ctx.word_interner,
-                            &mut ctx.phrase_interner,
-                            Phrase { words: mem::take(&mut phrase) },
-                        )),
-                        positions: phrase_start..=phrase_end,
+
+                phrase = 'phrase: {
+                    let phrase = phrase.take();
+
+                    // If we have a hard separator inside a phrase, we immediately start a new phrase
+                    let phrase = if separator_kind == SeparatorKind::Hard {
+                        if let Some(phrase) = phrase {
+                            if let Some(located_query_term) = phrase.build(ctx) {
+                                located_terms.push(located_query_term)
+                            }
+                            Some(PhraseBuilder::empty())
+                        } else {
+                            None
+                        }
+                    } else {
+                        phrase
                     };
-                    located_terms.push(located_query_term);
-                }
+
+                    // We close and start a new phrase depending on the number of double quotes
+                    let mut quote_count = token.lemma().chars().filter(|&s| s == '"').count();
+                    if quote_count == 0 {
+                        break 'phrase phrase;
+                    }
+
+                    // Consume the closing quote and the phrase
+                    if let Some(phrase) = phrase {
+                        // Per the check above, quote_count > 0
+                        quote_count -= 1;
+                        if let Some(located_query_term) = phrase.build(ctx) {
+                            located_terms.push(located_query_term)
+                        }
+                    }
+
+                    // Start new phrase if the token ends with an opening quote
+                    (quote_count % 2 == 1).then_some(PhraseBuilder::empty())
+                };
             }
             _ => (),
         }
     }
 
     // If a quote is never closed, we consider all of the end of the query as a phrase.
-    if !phrase.is_empty() {
-        let located_query_term = LocatedQueryTerm {
-            value: ctx.term_interner.insert(QueryTerm::phrase(
-                &mut ctx.word_interner,
-                &mut ctx.phrase_interner,
-                Phrase { words: mem::take(&mut phrase) },
-            )),
-            positions: phrase_start..=phrase_end,
-        };
-        located_terms.push(located_query_term);
+    if let Some(phrase) = phrase.take() {
+        if let Some(located_query_term) = phrase.build(ctx) {
+            located_terms.push(located_query_term);
+        }
     }
 
     Ok(located_terms)

@@ -12,7 +12,7 @@ pub struct Words {
     exhausted: bool, // TODO: remove
     query_graph: Option<QueryGraph>,
     iterating: bool, // TODO: remove
-    positions_to_remove: Vec<i8>,
+    positions_to_remove: Vec<u16>,
     terms_matching_strategy: TermsMatchingStrategy,
 }
 impl Words {
@@ -52,7 +52,7 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for Words {
                         QueryNodeData::Deleted | QueryNodeData::Start | QueryNodeData::End => {}
                     }
                 }
-                let mut r: Vec<i8> = all_positions.into_iter().collect();
+                let mut r: Vec<u16> = all_positions.into_iter().collect();
                 // don't remove the first term
                 r.remove(0);
                 r
