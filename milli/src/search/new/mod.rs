@@ -84,7 +84,7 @@ fn resolve_maximally_reduced_query_graph(
             .collect(),
         TermsMatchingStrategy::All => vec![],
     };
-    graph.remove_nodes(&nodes_to_remove);
+    graph.remove_nodes_keep_edges(&nodes_to_remove);
 
     logger.query_for_universe(&graph);
     let docids = compute_query_graph_docids(ctx, &graph, universe)?;

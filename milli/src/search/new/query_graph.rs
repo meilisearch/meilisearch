@@ -177,9 +177,32 @@ impl QueryGraph {
             node.data = node_data;
         }
         let mut graph = QueryGraph { root_node, end_node, nodes };
-        graph.rebuild_edges();
+        graph.build_initial_edges();
 
         Ok(graph)
+    }
+
+    /// Remove the given nodes, connecting all their predecessors to all their successors.
+    pub fn remove_nodes_keep_edges(&mut self, nodes: &[Interned<QueryNode>]) {
+        for &node_id in nodes {
+            let node = self.nodes.get(node_id);
+            let old_node_pred = node.predecessors.clone();
+            let old_node_succ = node.successors.clone();
+            for pred in old_node_pred.iter() {
+                let pred_successors = &mut self.nodes.get_mut(pred).successors;
+                pred_successors.remove(node_id);
+                pred_successors.union(&old_node_succ);
+            }
+            for succ in old_node_succ.iter() {
+                let succ_predecessors = &mut self.nodes.get_mut(succ).predecessors;
+                succ_predecessors.remove(node_id);
+                succ_predecessors.union(&old_node_pred);
+            }
+            let node = self.nodes.get_mut(node_id);
+            node.data = QueryNodeData::Deleted;
+            node.predecessors.clear();
+            node.successors.clear();
+        }
     }
 
     /// Remove the given nodes and all their edges from the query graph.
@@ -201,10 +224,30 @@ impl QueryGraph {
             node.predecessors.clear();
             node.successors.clear();
         }
-        self.rebuild_edges();
+    }
+    /// Simplify the query graph by removing all nodes that are disconnected from
+    /// the start or end nodes.
+    pub fn simplify(&mut self) {
+        loop {
+            let mut nodes_to_remove = vec![];
+            for (node_idx, node) in self.nodes.iter() {
+                if (!matches!(node.data, QueryNodeData::End | QueryNodeData::Deleted)
+                    && node.successors.is_empty())
+                    || (!matches!(node.data, QueryNodeData::Start | QueryNodeData::Deleted)
+                        && node.predecessors.is_empty())
+                {
+                    nodes_to_remove.push(node_idx);
+                }
+            }
+            if nodes_to_remove.is_empty() {
+                break;
+            } else {
+                self.remove_nodes(&nodes_to_remove);
+            }
+        }
     }
 
-    fn rebuild_edges(&mut self) {
+    fn build_initial_edges(&mut self) {
         for (_, node) in self.nodes.iter_mut() {
             node.successors.clear();
             node.predecessors.clear();
@@ -251,22 +294,6 @@ impl QueryGraph {
                 successor.predecessors.insert(node_id);
             }
         }
-    }
-
-    /// Remove all the nodes that correspond to a word starting at the given position and rebuild
-    /// the edges of the graph appropriately.
-    pub fn remove_words_starting_at_position(&mut self, position: i8) -> bool {
-        let mut nodes_to_remove = vec![];
-        for (node_idx, node) in self.nodes.iter() {
-            let QueryNodeData::Term(LocatedQueryTermSubset { term_subset: _, positions, term_ids: _  }) = &node.data else { continue };
-            if positions.start() == &position {
-                nodes_to_remove.push(node_idx);
-            }
-        }
-
-        self.remove_nodes(&nodes_to_remove);
-
-        !nodes_to_remove.is_empty()
     }
 
     pub fn removal_order_for_terms_matching_strategy_last(&self) -> Vec<SmallBitmap<QueryNode>> {

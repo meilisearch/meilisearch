@@ -76,7 +76,7 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for Words {
             self.exhausted = true;
         } else {
             let nodes_to_remove = self.nodes_to_remove.pop().unwrap();
-            query_graph.remove_nodes(&nodes_to_remove.iter().collect::<Vec<_>>());
+            query_graph.remove_nodes_keep_edges(&nodes_to_remove.iter().collect::<Vec<_>>());
         }
 
         Ok(Some(RankingRuleOutput { query: child_query_graph, candidates: this_bucket }))
