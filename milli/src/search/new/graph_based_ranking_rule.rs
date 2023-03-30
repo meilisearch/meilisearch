@@ -36,12 +36,11 @@ That is we find the documents where either:
 - OR: `pretty` is 2-close to `house` AND `house` is 1-close to `by`
 */
 
-use std::collections::HashSet;
 use std::ops::ControlFlow;
 
 use roaring::RoaringBitmap;
 
-use super::interner::MappedInterner;
+use super::interner::{Interned, MappedInterner};
 use super::logger::SearchLogger;
 use super::query_graph::QueryNode;
 use super::ranking_rule_graph::{
@@ -50,33 +49,35 @@ use super::ranking_rule_graph::{
 };
 use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, RankingRule, RankingRuleOutput, SearchContext};
-use crate::search::new::query_graph::QueryNodeData;
-use crate::Result;
+use crate::search::new::query_term::LocatedQueryTermSubset;
+use crate::search::new::ranking_rule_graph::PathVisitor;
+use crate::{Result, TermsMatchingStrategy};
 
 pub type Proximity = GraphBasedRankingRule<ProximityGraph>;
-impl Default for GraphBasedRankingRule<ProximityGraph> {
-    fn default() -> Self {
-        Self::new("proximity".to_owned())
+impl GraphBasedRankingRule<ProximityGraph> {
+    pub fn new(terms_matching_strategy: Option<TermsMatchingStrategy>) -> Self {
+        Self::new_with_id("proximity".to_owned(), terms_matching_strategy)
     }
 }
 pub type Typo = GraphBasedRankingRule<TypoGraph>;
-impl Default for GraphBasedRankingRule<TypoGraph> {
-    fn default() -> Self {
-        Self::new("typo".to_owned())
+impl GraphBasedRankingRule<TypoGraph> {
+    pub fn new(terms_matching_strategy: Option<TermsMatchingStrategy>) -> Self {
+        Self::new_with_id("typo".to_owned(), terms_matching_strategy)
     }
 }
 
 /// A generic graph-based ranking rule
 pub struct GraphBasedRankingRule<G: RankingRuleGraphTrait> {
     id: String,
+    terms_matching_strategy: Option<TermsMatchingStrategy>,
     // When the ranking rule is not iterating over its buckets,
     // its state is `None`.
     state: Option<GraphBasedRankingRuleState<G>>,
 }
 impl<G: RankingRuleGraphTrait> GraphBasedRankingRule<G> {
     /// Creates the ranking rule with the given identifier
-    pub fn new(id: String) -> Self {
-        Self { id, state: None }
+    pub fn new_with_id(id: String, terms_matching_strategy: Option<TermsMatchingStrategy>) -> Self {
+        Self { id, terms_matching_strategy, state: None }
     }
 }
 
@@ -89,7 +90,7 @@ pub struct GraphBasedRankingRuleState<G: RankingRuleGraphTrait> {
     /// Cache used to optimistically discard paths that resolve to no documents.
     dead_ends_cache: DeadEndsCache<G::Condition>,
     /// A structure giving the list of possible costs from each node to the end node
-    all_distances: MappedInterner<QueryNode, Vec<u16>>,
+    all_costs: MappedInterner<QueryNode, Vec<u64>>,
     /// An index in the first element of `all_distances`, giving the cost of the next bucket
     cur_distance_idx: usize,
 }
@@ -105,18 +106,45 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         _universe: &RoaringBitmap,
         query_graph: &QueryGraph,
     ) -> Result<()> {
-        let graph = RankingRuleGraph::build(ctx, query_graph.clone())?;
+        let removal_cost = if let Some(terms_matching_strategy) = self.terms_matching_strategy {
+            // oh no this is wrong!
+            // because
+            // skipping the second node should require that the first one be skipped too
+            match terms_matching_strategy {
+                TermsMatchingStrategy::Last => {
+                    let removal_order =
+                        query_graph.removal_order_for_terms_matching_strategy_last();
+                    let mut forbidden_nodes =
+                        SmallBitmap::for_interned_values_in(&query_graph.nodes);
+                    let mut costs = query_graph.nodes.map(|_| None);
+                    let mut cost = 100;
+                    for ns in removal_order {
+                        for n in ns.iter() {
+                            *costs.get_mut(n) = Some((cost, forbidden_nodes.clone()));
+                        }
+                        forbidden_nodes.union(&ns);
+                        cost = 1000;
+                    }
+                    costs
+                }
+                TermsMatchingStrategy::All => query_graph.nodes.map(|_| None),
+            }
+        } else {
+            query_graph.nodes.map(|_| None)
+        };
+
+        let graph = RankingRuleGraph::build(ctx, query_graph.clone(), removal_cost)?;
         let condition_docids_cache = ConditionDocIdsCache::default();
         let dead_ends_cache = DeadEndsCache::new(&graph.conditions_interner);
 
         // Then pre-compute the cost of all paths from each node to the end node
-        let all_distances = graph.initialize_distances_with_necessary_edges();
+        let all_costs = graph.find_all_costs_to_end();
 
         let state = GraphBasedRankingRuleState {
             graph,
             conditions_cache: condition_docids_cache,
             dead_ends_cache,
-            all_distances,
+            all_costs,
             cur_distance_idx: 0,
         };
 
@@ -140,16 +168,13 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
 
         // If the cur_distance_idx does not point to a valid cost in the `all_distances`
         // structure, then we have computed all the buckets and can return.
-        if state.cur_distance_idx
-            >= state.all_distances.get(state.graph.query_graph.root_node).len()
-        {
+        if state.cur_distance_idx >= state.all_costs.get(state.graph.query_graph.root_node).len() {
             self.state = None;
             return Ok(None);
         }
 
         // Retrieve the cost of the paths to compute
-        let cost =
-            state.all_distances.get(state.graph.query_graph.root_node)[state.cur_distance_idx];
+        let cost = state.all_costs.get(state.graph.query_graph.root_node)[state.cur_distance_idx];
         state.cur_distance_idx += 1;
 
         let mut bucket = RoaringBitmap::new();
@@ -158,7 +183,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
             graph,
             conditions_cache: condition_docids_cache,
             dead_ends_cache,
-            all_distances,
+            all_costs,
             cur_distance_idx: _,
         } = &mut state;
 
@@ -167,8 +192,8 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
 
         let original_graph = graph.clone();
         let mut used_conditions = SmallBitmap::for_interned_values_in(&graph.conditions_interner);
-        let mut considered_paths = vec![];
         let mut good_paths = vec![];
+        let mut considered_paths = vec![];
 
         // For each path of the given cost, we will compute its associated
         // document ids.
@@ -176,168 +201,80 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         // and update the `dead_ends_cache` accordingly.
         // Updating the dead_ends_cache helps speed up the execution of `visit_paths_of_cost` and reduces
         // the number of future candidate paths given by that same function.
-        graph.visit_paths_of_cost(
-            graph.query_graph.root_node,
-            cost,
-            all_distances,
-            dead_ends_cache,
-            |path, graph, dead_ends_cache| {
-                if universe.is_empty() {
-                    return Ok(ControlFlow::Break(()));
-                }
 
-                /* TODO: there are a couple ways to improve the speed of path computation.
+        let mut subpaths_docids: Vec<(Interned<G::Condition>, RoaringBitmap)> = vec![];
 
-                1. Since the `visit_paths_of_cost` method uses a depth-first-search, we know that
-                consecutive calls to this closure have a high chance of giving paths sharing
-                some prefix. It would be good to reuse `subpath_docids` and `visited_conditions`
-                to find out what this common prefix is, to avoid recomputing it. In a way, doing
-                this serves as the dual of the DeadEndsCache: it takes advantage of our knowledge that
-                some paths *aren't* deadends. There is however a subtlety in that the universe might
-                have changed between the two consecutive calls. This is why we should subtract the docids
-                of the previous path (if successful) to the `subpath_docids`, at the same time as we do
-                it for the universe.
-
-                2. We perform way too many intersections with the universe. For the first visited path,
-                the operation we do is essentially:
-                        universe & (c1 & universe) & (c2 & universe) & (c3 & universe) & etc.
-                This is a good idea *only if the universe is very small*. But if the universe is (almost)
-                a superset of each condition, then these intersections serve no purpose and slow down the search.
-                Maybe in the future we have a `deserialize_within_universe` method, which would speed up
-                these intersections. But for now, we have to be careful.
-
-                3. We could know in advance how many paths of a certain cost exist, and only update the
-                DeadEndsCache if (m)any remaining paths exist. There is a subtlety here because
-                on the next call of `next_bucket`, we will want an updated and correct DeadEndsCache.
-                We need to think about that. We could also avoid putting forbidden edges in this cache
-                if we know, somehow, that we won't visit this edge again.
-
-                4. Finally, but that will be a long term difficult project. We should compute the path *lazily*.
-                That is, when we do `path_docids &= condition`. We shouldn't *actually* perform the intersection,
-                but simply register that operation. It's only when we ask if the path_docids is empty that
-                **the minimum amount of work to determine whether the path is empty** is carried out. In practice,
-                that means performing a MultiOps on each container, in order or not, until any resulting container
-                is found to be non-empty. (In fact, when we ask `is_empty`, we should probably find the container
-                that has the highest chance of being non-empty and compute that one first).
-
-                */
-
-                // Accumulate the path for logging purposes only
-                considered_paths.push(path.to_vec());
-
-                let mut path_docids = universe.clone();
-
-                // We store the edges and their docids in vectors in case the path turns out to be
-                // empty and we need to figure out why it was empty.
-                let mut visited_conditions = vec![];
-                // let mut cached_condition_docids = vec![];
-                let mut subpath_docids = vec![];
-
-                for (latest_condition_path_idx, &latest_condition) in path.iter().enumerate() {
-                    visited_conditions.push(latest_condition);
-
-                    let condition_docids = condition_docids_cache.get_condition_docids(
-                        ctx,
-                        latest_condition,
-                        graph,
-                        &universe,
-                    )?;
-
-                    // If the edge is empty, then the path will be empty as well, we update the graph
-                    // and caches accordingly and skip to the next candidate path.
-                    if condition_docids.is_empty() {
-                        // 1. Store in the cache that this edge is empty for this universe
-                        dead_ends_cache.forbid_condition(latest_condition);
-                        // 2. remove all the edges with this condition from the ranking rule graph
-                        graph.remove_edges_with_condition(latest_condition);
-                        return Ok(ControlFlow::Continue(()));
-                    }
-                    path_docids &= condition_docids;
-                    subpath_docids.push(path_docids.clone());
-
-                    // If the (sub)path is empty, we try to figure out why and update the caches accordingly.
-                    if path_docids.is_empty() {
-                        let len_prefix = subpath_docids.len() - 1;
-                        // First, we know that this path is empty, and thus any path
-                        // that is a superset of it will also be empty.
-                        dead_ends_cache.forbid_condition_after_prefix(
-                            visited_conditions[..len_prefix].iter().copied(),
-                            latest_condition,
-                        );
-
-                        if visited_conditions.len() > 1 {
-                            let mut subprefix = vec![];
-                            // Deadend if the intersection between this edge and any
-                            // previous prefix is disjoint with the universe
-                            for (past_condition, subpath_docids) in visited_conditions[..len_prefix]
-                                .iter()
-                                .zip(subpath_docids[..len_prefix].iter())
-                            {
-                                if *past_condition == latest_condition {
-                                    todo!();
-                                };
-                                subprefix.push(*past_condition);
-                                if condition_docids.is_disjoint(subpath_docids) {
-                                    dead_ends_cache.forbid_condition_after_prefix(
-                                        subprefix.iter().copied(),
-                                        latest_condition,
-                                    );
-                                }
-                            }
-
-                            // keep the same prefix and check the intersection with
-                            // all the remaining conditions
-                            let mut forbidden = dead_ends_cache.forbidden.clone();
-                            let mut cursor = dead_ends_cache;
-                            for &c in visited_conditions[..len_prefix].iter() {
-                                cursor = cursor.advance(c).unwrap();
-                                forbidden.union(&cursor.forbidden);
-                            }
-
-                            let past_path_docids = &subpath_docids[subpath_docids.len() - 2];
-
-                            let remaining_conditions =
-                                path[latest_condition_path_idx..].iter().skip(1);
-                            for next_condition in remaining_conditions {
-                                if forbidden.contains(*next_condition) {
-                                    continue;
-                                }
-                                let next_condition_docids = condition_docids_cache
-                                    .get_condition_docids(ctx, *next_condition, graph, &universe)?;
-
-                                if past_path_docids.is_disjoint(next_condition_docids) {
-                                    cursor.forbid_condition(*next_condition);
-                                }
-                            }
-                        }
-
-                        return Ok(ControlFlow::Continue(()));
+        let visitor = PathVisitor::new(cost, graph, all_costs, dead_ends_cache);
+        visitor.visit_paths(&mut |path, graph, dead_ends_cache| {
+            considered_paths.push(path.to_vec());
+            // If the universe is empty, stop exploring the graph, since no docids will ever be found anymore.
+            if universe.is_empty() {
+                return Ok(ControlFlow::Break(()));
+            }
+            // `visit_paths` performs a depth-first search, so the previously visited path
+            // is likely to share a prefix with the current one.
+            // We stored the previous path and the docids associated to each of its prefixes in `subpaths_docids`.
+            // We take advantage of this to avoid computing the docids associated with the common prefix between
+            // the old and current path.
+            let idx_of_first_different_condition = {
+                let mut idx = 0;
+                for (&last_c, cur_c) in path.iter().zip(subpaths_docids.iter().map(|x| x.0)) {
+                    if last_c == cur_c {
+                        idx += 1;
+                    } else {
+                        break;
                     }
                 }
-                assert!(!path_docids.is_empty());
-                // Accumulate the path for logging purposes only
-                good_paths.push(path.to_vec());
-                for condition in path {
-                    used_conditions.insert(*condition);
+                subpaths_docids.truncate(idx);
+                idx
+            };
+            // Then for the remaining of the path, we continue computing docids.
+            for latest_condition in path[idx_of_first_different_condition..].iter().copied() {
+                // The visit_path_condition will stop
+                let success = visit_path_condition(
+                    ctx,
+                    graph,
+                    &universe,
+                    dead_ends_cache,
+                    condition_docids_cache,
+                    &mut subpaths_docids,
+                    latest_condition,
+                )?;
+                if !success {
+                    return Ok(ControlFlow::Continue(()));
                 }
-                bucket |= &path_docids;
-                // Reduce the size of the universe so that we can more optimistically discard candidate paths
-                universe -= path_docids;
+            }
+            assert!(subpaths_docids.iter().map(|x| x.0).eq(path.iter().copied()));
 
-                if universe.is_empty() {
-                    Ok(ControlFlow::Break(()))
-                } else {
-                    Ok(ControlFlow::Continue(()))
-                }
-            },
-        )?;
-        // println!("  {} paths of cost {} in {}", paths.len(), cost, self.id);
+            let path_docids =
+                subpaths_docids.pop().map(|x| x.1).unwrap_or_else(|| universe.clone());
+            assert!(!path_docids.is_empty());
+
+            // Accumulate the path for logging purposes only
+            good_paths.push(path.to_vec());
+            for &condition in path {
+                used_conditions.insert(condition);
+            }
+            bucket |= &path_docids;
+            // Reduce the size of the universe so that we can more optimistically discard candidate paths
+            universe -= &path_docids;
+            for (_, docids) in subpaths_docids.iter_mut() {
+                *docids -= &path_docids;
+            }
+
+            if universe.is_empty() {
+                Ok(ControlFlow::Break(()))
+            } else {
+                Ok(ControlFlow::Continue(()))
+            }
+        })?;
+
         G::log_state(
             &original_graph,
-            &good_paths,
+            &considered_paths,
             dead_ends_cache,
             original_universe,
-            all_distances,
+            all_costs,
             cost,
             logger,
         );
@@ -346,40 +283,21 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         // that was used to compute this bucket
         // But we only do it in case the bucket length is >1, because otherwise
         // we know the child ranking rule won't be called anyway
-        let mut next_query_graph = original_graph.query_graph;
-        if bucket.len() > 1 {
-            next_query_graph.simplify();
-            // 1. Gather all the words and phrases used in the computation of this bucket
-            let mut used_words = HashSet::new();
-            let mut used_phrases = HashSet::new();
-            for condition in used_conditions.iter() {
-                let (ws, ps) =
-                    condition_docids_cache.get_condition_used_words_and_phrases(condition);
-                used_words.extend(ws);
-                used_phrases.extend(ps);
-            }
-            // 2. Remove the unused words and phrases from all the nodes in the graph
-            let mut nodes_to_remove = vec![];
-            for (node_id, node) in next_query_graph.nodes.iter_mut() {
-                let term = match &mut node.data {
-                    QueryNodeData::Term(term) => term,
-                    QueryNodeData::Deleted | QueryNodeData::Start | QueryNodeData::End => continue,
-                };
-                if let Some(new_term) = ctx
-                    .term_interner
-                    .get(term.value)
-                    .removing_forbidden_terms(&used_words, &used_phrases)
-                {
-                    if new_term.is_empty() {
-                        nodes_to_remove.push(node_id);
-                    } else {
-                        term.value = ctx.term_interner.push(new_term);
-                    }
-                }
-            }
-            // 3. Remove the empty nodes from the graph
-            next_query_graph.remove_nodes(&nodes_to_remove);
-        }
+
+        let paths: Vec<Vec<(Option<LocatedQueryTermSubset>, LocatedQueryTermSubset)>> = good_paths
+            .into_iter()
+            .map(|path| {
+                path.into_iter()
+                    .map(|condition| {
+                        let (a, b) =
+                            condition_docids_cache.get_subsets_used_by_condition(condition);
+                        (a.clone(), b.clone())
+                    })
+                    .collect()
+            })
+            .collect();
+
+        let next_query_graph = QueryGraph::build_from_paths(paths);
 
         self.state = Some(state);
 
@@ -393,4 +311,60 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
     ) {
         self.state = None;
     }
+}
+
+/// Returns false if the intersection between the condition
+/// docids and the previous path docids is empty.
+fn visit_path_condition<G: RankingRuleGraphTrait>(
+    ctx: &mut SearchContext,
+    graph: &mut RankingRuleGraph<G>,
+    universe: &RoaringBitmap,
+    dead_ends_cache: &mut DeadEndsCache<G::Condition>,
+    condition_docids_cache: &mut ConditionDocIdsCache<G>,
+    subpath: &mut Vec<(Interned<G::Condition>, RoaringBitmap)>,
+    latest_condition: Interned<G::Condition>,
+) -> Result<bool> {
+    let condition_docids = &condition_docids_cache
+        .get_computed_condition(ctx, latest_condition, graph, universe)?
+        .docids;
+    if condition_docids.is_empty() {
+        // 1. Store in the cache that this edge is empty for this universe
+        dead_ends_cache.forbid_condition(latest_condition);
+        // 2. remove all the edges with this condition from the ranking rule graph
+        graph.remove_edges_with_condition(latest_condition);
+        return Ok(false);
+    }
+
+    let latest_path_docids = if let Some((_, prev_docids)) = subpath.last() {
+        prev_docids & condition_docids
+    } else {
+        condition_docids.clone()
+    };
+    if !latest_path_docids.is_empty() {
+        subpath.push((latest_condition, latest_path_docids));
+        return Ok(true);
+    }
+    // If the (sub)path is empty, we try to figure out why and update the caches accordingly.
+
+    // First, we know that this path is empty, and thus any path
+    // that is a superset of it will also be empty.
+    dead_ends_cache.forbid_condition_after_prefix(subpath.iter().map(|x| x.0), latest_condition);
+
+    if subpath.len() <= 1 {
+        return Ok(false);
+    }
+    let mut subprefix = vec![];
+    // Deadend if the intersection between this edge and any
+    // previous prefix is disjoint with the universe
+    // We already know that the intersection with the last one
+    // is empty,
+    for (past_condition, sp_docids) in subpath[..subpath.len() - 1].iter() {
+        subprefix.push(*past_condition);
+        if condition_docids.is_disjoint(sp_docids) {
+            dead_ends_cache
+                .forbid_condition_after_prefix(subprefix.iter().copied(), latest_condition);
+        }
+    }
+
+    Ok(false)
 }

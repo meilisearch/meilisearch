@@ -198,14 +198,14 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                     continue;
                 }
                 typo = true;
-                ranking_rules.push(Box::<Typo>::default());
+                ranking_rules.push(Box::new(Typo::new(None)));
             }
             crate::Criterion::Proximity => {
                 if proximity {
                     continue;
                 }
                 proximity = true;
-                ranking_rules.push(Box::<Proximity>::default());
+                ranking_rules.push(Box::new(Proximity::new(None)));
             }
             crate::Criterion::Attribute => {
                 if attribute {
