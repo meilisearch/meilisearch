@@ -36,12 +36,12 @@ impl<T> DeadEndsCache<T> {
     }
     pub fn forbidden_conditions_for_all_prefixes_up_to(
         &mut self,
-        prefix: &[Interned<T>],
+        prefix: impl Iterator<Item = Interned<T>>,
     ) -> SmallBitmap<T> {
         let mut forbidden = self.forbidden.clone();
         let mut cursor = self;
-        for c in prefix.iter() {
-            if let Some(next) = cursor.advance(*c) {
+        for c in prefix {
+            if let Some(next) = cursor.advance(c) {
                 cursor = next;
                 forbidden.union(&cursor.forbidden);
             } else {
@@ -52,11 +52,11 @@ impl<T> DeadEndsCache<T> {
     }
     pub fn forbidden_conditions_after_prefix(
         &mut self,
-        prefix: &[Interned<T>],
+        prefix: impl Iterator<Item = Interned<T>>,
     ) -> Option<SmallBitmap<T>> {
         let mut cursor = self;
-        for c in prefix.iter() {
-            if let Some(next) = cursor.advance(*c) {
+        for c in prefix {
+            if let Some(next) = cursor.advance(c) {
                 cursor = next;
             } else {
                 return None;
