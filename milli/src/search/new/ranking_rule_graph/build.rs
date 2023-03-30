@@ -1,20 +1,18 @@
-use std::collections::HashSet;
-
 use super::{Edge, RankingRuleGraph, RankingRuleGraphTrait};
-use crate::search::new::interner::DedupInterner;
+use crate::search::new::interner::{DedupInterner, MappedInterner};
+use crate::search::new::query_graph::{QueryNode, QueryNodeData};
 use crate::search::new::small_bitmap::SmallBitmap;
 use crate::search::new::{QueryGraph, SearchContext};
 use crate::Result;
+use std::collections::HashSet;
 
 impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
-    // TODO: here, the docids of all the edges should already be computed!
-    // an edge condition would then be reduced to a (ptr to) a roaring bitmap?
-    // we could build fewer of them by directly comparing them with the universe
-    // (e.g. for each word pairs?) with `deserialize_within_universe` maybe
-    //
-
     /// Build the ranking rule graph from the given query graph
-    pub fn build(ctx: &mut SearchContext, query_graph: QueryGraph) -> Result<Self> {
+    pub fn build(
+        ctx: &mut SearchContext,
+        query_graph: QueryGraph,
+        cost_of_ignoring_node: MappedInterner<QueryNode, Option<(u32, SmallBitmap<QueryNode>)>>,
+    ) -> Result<Self> {
         let QueryGraph { nodes: graph_nodes, .. } = &query_graph;
 
         let mut conditions_interner = DedupInterner::default();
@@ -26,8 +24,41 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
             let new_edges = edges_of_node.get_mut(source_id);
 
             for dest_idx in source_node.successors.iter() {
+                let src_term = match &source_node.data {
+                    QueryNodeData::Term(t) => Some(t),
+                    QueryNodeData::Start => None,
+                    QueryNodeData::Deleted | QueryNodeData::End => panic!(),
+                };
                 let dest_node = graph_nodes.get(dest_idx);
-                let edges = G::build_edges(ctx, &mut conditions_interner, source_node, dest_node)?;
+                let dest_term = match &dest_node.data {
+                    QueryNodeData::Term(t) => t,
+                    QueryNodeData::End => {
+                        let new_edge_id = edges_store.insert(Some(Edge {
+                            source_node: source_id,
+                            dest_node: dest_idx,
+                            cost: 0,
+                            condition: None,
+                            nodes_to_skip: SmallBitmap::for_interned_values_in(graph_nodes),
+                        }));
+                        new_edges.insert(new_edge_id);
+                        continue;
+                    }
+                    QueryNodeData::Deleted | QueryNodeData::Start => panic!(),
+                };
+                if let Some((cost_of_ignoring, forbidden_nodes)) =
+                    cost_of_ignoring_node.get(dest_idx)
+                {
+                    let new_edge_id = edges_store.insert(Some(Edge {
+                        source_node: source_id,
+                        dest_node: dest_idx,
+                        cost: *cost_of_ignoring,
+                        condition: None,
+                        nodes_to_skip: forbidden_nodes.clone(),
+                    }));
+                    new_edges.insert(new_edge_id);
+                }
+
+                let edges = G::build_edges(ctx, &mut conditions_interner, src_term, dest_term)?;
                 if edges.is_empty() {
                     continue;
                 }
@@ -37,7 +68,8 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                         source_node: source_id,
                         dest_node: dest_idx,
                         cost,
-                        condition,
+                        condition: Some(condition),
+                        nodes_to_skip: SmallBitmap::for_interned_values_in(graph_nodes),
                     }));
                     new_edges.insert(new_edge_id);
                 }
@@ -47,11 +79,8 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         let edges_of_node =
             edges_of_node.map(|edges| SmallBitmap::from_iter(edges.iter().copied(), &edges_store));
 
-        Ok(RankingRuleGraph {
-            query_graph,
-            edges_store,
-            edges_of_node,
-            conditions_interner: conditions_interner.freeze(),
-        })
+        let conditions_interner = conditions_interner.freeze();
+
+        Ok(RankingRuleGraph { query_graph, edges_store, edges_of_node, conditions_interner })
     }
 }
