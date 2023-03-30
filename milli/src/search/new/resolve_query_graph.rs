@@ -121,13 +121,26 @@ pub fn compute_phrase_docids(
     phrase: Interned<Phrase>,
 ) -> Result<RoaringBitmap> {
     let Phrase { words } = ctx.phrase_interner.get(phrase).clone();
+
+    if words.is_empty() {
+        return Ok(RoaringBitmap::new());
+    }
+    if words.len() == 1 {
+        if let Some(word) = &words[0] {
+            if let Some(word_docids) = ctx.get_db_word_docids(*word)? {
+                return RoaringBitmapCodec::bytes_decode(word_docids)
+                    .ok_or(heed::Error::Decoding.into());
+            } else {
+                return Ok(RoaringBitmap::new());
+            }
+        } else {
+            return Ok(RoaringBitmap::new());
+        }
+    }
+
     let mut candidates = RoaringBitmap::new();
     let mut first_iter = true;
     let winsize = words.len().min(3);
-
-    if words.is_empty() {
-        return Ok(candidates);
-    }
 
     for win in words.windows(winsize) {
         // Get all the documents with the matching distance for each word pairs.
