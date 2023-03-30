@@ -17,19 +17,26 @@ mod typo;
 
 use std::hash::Hash;
 
+pub use cheapest_paths::PathVisitor;
 pub use condition_docids_cache::ConditionDocIdsCache;
 pub use dead_ends_cache::DeadEndsCache;
-use fxhash::FxHashSet;
 pub use proximity::{ProximityCondition, ProximityGraph};
 use roaring::RoaringBitmap;
 pub use typo::{TypoCondition, TypoGraph};
 
 use super::interner::{DedupInterner, FixedSizeInterner, Interned, MappedInterner};
 use super::logger::SearchLogger;
-use super::query_term::Phrase;
+use super::query_term::LocatedQueryTermSubset;
 use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, QueryNode, SearchContext};
 use crate::Result;
+
+pub struct ComputedCondition {
+    pub docids: RoaringBitmap,
+    pub universe_len: u64,
+    pub start_term_subset: Option<LocatedQueryTermSubset>,
+    pub end_term_subset: LocatedQueryTermSubset,
+}
 
 /// An edge in the ranking rule graph.
 ///
@@ -37,12 +44,15 @@ use crate::Result;
 /// 1. The source and destination nodes
 /// 2. The cost of traversing this edge
 /// 3. The condition associated with it
+/// 4. The list of nodes that have to be skipped
+/// if this edge is traversed.
 #[derive(Clone)]
 pub struct Edge<E> {
     pub source_node: Interned<QueryNode>,
     pub dest_node: Interned<QueryNode>,
-    pub cost: u8,
+    pub cost: u32,
     pub condition: Option<Interned<E>>,
+    pub nodes_to_skip: SmallBitmap<QueryNode>,
 }
 
 impl<E> Hash for Edge<E> {
@@ -83,23 +93,23 @@ pub trait RankingRuleGraphTrait: Sized {
         ctx: &mut SearchContext,
         condition: &Self::Condition,
         universe: &RoaringBitmap,
-    ) -> Result<(RoaringBitmap, FxHashSet<Interned<String>>, FxHashSet<Interned<Phrase>>)>;
+    ) -> Result<ComputedCondition>;
 
     /// Return the costs and conditions of the edges going from the source node to the destination node
     fn build_edges(
         ctx: &mut SearchContext,
         conditions_interner: &mut DedupInterner<Self::Condition>,
-        source_node: &QueryNode,
-        dest_node: &QueryNode,
-    ) -> Result<Vec<(u8, Option<Interned<Self::Condition>>)>>;
+        source_node: Option<&LocatedQueryTermSubset>,
+        dest_node: &LocatedQueryTermSubset,
+    ) -> Result<Vec<(u32, Interned<Self::Condition>)>>;
 
     fn log_state(
         graph: &RankingRuleGraph<Self>,
         paths: &[Vec<Interned<Self::Condition>>],
         dead_ends_cache: &DeadEndsCache<Self::Condition>,
         universe: &RoaringBitmap,
-        distances: &MappedInterner<QueryNode, Vec<u16>>,
-        cost: u16,
+        costs: &MappedInterner<QueryNode, Vec<u64>>,
+        cost: u64,
         logger: &mut dyn SearchLogger<QueryGraph>,
     );
 }
