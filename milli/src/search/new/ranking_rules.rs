@@ -206,7 +206,9 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
             &next_bucket.candidates,
         );
 
-        assert!(ranking_rule_universes[cur_ranking_rule_index].is_superset(&next_bucket.candidates));
+        debug_assert!(
+            ranking_rule_universes[cur_ranking_rule_index].is_superset(&next_bucket.candidates)
+        );
         ranking_rule_universes[cur_ranking_rule_index] -= &next_bucket.candidates;
 
         if cur_ranking_rule_index == ranking_rules_len - 1
