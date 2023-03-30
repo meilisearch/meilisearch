@@ -5,8 +5,8 @@ use fxhash::FxHashMap;
 use heed::types::ByteSlice;
 use heed::{BytesEncode, Database, RoTxn};
 
-use super::interner::{DedupInterner, Interned};
-use crate::{Index, Result};
+use super::interner::Interned;
+use crate::{Result, SearchContext};
 
 /// A cache storing pointers to values in the LMDB databases.
 ///
@@ -47,94 +47,85 @@ impl<'ctx> DatabaseCache<'ctx> {
         };
         Ok(bitmap_ptr)
     }
-
+}
+impl<'ctx> SearchContext<'ctx> {
     /// Retrieve or insert the given value in the `word_docids` database.
-    pub fn get_word_docids(
-        &mut self,
-        index: &Index,
-        txn: &'ctx RoTxn,
-        word_interner: &DedupInterner<String>,
-        word: Interned<String>,
-    ) -> Result<Option<&'ctx [u8]>> {
-        Self::get_value(
-            txn,
+    pub fn get_db_word_docids(&mut self, word: Interned<String>) -> Result<Option<&'ctx [u8]>> {
+        DatabaseCache::get_value(
+            self.txn,
             word,
-            word_interner.get(word).as_str(),
-            &mut self.word_docids,
-            index.word_docids.remap_data_type::<ByteSlice>(),
+            self.word_interner.get(word).as_str(),
+            &mut self.db_cache.word_docids,
+            self.index.word_docids.remap_data_type::<ByteSlice>(),
         )
     }
     /// Retrieve or insert the given value in the `word_prefix_docids` database.
-    pub fn get_word_prefix_docids(
+    pub fn get_db_word_prefix_docids(
         &mut self,
-        index: &Index,
-        txn: &'ctx RoTxn,
-        word_interner: &DedupInterner<String>,
         prefix: Interned<String>,
     ) -> Result<Option<&'ctx [u8]>> {
-        Self::get_value(
-            txn,
+        DatabaseCache::get_value(
+            self.txn,
             prefix,
-            word_interner.get(prefix).as_str(),
-            &mut self.word_prefix_docids,
-            index.word_prefix_docids.remap_data_type::<ByteSlice>(),
+            self.word_interner.get(prefix).as_str(),
+            &mut self.db_cache.word_prefix_docids,
+            self.index.word_prefix_docids.remap_data_type::<ByteSlice>(),
         )
     }
 
-    pub fn get_word_pair_proximity_docids(
+    pub fn get_db_word_pair_proximity_docids(
         &mut self,
-        index: &Index,
-        txn: &'ctx RoTxn,
-        word_interner: &DedupInterner<String>,
         word1: Interned<String>,
         word2: Interned<String>,
         proximity: u8,
     ) -> Result<Option<&'ctx [u8]>> {
-        Self::get_value(
-            txn,
+        DatabaseCache::get_value(
+            self.txn,
             (proximity, word1, word2),
-            &(proximity, word_interner.get(word1).as_str(), word_interner.get(word2).as_str()),
-            &mut self.word_pair_proximity_docids,
-            index.word_pair_proximity_docids.remap_data_type::<ByteSlice>(),
+            &(
+                proximity,
+                self.word_interner.get(word1).as_str(),
+                self.word_interner.get(word2).as_str(),
+            ),
+            &mut self.db_cache.word_pair_proximity_docids,
+            self.index.word_pair_proximity_docids.remap_data_type::<ByteSlice>(),
         )
     }
 
-    pub fn get_word_prefix_pair_proximity_docids(
+    pub fn get_db_word_prefix_pair_proximity_docids(
         &mut self,
-        index: &Index,
-        txn: &'ctx RoTxn,
-        word_interner: &DedupInterner<String>,
         word1: Interned<String>,
         prefix2: Interned<String>,
         proximity: u8,
     ) -> Result<Option<&'ctx [u8]>> {
-        Self::get_value(
-            txn,
+        DatabaseCache::get_value(
+            self.txn,
             (proximity, word1, prefix2),
-            &(proximity, word_interner.get(word1).as_str(), word_interner.get(prefix2).as_str()),
-            &mut self.word_prefix_pair_proximity_docids,
-            index.word_prefix_pair_proximity_docids.remap_data_type::<ByteSlice>(),
+            &(
+                proximity,
+                self.word_interner.get(word1).as_str(),
+                self.word_interner.get(prefix2).as_str(),
+            ),
+            &mut self.db_cache.word_prefix_pair_proximity_docids,
+            self.index.word_prefix_pair_proximity_docids.remap_data_type::<ByteSlice>(),
         )
     }
-    pub fn get_prefix_word_pair_proximity_docids(
+    pub fn get_db_prefix_word_pair_proximity_docids(
         &mut self,
-        index: &Index,
-        txn: &'ctx RoTxn,
-        word_interner: &DedupInterner<String>,
         left_prefix: Interned<String>,
         right: Interned<String>,
         proximity: u8,
     ) -> Result<Option<&'ctx [u8]>> {
-        Self::get_value(
-            txn,
+        DatabaseCache::get_value(
+            self.txn,
             (proximity, left_prefix, right),
             &(
                 proximity,
-                word_interner.get(left_prefix).as_str(),
-                word_interner.get(right).as_str(),
+                self.word_interner.get(left_prefix).as_str(),
+                self.word_interner.get(right).as_str(),
             ),
-            &mut self.prefix_word_pair_proximity_docids,
-            index.prefix_word_pair_proximity_docids.remap_data_type::<ByteSlice>(),
+            &mut self.db_cache.prefix_word_pair_proximity_docids,
+            self.index.prefix_word_pair_proximity_docids.remap_data_type::<ByteSlice>(),
         )
     }
 }
