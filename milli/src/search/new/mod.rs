@@ -2,6 +2,7 @@ mod db_cache;
 mod distinct;
 mod graph_based_ranking_rule;
 mod interner;
+mod limits;
 mod logger;
 mod query_graph;
 mod query_term;

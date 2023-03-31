@@ -10,7 +10,7 @@ use heed::RoTxn;
 use itertools::Itertools;
 
 use super::interner::{DedupInterner, Interned};
-use super::SearchContext;
+use super::{limits, SearchContext};
 use crate::search::fst_utils::{Complement, Intersection, StartsWith, Union};
 use crate::search::{build_dfa, get_first};
 use crate::{CboRoaringBitmapLenCodec, Index, Result, MAX_WORD_LENGTH};
@@ -266,6 +266,9 @@ pub fn query_term_from_word(
             let mut stream = fst.search(prefix).into_stream();
 
             while let Some(derived_word) = stream.next() {
+                if prefix_of.len() >= limits::MAX_PREFIX_COUNT {
+                    break;
+                }
                 let derived_word = std::str::from_utf8(derived_word)?.to_owned();
                 let derived_word_interned = ctx.word_interner.insert(derived_word);
                 if derived_word_interned != word_interned {
@@ -277,23 +280,31 @@ pub fn query_term_from_word(
         let dfa = build_dfa(word, 1, is_prefix);
         let starts = StartsWith(Str::new(get_first(word)));
         let mut stream = fst.search_with_state(Intersection(starts, &dfa)).into_stream();
-        // TODO: There may be wayyy too many matches (e.g. in the thousands), how to reduce them?
 
         while let Some((derived_word, state)) = stream.next() {
+            if prefix_of.len() >= limits::MAX_PREFIX_COUNT
+                && one_typo.len() >= limits::MAX_ONE_TYPO_COUNT
+            {
+                break;
+            }
             let derived_word = std::str::from_utf8(derived_word)?;
 
             let d = dfa.distance(state.1);
             let derived_word_interned = ctx.word_interner.insert(derived_word.to_owned());
             match d.to_u8() {
                 0 => {
-                    if derived_word_interned != word_interned {
+                    if derived_word_interned != word_interned
+                        && prefix_of.len() < limits::MAX_PREFIX_COUNT
+                    {
                         prefix_of.push(derived_word_interned);
                     }
                 }
                 1 => {
-                    one_typo.push(derived_word_interned);
+                    if one_typo.len() < limits::MAX_PREFIX_COUNT {
+                        one_typo.push(derived_word_interned);
+                    }
                 }
-                _ => panic!(),
+                _ => unreachable!("One typo dfa produced multiple typos"),
             }
         }
     } else {
@@ -304,14 +315,21 @@ pub fn query_term_from_word(
         let automaton = Union(first, &second);
 
         let mut stream = fst.search_with_state(automaton).into_stream();
-        // TODO: There may be wayyy too many matches (e.g. in the thousands), how to reduce them?
 
         while let Some((derived_word, state)) = stream.next() {
+            if prefix_of.len() >= limits::MAX_PREFIX_COUNT
+                && one_typo.len() >= limits::MAX_ONE_TYPO_COUNT
+                && two_typos.len() >= limits::MAX_TWO_TYPOS_COUNT
+            {
+                break;
+            }
             let derived_word = std::str::from_utf8(derived_word)?;
             let derived_word_interned = ctx.word_interner.insert(derived_word.to_owned());
             // in the case the typo is on the first letter, we know the number of typo
             // is two
-            if get_first(derived_word) != get_first(word) {
+            if get_first(derived_word) != get_first(word)
+                && two_typos.len() < limits::MAX_TWO_TYPOS_COUNT
+            {
                 two_typos.push(derived_word_interned);
             } else {
                 // Else, we know that it is the second dfa that matched and compute the
@@ -319,17 +337,23 @@ pub fn query_term_from_word(
                 let d = second_dfa.distance((state.1).0);
                 match d.to_u8() {
                     0 => {
-                        if derived_word_interned != word_interned {
+                        if derived_word_interned != word_interned
+                            && prefix_of.len() < limits::MAX_PREFIX_COUNT
+                        {
                             prefix_of.push(derived_word_interned);
                         }
                     }
                     1 => {
-                        one_typo.push(derived_word_interned);
+                        if one_typo.len() < limits::MAX_ONE_TYPO_COUNT {
+                            one_typo.push(derived_word_interned);
+                        }
                     }
                     2 => {
-                        two_typos.push(derived_word_interned);
+                        if two_typos.len() < limits::MAX_TWO_TYPOS_COUNT {
+                            two_typos.push(derived_word_interned);
+                        }
                     }
-                    _ => panic!(),
+                    _ => unreachable!("2 typos DFA produced a distance greater than 2"),
                 }
             }
         }
@@ -341,15 +365,20 @@ pub fn query_term_from_word(
     });
 
     let synonyms = ctx.index.synonyms(ctx.txn)?;
-
+    let mut synonym_word_count = 0;
     let synonyms = synonyms
         .get(&vec![word.to_owned()])
         .cloned()
         .unwrap_or_default()
         .into_iter()
-        .map(|words| {
+        .take(limits::MAX_SYNONYM_PHRASE_COUNT)
+        .filter_map(|words| {
+            if synonym_word_count + words.len() > limits::MAX_SYNONYM_WORD_COUNT {
+                return None;
+            }
+            synonym_word_count += words.len();
             let words = words.into_iter().map(|w| Some(ctx.word_interner.insert(w))).collect();
-            ctx.phrase_interner.insert(Phrase { words })
+            Some(ctx.phrase_interner.insert(Phrase { words }))
         })
         .collect();
 
@@ -488,10 +517,7 @@ pub fn located_query_terms_from_string(
     // start with the last position as we will wrap around to position 0 at the beginning of the loop below.
     let mut position = u16::MAX;
 
-    // TODO: Loic, find proper value here so we don't overflow the interner.
-    const MAX_TOKEN_COUNT: usize = 1_000;
-
-    let mut peekable = query.take(MAX_TOKEN_COUNT).peekable();
+    let mut peekable = query.take(super::limits::MAX_TOKEN_COUNT).peekable();
     while let Some(token) = peekable.next() {
         // early return if word limit is exceeded
         if located_terms.len() >= parts_limit {
