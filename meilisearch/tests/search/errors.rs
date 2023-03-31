@@ -760,7 +760,6 @@ async fn filter_reserved_attribute_string() {
         .await;
 }
 
-
 #[actix_rt::test]
 async fn filter_reserved_geo_point_array() {
     let server = Server::new().await;
