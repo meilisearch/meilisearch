@@ -447,6 +447,7 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
         parse_to,
         // the next lines are only for error handling and are written at the end to have the less possible performance impact
         parse_geo,
+        parse_geo_distance,
         parse_geo_point,
         parse_error_reserved_keyword,
     ))(input)
