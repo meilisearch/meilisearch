@@ -672,7 +672,7 @@ async fn filter_reserved_geo_attribute_array() {
     index.wait_task(1).await;
 
     let expected_response = json!({
-        "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` field coordinates.\n1:5 _geo = Glass",
+        "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:13 _geo = Glass",
         "code": "invalid_search_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -697,7 +697,7 @@ async fn filter_reserved_geo_attribute_string() {
     index.wait_task(1).await;
 
     let expected_response = json!({
-        "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` field coordinates.\n1:5 _geo = Glass",
+        "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:13 _geo = Glass",
         "code": "invalid_search_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -722,7 +722,7 @@ async fn filter_reserved_attribute_array() {
     index.wait_task(1).await;
 
     let expected_response = json!({
-        "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression.\n1:13 _geoDistance = Glass",
+        "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:21 _geoDistance = Glass",
         "code": "invalid_search_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -747,7 +747,7 @@ async fn filter_reserved_attribute_string() {
     index.wait_task(1).await;
 
     let expected_response = json!({
-        "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression.\n1:13 _geoDistance = Glass",
+       "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:21 _geoDistance = Glass",
         "code": "invalid_search_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
