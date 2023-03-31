@@ -324,14 +324,10 @@ impl<'a> Filter<'a> {
                         Ok(RoaringBitmap::new())
                     }
                 } else {
-                    match fid.value() {
-                        attribute => {
-                            Err(fid.as_external_error(FilterError::AttributeNotFilterable {
-                                attribute,
-                                filterable_fields: filterable_fields.clone(),
-                            }))?
-                        }
-                    }
+                    Err(fid.as_external_error(FilterError::AttributeNotFilterable {
+                        attribute: fid.value(),
+                        filterable_fields: filterable_fields.clone(),
+                    }))?
                 }
             }
             FilterCondition::Or(subfilters) => {
