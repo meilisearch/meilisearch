@@ -54,8 +54,6 @@ impl Display for BadGeoError {
 enum FilterError<'a> {
     AttributeNotFilterable { attribute: &'a str, filterable_fields: HashSet<String> },
     ParseGeoError(BadGeoError),
-    ReservedGeo(&'a str),
-    Reserved(&'a str),
     TooDeep,
 }
 impl<'a> std::error::Error for FilterError<'a> {}
@@ -95,12 +93,6 @@ impl<'a> Display for FilterError<'a> {
                 f,
                 "Too many filter conditions, can't process more than {} filters.",
                 MAX_FILTER_DEPTH
-            ),
-            Self::ReservedGeo(keyword) => write!(f, "`{}` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` field coordinates.", keyword),
-            Self::Reserved(keyword) => write!(
-                f,
-                "`{}` is a reserved keyword and thus can't be used as a filter expression.",
-                keyword
             ),
             Self::ParseGeoError(error) => write!(f, "{}", error),
         }
@@ -333,15 +325,6 @@ impl<'a> Filter<'a> {
                     }
                 } else {
                     match fid.value() {
-                        attribute @ "_geo" => {
-                            Err(fid.as_external_error(FilterError::ReservedGeo(attribute)))?
-                        }
-                        attribute if attribute.starts_with("_geoPoint(") => {
-                            Err(fid.as_external_error(FilterError::ReservedGeo("_geoPoint")))?
-                        }
-                        attribute @ "_geoDistance" => {
-                            Err(fid.as_external_error(FilterError::Reserved(attribute)))?
-                        }
                         attribute => {
                             Err(fid.as_external_error(FilterError::AttributeNotFilterable {
                                 attribute,
