@@ -7,8 +7,8 @@ use nom::{InputIter, InputLength, InputTake, Slice};
 
 use crate::error::{ExpectedValueKind, NomErrorExt};
 use crate::{
-    parse_geo_bounding_box, parse_geo_point, parse_geo_radius, Error, ErrorKind, IResult, Span,
-    Token,
+    parse_geo, parse_geo_bounding_box, parse_geo_point, parse_geo_radius, Error, ErrorKind,
+    IResult, Span, Token,
 };
 
 /// This function goes through all characters in the [Span] if it finds any escaped character (`\`).
@@ -88,11 +88,16 @@ pub fn parse_value(input: Span) -> IResult<Token> {
     // then, we want to check if the user is misusing a geo expression
     // This expression can’t finish without error.
     // We want to return an error in case of failure.
-    if let Err(err) = parse_geo_point(input) {
-        if err.is_failure() {
-            return Err(err);
+    let geo_reserved_parse_functions = [parse_geo_point, parse_geo];
+
+    for parser in geo_reserved_parse_functions {
+        if let Err(err) = parser(input) {
+            if err.is_failure() {
+                return Err(err);
+            }
         }
     }
+
     match parse_geo_radius(input) {
         Ok(_) => {
             return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::MisusedGeoRadius)))

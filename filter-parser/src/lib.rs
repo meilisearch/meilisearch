@@ -382,6 +382,20 @@ fn parse_geo_point(input: Span) -> IResult<FilterCondition> {
     Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoPoint"))))
 }
 
+/// geo      = WS* "_geo(float WS* "," WS* float WS* "," WS* float)
+fn parse_geo(input: Span) -> IResult<FilterCondition> {
+    // we want to forbid space BEFORE the _geo but not after
+    tuple((
+        multispace0,
+        word_exact("_geo"),
+        // if we were able to parse `_geo` we are going to return a Failure whatever happens next.
+        cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
+    ))(input)
+    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geo"))))?;
+    // if we succeeded we still return a `Failure` because `_geo` filter is not allowed
+    Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::ReservedGeo("_geo"))))
+}
+
 fn parse_error_reserved_keyword(input: Span) -> IResult<FilterCondition> {
     match parse_condition(input) {
         Ok(result) => Ok(result),
@@ -418,6 +432,7 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
         parse_not_exists,
         parse_to,
         // the next lines are only for error handling and are written at the end to have the less possible performance impact
+        parse_geo,
         parse_geo_point,
         parse_error_reserved_keyword,
     ))(input)
@@ -628,6 +643,16 @@ pub mod tests {
         insta::assert_display_snapshot!(p("position <= _geoPoint(12, 13, 14)"), @r###"
         `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance), or _geoBoundingBox([latitude, longitude], [latitude, longitude]) built-in rules to filter on `_geo` coordinates.
         13:34 position <= _geoPoint(12, 13, 14)
+        "###);
+
+        insta::assert_display_snapshot!(p("_geo(12, 13, 14)"), @r###"
+        `_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance), or _geoBoundingBox([latitude, longitude], [latitude, longitude]) built-in rules to filter on `_geo` coordinates.
+        1:17 _geo(12, 13, 14)
+        "###);
+
+        insta::assert_display_snapshot!(p("position <= _geo(12, 13, 14)"), @r###"
+        `_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance), or _geoBoundingBox([latitude, longitude], [latitude, longitude]) built-in rules to filter on `_geo` coordinates.
+        13:29 position <= _geo(12, 13, 14)
         "###);
 
         insta::assert_display_snapshot!(p("position <= _geoRadius(12, 13, 14)"), @r###"
