@@ -37,7 +37,7 @@ use self::interner::Interner;
 use self::ranking_rules::{BoxRankingRule, RankingRule};
 use self::resolve_query_graph::compute_query_graph_docids;
 use self::sort::Sort;
-use crate::search::new::distinct::{apply_distinct_rule, DistinctOutput};
+use crate::search::new::distinct::apply_distinct_rule;
 use crate::{
     AscDesc, Filter, Index, MatchingWords, Member, Result, SearchResult, TermsMatchingStrategy,
     UserError,

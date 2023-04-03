@@ -52,6 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 &(!query.trim().is_empty()).then(|| query.trim().to_owned()),
                 // what a the from which when there is
                 TermsMatchingStrategy::Last,
+                false,
                 &None,
                 &None,
                 0,
