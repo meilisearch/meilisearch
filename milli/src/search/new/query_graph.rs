@@ -322,33 +322,31 @@ impl QueryGraph {
             return vec![];
         }
         let cost_of_term_idx = |term_idx: u8| {
-            if term_idx == first_term_idx {
-                None
-            } else {
-                let rank = 1 + last_term_idx - term_idx;
-                Some(rank as u16)
-            }
+            let rank = 1 + last_term_idx - term_idx;
+            rank as u16
         };
         let mut nodes_to_remove = BTreeMap::<u16, SmallBitmap<QueryNode>>::new();
-        'outer: for (node_id, node) in self.nodes.iter() {
+        let mut at_least_one_phrase = false;
+        for (node_id, node) in self.nodes.iter() {
             let QueryNodeData::Term(t) = &node.data else { continue };
             if ctx.term_interner.get(t.term_subset.original).zero_typo.phrase.is_some() {
+                at_least_one_phrase = true;
                 continue;
             }
             let mut cost = 0;
             for id in t.term_ids.clone() {
-                if let Some(t_cost) = cost_of_term_idx(id) {
-                    cost = std::cmp::max(cost, t_cost);
-                } else {
-                    continue 'outer;
-                }
+                cost = std::cmp::max(cost, cost_of_term_idx(id));
             }
             nodes_to_remove
                 .entry(cost)
                 .or_insert_with(|| SmallBitmap::for_interned_values_in(&self.nodes))
                 .insert(node_id);
         }
-        nodes_to_remove.into_values().collect()
+        let mut res: Vec<_> = nodes_to_remove.into_values().collect();
+        if !at_least_one_phrase {
+            res.pop();
+        }
+        res
     }
 }
 
