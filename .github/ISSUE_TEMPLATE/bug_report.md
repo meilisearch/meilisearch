@@ -23,7 +23,8 @@ A clear and concise description of what you expected to happen.
 **Screenshots**
 If applicable, add screenshots to help explain your problem.
 
-**Meilisearch version:** [e.g. v0.20.0]
+**Meilisearch version:**
+[e.g. v0.20.0]
 
 **Additional context**
 Additional information that may be relevant to the issue.
