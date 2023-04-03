@@ -254,28 +254,28 @@ impl QueryGraph {
         }
         for node_id in self.nodes.indexes() {
             let node = self.nodes.get(node_id);
-            let end_position = match &node.data {
-                QueryNodeData::Term(term) => *term.positions.end(),
+            let end_prev_term_id = match &node.data {
+                QueryNodeData::Term(term) => *term.term_ids.end() as i16,
                 QueryNodeData::Start => -1,
                 QueryNodeData::Deleted => continue,
                 QueryNodeData::End => continue,
             };
             let successors = {
                 let mut successors = SmallBitmap::for_interned_values_in(&self.nodes);
-                let mut min = i8::MAX;
+                let mut min = i16::MAX;
                 for (node_id, node) in self.nodes.iter() {
-                    let start_position = match &node.data {
-                        QueryNodeData::Term(term) => *term.positions.start(),
-                        QueryNodeData::End => i8::MAX,
+                    let start_next_term_id = match &node.data {
+                        QueryNodeData::Term(term) => *term.term_ids.start() as i16,
+                        QueryNodeData::End => i16::MAX,
                         QueryNodeData::Start => continue,
                         QueryNodeData::Deleted => continue,
                     };
-                    if start_position <= end_position {
+                    if start_next_term_id <= end_prev_term_id {
                         continue;
                     }
-                    match start_position.cmp(&min) {
+                    match start_next_term_id.cmp(&min) {
                         Ordering::Less => {
-                            min = start_position;
+                            min = start_next_term_id;
                             successors.clear();
                             successors.insert(node_id);
                         }
