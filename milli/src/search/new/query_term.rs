@@ -1017,15 +1017,12 @@ pub fn make_ngram(
     if ngram_str.len() > MAX_WORD_LENGTH {
         return Ok(None);
     }
+    let ngram_str_interned = ctx.word_interner.insert(ngram_str.clone());
 
     let max_nbr_typos =
         number_of_typos_allowed(ngram_str.as_str()).saturating_sub(terms.len() as u8 - 1);
 
     let mut term = partially_initialized_term_from_word(ctx, &ngram_str, max_nbr_typos, is_prefix)?;
-
-    // let (_, mut zero_typo, mut one_typo, two_typo) =
-    //     all_subterms_from_word(ctx, &ngram_str, max_nbr_typos, is_prefix)?;
-    let original = ctx.word_interner.insert(words.join(" "));
 
     // Now add the synonyms
     let index_synonyms = ctx.index.synonyms(ctx.txn)?;
@@ -1038,7 +1035,7 @@ pub fn make_ngram(
     );
 
     let term = QueryTerm {
-        original,
+        original: ngram_str_interned,
         is_multiple_words: true,
         is_prefix,
         max_nbr_typos,
