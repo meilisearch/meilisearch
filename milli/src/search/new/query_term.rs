@@ -891,6 +891,11 @@ pub fn make_ngram(
     number_of_typos_allowed: &impl Fn(&str) -> u8,
 ) -> Result<Option<LocatedQueryTerm>> {
     assert!(!terms.is_empty());
+    for t in terms {
+        if ctx.term_interner.get(t.value).zero_typo.phrase.is_some() {
+            return Ok(None);
+        }
+    }
     for ts in terms.windows(2) {
         let [t1, t2] = ts else { panic!() };
         if *t1.positions.end() != t2.positions.start() - 1 {
