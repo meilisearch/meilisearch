@@ -441,7 +441,7 @@ results.{cur_ranking_rule}{cur_activated_id} {{
             }) => {
                 let QueryTerm {
                     original,
-                    is_multiple_words: _,
+                    is_ngram: _,
                     is_prefix: _,
                     max_nbr_typos,
                     zero_typo,
@@ -458,7 +458,7 @@ results.{cur_ranking_rule}{cur_activated_id} {{
                 )
                 .unwrap();
 
-                let ZeroTypoTerm { phrase, zero_typo, prefix_of, synonyms, use_prefix_db } =
+                let ZeroTypoTerm { phrase, exact: zero_typo, prefix_of, synonyms, use_prefix_db } =
                     zero_typo;
 
                 for w in zero_typo.iter().copied() {
