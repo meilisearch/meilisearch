@@ -907,7 +907,7 @@ pub fn located_query_terms_from_string(
             TokenKind::Separator(separator_kind) => {
                 match separator_kind {
                     SeparatorKind::Hard => {
-                        position += 1;
+                        position += 8;
                     }
                     SeparatorKind::Soft => {
                         position += 0;
