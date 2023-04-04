@@ -204,8 +204,13 @@ impl QueryTermSubset {
         }
 
         if !self.zero_typo_subset.is_empty() {
-            let ZeroTypoTerm { phrase: _, zero_typo, prefix_of, synonyms: _, use_prefix_db: _ } =
-                &original.zero_typo;
+            let ZeroTypoTerm {
+                phrase: _,
+                exact: zero_typo,
+                prefix_of,
+                synonyms: _,
+                use_prefix_db: _,
+            } = &original.zero_typo;
             result.extend(zero_typo.iter().copied());
             result.extend(prefix_of.iter().copied());
         };
@@ -258,7 +263,7 @@ impl QueryTermSubset {
             )?;
         }
 
-        let ZeroTypoTerm { phrase, zero_typo: _, prefix_of: _, synonyms, use_prefix_db: _ } =
+        let ZeroTypoTerm { phrase, exact: _, prefix_of: _, synonyms, use_prefix_db: _ } =
             &original.zero_typo;
         result.extend(phrase.iter().copied());
         result.extend(synonyms.iter().copied());
@@ -302,7 +307,7 @@ impl QueryTerm {
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct QueryTerm {
     pub original: Interned<String>,
-    pub is_multiple_words: bool,
+    pub is_ngram: bool,
     pub max_nbr_typos: u8,
     pub is_prefix: bool,
     pub zero_typo: ZeroTypoTerm,
@@ -318,7 +323,7 @@ pub struct ZeroTypoTerm {
     /// The original phrase, if any
     pub phrase: Option<Interned<Phrase>>,
     /// A single word equivalent to the original term, with zero typos
-    pub zero_typo: Option<Interned<String>>,
+    pub exact: Option<Interned<String>>,
     /// All the words that contain the original word as prefix
     pub prefix_of: BTreeSet<Interned<String>>,
     /// All the synonyms of the original word or phrase
@@ -341,7 +346,7 @@ pub struct TwoTypoTerm {
 
 impl ZeroTypoTerm {
     fn is_empty(&self) -> bool {
-        let ZeroTypoTerm { phrase, zero_typo, prefix_of, synonyms, use_prefix_db } = self;
+        let ZeroTypoTerm { phrase, exact: zero_typo, prefix_of, synonyms, use_prefix_db } = self;
         phrase.is_none()
             && zero_typo.is_none()
             && prefix_of.is_empty()
@@ -370,12 +375,12 @@ impl QueryTerm {
     ) -> Self {
         Self {
             original: word_interner.insert(phrase.description(word_interner)),
-            is_multiple_words: false,
+            is_ngram: false,
             max_nbr_typos: 0,
             is_prefix: false,
             zero_typo: ZeroTypoTerm {
                 phrase: Some(phrase_interner.insert(phrase)),
-                zero_typo: None,
+                exact: None,
                 prefix_of: BTreeSet::default(),
                 synonyms: BTreeSet::default(),
                 use_prefix_db: None,
@@ -387,7 +392,7 @@ impl QueryTerm {
     pub fn empty(word_interner: &mut DedupInterner<String>, original: &str) -> Self {
         Self {
             original: word_interner.insert(original.to_owned()),
-            is_multiple_words: false,
+            is_ngram: false,
             is_prefix: false,
             max_nbr_typos: 0,
             zero_typo: <_>::default(),
@@ -606,11 +611,12 @@ fn partially_initialized_term_from_word(
             Some(ctx.phrase_interner.insert(Phrase { words }))
         })
         .collect();
-    let zero_typo = ZeroTypoTerm { phrase: None, zero_typo, prefix_of, synonyms, use_prefix_db };
+    let zero_typo =
+        ZeroTypoTerm { phrase: None, exact: zero_typo, prefix_of, synonyms, use_prefix_db };
 
     Ok(QueryTerm {
         original: word_interned,
-        is_multiple_words: false,
+        is_ngram: false,
         max_nbr_typos: max_typo,
         is_prefix,
         zero_typo,
@@ -765,7 +771,7 @@ fn split_best_frequency(
 impl QueryTerm {
     /// Return the original word from the given query term
     pub fn original_single_word(&self) -> Option<Interned<String>> {
-        if self.is_multiple_words {
+        if self.is_ngram {
             None
         } else {
             Some(self.original)
@@ -1039,7 +1045,7 @@ pub fn make_ngram(
 
     let term = QueryTerm {
         original,
-        is_multiple_words: true,
+        is_ngram: true,
         is_prefix,
         max_nbr_typos,
         zero_typo: term.zero_typo,
