@@ -7,14 +7,14 @@ use charabia::{SeparatorKind, TokenKind};
 use fst::automaton::Str;
 use fst::{Automaton, IntoStreamer, Streamer};
 use heed::types::DecodeIgnore;
-use heed::RoTxn;
+use heed::BytesDecode;
 use itertools::Itertools;
 
 use super::interner::{DedupInterner, Interned};
 use super::{limits, SearchContext};
 use crate::search::fst_utils::{Complement, Intersection, StartsWith, Union};
 use crate::search::{build_dfa, get_first};
-use crate::{CboRoaringBitmapLenCodec, Index, Result, MAX_WORD_LENGTH};
+use crate::{CboRoaringBitmapLenCodec, Result, MAX_WORD_LENGTH};
 
 /// A phrase in the user's search query, consisting of several words
 /// that must appear side-by-side in the search results.
@@ -191,18 +191,13 @@ impl QueryTermSubset {
         &self,
         ctx: &mut SearchContext,
     ) -> Result<BTreeSet<Interned<String>>> {
-        let original = ctx.term_interner.get_mut(self.original);
         let mut result = BTreeSet::default();
         // TODO: a compute_partially funtion
         if !self.one_typo_subset.is_empty() || !self.two_typo_subset.is_empty() {
-            original.compute_fully_if_needed(
-                ctx.index,
-                ctx.txn,
-                &mut ctx.word_interner,
-                &mut ctx.phrase_interner,
-            )?;
+            self.original.compute_fully_if_needed(ctx)?;
         }
 
+        let original = ctx.term_interner.get_mut(self.original);
         if !self.zero_typo_subset.is_empty() {
             let ZeroTypoTerm { phrase: _, zero_typo, prefix_of, synonyms: _, use_prefix_db: _ } =
                 &original.zero_typo;
@@ -245,18 +240,13 @@ impl QueryTermSubset {
         Ok(result)
     }
     pub fn all_phrases(&self, ctx: &mut SearchContext) -> Result<BTreeSet<Interned<Phrase>>> {
-        let original = ctx.term_interner.get_mut(self.original);
         let mut result = BTreeSet::default();
 
         if !self.one_typo_subset.is_empty() {
             // TODO: compute less than fully if possible
-            original.compute_fully_if_needed(
-                ctx.index,
-                ctx.txn,
-                &mut ctx.word_interner,
-                &mut ctx.phrase_interner,
-            )?;
+            self.original.compute_fully_if_needed(ctx)?;
         }
+        let original = ctx.term_interner.get_mut(self.original);
 
         let ZeroTypoTerm { phrase, zero_typo: _, prefix_of: _, synonyms, use_prefix_db: _ } =
             &original.zero_typo;
@@ -274,26 +264,23 @@ impl QueryTermSubset {
     }
 }
 
-impl QueryTerm {
-    pub fn compute_fully_if_needed(
-        &mut self,
-        index: &Index,
-        txn: &RoTxn,
-        word_interner: &mut DedupInterner<String>,
-        phrase_interner: &mut DedupInterner<Phrase>,
-    ) -> Result<()> {
-        if self.max_nbr_typos == 0 {
-            self.one_typo = Lazy::Init(OneTypoTerm::default());
-            self.two_typo = Lazy::Init(TwoTypoTerm::default());
-        } else if self.max_nbr_typos == 1 && self.one_typo.is_uninit() {
-            assert!(self.two_typo.is_uninit());
-            self.initialize_one_typo_subterm(index, txn, word_interner, phrase_interner)?;
-            assert!(self.one_typo.is_init());
-            self.two_typo = Lazy::Init(TwoTypoTerm::default());
-        } else if self.max_nbr_typos > 1 && self.two_typo.is_uninit() {
-            assert!(self.two_typo.is_uninit());
-            self.initialize_one_and_two_typo_subterm(index, txn, word_interner, phrase_interner)?;
-            assert!(self.one_typo.is_init() && self.two_typo.is_init());
+impl Interned<QueryTerm> {
+    pub fn compute_fully_if_needed(self, ctx: &mut SearchContext) -> Result<()> {
+        let s = ctx.term_interner.get_mut(self);
+        if s.max_nbr_typos == 0 {
+            s.one_typo = Lazy::Init(OneTypoTerm::default());
+            s.two_typo = Lazy::Init(TwoTypoTerm::default());
+        } else if s.max_nbr_typos == 1 && s.one_typo.is_uninit() {
+            assert!(s.two_typo.is_uninit());
+            self.initialize_one_typo_subterm(ctx)?;
+            let s = ctx.term_interner.get_mut(self);
+            assert!(s.one_typo.is_init());
+            s.two_typo = Lazy::Init(TwoTypoTerm::default());
+        } else if s.max_nbr_typos > 1 && s.two_typo.is_uninit() {
+            assert!(s.two_typo.is_uninit());
+            self.initialize_one_and_two_typo_subterm(ctx)?;
+            let s = ctx.term_interner.get_mut(self);
+            assert!(s.one_typo.is_init() && s.two_typo.is_init());
         }
         Ok(())
     }
@@ -302,7 +289,7 @@ impl QueryTerm {
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct QueryTerm {
     pub original: Interned<String>,
-    pub is_multiple_words: bool,
+    pub ngram_words: Option<Vec<Interned<String>>>,
     pub max_nbr_typos: u8,
     pub is_prefix: bool,
     pub zero_typo: ZeroTypoTerm,
@@ -363,39 +350,6 @@ impl TwoTypoTerm {
 }
 
 impl QueryTerm {
-    pub fn phrase(
-        word_interner: &mut DedupInterner<String>,
-        phrase_interner: &mut DedupInterner<Phrase>,
-        phrase: Phrase,
-    ) -> Self {
-        Self {
-            original: word_interner.insert(phrase.description(word_interner)),
-            is_multiple_words: false,
-            max_nbr_typos: 0,
-            is_prefix: false,
-            zero_typo: ZeroTypoTerm {
-                phrase: Some(phrase_interner.insert(phrase)),
-                zero_typo: None,
-                prefix_of: BTreeSet::default(),
-                synonyms: BTreeSet::default(),
-                use_prefix_db: None,
-            },
-            one_typo: Lazy::Uninit,
-            two_typo: Lazy::Uninit,
-        }
-    }
-    pub fn empty(word_interner: &mut DedupInterner<String>, original: &str) -> Self {
-        Self {
-            original: word_interner.insert(original.to_owned()),
-            is_multiple_words: false,
-            is_prefix: false,
-            max_nbr_typos: 0,
-            zero_typo: <_>::default(),
-            one_typo: Lazy::Init(<_>::default()),
-            two_typo: Lazy::Init(<_>::default()),
-        }
-    }
-
     pub fn is_empty(&self) -> bool {
         let Lazy::Init(one_typo) = &self.one_typo else {
             return false;
@@ -438,13 +392,13 @@ fn find_zero_typo_prefix_derivations(
 }
 
 fn find_zero_one_typo_derivations(
+    ctx: &mut SearchContext,
     word_interned: Interned<String>,
     is_prefix: bool,
-    fst: fst::Set<Cow<[u8]>>,
-    word_interner: &mut DedupInterner<String>,
     mut visit: impl FnMut(Interned<String>, ZeroOrOneTypo) -> Result<ControlFlow<()>>,
 ) -> Result<()> {
-    let word = word_interner.get(word_interned).to_owned();
+    let fst = ctx.get_words_fst()?;
+    let word = ctx.word_interner.get(word_interned).to_owned();
     let word = word.as_str();
 
     let dfa = build_dfa(word, 1, is_prefix);
@@ -453,7 +407,7 @@ fn find_zero_one_typo_derivations(
 
     while let Some((derived_word, state)) = stream.next() {
         let derived_word = std::str::from_utf8(derived_word)?;
-        let derived_word = word_interner.insert(derived_word.to_owned());
+        let derived_word = ctx.word_interner.insert(derived_word.to_owned());
         let d = dfa.distance(state.1);
         match d.to_u8() {
             0 => {
@@ -553,7 +507,17 @@ fn partially_initialized_term_from_word(
     let word_interned = ctx.word_interner.insert(word.to_owned());
 
     if word.len() > MAX_WORD_LENGTH {
-        return Ok(QueryTerm::empty(&mut ctx.word_interner, word));
+        return Ok({
+            QueryTerm {
+                original: ctx.word_interner.insert(word.to_owned()),
+                ngram_words: None,
+                is_prefix: false,
+                max_nbr_typos: 0,
+                zero_typo: <_>::default(),
+                one_typo: Lazy::Init(<_>::default()),
+                two_typo: Lazy::Init(<_>::default()),
+            }
+        });
     }
 
     let fst = ctx.index.words_fst(ctx.txn)?;
@@ -610,7 +574,7 @@ fn partially_initialized_term_from_word(
 
     Ok(QueryTerm {
         original: word_interned,
-        is_multiple_words: false,
+        ngram_words: None,
         max_nbr_typos: max_typo,
         is_prefix,
         zero_typo,
@@ -619,72 +583,52 @@ fn partially_initialized_term_from_word(
     })
 }
 
-fn find_split_words(
-    index: &Index,
-    txn: &RoTxn,
-    word_interner: &mut DedupInterner<String>,
-    phrase_interner: &mut DedupInterner<Phrase>,
-    word: &str,
-) -> Result<Option<Interned<Phrase>>> {
-    let split_words = split_best_frequency(index, txn, word)?.map(|(l, r)| {
-        phrase_interner.insert(Phrase {
-            words: vec![Some(word_interner.insert(l)), Some(word_interner.insert(r))],
-        })
-    });
-    Ok(split_words)
+fn find_split_words(ctx: &mut SearchContext, word: &str) -> Result<Option<Interned<Phrase>>> {
+    if let Some((l, r)) = split_best_frequency(ctx, word)? {
+        Ok(Some(ctx.phrase_interner.insert(Phrase { words: vec![Some(l), Some(r)] })))
+    } else {
+        Ok(None)
+    }
 }
 
-impl QueryTerm {
-    fn initialize_one_typo_subterm(
-        &mut self,
-        index: &Index,
-        txn: &RoTxn,
-        word_interner: &mut DedupInterner<String>,
-        phrase_interner: &mut DedupInterner<Phrase>,
-    ) -> Result<()> {
-        let QueryTerm { original, is_prefix, one_typo, .. } = self;
-        let original_str = word_interner.get(*original).to_owned();
+impl Interned<QueryTerm> {
+    fn initialize_one_typo_subterm(self, ctx: &mut SearchContext) -> Result<()> {
+        let self_mut = ctx.term_interner.get_mut(self);
+        let QueryTerm { original, is_prefix, one_typo, .. } = self_mut;
+        let original = *original;
+        let is_prefix = *is_prefix;
+        // let original_str = ctx.word_interner.get(*original).to_owned();
         if one_typo.is_init() {
             return Ok(());
         }
         let mut one_typo_words = BTreeSet::new();
 
-        find_zero_one_typo_derivations(
-            *original,
-            *is_prefix,
-            index.words_fst(txn)?,
-            word_interner,
-            |derived_word, nbr_typos| {
-                match nbr_typos {
-                    ZeroOrOneTypo::Zero => {}
-                    ZeroOrOneTypo::One => {
-                        if one_typo_words.len() < limits::MAX_ONE_TYPO_COUNT {
-                            one_typo_words.insert(derived_word);
-                        } else {
-                            return Ok(ControlFlow::Break(()));
-                        }
+        find_zero_one_typo_derivations(ctx, original, is_prefix, |derived_word, nbr_typos| {
+            match nbr_typos {
+                ZeroOrOneTypo::Zero => {}
+                ZeroOrOneTypo::One => {
+                    if one_typo_words.len() < limits::MAX_ONE_TYPO_COUNT {
+                        one_typo_words.insert(derived_word);
+                    } else {
+                        return Ok(ControlFlow::Break(()));
                     }
                 }
-                Ok(ControlFlow::Continue(()))
-            },
-        )?;
-        let split_words =
-            find_split_words(index, txn, word_interner, phrase_interner, original_str.as_str())?;
+            }
+            Ok(ControlFlow::Continue(()))
+        })?;
+        let original_str = ctx.word_interner.get(original).to_owned();
+        let split_words = find_split_words(ctx, original_str.as_str())?;
         let one_typo = OneTypoTerm { split_words, one_typo: one_typo_words };
 
-        self.one_typo = Lazy::Init(one_typo);
+        let self_mut = ctx.term_interner.get_mut(self);
+        self_mut.one_typo = Lazy::Init(one_typo);
 
         Ok(())
     }
-    fn initialize_one_and_two_typo_subterm(
-        &mut self,
-        index: &Index,
-        txn: &RoTxn,
-        word_interner: &mut DedupInterner<String>,
-        phrase_interner: &mut DedupInterner<Phrase>,
-    ) -> Result<()> {
-        let QueryTerm { original, is_prefix, two_typo, .. } = self;
-        let original_str = word_interner.get(*original).to_owned();
+    fn initialize_one_and_two_typo_subterm(self, ctx: &mut SearchContext) -> Result<()> {
+        let self_mut = ctx.term_interner.get_mut(self);
+        let QueryTerm { original, is_prefix, two_typo, .. } = self_mut;
+        let original_str = ctx.word_interner.get(*original).to_owned();
         if two_typo.is_init() {
             return Ok(());
         }
@@ -694,8 +638,8 @@ impl QueryTerm {
         find_zero_one_two_typo_derivations(
             *original,
             *is_prefix,
-            index.words_fst(txn)?,
-            word_interner,
+            ctx.index.words_fst(ctx.txn)?,
+            &mut ctx.word_interner,
             |derived_word, nbr_typos| {
                 if one_typo_words.len() >= limits::MAX_ONE_TYPO_COUNT
                     && two_typo_words.len() >= limits::MAX_TWO_TYPOS_COUNT
@@ -719,14 +663,15 @@ impl QueryTerm {
                 Ok(ControlFlow::Continue(()))
             },
         )?;
-        let split_words =
-            find_split_words(index, txn, word_interner, phrase_interner, original_str.as_str())?;
+        let split_words = find_split_words(ctx, original_str.as_str())?;
+        let self_mut = ctx.term_interner.get_mut(self);
+
         let one_typo = OneTypoTerm { one_typo: one_typo_words, split_words };
 
         let two_typo = TwoTypoTerm { two_typos: two_typo_words };
 
-        self.one_typo = Lazy::Init(one_typo);
-        self.two_typo = Lazy::Init(two_typo);
+        self_mut.one_typo = Lazy::Init(one_typo);
+        self_mut.two_typo = Lazy::Init(two_typo);
 
         Ok(())
     }
@@ -737,38 +682,37 @@ impl QueryTerm {
 ///
 /// Return `None` if the original word cannot be split.
 fn split_best_frequency(
-    index: &Index,
-    txn: &RoTxn,
+    ctx: &mut SearchContext,
     original: &str,
-) -> Result<Option<(String, String)>> {
+) -> Result<Option<(Interned<String>, Interned<String>)>> {
     let chars = original.char_indices().skip(1);
     let mut best = None;
 
     for (i, _) in chars {
         let (left, right) = original.split_at(i);
+        let left = ctx.word_interner.insert(left.to_owned());
+        let right = ctx.word_interner.insert(right.to_owned());
 
-        let key = (1, left, right);
-        let frequency = index
-            .word_pair_proximity_docids
-            .remap_data_type::<CboRoaringBitmapLenCodec>()
-            .get(txn, &key)?
-            .unwrap_or(0);
-
-        if frequency != 0 && best.map_or(true, |(old, _, _)| frequency > old) {
-            best = Some((frequency, left, right));
+        if let Some(docid_bytes) = ctx.get_db_word_pair_proximity_docids(left, right, 1)? {
+            let frequency =
+                CboRoaringBitmapLenCodec::bytes_decode(docid_bytes).ok_or(heed::Error::Decoding)?;
+            if best.map_or(true, |(old, _, _)| frequency > old) {
+                best = Some((frequency, left, right));
+            }
         }
     }
 
-    Ok(best.map(|(_, left, right)| (left.to_owned(), right.to_owned())))
+    Ok(best.map(|(_, left, right)| (left, right)))
 }
 
-impl QueryTerm {
+impl Interned<QueryTerm> {
     /// Return the original word from the given query term
-    pub fn original_single_word(&self) -> Option<Interned<String>> {
-        if self.is_multiple_words {
+    pub fn original_single_word(self, ctx: &SearchContext) -> Option<Interned<String>> {
+        let self_ = ctx.term_interner.get(self);
+        if self_.ngram_words.is_some() {
             None
         } else {
-            Some(self.original)
+            Some(self_.original)
         }
     }
 }
@@ -824,11 +768,25 @@ impl PhraseBuilder {
             return None;
         }
         Some(LocatedQueryTerm {
-            value: ctx.term_interner.push(QueryTerm::phrase(
-                &mut ctx.word_interner,
-                &mut ctx.phrase_interner,
-                Phrase { words: self.words },
-            )),
+            value: ctx.term_interner.push({
+                let phrase = Phrase { words: self.words };
+                let phrase_desc = phrase.description(&ctx.word_interner);
+                QueryTerm {
+                    original: ctx.word_interner.insert(phrase_desc),
+                    ngram_words: None,
+                    max_nbr_typos: 0,
+                    is_prefix: false,
+                    zero_typo: ZeroTypoTerm {
+                        phrase: Some(ctx.phrase_interner.insert(phrase)),
+                        zero_typo: None,
+                        prefix_of: BTreeSet::default(),
+                        synonyms: BTreeSet::default(),
+                        use_prefix_db: None,
+                    },
+                    one_typo: Lazy::Uninit,
+                    two_typo: Lazy::Uninit,
+                }
+            }),
             positions: self.start..=self.end,
         })
     }
@@ -1001,7 +959,7 @@ pub fn make_ngram(
     }
     let mut words_interned = vec![];
     for term in terms {
-        if let Some(original_term_word) = ctx.term_interner.get(term.value).original_single_word() {
+        if let Some(original_term_word) = term.value.original_single_word(ctx) {
             words_interned.push(original_term_word);
         } else {
             return Ok(None);
@@ -1036,7 +994,7 @@ pub fn make_ngram(
 
     let term = QueryTerm {
         original: ngram_str_interned,
-        is_multiple_words: true,
+        ngram_words: Some(words_interned),
         is_prefix,
         max_nbr_typos,
         zero_typo: term.zero_typo,
