@@ -431,6 +431,9 @@ impl QueryGraph {
                 let (start_term, dest_term) = node;
                 let end_term = Interned::from_raw(dest_term.into_raw());
                 let src = if let Some(start_term) = start_term {
+                    // TODO: this is incorrect! should take the intersection
+                    // between the prev node and the start term if they refer to the same
+                    // original query term!
                     let start_term = Interned::from_raw(start_term.into_raw());
                     nodes.get_mut(prev_node).successors.insert(start_term);
                     nodes.get_mut(start_term).predecessors.insert(prev_node);
