@@ -24,6 +24,8 @@ pub struct DatabaseCache<'ctx> {
     pub word_docids: FxHashMap<Interned<String>, Option<&'ctx [u8]>>,
     pub exact_word_docids: FxHashMap<Interned<String>, Option<&'ctx [u8]>>,
     pub word_prefix_docids: FxHashMap<Interned<String>, Option<&'ctx [u8]>>,
+    pub word_position_docids: FxHashMap<(Interned<String>, u16), Option<&'ctx [u8]>>,
+    pub word_fid_docids: FxHashMap<(Interned<String>, u16), Option<&'ctx [u8]>>,
 }
 impl<'ctx> DatabaseCache<'ctx> {
     fn get_value<'v, K1, KC>(
@@ -126,6 +128,34 @@ impl<'ctx> SearchContext<'ctx> {
             ),
             &mut self.db_cache.prefix_word_pair_proximity_docids,
             self.index.prefix_word_pair_proximity_docids.remap_data_type::<ByteSlice>(),
+        )
+    }
+
+    pub fn get_db_word_position_docids(
+        &mut self,
+        word: Interned<String>,
+        position: u16,
+    ) -> Result<Option<&'ctx [u8]>> {
+        DatabaseCache::get_value(
+            self.txn,
+            (word, position),
+            &(self.word_interner.get(word).as_str(), position),
+            &mut self.db_cache.word_position_docids,
+            self.index.word_position_docids.remap_data_type::<ByteSlice>(),
+        )
+    }
+
+    pub fn get_db_word_fid_docids(
+        &mut self,
+        word: Interned<String>,
+        fid: u16,
+    ) -> Result<Option<&'ctx [u8]>> {
+        DatabaseCache::get_value(
+            self.txn,
+            (word, fid),
+            &(self.word_interner.get(word).as_str(), fid),
+            &mut self.db_cache.word_fid_docids,
+            self.index.word_fid_docids.remap_data_type::<ByteSlice>(),
         )
     }
 }
