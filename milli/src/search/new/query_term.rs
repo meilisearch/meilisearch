@@ -4,6 +4,7 @@ use std::ops::{ControlFlow, RangeInclusive};
 
 use charabia::normalizer::NormalizedTokenIter;
 use charabia::{SeparatorKind, TokenKind};
+use either::Either;
 use fst::automaton::Str;
 use fst::{Automaton, IntoStreamer, Streamer};
 use heed::types::DecodeIgnore;
@@ -138,7 +139,43 @@ pub struct LocatedQueryTermSubset {
     pub term_ids: RangeInclusive<u8>,
 }
 
+#[derive(Clone, Copy)]
+pub enum ExactTerm {
+    Phrase(Interned<Phrase>),
+    Word(Interned<String>),
+}
+
+impl ExactTerm {
+    pub fn interned_words<'ctx>(
+        &self,
+        ctx: &'ctx SearchContext<'ctx>,
+    ) -> impl Iterator<Item = Option<Interned<String>>> + 'ctx {
+        match *self {
+            ExactTerm::Phrase(phrase) => {
+                let phrase = ctx.phrase_interner.get(phrase);
+                Either::Left(phrase.words.iter().copied())
+            }
+            ExactTerm::Word(word) => Either::Right(std::iter::once(Some(word))),
+        }
+    }
+}
+
 impl QueryTermSubset {
+    pub fn exact_term(&self, ctx: &SearchContext) -> Option<ExactTerm> {
+        let full_query_term = ctx.term_interner.get(self.original);
+        if full_query_term.is_ngram {
+            return None;
+        }
+        // TODO: included in subset
+        if let Some(phrase) = full_query_term.zero_typo.phrase {
+            self.zero_typo_subset.contains_phrase(phrase).then_some(ExactTerm::Phrase(phrase))
+        } else if let Some(word) = full_query_term.zero_typo.exact {
+            self.zero_typo_subset.contains_word(word).then_some(ExactTerm::Word(word))
+        } else {
+            None
+        }
+    }
+
     pub fn empty(for_term: Interned<QueryTerm>) -> Self {
         Self {
             original: for_term,
