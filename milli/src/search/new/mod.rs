@@ -17,6 +17,9 @@ mod sort;
 // TODO: documentation + comments
 mod words;
 
+#[cfg(test)]
+mod tests;
+
 use std::collections::HashSet;
 
 use charabia::TokenizerBuilder;

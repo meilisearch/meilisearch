@@ -1,7 +1,6 @@
 use super::interner::{FixedSizeInterner, Interned};
 use super::query_term::{
-    self, number_of_typos_allowed, LocatedQueryTerm, LocatedQueryTermSubset, NTypoTermSubset,
-    QueryTermSubset,
+    self, number_of_typos_allowed, LocatedQueryTerm, LocatedQueryTermSubset, QueryTermSubset,
 };
 use super::small_bitmap::SmallBitmap;
 use super::SearchContext;
@@ -107,12 +106,7 @@ impl QueryGraph {
             let new_node_idx = add_node(
                 &mut nodes_data,
                 QueryNodeData::Term(LocatedQueryTermSubset {
-                    term_subset: QueryTermSubset {
-                        original: Interned::from_raw(term_idx as u16),
-                        zero_typo_subset: NTypoTermSubset::All,
-                        one_typo_subset: NTypoTermSubset::All,
-                        two_typo_subset: NTypoTermSubset::All,
-                    },
+                    term_subset: QueryTermSubset::full(Interned::from_raw(term_idx as u16)),
                     positions: terms[term_idx].positions.clone(),
                     term_ids: term_idx as u8..=term_idx as u8,
                 }),
@@ -126,12 +120,7 @@ impl QueryGraph {
                     let ngram_idx = add_node(
                         &mut nodes_data,
                         QueryNodeData::Term(LocatedQueryTermSubset {
-                            term_subset: QueryTermSubset {
-                                original: ngram.value,
-                                zero_typo_subset: NTypoTermSubset::All,
-                                one_typo_subset: NTypoTermSubset::All,
-                                two_typo_subset: NTypoTermSubset::All,
-                            },
+                            term_subset: QueryTermSubset::full(ngram.value),
                             positions: ngram.positions,
                             term_ids: term_idx as u8 - 1..=term_idx as u8,
                         }),
@@ -146,12 +135,7 @@ impl QueryGraph {
                     let ngram_idx = add_node(
                         &mut nodes_data,
                         QueryNodeData::Term(LocatedQueryTermSubset {
-                            term_subset: QueryTermSubset {
-                                original: ngram.value,
-                                zero_typo_subset: NTypoTermSubset::All,
-                                one_typo_subset: NTypoTermSubset::All,
-                                two_typo_subset: NTypoTermSubset::All,
-                            },
+                            term_subset: QueryTermSubset::full(ngram.value),
                             positions: ngram.positions,
                             term_ids: term_idx as u8 - 2..=term_idx as u8,
                         }),
@@ -329,7 +313,7 @@ impl QueryGraph {
         let mut at_least_one_phrase = false;
         for (node_id, node) in self.nodes.iter() {
             let QueryNodeData::Term(t) = &node.data else { continue };
-            if ctx.term_interner.get(t.term_subset.original).zero_typo.phrase.is_some() {
+            if t.term_subset.original_phrase(ctx).is_some() {
                 at_least_one_phrase = true;
                 continue;
             }

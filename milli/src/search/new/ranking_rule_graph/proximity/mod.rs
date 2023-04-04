@@ -57,9 +57,7 @@ impl RankingRuleGraphTrait for ProximityGraph {
                 Ok(format!("{cost}: cost"))
             }
             ProximityCondition::Term { term } => {
-                let original_term = ctx.term_interner.get(term.term_subset.original);
-                let original_word = ctx.word_interner.get(original_term.original);
-                Ok(format!("{original_word} : exists"))
+                Ok(format!("{} : exists", term.term_subset.description(ctx)))
             }
         }
     }

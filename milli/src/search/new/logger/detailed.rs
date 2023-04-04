@@ -8,9 +8,7 @@ use roaring::RoaringBitmap;
 
 use crate::search::new::interner::{Interned, MappedInterner};
 use crate::search::new::query_graph::QueryNodeData;
-use crate::search::new::query_term::{
-    Lazy, LocatedQueryTermSubset, OneTypoTerm, QueryTerm, TwoTypoTerm, ZeroTypoTerm,
-};
+use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::search::new::ranking_rule_graph::{
     DeadEndsCache, Edge, ProximityCondition, ProximityGraph, RankingRuleGraph,
     RankingRuleGraphTrait, TypoCondition, TypoGraph,
@@ -439,87 +437,26 @@ results.{cur_ranking_rule}{cur_activated_id} {{
                 positions: _,
                 term_ids: _,
             }) => {
-                let QueryTerm {
-                    original,
-                    is_multiple_words: _,
-                    is_prefix: _,
-                    max_nbr_typos,
-                    zero_typo,
-                    one_typo,
-                    two_typo,
-                } = ctx.term_interner.get(term_subset.original);
-
-                let original = ctx.word_interner.get(*original);
                 writeln!(
                     file,
-                    "{node_idx} : \"{original}\" {{
+                    "{node_idx} : \"{}\" {{
                 shape: class
-                max_nbr_typo: {max_nbr_typos}"
+                max_nbr_typo: {}",
+                    term_subset.description(ctx),
+                    term_subset.max_nbr_typos(ctx)
                 )
                 .unwrap();
 
-                let ZeroTypoTerm { phrase, zero_typo, prefix_of, synonyms, use_prefix_db } =
-                    zero_typo;
-
-                for w in zero_typo.iter().copied() {
-                    if term_subset.zero_typo_subset.contains_word(w) {
-                        let w = ctx.word_interner.get(w);
-                        writeln!(file, "\"{w}\" : 0").unwrap();
-                    }
+                for w in term_subset.all_single_words_except_prefix_db(ctx).unwrap() {
+                    let w = ctx.word_interner.get(w);
+                    writeln!(file, "{w}: word").unwrap();
                 }
-                for w in prefix_of.iter().copied() {
-                    if term_subset.zero_typo_subset.contains_word(w) {
-                        let w = ctx.word_interner.get(w);
-                        writeln!(file, "\"{w}\" : 0P").unwrap();
-                    }
+                for p in term_subset.all_phrases(ctx).unwrap() {
+                    writeln!(file, "{}: phrase", p.description(ctx)).unwrap();
                 }
-
-                if let Some(phrase) = phrase {
-                    if term_subset.zero_typo_subset.contains_phrase(*phrase) {
-                        let phrase = ctx.phrase_interner.get(*phrase);
-                        let phrase_str = phrase.description(&ctx.word_interner);
-                        writeln!(file, "\"{phrase_str}\" : phrase").unwrap();
-                    }
-                }
-
-                for synonym in synonyms.iter().copied() {
-                    if term_subset.zero_typo_subset.contains_phrase(synonym) {
-                        let phrase = ctx.phrase_interner.get(synonym);
-                        let phrase_str = phrase.description(&ctx.word_interner);
-                        writeln!(file, "\"{phrase_str}\" : synonym").unwrap();
-                    }
-                }
-                if let Some(use_prefix_db) = use_prefix_db {
-                    if term_subset.zero_typo_subset.contains_word(*use_prefix_db) {
-                        let p = ctx.word_interner.get(*use_prefix_db);
-                        writeln!(file, "use prefix DB : {p}").unwrap();
-                    }
-                }
-                if let Lazy::Init(one_typo) = one_typo {
-                    let OneTypoTerm { split_words, one_typo } = one_typo;
-
-                    for w in one_typo.iter().copied() {
-                        if term_subset.one_typo_subset.contains_word(w) {
-                            let w = ctx.word_interner.get(w);
-                            writeln!(file, "\"{w}\" : 1").unwrap();
-                        }
-                    }
-                    if let Some(split_words) = split_words {
-                        if term_subset.one_typo_subset.contains_phrase(*split_words) {
-                            let phrase = ctx.phrase_interner.get(*split_words);
-                            let phrase_str = phrase.description(&ctx.word_interner);
-                            writeln!(file, "\"{phrase_str}\" : split_words").unwrap();
-                        }
-                    }
-                }
-                if let Lazy::Init(two_typo) = two_typo {
-                    let TwoTypoTerm { two_typos } = two_typo;
-                    for w in two_typos.iter().copied() {
-                        if term_subset.two_typo_subset.contains_word(w) {
-                            let w = ctx.word_interner.get(w);
-                            writeln!(file, "\"{w}\" : 2").unwrap();
-                        }
-                    }
+                if let Some(w) = term_subset.use_prefix_db(ctx) {
+                    let w = ctx.word_interner.get(w);
+                    writeln!(file, "{w}: prefix db").unwrap();
                 }
 
                 writeln!(file, "}}").unwrap();

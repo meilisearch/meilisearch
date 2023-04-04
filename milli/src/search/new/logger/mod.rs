@@ -1,6 +1,8 @@
 // #[cfg(test)]
 pub mod detailed;
 
+pub mod test_logger;
+
 use roaring::RoaringBitmap;
 
 use super::interner::{Interned, MappedInterner};
