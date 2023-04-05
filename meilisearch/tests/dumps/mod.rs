@@ -1121,6 +1121,12 @@ async fn import_dump_v5() {
     assert_eq!(indexes["results"][1]["uid"], json!("test2"));
     assert_eq!(indexes["results"][0]["primaryKey"], json!("id"));
 
+    // before doing anything we're going to wait until all the tasks in the dump have finished processing
+    let result = server.tasks_filter("statuses=enqueued,processing").await.0;
+    for task in result["results"].as_array().unwrap() {
+        server.wait_task(task["uid"].as_u64().unwrap()).await;
+    }
+
     let expected_stats = json!({
         "numberOfDocuments": 10,
         "isIndexing": false,
