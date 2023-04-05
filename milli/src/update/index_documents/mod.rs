@@ -2255,4 +2255,61 @@ mod tests {
         {"id":1,"catto":"jorts"}
         "###);
     }
+
+    #[test]
+    fn test_word_fid_position() {
+        let index = TempIndex::new();
+
+        index
+            .add_documents(documents!([
+              {"id": 0, "text": "sun flowers are looking at the sun" },
+              {"id": 1, "text": "sun flowers are looking at the sun" },
+              {"id": 2, "text": "the sun is shining today" },
+              {
+                "id": 3,
+                "text": "a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a 
+                a a a a a a a a a a a a a a a a a a a a a a a a a a 
+                a a a a a a a a a a a a a a a a a a a a a a a a a a 
+                a a a a a a a a a a a a a a a a a a a a a a a a a a 
+                a a a a a a a a a a a a a a a a a a a a a a a a a a 
+                a a a a a a a a a a a a a a a a a a a a a "
+             }
+            ]))
+            .unwrap();
+
+        db_snap!(index, word_fid_docids, 1, @"bf3355e493330de036c8823ddd1dbbd9");
+        db_snap!(index, word_position_docids, 1, @"896d54b29ed79c4c6f14084f326dcf6f");
+
+        index
+            .add_documents(documents!([
+              {"id": 4, "text": "sun flowers are looking at the sun" },
+              {"id": 5, "text2": "sun flowers are looking at the sun" },
+              {"id": 6, "text": "b b b" },
+              {
+                "id": 7,
+                "text2": "a a a a"
+             }
+            ]))
+            .unwrap();
+
+        db_snap!(index, word_fid_docids, 2, @"a48d3f88db33f94bc23110a673ea49e4");
+        db_snap!(index, word_position_docids, 2, @"3c9e66c6768ae2cf42b46b2c46e46a83");
+
+        let mut wtxn = index.write_txn().unwrap();
+
+        // Delete not all of the documents but some of them.
+        let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
+        builder.strategy(DeletionStrategy::AlwaysHard);
+        builder.delete_external_id("0");
+        builder.delete_external_id("3");
+        let result = builder.execute().unwrap();
+        println!("{result:?}");
+
+        wtxn.commit().unwrap();
+
+        db_snap!(index, word_fid_docids, 3, @"4c2e2a1832e5802796edc1638136d933");
+        db_snap!(index, word_position_docids, 3, @"74f556b91d161d997a89468b4da1cb8f");
+        db_snap!(index, docid_word_positions, 3, @"5287245332627675740b28bd46e1cde1");
+    }
 }
