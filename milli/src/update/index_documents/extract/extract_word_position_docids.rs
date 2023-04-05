@@ -7,10 +7,7 @@ use super::helpers::{
 };
 use crate::error::SerializationError;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
-use crate::{
-    absolute_from_relative_position, bucketed_position, relative_from_absolute_position,
-    DocumentId, Result,
-};
+use crate::{bucketed_position, relative_from_absolute_position, DocumentId, Result};
 
 /// Extracts the word positions and the documents ids where this word appear.
 ///

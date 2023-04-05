@@ -1,24 +1,11 @@
+use heed::BytesDecode;
 use roaring::RoaringBitmap;
 
 use super::{ComputedCondition, DeadEndsCache, RankingRuleGraph, RankingRuleGraphTrait};
 use crate::search::new::interner::{DedupInterner, Interned, MappedInterner};
 use crate::search::new::query_graph::{QueryGraph, QueryNode};
 use crate::search::new::query_term::{ExactTerm, LocatedQueryTermSubset};
-use crate::{CboRoaringBitmapCodec, Result, SearchContext, SearchLogger};
-
-/// - Exactness as first ranking rule: TermsMatchingStrategy? prefer a document that matches 1 word exactly and no other
-/// word than a doc that matches 9 words non exactly but none exactly
-/// - `TermsMatchingStrategy` as a word + exactness optimization: we could consider
-///
-/// "naive vision"
-/// condition from one node to another:
-/// - word exactly present: cost 0
-/// - word typo/ngram/prefix/missing: cost 1, not remove from query graph, edge btwn the two nodes, return the universe without condition when resolving, destination query term is inside
-///
-/// Three strategies:
-/// 1. ExactAttribute: word position / word_fid_docid
-/// 2. AttributeStart:
-/// 3. AttributeContainsExact => implementable via `RankingRuleGraphTrait`
+use crate::{Result, RoaringBitmapCodec, SearchContext, SearchLogger};
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum ExactnessCondition {
@@ -42,7 +29,7 @@ fn compute_docids(
         ExactTerm::Phrase(phrase) => ctx.get_phrase_docids(phrase)?.clone(),
         ExactTerm::Word(word) => {
             if let Some(word_candidates) = ctx.get_db_word_docids(word)? {
-                CboRoaringBitmapCodec::deserialize_from(word_candidates)?
+                RoaringBitmapCodec::bytes_decode(word_candidates).ok_or(heed::Error::Decoding)?
             } else {
                 return Ok(Default::default());
             }
@@ -86,22 +73,29 @@ impl RankingRuleGraphTrait for ExactnessGraph {
 
         let skip_condition = ExactnessCondition::Skip(dest_node.clone());
         let skip_condition = conditions_interner.insert(skip_condition);
-        Ok(vec![(0, exact_condition), (1, skip_condition)])
+
+        Ok(vec![(0, exact_condition), (dest_node.term_ids.len() as u32, skip_condition)])
     }
 
     fn log_state(
-        graph: &RankingRuleGraph<Self>,
-        paths: &[Vec<Interned<Self::Condition>>],
-        dead_ends_cache: &DeadEndsCache<Self::Condition>,
-        universe: &RoaringBitmap,
-        costs: &MappedInterner<QueryNode, Vec<u64>>,
-        cost: u64,
-        logger: &mut dyn SearchLogger<QueryGraph>,
+        _graph: &RankingRuleGraph<Self>,
+        _paths: &[Vec<Interned<Self::Condition>>],
+        _dead_ends_cache: &DeadEndsCache<Self::Condition>,
+        _niverse: &RoaringBitmap,
+        _costs: &MappedInterner<QueryNode, Vec<u64>>,
+        _cost: u64,
+        _logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
-        todo!()
     }
 
-    fn label_for_condition(ctx: &mut SearchContext, condition: &Self::Condition) -> Result<String> {
-        todo!()
+    fn label_for_condition(
+        _ctx: &mut SearchContext,
+        condition: &Self::Condition,
+    ) -> Result<String> {
+        Ok(match condition {
+            ExactnessCondition::ExactInAttribute(_) => "exact",
+            ExactnessCondition::Skip(_) => "skip",
+        }
+        .to_owned())
     }
 }
