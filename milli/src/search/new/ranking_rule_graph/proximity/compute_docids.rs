@@ -1,14 +1,17 @@
 #![allow(clippy::too_many_arguments)]
 
+use std::collections::BTreeSet;
+
+use heed::BytesDecode;
+use roaring::RoaringBitmap;
+
 use super::ProximityCondition;
 use crate::search::new::interner::Interned;
 use crate::search::new::query_term::{Phrase, QueryTermSubset};
 use crate::search::new::ranking_rule_graph::ComputedCondition;
 use crate::search::new::resolve_query_graph::compute_query_term_subset_docids;
 use crate::search::new::SearchContext;
-use crate::{CboRoaringBitmapCodec, Result};
-use roaring::RoaringBitmap;
-use std::collections::BTreeSet;
+use crate::{CboRoaringBitmapCodec, Result, RoaringBitmapCodec};
 
 pub fn compute_docids(
     ctx: &mut SearchContext,
@@ -90,7 +93,8 @@ pub fn compute_docids(
                     continue;
                 }
             } else if let Some(lw_bytes) = ctx.get_db_word_docids(left_word)? {
-                let left_word_docids = CboRoaringBitmapCodec::deserialize_from(lw_bytes)?;
+                let left_word_docids =
+                    RoaringBitmapCodec::bytes_decode(lw_bytes).ok_or(heed::Error::Decoding)?;
                 if universe.is_disjoint(&left_word_docids) {
                     continue;
                 }
