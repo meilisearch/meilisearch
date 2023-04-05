@@ -39,9 +39,8 @@ pub fn extract_word_fid_and_position_docids<R: io::Read + io::Seek>(
         for position in read_u32_ne_bytes(value) {
             key_buffer.clear();
             key_buffer.extend_from_slice(word_bytes);
-            let (fid, position) = relative_from_absolute_position(position);
+            let (_fid, position) = relative_from_absolute_position(position);
             let position = bucketed_position(position);
-            let position = absolute_from_relative_position(fid, position);
             key_buffer.extend_from_slice(&position.to_be_bytes());
             word_position_docids_sorter.insert(&key_buffer, document_id.to_ne_bytes())?;
         }
