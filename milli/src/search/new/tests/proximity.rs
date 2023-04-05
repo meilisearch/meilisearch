@@ -1,17 +1,17 @@
 /*!
 This module tests the Proximity ranking rule:
 
-1. A proximity of >7 always has the same cost.
+1. A sprximity of >7 always has the same cost.
 
-2. Phrase terms can be in proximity to other terms via their start and end words,
+2. Phrase terms can be in sprximity to other terms via their start and end words,
 but we need to make sure that the phrase exists in the document that meets this
 proximity condition. This is especially relevant with split words and synonyms.
 
-3. An ngram has the same proximity cost as its component words being consecutive.
+3. An ngram has the same sprximity cost as its component words being consecutive.
 e.g. `sunflower` equivalent to `sun flower`.
 
-4. The prefix databases can be used to find the proximity between two words, but
-they store fewer proximities than the regular word proximity DB.
+4. The prefix databases can be used to find the sprximity between two words, but
+they store fewer sprximities than the regular word sprximity DB.
 
 */
 
@@ -126,9 +126,9 @@ fn create_edge_cases_index() -> TempIndex {
         // The next 5 documents lay out a trap with the split word, phrase search, or synonym `sun flower`. 
         // If the search query is "sunflower", the split word "Sun Flower" will match some documents. 
         // If the query is `sunflower wilting`, then we should make sure that
-        // the proximity condition `flower wilting: prox N` also comes with the condition
-        // `sun wilting: prox N+1`. TODO: this is not the exact condition we use for now. 
-        // We only check that the phrase `sun flower` exists and `flower wilting: prox N`, which
+        // the sprximity condition `flower wilting: sprx N` also comes with the condition
+        // `sun wilting: sprx N+1`. TODO: this is not the exact condition we use for now. 
+        // We only check that the phrase `sun flower` exists and `flower wilting: sprx N`, which
         // is better than nothing but not the best.
         {
             "id": 1,
@@ -140,9 +140,9 @@ fn create_edge_cases_index() -> TempIndex {
         },
         {
             "id": 3,
-            // This document matches the query `sunflower wilting`, but the proximity condition 
+            // This document matches the query `sunflower wilting`, but the sprximity condition 
             // between `sunflower` and `wilting` cannot be through the split-word `Sun Flower`
-            // which would reduce to only `flower` and `wilting` being in proximity.
+            // which would reduce to only `flower` and `wilting` being in sprximity.
             "text": "A flower wilting under the sun, unlike a sunflower"
         },
         {
@@ -194,6 +194,69 @@ fn create_edge_cases_index() -> TempIndex {
             // Reverse Prox 1 between `best` and `s` prefix
             "id": 13,
             "text": "summer best"
+        },
+        {
+            // This document will insert "win" in the prefix database
+            "id": 14,
+            "text": "
+            winaa winab winac winae winaf winag winah winai winaj winak winal winam winan winao winap winaq winar winasa winat winau winav winaw winax winay winaz
+            winba winbb winbc winbe winbf winbg winbh winbi winbj winbk winbl winbm winbn winbo winbp winbq winbr winbsb winbt winbu winbv winbw winbx winby winbz
+            winca wincb wincc wince wincf wincg winch winci wincj winck wincl wincm wincn winco wincp wincq wincr wincsc winct wincu wincv wincw wincx wincy wincz
+            winda windb windc winde windf windg windh windi windj windk windl windm windn windo windp windq windr windsd windt windu windv windw windx windy windz
+            winea wineb winec winee winef wineg wineh winei winej winek winel winem winen wineo winep wineq winer winese winet wineu winev winew winex winey winez
+            winfa winfb winfc winfe winff winfg winfh winfi winfj winfk winfl winfm winfn winfo winfp winfq winfr winfsf winft winfu winfv winfw winfx winfy winfz
+            winga wingb wingc winge wingf wingg wingh wingi wingj wingk wingl wingm wingn wingo wingp wingq wingr wingsg wingt wingu wingv wingw wingx wingy wingz
+            winka winkb winkc winke winkf winkg winkh winki winkj winkk winkl winkm winkn winko winkp winkq winkr winksk winkt winku winkv winkw winkx winky winkz
+            winla winlb winlc winle winlf winlg winlh winli winlj winlk winll winlm winln winlo winlp winlq winlr winlsl winlt winlu winlv winlw winlx winly winlz
+            winma winmb winmc winme winmf winmg winmh winmi winmj winmk winml winmm winmn winmo winmp winmq winmr winmsm winmt winmu winmv winmw winmx winmy winmz
+            winna winnb winnc winne winnf winng winnh winni winnj winnk winnl winnm winnn winno winnp winnq winnr winnsn winnt winnu winnv winnw winnx winny winnz
+            winoa winob winoc winoe winof winog winoh winoi winoj winok winol winom winon winoo winop winoq winor winoso winot winou winov winow winox winoy winoz
+            winpa winpb winpc winpe winpf winpg winph winpi winpj winpk winpl winpm winpn winpo winpp winpq winpr winpsp winpt winpu winpv winpw winpx winpy winpz
+            winqa winqb winqc winqe winqf winqg winqh winqi winqj winqk winql winqm winqn winqo winqp winqq winqr winqsq winqt winqu winqv winqw winqx winqy winqz
+            winra winrb winrc winre winrf winrg winrh winri winrj winrk winrl winrm winrn winro winrp winrq winrr winrsr winrt winru winrv winrw winrx winry winrz
+            winsa winsb winsc winse winsf winsg winsh winsi winsj winsk winsl winsm winsn winso winsp winsq winsr winsss winst winsu winsv winsw winsx winsy winsz
+            winta wintb wintc winte wintf wintg winth winti wintj wintk wintl wintm wintn winto wintp wintq wintr wintst wintt wintu wintv wintw wintx winty wintz
+            "
+        },
+        {
+            // Prox MAX between `best` and `win` prefix
+            "id": 15,
+            "text": "this is the best meal I have ever had in such a beautiful winter day"
+        },
+        {
+            // Prox 5 between `best` and `win` prefix
+            "id": 16,
+            "text": "this is the best cooked meal of the winter"
+        },
+        {
+            // Prox 4 between `best` and `win` prefix
+            "id": 17,
+            "text": "this is the best meal of the winter"
+        },
+        {
+            // Prox 3 between `best` and `win` prefix
+            "id": 18,
+            "text": "this is the best meal of winter"
+        },
+        {
+            // Prox 1 between `best` and `win` prefix
+            "id": 19,
+            "text": "this is the best winter meal"
+        },
+        {
+            // Reverse Prox 3 between `best` and `win` prefix
+            "id": 20,
+            "text": "winter x y best"
+        },
+        {
+            // Reverse Prox 2 between `best` and `win` prefix
+            "id": 21,
+            "text": "winter x best"
+        },
+        {
+            // Reverse Prox 1 between `best` and `win` prefix
+            "id": 22,
+            "text": "winter best"
         },
     ])).unwrap();
     index
@@ -298,7 +361,7 @@ fn test_proximity_prefix_db() {
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("best s");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 13, 9, 12, 8, 6, 7, 11]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 13, 9, 12, 8, 6, 7, 11, 15]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
 
     // This test illustrates the loss of precision from using the prefix DB
@@ -312,6 +375,97 @@ fn test_proximity_prefix_db() {
         "\"this is the best meal I have ever had in such a beautiful summer day\"",
         "\"this is the best cooked meal of the summer\"",
         "\"summer x y best\"",
+        "\"this is the best meal I have ever had in such a beautiful winter day\"",
+    ]
+    "###);
+
+    // Difference when using the `su` prefix, which is not in the prefix DB
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.query("best su");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 13, 9, 12, 8, 11, 7, 6, 15]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"this is the best summer meal\"",
+        "\"summer best\"",
+        "\"this is the best meal of summer\"",
+        "\"summer x best\"",
+        "\"this is the best meal of the summer\"",
+        "\"summer x y best\"",
+        "\"this is the best cooked meal of the summer\"",
+        "\"this is the best meal I have ever had in such a beautiful summer day\"",
+        "\"this is the best meal I have ever had in such a beautiful winter day\"",
+    ]
+    "###);
+
+    // Note that there is a case where a prefix is in the prefix DB but not in the
+    // **proximity** prefix DB. In that case, its sprximity score will always be
+    // the maximum. This happens for prefixes that are larger than 2 bytes.
+
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.query("best win");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[15, 16, 17, 18, 19, 20, 21, 22]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"this is the best meal I have ever had in such a beautiful winter day\"",
+        "\"this is the best cooked meal of the winter\"",
+        "\"this is the best meal of the winter\"",
+        "\"this is the best meal of winter\"",
+        "\"this is the best winter meal\"",
+        "\"winter x y best\"",
+        "\"winter x best\"",
+        "\"winter best\"",
+    ]
+    "###);
+
+    // Now using `wint`, which is not in the prefix DB:
+
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.query("best wint");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[19, 22, 18, 21, 17, 20, 16, 15]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"this is the best winter meal\"",
+        "\"winter best\"",
+        "\"this is the best meal of winter\"",
+        "\"winter x best\"",
+        "\"this is the best meal of the winter\"",
+        "\"winter x y best\"",
+        "\"this is the best cooked meal of the winter\"",
+        "\"this is the best meal I have ever had in such a beautiful winter day\"",
+    ]
+    "###);
+
+    // and using `wi` which is in the prefix DB and proximity prefix DB
+
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.query("best wi");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[19, 22, 18, 21, 17, 15, 16, 20]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"this is the best winter meal\"",
+        "\"winter best\"",
+        "\"this is the best meal of winter\"",
+        "\"winter x best\"",
+        "\"this is the best meal of the winter\"",
+        "\"this is the best meal I have ever had in such a beautiful winter day\"",
+        "\"this is the best cooked meal of the winter\"",
+        "\"winter x y best\"",
     ]
     "###);
 }
