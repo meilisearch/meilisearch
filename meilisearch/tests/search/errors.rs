@@ -810,8 +810,6 @@ async fn filter_reserved_geo_point_string() {
         .await;
 }
 
-//_geoPoint
-
 #[actix_rt::test]
 async fn sort_geo_reserved_attribute() {
     let server = Server::new().await;
