@@ -271,13 +271,13 @@ fn test_sort() {
         "false",
         "true",
         "true",
-        "__does_not_exist___",
+        "__does_not_exist__",
         "null",
         "[null,null,\"\"]",
         "\"\"",
         "{\"sub\":0}",
-        "__does_not_exist___",
-        "__does_not_exist___",
+        "__does_not_exist__",
+        "__does_not_exist__",
     ]
     "###);
 
@@ -304,13 +304,13 @@ fn test_sort() {
         "false",
         "\"1\"",
         "\"0\"",
-        "__does_not_exist___",
+        "__does_not_exist__",
         "null",
         "[null,null,\"\"]",
         "\"\"",
         "{\"sub\":0}",
-        "__does_not_exist___",
-        "__does_not_exist___",
+        "__does_not_exist__",
+        "__does_not_exist__",
     ]
     "###);
 }

@@ -59,8 +59,7 @@ fn create_index() -> TempIndex {
                 "id": 3,
                 "text": "beautiful sommer"
             },
-            // The next two documents lay out an even more complex trap, which the current implementation
-            // fails to handle properly.
+            // The next two documents lay out an even more complex trap.
             // With the user query `delicious sweet dessert`, the typo ranking rule will return one bucket of:
             // - id 4: delicitous + sweet + dessert
             // - id 5: beautiful + sweet + desgert
@@ -114,13 +113,12 @@ fn test_trap_complex2() {
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("delicious sweet dessert");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[4, 5]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[5, 4]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
-    // TODO: this is incorrect. 5 should appear before 4
     insta::assert_debug_snapshot!(texts, @r###"
     [
-        "\"delicitous. sweet. dessert. delicitous sweet desgert\"",
         "\"delicious. sweet desgert. delicious sweet desgert\"",
+        "\"delicitous. sweet. dessert. delicitous sweet desgert\"",
     ]
     "###);
 }

@@ -4,7 +4,7 @@ use super::query_term::{
 };
 use super::small_bitmap::SmallBitmap;
 use super::SearchContext;
-use crate::search::new::interner::DedupInterner;
+use crate::search::new::interner::Interner;
 use crate::Result;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -345,29 +345,13 @@ impl QueryGraph {
     Build a query graph from a list of paths
 
     The paths are composed of source and dest terms.
-    If the source term is `None`, then the last dest term is used
-    as the predecessor of the dest term. If the source is Some(_),
-    then an edge is built between the last dest term and the source,
-    and between the source and new dest term.
 
-    Note that the resulting graph will not correspond to a perfect
-    representation of the set of paths.
     For example, consider the following paths:
     ```txt
     PATH 1 :  a -> b1 -> c1 -> d -> e1
     PATH 2 :  a -> b2 -> c2 -> d -> e2
     ```
     Then the resulting graph will be:
-    ```txt
-              ┌────┐  ┌────┐             ┌────┐
-           ┌──│ b1 │──│ c1 │─┐        ┌──│ e1 │
-    ┌────┐ │  └────┘  └────┘ │ ┌────┐ │  └────┘
-    │ a  │─┤                 ├─│ d  │─┤
-    └────┘ │  ┌────┐  ┌────┐ │ └────┘ │  ┌────┐
-           └──│ b2 │──│ c2 │─┘        └──│ e2 │
-              └────┘  └────┘             └────┘
-    ```
-    which is different from the fully correct representation:
     ```txt
               ┌────┐  ┌────┐   ┌────┐   ┌────┐
            ┌──│ b1 │──│ c1 │───│ d  │───│ e1 │
@@ -383,21 +367,51 @@ impl QueryGraph {
     pub fn build_from_paths(
         paths: Vec<Vec<(Option<LocatedQueryTermSubset>, LocatedQueryTermSubset)>>,
     ) -> Self {
-        let mut node_data = DedupInterner::default();
-        let root_node = node_data.insert(QueryNodeData::Start);
-        let end_node = node_data.insert(QueryNodeData::End);
+        let mut node_data = Interner::default();
+        let root_node = node_data.push(QueryNodeData::Start);
+        let end_node = node_data.push(QueryNodeData::End);
+
+        let mut paths_with_single_terms = vec![];
+
+        for path in paths {
+            let mut processed_path = vec![];
+            let mut prev_dest_term: Option<LocatedQueryTermSubset> = None;
+            for (start_term, dest_term) in path {
+                if let Some(prev_dest_term) = prev_dest_term.take() {
+                    if let Some(mut start_term) = start_term {
+                        if start_term.term_ids == prev_dest_term.term_ids {
+                            start_term.term_subset.intersect(&prev_dest_term.term_subset);
+                            processed_path.push(start_term);
+                        } else {
+                            processed_path.push(prev_dest_term);
+                            processed_path.push(start_term);
+                        }
+                    } else {
+                        processed_path.push(prev_dest_term);
+                    }
+                } else if let Some(start_term) = start_term {
+                    processed_path.push(start_term);
+                }
+                prev_dest_term = Some(dest_term);
+            }
+            if let Some(prev_dest_term) = prev_dest_term {
+                processed_path.push(prev_dest_term);
+            }
+            paths_with_single_terms.push(processed_path);
+        }
+
+        // TODO: make a prefix tree of the processed paths to avoid uselessly duplicating nodes
 
         let mut paths_with_ids = vec![];
-        for path in paths {
+        for path in paths_with_single_terms {
             let mut path_with_ids = vec![];
-            for node in path {
-                let (start_term, end_term) = node;
-                let src_node_id = start_term.map(|x| node_data.insert(QueryNodeData::Term(x)));
-                let dest_node_id = node_data.insert(QueryNodeData::Term(end_term));
-                path_with_ids.push((src_node_id, dest_node_id));
+            for term in path {
+                let id = node_data.push(QueryNodeData::Term(term));
+                path_with_ids.push(Interned::from_raw(id.into_raw()));
             }
             paths_with_ids.push(path_with_ids);
         }
+
         let nodes_data = node_data.freeze();
         let nodes_data_len = nodes_data.len();
         let mut nodes = nodes_data.map_move(|n| QueryNode {
@@ -406,31 +420,22 @@ impl QueryGraph {
             successors: SmallBitmap::new(nodes_data_len),
         });
 
-        let root_node = Interned::from_raw(root_node.into_raw());
-        let end_node = Interned::from_raw(end_node.into_raw());
+        let root_node = Interned::<QueryNode>::from_raw(root_node.into_raw());
+        let end_node = Interned::<QueryNode>::from_raw(end_node.into_raw());
 
         for path in paths_with_ids {
-            let mut prev_node = root_node;
-            for node in path {
-                let (start_term, dest_term) = node;
-                let end_term = Interned::from_raw(dest_term.into_raw());
-                let src = if let Some(start_term) = start_term {
-                    // TODO: this is incorrect! should take the intersection
-                    // between the prev node and the start term if they refer to the same
-                    // original query term!
-                    let start_term = Interned::from_raw(start_term.into_raw());
-                    nodes.get_mut(prev_node).successors.insert(start_term);
-                    nodes.get_mut(start_term).predecessors.insert(prev_node);
-                    start_term
-                } else {
-                    prev_node
-                };
-                nodes.get_mut(src).successors.insert(end_term);
-                nodes.get_mut(end_term).predecessors.insert(src);
-                prev_node = end_term;
+            let mut prev_node_id = root_node;
+            for node_id in path {
+                let prev_node = nodes.get_mut(prev_node_id);
+                prev_node.successors.insert(node_id);
+                let node = nodes.get_mut(node_id);
+                node.predecessors.insert(prev_node_id);
+                prev_node_id = node_id;
             }
-            nodes.get_mut(prev_node).successors.insert(end_node);
-            nodes.get_mut(end_node).predecessors.insert(prev_node);
+            let prev_node = nodes.get_mut(prev_node_id);
+            prev_node.successors.insert(end_node);
+            let node = nodes.get_mut(end_node);
+            node.predecessors.insert(prev_node_id);
         }
 
         QueryGraph { root_node, end_node, nodes }
