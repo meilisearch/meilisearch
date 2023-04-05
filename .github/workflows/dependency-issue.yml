@@ -1,0 +1,24 @@
+name: Create issue to upgrade dependencies
+
+on:
+  schedule:
+    # Run the first of the month, every 3 month
+    - cron: '0 0 1 */3 *'
+  workflow_dispatch:
+
+jobs:
+  create-issue:
+    runs-on: ubuntu-latest
+    env:
+      ISSUE_TEMPLATE: issue-template.md
+      GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
+    steps:
+    - uses: actions/checkout@v3
+    - name: Download the issue template
+      run: curl -s https://raw.githubusercontent.com/meilisearch/engine-team/main/issue-templates/dependency-issue.md > $ISSUE_TEMPLATE
+    - name: Create issue
+      run: |
+        gh issue create \
+          --title 'Upgrade dependencies' \
+          --label 'dependencies,maintenance' \
+          --body-file $ISSUE_TEMPLATE

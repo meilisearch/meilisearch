@@ -367,12 +367,14 @@ fn import_dump(
         log::info!("All documents successfully imported.");
     }
 
+    let mut index_scheduler_dump = index_scheduler.register_dumped_task()?;
+
     // 4. Import the tasks.
     for ret in dump_reader.tasks()? {
         let (task, file) = ret?;
-        index_scheduler.register_dumped_task(task, file)?;
+        index_scheduler_dump.register_dumped_task(task, file)?;
     }
-    Ok(())
+    Ok(index_scheduler_dump.finish()?)
 }
 
 pub fn configure_data(

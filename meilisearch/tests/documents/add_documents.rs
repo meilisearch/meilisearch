@@ -280,6 +280,81 @@ async fn add_csv_document() {
 }
 
 #[actix_rt::test]
+async fn add_csv_document_with_types() {
+    let server = Server::new().await;
+    let index = server.index("pets");
+
+    let document = "#id:number,name:string,race:string,age:number,cute:boolean
+0,jean,bernese mountain,2.5,true
+1,,,,
+2,lilou,pug,-2,false";
+
+    let (response, code) = index.raw_update_documents(document, Some("text/csv"), "").await;
+    snapshot!(code, @"202 Accepted");
+    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
+    {
+      "taskUid": 0,
+      "indexUid": "pets",
+      "status": "enqueued",
+      "type": "documentAdditionOrUpdate",
+      "enqueuedAt": "[date]"
+    }
+    "###);
+    let response = index.wait_task(response["taskUid"].as_u64().unwrap()).await;
+    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
+    {
+      "uid": 0,
+      "indexUid": "pets",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 3,
+        "indexedDocuments": 3
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let (documents, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "#id": 0,
+          "name": "jean",
+          "race": "bernese mountain",
+          "age": 2.5,
+          "cute": true
+        },
+        {
+          "#id": 1,
+          "name": null,
+          "race": null,
+          "age": null,
+          "cute": null
+        },
+        {
+          "#id": 2,
+          "name": "lilou",
+          "race": "pug",
+          "age": -2,
+          "cute": false
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 3
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn add_csv_document_with_custom_delimiter() {
     let server = Server::new().await;
     let index = server.index("pets");
@@ -339,6 +414,40 @@ async fn add_csv_document_with_custom_delimiter() {
       "offset": 0,
       "limit": 20,
       "total": 2
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn add_csv_document_with_types_error() {
+    let server = Server::new().await;
+    let index = server.index("pets");
+
+    let document = "#id:number,a:boolean,b:number
+0,doggo,1";
+
+    let (response, code) = index.raw_update_documents(document, Some("text/csv"), "").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
+    {
+      "message": "The `csv` payload provided is malformed: `Error parsing boolean \"doggo\" at line 1: provided string was not `true` or `false``.",
+      "code": "malformed_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#malformed_payload"
+    }
+    "###);
+
+    let document = "#id:number,a:boolean,b:number
+0,true,doggo";
+
+    let (response, code) = index.raw_update_documents(document, Some("text/csv"), "").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
+    {
+      "message": "The `csv` payload provided is malformed: `Error parsing number \"doggo\" at line 1: invalid float literal`.",
+      "code": "malformed_payload",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#malformed_payload"
     }
     "###);
 }
