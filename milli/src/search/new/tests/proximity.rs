@@ -1,7 +1,7 @@
 /*!
 This module tests the Proximity ranking rule:
 
-1. A sprximity of >7 always has the same cost.
+1. A proximity of >7 always has the same cost.
 
 2. Phrase terms can be in sprximity to other terms via their start and end words,
 but we need to make sure that the phrase exists in the document that meets this

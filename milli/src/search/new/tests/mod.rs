@@ -3,8 +3,10 @@ pub mod distinct;
 pub mod language;
 pub mod ngram_split_words;
 pub mod proximity;
+pub mod proximity_typo;
 pub mod sort;
 pub mod typo;
+pub mod typo_proximity;
 pub mod words_tms;
 
 fn collect_field_values(
