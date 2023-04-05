@@ -16,7 +16,10 @@ This module tests the following properties:
 13. Ngrams cannot be formed by combining a phrase and a word or two phrases
 */
 
-use crate::{index::tests::TempIndex, Criterion, Search, SearchResult, TermsMatchingStrategy};
+use crate::{
+    index::tests::TempIndex, search::new::tests::collect_field_values, Criterion, Search,
+    SearchResult, TermsMatchingStrategy,
+};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -46,6 +49,14 @@ fn create_index() -> TempIndex {
             {
                 "id": 3,
                 "text": "the sunflower is tall"
+            },
+            {
+                "id": 4,
+                "text": "the sunflawer is tall"
+            },
+            {
+                "id": 5,
+                "text": "sunflowering is not a verb"
             }
         ]))
         .unwrap();
@@ -67,8 +78,18 @@ fn test_2gram_simple() {
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("sun flower");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    // will also match documents with "sun flower"
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1, 2, 3]");
+    // will also match documents with "sunflower" + prefix tolerance
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1, 2, 3, 5]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the sun flowers are pretty\"",
+        "\"the sun flower is tall\"",
+        "\"the sunflowers are pretty\"",
+        "\"the sunflower is tall\"",
+        "\"sunflowering is not a verb\"",
+    ]
+    "###);
 }
 #[test]
 fn test_3gram_simple() {
@@ -87,6 +108,13 @@ fn test_3gram_simple() {
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 2]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the sun flowers are pretty\"",
+        "\"the sunflowers are pretty\"",
+    ]
+    "###);
 }
 
 #[test]
@@ -99,7 +127,18 @@ fn test_2gram_typo() {
     s.query("sun flawer");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1, 2, 3]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1, 2, 3, 4, 5]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the sun flowers are pretty\"",
+        "\"the sun flower is tall\"",
+        "\"the sunflowers are pretty\"",
+        "\"the sunflower is tall\"",
+        "\"the sunflawer is tall\"",
+        "\"sunflowering is not a verb\"",
+    ]
+    "###);
 }
 
 #[test]
@@ -119,6 +158,13 @@ fn test_no_disable_ngrams() {
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     // documents containing `sunflower`
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[1, 3]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the sun flower is tall\"",
+        "\"the sunflower is tall\"",
+    ]
+    "###);
 }
 
 #[test]
@@ -137,7 +183,17 @@ fn test_2gram_prefix() {
     s.query("sun flow");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     // documents containing words beginning with `sunflow`
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1, 2, 3]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1, 2, 3, 5]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the sun flowers are pretty\"",
+        "\"the sun flower is tall\"",
+        "\"the sunflowers are pretty\"",
+        "\"the sunflower is tall\"",
+        "\"sunflowering is not a verb\"",
+    ]
+    "###);
 }
 
 #[test]
@@ -157,7 +213,16 @@ fn test_3gram_prefix() {
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
     // documents containing a word beginning with sunfl
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 3]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 3, 4, 5]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the sunflowers are pretty\"",
+        "\"the sunflower is tall\"",
+        "\"the sunflawer is tall\"",
+        "\"sunflowering is not a verb\"",
+    ]
+    "###);
 }
 
 #[test]
@@ -170,8 +235,17 @@ fn test_split_words() {
     s.query("sunflower ");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
-    // all the documents with either `sunflower` or `sun flower`
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[1, 2, 3]");
+    // all the documents with either `sunflower` or `sun flower` + eventual typo
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[1, 2, 3, 4]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the sun flower is tall\"",
+        "\"the sunflowers are pretty\"",
+        "\"the sunflower is tall\"",
+        "\"the sunflawer is tall\"",
+    ]
+    "###);
 }
 
 #[test]
@@ -191,6 +265,12 @@ fn test_disable_split_words() {
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     // no document containing `sun flower`
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[3]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the sunflower is tall\"",
+    ]
+    "###);
 }
 
 #[test]
@@ -203,8 +283,18 @@ fn test_2gram_split_words() {
     s.query("sunf lower");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
-    // all the documents with "sunflower", "sun flower", or (sunflower + 1 typo)
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[1, 2, 3]");
+    // all the documents with "sunflower", "sun flower", (sunflower + 1 typo), or (sunflower as prefix)
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[1, 2, 3, 4, 5]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the sun flower is tall\"",
+        "\"the sunflowers are pretty\"",
+        "\"the sunflower is tall\"",
+        "\"the sunflawer is tall\"",
+        "\"sunflowering is not a verb\"",
+    ]
+    "###);
 }
 
 #[test]
@@ -218,7 +308,15 @@ fn test_3gram_no_split_words() {
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
     // no document with `sun flower`
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 3]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 3, 5]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the sunflowers are pretty\"",
+        "\"the sunflower is tall\"",
+        "\"sunflowering is not a verb\"",
+    ]
+    "###);
 }
 
 #[test]
@@ -231,7 +329,13 @@ fn test_3gram_no_typos() {
     s.query("sunf la wer");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[4]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the sunflawer is tall\"",
+    ]
+    "###);
 }
 
 #[test]
@@ -245,6 +349,13 @@ fn test_no_ngram_phrases() {
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the sun flowers are pretty\"",
+        "\"the sun flower is tall\"",
+    ]
+    "###);
 
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
@@ -252,4 +363,10 @@ fn test_no_ngram_phrases() {
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[1]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the sun flower is tall\"",
+    ]
+    "###);
 }

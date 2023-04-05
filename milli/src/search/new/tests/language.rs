@@ -18,5 +18,5 @@ fn test_kanji_language_detection() {
     search.query("東京");
     let SearchResult { documents_ids, .. } = search.execute().unwrap();
 
-    assert_eq!(documents_ids, vec![1]);
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[1]");
 }

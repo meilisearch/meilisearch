@@ -21,8 +21,8 @@ if `words` doesn't exist before it.
 use std::collections::HashMap;
 
 use crate::{
-    index::tests::TempIndex, Criterion, 
-    Search, SearchResult, TermsMatchingStrategy,
+    index::tests::TempIndex, search::new::tests::collect_field_values, Criterion, Search,
+    SearchResult, TermsMatchingStrategy,
 };
 
 fn create_index() -> TempIndex {
@@ -130,6 +130,10 @@ fn create_index() -> TempIndex {
                 "id": 22,
                 "text": "the quick brown fox jumps over the lackadaisical dog"
             },
+            {
+                "id": 23,
+                "text": "the quivk brown fox jumps over the lazy dog"
+            },
         ]))
         .unwrap();
     index
@@ -151,6 +155,12 @@ fn test_no_typo() {
     s.query("the quick brown fox jumps over the lazy dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+    ]
+    "###);
 }
 
 #[test]
@@ -168,7 +178,14 @@ fn test_default_typo() {
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quick brown fox jumps over the lazy dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 23]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+        "\"the quivk brown fox jumps over the lazy dog\"",
+    ]
+    "###);
 
     // 1 typo on one word, replaced letter
     let mut s = Search::new(&txn, &index);
@@ -176,6 +193,12 @@ fn test_default_typo() {
     s.query("the quack brown fox jumps over the lazy dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+    ]
+    "###);
 
     // 1 typo on one word, missing letter, extra letter
     let mut s = Search::new(&txn, &index);
@@ -183,6 +206,12 @@ fn test_default_typo() {
     s.query("the quicest brownest fox jummps over the laziest dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[3]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quickest brownest fox jumps over the laziest dog\"",
+    ]
+    "###);
 
     // 1 typo on one word, swapped letters
     let mut s = Search::new(&txn, &index);
@@ -190,6 +219,12 @@ fn test_default_typo() {
     s.query("the quikc borwn fox jupms over the lazy dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+    ]
+    "###);
 
     // 1 first letter typo on a word <5 bytes, replaced letter
     let mut s = Search::new(&txn, &index);
@@ -211,6 +246,12 @@ fn test_default_typo() {
     s.query("the quack brawn fox junps over the lazy dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+    ]
+    "###);
 
     // 2 typos on words < 9 bytes
     let mut s = Search::new(&txn, &index);
@@ -225,6 +266,12 @@ fn test_default_typo() {
     s.query("the extravant fox kyrocketed over the lamguorout dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the extravagant fox skyrocketed over the languorous dog\"",
+    ]
+    "###);
 
     // 2 typos on words >= 9 bytes: 2 extra letters in a single word, swapped letters + extra letter, replaced letters
     let mut s = Search::new(&txn, &index);
@@ -232,6 +279,12 @@ fn test_default_typo() {
     s.query("the extravaganttt fox sktyrocnketed over the lagnuorrous dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the extravagant fox skyrocketed over the languorous dog\"",
+    ]
+    "###);
 }
 
 #[test]
@@ -244,6 +297,8 @@ fn test_phrase_no_typo_allowed() {
     s.query("the \"quick brewn\" fox jumps over the lazy dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @"[]");
 }
 
 #[test]
@@ -256,12 +311,20 @@ fn test_ngram_typos() {
     s.query("the extra lagant fox skyrocketed over the languorous dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the extravagant fox skyrocketed over the languorous dog\"",
+    ]
+    "###);
 
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the ex tra lagant fox skyrocketed over the languorous dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @"[]");
 }
 #[test]
 fn test_typo_ranking_rule_not_preceded_by_words_ranking_rule() {
@@ -278,7 +341,29 @@ fn test_typo_ranking_rule_not_preceded_by_words_ranking_rule() {
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
     let SearchResult { documents_ids: ids_1, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{ids_1:?}"), @"[0, 7, 8, 9, 10, 11, 1, 2, 12, 13, 4, 3, 5, 6, 21]");
+    insta::assert_snapshot!(format!("{ids_1:?}"), @"[0, 23, 7, 8, 9, 22, 10, 11, 1, 2, 12, 13, 4, 3, 5, 6, 21]");
+    let texts = collect_field_values(&index, &txn, "text", &ids_1);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+        "\"the quivk brown fox jumps over the lazy dog\"",
+        "\"the quick brown fox jumps over the lazy\"",
+        "\"the quick brown fox jumps over the\"",
+        "\"the quick brown fox jumps over\"",
+        "\"the quick brown fox jumps over the lackadaisical dog\"",
+        "\"the quick brown fox jumps\"",
+        "\"the quick brown fox\"",
+        "\"the quick brown foxes jump over the lazy dog\"",
+        "\"the quick brown fax sends a letter to the dog\"",
+        "\"the quick brown\"",
+        "\"the quick\"",
+        "\"a fox doesn't quack, that crown goes to the duck.\"",
+        "\"the quickest brownest fox jumps over the laziest dog\"",
+        "\"the quicker browner fox jumped over the lazier dog\"",
+        "\"the extravagant fox skyrocketed over the languorous dog\"",
+        "\"the fast brownish fox jumps over the lackadaisical dog\"",
+    ]
+    "###);
 
     index
         .update_settings(|s| {
@@ -290,7 +375,7 @@ fn test_typo_ranking_rule_not_preceded_by_words_ranking_rule() {
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
     let SearchResult { documents_ids: ids_2, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{ids_2:?}"), @"[0, 7, 8, 9, 10, 11, 1, 2, 12, 13, 4, 3, 5, 6, 21]");
+    insta::assert_snapshot!(format!("{ids_2:?}"), @"[0, 23, 7, 8, 9, 22, 10, 11, 1, 2, 12, 13, 4, 3, 5, 6, 21]");
 
     assert_eq!(ids_1, ids_2);
 }
@@ -307,6 +392,17 @@ fn test_typo_bucketing() {
     s.query("network interconnection sunflower");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[14, 15, 16, 17, 18, 20]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"netwolk interconections sunflawar\"",
+        "\"network interconnections sunflawer\"",
+        "\"network interconnection sunflower\"",
+        "\"network interconnection sun flower\"",
+        "\"network interconnection sunflowering\"",
+        "\"network interconnection sunflowar\"",
+    ]
+    "###);
 
     // Then with the typo ranking rule
     drop(txn);
@@ -322,12 +418,34 @@ fn test_typo_bucketing() {
     s.query("network interconnection sunflower");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[16, 18, 17, 20, 15, 14]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"network interconnection sunflower\"",
+        "\"network interconnection sunflowering\"",
+        "\"network interconnection sun flower\"",
+        "\"network interconnection sunflowar\"",
+        "\"network interconnections sunflawer\"",
+        "\"netwolk interconections sunflawar\"",
+    ]
+    "###);
 
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("network interconnection sun flower");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[17, 19, 16, 18, 20, 15]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"network interconnection sun flower\"",
+        "\"network interconnection sun flowering\"",
+        "\"network interconnection sunflower\"",
+        "\"network interconnection sunflowering\"",
+        "\"network interconnection sunflowar\"",
+        "\"network interconnections sunflawer\"",
+    ]
+    "###);
 }
 
 #[test]
@@ -350,7 +468,15 @@ fn test_typo_synonyms() {
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quick brown fox jumps over the lackadaisical dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[21, 0]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 22, 23]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+        "\"the quick brown fox jumps over the lackadaisical dog\"",
+        "\"the quivk brown fox jumps over the lazy dog\"",
+    ]
+    "###);
 
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
@@ -359,5 +485,13 @@ fn test_typo_synonyms() {
     // TODO: is this correct? interaction of ngrams + synonyms means that the
     // multi-word synonyms end up having a typo cost. This is probably not what we want.
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[21, 0]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[21, 0, 22]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the fast brownish fox jumps over the lackadaisical dog\"",
+        "\"the quick brown fox jumps over the lazy dog\"",
+        "\"the quick brown fox jumps over the lackadaisical dog\"",
+    ]
+    "###);
 }

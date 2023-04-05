@@ -12,9 +12,12 @@ account by the proximity ranking rule.
 7. The search is capable of returning no results if no documents match the query
 */
 
-use crate::{index::tests::TempIndex, Criterion, Search, SearchResult, TermsMatchingStrategy};
+use crate::{
+    index::tests::TempIndex, search::new::tests::collect_field_values, Criterion, Search,
+    SearchResult, TermsMatchingStrategy,
+};
 
-fn create_quick_brown_fox_trivial_index() -> TempIndex {
+fn create_index() -> TempIndex {
     let index = TempIndex::new();
 
     index
@@ -126,7 +129,7 @@ fn create_quick_brown_fox_trivial_index() -> TempIndex {
 
 #[test]
 fn test_words_tms_last_simple() {
-    let index = create_quick_brown_fox_trivial_index();
+    let index = create_index();
 
     let txn = index.read_txn().unwrap();
     let mut s = Search::new(&txn, &index);
@@ -136,6 +139,31 @@ fn test_words_tms_last_simple() {
 
     // 6 and 7 have the same score because "the" appears twice
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 10, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 8, 6, 7, 5, 4, 11, 12, 3]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+        "\"the brown quick fox jumps over the lazy dog\"",
+        "\"the mighty and quick brown fox jumps over the lazy dog\"",
+        "\"the great quick brown fox jumps over the lazy dog\"",
+        "\"this quick brown and very scary fox jumps over the lazy dog\"",
+        "\"this quick brown and scary fox jumps over the lazy dog\"",
+        "\"the quick brown fox jumps over the really lazy dog\"",
+        "\"the brown quick fox jumps over the really lazy dog\"",
+        "\"the brown quick fox immediately jumps over the really lazy dog\"",
+        "\"the brown quick fox immediately jumps over the really lazy blue dog\"",
+        "\"the quick brown. quick brown fox. brown fox jumps. fox jumps over. over the lazy. the lazy dog.\"",
+        "\"the, quick, brown, fox, jumps, over, the, lazy, dog\"",
+        "\"the quick brown fox jumps over the lazy\"",
+        "\"the quick brown fox jumps over\"",
+        "\"the quick brown fox jumps over the\"",
+        "\"the quick brown fox jumps\"",
+        "\"the quick brown fox\"",
+        "\"the quick brown fox talks to the lazy and slow dog\"",
+        "\"the quick brown fox talks to the lazy dog\"",
+        "\"the quick brown\"",
+    ]
+    "###);
 
     let mut s = Search::new(&txn, &index);
     s.query("extravagant the quick brown fox jumps over the lazy dog");
@@ -146,7 +174,7 @@ fn test_words_tms_last_simple() {
 
 #[test]
 fn test_words_tms_last_phrase() {
-    let index = create_quick_brown_fox_trivial_index();
+    let index = create_index();
 
     let txn = index.read_txn().unwrap();
     let mut s = Search::new(&txn, &index);
@@ -156,6 +184,21 @@ fn test_words_tms_last_phrase() {
 
     // "The quick brown fox" is a phrase, not deleted by this term matching strategy
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 17, 21, 8, 6, 7, 5, 4, 11, 12]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+        "\"the quick brown fox jumps over the really lazy dog\"",
+        "\"the quick brown. quick brown fox. brown fox jumps. fox jumps over. over the lazy. the lazy dog.\"",
+        "\"the quick brown fox jumps over the lazy\"",
+        "\"the quick brown fox jumps over\"",
+        "\"the quick brown fox jumps over the\"",
+        "\"the quick brown fox jumps\"",
+        "\"the quick brown fox\"",
+        "\"the quick brown fox talks to the lazy and slow dog\"",
+        "\"the quick brown fox talks to the lazy dog\"",
+    ]
+    "###);
 
     let mut s = Search::new(&txn, &index);
     s.query("\"the quick brown fox\" jumps over the \"lazy\" dog");
@@ -165,6 +208,17 @@ fn test_words_tms_last_phrase() {
     // "lazy" is a phrase, not deleted by this term matching strategy
     // but words before it can be deleted
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 17, 21, 8, 11, 12]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+        "\"the quick brown fox jumps over the really lazy dog\"",
+        "\"the quick brown. quick brown fox. brown fox jumps. fox jumps over. over the lazy. the lazy dog.\"",
+        "\"the quick brown fox jumps over the lazy\"",
+        "\"the quick brown fox talks to the lazy and slow dog\"",
+        "\"the quick brown fox talks to the lazy dog\"",
+    ]
+    "###);
 
     let mut s = Search::new(&txn, &index);
     s.query("\"the quick brown fox jumps over the lazy dog\"");
@@ -173,6 +227,12 @@ fn test_words_tms_last_phrase() {
 
     // The whole query is a phrase, no terms are removed
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+    ]
+    "###);
 
     let mut s = Search::new(&txn, &index);
     s.query("\"the quick brown fox jumps over the lazy dog");
@@ -181,11 +241,17 @@ fn test_words_tms_last_phrase() {
 
     // The whole query is still a phrase, even without closing quotes, so no terms are removed
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+    ]
+    "###);
 }
 
 #[test]
 fn test_words_proximity_tms_last_simple() {
-    let index = create_quick_brown_fox_trivial_index();
+    let index = create_index();
     index
         .update_settings(|s| {
             s.set_criteria(vec![Criterion::Words, Criterion::Proximity]);
@@ -200,6 +266,31 @@ fn test_words_proximity_tms_last_simple() {
 
     // 7 is better than 6 because of the proximity between "the" and its surrounding terms
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 21, 14, 17, 13, 10, 18, 19, 20, 16, 15, 22, 8, 7, 6, 5, 4, 11, 12, 3]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+        "\"the quick brown. quick brown fox. brown fox jumps. fox jumps over. over the lazy. the lazy dog.\"",
+        "\"the great quick brown fox jumps over the lazy dog\"",
+        "\"the quick brown fox jumps over the really lazy dog\"",
+        "\"the mighty and quick brown fox jumps over the lazy dog\"",
+        "\"the brown quick fox jumps over the lazy dog\"",
+        "\"the brown quick fox jumps over the really lazy dog\"",
+        "\"the brown quick fox immediately jumps over the really lazy dog\"",
+        "\"the brown quick fox immediately jumps over the really lazy blue dog\"",
+        "\"this quick brown and scary fox jumps over the lazy dog\"",
+        "\"this quick brown and very scary fox jumps over the lazy dog\"",
+        "\"the, quick, brown, fox, jumps, over, the, lazy, dog\"",
+        "\"the quick brown fox jumps over the lazy\"",
+        "\"the quick brown fox jumps over the\"",
+        "\"the quick brown fox jumps over\"",
+        "\"the quick brown fox jumps\"",
+        "\"the quick brown fox\"",
+        "\"the quick brown fox talks to the lazy and slow dog\"",
+        "\"the quick brown fox talks to the lazy dog\"",
+        "\"the quick brown\"",
+    ]
+    "###);
 
     let mut s = Search::new(&txn, &index);
     s.query("the brown quick fox jumps over the lazy dog");
@@ -208,11 +299,36 @@ fn test_words_proximity_tms_last_simple() {
 
     // 10 is better than 9 because of the proximity between "quick" and "brown"
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 18, 19, 9, 20, 21, 14, 17, 13, 16, 15, 22, 8, 7, 6, 5, 4, 11, 12, 3]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the brown quick fox jumps over the lazy dog\"",
+        "\"the brown quick fox jumps over the really lazy dog\"",
+        "\"the brown quick fox immediately jumps over the really lazy dog\"",
+        "\"the quick brown fox jumps over the lazy dog\"",
+        "\"the brown quick fox immediately jumps over the really lazy blue dog\"",
+        "\"the quick brown. quick brown fox. brown fox jumps. fox jumps over. over the lazy. the lazy dog.\"",
+        "\"the great quick brown fox jumps over the lazy dog\"",
+        "\"the quick brown fox jumps over the really lazy dog\"",
+        "\"the mighty and quick brown fox jumps over the lazy dog\"",
+        "\"this quick brown and scary fox jumps over the lazy dog\"",
+        "\"this quick brown and very scary fox jumps over the lazy dog\"",
+        "\"the, quick, brown, fox, jumps, over, the, lazy, dog\"",
+        "\"the quick brown fox jumps over the lazy\"",
+        "\"the quick brown fox jumps over the\"",
+        "\"the quick brown fox jumps over\"",
+        "\"the quick brown fox jumps\"",
+        "\"the quick brown fox\"",
+        "\"the quick brown fox talks to the lazy and slow dog\"",
+        "\"the quick brown fox talks to the lazy dog\"",
+        "\"the quick brown\"",
+    ]
+    "###);
 }
 
 #[test]
 fn test_words_proximity_tms_last_phrase() {
-    let index = create_quick_brown_fox_trivial_index();
+    let index = create_index();
     index
         .update_settings(|s| {
             s.set_criteria(vec![Criterion::Words, Criterion::Proximity]);
@@ -228,6 +344,26 @@ fn test_words_proximity_tms_last_phrase() {
     // "quick brown" is a phrase. The proximity of its first and last words
     // to their adjacent query words should be taken into account
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 21, 14, 17, 13, 16, 15, 8, 7, 6, 5, 4, 11, 12, 3]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+        "\"the quick brown. quick brown fox. brown fox jumps. fox jumps over. over the lazy. the lazy dog.\"",
+        "\"the great quick brown fox jumps over the lazy dog\"",
+        "\"the quick brown fox jumps over the really lazy dog\"",
+        "\"the mighty and quick brown fox jumps over the lazy dog\"",
+        "\"this quick brown and scary fox jumps over the lazy dog\"",
+        "\"this quick brown and very scary fox jumps over the lazy dog\"",
+        "\"the quick brown fox jumps over the lazy\"",
+        "\"the quick brown fox jumps over the\"",
+        "\"the quick brown fox jumps over\"",
+        "\"the quick brown fox jumps\"",
+        "\"the quick brown fox\"",
+        "\"the quick brown fox talks to the lazy and slow dog\"",
+        "\"the quick brown fox talks to the lazy dog\"",
+        "\"the quick brown\"",
+    ]
+    "###);
 
     let mut s = Search::new(&txn, &index);
     s.query("the \"quick brown\" \"fox jumps\" over the lazy dog");
@@ -238,11 +374,27 @@ fn test_words_proximity_tms_last_phrase() {
     // to their adjacent query words should be taken into account.
     // The same applies to `fox jumps`.
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 21, 14, 17, 13, 16, 15, 8, 7, 6, 5]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+        "\"the quick brown. quick brown fox. brown fox jumps. fox jumps over. over the lazy. the lazy dog.\"",
+        "\"the great quick brown fox jumps over the lazy dog\"",
+        "\"the quick brown fox jumps over the really lazy dog\"",
+        "\"the mighty and quick brown fox jumps over the lazy dog\"",
+        "\"this quick brown and scary fox jumps over the lazy dog\"",
+        "\"this quick brown and very scary fox jumps over the lazy dog\"",
+        "\"the quick brown fox jumps over the lazy\"",
+        "\"the quick brown fox jumps over the\"",
+        "\"the quick brown fox jumps over\"",
+        "\"the quick brown fox jumps\"",
+    ]
+    "###);
 }
 
 #[test]
 fn test_words_tms_all() {
-    let index = create_quick_brown_fox_trivial_index();
+    let index = create_index();
     index
         .update_settings(|s| {
             s.set_criteria(vec![Criterion::Words, Criterion::Proximity]);
@@ -256,6 +408,23 @@ fn test_words_tms_all() {
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 21, 14, 17, 13, 10, 18, 19, 20, 16, 15, 22]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+        "\"the quick brown. quick brown fox. brown fox jumps. fox jumps over. over the lazy. the lazy dog.\"",
+        "\"the great quick brown fox jumps over the lazy dog\"",
+        "\"the quick brown fox jumps over the really lazy dog\"",
+        "\"the mighty and quick brown fox jumps over the lazy dog\"",
+        "\"the brown quick fox jumps over the lazy dog\"",
+        "\"the brown quick fox jumps over the really lazy dog\"",
+        "\"the brown quick fox immediately jumps over the really lazy dog\"",
+        "\"the brown quick fox immediately jumps over the really lazy blue dog\"",
+        "\"this quick brown and scary fox jumps over the lazy dog\"",
+        "\"this quick brown and very scary fox jumps over the lazy dog\"",
+        "\"the, quick, brown, fox, jumps, over, the, lazy, dog\"",
+    ]
+    "###);
 
     let mut s = Search::new(&txn, &index);
     s.query("extravagant");
@@ -263,4 +432,6 @@ fn test_words_tms_all() {
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @"[]");
 }
