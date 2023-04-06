@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
@@ -6,6 +7,7 @@ use std::time::Instant;
 // use rand::random;
 use roaring::RoaringBitmap;
 
+use crate::search::new::graph_based_ranking_rule::Typo;
 use crate::search::new::interner::{Interned, MappedInterner};
 use crate::search::new::query_graph::QueryNodeData;
 use crate::search::new::query_term::LocatedQueryTermSubset;
@@ -14,6 +16,8 @@ use crate::search::new::ranking_rule_graph::{
     RankingRuleGraphTrait, TypoCondition, TypoGraph,
 };
 use crate::search::new::ranking_rules::BoxRankingRule;
+use crate::search::new::sort::Sort;
+use crate::search::new::words::Words;
 use crate::search::new::{QueryGraph, QueryNode, RankingRule, SearchContext, SearchLogger};
 
 pub enum SearchEvents {
@@ -92,7 +96,7 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         self.initial_query_time = Some(Instant::now());
     }
 
-    fn query_for_universe(&mut self, query: &QueryGraph) {
+    fn query_for_initial_universe(&mut self, query: &QueryGraph) {
         self.query_for_universe = Some(query.clone());
     }
 
@@ -161,46 +165,12 @@ impl SearchLogger<QueryGraph> for DetailedSearchLogger {
         self.events.push(SearchEvents::ExtendResults { new: docids.to_vec() });
     }
 
-    fn log_words_state(&mut self, query_graph: &QueryGraph) {
-        self.events.push(SearchEvents::WordsState { query_graph: query_graph.clone() });
-    }
-
-    fn log_proximity_state(
-        &mut self,
-        query_graph: &RankingRuleGraph<ProximityGraph>,
-        paths_map: &[Vec<Interned<ProximityCondition>>],
-        dead_ends_cache: &DeadEndsCache<ProximityCondition>,
-        universe: &RoaringBitmap,
-        costs: &MappedInterner<QueryNode, Vec<u64>>,
-        cost: u64,
-    ) {
-        self.events.push(SearchEvents::ProximityState {
-            graph: query_graph.clone(),
-            paths: paths_map.to_vec(),
-            dead_ends_cache: dead_ends_cache.clone(),
-            universe: universe.clone(),
-            costs: costs.clone(),
-            cost,
-        })
-    }
-
-    fn log_typo_state(
-        &mut self,
-        query_graph: &RankingRuleGraph<TypoGraph>,
-        paths_map: &[Vec<Interned<TypoCondition>>],
-        dead_ends_cache: &DeadEndsCache<TypoCondition>,
-        universe: &RoaringBitmap,
-        costs: &MappedInterner<QueryNode, Vec<u64>>,
-        cost: u64,
-    ) {
-        self.events.push(SearchEvents::TypoState {
-            graph: query_graph.clone(),
-            paths: paths_map.to_vec(),
-            dead_ends_cache: dead_ends_cache.clone(),
-            universe: universe.clone(),
-            costs: costs.clone(),
-            cost,
-        })
+    /// Logs the internal state of the ranking rule
+    fn log_ranking_rule_state<'ctx>(&mut self, state: &(dyn Any + 'ctx)) {
+        if let Some(_words) = state.downcast_ref::<Words>() {
+        } else if let Some(_sort) = state.downcast_ref::<Sort<'ctx, QueryGraph>>() {
+        } else if let Some(_typo) = state.downcast_ref::<Typo>() {
+        }
     }
 }
 
@@ -567,9 +537,8 @@ results.{cur_ranking_rule}{cur_activated_id} {{
             file,
             "{condition_id} {{
 shape: class
-{}
+label
 }}",
-            R::label_for_condition(ctx, condition).unwrap()
         )
         .unwrap();
     }

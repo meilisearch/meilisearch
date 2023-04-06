@@ -66,8 +66,6 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for Words {
         }
         let Some(query_graph) = &mut self.query_graph else { panic!() };
 
-        logger.log_words_state(query_graph);
-
         let this_bucket = compute_query_graph_docids(ctx, query_graph, universe)?;
 
         let child_query_graph = query_graph.clone();

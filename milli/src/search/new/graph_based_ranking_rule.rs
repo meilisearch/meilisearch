@@ -190,10 +190,8 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
             cur_distance_idx: _,
         } = &mut state;
 
-        let original_universe = universe;
         let mut universe = universe.clone();
 
-        let original_graph = graph.clone();
         let mut used_conditions = SmallBitmap::for_interned_values_in(&graph.conditions_interner);
         let mut good_paths = vec![];
         let mut considered_paths = vec![];
@@ -271,16 +269,6 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                 Ok(ControlFlow::Continue(()))
             }
         })?;
-
-        G::log_state(
-            &original_graph,
-            &considered_paths,
-            dead_ends_cache,
-            original_universe,
-            all_costs,
-            cost,
-            logger,
-        );
 
         // We modify the next query graph so that it only contains the subgraph
         // that was used to compute this bucket

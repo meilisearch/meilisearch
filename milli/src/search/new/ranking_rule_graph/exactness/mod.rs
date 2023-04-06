@@ -1,11 +1,10 @@
 use heed::BytesDecode;
 use roaring::RoaringBitmap;
 
-use super::{ComputedCondition, DeadEndsCache, RankingRuleGraph, RankingRuleGraphTrait};
-use crate::search::new::interner::{DedupInterner, Interned, MappedInterner};
-use crate::search::new::query_graph::{QueryGraph, QueryNode};
+use super::{ComputedCondition, RankingRuleGraphTrait};
+use crate::search::new::interner::{DedupInterner, Interned};
 use crate::search::new::query_term::{ExactTerm, LocatedQueryTermSubset};
-use crate::{Result, RoaringBitmapCodec, SearchContext, SearchLogger};
+use crate::{Result, RoaringBitmapCodec, SearchContext};
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum ExactnessCondition {
@@ -76,27 +75,5 @@ impl RankingRuleGraphTrait for ExactnessGraph {
         let skip_condition = conditions_interner.insert(skip_condition);
 
         Ok(vec![(0, exact_condition), (dest_node.term_ids.len() as u32, skip_condition)])
-    }
-
-    fn log_state(
-        _graph: &RankingRuleGraph<Self>,
-        _paths: &[Vec<Interned<Self::Condition>>],
-        _dead_ends_cache: &DeadEndsCache<Self::Condition>,
-        _niverse: &RoaringBitmap,
-        _costs: &MappedInterner<QueryNode, Vec<u64>>,
-        _cost: u64,
-        _logger: &mut dyn SearchLogger<QueryGraph>,
-    ) {
-    }
-
-    fn label_for_condition(
-        _ctx: &mut SearchContext,
-        condition: &Self::Condition,
-    ) -> Result<String> {
-        Ok(match condition {
-            ExactnessCondition::ExactInAttribute(_) => "exact",
-            ExactnessCondition::Skip(_) => "skip",
-        }
-        .to_owned())
     }
 }

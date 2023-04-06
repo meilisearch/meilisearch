@@ -96,7 +96,7 @@ fn resolve_maximally_reduced_query_graph(
     };
     graph.remove_nodes_keep_edges(&nodes_to_remove);
 
-    logger.query_for_universe(&graph);
+    logger.query_for_initial_universe(&graph);
     let docids = compute_query_graph_docids(ctx, &graph, universe)?;
 
     Ok(docids)

@@ -28,7 +28,6 @@ use roaring::RoaringBitmap;
 pub use typo::{TypoCondition, TypoGraph};
 
 use super::interner::{DedupInterner, FixedSizeInterner, Interned, MappedInterner};
-use super::logger::SearchLogger;
 use super::query_term::LocatedQueryTermSubset;
 use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, QueryNode, SearchContext};
@@ -86,10 +85,6 @@ impl<E> PartialEq for Edge<E> {
 pub trait RankingRuleGraphTrait: Sized {
     type Condition: Sized + Clone + PartialEq + Eq + Hash;
 
-    /// Return the label of the given edge condition, to be used when visualising
-    /// the ranking rule graph.
-    fn label_for_condition(ctx: &mut SearchContext, condition: &Self::Condition) -> Result<String>;
-
     /// Compute the document ids associated with the given edge condition,
     /// restricted to the given universe.
     fn resolve_condition(
@@ -105,16 +100,6 @@ pub trait RankingRuleGraphTrait: Sized {
         source_node: Option<&LocatedQueryTermSubset>,
         dest_node: &LocatedQueryTermSubset,
     ) -> Result<Vec<(u32, Interned<Self::Condition>)>>;
-
-    fn log_state(
-        graph: &RankingRuleGraph<Self>,
-        paths: &[Vec<Interned<Self::Condition>>],
-        dead_ends_cache: &DeadEndsCache<Self::Condition>,
-        universe: &RoaringBitmap,
-        costs: &MappedInterner<QueryNode, Vec<u64>>,
-        cost: u64,
-        logger: &mut dyn SearchLogger<QueryGraph>,
-    );
 }
 
 /// The graph used by graph-based ranking rules.

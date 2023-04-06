@@ -1,14 +1,14 @@
 // #[cfg(test)]
 pub mod detailed;
 
+use std::any::Any;
+
 use roaring::RoaringBitmap;
 
-use super::interner::{Interned, MappedInterner};
-use super::query_graph::QueryNode;
-use super::ranking_rule_graph::{
-    DeadEndsCache, ProximityCondition, ProximityGraph, RankingRuleGraph, TypoCondition, TypoGraph,
-};
+use super::graph_based_ranking_rule::Typo;
 use super::ranking_rules::BoxRankingRule;
+use super::sort::Sort;
+use super::words::Words;
 use super::{RankingRule, RankingRuleQueryTrait};
 
 /// Trait for structure logging the execution of a search query.
@@ -16,11 +16,11 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
     /// Logs the initial query
     fn initial_query(&mut self, query: &Q);
 
-    /// Logs the query that was used to compute the set of all candidates
-    fn query_for_universe(&mut self, query: &Q);
-
     /// Logs the value of the initial set of all candidates
     fn initial_universe(&mut self, universe: &RoaringBitmap);
+
+    /// Logs the query that was used to compute the set of all candidates
+    fn query_for_initial_universe(&mut self, query: &Q);
 
     /// Logs the ranking rules used to perform the search query
     fn ranking_rules(&mut self, rr: &[BoxRankingRule<Q>]);
@@ -58,30 +58,13 @@ pub trait SearchLogger<Q: RankingRuleQueryTrait> {
     /// Logs the addition of document ids to the final results
     fn add_to_results(&mut self, docids: &[u32]);
 
-    /// Logs the internal state of the words ranking rule
-    fn log_words_state(&mut self, query_graph: &Q);
-
-    /// Logs the internal state of the proximity ranking rule
-    fn log_proximity_state(
-        &mut self,
-        query_graph: &RankingRuleGraph<ProximityGraph>,
-        paths: &[Vec<Interned<ProximityCondition>>],
-        dead_ends_cache: &DeadEndsCache<ProximityCondition>,
-        universe: &RoaringBitmap,
-        distances: &MappedInterner<QueryNode, Vec<u64>>,
-        cost: u64,
-    );
-
-    /// Logs the internal state of the typo ranking rule
-    fn log_typo_state(
-        &mut self,
-        query_graph: &RankingRuleGraph<TypoGraph>,
-        paths: &[Vec<Interned<TypoCondition>>],
-        dead_ends_cache: &DeadEndsCache<TypoCondition>,
-        universe: &RoaringBitmap,
-        distances: &MappedInterner<QueryNode, Vec<u64>>,
-        cost: u64,
-    );
+    /// Logs the internal state of the ranking rule
+    fn log_ranking_rule_state<'ctx>(&mut self, rr: &(dyn Any + 'ctx)) {
+        if let Some(_words) = rr.downcast_ref::<Words>() {
+        } else if let Some(_sort) = rr.downcast_ref::<Sort<'ctx, Q>>() {
+        } else if let Some(_typo) = rr.downcast_ref::<Typo>() {
+        }
+    }
 }
 
 /// A dummy [`SearchLogger`] which does nothing.
@@ -90,7 +73,7 @@ pub struct DefaultSearchLogger;
 impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
     fn initial_query(&mut self, _query: &Q) {}
 
-    fn query_for_universe(&mut self, _query: &Q) {}
+    fn query_for_initial_universe(&mut self, _query: &Q) {}
 
     fn initial_universe(&mut self, _universe: &RoaringBitmap) {}
 
@@ -130,28 +113,4 @@ impl<Q: RankingRuleQueryTrait> SearchLogger<Q> for DefaultSearchLogger {
     }
 
     fn add_to_results(&mut self, _docids: &[u32]) {}
-
-    fn log_words_state(&mut self, _query_graph: &Q) {}
-
-    fn log_proximity_state(
-        &mut self,
-        _query_graph: &RankingRuleGraph<ProximityGraph>,
-        _paths_map: &[Vec<Interned<ProximityCondition>>],
-        _dead_ends_cache: &DeadEndsCache<ProximityCondition>,
-        _universe: &RoaringBitmap,
-        _distances: &MappedInterner<QueryNode, Vec<u64>>,
-        _cost: u64,
-    ) {
-    }
-
-    fn log_typo_state(
-        &mut self,
-        _query_graph: &RankingRuleGraph<TypoGraph>,
-        _paths: &[Vec<Interned<TypoCondition>>],
-        _dead_ends_cache: &DeadEndsCache<TypoCondition>,
-        _universe: &RoaringBitmap,
-        _distances: &MappedInterner<QueryNode, Vec<u64>>,
-        _cost: u64,
-    ) {
-    }
 }

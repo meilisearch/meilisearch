@@ -1,11 +1,10 @@
 use roaring::RoaringBitmap;
 
-use super::{ComputedCondition, DeadEndsCache, RankingRuleGraph, RankingRuleGraphTrait};
-use crate::search::new::interner::{DedupInterner, Interned, MappedInterner};
-use crate::search::new::logger::SearchLogger;
+use super::{ComputedCondition, RankingRuleGraphTrait};
+use crate::search::new::interner::{DedupInterner, Interned};
 use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::search::new::resolve_query_graph::compute_query_term_subset_docids;
-use crate::search::new::{QueryGraph, QueryNode, SearchContext};
+use crate::search::new::SearchContext;
 use crate::Result;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -75,22 +74,5 @@ impl RankingRuleGraphTrait for TypoGraph {
             ));
         }
         Ok(edges)
-    }
-
-    fn log_state(
-        graph: &RankingRuleGraph<Self>,
-        paths: &[Vec<Interned<TypoCondition>>],
-        dead_ends_cache: &DeadEndsCache<TypoCondition>,
-        universe: &RoaringBitmap,
-        distances: &MappedInterner<QueryNode, Vec<u64>>,
-        cost: u64,
-        logger: &mut dyn SearchLogger<QueryGraph>,
-    ) {
-        logger.log_typo_state(graph, paths, dead_ends_cache, universe, distances, cost);
-    }
-
-    fn label_for_condition(ctx: &mut SearchContext, condition: &Self::Condition) -> Result<String> {
-        let TypoCondition { term, nbr_typos } = condition;
-        Ok(format!("{}: {nbr_typos}", term.term_subset.description(ctx)))
     }
 }
