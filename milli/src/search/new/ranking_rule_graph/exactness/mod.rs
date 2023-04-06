@@ -58,6 +58,7 @@ impl RankingRuleGraphTrait for ExactnessGraph {
             docids,
             universe_len: universe.len(),
             start_term_subset: None,
+            // TODO/FIXME:  modify `end_term_subset` to signal to the next ranking rules that the term cannot be removed
             end_term_subset: dest_node.clone(),
         })
     }
