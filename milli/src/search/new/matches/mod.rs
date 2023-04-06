@@ -1,7 +1,8 @@
 use std::borrow::Cow;
 
 use charabia::{SeparatorKind, Token, Tokenizer};
-use matching_words::{MatchType, MatchingWords, PartialMatch, WordId};
+pub use matching_words::MatchingWords;
+use matching_words::{MatchType, PartialMatch, WordId};
 use serde::Serialize;
 
 use super::query_term::LocatedQueryTerm;
@@ -23,12 +24,7 @@ pub struct MatcherBuilder<'a, A> {
 }
 
 impl<'a, A> MatcherBuilder<'a, A> {
-    pub fn new(
-        ctx: SearchContext,
-        located_terms: Vec<LocatedQueryTerm>,
-        tokenizer: Tokenizer<'a, 'a, A>,
-    ) -> Self {
-        let matching_words = MatchingWords::new(ctx, located_terms);
+    pub fn new(matching_words: MatchingWords, tokenizer: Tokenizer<'a, 'a, A>) -> Self {
         Self {
             matching_words,
             tokenizer,
@@ -514,7 +510,8 @@ mod tests {
             let tokenizer = TokenizerBuilder::new().build();
             let tokens = tokenizer.tokenize(query);
             let query_terms = located_query_terms_from_string(&mut ctx, tokens, None).unwrap();
-            Self::new(ctx, query_terms, TokenizerBuilder::new().build())
+            let matching_words = MatchingWords::new(ctx, query_terms);
+            Self::new(matching_words, TokenizerBuilder::new().build())
         }
     }
 

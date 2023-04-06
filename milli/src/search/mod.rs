@@ -5,9 +5,7 @@ use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
 pub use self::facet::{FacetDistribution, Filter, DEFAULT_VALUES_PER_FACET};
-pub use self::matches::{
-    FormatOptions, MatchBounds, Matcher, MatcherBuilder, MatchingWord, MatchingWords,
-};
+pub use self::new::matches::{FormatOptions, MatchBounds, Matcher, MatcherBuilder, MatchingWords};
 use crate::{
     execute_search, AscDesc, DefaultSearchLogger, DocumentId, Index, Result, SearchContext,
 };
@@ -109,9 +107,9 @@ impl<'a> Search<'a> {
     }
 
     pub fn execute(&self) -> Result<SearchResult> {
-        let mut ctx = SearchContext::new(self.index, self.rtxn);
+        let ctx = SearchContext::new(self.index, self.rtxn);
         execute_search(
-            &mut ctx,
+            ctx,
             &self.query,
             self.terms_matching_strategy,
             self.exhaustive_number_hits,

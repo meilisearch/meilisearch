@@ -97,8 +97,8 @@ pub use self::heed_codec::{
 };
 pub use self::index::Index;
 pub use self::search::{
-    FacetDistribution, Filter, FormatOptions, MatchBounds, MatcherBuilder, MatchingWord,
-    MatchingWords, Search, SearchResult, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
+    FacetDistribution, Filter, FormatOptions, MatchBounds, MatcherBuilder, MatchingWords, Search,
+    SearchResult, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
 
 pub type Result<T> = std::result::Result<T, error::Error>;

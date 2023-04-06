@@ -1,4 +1,5 @@
 use std::cmp::Reverse;
+use std::fmt;
 use std::ops::RangeInclusive;
 
 use charabia::Token;
@@ -23,6 +24,7 @@ pub struct LocatedMatchingWords {
 
 /// Structure created from a query tree
 /// referencing words that match the given query tree.
+#[derive(Default)]
 pub struct MatchingWords {
     word_interner: DedupInterner<String>,
     phrase_interner: DedupInterner<Phrase>,
@@ -237,6 +239,40 @@ impl<'a> PartialMatch<'a> {
 
     pub fn char_len(&self) -> usize {
         self.char_len
+    }
+}
+
+impl fmt::Debug for MatchingWords {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let MatchingWords { word_interner, phrase_interner, phrases, words } = self;
+
+        let phrases: Vec<_> = phrases
+            .iter()
+            .map(|p| {
+                (
+                    phrase_interner
+                        .get(p.value)
+                        .words
+                        .iter()
+                        .map(|w| w.map_or("STOP_WORD", |w| word_interner.get(w)))
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                    p.positions.clone(),
+                )
+            })
+            .collect();
+
+        let words: Vec<_> = words
+            .iter()
+            .flat_map(|w| {
+                w.value
+                    .iter()
+                    .map(|s| (word_interner.get(*s), w.positions.clone(), w.is_prefix))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+
+        f.debug_struct("MatchingWords").field("phrases", &phrases).field("words", &words).finish()
     }
 }
 

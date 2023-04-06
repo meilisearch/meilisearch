@@ -289,8 +289,7 @@ mod tests {
 
     use charabia::TokenKind;
 
-    use super::*;
-    use crate::MatchingWords;
+    use super::{MatchingWords, *};
 
     #[test]
     fn test_bytes_to_highlight() {

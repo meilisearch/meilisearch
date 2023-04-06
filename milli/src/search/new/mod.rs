@@ -4,7 +4,7 @@ mod graph_based_ranking_rule;
 mod interner;
 mod limits;
 mod logger;
-mod matches;
+pub mod matches;
 mod query_graph;
 mod query_term;
 mod ranking_rule_graph;
@@ -271,7 +271,7 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
 
 #[allow(clippy::too_many_arguments)]
 pub fn execute_search(
-    ctx: &mut SearchContext,
+    mut ctx: SearchContext,
     query: &Option<String>,
     terms_matching_strategy: TermsMatchingStrategy,
     exhaustive_number_hits: bool,
@@ -284,21 +284,22 @@ pub fn execute_search(
     query_graph_logger: &mut dyn SearchLogger<QueryGraph>,
 ) -> Result<SearchResult> {
     let mut universe = if let Some(filters) = filters {
-        filters.evaluate(ctx.txn, ctx.index)?
+        filters.evaluate(&mut ctx.txn, &mut ctx.index)?
     } else {
-        ctx.index.documents_ids(ctx.txn)?
+        ctx.index.documents_ids(&mut ctx.txn)?
     };
 
+    let mut located_query_terms = None;
     let documents_ids = if let Some(query) = query {
         // We make sure that the analyzer is aware of the stop words
         // this ensures that the query builder is able to properly remove them.
         let mut tokbuilder = TokenizerBuilder::new();
-        let stop_words = ctx.index.stop_words(ctx.txn)?;
+        let stop_words = &mut ctx.index.stop_words(&mut ctx.txn)?;
         if let Some(ref stop_words) = stop_words {
             tokbuilder.stop_words(stop_words);
         }
 
-        let script_lang_map = ctx.index.script_language(ctx.txn)?;
+        let script_lang_map = &mut ctx.index.script_language(&mut ctx.txn)?;
         if !script_lang_map.is_empty() {
             tokbuilder.allow_list(&script_lang_map);
         }
@@ -306,27 +307,31 @@ pub fn execute_search(
         let tokenizer = tokbuilder.build();
         let tokens = tokenizer.tokenize(query);
 
-        let query_terms = located_query_terms_from_string(ctx, tokens, words_limit)?;
-        let graph = QueryGraph::from_query(ctx, &query_terms)?;
+        let query_terms = located_query_terms_from_string(&mut ctx, tokens, words_limit)?;
+        let graph = QueryGraph::from_query(&mut ctx, &query_terms)?;
+        located_query_terms = Some(query_terms);
 
-        check_sort_criteria(ctx, sort_criteria.as_ref())?;
+        check_sort_criteria(&mut ctx, sort_criteria.as_ref())?;
 
         universe = resolve_maximally_reduced_query_graph(
-            ctx,
+            &mut ctx,
             &universe,
             &graph,
             terms_matching_strategy,
             query_graph_logger,
         )?;
 
-        let ranking_rules =
-            get_ranking_rules_for_query_graph_search(ctx, sort_criteria, terms_matching_strategy)?;
+        let ranking_rules = get_ranking_rules_for_query_graph_search(
+            &mut ctx,
+            sort_criteria,
+            terms_matching_strategy,
+        )?;
 
-        bucket_sort(ctx, ranking_rules, &graph, &universe, from, length, query_graph_logger)?
+        bucket_sort(&mut ctx, ranking_rules, &graph, &universe, from, length, query_graph_logger)?
     } else {
-        let ranking_rules = get_ranking_rules_for_placeholder_search(ctx, sort_criteria)?;
+        let ranking_rules = get_ranking_rules_for_placeholder_search(&mut ctx, sort_criteria)?;
         bucket_sort(
-            ctx,
+            &mut ctx,
             ranking_rules,
             &PlaceholderQuery,
             &universe,
@@ -340,19 +345,20 @@ pub fn execute_search(
     // is requested and a distinct attribute is set.
     let mut candidates = universe;
     if exhaustive_number_hits {
-        if let Some(f) = ctx.index.distinct_field(ctx.txn)? {
-            if let Some(distinct_fid) = ctx.index.fields_ids_map(ctx.txn)?.id(f) {
-                candidates = apply_distinct_rule(ctx, distinct_fid, &candidates)?.remaining;
+        if let Some(f) = &mut ctx.index.distinct_field(&mut ctx.txn)? {
+            if let Some(distinct_fid) = ctx.index.fields_ids_map(&mut ctx.txn)?.id(f) {
+                candidates = apply_distinct_rule(&mut ctx, distinct_fid, &candidates)?.remaining;
             }
         }
     }
 
-    Ok(SearchResult {
-        // TODO: correct matching words
-        matching_words: MatchingWords::default(),
-        candidates,
-        documents_ids,
-    })
+    // consume context and located_query_terms to build MatchingWords.
+    let matching_words = match located_query_terms {
+        Some(located_query_terms) => MatchingWords::new(ctx, located_query_terms),
+        None => MatchingWords::default(),
+    };
+
+    Ok(SearchResult { matching_words, candidates, documents_ids })
 }
 
 fn check_sort_criteria(ctx: &SearchContext, sort_criteria: Option<&Vec<AscDesc>>) -> Result<()> {
