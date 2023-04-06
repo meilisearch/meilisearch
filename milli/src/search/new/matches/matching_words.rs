@@ -23,9 +23,9 @@ pub struct LocatedMatchingWords {
 
 /// Structure created from a query tree
 /// referencing words that match the given query tree.
-pub struct MatchingWords<'ctx> {
-    word_interner: &'ctx DedupInterner<String>,
-    phrase_interner: &'ctx DedupInterner<Phrase>,
+pub struct MatchingWords {
+    word_interner: DedupInterner<String>,
+    phrase_interner: DedupInterner<Phrase>,
     phrases: Vec<LocatedMatchingPhrase>,
     words: Vec<LocatedMatchingWords>,
 }
@@ -82,8 +82,8 @@ fn extract_matching_terms(term: &QueryTerm) -> (Vec<Interned<Phrase>>, Vec<Inter
     (matching_phrases, matching_words)
 }
 
-impl<'ctx> MatchingWords<'ctx> {
-    pub fn new(ctx: &'ctx SearchContext, located_terms: Vec<LocatedQueryTerm>) -> Self {
+impl MatchingWords {
+    pub fn new(ctx: SearchContext, located_terms: Vec<LocatedQueryTerm>) -> Self {
         let mut phrases = Vec::new();
         let mut words = Vec::new();
 
@@ -112,18 +112,18 @@ impl<'ctx> MatchingWords<'ctx> {
         Self {
             phrases,
             words,
-            word_interner: &ctx.word_interner,
-            phrase_interner: &ctx.phrase_interner,
+            word_interner: ctx.word_interner,
+            phrase_interner: ctx.phrase_interner,
         }
     }
 
     /// Returns an iterator over terms that match or partially match the given token.
-    pub fn match_token<'b>(&'ctx self, token: &'b Token<'b>) -> MatchesIter<'ctx, 'b> {
+    pub fn match_token<'a, 'b>(&'a self, token: &'b Token<'b>) -> MatchesIter<'a, 'b> {
         MatchesIter { matching_words: self, phrases: Box::new(self.phrases.iter()), token }
     }
 
     /// Try to match the token with one of the located_words.
-    fn match_unique_words(&'ctx self, token: &Token) -> Option<MatchType<'ctx>> {
+    fn match_unique_words<'a>(&'a self, token: &Token) -> Option<MatchType<'a>> {
         for located_words in &self.words {
             for word in &located_words.value {
                 let word = self.word_interner.get(*word);
@@ -148,7 +148,7 @@ impl<'ctx> MatchingWords<'ctx> {
 /// Iterator over terms that match the given token,
 /// This allow to lazily evaluate matches.
 pub struct MatchesIter<'a, 'b> {
-    matching_words: &'a MatchingWords<'a>,
+    matching_words: &'a MatchingWords,
     phrases: Box<dyn Iterator<Item = &'a LocatedMatchingPhrase> + 'a>,
     token: &'b Token<'b>,
 }
@@ -268,7 +268,7 @@ pub(crate) mod tests {
         let tokenizer = TokenizerBuilder::new().build();
         let tokens = tokenizer.tokenize("split this world");
         let query_terms = located_query_terms_from_string(&mut ctx, tokens, None).unwrap();
-        let matching_words = MatchingWords::new(&ctx, query_terms);
+        let matching_words = MatchingWords::new(ctx, query_terms);
 
         assert_eq!(
             matching_words
