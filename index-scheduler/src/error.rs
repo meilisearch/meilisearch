@@ -61,6 +61,8 @@ pub enum Error {
     SwapDuplicateIndexesFound(Vec<String>),
     #[error("Index `{0}` not found.")]
     SwapIndexNotFound(String),
+    #[error("No space left in database. Free some space by deleting tasks.")]
+    NoSpaceLeftInTaskQueue,
     #[error(
         "Indexes {} not found.",
         .0.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
@@ -152,6 +154,8 @@ impl ErrorCode for Error {
             Error::TaskNotFound(_) => Code::TaskNotFound,
             Error::TaskDeletionWithEmptyQuery => Code::MissingTaskFilters,
             Error::TaskCancelationWithEmptyQuery => Code::MissingTaskFilters,
+            // TODO: not sure of the Code to use
+            Error::NoSpaceLeftInTaskQueue => Code::NoSpaceLeftOnDevice,
             Error::Dump(e) => e.error_code(),
             Error::Milli(e) => e.error_code(),
             Error::ProcessBatchPanicked => Code::Internal,

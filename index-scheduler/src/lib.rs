@@ -820,6 +820,13 @@ impl IndexScheduler {
     pub fn register(&self, kind: KindWithContent) -> Result<Task> {
         let mut wtxn = self.env.write_txn()?;
 
+        // if the task doesn't delete anything and 90% of the task queue is full, we must refuse to enqueue the incomming task
+        if !matches!(&kind, KindWithContent::TaskDeletion { tasks, .. } if !tasks.is_empty())
+            && (self.env.real_disk_size()? * 100) / self.env.map_size()? as u64 > 90
+        {
+            return Err(Error::NoSpaceLeftInTaskQueue);
+        }
+
         let mut task = Task {
             uid: self.next_task_id(&wtxn)?,
             enqueued_at: OffsetDateTime::now_utc(),
