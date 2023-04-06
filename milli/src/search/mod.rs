@@ -17,7 +17,6 @@ static LEVDIST2: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(2, true));
 
 pub mod facet;
 mod fst_utils;
-mod matches;
 pub mod new;
 
 pub struct Search<'a> {
