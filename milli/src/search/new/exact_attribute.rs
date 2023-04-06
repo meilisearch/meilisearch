@@ -166,6 +166,9 @@ impl State {
                 )
                 .unwrap_or_default();
                 candidates &= word_position_docids;
+                if candidates.is_empty() {
+                    return Ok(State::Empty(query_graph.clone()));
+                }
             }
         }
 
@@ -197,11 +200,15 @@ impl State {
             )?;
             intersection &= &candidates;
             if !intersection.is_empty() {
+                // TODO: although not really worth it in terms of performance,
+                // if would be good to put this in cache for the sake of consistency
                 let candidates_with_exact_word_count = ctx
                     .index
                     .field_id_word_count_docids
                     .get(ctx.txn, &(fid, exact_term_position_ids.len() as u8))?
                     .unwrap_or_default();
+                // TODO: consider if we must store the candidates as arrays, or if there is a way to perform the union
+                // here.
                 candidates_per_attribute.push(FieldCandidates {
                     start_with_exact: intersection,
                     exact_word_count: candidates_with_exact_word_count,
