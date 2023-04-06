@@ -5,9 +5,6 @@ pub use matching_words::MatchingWords;
 use matching_words::{MatchType, PartialMatch, WordId};
 use serde::Serialize;
 
-use super::query_term::LocatedQueryTerm;
-use crate::SearchContext;
-
 pub mod matching_words;
 
 const DEFAULT_CROP_MARKER: &str = "…";
@@ -504,6 +501,7 @@ mod tests {
 
     use super::super::located_query_terms_from_string;
     use super::*;
+    use crate::SearchContext;
 
     impl<'a, 'ctx> MatcherBuilder<'a, &[u8]> {
         pub fn new_test(mut ctx: SearchContext, query: &'a str) -> Self {
