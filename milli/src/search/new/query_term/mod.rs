@@ -9,16 +9,14 @@ use crate::Result;
 use std::collections::BTreeSet;
 use std::ops::RangeInclusive;
 
+use either::Either;
 pub use ntypo_subset::NTypoTermSubset;
 pub use parse_query::{located_query_terms_from_string, make_ngram, number_of_typos_allowed};
 pub use phrase::Phrase;
 
 use compute_derivations::partially_initialized_term_from_word;
 
-/**
-A set of word derivations attached to a location in the search query.
-
-*/
+/// A set of word derivations attached to a location in the search query.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct LocatedQueryTermSubset {
     pub term_subset: QueryTermSubset,
@@ -53,7 +51,7 @@ struct ZeroTypoTerm {
     /// The original phrase, if any
     phrase: Option<Interned<Phrase>>,
     /// A single word equivalent to the original term, with zero typos
-    zero_typo: Option<Interned<String>>,
+    exact: Option<Interned<String>>,
     /// All the words that contain the original word as prefix
     prefix_of: BTreeSet<Interned<String>>,
     /// All the synonyms of the original word or phrase
@@ -94,7 +92,43 @@ impl<T> Lazy<T> {
     }
 }
 
+#[derive(Clone, Copy)]
+pub enum ExactTerm {
+    Phrase(Interned<Phrase>),
+    Word(Interned<String>),
+}
+
+impl ExactTerm {
+    pub fn interned_words<'ctx>(
+        &self,
+        ctx: &'ctx SearchContext<'ctx>,
+    ) -> impl Iterator<Item = Option<Interned<String>>> + 'ctx {
+        match *self {
+            ExactTerm::Phrase(phrase) => {
+                let phrase = ctx.phrase_interner.get(phrase);
+                Either::Left(phrase.words.iter().copied())
+            }
+            ExactTerm::Word(word) => Either::Right(std::iter::once(Some(word))),
+        }
+    }
+}
+
 impl QueryTermSubset {
+    pub fn exact_term(&self, ctx: &SearchContext) -> Option<ExactTerm> {
+        let full_query_term = ctx.term_interner.get(self.original);
+        if full_query_term.ngram_words.is_some() {
+            return None;
+        }
+        // TODO: included in subset
+        if let Some(phrase) = full_query_term.zero_typo.phrase {
+            self.zero_typo_subset.contains_phrase(phrase).then_some(ExactTerm::Phrase(phrase))
+        } else if let Some(word) = full_query_term.zero_typo.exact {
+            self.zero_typo_subset.contains_word(word).then_some(ExactTerm::Word(word))
+        } else {
+            None
+        }
+    }
+
     pub fn empty(for_term: Interned<QueryTerm>) -> Self {
         Self {
             original: for_term,
@@ -155,8 +189,13 @@ impl QueryTermSubset {
 
         let original = ctx.term_interner.get_mut(self.original);
         if !self.zero_typo_subset.is_empty() {
-            let ZeroTypoTerm { phrase: _, zero_typo, prefix_of, synonyms: _, use_prefix_db: _ } =
-                &original.zero_typo;
+            let ZeroTypoTerm {
+                phrase: _,
+                exact: zero_typo,
+                prefix_of,
+                synonyms: _,
+                use_prefix_db: _,
+            } = &original.zero_typo;
             result.extend(zero_typo.iter().copied());
             result.extend(prefix_of.iter().copied());
         };
@@ -204,7 +243,7 @@ impl QueryTermSubset {
         }
         let original = ctx.term_interner.get_mut(self.original);
 
-        let ZeroTypoTerm { phrase, zero_typo: _, prefix_of: _, synonyms, use_prefix_db: _ } =
+        let ZeroTypoTerm { phrase, exact: _, prefix_of: _, synonyms, use_prefix_db: _ } =
             &original.zero_typo;
         result.extend(phrase.iter().copied());
         result.extend(synonyms.iter().copied());
@@ -270,7 +309,7 @@ impl QueryTermSubset {
 
 impl ZeroTypoTerm {
     fn is_empty(&self) -> bool {
-        let ZeroTypoTerm { phrase, zero_typo, prefix_of, synonyms, use_prefix_db } = self;
+        let ZeroTypoTerm { phrase, exact: zero_typo, prefix_of, synonyms, use_prefix_db } = self;
         phrase.is_none()
             && zero_typo.is_none()
             && prefix_of.is_empty()

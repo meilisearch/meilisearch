@@ -7,20 +7,17 @@ use super::helpers::{
 };
 use crate::error::SerializationError;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
-use crate::{bucketed_position, relative_from_absolute_position, DocumentId, Result};
+use crate::{relative_from_absolute_position, DocumentId, Result};
 
-/// Extracts the word positions and the documents ids where this word appear.
-///
-/// Returns a grenad reader with the list of extracted words at positions and
-/// documents ids from the given chunk of docid word positions.
+/// Extracts the word, field id, and the documents ids where this word appear at this field id.
 #[logging_timer::time]
-pub fn extract_word_position_docids<R: io::Read + io::Seek>(
+pub fn extract_word_fid_docids<R: io::Read + io::Seek>(
     docid_word_positions: grenad::Reader<R>,
     indexer: GrenadParameters,
 ) -> Result<grenad::Reader<File>> {
     let max_memory = indexer.max_memory_by_thread();
 
-    let mut word_position_docids_sorter = create_sorter(
+    let mut word_fid_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,
         merge_cbo_roaring_bitmaps,
         indexer.chunk_compression_type,
@@ -39,14 +36,13 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
         for position in read_u32_ne_bytes(value) {
             key_buffer.clear();
             key_buffer.extend_from_slice(word_bytes);
-            let (_, position) = relative_from_absolute_position(position);
-            let position = bucketed_position(position);
-            key_buffer.extend_from_slice(&position.to_be_bytes());
-            word_position_docids_sorter.insert(&key_buffer, document_id.to_ne_bytes())?;
+            let (fid, _) = relative_from_absolute_position(position);
+            key_buffer.extend_from_slice(&fid.to_be_bytes());
+            word_fid_docids_sorter.insert(&key_buffer, document_id.to_ne_bytes())?;
         }
     }
 
-    let word_position_docids_reader = sorter_into_reader(word_position_docids_sorter, indexer)?;
+    let word_fid_docids_reader = sorter_into_reader(word_fid_docids_sorter, indexer)?;
 
-    Ok(word_position_docids_reader)
+    Ok(word_fid_docids_reader)
 }

@@ -266,7 +266,7 @@ impl PhraseBuilder {
                     is_prefix: false,
                     zero_typo: ZeroTypoTerm {
                         phrase: Some(phrase),
-                        zero_typo: None,
+                        exact: None,
                         prefix_of: BTreeSet::default(),
                         synonyms: BTreeSet::default(),
                         use_prefix_db: None,

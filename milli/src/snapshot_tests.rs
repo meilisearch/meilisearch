@@ -248,6 +248,11 @@ pub fn snap_word_position_docids(index: &Index) -> String {
         &format!("{word:<16} {position:<6} {}", display_bitmap(&b))
     })
 }
+pub fn snap_word_fid_docids(index: &Index) -> String {
+    make_db_snap_from_iter!(index, word_fid_docids, |((word, fid), b)| {
+        &format!("{word:<16} {fid:<3} {}", display_bitmap(&b))
+    })
+}
 pub fn snap_field_id_word_count_docids(index: &Index) -> String {
     make_db_snap_from_iter!(index, field_id_word_count_docids, |((field_id, word_count), b)| {
         &format!("{field_id:<3} {word_count:<6} {}", display_bitmap(&b))
@@ -476,6 +481,9 @@ macro_rules! full_snap_of_db {
     }};
     ($index:ident, word_position_docids) => {{
         $crate::snapshot_tests::snap_word_position_docids(&$index)
+    }};
+    ($index:ident, word_fid_docids) => {{
+        $crate::snapshot_tests::snap_word_fid_docids(&$index)
     }};
     ($index:ident, field_id_word_count_docids) => {{
         $crate::snapshot_tests::snap_field_id_word_count_docids(&$index)

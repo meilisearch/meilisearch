@@ -244,7 +244,8 @@ pub fn partially_initialized_term_from_word(
             Some(ctx.phrase_interner.insert(Phrase { words }))
         })
         .collect();
-    let zero_typo = ZeroTypoTerm { phrase: None, zero_typo, prefix_of, synonyms, use_prefix_db };
+    let zero_typo =
+        ZeroTypoTerm { phrase: None, exact: zero_typo, prefix_of, synonyms, use_prefix_db };
 
     Ok(QueryTerm {
         original: word_interned,

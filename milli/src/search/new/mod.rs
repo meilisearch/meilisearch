@@ -10,8 +10,9 @@ mod query_term;
 mod ranking_rule_graph;
 mod ranking_rules;
 mod resolve_query_graph;
-// TODO: documentation + comments
 mod small_bitmap;
+
+mod exact_attribute;
 // TODO: documentation + comments
 // implementation is currently an adaptation of the previous implementation to fit with the new model
 mod sort;
@@ -38,6 +39,8 @@ use resolve_query_graph::PhraseDocIdsCache;
 use roaring::RoaringBitmap;
 use words::Words;
 
+use self::exact_attribute::ExactAttribute;
+use self::graph_based_ranking_rule::Exactness;
 use self::interner::Interner;
 use self::ranking_rules::{BoxRankingRule, RankingRule};
 use self::resolve_query_graph::compute_query_graph_docids;
@@ -155,7 +158,7 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
     let mut proximity = false;
     let mut sort = false;
     let attribute = false;
-    let exactness = false;
+    let mut exactness = false;
     let mut asc = HashSet::new();
     let mut desc = HashSet::new();
 
@@ -216,8 +219,9 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                 if exactness {
                     continue;
                 }
-                // todo!();
-                // exactness = false;
+                ranking_rules.push(Box::new(ExactAttribute::new()));
+                ranking_rules.push(Box::new(Exactness::new()));
+                exactness = true;
             }
             crate::Criterion::Asc(field_name) => {
                 if asc.contains(&field_name) {
