@@ -1,0 +1,25 @@
+---
+source: meilisearch/tests/dumps/mod.rs
+---
+{
+  "results": [
+    {
+      "uid": 4,
+      "indexUid": null,
+      "status": "succeeded",
+      "type": "dumpCreation",
+      "canceledBy": null,
+      "details": {
+        "dumpUid": "[uid]"
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "2022-06-08T15:11:40.604805Z",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+  ],
+  "limit": 1,
+  "from": 4,
+  "next": 3
+}

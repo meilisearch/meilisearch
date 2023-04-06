@@ -45,10 +45,9 @@ use file_store::FileStore;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn};
-use meilisearch_types::milli;
 use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::update::IndexerConfig;
-use meilisearch_types::milli::{CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
+use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use synchronoise::SignalEvent;
@@ -567,7 +566,7 @@ impl IndexScheduler {
     }
 
     /// Return the name of all indexes without opening them.
-    pub fn index_names(self) -> Result<Vec<String>> {
+    pub fn index_names(&self) -> Result<Vec<String>> {
         let rtxn = self.env.read_txn()?;
         self.index_mapper.index_names(&rtxn)
     }
@@ -1080,6 +1079,14 @@ impl IndexScheduler {
         Ok(TickOutcome::TickAgain(processed_tasks))
     }
 
+    pub fn index_stats(&self, index_uid: &str) -> Result<IndexStats> {
+        let is_indexing = self.is_index_processing(index_uid)?;
+        let rtxn = self.read_txn()?;
+        let index_stats = self.index_mapper.stats_of(&rtxn, index_uid)?;
+
+        Ok(IndexStats { is_indexing, inner_stats: index_stats })
+    }
+
     pub(crate) fn delete_persisted_task_data(&self, task: &Task) -> Result<()> {
         match task.content_uuid() {
             Some(content_file) => self.delete_update_file(content_file),
@@ -1237,6 +1244,34 @@ impl<'a> Dump<'a> {
                 }
             };
         }
+
+        utils::insert_task_datetime(
+            &mut self.wtxn,
+            self.index_scheduler.enqueued_at,
+            task.enqueued_at,
+            task.uid,
+        )?;
+
+        // we can't override the started_at & finished_at, so we must only set it if the tasks is finished and won't change
+        if matches!(task.status, Status::Succeeded | Status::Failed | Status::Canceled) {
+            if let Some(started_at) = task.started_at {
+                utils::insert_task_datetime(
+                    &mut self.wtxn,
+                    self.index_scheduler.started_at,
+                    started_at,
+                    task.uid,
+                )?;
+            }
+            if let Some(finished_at) = task.finished_at {
+                utils::insert_task_datetime(
+                    &mut self.wtxn,
+                    self.index_scheduler.finished_at,
+                    finished_at,
+                    task.uid,
+                )?;
+            }
+        }
+
         self.statuses.entry(task.status).or_insert(RoaringBitmap::new()).insert(task.uid);
         self.kinds.entry(task.kind.as_kind()).or_insert(RoaringBitmap::new()).insert(task.uid);
 
@@ -1280,6 +1315,17 @@ struct IndexBudget {
     index_count: usize,
     /// For very constrained systems we might need to reduce the base task_db_size so we can accept at least one index.
     task_db_size: usize,
+}
+
+/// The statistics that can be computed from an `Index` object and the scheduler.
+///
+/// Compared with `index_mapper::IndexStats`, it adds the scheduling status.
+#[derive(Debug)]
+pub struct IndexStats {
+    /// Whether this index is currently performing indexation, according to the scheduler.
+    pub is_indexing: bool,
+    /// Internal stats computed from the index.
+    pub inner_stats: index_mapper::IndexStats,
 }
 
 #[cfg(test)]

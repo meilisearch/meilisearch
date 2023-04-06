@@ -1,0 +1,46 @@
+---
+source: meilisearch/tests/dumps/mod.rs
+---
+{
+  "results": [
+    {
+      "uid": 1,
+      "indexUid": "indexUID",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "displayedAttributes": [
+          "genres",
+          "id",
+          "overview",
+          "poster",
+          "release_date",
+          "title"
+        ],
+        "searchableAttributes": [
+          "title",
+          "overview"
+        ],
+        "filterableAttributes": [
+          "genres"
+        ],
+        "sortableAttributes": [
+          "genres"
+        ],
+        "stopWords": [
+          "of",
+          "the"
+        ]
+      },
+      "error": null,
+      "duration": "PT7.288826907S",
+      "enqueuedAt": "2021-09-08T09:34:40.882977Z",
+      "startedAt": "2021-09-08T09:34:40.883073093Z",
+      "finishedAt": "2021-09-08T09:34:48.1719Z"
+    }
+  ],
+  "limit": 1,
+  "from": 1,
+  "next": 0
+}

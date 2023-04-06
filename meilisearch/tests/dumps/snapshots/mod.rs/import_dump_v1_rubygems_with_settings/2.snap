@@ -1,0 +1,26 @@
+---
+source: meilisearch/tests/dumps/mod.rs
+---
+{
+  "results": [
+    {
+      "uid": 92,
+      "indexUid": "rubygems",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 0,
+        "indexedDocuments": 1042
+      },
+      "error": null,
+      "duration": "PT1.487793839S",
+      "enqueuedAt": "2021-09-08T09:27:01.465296Z",
+      "startedAt": "2021-09-08T09:28:44.882177161Z",
+      "finishedAt": "2021-09-08T09:28:46.369971Z"
+    }
+  ],
+  "limit": 1,
+  "from": 92,
+  "next": 91
+}

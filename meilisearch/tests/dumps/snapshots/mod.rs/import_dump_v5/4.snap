@@ -1,0 +1,30 @@
+---
+source: meilisearch/tests/dumps/mod.rs
+---
+{
+  "results": [
+    {
+      "uid": 2,
+      "indexUid": "test",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "typoTolerance": {
+          "minWordSizeForTypos": {
+            "oneTypo": 10,
+            "twoTypos": 17
+          }
+        }
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "2022-06-08T15:01:14.794184Z",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+  ],
+  "limit": 1,
+  "from": 2,
+  "next": 0
+}
