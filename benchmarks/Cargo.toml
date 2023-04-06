@@ -48,7 +48,3 @@ harness = false
 [[bench]]
 name = "indexing"
 harness = false
-
-[[bench]]
-name = "formatting"
-harness = false
