@@ -293,9 +293,26 @@ impl Interned<QueryTerm> {
         })?;
         let original_str = ctx.word_interner.get(original).to_owned();
         let split_words = find_split_words(ctx, original_str.as_str())?;
-        let one_typo = OneTypoTerm { split_words, one_typo: one_typo_words };
 
         let self_mut = ctx.term_interner.get_mut(self);
+
+        // Only add the split words to the derivations if:
+        // 1. the term is not an ngram; OR
+        // 2. the term is an ngram, but the split words are different from the ngram's component words
+        let split_words = if let Some((ngram_words, split_words)) =
+            self_mut.ngram_words.as_ref().zip(split_words.as_ref())
+        {
+            let Phrase { words } = ctx.phrase_interner.get(*split_words);
+            if ngram_words.iter().ne(words.iter().flatten()) {
+                Some(*split_words)
+            } else {
+                None
+            }
+        } else {
+            split_words
+        };
+        let one_typo = OneTypoTerm { split_words, one_typo: one_typo_words };
+
         self_mut.one_typo = Lazy::Init(one_typo);
 
         Ok(())
