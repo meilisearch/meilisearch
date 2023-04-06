@@ -503,7 +503,7 @@ mod tests {
     use super::*;
     use crate::SearchContext;
 
-    impl<'a, 'ctx> MatcherBuilder<'a, &[u8]> {
+    impl<'a> MatcherBuilder<'a, &[u8]> {
         pub fn new_test(mut ctx: SearchContext, query: &'a str) -> Self {
             let tokenizer = TokenizerBuilder::new().build();
             let tokens = tokenizer.tokenize(query);
