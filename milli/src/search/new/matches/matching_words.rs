@@ -20,6 +20,7 @@ pub struct LocatedMatchingWords {
     pub value: Vec<Interned<String>>,
     pub positions: RangeInclusive<WordId>,
     pub is_prefix: bool,
+    pub original_char_count: usize,
 }
 
 /// Structure created from a query tree
@@ -101,10 +102,12 @@ impl MatchingWords {
                     positions: located_term.positions.clone(),
                 });
             }
+
             words.push(LocatedMatchingWords {
                 value: matching_words,
                 positions: located_term.positions.clone(),
                 is_prefix: term.is_prefix,
+                original_char_count: ctx.word_interner.get(term.original).chars().count(),
             });
         }
 
@@ -131,7 +134,11 @@ impl MatchingWords {
                 let word = self.word_interner.get(*word);
                 // if the word is a prefix we match using starts_with.
                 if located_words.is_prefix && token.lemma().starts_with(word) {
-                    let char_len = token.original_lengths(word.len()).0;
+                    let Some((char_index, c)) = word.char_indices().take(located_words.original_char_count).last() else {
+                        continue;
+                    };
+                    let prefix_length = char_index + c.len_utf8();
+                    let char_len = token.original_lengths(prefix_length).0;
                     let ids = &located_words.positions;
                     return Some(MatchType::Full { char_len, ids });
                 // else we exact match the token.
