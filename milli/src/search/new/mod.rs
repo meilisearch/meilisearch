@@ -28,7 +28,7 @@ use interner::DedupInterner;
 pub use logger::detailed::DetailedSearchLogger;
 pub use logger::{DefaultSearchLogger, SearchLogger};
 use query_graph::{QueryGraph, QueryNode};
-use query_term::{located_query_terms_from_string, Phrase, QueryTerm};
+use query_term::{located_query_terms_from_string, LocatedQueryTerm, Phrase, QueryTerm};
 use ranking_rules::{bucket_sort, PlaceholderQuery, RankingRuleOutput, RankingRuleQueryTrait};
 use resolve_query_graph::PhraseDocIdsCache;
 use roaring::RoaringBitmap;
@@ -39,10 +39,7 @@ use self::ranking_rules::{BoxRankingRule, RankingRule};
 use self::resolve_query_graph::compute_query_graph_docids;
 use self::sort::Sort;
 use crate::search::new::distinct::apply_distinct_rule;
-use crate::{
-    AscDesc, Filter, Index, MatchingWords, Member, Result, SearchResult, TermsMatchingStrategy,
-    UserError,
-};
+use crate::{AscDesc, DocumentId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError};
 
 /// A structure used throughout the execution of a search query.
 pub struct SearchContext<'ctx> {
@@ -54,6 +51,7 @@ pub struct SearchContext<'ctx> {
     pub term_interner: Interner<QueryTerm>,
     pub phrase_docids: PhraseDocIdsCache,
 }
+
 impl<'ctx> SearchContext<'ctx> {
     pub fn new(index: &'ctx Index, txn: &'ctx RoTxn<'ctx>) -> Self {
         Self {
@@ -271,7 +269,7 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
 
 #[allow(clippy::too_many_arguments)]
 pub fn execute_search(
-    mut ctx: SearchContext,
+    ctx: &mut SearchContext,
     query: &Option<String>,
     terms_matching_strategy: TermsMatchingStrategy,
     exhaustive_number_hits: bool,
@@ -282,11 +280,11 @@ pub fn execute_search(
     words_limit: Option<usize>,
     placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery>,
     query_graph_logger: &mut dyn SearchLogger<QueryGraph>,
-) -> Result<SearchResult> {
+) -> Result<PartialSearchResult> {
     let mut universe = if let Some(filters) = filters {
-        filters.evaluate(&mut ctx.txn, &mut ctx.index)?
+        filters.evaluate(ctx.txn, ctx.index)?
     } else {
-        ctx.index.documents_ids(&mut ctx.txn)?
+        ctx.index.documents_ids(ctx.txn)?
     };
 
     let mut located_query_terms = None;
@@ -294,12 +292,12 @@ pub fn execute_search(
         // We make sure that the analyzer is aware of the stop words
         // this ensures that the query builder is able to properly remove them.
         let mut tokbuilder = TokenizerBuilder::new();
-        let stop_words = &mut ctx.index.stop_words(&mut ctx.txn)?;
+        let stop_words = ctx.index.stop_words(ctx.txn)?;
         if let Some(ref stop_words) = stop_words {
             tokbuilder.stop_words(stop_words);
         }
 
-        let script_lang_map = &mut ctx.index.script_language(&mut ctx.txn)?;
+        let script_lang_map = ctx.index.script_language(ctx.txn)?;
         if !script_lang_map.is_empty() {
             tokbuilder.allow_list(&script_lang_map);
         }
@@ -307,31 +305,28 @@ pub fn execute_search(
         let tokenizer = tokbuilder.build();
         let tokens = tokenizer.tokenize(query);
 
-        let query_terms = located_query_terms_from_string(&mut ctx, tokens, words_limit)?;
-        let graph = QueryGraph::from_query(&mut ctx, &query_terms)?;
+        let query_terms = located_query_terms_from_string(ctx, tokens, words_limit)?;
+        let graph = QueryGraph::from_query(ctx, &query_terms)?;
         located_query_terms = Some(query_terms);
 
-        check_sort_criteria(&mut ctx, sort_criteria.as_ref())?;
+        check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
         universe = resolve_maximally_reduced_query_graph(
-            &mut ctx,
+            ctx,
             &universe,
             &graph,
             terms_matching_strategy,
             query_graph_logger,
         )?;
 
-        let ranking_rules = get_ranking_rules_for_query_graph_search(
-            &mut ctx,
-            sort_criteria,
-            terms_matching_strategy,
-        )?;
+        let ranking_rules =
+            get_ranking_rules_for_query_graph_search(ctx, sort_criteria, terms_matching_strategy)?;
 
-        bucket_sort(&mut ctx, ranking_rules, &graph, &universe, from, length, query_graph_logger)?
+        bucket_sort(ctx, ranking_rules, &graph, &universe, from, length, query_graph_logger)?
     } else {
-        let ranking_rules = get_ranking_rules_for_placeholder_search(&mut ctx, sort_criteria)?;
+        let ranking_rules = get_ranking_rules_for_placeholder_search(ctx, sort_criteria)?;
         bucket_sort(
-            &mut ctx,
+            ctx,
             ranking_rules,
             &PlaceholderQuery,
             &universe,
@@ -345,20 +340,14 @@ pub fn execute_search(
     // is requested and a distinct attribute is set.
     let mut candidates = universe;
     if exhaustive_number_hits {
-        if let Some(f) = &mut ctx.index.distinct_field(&mut ctx.txn)? {
-            if let Some(distinct_fid) = ctx.index.fields_ids_map(&mut ctx.txn)?.id(f) {
-                candidates = apply_distinct_rule(&mut ctx, distinct_fid, &candidates)?.remaining;
+        if let Some(f) = ctx.index.distinct_field(ctx.txn)? {
+            if let Some(distinct_fid) = ctx.index.fields_ids_map(ctx.txn)?.id(f) {
+                candidates = apply_distinct_rule(ctx, distinct_fid, &candidates)?.remaining;
             }
         }
     }
 
-    // consume context and located_query_terms to build MatchingWords.
-    let matching_words = match located_query_terms {
-        Some(located_query_terms) => MatchingWords::new(ctx, located_query_terms),
-        None => MatchingWords::default(),
-    };
-
-    Ok(SearchResult { matching_words, candidates, documents_ids })
+    Ok(PartialSearchResult { located_query_terms, candidates, documents_ids })
 }
 
 fn check_sort_criteria(ctx: &SearchContext, sort_criteria: Option<&Vec<AscDesc>>) -> Result<()> {
@@ -401,4 +390,10 @@ fn check_sort_criteria(ctx: &SearchContext, sort_criteria: Option<&Vec<AscDesc>>
     }
 
     Ok(())
+}
+
+pub struct PartialSearchResult {
+    pub located_query_terms: Option<Vec<LocatedQueryTerm>>,
+    pub candidates: RoaringBitmap,
+    pub documents_ids: Vec<DocumentId>,
 }
