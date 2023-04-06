@@ -88,7 +88,7 @@ fn is_empty_db(db_path: impl AsRef<Path>) -> bool {
 
 pub fn create_app(
     index_scheduler: Data<IndexScheduler>,
-    auth_controller: AuthController,
+    auth_controller: Data<AuthController>,
     opt: Opt,
     analytics: Arc<dyn Analytics>,
     enable_dashboard: bool,
@@ -136,7 +136,7 @@ enum OnFailure {
     KeepDb,
 }
 
-pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, AuthController)> {
+pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<AuthController>)> {
     let empty_db = is_empty_db(&opt.db_path);
     let (index_scheduler, auth_controller) = if let Some(ref snapshot_path) = opt.import_snapshot {
         let snapshot_path_exists = snapshot_path.exists();
@@ -195,6 +195,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Auth
 
     // We create a loop in a thread that registers snapshotCreation tasks
     let index_scheduler = Arc::new(index_scheduler);
+    let auth_controller = Arc::new(auth_controller);
     if let ScheduleSnapshot::Enabled(snapshot_delay) = opt.schedule_snapshot {
         let snapshot_delay = Duration::from_secs(snapshot_delay);
         let index_scheduler = index_scheduler.clone();
@@ -380,7 +381,7 @@ fn import_dump(
 pub fn configure_data(
     config: &mut web::ServiceConfig,
     index_scheduler: Data<IndexScheduler>,
-    auth: AuthController,
+    auth: Data<AuthController>,
     opt: &Opt,
     analytics: Arc<dyn Analytics>,
 ) {

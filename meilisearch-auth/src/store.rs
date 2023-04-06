@@ -61,6 +61,13 @@ impl HeedAuthStore {
         Ok(Self { env, keys, action_keyid_index_expiration, should_close_on_drop: true })
     }
 
+    /// Return `Ok(())` if the auth store is able to access one of its database.
+    pub fn health(&self) -> Result<()> {
+        let rtxn = self.env.read_txn()?;
+        self.keys.first(&rtxn)?;
+        Ok(())
+    }
+
     /// Return the size in bytes of database
     pub fn size(&self) -> Result<u64> {
         Ok(self.env.real_disk_size()?)

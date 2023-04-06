@@ -17,7 +17,7 @@ pub fn configure(config: &mut web::ServiceConfig) {
 
 pub async fn get_metrics(
     index_scheduler: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, Data<IndexScheduler>>,
-    auth_controller: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, AuthController>,
+    auth_controller: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, Data<AuthController>>,
 ) -> Result<HttpResponse, ResponseError> {
     let auth_filters = index_scheduler.filters();
     if !auth_filters.all_indexes_authorized() {

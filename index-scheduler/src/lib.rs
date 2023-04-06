@@ -429,6 +429,13 @@ impl IndexScheduler {
         Ok(this)
     }
 
+    /// Return `Ok(())` if the index scheduler is able to access one of its database.
+    pub fn health(&self) -> Result<()> {
+        let rtxn = self.env.read_txn()?;
+        self.all_tasks.first(&rtxn)?;
+        Ok(())
+    }
+
     fn index_budget(
         tasks_path: &Path,
         base_map_size: usize,

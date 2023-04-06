@@ -238,7 +238,7 @@ pub struct Stats {
 
 async fn get_stats(
     index_scheduler: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<IndexScheduler>>,
-    auth_controller: GuardedData<ActionPolicy<{ actions::STATS_GET }>, AuthController>,
+    auth_controller: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<AuthController>>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -253,7 +253,7 @@ async fn get_stats(
 
 pub fn create_all_stats(
     index_scheduler: Data<IndexScheduler>,
-    auth_controller: AuthController,
+    auth_controller: Data<AuthController>,
     filters: &meilisearch_auth::AuthFilter,
 ) -> Result<Stats, ResponseError> {
     let mut last_task: Option<OffsetDateTime> = None;
@@ -318,9 +318,14 @@ struct KeysResponse {
 
 pub async fn get_health(
     req: HttpRequest,
+    index_scheduler: Data<IndexScheduler>,
+    auth_controller: Data<AuthController>,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     analytics.health_seen(&req);
+
+    index_scheduler.health().unwrap();
+    auth_controller.health().unwrap();
 
     Ok(HttpResponse::Ok().json(serde_json::json!({ "status": "available" })))
 }
