@@ -113,6 +113,8 @@ impl State {
         }
 
         exact_term_position_ids.sort_by_key(|(_, _, id)| *id);
+        exact_term_position_ids.dedup_by_key(|(_, _, id)| *id);
+
         // bail if there is a "hole" (missing word) in remaining query graph
         if let Some((_, _, first_id)) = exact_term_position_ids.first() {
             if *first_id != 0 {
