@@ -4,6 +4,7 @@ mod graph_based_ranking_rule;
 mod interner;
 mod limits;
 mod logger;
+mod matches;
 mod query_graph;
 mod query_term;
 mod ranking_rule_graph;
