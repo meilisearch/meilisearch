@@ -19,7 +19,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 pub async fn create_dump(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DUMPS_CREATE }>, Data<IndexScheduler>>,
-    auth_controller: GuardedData<ActionPolicy<{ actions::DUMPS_CREATE }>, AuthController>,
+    auth_controller: GuardedData<ActionPolicy<{ actions::DUMPS_CREATE }>, Data<AuthController>>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {

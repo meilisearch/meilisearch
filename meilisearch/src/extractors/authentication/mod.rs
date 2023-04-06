@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::pin::Pin;
 
+use actix_web::web::Data;
 use actix_web::FromRequest;
 pub use error::AuthenticationError;
 use futures::future::err;
@@ -23,7 +24,7 @@ impl<P, D> GuardedData<P, D> {
     }
 
     async fn auth_bearer(
-        auth: AuthController,
+        auth: Data<AuthController>,
         token: String,
         index: Option<String>,
         data: Option<D>,
@@ -43,7 +44,7 @@ impl<P, D> GuardedData<P, D> {
         }
     }
 
-    async fn auth_token(auth: AuthController, data: Option<D>) -> Result<Self, ResponseError>
+    async fn auth_token(auth: Data<AuthController>, data: Option<D>) -> Result<Self, ResponseError>
     where
         P: Policy + 'static,
     {
@@ -60,7 +61,7 @@ impl<P, D> GuardedData<P, D> {
     }
 
     async fn authenticate(
-        auth: AuthController,
+        auth: Data<AuthController>,
         token: String,
         index: Option<String>,
     ) -> Result<Option<AuthFilter>, ResponseError>
@@ -90,7 +91,7 @@ impl<P: Policy + 'static, D: 'static + Clone> FromRequest for GuardedData<P, D> 
         req: &actix_web::HttpRequest,
         _payload: &mut actix_web::dev::Payload,
     ) -> Self::Future {
-        match req.app_data::<AuthController>().cloned() {
+        match req.app_data::<Data<AuthController>>().cloned() {
             Some(auth) => match req
                 .headers()
                 .get("Authorization")
@@ -122,10 +123,15 @@ impl<P: Policy + 'static, D: 'static + Clone> FromRequest for GuardedData<P, D> 
 }
 
 pub trait Policy {
-    fn authenticate(auth: AuthController, token: &str, index: Option<&str>) -> Option<AuthFilter>;
+    fn authenticate(
+        auth: Data<AuthController>,
+        token: &str,
+        index: Option<&str>,
+    ) -> Option<AuthFilter>;
 }
 
 pub mod policies {
+    use actix_web::web::Data;
     use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
     use meilisearch_auth::{AuthController, AuthFilter, SearchRules};
     // reexport actions in policies in order to be used in routes configuration.
@@ -178,7 +184,7 @@ pub mod policies {
         /// Otherwise, returns an object containing the generated permissions: the search filters to add to a search, and the list of allowed indexes
         /// (that may contain more indexes than requested).
         fn authenticate(
-            auth: AuthController,
+            auth: Data<AuthController>,
             token: &str,
             index: Option<&str>,
         ) -> Option<AuthFilter> {

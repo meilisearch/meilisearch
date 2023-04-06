@@ -74,13 +74,14 @@ async fn main() -> anyhow::Result<()> {
 
 async fn run_http(
     index_scheduler: Arc<IndexScheduler>,
-    auth_controller: AuthController,
+    auth_controller: Arc<AuthController>,
     opt: Opt,
     analytics: Arc<dyn Analytics>,
 ) -> anyhow::Result<()> {
     let enable_dashboard = &opt.env == "development";
     let opt_clone = opt.clone();
     let index_scheduler = Data::from(index_scheduler);
+    let auth_controller = Data::from(auth_controller);
 
     let http_server = HttpServer::new(move || {
         create_app(

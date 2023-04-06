@@ -13,7 +13,7 @@ use crate::common::encoder::Encoder;
 
 pub struct Service {
     pub index_scheduler: Arc<IndexScheduler>,
-    pub auth: AuthController,
+    pub auth: Arc<AuthController>,
     pub options: Opt,
     pub api_key: Option<String>,
 }
@@ -107,7 +107,7 @@ impl Service {
     pub async fn request(&self, mut req: test::TestRequest) -> (Value, StatusCode) {
         let app = test::init_service(create_app(
             self.index_scheduler.clone().into(),
-            self.auth.clone(),
+            self.auth.clone().into(),
             self.options.clone(),
             analytics::MockAnalytics::new(&self.options),
             true,

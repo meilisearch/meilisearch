@@ -1,5 +1,6 @@
 use std::str;
 
+use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::Deserr;
@@ -35,7 +36,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 pub async fn create_api_key(
-    auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_CREATE }>, AuthController>,
+    auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_CREATE }>, Data<AuthController>>,
     body: AwebJson<CreateApiKey, DeserrJsonError>,
     _req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
@@ -66,7 +67,7 @@ impl ListApiKeys {
 }
 
 pub async fn list_api_keys(
-    auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_GET }>, AuthController>,
+    auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_GET }>, Data<AuthController>>,
     list_api_keys: AwebQueryParameter<ListApiKeys, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
     let paginate = list_api_keys.into_inner().as_pagination();
@@ -84,7 +85,7 @@ pub async fn list_api_keys(
 }
 
 pub async fn get_api_key(
-    auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_GET }>, AuthController>,
+    auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_GET }>, Data<AuthController>>,
     path: web::Path<AuthParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let key = path.into_inner().key;
@@ -103,7 +104,7 @@ pub async fn get_api_key(
 }
 
 pub async fn patch_api_key(
-    auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_UPDATE }>, AuthController>,
+    auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_UPDATE }>, Data<AuthController>>,
     body: AwebJson<PatchApiKey, DeserrJsonError>,
     path: web::Path<AuthParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -123,7 +124,7 @@ pub async fn patch_api_key(
 }
 
 pub async fn delete_api_key(
-    auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_DELETE }>, AuthController>,
+    auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_DELETE }>, Data<AuthController>>,
     path: web::Path<AuthParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let key = path.into_inner().key;
