@@ -1489,10 +1489,9 @@ impl IndexScheduler {
 fn delete_document_by_filter(filter: &serde_json::Value, index: Index) -> Result<u64> {
     let filter = Filter::from_json(filter)?;
     Ok(if let Some(filter) = filter {
-        let index_rtxn = index.read_txn()?;
-
-        let candidates = filter.evaluate(&index_rtxn, &index)?;
         let mut wtxn = index.write_txn()?;
+
+        let candidates = filter.evaluate(&wtxn, &index)?;
         let mut delete_operation = DeleteDocuments::new(&mut wtxn, &index)?;
         delete_operation.delete_documents(&candidates);
         let deleted_documents =
