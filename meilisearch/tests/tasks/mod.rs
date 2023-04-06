@@ -1,11 +1,14 @@
 mod errors;
 
+use byte_unit::{Byte, ByteUnit};
 use meili_snap::insta::assert_json_snapshot;
+use meili_snap::{json_string, snapshot};
 use serde_json::json;
+use tempfile::TempDir;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
-use crate::common::Server;
+use crate::common::{default_settings, Server};
 
 #[actix_rt::test]
 async fn error_get_unexisting_task_status() {
@@ -997,6 +1000,92 @@ async fn test_summarized_dump_creation() {
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
+    }
+    "###);
+}
+
+#[actix_web::test]
+async fn test_task_queue_is_full() {
+    let dir = TempDir::new().unwrap();
+    let mut options = default_settings(dir.path());
+    options.max_task_db_size = Byte::from_unit(500.0, ByteUnit::B).unwrap();
+
+    let server = Server::new_with_options(options).await.unwrap();
+
+    // the first task should be enqueued without issue
+    let (result, code) = server.create_index(json!({ "uid": "doggo" })).await;
+    snapshot!(code, @"202 Accepted");
+    snapshot!(json_string!(result, { ".enqueuedAt" => "[date]" }), @r###"
+    {
+      "taskUid": 0,
+      "indexUid": "doggo",
+      "status": "enqueued",
+      "type": "indexCreation",
+      "enqueuedAt": "[date]"
+    }
+    "###);
+
+    loop {
+        let (res, _code) = server.create_index(json!({ "uid": "doggo" })).await;
+        if res["taskUid"] == json!(null) {
+            break;
+        }
+    }
+
+    let (result, code) = server.create_index(json!({ "uid": "doggo" })).await;
+    snapshot!(code, @"422 Unprocessable Entity");
+    snapshot!(json_string!(result), @r###"
+    {
+      "message": "No space left in database. Free some space by deleting tasks.",
+      "code": "no_space_left_on_device",
+      "type": "system",
+      "link": "https://docs.meilisearch.com/errors#no_space_left_on_device"
+    }
+    "###);
+
+    // But we should still be able to register tasks deletion IF they delete something
+    let (result, code) = server.delete_tasks("uids=0").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(result, { ".enqueuedAt" => "[date]", ".taskUid" => "uid" }), @r###"
+    {
+      "taskUid": "uid",
+      "indexUid": null,
+      "status": "enqueued",
+      "type": "taskDeletion",
+      "enqueuedAt": "[date]"
+    }
+    "###);
+
+    // we're going to fill up the queue once again
+    loop {
+        let (res, _code) = server.create_index(json!({ "uid": "doggo" })).await;
+        if res["taskUid"] == json!(null) {
+            break;
+        }
+    }
+
+    // But we should NOT be able to register this task because it doesn't match any tasks
+    let (result, code) = server.delete_tasks("uids=0").await;
+    snapshot!(code, @"422 Unprocessable Entity");
+    snapshot!(json_string!(result), @r###"
+    {
+      "message": "No space left in database. Free some space by deleting tasks.",
+      "code": "no_space_left_on_device",
+      "type": "system",
+      "link": "https://docs.meilisearch.com/errors#no_space_left_on_device"
+    }
+    "###);
+
+    // The deletion still works
+    let (result, code) = server.delete_tasks("uids=*").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(result, { ".enqueuedAt" => "[date]", ".taskUid" => "uid" }), @r###"
+    {
+      "taskUid": "uid",
+      "indexUid": null,
+      "status": "enqueued",
+      "type": "taskDeletion",
+      "enqueuedAt": "[date]"
     }
     "###);
 }
