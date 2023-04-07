@@ -81,8 +81,7 @@ impl<'t, 'u, 'i> WordPrefixPositionDocids<'t, 'u, 'i> {
             let mut current_prefixes: Option<&&[String]> = None;
             let mut prefixes_cache = HashMap::new();
             while let Some((key, data)) = new_word_position_docids_iter.move_on_next()? {
-                let (word, pos) = StrBEU32Codec::bytes_decode(key).ok_or(heed::Error::Decoding)?;
-                let (_fid, pos) = relative_from_absolute_position(pos);
+                let (word, pos) = StrBEU16Codec::bytes_decode(key).ok_or(heed::Error::Decoding)?;
 
                 current_prefixes = match current_prefixes.take() {
                     Some(prefixes) if word.starts_with(&prefixes[0]) => Some(prefixes),
