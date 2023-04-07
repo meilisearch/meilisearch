@@ -6,6 +6,11 @@ use super::SearchContext;
 use crate::search::new::distinct::{apply_distinct_rule, distinct_single_docid, DistinctOutput};
 use crate::Result;
 
+pub struct BucketSortOutput {
+    pub docids: Vec<u32>,
+    pub all_candidates: RoaringBitmap,
+}
+
 pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     ctx: &mut SearchContext<'ctx>,
     mut ranking_rules: Vec<BoxRankingRule<'ctx, Q>>,
@@ -14,7 +19,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     from: usize,
     length: usize,
     logger: &mut dyn SearchLogger<Q>,
-) -> Result<Vec<u32>> {
+) -> Result<BucketSortOutput> {
     logger.initial_query(query);
     logger.ranking_rules(&ranking_rules);
     logger.initial_universe(universe);
@@ -26,7 +31,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     };
 
     if universe.len() < from as u64 {
-        return Ok(vec![]);
+        return Ok(BucketSortOutput { docids: vec![], all_candidates: universe.clone() });
     }
     if ranking_rules.is_empty() {
         if let Some(distinct_fid) = distinct_fid {
@@ -42,9 +47,12 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
                 distinct_single_docid(ctx.index, ctx.txn, distinct_fid, docid, &mut excluded)?;
                 results.push(docid);
             }
-            return Ok(results);
+            let mut all_candidates = universe - excluded;
+            all_candidates.extend(results.iter().copied());
+            return Ok(BucketSortOutput { docids: results, all_candidates });
         } else {
-            return Ok(universe.iter().skip(from).take(length).collect());
+            let docids = universe.iter().skip(from).take(length).collect();
+            return Ok(BucketSortOutput { docids, all_candidates: universe.clone() });
         };
     }
 
@@ -61,7 +69,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
 
     /// Finish iterating over the current ranking rule, yielding
     /// control to the parent (or finishing the search if not possible).
-    /// Update the candidates accordingly and inform the logger.
+    /// Update the universes accordingly and inform the logger.
     macro_rules! back {
         () => {
             assert!(ranking_rule_universes[cur_ranking_rule_index].is_empty());
@@ -80,72 +88,35 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         };
     }
 
-    let mut results = vec![];
+    let mut all_candidates = RoaringBitmap::new();
+    let mut valid_docids = vec![];
     let mut cur_offset = 0usize;
 
-    /// Add the candidates to the results. Take `distinct`, `from`, `length`, and `cur_offset`
-    /// into account and inform the logger.
     macro_rules! maybe_add_to_results {
         ($candidates:expr) => {
-            // First apply the distinct rule on the candidates, reducing the universes if necessary
-            let candidates = if let Some(distinct_fid) = distinct_fid {
-                let DistinctOutput { remaining, excluded } = apply_distinct_rule(ctx, distinct_fid, $candidates)?;
-                for universe in ranking_rule_universes.iter_mut() {
-                    *universe -= &excluded;
-                }
-                remaining
-            } else {
-                $candidates.clone()
-            };
-            let len = candidates.len();
-            // if the candidates are empty, there is nothing to do;
-            if !candidates.is_empty() {
-                // if we still haven't reached the first document to return
-                if cur_offset < from {
-                    // and if no document from this bucket can be returned
-                    if cur_offset + (candidates.len() as usize) < from {
-                        // then just skip the bucket
-                        logger.skip_bucket_ranking_rule(
-                            cur_ranking_rule_index,
-                            ranking_rules[cur_ranking_rule_index].as_ref(),
-                            &candidates,
-                        );
-                    } else {
-                        // otherwise, skip some of the documents and add some of the rest, in order of ids
-                        let all_candidates = candidates.iter().collect::<Vec<_>>();
-                        let (skipped_candidates, candidates) =
-                            all_candidates.split_at(from - cur_offset);
-                        logger.skip_bucket_ranking_rule(
-                            cur_ranking_rule_index,
-                            ranking_rules[cur_ranking_rule_index].as_ref(),
-                            &skipped_candidates.into_iter().collect(),
-                        );
-                        let candidates = candidates
-                            .iter()
-                            .take(length - results.len())
-                            .copied()
-                            .collect::<Vec<_>>();
-                        logger.add_to_results(&candidates);
-                        results.extend(&candidates);
-                    }
-                } else {
-                    // if we have passed the offset already, add some of the documents (up to the limit)
-                    let candidates =
-                        candidates.iter().take(length - results.len()).collect::<Vec<u32>>();
-                    logger.add_to_results(&candidates);
-                    results.extend(&candidates);
-                }
-            }
-            cur_offset += len as usize;
+            maybe_add_to_results(
+                ctx,
+                from,
+                length,
+                logger,
+                &mut valid_docids,
+                &mut all_candidates,
+                &mut ranking_rule_universes,
+                &mut ranking_rules,
+                cur_ranking_rule_index,
+                &mut cur_offset,
+                distinct_fid,
+                $candidates,
+            )?;
         };
     }
 
-    while results.len() < length {
+    while valid_docids.len() < length {
         // The universe for this bucket is zero or one element, so we don't need to sort
         // anything, just extend the results and go back to the parent ranking rule.
         if ranking_rule_universes[cur_ranking_rule_index].len() <= 1 {
-            maybe_add_to_results!(&ranking_rule_universes[cur_ranking_rule_index]);
-            ranking_rule_universes[cur_ranking_rule_index].clear();
+            let bucket = std::mem::take(&mut ranking_rule_universes[cur_ranking_rule_index]);
+            maybe_add_to_results!(bucket);
             back!();
             continue;
         }
@@ -171,7 +142,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
             || next_bucket.candidates.len() <= 1
             || cur_offset + (next_bucket.candidates.len() as usize) < from
         {
-            maybe_add_to_results!(&next_bucket.candidates);
+            maybe_add_to_results!(next_bucket.candidates);
             continue;
         }
 
@@ -191,5 +162,80 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         )?;
     }
 
-    Ok(results)
+    all_candidates |= &ranking_rule_universes[0];
+
+    Ok(BucketSortOutput { docids: valid_docids, all_candidates })
+}
+
+/// Add the candidates to the results. Take `distinct`, `from`, `length`, and `cur_offset`
+/// into account and inform the logger.
+#[allow(clippy::too_many_arguments)]
+fn maybe_add_to_results<'ctx, Q: RankingRuleQueryTrait>(
+    ctx: &mut SearchContext<'ctx>,
+    from: usize,
+    length: usize,
+    logger: &mut dyn SearchLogger<Q>,
+
+    valid_docids: &mut Vec<u32>,
+    all_candidates: &mut RoaringBitmap,
+
+    ranking_rule_universes: &mut [RoaringBitmap],
+    ranking_rules: &mut [BoxRankingRule<'ctx, Q>],
+    cur_ranking_rule_index: usize,
+
+    cur_offset: &mut usize,
+    distinct_fid: Option<u16>,
+    candidates: RoaringBitmap,
+) -> Result<()> {
+    // First apply the distinct rule on the candidates, reducing the universes if necessary
+    let candidates = if let Some(distinct_fid) = distinct_fid {
+        let DistinctOutput { remaining, excluded } =
+            apply_distinct_rule(ctx, distinct_fid, &candidates)?;
+        for universe in ranking_rule_universes.iter_mut() {
+            *universe -= &excluded;
+        }
+        remaining
+    } else {
+        candidates.clone()
+    };
+    *all_candidates |= &candidates;
+    // if the candidates are empty, there is nothing to do;
+    if candidates.is_empty() {
+        return Ok(());
+    }
+
+    // if we still haven't reached the first document to return
+    if *cur_offset < from {
+        // and if no document from this bucket can be returned
+        if *cur_offset + (candidates.len() as usize) < from {
+            // then just skip the bucket
+            logger.skip_bucket_ranking_rule(
+                cur_ranking_rule_index,
+                ranking_rules[cur_ranking_rule_index].as_ref(),
+                &candidates,
+            );
+        } else {
+            // otherwise, skip some of the documents and add some of the rest, in order of ids
+            let all_candidates = candidates.iter().collect::<Vec<_>>();
+            let (skipped_candidates, candidates) = all_candidates.split_at(from - *cur_offset);
+
+            logger.skip_bucket_ranking_rule(
+                cur_ranking_rule_index,
+                ranking_rules[cur_ranking_rule_index].as_ref(),
+                &skipped_candidates.iter().collect(),
+            );
+            let candidates =
+                candidates.iter().take(length - valid_docids.len()).copied().collect::<Vec<_>>();
+            logger.add_to_results(&candidates);
+            valid_docids.extend(&candidates);
+        }
+    } else {
+        // if we have passed the offset already, add some of the documents (up to the limit)
+        let candidates = candidates.iter().take(length - valid_docids.len()).collect::<Vec<u32>>();
+        logger.add_to_results(&candidates);
+        valid_docids.extend(&candidates);
+    }
+
+    *cur_offset += candidates.len() as usize;
+    Ok(())
 }

@@ -61,12 +61,9 @@ pub fn distinct_single_docid(
     }
     for item in facet_number_values(docid, field_id, index, txn)? {
         let ((_, _, facet_value), _) = item?;
-        if let Some(facet_docids) = facet_value_docids(
-            index.facet_id_string_docids.remap_types(),
-            txn,
-            field_id,
-            facet_value,
-        )? {
+        if let Some(facet_docids) =
+            facet_value_docids(index.facet_id_f64_docids.remap_types(), txn, field_id, facet_value)?
+        {
             *excluded |= facet_docids;
         }
     }

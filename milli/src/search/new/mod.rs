@@ -24,6 +24,7 @@ mod tests;
 
 use std::collections::HashSet;
 
+use bucket_sort::bucket_sort;
 use charabia::TokenizerBuilder;
 use db_cache::DatabaseCache;
 use graph_based_ranking_rule::{Proximity, Typo};
@@ -34,11 +35,11 @@ pub use logger::{DefaultSearchLogger, SearchLogger};
 use query_graph::{QueryGraph, QueryNode};
 use query_term::{located_query_terms_from_string, Phrase, QueryTerm};
 use ranking_rules::{PlaceholderQuery, RankingRuleOutput, RankingRuleQueryTrait};
-use bucket_sort::bucket_sort;
 use resolve_query_graph::PhraseDocIdsCache;
 use roaring::RoaringBitmap;
 use words::Words;
 
+use self::bucket_sort::BucketSortOutput;
 use self::exact_attribute::ExactAttribute;
 use self::graph_based_ranking_rule::Exactness;
 use self::interner::Interner;
@@ -297,7 +298,7 @@ pub fn execute_search(
         ctx.index.documents_ids(ctx.txn)?
     };
 
-    let documents_ids = if let Some(query) = query {
+    let bucket_sort_output = if let Some(query) = query {
         // We make sure that the analyzer is aware of the stop words
         // this ensures that the query builder is able to properly remove them.
         let mut tokbuilder = TokenizerBuilder::new();
@@ -344,13 +345,14 @@ pub fn execute_search(
         )?
     };
 
+    let BucketSortOutput { docids, mut all_candidates } = bucket_sort_output;
+
     // The candidates is the universe unless the exhaustive number of hits
     // is requested and a distinct attribute is set.
-    let mut candidates = universe;
     if exhaustive_number_hits {
         if let Some(f) = ctx.index.distinct_field(ctx.txn)? {
             if let Some(distinct_fid) = ctx.index.fields_ids_map(ctx.txn)?.id(f) {
-                candidates = apply_distinct_rule(ctx, distinct_fid, &candidates)?.remaining;
+                all_candidates = apply_distinct_rule(ctx, distinct_fid, &all_candidates)?.remaining;
             }
         }
     }
@@ -358,8 +360,8 @@ pub fn execute_search(
     Ok(SearchResult {
         // TODO: correct matching words
         matching_words: MatchingWords::default(),
-        candidates,
-        documents_ids,
+        candidates: all_candidates,
+        documents_ids: docids,
     })
 }
 
