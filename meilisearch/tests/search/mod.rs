@@ -30,7 +30,7 @@ pub(self) static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
             "id": "166428",
         },
         {
-            "title": "Glass",
+            "title": "Gläss",
             "id": "450465",
         }
     ])
@@ -52,7 +52,7 @@ pub(self) static NESTED_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
                     "age": 4,
                 },
             ],
-            "cattos": "pesti",
+            "cattos": "pésti",
         },
         {
             "id": 654,
@@ -142,7 +142,7 @@ async fn simple_search() {
     index.wait_task(1).await;
 
     index
-        .search(json!({"q": "pesti"}), |response, code| {
+        .search(json!({"q": "pésti"}), |response, code| {
             assert_eq!(code, 200, "{}", response);
             assert_eq!(response["hits"].as_array().unwrap().len(), 2);
         })
@@ -192,6 +192,31 @@ async fn test_kanji_language_detection() {
         .await;
 }
 
+#[cfg(feature = "default")]
+#[actix_rt::test]
+async fn test_thai_language() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    // We don't need documents, the issue is on the query side only.
+    let documents = json!([
+        { "id": 0, "title": "สบู่สมุนไพรดอกดาวเรือง 100 กรัม จำนวน 6 ก้อน" },
+        { "id": 1, "title": "สบู่สมุนไพรชาเขียว 100 กรัม จำนวน 6 ก้อน" },
+        { "id": 2, "title": "สบู่สมุนไพรฝางแดงผสมว่านหางจรเข้ 100 กรัม จำนวน 6 ก้อน" }
+    ]);
+    index.add_documents(documents, None).await;
+    index.wait_task(0).await;
+
+    index.update_settings(json!({"rankingRules": ["exactness"]})).await;
+    index.wait_task(1).await;
+
+    index
+        .search(json!({"q": "สบู"}), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+        })
+        .await;
+}
+
 #[actix_rt::test]
 async fn search_multiple_params() {
     let server = Server::new().await;
@@ -225,7 +250,7 @@ async fn search_multiple_params() {
     index
         .search(
             json!({
-                "q": "pesti",
+                "q": "pésti",
                 "attributesToCrop": ["catto:2"],
                 "attributesToHighlight": ["catto"],
                 "limit": 2,
@@ -256,7 +281,7 @@ async fn search_with_filter_string_notation() {
     index
         .search(
             json!({
-                "filter": "title = Glass"
+                "filter": "title = Gläss"
             }),
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
@@ -280,7 +305,7 @@ async fn search_with_filter_string_notation() {
     index
         .search(
             json!({
-                "filter": "cattos = pesti"
+                "filter": "cattos = pésti"
             }),
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
@@ -318,7 +343,7 @@ async fn search_with_filter_array_notation() {
 
     let (response, code) = index
         .search_post(json!({
-            "filter": ["title = Glass"]
+            "filter": ["title = Gläss"]
         }))
         .await;
     assert_eq!(code, 200, "{}", response);
@@ -326,7 +351,7 @@ async fn search_with_filter_array_notation() {
 
     let (response, code) = index
         .search_post(json!({
-            "filter": [["title = Glass", "title = \"Shazam!\"", "title = \"Escape Room\""]]
+            "filter": [["title = Gläss", "title = \"Shazam!\"", "title = \"Escape Room\""]]
         }))
         .await;
     assert_eq!(code, 200, "{}", response);

@@ -4,10 +4,11 @@ use std::time::Duration;
 use std::{fs, thread};
 
 use log::error;
-use meilisearch_types::heed::types::Str;
+use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn};
 use meilisearch_types::milli::update::IndexerConfig;
-use meilisearch_types::milli::Index;
+use meilisearch_types::milli::{FieldDistribution, Index};
+use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -19,6 +20,7 @@ use crate::{Error, Result};
 mod index_map;
 
 const INDEX_MAPPING: &str = "index-mapping";
+const INDEX_STATS: &str = "index-stats";
 
 /// Structure managing meilisearch's indexes.
 ///
@@ -52,6 +54,11 @@ pub struct IndexMapper {
 
     /// Map an index name with an index uuid currently available on disk.
     pub(crate) index_mapping: Database<Str, UuidCodec>,
+    /// Map an index UUID with the cached stats associated to the index.
+    ///
+    /// Using an UUID forces to use the index_mapping table to recover the index behind a name, ensuring
+    /// consistency wrt index swapping.
+    pub(crate) index_stats: Database<UuidCodec, SerdeJson<IndexStats>>,
 
     /// Path to the folder where the LMDB environments of each index are.
     base_path: PathBuf,
@@ -76,6 +83,39 @@ pub enum IndexStatus {
     Available(Index),
 }
 
+/// The statistics that can be computed from an `Index` object.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct IndexStats {
+    /// Number of documents in the index.
+    pub number_of_documents: u64,
+    /// Size of the index' DB, in bytes.
+    pub database_size: u64,
+    /// Association of every field name with the number of times it occurs in the documents.
+    pub field_distribution: FieldDistribution,
+    /// Creation date of the index.
+    pub created_at: OffsetDateTime,
+    /// Date of the last update of the index.
+    pub updated_at: OffsetDateTime,
+}
+
+impl IndexStats {
+    /// Compute the stats of an index
+    ///
+    /// # Parameters
+    ///
+    /// - rtxn: a RO transaction for the index, obtained from `Index::read_txn()`.
+    pub fn new(index: &Index, rtxn: &RoTxn) -> Result<Self> {
+        let database_size = index.on_disk_size()?;
+        Ok(IndexStats {
+            number_of_documents: index.number_of_documents(rtxn)?,
+            database_size,
+            field_distribution: index.field_distribution(rtxn)?,
+            created_at: index.created_at(rtxn)?,
+            updated_at: index.updated_at(rtxn)?,
+        })
+    }
+}
+
 impl IndexMapper {
     pub fn new(
         env: &Env,
@@ -88,6 +128,7 @@ impl IndexMapper {
         Ok(Self {
             index_map: Arc::new(RwLock::new(IndexMap::new(index_count))),
             index_mapping: env.create_database(Some(INDEX_MAPPING))?,
+            index_stats: env.create_database(Some(INDEX_STATS))?,
             base_path,
             index_base_map_size,
             index_growth_amount,
@@ -139,6 +180,9 @@ impl IndexMapper {
             .index_mapping
             .get(&wtxn, name)?
             .ok_or_else(|| Error::IndexNotFound(name.to_string()))?;
+
+        // Not an error if the index had no stats in cache.
+        self.index_stats.delete(&mut wtxn, &uuid)?;
 
         // Once we retrieved the UUID of the index we remove it from the mapping table.
         assert!(self.index_mapping.delete(&mut wtxn, name)?);
@@ -357,6 +401,45 @@ impl IndexMapper {
         self.index_mapping.put(wtxn, lhs, &rhs_uuid)?;
         self.index_mapping.put(wtxn, rhs, &lhs_uuid)?;
 
+        Ok(())
+    }
+
+    /// The stats of an index.
+    ///
+    /// If available in the cache, they are directly returned.
+    /// Otherwise, the `Index` is opened to compute the stats on the fly (the result is not cached).
+    /// The stats for an index are cached after each `Index` update.
+    pub fn stats_of(&self, rtxn: &RoTxn, index_uid: &str) -> Result<IndexStats> {
+        let uuid = self
+            .index_mapping
+            .get(rtxn, index_uid)?
+            .ok_or_else(|| Error::IndexNotFound(index_uid.to_string()))?;
+
+        match self.index_stats.get(rtxn, &uuid)? {
+            Some(stats) => Ok(stats),
+            None => {
+                let index = self.index(rtxn, index_uid)?;
+                let index_rtxn = index.read_txn()?;
+                IndexStats::new(&index, &index_rtxn)
+            }
+        }
+    }
+
+    /// Stores the new stats for an index.
+    ///
+    /// Expected usage is to compute the stats the index using `IndexStats::new`, the pass it to this function.
+    pub fn store_stats_of(
+        &self,
+        wtxn: &mut RwTxn,
+        index_uid: &str,
+        stats: &IndexStats,
+    ) -> Result<()> {
+        let uuid = self
+            .index_mapping
+            .get(wtxn, index_uid)?
+            .ok_or_else(|| Error::IndexNotFound(index_uid.to_string()))?;
+
+        self.index_stats.put(wtxn, &uuid, stats)?;
         Ok(())
     }
 

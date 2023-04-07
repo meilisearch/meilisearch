@@ -1,6 +1,5 @@
 ---
 source: index-scheduler/src/lib.rs
-assertion_line: 1818
 ---
 ### Autobatching Enabled = true
 ### Processing Tasks:
@@ -23,7 +22,8 @@ canceled [0,]
 catto [0,]
 ----------------------------------------------------------------------
 ### Index Mapper:
-["catto"]
+catto: { number_of_documents: 0, field_distribution: {} }
+
 ----------------------------------------------------------------------
 ### Canceled By:
 1 [0,]

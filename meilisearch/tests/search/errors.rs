@@ -672,7 +672,7 @@ async fn filter_reserved_geo_attribute_array() {
     index.wait_task(1).await;
 
     let expected_response = json!({
-        "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` field coordinates.\n1:5 _geo = Glass",
+        "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:13 _geo = Glass",
         "code": "invalid_search_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -697,7 +697,7 @@ async fn filter_reserved_geo_attribute_string() {
     index.wait_task(1).await;
 
     let expected_response = json!({
-        "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` field coordinates.\n1:5 _geo = Glass",
+        "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:13 _geo = Glass",
         "code": "invalid_search_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -722,7 +722,7 @@ async fn filter_reserved_attribute_array() {
     index.wait_task(1).await;
 
     let expected_response = json!({
-        "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression.\n1:13 _geoDistance = Glass",
+        "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:21 _geoDistance = Glass",
         "code": "invalid_search_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -747,13 +747,63 @@ async fn filter_reserved_attribute_string() {
     index.wait_task(1).await;
 
     let expected_response = json!({
-        "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression.\n1:13 _geoDistance = Glass",
+       "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:21 _geoDistance = Glass",
         "code": "invalid_search_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
     });
     index
         .search(json!({"filter": "_geoDistance = Glass"}), |response, code| {
+            assert_eq!(response, expected_response);
+            assert_eq!(code, 400);
+        })
+        .await;
+}
+
+#[actix_rt::test]
+async fn filter_reserved_geo_point_array() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    index.update_settings(json!({"filterableAttributes": ["title"]})).await;
+
+    let documents = DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(1).await;
+
+    let expected_response = json!({
+        "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:18 _geoPoint = Glass",
+        "code": "invalid_search_filter",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+    });
+    index
+        .search(json!({"filter": ["_geoPoint = Glass"]}), |response, code| {
+            assert_eq!(response, expected_response);
+            assert_eq!(code, 400);
+        })
+        .await;
+}
+
+#[actix_rt::test]
+async fn filter_reserved_geo_point_string() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    index.update_settings(json!({"filterableAttributes": ["title"]})).await;
+
+    let documents = DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(1).await;
+
+    let expected_response = json!({
+       "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:18 _geoPoint = Glass",
+        "code": "invalid_search_filter",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+    });
+    index
+        .search(json!({"filter": "_geoPoint = Glass"}), |response, code| {
             assert_eq!(response, expected_response);
             assert_eq!(code, 400);
         })

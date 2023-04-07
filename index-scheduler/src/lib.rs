@@ -31,6 +31,7 @@ mod uuid_codec;
 pub type Result<T> = std::result::Result<T, Error>;
 pub type TaskId = u32;
 
+use std::collections::HashMap;
 use std::ops::{Bound, RangeBounds};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -43,11 +44,10 @@ pub use error::Error;
 use file_store::FileStore;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::types::{OwnedType, SerdeBincode, SerdeJson, Str};
-use meilisearch_types::heed::{self, Database, Env, RoTxn};
-use meilisearch_types::milli;
+use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn};
 use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::update::IndexerConfig;
-use meilisearch_types::milli::{CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
+use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use synchronoise::SignalEvent;
@@ -429,6 +429,13 @@ impl IndexScheduler {
         Ok(this)
     }
 
+    /// Return `Ok(())` if the index scheduler is able to access one of its database.
+    pub fn health(&self) -> Result<()> {
+        let rtxn = self.env.read_txn()?;
+        self.all_tasks.first(&rtxn)?;
+        Ok(())
+    }
+
     fn index_budget(
         tasks_path: &Path,
         base_map_size: usize,
@@ -566,7 +573,7 @@ impl IndexScheduler {
     }
 
     /// Return the name of all indexes without opening them.
-    pub fn index_names(self) -> Result<Vec<String>> {
+    pub fn index_names(&self) -> Result<Vec<String>> {
         let rtxn = self.env.read_txn()?;
         self.index_mapper.index_names(&rtxn)
     }
@@ -883,115 +890,8 @@ impl IndexScheduler {
 
     /// Register a new task coming from a dump in the scheduler.
     /// By taking a mutable ref we're pretty sure no one will ever import a dump while actix is running.
-    pub fn register_dumped_task(
-        &mut self,
-        task: TaskDump,
-        content_file: Option<Box<UpdateFile>>,
-    ) -> Result<Task> {
-        // Currently we don't need to access the tasks queue while loading a dump thus I can block everything.
-        let mut wtxn = self.env.write_txn()?;
-
-        let content_uuid = match content_file {
-            Some(content_file) if task.status == Status::Enqueued => {
-                let (uuid, mut file) = self.create_update_file()?;
-                let mut builder = DocumentsBatchBuilder::new(file.as_file_mut());
-                for doc in content_file {
-                    builder.append_json_object(&doc?)?;
-                }
-                builder.into_inner()?;
-                file.persist()?;
-
-                Some(uuid)
-            }
-            // If the task isn't `Enqueued` then just generate a recognisable `Uuid`
-            // in case we try to open it later.
-            _ if task.status != Status::Enqueued => Some(Uuid::nil()),
-            _ => None,
-        };
-
-        let task = Task {
-            uid: task.uid,
-            enqueued_at: task.enqueued_at,
-            started_at: task.started_at,
-            finished_at: task.finished_at,
-            error: task.error,
-            canceled_by: task.canceled_by,
-            details: task.details,
-            status: task.status,
-            kind: match task.kind {
-                KindDump::DocumentImport {
-                    primary_key,
-                    method,
-                    documents_count,
-                    allow_index_creation,
-                } => KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
-                    primary_key,
-                    method,
-                    content_file: content_uuid.ok_or(Error::CorruptedDump)?,
-                    documents_count,
-                    allow_index_creation,
-                },
-                KindDump::DocumentDeletion { documents_ids } => KindWithContent::DocumentDeletion {
-                    documents_ids,
-                    index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
-                },
-                KindDump::DocumentClear => KindWithContent::DocumentClear {
-                    index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
-                },
-                KindDump::Settings { settings, is_deletion, allow_index_creation } => {
-                    KindWithContent::SettingsUpdate {
-                        index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
-                        new_settings: settings,
-                        is_deletion,
-                        allow_index_creation,
-                    }
-                }
-                KindDump::IndexDeletion => KindWithContent::IndexDeletion {
-                    index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
-                },
-                KindDump::IndexCreation { primary_key } => KindWithContent::IndexCreation {
-                    index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
-                    primary_key,
-                },
-                KindDump::IndexUpdate { primary_key } => KindWithContent::IndexUpdate {
-                    index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
-                    primary_key,
-                },
-                KindDump::IndexSwap { swaps } => KindWithContent::IndexSwap { swaps },
-                KindDump::TaskCancelation { query, tasks } => {
-                    KindWithContent::TaskCancelation { query, tasks }
-                }
-                KindDump::TasksDeletion { query, tasks } => {
-                    KindWithContent::TaskDeletion { query, tasks }
-                }
-                KindDump::DumpCreation { keys, instance_uid } => {
-                    KindWithContent::DumpCreation { keys, instance_uid }
-                }
-                KindDump::SnapshotCreation => KindWithContent::SnapshotCreation,
-            },
-        };
-
-        self.all_tasks.put(&mut wtxn, &BEU32::new(task.uid), &task)?;
-
-        for index in task.indexes() {
-            self.update_index(&mut wtxn, index, |bitmap| {
-                bitmap.insert(task.uid);
-            })?;
-        }
-
-        self.update_status(&mut wtxn, task.status, |bitmap| {
-            bitmap.insert(task.uid);
-        })?;
-
-        self.update_kind(&mut wtxn, task.kind.as_kind(), |bitmap| {
-            (bitmap.insert(task.uid));
-        })?;
-
-        wtxn.commit()?;
-        self.wake_up.signal();
-
-        Ok(task)
+    pub fn register_dumped_task(&mut self) -> Result<Dump> {
+        Dump::new(self)
     }
 
     /// Create a new index without any associated task.
@@ -1186,6 +1086,14 @@ impl IndexScheduler {
         Ok(TickOutcome::TickAgain(processed_tasks))
     }
 
+    pub fn index_stats(&self, index_uid: &str) -> Result<IndexStats> {
+        let is_indexing = self.is_index_processing(index_uid)?;
+        let rtxn = self.read_txn()?;
+        let index_stats = self.index_mapper.stats_of(&rtxn, index_uid)?;
+
+        Ok(IndexStats { is_indexing, inner_stats: index_stats })
+    }
+
     pub(crate) fn delete_persisted_task_data(&self, task: &Task) -> Result<()> {
         match task.content_uuid() {
             Some(content_file) => self.delete_update_file(content_file),
@@ -1218,6 +1126,184 @@ impl IndexScheduler {
     }
 }
 
+pub struct Dump<'a> {
+    index_scheduler: &'a IndexScheduler,
+    wtxn: RwTxn<'a, 'a>,
+
+    indexes: HashMap<String, RoaringBitmap>,
+    statuses: HashMap<Status, RoaringBitmap>,
+    kinds: HashMap<Kind, RoaringBitmap>,
+}
+
+impl<'a> Dump<'a> {
+    pub(crate) fn new(index_scheduler: &'a mut IndexScheduler) -> Result<Self> {
+        // While loading a dump no one should be able to access the scheduler thus I can block everything.
+        let wtxn = index_scheduler.env.write_txn()?;
+
+        Ok(Dump {
+            index_scheduler,
+            wtxn,
+            indexes: HashMap::new(),
+            statuses: HashMap::new(),
+            kinds: HashMap::new(),
+        })
+    }
+
+    /// Register a new task coming from a dump in the scheduler.
+    /// By taking a mutable ref we're pretty sure no one will ever import a dump while actix is running.
+    pub fn register_dumped_task(
+        &mut self,
+        task: TaskDump,
+        content_file: Option<Box<UpdateFile>>,
+    ) -> Result<Task> {
+        let content_uuid = match content_file {
+            Some(content_file) if task.status == Status::Enqueued => {
+                let (uuid, mut file) = self.index_scheduler.create_update_file()?;
+                let mut builder = DocumentsBatchBuilder::new(file.as_file_mut());
+                for doc in content_file {
+                    builder.append_json_object(&doc?)?;
+                }
+                builder.into_inner()?;
+                file.persist()?;
+
+                Some(uuid)
+            }
+            // If the task isn't `Enqueued` then just generate a recognisable `Uuid`
+            // in case we try to open it later.
+            _ if task.status != Status::Enqueued => Some(Uuid::nil()),
+            _ => None,
+        };
+
+        let task = Task {
+            uid: task.uid,
+            enqueued_at: task.enqueued_at,
+            started_at: task.started_at,
+            finished_at: task.finished_at,
+            error: task.error,
+            canceled_by: task.canceled_by,
+            details: task.details,
+            status: task.status,
+            kind: match task.kind {
+                KindDump::DocumentImport {
+                    primary_key,
+                    method,
+                    documents_count,
+                    allow_index_creation,
+                } => KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
+                    primary_key,
+                    method,
+                    content_file: content_uuid.ok_or(Error::CorruptedDump)?,
+                    documents_count,
+                    allow_index_creation,
+                },
+                KindDump::DocumentDeletion { documents_ids } => KindWithContent::DocumentDeletion {
+                    documents_ids,
+                    index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
+                },
+                KindDump::DocumentClear => KindWithContent::DocumentClear {
+                    index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
+                },
+                KindDump::Settings { settings, is_deletion, allow_index_creation } => {
+                    KindWithContent::SettingsUpdate {
+                        index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
+                        new_settings: settings,
+                        is_deletion,
+                        allow_index_creation,
+                    }
+                }
+                KindDump::IndexDeletion => KindWithContent::IndexDeletion {
+                    index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
+                },
+                KindDump::IndexCreation { primary_key } => KindWithContent::IndexCreation {
+                    index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
+                    primary_key,
+                },
+                KindDump::IndexUpdate { primary_key } => KindWithContent::IndexUpdate {
+                    index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
+                    primary_key,
+                },
+                KindDump::IndexSwap { swaps } => KindWithContent::IndexSwap { swaps },
+                KindDump::TaskCancelation { query, tasks } => {
+                    KindWithContent::TaskCancelation { query, tasks }
+                }
+                KindDump::TasksDeletion { query, tasks } => {
+                    KindWithContent::TaskDeletion { query, tasks }
+                }
+                KindDump::DumpCreation { keys, instance_uid } => {
+                    KindWithContent::DumpCreation { keys, instance_uid }
+                }
+                KindDump::SnapshotCreation => KindWithContent::SnapshotCreation,
+            },
+        };
+
+        self.index_scheduler.all_tasks.put(&mut self.wtxn, &BEU32::new(task.uid), &task)?;
+
+        for index in task.indexes() {
+            match self.indexes.get_mut(index) {
+                Some(bitmap) => {
+                    bitmap.insert(task.uid);
+                }
+                None => {
+                    let mut bitmap = RoaringBitmap::new();
+                    bitmap.insert(task.uid);
+                    self.indexes.insert(index.to_string(), bitmap);
+                }
+            };
+        }
+
+        utils::insert_task_datetime(
+            &mut self.wtxn,
+            self.index_scheduler.enqueued_at,
+            task.enqueued_at,
+            task.uid,
+        )?;
+
+        // we can't override the started_at & finished_at, so we must only set it if the tasks is finished and won't change
+        if matches!(task.status, Status::Succeeded | Status::Failed | Status::Canceled) {
+            if let Some(started_at) = task.started_at {
+                utils::insert_task_datetime(
+                    &mut self.wtxn,
+                    self.index_scheduler.started_at,
+                    started_at,
+                    task.uid,
+                )?;
+            }
+            if let Some(finished_at) = task.finished_at {
+                utils::insert_task_datetime(
+                    &mut self.wtxn,
+                    self.index_scheduler.finished_at,
+                    finished_at,
+                    task.uid,
+                )?;
+            }
+        }
+
+        self.statuses.entry(task.status).or_insert(RoaringBitmap::new()).insert(task.uid);
+        self.kinds.entry(task.kind.as_kind()).or_insert(RoaringBitmap::new()).insert(task.uid);
+
+        Ok(task)
+    }
+
+    /// Commit all the changes and exit the importing dump state
+    pub fn finish(mut self) -> Result<()> {
+        for (index, bitmap) in self.indexes {
+            self.index_scheduler.index_tasks.put(&mut self.wtxn, &index, &bitmap)?;
+        }
+        for (status, bitmap) in self.statuses {
+            self.index_scheduler.put_status(&mut self.wtxn, status, &bitmap)?;
+        }
+        for (kind, bitmap) in self.kinds {
+            self.index_scheduler.put_kind(&mut self.wtxn, kind, &bitmap)?;
+        }
+
+        self.wtxn.commit()?;
+        self.index_scheduler.wake_up.signal();
+
+        Ok(())
+    }
+}
+
 /// The outcome of calling the [`IndexScheduler::tick`] function.
 pub enum TickOutcome {
     /// The scheduler should immediately attempt another `tick`.
@@ -1236,6 +1322,17 @@ struct IndexBudget {
     index_count: usize,
     /// For very constrained systems we might need to reduce the base task_db_size so we can accept at least one index.
     task_db_size: usize,
+}
+
+/// The statistics that can be computed from an `Index` object and the scheduler.
+///
+/// Compared with `index_mapper::IndexStats`, it adds the scheduling status.
+#[derive(Debug)]
+pub struct IndexStats {
+    /// Whether this index is currently performing indexation, according to the scheduler.
+    pub is_indexing: bool,
+    /// Internal stats computed from the index.
+    pub inner_stats: index_mapper::IndexStats,
 }
 
 #[cfg(test)]

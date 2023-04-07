@@ -23,7 +23,10 @@ doggo [0,]
 whalo [1,]
 ----------------------------------------------------------------------
 ### Index Mapper:
-["catto", "doggo", "whalo"]
+catto: { number_of_documents: 0, field_distribution: {} }
+doggo: { number_of_documents: 0, field_distribution: {} }
+whalo: { number_of_documents: 0, field_distribution: {} }
+
 ----------------------------------------------------------------------
 ### Canceled By:
 

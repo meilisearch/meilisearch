@@ -4,7 +4,6 @@ use std::fs::File;
 use std::io;
 use std::mem::size_of;
 
-use charabia::normalizer::{CharNormalizer, CompatibilityDecompositionNormalizer};
 use heed::zerocopy::AsBytes;
 use heed::BytesEncode;
 use roaring::RoaringBitmap;
@@ -136,9 +135,7 @@ fn extract_facet_values(value: &Value) -> (Vec<f64>, Vec<(String, String)>) {
                 }
             }
             Value::String(original) => {
-                let normalized = CompatibilityDecompositionNormalizer
-                    .normalize_str(original.trim())
-                    .to_lowercase();
+                let normalized = crate::normalize_facet(original);
                 output_strings.push((normalized, original.clone()));
             }
             Value::Array(values) => {

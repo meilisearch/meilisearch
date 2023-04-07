@@ -82,7 +82,7 @@ impl Server {
     > {
         actix_web::test::init_service(create_app(
             self.service.index_scheduler.clone().into(),
-            self.service.auth.clone(),
+            self.service.auth.clone().into(),
             self.service.options.clone(),
             analytics::MockAnalytics::new(&self.service.options),
             true,

@@ -24,6 +24,9 @@ pub fn located_query_terms_from_string(
 
     let mut peekable = query.take(super::limits::MAX_TOKEN_COUNT).peekable();
     while let Some(token) = peekable.next() {
+        if token.lemma().is_empty() {
+            continue;
+        }
         // early return if word limit is exceeded
         if located_terms.len() >= parts_limit {
             return Ok(located_terms);

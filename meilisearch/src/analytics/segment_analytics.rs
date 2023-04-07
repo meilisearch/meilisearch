@@ -86,7 +86,7 @@ impl SegmentAnalytics {
     pub async fn new(
         opt: &Opt,
         index_scheduler: Arc<IndexScheduler>,
-        auth_controller: AuthController,
+        auth_controller: Arc<AuthController>,
     ) -> Arc<dyn Analytics> {
         let instance_uid = super::find_user_id(&opt.db_path);
         let first_time_run = instance_uid.is_none();
@@ -376,7 +376,11 @@ impl Segment {
         })
     }
 
-    async fn run(mut self, index_scheduler: Arc<IndexScheduler>, auth_controller: AuthController) {
+    async fn run(
+        mut self,
+        index_scheduler: Arc<IndexScheduler>,
+        auth_controller: Arc<AuthController>,
+    ) {
         const INTERVAL: Duration = Duration::from_secs(60 * 60); // one hour
                                                                  // The first batch must be sent after one hour.
         let mut interval =
@@ -408,10 +412,10 @@ impl Segment {
     async fn tick(
         &mut self,
         index_scheduler: Arc<IndexScheduler>,
-        auth_controller: AuthController,
+        auth_controller: Arc<AuthController>,
     ) {
         if let Ok(stats) =
-            create_all_stats(index_scheduler.into(), auth_controller, &AuthFilter::default())
+            create_all_stats(index_scheduler.into(), auth_controller.into(), &AuthFilter::default())
         {
             // Replace the version number with the prototype name if any.
             let version = if let Some(prototype) = crate::prototype_name() {

@@ -1,6 +1,5 @@
 ---
 source: index-scheduler/src/lib.rs
-assertion_line: 1859
 ---
 ### Autobatching Enabled = true
 ### Processing Tasks:
@@ -27,7 +26,9 @@ catto [0,]
 wolfo [2,]
 ----------------------------------------------------------------------
 ### Index Mapper:
-["beavero", "catto"]
+beavero: { number_of_documents: 0, field_distribution: {} }
+catto: { number_of_documents: 1, field_distribution: {"id": 1} }
+
 ----------------------------------------------------------------------
 ### Canceled By:
 3 [1,2,]

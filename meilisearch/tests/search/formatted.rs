@@ -14,7 +14,7 @@ async fn formatted_contain_wildcard() {
     index.add_documents(documents, None).await;
     index.wait_task(1).await;
 
-    index.search(json!({ "q": "pesti", "attributesToRetrieve": ["father", "mother"], "attributesToHighlight": ["father", "mother", "*"], "attributesToCrop": ["doggos"], "showMatchesPosition": true }),
+    index.search(json!({ "q": "pésti", "attributesToRetrieve": ["father", "mother"], "attributesToHighlight": ["father", "mother", "*"], "attributesToCrop": ["doggos"], "showMatchesPosition": true }),
         |response, code|
         {
             assert_eq!(code, 200, "{}", response);
@@ -23,7 +23,7 @@ async fn formatted_contain_wildcard() {
                 json!({
                     "_formatted": {
                         "id": "852",
-                        "cattos": "<em>pesti</em>",
+                        "cattos": "<em>pésti</em>",
                     },
                     "_matchesPosition": {"cattos": [{"start": 0, "length": 5}]},
                 })
@@ -33,13 +33,13 @@ async fn formatted_contain_wildcard() {
     .await;
 
     index
-        .search(json!({ "q": "pesti", "attributesToRetrieve": ["*"] }), |response, code| {
+        .search(json!({ "q": "pésti", "attributesToRetrieve": ["*"] }), |response, code| {
             assert_eq!(code, 200, "{}", response);
             assert_eq!(
                 response["hits"][0],
                 json!({
                     "id": 852,
-                    "cattos": "pesti",
+                    "cattos": "pésti",
                 })
             );
         })
@@ -47,17 +47,17 @@ async fn formatted_contain_wildcard() {
 
     index
         .search(
-            json!({ "q": "pesti", "attributesToRetrieve": ["*"], "attributesToHighlight": ["id"], "showMatchesPosition": true }),
+            json!({ "q": "pésti", "attributesToRetrieve": ["*"], "attributesToHighlight": ["id"], "showMatchesPosition": true }),
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
                 assert_eq!(
                     response["hits"][0],
                     json!({
                         "id": 852,
-                        "cattos": "pesti",
+                        "cattos": "pésti",
                         "_formatted": {
                             "id": "852",
-                            "cattos": "pesti",
+                            "cattos": "pésti",
                         },
                         "_matchesPosition": {"cattos": [{"start": 0, "length": 5}]},
                     })
@@ -68,17 +68,17 @@ async fn formatted_contain_wildcard() {
 
     index
         .search(
-            json!({ "q": "pesti", "attributesToRetrieve": ["*"], "attributesToCrop": ["*"] }),
+            json!({ "q": "pésti", "attributesToRetrieve": ["*"], "attributesToCrop": ["*"] }),
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
                 assert_eq!(
                     response["hits"][0],
                     json!({
                         "id": 852,
-                        "cattos": "pesti",
+                        "cattos": "pésti",
                         "_formatted": {
                             "id": "852",
-                            "cattos": "pesti",
+                            "cattos": "pésti",
                         }
                     })
                 );
@@ -87,16 +87,16 @@ async fn formatted_contain_wildcard() {
         .await;
 
     index
-        .search(json!({ "q": "pesti", "attributesToCrop": ["*"] }), |response, code| {
+        .search(json!({ "q": "pésti", "attributesToCrop": ["*"] }), |response, code| {
             assert_eq!(code, 200, "{}", response);
             assert_eq!(
                 response["hits"][0],
                 json!({
                     "id": 852,
-                    "cattos": "pesti",
+                    "cattos": "pésti",
                     "_formatted": {
                         "id": "852",
-                        "cattos": "pesti",
+                        "cattos": "pésti",
                     }
                 })
             );
@@ -114,7 +114,7 @@ async fn format_nested() {
     index.wait_task(0).await;
 
     index
-        .search(json!({ "q": "pesti", "attributesToRetrieve": ["doggos"] }), |response, code| {
+        .search(json!({ "q": "pésti", "attributesToRetrieve": ["doggos"] }), |response, code| {
             assert_eq!(code, 200, "{}", response);
             assert_eq!(
                 response["hits"][0],
@@ -136,7 +136,7 @@ async fn format_nested() {
 
     index
         .search(
-            json!({ "q": "pesti", "attributesToRetrieve": ["doggos.name"] }),
+            json!({ "q": "pésti", "attributesToRetrieve": ["doggos.name"] }),
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
                 assert_eq!(
@@ -180,7 +180,7 @@ async fn format_nested() {
         .await;
 
     index
-        .search(json!({ "q": "pesti", "attributesToRetrieve": [], "attributesToHighlight": ["doggos.name"] }),
+        .search(json!({ "q": "pésti", "attributesToRetrieve": [], "attributesToHighlight": ["doggos.name"] }),
         |response, code| {
             assert_eq!(code, 200, "{}", response);
             assert_eq!(
@@ -202,7 +202,7 @@ async fn format_nested() {
         .await;
 
     index
-        .search(json!({ "q": "pesti", "attributesToRetrieve": [], "attributesToCrop": ["doggos.name"] }),
+        .search(json!({ "q": "pésti", "attributesToRetrieve": [], "attributesToCrop": ["doggos.name"] }),
         |response, code| {
             assert_eq!(code, 200, "{}", response);
             assert_eq!(
@@ -224,7 +224,7 @@ async fn format_nested() {
         .await;
 
     index
-        .search(json!({ "q": "pesti", "attributesToRetrieve": ["doggos.name"], "attributesToHighlight": ["doggos.age"] }),
+        .search(json!({ "q": "pésti", "attributesToRetrieve": ["doggos.name"], "attributesToHighlight": ["doggos.age"] }),
         |response, code| {
     assert_eq!(code, 200, "{}", response);
     assert_eq!(
@@ -256,7 +256,7 @@ async fn format_nested() {
         .await;
 
     index
-        .search(json!({ "q": "pesti", "attributesToRetrieve": [], "attributesToHighlight": ["doggos.age"], "attributesToCrop": ["doggos.name"] }),
+        .search(json!({ "q": "pésti", "attributesToRetrieve": [], "attributesToHighlight": ["doggos.age"], "attributesToCrop": ["doggos.name"] }),
         |response, code| {
                 assert_eq!(code, 200, "{}", response);
     assert_eq!(

@@ -34,6 +34,12 @@ impl AuthController {
         Ok(Self { store: Arc::new(store), master_key: master_key.clone() })
     }
 
+    /// Return `Ok(())` if the auth controller is able to access one of its database.
+    pub fn health(&self) -> Result<()> {
+        self.store.health()?;
+        Ok(())
+    }
+
     /// Return the size of the `AuthController` database in bytes.
     pub fn size(&self) -> Result<u64> {
         self.store.size()

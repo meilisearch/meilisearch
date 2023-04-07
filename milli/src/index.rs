@@ -1222,11 +1222,22 @@ impl Index {
         let soft_deleted_documents = self.soft_deleted_documents_ids(rtxn)?;
 
         let mut script_language: HashMap<Script, Vec<Language>> = HashMap::new();
+        let mut script_language_doc_count: Vec<(Script, Language, u64)> = Vec::new();
+        let mut total = 0;
         for sl in self.script_language_docids.iter(rtxn)? {
             let ((script, language), docids) = sl?;
 
             // keep only Languages that contains at least 1 document.
-            if !soft_deleted_documents.is_superset(&docids) {
+            let remaining_documents_count = (docids - &soft_deleted_documents).len();
+            total += remaining_documents_count;
+            if remaining_documents_count > 0 {
+                script_language_doc_count.push((script, language, remaining_documents_count));
+            }
+        }
+
+        let threshold = total / 20; // 5% (arbitrary)
+        for (script, language, count) in script_language_doc_count {
+            if count > threshold {
                 if let Some(languages) = script_language.get_mut(&script) {
                     (*languages).push(language);
                 } else {
@@ -1586,35 +1597,35 @@ pub(crate) mod tests {
 
         // match a document in the middle of the rectangle
         let search_result = search
-            .filter(Filter::from_str("_geoBoundingBox([10, -10], [-10, 10])").unwrap().unwrap())
+            .filter(Filter::from_str("_geoBoundingBox([10, 10], [-10, -10])").unwrap().unwrap())
             .execute()
             .unwrap();
         insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0]>");
 
         // select everything
         let search_result = search
-            .filter(Filter::from_str("_geoBoundingBox([90, -180], [-90, 180])").unwrap().unwrap())
+            .filter(Filter::from_str("_geoBoundingBox([90, 180], [-90, -180])").unwrap().unwrap())
             .execute()
             .unwrap();
         insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0, 1, 2, 3, 4]>");
 
         // go on the edge of the longitude
         let search_result = search
-            .filter(Filter::from_str("_geoBoundingBox([0, 180], [0, -170])").unwrap().unwrap())
+            .filter(Filter::from_str("_geoBoundingBox([0, -170], [0, 180])").unwrap().unwrap())
             .execute()
             .unwrap();
         insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[1]>");
 
         // go on the other edge of the longitude
         let search_result = search
-            .filter(Filter::from_str("_geoBoundingBox([0, 170], [0, -180])").unwrap().unwrap())
+            .filter(Filter::from_str("_geoBoundingBox([0, -180], [0, 170])").unwrap().unwrap())
             .execute()
             .unwrap();
         insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[2]>");
 
         // wrap around the longitude
         let search_result = search
-            .filter(Filter::from_str("_geoBoundingBox([0, 170], [0, -170])").unwrap().unwrap())
+            .filter(Filter::from_str("_geoBoundingBox([0, -170], [0, 170])").unwrap().unwrap())
             .execute()
             .unwrap();
         insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[1, 2]>");
@@ -1640,20 +1651,26 @@ pub(crate) mod tests {
             .filter(Filter::from_str("_geoBoundingBox([-80, 0], [80, 0])").unwrap().unwrap())
             .execute()
             .unwrap_err();
-        insta::assert_display_snapshot!(error, @r###"
+        insta::assert_display_snapshot!(
+            error,
+            @r###"
         The top latitude `-80` is below the bottom latitude `80`.
         32:33 _geoBoundingBox([-80, 0], [80, 0])
-        "###);
+        "###
+        );
 
         // send a top latitude lower than the bottow latitude
         let error = search
             .filter(Filter::from_str("_geoBoundingBox([-10, 0], [10, 0])").unwrap().unwrap())
             .execute()
             .unwrap_err();
-        insta::assert_display_snapshot!(error, @r###"
+        insta::assert_display_snapshot!(
+            error,
+            @r###"
         The top latitude `-10` is below the bottom latitude `10`.
         32:33 _geoBoundingBox([-10, 0], [10, 0])
-        "###);
+        "###
+        );
     }
 
     #[test]

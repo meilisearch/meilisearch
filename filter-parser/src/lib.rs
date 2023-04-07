@@ -141,7 +141,7 @@ pub enum FilterCondition<'a> {
     Or(Vec<Self>),
     And(Vec<Self>),
     GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a> },
-    GeoBoundingBox { top_left_point: [Token<'a>; 2], bottom_right_point: [Token<'a>; 2] },
+    GeoBoundingBox { top_right_point: [Token<'a>; 2], bottom_left_point: [Token<'a>; 2] },
 }
 
 impl<'a> FilterCondition<'a> {
@@ -362,8 +362,8 @@ fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
     }
 
     let res = FilterCondition::GeoBoundingBox {
-        top_left_point: [args[0][0].into(), args[0][1].into()],
-        bottom_right_point: [args[1][0].into(), args[1][1].into()],
+        top_right_point: [args[0][0].into(), args[0][1].into()],
+        bottom_left_point: [args[1][0].into(), args[1][1].into()],
     };
     Ok((input, res))
 }
@@ -380,6 +380,34 @@ fn parse_geo_point(input: Span) -> IResult<FilterCondition> {
     .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoPoint"))))?;
     // if we succeeded we still return a `Failure` because geoPoints are not allowed
     Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoPoint"))))
+}
+
+/// geoPoint      = WS* "_geoDistance(float WS* "," WS* float WS* "," WS* float)
+fn parse_geo_distance(input: Span) -> IResult<FilterCondition> {
+    // we want to forbid space BEFORE the _geoDistance but not after
+    tuple((
+        multispace0,
+        tag("_geoDistance"),
+        // if we were able to parse `_geoDistance` we are going to return a Failure whatever happens next.
+        cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
+    ))(input)
+    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoDistance"))))?;
+    // if we succeeded we still return a `Failure` because `geoDistance` filters are not allowed
+    Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoDistance"))))
+}
+
+/// geo      = WS* "_geo(float WS* "," WS* float WS* "," WS* float)
+fn parse_geo(input: Span) -> IResult<FilterCondition> {
+    // we want to forbid space BEFORE the _geo but not after
+    tuple((
+        multispace0,
+        word_exact("_geo"),
+        // if we were able to parse `_geo` we are going to return a Failure whatever happens next.
+        cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
+    ))(input)
+    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geo"))))?;
+    // if we succeeded we still return a `Failure` because `_geo` filter is not allowed
+    Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::ReservedGeo("_geo"))))
 }
 
 fn parse_error_reserved_keyword(input: Span) -> IResult<FilterCondition> {
@@ -418,6 +446,8 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
         parse_not_exists,
         parse_to,
         // the next lines are only for error handling and are written at the end to have the less possible performance impact
+        parse_geo,
+        parse_geo_distance,
         parse_geo_point,
         parse_error_reserved_keyword,
     ))(input)
@@ -621,13 +651,33 @@ pub mod tests {
         "###);
 
         insta::assert_display_snapshot!(p("_geoPoint(12, 13, 14)"), @r###"
-        `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance), or _geoBoundingBox([latitude, longitude], [latitude, longitude]) built-in rules to filter on `_geo` coordinates.
+        `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.
         1:22 _geoPoint(12, 13, 14)
         "###);
 
         insta::assert_display_snapshot!(p("position <= _geoPoint(12, 13, 14)"), @r###"
-        `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance), or _geoBoundingBox([latitude, longitude], [latitude, longitude]) built-in rules to filter on `_geo` coordinates.
+        `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.
         13:34 position <= _geoPoint(12, 13, 14)
+        "###);
+
+        insta::assert_display_snapshot!(p("_geoDistance(12, 13, 14)"), @r###"
+        `_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.
+        1:25 _geoDistance(12, 13, 14)
+        "###);
+
+        insta::assert_display_snapshot!(p("position <= _geoDistance(12, 13, 14)"), @r###"
+        `_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.
+        13:37 position <= _geoDistance(12, 13, 14)
+        "###);
+
+        insta::assert_display_snapshot!(p("_geo(12, 13, 14)"), @r###"
+        `_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.
+        1:17 _geo(12, 13, 14)
+        "###);
+
+        insta::assert_display_snapshot!(p("position <= _geo(12, 13, 14)"), @r###"
+        `_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.
+        13:29 position <= _geo(12, 13, 14)
         "###);
 
         insta::assert_display_snapshot!(p("position <= _geoRadius(12, 13, 14)"), @r###"
@@ -780,7 +830,10 @@ impl<'a> std::fmt::Display for FilterCondition<'a> {
             FilterCondition::GeoLowerThan { point, radius } => {
                 write!(f, "_geoRadius({}, {}, {})", point[0], point[1], radius)
             }
-            FilterCondition::GeoBoundingBox { top_left_point, bottom_right_point } => {
+            FilterCondition::GeoBoundingBox {
+                top_right_point: top_left_point,
+                bottom_left_point: bottom_right_point,
+            } => {
                 write!(
                     f,
                     "_geoBoundingBox([{}, {}], [{}, {}])",

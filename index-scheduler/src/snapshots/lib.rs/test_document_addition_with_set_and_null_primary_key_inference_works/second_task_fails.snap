@@ -25,7 +25,8 @@ failed [1,]
 doggos [0,1,2,3,4,5,]
 ----------------------------------------------------------------------
 ### Index Mapper:
-["doggos"]
+doggos: { number_of_documents: 1, field_distribution: {"doggo": 1, "doggoid": 1} }
+
 ----------------------------------------------------------------------
 ### Canceled By:
 
