@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::hash::Hash;
 
@@ -24,6 +25,8 @@ pub struct DatabaseCache<'ctx> {
     pub word_docids: FxHashMap<Interned<String>, Option<&'ctx [u8]>>,
     pub exact_word_docids: FxHashMap<Interned<String>, Option<&'ctx [u8]>>,
     pub word_prefix_docids: FxHashMap<Interned<String>, Option<&'ctx [u8]>>,
+
+    pub words_fst: Option<fst::Set<Cow<'ctx, [u8]>>>,
     pub word_position_docids: FxHashMap<(Interned<String>, u16), Option<&'ctx [u8]>>,
     pub word_fid_docids: FxHashMap<(Interned<String>, u16), Option<&'ctx [u8]>>,
 }
@@ -51,6 +54,16 @@ impl<'ctx> DatabaseCache<'ctx> {
     }
 }
 impl<'ctx> SearchContext<'ctx> {
+    pub fn get_words_fst(&mut self) -> Result<fst::Set<Cow<'ctx, [u8]>>> {
+        if let Some(fst) = self.db_cache.words_fst.clone() {
+            Ok(fst)
+        } else {
+            let fst = self.index.words_fst(self.txn)?;
+            self.db_cache.words_fst = Some(fst.clone());
+            Ok(fst)
+        }
+    }
+
     /// Retrieve or insert the given value in the `word_docids` database.
     pub fn get_db_word_docids(&mut self, word: Interned<String>) -> Result<Option<&'ctx [u8]>> {
         DatabaseCache::get_value(

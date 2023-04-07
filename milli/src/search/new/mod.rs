@@ -1,3 +1,4 @@
+mod bucket_sort;
 mod db_cache;
 mod distinct;
 mod graph_based_ranking_rule;
@@ -18,6 +19,9 @@ mod sort;
 // TODO: documentation + comments
 mod words;
 
+#[cfg(test)]
+mod tests;
+
 use std::collections::HashSet;
 
 use charabia::TokenizerBuilder;
@@ -29,7 +33,8 @@ pub use logger::detailed::DetailedSearchLogger;
 pub use logger::{DefaultSearchLogger, SearchLogger};
 use query_graph::{QueryGraph, QueryNode};
 use query_term::{located_query_terms_from_string, Phrase, QueryTerm};
-use ranking_rules::{bucket_sort, PlaceholderQuery, RankingRuleOutput, RankingRuleQueryTrait};
+use ranking_rules::{PlaceholderQuery, RankingRuleOutput, RankingRuleQueryTrait};
+use bucket_sort::bucket_sort;
 use resolve_query_graph::PhraseDocIdsCache;
 use roaring::RoaringBitmap;
 use words::Words;

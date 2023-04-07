@@ -176,6 +176,9 @@ impl<T> Interner<T> {
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (Interned<T>, &mut T)> {
         self.stable_store.iter_mut().enumerate().map(|(i, x)| (Interned::from_raw(i as u16), x))
     }
+    pub fn freeze(self) -> FixedSizeInterner<T> {
+        FixedSizeInterner { stable_store: self.stable_store }
+    }
 }
 
 /// A store of values of type `T`, each linked to a value of type `From`

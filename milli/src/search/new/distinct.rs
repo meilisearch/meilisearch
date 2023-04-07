@@ -41,7 +41,7 @@ pub fn apply_distinct_rule(
 }
 
 /// Apply the distinct rule defined by [`apply_distinct_rule`] for a single document id.
-fn distinct_single_docid(
+pub fn distinct_single_docid(
     index: &Index,
     txn: &RoTxn,
     field_id: u16,
