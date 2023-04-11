@@ -3,7 +3,6 @@
 use std::collections::VecDeque;
 
 use fxhash::FxHashMap;
-use heed::BytesDecode;
 use roaring::RoaringBitmap;
 
 use super::interner::Interned;
@@ -12,7 +11,7 @@ use super::query_term::{Phrase, QueryTermSubset};
 use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, SearchContext};
 use crate::search::new::query_term::LocatedQueryTermSubset;
-use crate::{CboRoaringBitmapCodec, Result, RoaringBitmapCodec};
+use crate::Result;
 
 #[derive(Default)]
 pub struct PhraseDocIdsCache {
@@ -37,7 +36,7 @@ pub fn compute_query_term_subset_docids(
     let mut docids = RoaringBitmap::new();
     for word in term.all_single_words_except_prefix_db(ctx)? {
         if let Some(word_docids) = ctx.get_db_word_docids(word)? {
-            docids |= RoaringBitmapCodec::bytes_decode(word_docids).ok_or(heed::Error::Decoding)?;
+            docids |= word_docids;
         }
     }
     for phrase in term.all_phrases(ctx)? {
@@ -46,8 +45,7 @@ pub fn compute_query_term_subset_docids(
 
     if let Some(prefix) = term.use_prefix_db(ctx) {
         if let Some(prefix_docids) = ctx.get_db_word_prefix_docids(prefix)? {
-            docids |=
-                RoaringBitmapCodec::bytes_decode(prefix_docids).ok_or(heed::Error::Decoding)?;
+            docids |= prefix_docids;
         }
     }
 
@@ -128,8 +126,7 @@ pub fn compute_phrase_docids(
     if words.len() == 1 {
         if let Some(word) = &words[0] {
             if let Some(word_docids) = ctx.get_db_word_docids(*word)? {
-                return RoaringBitmapCodec::bytes_decode(word_docids)
-                    .ok_or(heed::Error::Decoding.into());
+                return Ok(word_docids);
             } else {
                 return Ok(RoaringBitmap::new());
             }
@@ -158,7 +155,7 @@ pub fn compute_phrase_docids(
             {
                 if dist == 0 {
                     match ctx.get_db_word_pair_proximity_docids(s1, s2, 1)? {
-                        Some(m) => bitmaps.push(CboRoaringBitmapCodec::deserialize_from(m)?),
+                        Some(m) => bitmaps.push(m),
                         // If there are no documents for this pair, there will be no
                         // results for the phrase query.
                         None => return Ok(RoaringBitmap::new()),
@@ -169,7 +166,7 @@ pub fn compute_phrase_docids(
                         if let Some(m) =
                             ctx.get_db_word_pair_proximity_docids(s1, s2, dist as u8 + 1)?
                         {
-                            bitmap |= CboRoaringBitmapCodec::deserialize_from(m)?;
+                            bitmap |= m;
                         }
                     }
                     if bitmap.is_empty() {

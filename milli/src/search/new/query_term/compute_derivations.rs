@@ -1,17 +1,17 @@
-use fst::automaton::Str;
-use fst::{Automaton, IntoStreamer, Streamer};
-use heed::types::DecodeIgnore;
-use heed::BytesDecode;
 use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::ops::ControlFlow;
+
+use fst::automaton::Str;
+use fst::{Automaton, IntoStreamer, Streamer};
+use heed::types::DecodeIgnore;
 
 use super::*;
 use crate::search::fst_utils::{Complement, Intersection, StartsWith, Union};
 use crate::search::new::query_term::TwoTypoTerm;
 use crate::search::new::{limits, SearchContext};
 use crate::search::{build_dfa, get_first};
-use crate::{CboRoaringBitmapLenCodec, Result, MAX_WORD_LENGTH};
+use crate::{Result, MAX_WORD_LENGTH};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NumberOfTypos {
@@ -385,9 +385,7 @@ fn split_best_frequency(
         let left = ctx.word_interner.insert(left.to_owned());
         let right = ctx.word_interner.insert(right.to_owned());
 
-        if let Some(docid_bytes) = ctx.get_db_word_pair_proximity_docids(left, right, 1)? {
-            let frequency =
-                CboRoaringBitmapLenCodec::bytes_decode(docid_bytes).ok_or(heed::Error::Decoding)?;
+        if let Some(frequency) = ctx.get_db_word_pair_proximity_docids_len(left, right, 1)? {
             if best.map_or(true, |(old, _, _)| frequency > old) {
                 best = Some((frequency, left, right));
             }
