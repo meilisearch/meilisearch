@@ -434,7 +434,7 @@ fill: \"#B6E2D3\"
                     writeln!(file, "{}: phrase", p.description(ctx))?;
                 }
                 if let Some(w) = term_subset.use_prefix_db(ctx) {
-                    let w = ctx.word_interner.get(w);
+                    let w = ctx.word_interner.get(w.interned());
                     writeln!(file, "{w}: prefix db")?;
                 }
 

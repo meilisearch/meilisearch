@@ -44,7 +44,7 @@ pub fn compute_query_term_subset_docids(
     }
 
     if let Some(prefix) = term.use_prefix_db(ctx) {
-        if let Some(prefix_docids) = ctx.get_db_word_prefix_docids(prefix)? {
+        if let Some(prefix_docids) = ctx.word_prefix_docids(prefix)? {
             docids |= prefix_docids;
         }
     }

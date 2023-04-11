@@ -138,7 +138,7 @@ impl<'ctx> SearchContext<'ctx> {
     }
 
     /// Retrieve or insert the given value in the `word_prefix_docids` database.
-    pub fn get_db_word_prefix_docids(
+    fn get_db_word_prefix_docids(
         &mut self,
         prefix: Interned<String>,
     ) -> Result<Option<RoaringBitmap>> {
