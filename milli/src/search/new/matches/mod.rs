@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 
 use charabia::{SeparatorKind, Token, Tokenizer};
-use matching_words::{MatchType, PartialMatch, PrimitiveWordId};
-pub use matching_words::{MatchingWord, MatchingWords};
+pub use matching_words::MatchingWords;
+use matching_words::{MatchType, PartialMatch, WordId};
 use serde::Serialize;
 
 pub mod matching_words;
@@ -88,7 +88,7 @@ impl FormatOptions {
 pub struct Match {
     match_len: usize,
     // ids of the query words that matches.
-    ids: Vec<PrimitiveWordId>,
+    ids: Vec<WordId>,
     // position of the word in the whole text.
     word_position: usize,
     // position of the token in the whole text.
@@ -137,11 +137,12 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
                     }
                     // partial match is now full, we keep this matches and we advance positions
                     Some(MatchType::Full { char_len, ids }) => {
+                        let ids: Vec<_> = ids.clone().into_iter().collect();
                         // save previously matched tokens as matches.
                         let iter = potential_matches.into_iter().map(
                             |(token_position, word_position, match_len)| Match {
                                 match_len,
-                                ids: ids.to_vec(),
+                                ids: ids.clone(),
                                 word_position,
                                 token_position,
                             },
@@ -151,7 +152,7 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
                         // save the token that closes the partial match as a match.
                         matches.push(Match {
                             match_len: char_len,
-                            ids: ids.to_vec(),
+                            ids,
                             word_position,
                             token_position,
                         });
@@ -191,9 +192,10 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
                     // we match, we save the current token as a match,
                     // then we continue the rest of the tokens.
                     MatchType::Full { char_len, ids } => {
+                        let ids: Vec<_> = ids.clone().into_iter().collect();
                         matches.push(Match {
                             match_len: char_len,
-                            ids: ids.to_vec(),
+                            ids,
                             word_position,
                             token_position,
                         });
@@ -334,7 +336,7 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
     /// 2) calculate distance between matches
     /// 3) count ordered matches
     fn match_interval_score(&self, matches: &[Match]) -> (i16, i16, i16) {
-        let mut ids: Vec<PrimitiveWordId> = Vec::with_capacity(matches.len());
+        let mut ids: Vec<WordId> = Vec::with_capacity(matches.len());
         let mut order_score = 0;
         let mut distance_score = 0;
 
@@ -494,39 +496,29 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
 
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
-
     use charabia::TokenizerBuilder;
+    use matching_words::tests::temp_index_with_documents;
 
+    use super::super::located_query_terms_from_string;
     use super::*;
-    use crate::search::matches::matching_words::MatchingWord;
+    use crate::SearchContext;
 
-    fn matching_words() -> MatchingWords {
-        let all = vec![
-            Rc::new(MatchingWord::new("split".to_string(), 0, false).unwrap()),
-            Rc::new(MatchingWord::new("the".to_string(), 0, false).unwrap()),
-            Rc::new(MatchingWord::new("world".to_string(), 1, true).unwrap()),
-        ];
-        let matching_words = vec![
-            (vec![all[0].clone()], vec![0]),
-            (vec![all[1].clone()], vec![1]),
-            (vec![all[2].clone()], vec![2]),
-        ];
-
-        MatchingWords::new(matching_words).unwrap()
-    }
-
-    impl MatcherBuilder<'_, Vec<u8>> {
-        pub fn from_matching_words(matching_words: MatchingWords) -> Self {
-            Self::new(matching_words, TokenizerBuilder::default().build())
+    impl<'a> MatcherBuilder<'a, &[u8]> {
+        pub fn new_test(mut ctx: SearchContext, query: &'a str) -> Self {
+            let tokenizer = TokenizerBuilder::new().build();
+            let tokens = tokenizer.tokenize(query);
+            let query_terms = located_query_terms_from_string(&mut ctx, tokens, None).unwrap();
+            let matching_words = MatchingWords::new(ctx, query_terms);
+            Self::new(matching_words, TokenizerBuilder::new().build())
         }
     }
 
     #[test]
     fn format_identity() {
-        let matching_words = matching_words();
-
-        let builder = MatcherBuilder::from_matching_words(matching_words);
+        let temp_index = temp_index_with_documents();
+        let rtxn = temp_index.read_txn().unwrap();
+        let ctx = SearchContext::new(&temp_index, &rtxn);
+        let builder = MatcherBuilder::new_test(ctx, "split the world");
 
         let format_options = FormatOptions { highlight: false, crop: None };
 
@@ -551,9 +543,10 @@ mod tests {
 
     #[test]
     fn format_highlight() {
-        let matching_words = matching_words();
-
-        let builder = MatcherBuilder::from_matching_words(matching_words);
+        let temp_index = temp_index_with_documents();
+        let rtxn = temp_index.read_txn().unwrap();
+        let ctx = SearchContext::new(&temp_index, &rtxn);
+        let builder = MatcherBuilder::new_test(ctx, "split the world");
 
         let format_options = FormatOptions { highlight: true, crop: None };
 
@@ -594,16 +587,10 @@ mod tests {
 
     #[test]
     fn highlight_unicode() {
-        let all = vec![
-            Rc::new(MatchingWord::new("wessfali".to_string(), 1, true).unwrap()),
-            Rc::new(MatchingWord::new("world".to_string(), 1, true).unwrap()),
-        ];
-        let matching_words = vec![(vec![all[0].clone()], vec![0]), (vec![all[1].clone()], vec![1])];
-
-        let matching_words = MatchingWords::new(matching_words).unwrap();
-
-        let builder = MatcherBuilder::from_matching_words(matching_words);
-
+        let temp_index = temp_index_with_documents();
+        let rtxn = temp_index.read_txn().unwrap();
+        let ctx = SearchContext::new(&temp_index, &rtxn);
+        let builder = MatcherBuilder::new_test(ctx, "world");
         let format_options = FormatOptions { highlight: true, crop: None };
 
         // Text containing prefix match.
@@ -624,6 +611,10 @@ mod tests {
             @"<em>Ŵôřlḑ</em>"
         );
 
+        let ctx = SearchContext::new(&temp_index, &rtxn);
+        let builder = MatcherBuilder::new_test(ctx, "westfali");
+        let format_options = FormatOptions { highlight: true, crop: None };
+
         // Text containing unicode match.
         let text = "Westfália";
         let mut matcher = builder.build(text);
@@ -636,9 +627,10 @@ mod tests {
 
     #[test]
     fn format_crop() {
-        let matching_words = matching_words();
-
-        let builder = MatcherBuilder::from_matching_words(matching_words);
+        let temp_index = temp_index_with_documents();
+        let rtxn = temp_index.read_txn().unwrap();
+        let ctx = SearchContext::new(&temp_index, &rtxn);
+        let builder = MatcherBuilder::new_test(ctx, "split the world");
 
         let format_options = FormatOptions { highlight: false, crop: Some(10) };
 
@@ -733,9 +725,10 @@ mod tests {
 
     #[test]
     fn format_highlight_crop() {
-        let matching_words = matching_words();
-
-        let builder = MatcherBuilder::from_matching_words(matching_words);
+        let temp_index = temp_index_with_documents();
+        let rtxn = temp_index.read_txn().unwrap();
+        let ctx = SearchContext::new(&temp_index, &rtxn);
+        let builder = MatcherBuilder::new_test(ctx, "split the world");
 
         let format_options = FormatOptions { highlight: true, crop: Some(10) };
 
@@ -795,9 +788,10 @@ mod tests {
     #[test]
     fn smaller_crop_size() {
         //! testing: https://github.com/meilisearch/specifications/pull/120#discussion_r836536295
-        let matching_words = matching_words();
-
-        let builder = MatcherBuilder::from_matching_words(matching_words);
+        let temp_index = temp_index_with_documents();
+        let rtxn = temp_index.read_txn().unwrap();
+        let ctx = SearchContext::new(&temp_index, &rtxn);
+        let builder = MatcherBuilder::new_test(ctx, "split the world");
 
         let text = "void void split the world void void.";
 
@@ -831,25 +825,10 @@ mod tests {
 
     #[test]
     fn partial_matches() {
-        let all = vec![
-            Rc::new(MatchingWord::new("the".to_string(), 0, false).unwrap()),
-            Rc::new(MatchingWord::new("t".to_string(), 0, false).unwrap()),
-            Rc::new(MatchingWord::new("he".to_string(), 0, false).unwrap()),
-            Rc::new(MatchingWord::new("door".to_string(), 0, false).unwrap()),
-            Rc::new(MatchingWord::new("do".to_string(), 0, false).unwrap()),
-            Rc::new(MatchingWord::new("or".to_string(), 0, false).unwrap()),
-        ];
-        let matching_words = vec![
-            (vec![all[0].clone()], vec![0]),
-            (vec![all[1].clone(), all[2].clone()], vec![0]),
-            (vec![all[3].clone()], vec![1]),
-            (vec![all[4].clone(), all[5].clone()], vec![1]),
-            (vec![all[4].clone()], vec![2]),
-        ];
-
-        let matching_words = MatchingWords::new(matching_words).unwrap();
-
-        let mut builder = MatcherBuilder::from_matching_words(matching_words);
+        let temp_index = temp_index_with_documents();
+        let rtxn = temp_index.read_txn().unwrap();
+        let ctx = SearchContext::new(&temp_index, &rtxn);
+        let mut builder = MatcherBuilder::new_test(ctx, "the \"t he\" door \"do or\"");
         builder.highlight_prefix("_".to_string());
         builder.highlight_suffix("_".to_string());
 
@@ -859,7 +838,7 @@ mod tests {
         let mut matcher = builder.build(text);
         insta::assert_snapshot!(
             matcher.format(format_options),
-            @"_the_ _do_ _or_ die can't be he _do_ and or isn'_t_ _he_"
+            @"_the_ _do_ _or_ die can't be he do and or isn'_t_ _he_"
         );
     }
 }

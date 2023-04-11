@@ -5,6 +5,7 @@ mod graph_based_ranking_rule;
 mod interner;
 mod limits;
 mod logger;
+pub mod matches;
 mod query_graph;
 mod query_term;
 mod ranking_rule_graph;
@@ -33,8 +34,8 @@ use interner::DedupInterner;
 pub use logger::detailed::DetailedSearchLogger;
 pub use logger::{DefaultSearchLogger, SearchLogger};
 use query_graph::{QueryGraph, QueryNode};
-use query_term::{located_query_terms_from_string, Phrase, QueryTerm};
-use ranking_rules::{PlaceholderQuery, RankingRuleOutput, RankingRuleQueryTrait};
+use query_term::{located_query_terms_from_string, LocatedQueryTerm, Phrase, QueryTerm};
+use ranking_rules::{bucket_sort, PlaceholderQuery, RankingRuleOutput, RankingRuleQueryTrait};
 use resolve_query_graph::PhraseDocIdsCache;
 use roaring::RoaringBitmap;
 use words::Words;
@@ -47,10 +48,7 @@ use self::ranking_rules::{BoxRankingRule, RankingRule};
 use self::resolve_query_graph::compute_query_graph_docids;
 use self::sort::Sort;
 use crate::search::new::distinct::apply_distinct_rule;
-use crate::{
-    AscDesc, Filter, Index, MatchingWords, Member, Result, SearchResult, TermsMatchingStrategy,
-    UserError,
-};
+use crate::{AscDesc, DocumentId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError};
 
 /// A structure used throughout the execution of a search query.
 pub struct SearchContext<'ctx> {
@@ -62,6 +60,7 @@ pub struct SearchContext<'ctx> {
     pub term_interner: Interner<QueryTerm>,
     pub phrase_docids: PhraseDocIdsCache,
 }
+
 impl<'ctx> SearchContext<'ctx> {
     pub fn new(index: &'ctx Index, txn: &'ctx RoTxn<'ctx>) -> Self {
         Self {
@@ -291,13 +290,14 @@ pub fn execute_search(
     words_limit: Option<usize>,
     placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery>,
     query_graph_logger: &mut dyn SearchLogger<QueryGraph>,
-) -> Result<SearchResult> {
+) -> Result<PartialSearchResult> {
     let mut universe = if let Some(filters) = filters {
         filters.evaluate(ctx.txn, ctx.index)?
     } else {
         ctx.index.documents_ids(ctx.txn)?
     };
 
+    let mut located_query_terms = None;
     let bucket_sort_output = if let Some(query) = query {
         // We make sure that the analyzer is aware of the stop words
         // this ensures that the query builder is able to properly remove them.
@@ -317,6 +317,7 @@ pub fn execute_search(
 
         let query_terms = located_query_terms_from_string(ctx, tokens, words_limit)?;
         let graph = QueryGraph::from_query(ctx, &query_terms)?;
+        located_query_terms = Some(query_terms);
 
         check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
@@ -357,9 +358,7 @@ pub fn execute_search(
         }
     }
 
-    Ok(SearchResult {
-        // TODO: correct matching words
-        matching_words: MatchingWords::default(),
+    Ok(PartialSearchResult {
         candidates: all_candidates,
         documents_ids: docids,
     })
@@ -405,4 +404,10 @@ fn check_sort_criteria(ctx: &SearchContext, sort_criteria: Option<&Vec<AscDesc>>
     }
 
     Ok(())
+}
+
+pub struct PartialSearchResult {
+    pub located_query_terms: Option<Vec<LocatedQueryTerm>>,
+    pub candidates: RoaringBitmap,
+    pub documents_ids: Vec<DocumentId>,
 }

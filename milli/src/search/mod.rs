@@ -5,9 +5,8 @@ use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
 pub use self::facet::{FacetDistribution, Filter, DEFAULT_VALUES_PER_FACET};
-pub use self::matches::{
-    FormatOptions, MatchBounds, Matcher, MatcherBuilder, MatchingWord, MatchingWords,
-};
+pub use self::new::matches::{FormatOptions, MatchBounds, Matcher, MatcherBuilder, MatchingWords};
+use self::new::PartialSearchResult;
 use crate::{
     execute_search, AscDesc, DefaultSearchLogger, DocumentId, Index, Result, SearchContext,
 };
@@ -19,7 +18,6 @@ static LEVDIST2: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(2, true));
 
 pub mod facet;
 mod fst_utils;
-mod matches;
 pub mod new;
 
 pub struct Search<'a> {
@@ -110,19 +108,28 @@ impl<'a> Search<'a> {
 
     pub fn execute(&self) -> Result<SearchResult> {
         let mut ctx = SearchContext::new(self.index, self.rtxn);
-        execute_search(
-            &mut ctx,
-            &self.query,
-            self.terms_matching_strategy,
-            self.exhaustive_number_hits,
-            &self.filter,
-            &self.sort_criteria,
-            self.offset,
-            self.limit,
-            Some(self.words_limit),
-            &mut DefaultSearchLogger,
-            &mut DefaultSearchLogger,
-        )
+        let PartialSearchResult { located_query_terms, candidates, documents_ids } =
+            execute_search(
+                &mut ctx,
+                &self.query,
+                self.terms_matching_strategy,
+                self.exhaustive_number_hits,
+                &self.filter,
+                &self.sort_criteria,
+                self.offset,
+                self.limit,
+                Some(self.words_limit),
+                &mut DefaultSearchLogger,
+                &mut DefaultSearchLogger,
+            )?;
+
+        // consume context and located_query_terms to build MatchingWords.
+        let matching_words = match located_query_terms {
+            Some(located_query_terms) => MatchingWords::new(ctx, located_query_terms),
+            None => MatchingWords::default(),
+        };
+
+        Ok(SearchResult { matching_words, candidates, documents_ids })
     }
 }
 
