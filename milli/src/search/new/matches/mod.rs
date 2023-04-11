@@ -137,7 +137,7 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
                     }
                     // partial match is now full, we keep this matches and we advance positions
                     Some(MatchType::Full { char_len, ids }) => {
-                        let ids: Vec<_> = ids.clone().into_iter().collect();
+                        let ids: Vec<_> = ids.clone().collect();
                         // save previously matched tokens as matches.
                         let iter = potential_matches.into_iter().map(
                             |(token_position, word_position, match_len)| Match {
@@ -192,7 +192,7 @@ impl<'t, A: AsRef<[u8]>> Matcher<'t, '_, A> {
                     // we match, we save the current token as a match,
                     // then we continue the rest of the tokens.
                     MatchType::Full { char_len, ids } => {
-                        let ids: Vec<_> = ids.clone().into_iter().collect();
+                        let ids: Vec<_> = ids.clone().collect();
                         matches.push(Match {
                             match_len: char_len,
                             ids,

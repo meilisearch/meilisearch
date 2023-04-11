@@ -188,17 +188,35 @@ impl QueryTermSubset {
         }
 
         let original = ctx.term_interner.get_mut(self.original);
-        if !self.zero_typo_subset.is_empty() {
-            let ZeroTypoTerm {
-                phrase: _,
-                exact: zero_typo,
-                prefix_of,
-                synonyms: _,
-                use_prefix_db: _,
-            } = &original.zero_typo;
-            result.extend(zero_typo.iter().copied());
-            result.extend(prefix_of.iter().copied());
-        };
+        match &self.zero_typo_subset {
+            NTypoTermSubset::All => {
+                let ZeroTypoTerm {
+                    phrase: _,
+                    exact: zero_typo,
+                    prefix_of,
+                    synonyms: _,
+                    use_prefix_db: _,
+                } = &original.zero_typo;
+                result.extend(zero_typo.iter().copied());
+                result.extend(prefix_of.iter().copied());
+            }
+            NTypoTermSubset::Subset { words, phrases: _ } => {
+                let ZeroTypoTerm {
+                    phrase: _,
+                    exact: zero_typo,
+                    prefix_of,
+                    synonyms: _,
+                    use_prefix_db: _,
+                } = &original.zero_typo;
+                if let Some(zero_typo) = zero_typo {
+                    if words.contains(zero_typo) {
+                        result.insert(*zero_typo);
+                    }
+                }
+                result.extend(prefix_of.intersection(words).copied());
+            }
+            NTypoTermSubset::Nothing => {}
+        }
 
         match &self.one_typo_subset {
             NTypoTermSubset::All => {
@@ -248,11 +266,24 @@ impl QueryTermSubset {
         result.extend(phrase.iter().copied());
         result.extend(synonyms.iter().copied());
 
-        if !self.one_typo_subset.is_empty() {
-            let Lazy::Init(OneTypoTerm { split_words, one_typo: _ }) = &original.one_typo else {
-                panic!();
-            };
-            result.extend(split_words.iter().copied());
+        match &self.one_typo_subset {
+            NTypoTermSubset::All => {
+                let Lazy::Init(OneTypoTerm { split_words, one_typo: _ }) = &original.one_typo else {
+                    panic!();
+                };
+                result.extend(split_words.iter().copied());
+            }
+            NTypoTermSubset::Subset { phrases, .. } => {
+                let Lazy::Init(OneTypoTerm { split_words, one_typo: _ }) = &original.one_typo else {
+                    panic!();
+                };
+                if let Some(split_words) = split_words {
+                    if phrases.contains(split_words) {
+                        result.insert(*split_words);
+                    }
+                }
+            }
+            NTypoTermSubset::Nothing => {}
         }
 
         Ok(result)
@@ -366,5 +397,36 @@ impl LocatedQueryTerm {
     /// Return `true` iff the term is empty
     pub fn is_empty(&self, interner: &DedupInterner<QueryTerm>) -> bool {
         interner.get(self.value).is_empty()
+    }
+}
+
+impl QueryTerm {
+    pub fn is_cached_prefix(&self) -> bool {
+        self.zero_typo.use_prefix_db.is_some()
+    }
+    pub fn original_word(&self, ctx: &SearchContext) -> String {
+        ctx.word_interner.get(self.original).clone()
+    }
+    pub fn all_computed_derivations(&self) -> (Vec<Interned<String>>, Vec<Interned<Phrase>>) {
+        let mut words = BTreeSet::new();
+        let mut phrases = BTreeSet::new();
+
+        let ZeroTypoTerm { phrase, exact: zero_typo, prefix_of, synonyms, use_prefix_db: _ } =
+            &self.zero_typo;
+        words.extend(zero_typo.iter().copied());
+        words.extend(prefix_of.iter().copied());
+        phrases.extend(phrase.iter().copied());
+        phrases.extend(synonyms.iter().copied());
+
+        if let Lazy::Init(OneTypoTerm { split_words, one_typo }) = &self.one_typo {
+            words.extend(one_typo.iter().copied());
+            phrases.extend(split_words.iter().copied());
+        };
+
+        if let Lazy::Init(TwoTypoTerm { two_typos }) = &self.two_typo {
+            words.extend(two_typos.iter().copied());
+        };
+
+        (words.into_iter().collect(), phrases.into_iter().collect())
     }
 }

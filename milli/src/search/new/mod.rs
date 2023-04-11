@@ -35,20 +35,20 @@ pub use logger::detailed::DetailedSearchLogger;
 pub use logger::{DefaultSearchLogger, SearchLogger};
 use query_graph::{QueryGraph, QueryNode};
 use query_term::{located_query_terms_from_string, LocatedQueryTerm, Phrase, QueryTerm};
-use ranking_rules::{bucket_sort, PlaceholderQuery, RankingRuleOutput, RankingRuleQueryTrait};
+use ranking_rules::{PlaceholderQuery, RankingRuleOutput, RankingRuleQueryTrait};
 use resolve_query_graph::PhraseDocIdsCache;
 use roaring::RoaringBitmap;
 use words::Words;
 
-use self::bucket_sort::BucketSortOutput;
-use self::exact_attribute::ExactAttribute;
-use self::graph_based_ranking_rule::Exactness;
-use self::interner::Interner;
-use self::ranking_rules::{BoxRankingRule, RankingRule};
-use self::resolve_query_graph::compute_query_graph_docids;
-use self::sort::Sort;
 use crate::search::new::distinct::apply_distinct_rule;
 use crate::{AscDesc, DocumentId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError};
+use bucket_sort::BucketSortOutput;
+use exact_attribute::ExactAttribute;
+use graph_based_ranking_rule::Exactness;
+use interner::Interner;
+use ranking_rules::{BoxRankingRule, RankingRule};
+use resolve_query_graph::compute_query_graph_docids;
+use sort::Sort;
 
 /// A structure used throughout the execution of a search query.
 pub struct SearchContext<'ctx> {
@@ -361,6 +361,7 @@ pub fn execute_search(
     Ok(PartialSearchResult {
         candidates: all_candidates,
         documents_ids: docids,
+        located_query_terms,
     })
 }
 

@@ -5,9 +5,7 @@ use std::ops::RangeInclusive;
 use charabia::Token;
 
 use super::super::interner::Interned;
-use super::super::query_term::{
-    Lazy, LocatedQueryTerm, OneTypoTerm, QueryTerm, TwoTypoTerm, ZeroTypoTerm,
-};
+use super::super::query_term::LocatedQueryTerm;
 use super::super::{DedupInterner, Phrase};
 use crate::SearchContext;
 
@@ -33,68 +31,16 @@ pub struct MatchingWords {
     words: Vec<LocatedMatchingWords>,
 }
 
-/// Extract and centralize the different phrases and words to match stored in a QueryTerm.
-fn extract_matching_terms(term: &QueryTerm) -> (Vec<Interned<Phrase>>, Vec<Interned<String>>) {
-    let mut matching_words = Vec::new();
-    let mut matching_phrases = Vec::new();
-
-    // the structure is exhaustively extracted to ensure that no field is missing.
-    let QueryTerm {
-        original: _,
-        is_multiple_words: _,
-        max_nbr_typos: _,
-        is_prefix: _,
-        zero_typo,
-        one_typo,
-        two_typo,
-    } = term;
-
-    // the structure is exhaustively extracted to ensure that no field is missing.
-    let ZeroTypoTerm { phrase, zero_typo, prefix_of: _, synonyms, use_prefix_db: _ } = zero_typo;
-
-    // zero typo
-    if let Some(phrase) = phrase {
-        matching_phrases.push(*phrase);
-    }
-    if let Some(zero_typo) = zero_typo {
-        matching_words.push(*zero_typo);
-    }
-    for synonym in synonyms {
-        matching_phrases.push(*synonym);
-    }
-
-    // one typo
-    // the structure is exhaustively extracted to ensure that no field is missing.
-    if let Lazy::Init(OneTypoTerm { split_words, one_typo }) = one_typo {
-        if let Some(split_words) = split_words {
-            matching_phrases.push(*split_words);
-        }
-        for one_typo in one_typo {
-            matching_words.push(*one_typo);
-        }
-    }
-
-    // two typos
-    // the structure is exhaustively extracted to ensure that no field is missing.
-    if let Lazy::Init(TwoTypoTerm { two_typos }) = two_typo {
-        for two_typos in two_typos {
-            matching_words.push(*two_typos);
-        }
-    }
-
-    (matching_phrases, matching_words)
-}
-
 impl MatchingWords {
     pub fn new(ctx: SearchContext, located_terms: Vec<LocatedQueryTerm>) -> Self {
         let mut phrases = Vec::new();
         let mut words = Vec::new();
 
-        // Extract and centralize the different phrases and words to match stored in a QueryTerm using extract_matching_terms
+        // Extract and centralize the different phrases and words to match stored in a QueryTerm
         // and wrap them in dedicated structures.
         for located_term in located_terms {
             let term = ctx.term_interner.get(located_term.value);
-            let (matching_phrases, matching_words) = extract_matching_terms(term);
+            let (matching_words, matching_phrases) = term.all_computed_derivations();
 
             for matching_phrase in matching_phrases {
                 phrases.push(LocatedMatchingPhrase {
@@ -106,8 +52,8 @@ impl MatchingWords {
             words.push(LocatedMatchingWords {
                 value: matching_words,
                 positions: located_term.positions.clone(),
-                is_prefix: term.is_prefix,
-                original_char_count: ctx.word_interner.get(term.original).chars().count(),
+                is_prefix: term.is_cached_prefix(),
+                original_char_count: term.original_word(&ctx).chars().count(),
             });
         }
 
