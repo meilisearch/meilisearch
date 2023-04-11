@@ -29,6 +29,7 @@ pub struct DatabaseCache<'ctx> {
     pub word_docids: FxHashMap<Interned<String>, Option<&'ctx [u8]>>,
     pub exact_word_docids: FxHashMap<Interned<String>, Option<&'ctx [u8]>>,
     pub word_prefix_docids: FxHashMap<Interned<String>, Option<&'ctx [u8]>>,
+    pub exact_word_prefix_docids: FxHashMap<Interned<String>, Option<&'ctx [u8]>>,
 
     pub words_fst: Option<fst::Set<Cow<'ctx, [u8]>>>,
     pub word_position_docids: FxHashMap<(Interned<String>, u16), Option<&'ctx [u8]>>,
@@ -116,6 +117,26 @@ impl<'ctx> SearchContext<'ctx> {
         .transpose()
     }
 
+    pub fn word_prefix_docids(&mut self, prefix: Word) -> Result<Option<RoaringBitmap>> {
+        match prefix {
+            Word::Original(prefix) => {
+                let exact = self.get_db_exact_word_prefix_docids(prefix)?;
+                let tolerant = self.get_db_word_prefix_docids(prefix)?;
+                Ok(match (exact, tolerant) {
+                    (None, None) => None,
+                    (None, Some(tolerant)) => Some(tolerant),
+                    (Some(exact), None) => Some(exact),
+                    (Some(exact), Some(tolerant)) => {
+                        let mut both = exact;
+                        both |= tolerant;
+                        Some(both)
+                    }
+                })
+            }
+            Word::Derived(prefix) => self.get_db_word_prefix_docids(prefix),
+        }
+    }
+
     /// Retrieve or insert the given value in the `word_prefix_docids` database.
     pub fn get_db_word_prefix_docids(
         &mut self,
@@ -127,6 +148,21 @@ impl<'ctx> SearchContext<'ctx> {
             self.word_interner.get(prefix).as_str(),
             &mut self.db_cache.word_prefix_docids,
             self.index.word_prefix_docids.remap_data_type::<ByteSlice>(),
+        )?
+        .map(|bytes| RoaringBitmapCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding.into()))
+        .transpose()
+    }
+
+    fn get_db_exact_word_prefix_docids(
+        &mut self,
+        prefix: Interned<String>,
+    ) -> Result<Option<RoaringBitmap>> {
+        DatabaseCache::get_value(
+            self.txn,
+            prefix,
+            self.word_interner.get(prefix).as_str(),
+            &mut self.db_cache.exact_word_prefix_docids,
+            self.index.exact_word_prefix_docids.remap_data_type::<ByteSlice>(),
         )?
         .map(|bytes| RoaringBitmapCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding.into()))
         .transpose()
