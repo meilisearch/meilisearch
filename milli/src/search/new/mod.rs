@@ -75,6 +75,21 @@ impl<'ctx> SearchContext<'ctx> {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, PartialOrd, Ord, Eq)]
+pub enum Word {
+    Original(Interned<String>),
+    Derived(Interned<String>),
+}
+
+impl Word {
+    pub fn interned(&self) -> Interned<String> {
+        match self {
+            Word::Original(word) => *word,
+            Word::Derived(word) => *word,
+        }
+    }
+}
+
 /// Apply the [`TermsMatchingStrategy`] to the query graph and resolve it.
 #[allow(clippy::too_many_arguments)]
 fn resolve_maximally_reduced_query_graph(
