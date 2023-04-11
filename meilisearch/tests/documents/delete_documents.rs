@@ -247,11 +247,14 @@ async fn delete_document_by_filter() {
         {
           "id": 0,
           "color": "red"
+        },
+        {
+          "id": 3
         }
       ],
       "offset": 0,
       "limit": 20,
-      "total": 1
+      "total": 2
     }
     "###);
 }

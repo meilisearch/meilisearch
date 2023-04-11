@@ -418,3 +418,128 @@ async fn update_documents_csv_delimiter_with_bad_content_type() {
     }
     "###);
 }
+
+#[actix_rt::test]
+async fn delete_document_by_filter() {
+    let server = Server::new().await;
+    let index = server.index("doggo");
+
+    // send a bad payload type
+    let (response, code) = index.delete_document_by_filter(json!("hello")).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Json deserialize error: data did not match any variant of untagged enum DocumentDeletionQuery",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "###);
+
+    // send bad filter
+    let (response, code) = index.delete_document_by_filter(json!({ "filter": "hello"})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `_geoRadius`, or `_geoBoundingBox` at `hello`.\n1:6 hello",
+      "code": "invalid_search_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+    }
+    "###);
+
+    // index does not exists
+    let (response, code) =
+        index.delete_document_by_filter(json!({ "filter": "doggo = bernese"})).await;
+    snapshot!(code, @"202 Accepted");
+    let response = server.wait_task(response["taskUid"].as_u64().unwrap()).await;
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]"}), @r###"
+    {
+      "uid": 0,
+      "indexUid": "doggo",
+      "status": "failed",
+      "type": "documentDeletion",
+      "canceledBy": null,
+      "details": {
+        "deletedDocuments": 0,
+        "originalFilter": "\"doggo = bernese\""
+      },
+      "error": {
+        "message": "Index `doggo` not found.",
+        "code": "index_not_found",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let (response, code) = index.create(None).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response["taskUid"].as_u64().unwrap()).await;
+
+    // no filterable are set
+    let (response, code) =
+        index.delete_document_by_filter(json!({ "filter": "doggo = bernese"})).await;
+    snapshot!(code, @"202 Accepted");
+    let response = server.wait_task(response["taskUid"].as_u64().unwrap()).await;
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]"}), @r###"
+    {
+      "uid": 2,
+      "indexUid": "doggo",
+      "status": "failed",
+      "type": "documentDeletion",
+      "canceledBy": null,
+      "details": {
+        "deletedDocuments": 0,
+        "originalFilter": "\"doggo = bernese\""
+      },
+      "error": {
+        "message": "Attribute `doggo` is not filterable. This index does not have configured filterable attributes.\n1:6 doggo = bernese",
+        "code": "invalid_search_filter",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let (response, code) = index.update_settings_filterable_attributes(json!(["doggo"])).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response["taskUid"].as_u64().unwrap()).await;
+
+    // not filterable while there is a filterable attribute
+    let (response, code) =
+        index.delete_document_by_filter(json!({ "filter": "catto = jorts"})).await;
+    snapshot!(code, @"202 Accepted");
+    let response = server.wait_task(response["taskUid"].as_u64().unwrap()).await;
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]"}), @r###"
+    {
+      "uid": 4,
+      "indexUid": "doggo",
+      "status": "failed",
+      "type": "documentDeletion",
+      "canceledBy": null,
+      "details": {
+        "deletedDocuments": 0,
+        "originalFilter": "\"catto = jorts\""
+      },
+      "error": {
+        "message": "Attribute `catto` is not filterable. Available filterable attributes are: `doggo`.\n1:6 catto = jorts",
+        "code": "invalid_search_filter",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+}
