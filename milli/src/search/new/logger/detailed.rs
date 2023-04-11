@@ -455,7 +455,7 @@ results.{cur_ranking_rule}{cur_activated_id} {{
                     writeln!(file, "{}: phrase", p.description(ctx)).unwrap();
                 }
                 if let Some(w) = term_subset.use_prefix_db(ctx) {
-                    let w = ctx.word_interner.get(w);
+                    let w = ctx.word_interner.get(w.interned());
                     writeln!(file, "{w}: prefix db").unwrap();
                 }
 

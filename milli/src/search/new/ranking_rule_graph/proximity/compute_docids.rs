@@ -55,7 +55,7 @@ pub fn compute_docids(
             compute_prefix_edges(
                 ctx,
                 left_word.interned(),
-                right_prefix,
+                right_prefix.interned(),
                 left_phrase,
                 forward_proximity,
                 backward_proximity,

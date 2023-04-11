@@ -159,12 +159,12 @@ impl QueryTermSubset {
         self.two_typo_subset.intersect(&other.two_typo_subset);
     }
 
-    pub fn use_prefix_db(&self, ctx: &SearchContext) -> Option<Interned<String>> {
+    pub fn use_prefix_db(&self, ctx: &SearchContext) -> Option<Word> {
         let original = ctx.term_interner.get(self.original);
         let Some(use_prefix_db) = original.zero_typo.use_prefix_db else {
             return None
         };
-        match &self.zero_typo_subset {
+        let word = match &self.zero_typo_subset {
             NTypoTermSubset::All => Some(use_prefix_db),
             NTypoTermSubset::Subset { words, phrases: _ } => {
                 // TODO: use a subset of prefix words instead
@@ -175,7 +175,14 @@ impl QueryTermSubset {
                 }
             }
             NTypoTermSubset::Nothing => None,
-        }
+        };
+        word.map(|word| {
+            if original.ngram_words.is_some() {
+                Word::Derived(word)
+            } else {
+                Word::Original(word)
+            }
+        })
     }
     pub fn all_single_words_except_prefix_db(
         &self,
