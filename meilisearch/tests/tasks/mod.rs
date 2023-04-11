@@ -1026,9 +1026,15 @@ async fn test_task_queue_is_full() {
     "###);
 
     loop {
-        let (res, _code) = server.create_index(json!({ "uid": "doggo" })).await;
-        if res["taskUid"] == json!(null) {
+        let (res, code) = server.create_index(json!({ "uid": "doggo" })).await;
+        if code == 422 {
             break;
+        }
+        if res["taskUid"] == json!(null) {
+            panic!(
+                "Encountered the strange case:\n{}",
+                serde_json::to_string_pretty(&res).unwrap()
+            );
         }
     }
 
@@ -1058,9 +1064,15 @@ async fn test_task_queue_is_full() {
 
     // we're going to fill up the queue once again
     loop {
-        let (res, _code) = server.create_index(json!({ "uid": "doggo" })).await;
-        if res["taskUid"] == json!(null) {
+        let (res, code) = server.create_index(json!({ "uid": "doggo" })).await;
+        if code == 422 {
             break;
+        }
+        if res["taskUid"] == json!(null) {
+            panic!(
+                "Encountered the strange case:\n{}",
+                serde_json::to_string_pretty(&res).unwrap()
+            );
         }
     }
 
