@@ -11,7 +11,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-base64 = "0.13.1"
+base64 = "0.21.0"
 enum-iterator = "1.4.0"
 hmac = "0.12.1"
 maplit = "1.0.2"

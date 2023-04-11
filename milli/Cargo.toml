@@ -35,7 +35,7 @@ once_cell = "1.17.1"
 ordered-float = "3.6.0"
 rayon = "1.7.0"
 roaring = "0.10.1"
-rstar = { version = "0.9.3", features = ["serde"] }
+rstar = { version = "0.10.0", features = ["serde"] }
 serde = { version = "1.0.160", features = ["derive"] }
 serde_json = { version = "1.0.95", features = ["preserve_order"] }
 slice-group-by = "0.3.0"
