@@ -4,10 +4,13 @@ use std::hash::Hash;
 
 use fxhash::FxHashMap;
 use heed::types::ByteSlice;
-use heed::{BytesEncode, Database, RoTxn};
+use heed::{BytesDecode, BytesEncode, Database, RoTxn};
+use roaring::RoaringBitmap;
 
 use super::interner::Interned;
-use crate::{Result, SearchContext};
+use crate::{
+    CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, Result, RoaringBitmapCodec, SearchContext,
+};
 
 /// A cache storing pointers to values in the LMDB databases.
 ///
@@ -65,27 +68,31 @@ impl<'ctx> SearchContext<'ctx> {
     }
 
     /// Retrieve or insert the given value in the `word_docids` database.
-    pub fn get_db_word_docids(&mut self, word: Interned<String>) -> Result<Option<&'ctx [u8]>> {
+    pub fn get_db_word_docids(&mut self, word: Interned<String>) -> Result<Option<RoaringBitmap>> {
         DatabaseCache::get_value(
             self.txn,
             word,
             self.word_interner.get(word).as_str(),
             &mut self.db_cache.word_docids,
             self.index.word_docids.remap_data_type::<ByteSlice>(),
-        )
+        )?
+        .map(|bytes| RoaringBitmapCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding.into()))
+        .transpose()
     }
     /// Retrieve or insert the given value in the `word_prefix_docids` database.
     pub fn get_db_word_prefix_docids(
         &mut self,
         prefix: Interned<String>,
-    ) -> Result<Option<&'ctx [u8]>> {
+    ) -> Result<Option<RoaringBitmap>> {
         DatabaseCache::get_value(
             self.txn,
             prefix,
             self.word_interner.get(prefix).as_str(),
             &mut self.db_cache.word_prefix_docids,
             self.index.word_prefix_docids.remap_data_type::<ByteSlice>(),
-        )
+        )?
+        .map(|bytes| RoaringBitmapCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding.into()))
+        .transpose()
     }
 
     pub fn get_db_word_pair_proximity_docids(
@@ -93,7 +100,7 @@ impl<'ctx> SearchContext<'ctx> {
         word1: Interned<String>,
         word2: Interned<String>,
         proximity: u8,
-    ) -> Result<Option<&'ctx [u8]>> {
+    ) -> Result<Option<RoaringBitmap>> {
         DatabaseCache::get_value(
             self.txn,
             (proximity, word1, word2),
@@ -104,7 +111,32 @@ impl<'ctx> SearchContext<'ctx> {
             ),
             &mut self.db_cache.word_pair_proximity_docids,
             self.index.word_pair_proximity_docids.remap_data_type::<ByteSlice>(),
-        )
+        )?
+        .map(|bytes| CboRoaringBitmapCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding.into()))
+        .transpose()
+    }
+
+    pub fn get_db_word_pair_proximity_docids_len(
+        &mut self,
+        word1: Interned<String>,
+        word2: Interned<String>,
+        proximity: u8,
+    ) -> Result<Option<u64>> {
+        DatabaseCache::get_value(
+            self.txn,
+            (proximity, word1, word2),
+            &(
+                proximity,
+                self.word_interner.get(word1).as_str(),
+                self.word_interner.get(word2).as_str(),
+            ),
+            &mut self.db_cache.word_pair_proximity_docids,
+            self.index.word_pair_proximity_docids.remap_data_type::<ByteSlice>(),
+        )?
+        .map(|bytes| {
+            CboRoaringBitmapLenCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding.into())
+        })
+        .transpose()
     }
 
     pub fn get_db_word_prefix_pair_proximity_docids(
@@ -112,7 +144,7 @@ impl<'ctx> SearchContext<'ctx> {
         word1: Interned<String>,
         prefix2: Interned<String>,
         proximity: u8,
-    ) -> Result<Option<&'ctx [u8]>> {
+    ) -> Result<Option<RoaringBitmap>> {
         DatabaseCache::get_value(
             self.txn,
             (proximity, word1, prefix2),
@@ -123,14 +155,16 @@ impl<'ctx> SearchContext<'ctx> {
             ),
             &mut self.db_cache.word_prefix_pair_proximity_docids,
             self.index.word_prefix_pair_proximity_docids.remap_data_type::<ByteSlice>(),
-        )
+        )?
+        .map(|bytes| CboRoaringBitmapCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding.into()))
+        .transpose()
     }
     pub fn get_db_prefix_word_pair_proximity_docids(
         &mut self,
         left_prefix: Interned<String>,
         right: Interned<String>,
         proximity: u8,
-    ) -> Result<Option<&'ctx [u8]>> {
+    ) -> Result<Option<RoaringBitmap>> {
         DatabaseCache::get_value(
             self.txn,
             (proximity, left_prefix, right),
@@ -141,34 +175,40 @@ impl<'ctx> SearchContext<'ctx> {
             ),
             &mut self.db_cache.prefix_word_pair_proximity_docids,
             self.index.prefix_word_pair_proximity_docids.remap_data_type::<ByteSlice>(),
-        )
+        )?
+        .map(|bytes| CboRoaringBitmapCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding.into()))
+        .transpose()
     }
 
     pub fn get_db_word_position_docids(
         &mut self,
         word: Interned<String>,
         position: u16,
-    ) -> Result<Option<&'ctx [u8]>> {
+    ) -> Result<Option<RoaringBitmap>> {
         DatabaseCache::get_value(
             self.txn,
             (word, position),
             &(self.word_interner.get(word).as_str(), position),
             &mut self.db_cache.word_position_docids,
             self.index.word_position_docids.remap_data_type::<ByteSlice>(),
-        )
+        )?
+        .map(|bytes| CboRoaringBitmapCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding.into()))
+        .transpose()
     }
 
     pub fn get_db_word_fid_docids(
         &mut self,
         word: Interned<String>,
         fid: u16,
-    ) -> Result<Option<&'ctx [u8]>> {
+    ) -> Result<Option<RoaringBitmap>> {
         DatabaseCache::get_value(
             self.txn,
             (word, fid),
             &(self.word_interner.get(word).as_str(), fid),
             &mut self.db_cache.word_fid_docids,
             self.index.word_fid_docids.remap_data_type::<ByteSlice>(),
-        )
+        )?
+        .map(|bytes| CboRoaringBitmapCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding.into()))
+        .transpose()
     }
 }
