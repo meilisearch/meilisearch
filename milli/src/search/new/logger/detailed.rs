@@ -448,7 +448,7 @@ results.{cur_ranking_rule}{cur_activated_id} {{
                 .unwrap();
 
                 for w in term_subset.all_single_words_except_prefix_db(ctx).unwrap() {
-                    let w = ctx.word_interner.get(w);
+                    let w = ctx.word_interner.get(w.interned());
                     writeln!(file, "{w}: word").unwrap();
                 }
                 for p in term_subset.all_phrases(ctx).unwrap() {

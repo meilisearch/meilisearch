@@ -3,18 +3,18 @@ mod ntypo_subset;
 mod parse_query;
 mod phrase;
 
-use super::interner::{DedupInterner, Interned};
-use super::{limits, SearchContext};
-use crate::Result;
 use std::collections::BTreeSet;
 use std::ops::RangeInclusive;
 
+use compute_derivations::partially_initialized_term_from_word;
 use either::Either;
 pub use ntypo_subset::NTypoTermSubset;
 pub use parse_query::{located_query_terms_from_string, make_ngram, number_of_typos_allowed};
 pub use phrase::Phrase;
 
-use compute_derivations::partially_initialized_term_from_word;
+use super::interner::{DedupInterner, Interned};
+use super::{limits, SearchContext, Word};
+use crate::Result;
 
 /// A set of word derivations attached to a location in the search query.
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -180,7 +180,7 @@ impl QueryTermSubset {
     pub fn all_single_words_except_prefix_db(
         &self,
         ctx: &mut SearchContext,
-    ) -> Result<BTreeSet<Interned<String>>> {
+    ) -> Result<BTreeSet<Word>> {
         let mut result = BTreeSet::default();
         // TODO: a compute_partially funtion
         if !self.one_typo_subset.is_empty() || !self.two_typo_subset.is_empty() {
@@ -196,8 +196,14 @@ impl QueryTermSubset {
                 synonyms: _,
                 use_prefix_db: _,
             } = &original.zero_typo;
-            result.extend(zero_typo.iter().copied());
-            result.extend(prefix_of.iter().copied());
+            result.extend(zero_typo.iter().copied().map(|word| {
+                if original.ngram_words.is_some() {
+                    Word::Original(word)
+                } else {
+                    Word::Derived(word)
+                }
+            }));
+            result.extend(prefix_of.iter().copied().map(Word::Derived));
         };
 
         match &self.one_typo_subset {
@@ -205,13 +211,13 @@ impl QueryTermSubset {
                 let Lazy::Init(OneTypoTerm { split_words: _, one_typo }) = &original.one_typo else {
                     panic!()
                 };
-                result.extend(one_typo.iter().copied())
+                result.extend(one_typo.iter().copied().map(Word::Derived))
             }
             NTypoTermSubset::Subset { words, phrases: _ } => {
                 let Lazy::Init(OneTypoTerm { split_words: _, one_typo }) = &original.one_typo else {
                     panic!()
                 };
-                result.extend(one_typo.intersection(words));
+                result.extend(one_typo.intersection(words).copied().map(Word::Derived));
             }
             NTypoTermSubset::Nothing => {}
         };
@@ -221,13 +227,13 @@ impl QueryTermSubset {
                 let Lazy::Init(TwoTypoTerm { two_typos }) = &original.two_typo else {
                     panic!()
                 };
-                result.extend(two_typos.iter().copied());
+                result.extend(two_typos.iter().copied().map(Word::Derived));
             }
             NTypoTermSubset::Subset { words, phrases: _ } => {
                 let Lazy::Init(TwoTypoTerm { two_typos }) = &original.two_typo else {
                     panic!()
                 };
-                result.extend(two_typos.intersection(words));
+                result.extend(two_typos.intersection(words).copied().map(Word::Derived));
             }
             NTypoTermSubset::Nothing => {}
         };

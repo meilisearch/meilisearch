@@ -4,6 +4,7 @@ use super::{ComputedCondition, DeadEndsCache, RankingRuleGraph, RankingRuleGraph
 use crate::search::new::interner::{DedupInterner, Interned, MappedInterner};
 use crate::search::new::query_graph::{QueryGraph, QueryNode};
 use crate::search::new::query_term::{ExactTerm, LocatedQueryTermSubset};
+use crate::search::new::Word;
 use crate::{Result, SearchContext, SearchLogger};
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -27,7 +28,7 @@ fn compute_docids(
     let mut candidates = match exact_term {
         ExactTerm::Phrase(phrase) => ctx.get_phrase_docids(phrase)?.clone(),
         ExactTerm::Word(word) => {
-            if let Some(word_candidates) = ctx.get_db_word_docids(word)? {
+            if let Some(word_candidates) = ctx.word_docids(Word::Original(word))? {
                 word_candidates
             } else {
                 return Ok(Default::default());

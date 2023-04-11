@@ -9,7 +9,7 @@ use super::interner::Interned;
 use super::query_graph::QueryNodeData;
 use super::query_term::{Phrase, QueryTermSubset};
 use super::small_bitmap::SmallBitmap;
-use super::{QueryGraph, SearchContext};
+use super::{QueryGraph, SearchContext, Word};
 use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::Result;
 
@@ -35,7 +35,7 @@ pub fn compute_query_term_subset_docids(
 ) -> Result<RoaringBitmap> {
     let mut docids = RoaringBitmap::new();
     for word in term.all_single_words_except_prefix_db(ctx)? {
-        if let Some(word_docids) = ctx.get_db_word_docids(word)? {
+        if let Some(word_docids) = ctx.word_docids(word)? {
             docids |= word_docids;
         }
     }
@@ -125,7 +125,7 @@ pub fn compute_phrase_docids(
     }
     if words.len() == 1 {
         if let Some(word) = &words[0] {
-            if let Some(word_docids) = ctx.get_db_word_docids(*word)? {
+            if let Some(word_docids) = ctx.word_docids(Word::Original(*word))? {
                 return Ok(word_docids);
             } else {
                 return Ok(RoaringBitmap::new());
