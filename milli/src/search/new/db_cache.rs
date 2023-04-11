@@ -8,6 +8,7 @@ use heed::{BytesDecode, BytesEncode, Database, RoTxn};
 use roaring::RoaringBitmap;
 
 use super::interner::Interned;
+use super::Word;
 use crate::{
     CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, Result, RoaringBitmapCodec, SearchContext,
 };
@@ -67,6 +68,26 @@ impl<'ctx> SearchContext<'ctx> {
         }
     }
 
+    pub fn word_docids(&mut self, word: Word) -> Result<Option<RoaringBitmap>> {
+        match word {
+            Word::Original(word) => {
+                let exact = self.get_db_exact_word_docids(word)?;
+                let tolerant = self.get_db_word_docids(word)?;
+                Ok(match (exact, tolerant) {
+                    (None, None) => None,
+                    (None, Some(tolerant)) => Some(tolerant),
+                    (Some(exact), None) => Some(exact),
+                    (Some(exact), Some(tolerant)) => {
+                        let mut both = exact;
+                        both |= tolerant;
+                        Some(both)
+                    }
+                })
+            }
+            Word::Derived(word) => self.get_db_word_docids(word),
+        }
+    }
+
     /// Retrieve or insert the given value in the `word_docids` database.
     pub fn get_db_word_docids(&mut self, word: Interned<String>) -> Result<Option<RoaringBitmap>> {
         DatabaseCache::get_value(
@@ -79,6 +100,22 @@ impl<'ctx> SearchContext<'ctx> {
         .map(|bytes| RoaringBitmapCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding.into()))
         .transpose()
     }
+
+    fn get_db_exact_word_docids(
+        &mut self,
+        word: Interned<String>,
+    ) -> Result<Option<RoaringBitmap>> {
+        DatabaseCache::get_value(
+            self.txn,
+            word,
+            self.word_interner.get(word).as_str(),
+            &mut self.db_cache.exact_word_docids,
+            self.index.exact_word_docids.remap_data_type::<ByteSlice>(),
+        )?
+        .map(|bytes| RoaringBitmapCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding.into()))
+        .transpose()
+    }
+
     /// Retrieve or insert the given value in the `word_prefix_docids` database.
     pub fn get_db_word_prefix_docids(
         &mut self,

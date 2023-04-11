@@ -42,7 +42,7 @@ use words::Words;
 use self::bucket_sort::BucketSortOutput;
 use self::exact_attribute::ExactAttribute;
 use self::graph_based_ranking_rule::Exactness;
-use self::interner::Interner;
+use self::interner::{Interned, Interner};
 use self::ranking_rules::{BoxRankingRule, RankingRule};
 use self::resolve_query_graph::compute_query_graph_docids;
 use self::sort::Sort;
@@ -72,6 +72,21 @@ impl<'ctx> SearchContext<'ctx> {
             phrase_interner: <_>::default(),
             term_interner: <_>::default(),
             phrase_docids: <_>::default(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, PartialOrd, Ord, Eq)]
+pub enum Word {
+    Original(Interned<String>),
+    Derived(Interned<String>),
+}
+
+impl Word {
+    pub fn interned(&self) -> Interned<String> {
+        match self {
+            Word::Original(word) => *word,
+            Word::Derived(word) => *word,
         }
     }
 }
