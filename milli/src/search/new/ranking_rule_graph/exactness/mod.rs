@@ -1,4 +1,3 @@
-use heed::BytesDecode;
 use roaring::RoaringBitmap;
 
 use super::{ComputedCondition, RankingRuleGraphTrait};
@@ -28,7 +27,7 @@ fn compute_docids(
         ExactTerm::Phrase(phrase) => ctx.get_phrase_docids(phrase)?.clone(),
         ExactTerm::Word(word) => {
             if let Some(word_candidates) = ctx.get_db_word_docids(word)? {
-                RoaringBitmapCodec::bytes_decode(word_candidates).ok_or(heed::Error::Decoding)?
+                word_candidates
             } else {
                 return Ok(Default::default());
             }
