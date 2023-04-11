@@ -50,6 +50,8 @@ use ranking_rules::{BoxRankingRule, RankingRule};
 use resolve_query_graph::compute_query_graph_docids;
 use sort::Sort;
 
+use self::interner::Interned;
+
 /// A structure used throughout the execution of a search query.
 pub struct SearchContext<'ctx> {
     pub index: &'ctx Index,

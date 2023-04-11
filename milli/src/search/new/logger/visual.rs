@@ -427,7 +427,7 @@ fill: \"#B6E2D3\"
                 )?;
 
                 for w in term_subset.all_single_words_except_prefix_db(ctx)? {
-                    let w = ctx.word_interner.get(w);
+                    let w = ctx.word_interner.get(w.interned());
                     writeln!(file, "{w}: word")?;
                 }
                 for p in term_subset.all_phrases(ctx)? {

@@ -89,7 +89,7 @@ impl<'ctx> SearchContext<'ctx> {
     }
 
     /// Retrieve or insert the given value in the `word_docids` database.
-    pub fn get_db_word_docids(&mut self, word: Interned<String>) -> Result<Option<RoaringBitmap>> {
+    fn get_db_word_docids(&mut self, word: Interned<String>) -> Result<Option<RoaringBitmap>> {
         DatabaseCache::get_value(
             self.txn,
             word,
