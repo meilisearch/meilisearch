@@ -1,6 +1,6 @@
-use std::error::Error;
 use std::io::stdin;
 use std::time::Instant;
+use std::{error::Error, path::Path};
 
 use heed::EnvOpenOptions;
 use milli::{
@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             program_name
         )
     });
-    let detailed_logger = args.next();
+    let detailed_logger_dir = args.next();
     let print_documents: bool =
         if let Some(arg) = args.next() { arg == "print-documents" } else { false };
 
@@ -34,11 +34,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             let mut default_logger = DefaultSearchLogger;
             // FIXME: consider resetting the state of the logger between search executions as otherwise panics are possible.
             // Workaround'd here by recreating the logger on each iteration of the loop
-            let mut detailed_logger = detailed_logger
+            let mut detailed_logger = detailed_logger_dir
                 .as_ref()
-                .map(|logger_dir| milli::DetailedSearchLogger::new(logger_dir));
+                .map(|logger_dir| (milli::VisualSearchLogger::default(), logger_dir));
             let logger: &mut dyn SearchLogger<_> =
-                if let Some(detailed_logger) = detailed_logger.as_mut() {
+                if let Some((detailed_logger, _)) = detailed_logger.as_mut() {
                     detailed_logger
                 } else {
                     &mut default_logger
@@ -61,8 +61,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 &mut DefaultSearchLogger,
                 logger,
             )?;
-            if let Some(logger) = &detailed_logger {
-                logger.write_d2_description(&mut ctx);
+            if let Some((logger, dir)) = detailed_logger {
+                logger.finish(&mut ctx, Path::new(dir))?;
             }
             let elapsed = start.elapsed();
             println!("new: {}us, docids: {:?}", elapsed.as_micros(), docs.documents_ids);

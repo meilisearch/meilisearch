@@ -82,7 +82,7 @@ impl<E> PartialEq for Edge<E> {
 /// It mostly describes how to:
 /// 1. Retrieve the set of edges (their cost and condition) between two nodes.
 /// 2. Compute the document ids satisfying a condition
-pub trait RankingRuleGraphTrait: Sized {
+pub trait RankingRuleGraphTrait: Sized + 'static {
     type Condition: Sized + Clone + PartialEq + Eq + Hash;
 
     /// Compute the document ids associated with the given edge condition,

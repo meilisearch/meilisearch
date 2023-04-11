@@ -31,7 +31,7 @@ use db_cache::DatabaseCache;
 use graph_based_ranking_rule::{Proximity, Typo};
 use heed::RoTxn;
 use interner::DedupInterner;
-pub use logger::detailed::DetailedSearchLogger;
+pub use logger::visual::VisualSearchLogger;
 pub use logger::{DefaultSearchLogger, SearchLogger};
 use query_graph::{QueryGraph, QueryNode};
 use query_term::{located_query_terms_from_string, LocatedQueryTerm, Phrase, QueryTerm};
