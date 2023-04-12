@@ -25,7 +25,7 @@ impl RankingRuleGraphTrait for AttributeGraph {
         universe: &RoaringBitmap,
     ) -> Result<ComputedCondition> {
         let AttributeCondition { term, .. } = condition;
-        // maybe compute_query_term_subset_docids should accept a universe as argument
+        // maybe compute_query_term_subset_docids_within_field_id should accept a universe as argument
         let mut docids = compute_query_term_subset_docids_within_field_id(
             ctx,
             &term.term_subset,

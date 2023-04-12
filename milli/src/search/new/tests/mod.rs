@@ -1,3 +1,4 @@
+pub mod attribute;
 pub mod distinct;
 #[cfg(feature = "default")]
 pub mod language;
