@@ -4,7 +4,9 @@ use roaring::RoaringBitmap;
 use super::{ComputedCondition, RankingRuleGraphTrait};
 use crate::search::new::interner::{DedupInterner, Interned};
 use crate::search::new::query_term::LocatedQueryTermSubset;
-use crate::search::new::resolve_query_graph::compute_query_term_subset_docids;
+use crate::search::new::resolve_query_graph::{
+    compute_query_term_subset_docids, compute_query_term_subset_docids_within_field_id,
+};
 use crate::search::new::SearchContext;
 use crate::Result;
 
@@ -26,7 +28,11 @@ impl RankingRuleGraphTrait for AttributeGraph {
     ) -> Result<ComputedCondition> {
         let AttributeCondition { term, .. } = condition;
         // maybe compute_query_term_subset_docids should accept a universe as argument
-        let mut docids = compute_query_term_subset_docids(ctx, &term.term_subset)?;
+        let mut docids = compute_query_term_subset_docids_within_field_id(
+            ctx,
+            &term.term_subset,
+            condition.fid,
+        )?;
         docids &= universe;
 
         Ok(ComputedCondition {

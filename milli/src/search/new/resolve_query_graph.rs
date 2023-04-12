@@ -33,6 +33,8 @@ pub fn compute_query_term_subset_docids(
     ctx: &mut SearchContext,
     term: &QueryTermSubset,
 ) -> Result<RoaringBitmap> {
+    // TODO Use the roaring::MultiOps trait
+
     let mut docids = RoaringBitmap::new();
     for word in term.all_single_words_except_prefix_db(ctx)? {
         if let Some(word_docids) = ctx.word_docids(word)? {
@@ -46,6 +48,40 @@ pub fn compute_query_term_subset_docids(
     if let Some(prefix) = term.use_prefix_db(ctx) {
         if let Some(prefix_docids) = ctx.word_prefix_docids(prefix)? {
             docids |= prefix_docids;
+        }
+    }
+
+    Ok(docids)
+}
+
+pub fn compute_query_term_subset_docids_within_field_id(
+    ctx: &mut SearchContext,
+    term: &QueryTermSubset,
+    fid: u16,
+) -> Result<RoaringBitmap> {
+    // TODO Use the roaring::MultiOps trait
+
+    let mut docids = RoaringBitmap::new();
+    for word in term.all_single_words_except_prefix_db(ctx)? {
+        if let Some(word_fid_docids) = ctx.get_db_word_fid_docids(word, fid)? {
+            docids |= CboRoaringBitmapCodec::bytes_decode(word_fid_docids)
+                .ok_or(heed::Error::Decoding)?;
+        }
+    }
+
+    for phrase in term.all_phrases(ctx)? {
+        for &word in phrase.words(ctx).iter().flatten() {
+            if let Some(word_fid_docids) = ctx.get_db_word_fid_docids(word, fid)? {
+                docids |= CboRoaringBitmapCodec::bytes_decode(word_fid_docids)
+                    .ok_or(heed::Error::Decoding)?;
+            }
+        }
+    }
+
+    if let Some(word_prefix) = term.use_prefix_db(ctx) {
+        if let Some(word_fid_docids) = ctx.get_db_word_prefix_fid_docids(word_prefix, fid)? {
+            docids |= CboRoaringBitmapCodec::bytes_decode(word_fid_docids)
+                .ok_or(heed::Error::Decoding)?;
         }
     }
 
