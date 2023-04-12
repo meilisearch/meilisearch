@@ -210,7 +210,13 @@ impl QueryTermSubset {
                     Word::Original(word)
                 }
             }));
-            result.extend(prefix_of.iter().copied().map(Word::Derived));
+            result.extend(prefix_of.iter().copied().map(|word| {
+                if original.ngram_words.is_some() {
+                    Word::Derived(word)
+                } else {
+                    Word::Original(word)
+                }
+            }));
         };
 
         match &self.one_typo_subset {
