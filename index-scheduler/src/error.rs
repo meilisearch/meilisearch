@@ -61,7 +61,7 @@ pub enum Error {
     SwapDuplicateIndexesFound(Vec<String>),
     #[error("Index `{0}` not found.")]
     SwapIndexNotFound(String),
-    #[error("No space left in database. Free some space by deleting tasks.")]
+    #[error("Meilisearch cannot receive write operations because the limit of the task database has been reached. Please delete tasks to continue performing write operations.")]
     NoSpaceLeftInTaskQueue,
     #[error(
         "Indexes {} not found.",

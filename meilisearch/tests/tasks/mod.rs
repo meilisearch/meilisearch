@@ -1042,7 +1042,7 @@ async fn test_task_queue_is_full() {
     snapshot!(code, @"422 Unprocessable Entity");
     snapshot!(json_string!(result), @r###"
     {
-      "message": "No space left in database. Free some space by deleting tasks.",
+      "message": "Meilisearch cannot receive write operations because the limit of the task database has been reached. Please delete tasks to continue performing write operations.",
       "code": "no_space_left_on_device",
       "type": "system",
       "link": "https://docs.meilisearch.com/errors#no_space_left_on_device"
@@ -1081,7 +1081,7 @@ async fn test_task_queue_is_full() {
     snapshot!(code, @"422 Unprocessable Entity");
     snapshot!(json_string!(result), @r###"
     {
-      "message": "No space left in database. Free some space by deleting tasks.",
+      "message": "Meilisearch cannot receive write operations because the limit of the task database has been reached. Please delete tasks to continue performing write operations.",
       "code": "no_space_left_on_device",
       "type": "system",
       "link": "https://docs.meilisearch.com/errors#no_space_left_on_device"
