@@ -9,6 +9,7 @@ use roaring::RoaringBitmap;
 
 use super::interner::Interned;
 use super::Word;
+use crate::heed_codec::StrBEU16Codec;
 use crate::{
     CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, Result, RoaringBitmapCodec, SearchContext,
 };
@@ -292,14 +293,16 @@ impl<'ctx> SearchContext<'ctx> {
         &mut self,
         word_prefix: Interned<String>,
         fid: u16,
-    ) -> Result<Option<&'ctx [u8]>> {
+    ) -> Result<Option<RoaringBitmap>> {
         DatabaseCache::get_value(
             self.txn,
             (word_prefix, fid),
             &(self.word_interner.get(word_prefix).as_str(), fid),
             &mut self.db_cache.word_prefix_fid_docids,
             self.index.word_prefix_fid_docids.remap_data_type::<ByteSlice>(),
-        )
+        )?
+        .map(|bytes| CboRoaringBitmapCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding.into()))
+        .transpose()
     }
 
     pub fn get_db_word_fids(&mut self, word: Interned<String>) -> Result<Vec<u16>> {

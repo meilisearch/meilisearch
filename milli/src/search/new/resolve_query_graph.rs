@@ -63,25 +63,24 @@ pub fn compute_query_term_subset_docids_within_field_id(
 
     let mut docids = RoaringBitmap::new();
     for word in term.all_single_words_except_prefix_db(ctx)? {
-        if let Some(word_fid_docids) = ctx.get_db_word_fid_docids(word, fid)? {
-            docids |= CboRoaringBitmapCodec::bytes_decode(word_fid_docids)
-                .ok_or(heed::Error::Decoding)?;
+        if let Some(word_fid_docids) = ctx.get_db_word_fid_docids(word.interned(), fid)? {
+            docids |= word_fid_docids;
         }
     }
 
     for phrase in term.all_phrases(ctx)? {
         for &word in phrase.words(ctx).iter().flatten() {
             if let Some(word_fid_docids) = ctx.get_db_word_fid_docids(word, fid)? {
-                docids |= CboRoaringBitmapCodec::bytes_decode(word_fid_docids)
-                    .ok_or(heed::Error::Decoding)?;
+                docids |= word_fid_docids;
             }
         }
     }
 
     if let Some(word_prefix) = term.use_prefix_db(ctx) {
-        if let Some(word_fid_docids) = ctx.get_db_word_prefix_fid_docids(word_prefix, fid)? {
-            docids |= CboRoaringBitmapCodec::bytes_decode(word_fid_docids)
-                .ok_or(heed::Error::Decoding)?;
+        if let Some(word_fid_docids) =
+            ctx.get_db_word_prefix_fid_docids(word_prefix.interned(), fid)?
+        {
+            docids |= word_fid_docids;
         }
     }
 

@@ -4,9 +4,7 @@ use roaring::RoaringBitmap;
 use super::{ComputedCondition, RankingRuleGraphTrait};
 use crate::search::new::interner::{DedupInterner, Interned};
 use crate::search::new::query_term::LocatedQueryTermSubset;
-use crate::search::new::resolve_query_graph::{
-    compute_query_term_subset_docids, compute_query_term_subset_docids_within_field_id,
-};
+use crate::search::new::resolve_query_graph::compute_query_term_subset_docids_within_field_id;
 use crate::search::new::SearchContext;
 use crate::Result;
 
@@ -53,7 +51,7 @@ impl RankingRuleGraphTrait for AttributeGraph {
 
         let mut all_fields = FxHashSet::default();
         for word in term.term_subset.all_single_words_except_prefix_db(ctx)? {
-            let fields = ctx.get_db_word_fids(word)?;
+            let fields = ctx.get_db_word_fids(word.interned())?;
             all_fields.extend(fields);
         }
 
@@ -65,7 +63,7 @@ impl RankingRuleGraphTrait for AttributeGraph {
         }
 
         if let Some(word_prefix) = term.term_subset.use_prefix_db(ctx) {
-            let fields = ctx.get_db_word_prefix_fids(word_prefix)?;
+            let fields = ctx.get_db_word_prefix_fids(word_prefix.interned())?;
             all_fields.extend(fields);
         }
 
