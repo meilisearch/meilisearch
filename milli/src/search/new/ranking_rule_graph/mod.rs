@@ -16,6 +16,8 @@ mod exactness;
 mod proximity;
 /// Implementation of the `typo` ranking rule
 mod typo;
+/// Implementation of the `attribute` ranking rule
+mod attribute;
 
 use std::hash::Hash;
 

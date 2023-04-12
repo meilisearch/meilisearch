@@ -13,4 +13,8 @@ impl Interned<Phrase> {
         let p = ctx.phrase_interner.get(self);
         p.words.iter().flatten().map(|w| ctx.word_interner.get(*w)).join(" ")
     }
+    pub fn words(self, ctx: &SearchContext) -> Vec<Option<Interned<String>>> {
+        let p = ctx.phrase_interner.get(self);
+        p.words.clone()
+    }
 }

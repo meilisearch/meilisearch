@@ -1,3 +1,4 @@
+use fxhash::FxHashSet;
 use roaring::RoaringBitmap;
 
 use super::{ComputedCondition, RankingRuleGraphTrait};
@@ -10,7 +11,7 @@ use crate::Result;
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct AttributeCondition {
     term: LocatedQueryTermSubset,
-    nbr_typos: u8,
+    fid: u16,
 }
 
 pub enum AttributeGraph {}
@@ -44,39 +45,37 @@ impl RankingRuleGraphTrait for AttributeGraph {
     ) -> Result<Vec<(u32, Interned<Self::Condition>)>> {
         let term = to_term;
 
-        let mut edges = vec![];
+        let mut all_fields = FxHashSet::default();
         for word in term.term_subset.all_single_words_except_prefix_db(ctx)? {
-            // ...
+            let fields = ctx.get_db_word_fids(word)?;
+            all_fields.extend(fields);
         }
 
-        // Ngrams have a base typo cost
-        // 2-gram -> equivalent to 1 typo
-        // 3-gram -> equivalent to 2 typos
-        let base_cost = if term.term_ids.len() == 1 { 0 } else { term.term_ids.len() as u32 };
+        for phrase in term.term_subset.all_phrases(ctx)? {
+            for &word in phrase.words(ctx).iter().flatten() {
+                let fields = ctx.get_db_word_fids(word)?;
+                all_fields.extend(fields);
+            }
+        }
 
-        for nbr_typos in 0..=term.term_subset.max_nbr_typos(ctx) {
-            let mut term = term.clone();
-            match nbr_typos {
-                0 => {
-                    term.term_subset.clear_one_typo_subset();
-                    term.term_subset.clear_two_typo_subset();
-                }
-                1 => {
-                    term.term_subset.clear_zero_typo_subset();
-                    term.term_subset.clear_two_typo_subset();
-                }
-                2 => {
-                    term.term_subset.clear_zero_typo_subset();
-                    term.term_subset.clear_one_typo_subset();
-                }
-                _ => panic!(),
-            };
+        if let Some(word_prefix) = term.term_subset.use_prefix_db(ctx) {
+            let fields = ctx.get_db_word_prefix_fids(word_prefix)?;
+            all_fields.extend(fields);
+        }
 
+        let mut edges = vec![];
+        for fid in all_fields {
+            // TODO: We can improve performances and relevancy by storing
+            //       the term subsets associated to each field ids fetched.
             edges.push((
-                nbr_typos as u32 + base_cost,
-                conditions_interner.insert(AttributeCondition { term, nbr_typos }),
+                fid as u32 * term.term_ids.len() as u32, // TODO improve the fid score i.e. fid^10.
+                conditions_interner.insert(AttributeCondition {
+                    term: term.clone(), // TODO remove this ugly clone
+                    fid,
+                }),
             ));
         }
+
         Ok(edges)
     }
 }
