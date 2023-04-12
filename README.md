@@ -50,7 +50,7 @@ Meilisearch helps you shape a delightful search experience in a snap, offering f
 
 ## 📖 Documentation
 
-You can consult Meilisearch's documentation at [https://docs.meilisearch.com](https://meilisearch.com/docs/).
+You can consult Meilisearch's documentation at [https://meilisearch.com/docs](https://meilisearch.com/docs/).
 
 ## 🚀 Getting started
 
