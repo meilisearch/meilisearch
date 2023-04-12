@@ -50,6 +50,8 @@ use ranking_rules::{BoxRankingRule, RankingRule};
 use resolve_query_graph::compute_query_graph_docids;
 use sort::Sort;
 
+use self::interner::Interned;
+
 /// A structure used throughout the execution of a search query.
 pub struct SearchContext<'ctx> {
     pub index: &'ctx Index,
@@ -71,6 +73,21 @@ impl<'ctx> SearchContext<'ctx> {
             phrase_interner: <_>::default(),
             term_interner: <_>::default(),
             phrase_docids: <_>::default(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, PartialOrd, Ord, Eq)]
+pub enum Word {
+    Original(Interned<String>),
+    Derived(Interned<String>),
+}
+
+impl Word {
+    pub fn interned(&self) -> Interned<String> {
+        match self {
+            Word::Original(word) => *word,
+            Word::Derived(word) => *word,
         }
     }
 }

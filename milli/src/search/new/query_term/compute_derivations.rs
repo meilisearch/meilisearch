@@ -1,17 +1,17 @@
-use fst::automaton::Str;
-use fst::{Automaton, IntoStreamer, Streamer};
-use heed::types::DecodeIgnore;
-use heed::BytesDecode;
 use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::ops::ControlFlow;
+
+use fst::automaton::Str;
+use fst::{Automaton, IntoStreamer, Streamer};
+use heed::types::DecodeIgnore;
 
 use super::*;
 use crate::search::fst_utils::{Complement, Intersection, StartsWith, Union};
 use crate::search::new::query_term::TwoTypoTerm;
 use crate::search::new::{limits, SearchContext};
 use crate::search::{build_dfa, get_first};
-use crate::{CboRoaringBitmapLenCodec, Result, MAX_WORD_LENGTH};
+use crate::{Result, MAX_WORD_LENGTH};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NumberOfTypos {
@@ -177,6 +177,7 @@ pub fn partially_initialized_term_from_word(
     word: &str,
     max_typo: u8,
     is_prefix: bool,
+    is_ngram: bool,
 ) -> Result<QueryTerm> {
     let word_interned = ctx.word_interner.insert(word.to_owned());
 
@@ -197,12 +198,19 @@ pub fn partially_initialized_term_from_word(
     let fst = ctx.index.words_fst(ctx.txn)?;
 
     let use_prefix_db = is_prefix
-        && ctx
+        && (ctx
             .index
             .word_prefix_docids
             .remap_data_type::<DecodeIgnore>()
             .get(ctx.txn, word)?
-            .is_some();
+            .is_some()
+            || (!is_ngram
+                && ctx
+                    .index
+                    .exact_word_prefix_docids
+                    .remap_data_type::<DecodeIgnore>()
+                    .get(ctx.txn, word)?
+                    .is_some()));
     let use_prefix_db = if use_prefix_db { Some(word_interned) } else { None };
 
     let mut zero_typo = None;
@@ -385,9 +393,7 @@ fn split_best_frequency(
         let left = ctx.word_interner.insert(left.to_owned());
         let right = ctx.word_interner.insert(right.to_owned());
 
-        if let Some(docid_bytes) = ctx.get_db_word_pair_proximity_docids(left, right, 1)? {
-            let frequency =
-                CboRoaringBitmapLenCodec::bytes_decode(docid_bytes).ok_or(heed::Error::Decoding)?;
+        if let Some(frequency) = ctx.get_db_word_pair_proximity_docids_len(left, right, 1)? {
             if best.map_or(true, |(old, _, _)| frequency > old) {
                 best = Some((frequency, left, right));
             }

@@ -2,7 +2,6 @@
 
 use std::collections::BTreeSet;
 
-use heed::BytesDecode;
 use roaring::RoaringBitmap;
 
 use super::ProximityCondition;
@@ -10,8 +9,8 @@ use crate::search::new::interner::Interned;
 use crate::search::new::query_term::{Phrase, QueryTermSubset};
 use crate::search::new::ranking_rule_graph::ComputedCondition;
 use crate::search::new::resolve_query_graph::compute_query_term_subset_docids;
-use crate::search::new::SearchContext;
-use crate::{CboRoaringBitmapCodec, Result, RoaringBitmapCodec};
+use crate::search::new::{SearchContext, Word};
+use crate::Result;
 
 pub fn compute_docids(
     ctx: &mut SearchContext,
@@ -55,8 +54,8 @@ pub fn compute_docids(
         {
             compute_prefix_edges(
                 ctx,
-                left_word,
-                right_prefix,
+                left_word.interned(),
+                right_prefix.interned(),
                 left_phrase,
                 forward_proximity,
                 backward_proximity,
@@ -92,9 +91,7 @@ pub fn compute_docids(
                 if universe.is_disjoint(ctx.get_phrase_docids(left_phrase)?) {
                     continue;
                 }
-            } else if let Some(lw_bytes) = ctx.get_db_word_docids(left_word)? {
-                let left_word_docids =
-                    RoaringBitmapCodec::bytes_decode(lw_bytes).ok_or(heed::Error::Decoding)?;
+            } else if let Some(left_word_docids) = ctx.word_docids(left_word)? {
                 if universe.is_disjoint(&left_word_docids) {
                     continue;
                 }
@@ -104,7 +101,7 @@ pub fn compute_docids(
         for (right_word, right_phrase) in right_derivs {
             compute_non_prefix_edges(
                 ctx,
-                left_word,
+                left_word.interned(),
                 right_word,
                 left_phrase,
                 right_phrase,
@@ -155,7 +152,7 @@ fn compute_prefix_edges(
     if let Some(new_docids) =
         ctx.get_db_word_prefix_pair_proximity_docids(left_word, right_prefix, forward_proximity)?
     {
-        let new_docids = &universe & CboRoaringBitmapCodec::deserialize_from(new_docids)?;
+        let new_docids = &universe & new_docids;
         if !new_docids.is_empty() {
             used_left_words.insert(left_word);
             used_right_prefix.insert(right_prefix);
@@ -170,7 +167,7 @@ fn compute_prefix_edges(
             left_word,
             backward_proximity,
         )? {
-            let new_docids = &universe & CboRoaringBitmapCodec::deserialize_from(new_docids)?;
+            let new_docids = &universe & new_docids;
             if !new_docids.is_empty() {
                 used_left_words.insert(left_word);
                 used_right_prefix.insert(right_prefix);
@@ -217,7 +214,7 @@ fn compute_non_prefix_edges(
     if let Some(new_docids) =
         ctx.get_db_word_pair_proximity_docids(word1, word2, forward_proximity)?
     {
-        let new_docids = &universe & CboRoaringBitmapCodec::deserialize_from(new_docids)?;
+        let new_docids = &universe & new_docids;
         if !new_docids.is_empty() {
             used_left_words.insert(word1);
             used_right_words.insert(word2);
@@ -231,7 +228,7 @@ fn compute_non_prefix_edges(
         if let Some(new_docids) =
             ctx.get_db_word_pair_proximity_docids(word2, word1, backward_proximity)?
         {
-            let new_docids = &universe & CboRoaringBitmapCodec::deserialize_from(new_docids)?;
+            let new_docids = &universe & new_docids;
             if !new_docids.is_empty() {
                 used_left_words.insert(word2);
                 used_right_words.insert(word1);
@@ -246,7 +243,7 @@ fn compute_non_prefix_edges(
 fn last_words_of_term_derivations(
     ctx: &mut SearchContext,
     t: &QueryTermSubset,
-) -> Result<BTreeSet<(Option<Interned<Phrase>>, Interned<String>)>> {
+) -> Result<BTreeSet<(Option<Interned<Phrase>>, Word)>> {
     let mut result = BTreeSet::new();
 
     for w in t.all_single_words_except_prefix_db(ctx)? {
@@ -256,7 +253,7 @@ fn last_words_of_term_derivations(
         let phrase = ctx.phrase_interner.get(p);
         let last_term_of_phrase = phrase.words.last().unwrap();
         if let Some(last_word) = last_term_of_phrase {
-            result.insert((Some(p), *last_word));
+            result.insert((Some(p), Word::Original(*last_word)));
         }
     }
 
@@ -269,7 +266,7 @@ fn first_word_of_term_iter(
     let mut result = BTreeSet::new();
     let all_words = t.all_single_words_except_prefix_db(ctx)?;
     for w in all_words {
-        result.insert((w, None));
+        result.insert((w.interned(), None));
     }
     for p in t.all_phrases(ctx)? {
         let phrase = ctx.phrase_interner.get(p);

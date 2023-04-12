@@ -1,10 +1,10 @@
-use heed::BytesDecode;
 use roaring::RoaringBitmap;
 
 use super::{ComputedCondition, RankingRuleGraphTrait};
 use crate::search::new::interner::{DedupInterner, Interned};
 use crate::search::new::query_term::{ExactTerm, LocatedQueryTermSubset};
-use crate::{Result, RoaringBitmapCodec, SearchContext};
+use crate::search::new::Word;
+use crate::{Result, SearchContext};
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum ExactnessCondition {
@@ -27,8 +27,8 @@ fn compute_docids(
     let mut candidates = match exact_term {
         ExactTerm::Phrase(phrase) => ctx.get_phrase_docids(phrase)?.clone(),
         ExactTerm::Word(word) => {
-            if let Some(word_candidates) = ctx.get_db_word_docids(word)? {
-                RoaringBitmapCodec::bytes_decode(word_candidates).ok_or(heed::Error::Decoding)?
+            if let Some(word_candidates) = ctx.word_docids(Word::Original(word))? {
+                word_candidates
             } else {
                 return Ok(Default::default());
             }
