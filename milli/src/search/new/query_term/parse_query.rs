@@ -1,8 +1,8 @@
-use charabia::{normalizer::NormalizedTokenIter, SeparatorKind, TokenKind};
-
-use crate::{Result, SearchContext, MAX_WORD_LENGTH};
+use charabia::normalizer::NormalizedTokenIter;
+use charabia::{SeparatorKind, TokenKind};
 
 use super::*;
+use crate::{Result, SearchContext, MAX_WORD_LENGTH};
 
 /// Convert the tokenised search query into a list of located query terms.
 // TODO: checking if the positions are correct for phrases, separators, ngrams
@@ -51,6 +51,7 @@ pub fn located_query_terms_from_string(
                                 word,
                                 nbr_typos(word),
                                 false,
+                                false,
                             )?;
                             let located_term = LocatedQueryTerm {
                                 value: ctx.term_interner.push(term),
@@ -62,8 +63,13 @@ pub fn located_query_terms_from_string(
                     }
                 } else {
                     let word = token.lemma();
-                    let term =
-                        partially_initialized_term_from_word(ctx, word, nbr_typos(word), true)?;
+                    let term = partially_initialized_term_from_word(
+                        ctx,
+                        word,
+                        nbr_typos(word),
+                        true,
+                        false,
+                    )?;
                     let located_term = LocatedQueryTerm {
                         value: ctx.term_interner.push(term),
                         positions: position..=position,
@@ -195,7 +201,8 @@ pub fn make_ngram(
     let max_nbr_typos =
         number_of_typos_allowed(ngram_str.as_str()).saturating_sub(terms.len() as u8 - 1);
 
-    let mut term = partially_initialized_term_from_word(ctx, &ngram_str, max_nbr_typos, is_prefix)?;
+    let mut term =
+        partially_initialized_term_from_word(ctx, &ngram_str, max_nbr_typos, is_prefix, true)?;
 
     // Now add the synonyms
     let index_synonyms = ctx.index.synonyms(ctx.txn)?;
