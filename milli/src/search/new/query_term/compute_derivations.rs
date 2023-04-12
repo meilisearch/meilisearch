@@ -177,6 +177,7 @@ pub fn partially_initialized_term_from_word(
     word: &str,
     max_typo: u8,
     is_prefix: bool,
+    is_ngram: bool,
 ) -> Result<QueryTerm> {
     let word_interned = ctx.word_interner.insert(word.to_owned());
 
@@ -197,12 +198,19 @@ pub fn partially_initialized_term_from_word(
     let fst = ctx.index.words_fst(ctx.txn)?;
 
     let use_prefix_db = is_prefix
-        && ctx
+        && (ctx
             .index
             .word_prefix_docids
             .remap_data_type::<DecodeIgnore>()
             .get(ctx.txn, word)?
-            .is_some();
+            .is_some()
+            || (!is_ngram
+                && ctx
+                    .index
+                    .exact_word_prefix_docids
+                    .remap_data_type::<DecodeIgnore>()
+                    .get(ctx.txn, word)?
+                    .is_some()));
     let use_prefix_db = if use_prefix_db { Some(word_interned) } else { None };
 
     let mut zero_typo = None;
