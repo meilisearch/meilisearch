@@ -205,9 +205,9 @@ impl QueryTermSubset {
             } = &original.zero_typo;
             result.extend(zero_typo.iter().copied().map(|word| {
                 if original.ngram_words.is_some() {
-                    Word::Original(word)
-                } else {
                     Word::Derived(word)
+                } else {
+                    Word::Original(word)
                 }
             }));
             result.extend(prefix_of.iter().copied().map(Word::Derived));
