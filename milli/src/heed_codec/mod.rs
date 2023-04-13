@@ -2,6 +2,7 @@ mod beu32_str_codec;
 mod byte_slice_ref;
 pub mod facet;
 mod field_id_word_count_codec;
+mod fst_set_codec;
 mod obkv_codec;
 mod roaring_bitmap;
 mod roaring_bitmap_length;
@@ -15,6 +16,7 @@ pub use str_ref::StrRefCodec;
 
 pub use self::beu32_str_codec::BEU32StrCodec;
 pub use self::field_id_word_count_codec::FieldIdWordCountCodec;
+pub use self::fst_set_codec::FstSetCodec;
 pub use self::obkv_codec::ObkvCodec;
 pub use self::roaring_bitmap::{BoRoaringBitmapCodec, CboRoaringBitmapCodec, RoaringBitmapCodec};
 pub use self::roaring_bitmap_length::{

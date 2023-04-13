@@ -19,7 +19,7 @@ use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
     FieldIdCodec, OrderedF64Codec,
 };
-use crate::heed_codec::{ScriptLanguageCodec, StrRefCodec};
+use crate::heed_codec::{FstSetCodec, ScriptLanguageCodec, StrRefCodec};
 use crate::{
     default_criteria, BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec, Criterion,
     DocumentId, ExternalDocumentsIds, FacetDistribution, FieldDistribution, FieldId,
@@ -81,6 +81,7 @@ pub mod db_name {
     pub const FACET_ID_F64_DOCIDS: &str = "facet-id-f64-docids";
     pub const FACET_ID_EXISTS_DOCIDS: &str = "facet-id-exists-docids";
     pub const FACET_ID_STRING_DOCIDS: &str = "facet-id-string-docids";
+    pub const FACET_ID_STRING_FST: &str = "facet-id-string-fst";
     pub const FIELD_ID_DOCID_FACET_F64S: &str = "field-id-docid-facet-f64s";
     pub const FIELD_ID_DOCID_FACET_STRINGS: &str = "field-id-docid-facet-strings";
     pub const DOCUMENTS: &str = "documents";
@@ -134,6 +135,8 @@ pub struct Index {
     pub facet_id_f64_docids: Database<FacetGroupKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>,
     /// Maps the facet field id and ranges of strings with the docids that corresponds to them.
     pub facet_id_string_docids: Database<FacetGroupKeyCodec<StrRefCodec>, FacetGroupValueCodec>,
+    /// Maps the facet field id of the string facets with an FST containing all the facets values.
+    pub facet_id_string_fst: Database<OwnedType<BEU16>, FstSetCodec>,
 
     /// Maps the document id, the facet field id and the numbers.
     pub field_id_docid_facet_f64s: Database<FieldDocIdFacetF64Codec, Unit>,
@@ -153,7 +156,7 @@ impl Index {
     ) -> Result<Index> {
         use db_name::*;
 
-        options.max_dbs(19);
+        options.max_dbs(20);
         unsafe { options.flag(Flags::MdbAlwaysFreePages) };
 
         let env = options.open(path)?;
@@ -174,6 +177,7 @@ impl Index {
         let word_prefix_position_docids = env.create_database(Some(WORD_PREFIX_POSITION_DOCIDS))?;
         let facet_id_f64_docids = env.create_database(Some(FACET_ID_F64_DOCIDS))?;
         let facet_id_string_docids = env.create_database(Some(FACET_ID_STRING_DOCIDS))?;
+        let facet_id_string_fst = env.create_database(Some(FACET_ID_STRING_FST))?;
         let facet_id_exists_docids = env.create_database(Some(FACET_ID_EXISTS_DOCIDS))?;
 
         let field_id_docid_facet_f64s = env.create_database(Some(FIELD_ID_DOCID_FACET_F64S))?;
@@ -200,6 +204,7 @@ impl Index {
             field_id_word_count_docids,
             facet_id_f64_docids,
             facet_id_string_docids,
+            facet_id_string_fst,
             facet_id_exists_docids,
             field_id_docid_facet_f64s,
             field_id_docid_facet_strings,
