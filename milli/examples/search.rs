@@ -1,10 +1,12 @@
+use std::error::Error;
 use std::io::stdin;
+use std::path::Path;
 use std::time::Instant;
-use std::{error::Error, path::Path};
 
 use heed::EnvOpenOptions;
 use milli::{
-    execute_search, DefaultSearchLogger, Index, SearchContext, SearchLogger, TermsMatchingStrategy,
+    execute_search, DefaultSearchLogger, GeoSortStrategy, Index, SearchContext, SearchLogger,
+    TermsMatchingStrategy,
 };
 
 #[global_allocator]
@@ -54,6 +56,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 false,
                 &None,
                 &None,
+                GeoSortStrategy::default(),
                 0,
                 20,
                 None,

@@ -27,6 +27,7 @@ pub struct Search<'a> {
     offset: usize,
     limit: usize,
     sort_criteria: Option<Vec<AscDesc>>,
+    geo_strategy: new::GeoSortStrategy,
     terms_matching_strategy: TermsMatchingStrategy,
     words_limit: usize,
     exhaustive_number_hits: bool,
@@ -42,6 +43,7 @@ impl<'a> Search<'a> {
             offset: 0,
             limit: 20,
             sort_criteria: None,
+            geo_strategy: new::GeoSortStrategy::default(),
             terms_matching_strategy: TermsMatchingStrategy::default(),
             exhaustive_number_hits: false,
             words_limit: 10,
@@ -85,6 +87,12 @@ impl<'a> Search<'a> {
         self
     }
 
+    #[cfg(test)]
+    pub fn geo_sort_strategy(&mut self, strategy: new::GeoSortStrategy) -> &mut Search<'a> {
+        self.geo_strategy = strategy;
+        self
+    }
+
     /// Force the search to exhastivelly compute the number of candidates,
     /// this will increase the search time but allows finite pagination.
     pub fn exhaustive_number_hits(&mut self, exhaustive_number_hits: bool) -> &mut Search<'a> {
@@ -102,6 +110,7 @@ impl<'a> Search<'a> {
                 self.exhaustive_number_hits,
                 &self.filter,
                 &self.sort_criteria,
+                self.geo_strategy,
                 self.offset,
                 self.limit,
                 Some(self.words_limit),
@@ -127,6 +136,7 @@ impl fmt::Debug for Search<'_> {
             offset,
             limit,
             sort_criteria,
+            geo_strategy: _,
             terms_matching_strategy,
             words_limit,
             exhaustive_number_hits,

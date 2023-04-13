@@ -79,7 +79,8 @@ pub use filter_parser::{Condition, FilterCondition, Span, Token};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
 pub use search::new::{
-    execute_search, DefaultSearchLogger, SearchContext, SearchLogger, VisualSearchLogger,
+    execute_search, DefaultSearchLogger, GeoSortStrategy, SearchContext, SearchLogger,
+    VisualSearchLogger,
 };
 use serde_json::Value;
 pub use {charabia as tokenizer, heed};

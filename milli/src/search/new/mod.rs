@@ -1,6 +1,7 @@
 mod bucket_sort;
 mod db_cache;
 mod distinct;
+mod geo_sort;
 mod graph_based_ranking_rule;
 mod interner;
 mod limits;
@@ -25,32 +26,30 @@ mod tests;
 
 use std::collections::HashSet;
 
-use bucket_sort::bucket_sort;
+use bucket_sort::{bucket_sort, BucketSortOutput};
 use charabia::TokenizerBuilder;
 use db_cache::DatabaseCache;
-use graph_based_ranking_rule::{Fid, Position, Proximity, Typo};
+use exact_attribute::ExactAttribute;
+use graph_based_ranking_rule::{Exactness, Fid, Position, Proximity, Typo};
 use heed::RoTxn;
-use interner::DedupInterner;
+use interner::{DedupInterner, Interner};
 pub use logger::visual::VisualSearchLogger;
 pub use logger::{DefaultSearchLogger, SearchLogger};
 use query_graph::{QueryGraph, QueryNode};
 use query_term::{located_query_terms_from_string, LocatedQueryTerm, Phrase, QueryTerm};
-use ranking_rules::{PlaceholderQuery, RankingRuleOutput, RankingRuleQueryTrait};
-use resolve_query_graph::PhraseDocIdsCache;
+use ranking_rules::{
+    BoxRankingRule, PlaceholderQuery, RankingRule, RankingRuleOutput, RankingRuleQueryTrait,
+};
+use resolve_query_graph::{compute_query_graph_docids, PhraseDocIdsCache};
 use roaring::RoaringBitmap;
+use sort::Sort;
 use words::Words;
 
+use self::geo_sort::GeoSort;
+pub use self::geo_sort::Strategy as GeoSortStrategy;
+use self::interner::Interned;
 use crate::search::new::distinct::apply_distinct_rule;
 use crate::{AscDesc, DocumentId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError};
-use bucket_sort::BucketSortOutput;
-use exact_attribute::ExactAttribute;
-use graph_based_ranking_rule::Exactness;
-use interner::Interner;
-use ranking_rules::{BoxRankingRule, RankingRule};
-use resolve_query_graph::compute_query_graph_docids;
-use sort::Sort;
-
-use self::interner::Interned;
 
 /// A structure used throughout the execution of a search query.
 pub struct SearchContext<'ctx> {
@@ -139,10 +138,11 @@ fn resolve_universe(
 fn get_ranking_rules_for_placeholder_search<'ctx>(
     ctx: &SearchContext<'ctx>,
     sort_criteria: &Option<Vec<AscDesc>>,
+    geo_strategy: geo_sort::Strategy,
 ) -> Result<Vec<BoxRankingRule<'ctx, PlaceholderQuery>>> {
     let mut sort = false;
-    let mut asc = HashSet::new();
-    let mut desc = HashSet::new();
+    let mut sorted_fields = HashSet::new();
+    let mut geo_sorted = false;
     let mut ranking_rules: Vec<BoxRankingRule<PlaceholderQuery>> = vec![];
     let settings_ranking_rules = ctx.index.criteria(ctx.txn)?;
     for rr in settings_ranking_rules {
@@ -157,21 +157,28 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
                 if sort {
                     continue;
                 }
-                resolve_sort_criteria(sort_criteria, ctx, &mut ranking_rules, &mut asc, &mut desc)?;
+                resolve_sort_criteria(
+                    sort_criteria,
+                    ctx,
+                    &mut ranking_rules,
+                    &mut sorted_fields,
+                    &mut geo_sorted,
+                    geo_strategy,
+                )?;
                 sort = true;
             }
             crate::Criterion::Asc(field_name) => {
-                if asc.contains(&field_name) {
+                if sorted_fields.contains(&field_name) {
                     continue;
                 }
-                asc.insert(field_name.clone());
+                sorted_fields.insert(field_name.clone());
                 ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, true)?));
             }
             crate::Criterion::Desc(field_name) => {
-                if desc.contains(&field_name) {
+                if sorted_fields.contains(&field_name) {
                     continue;
                 }
-                desc.insert(field_name.clone());
+                sorted_fields.insert(field_name.clone());
                 ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, false)?));
             }
         }
@@ -183,6 +190,7 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
 fn get_ranking_rules_for_query_graph_search<'ctx>(
     ctx: &SearchContext<'ctx>,
     sort_criteria: &Option<Vec<AscDesc>>,
+    geo_strategy: geo_sort::Strategy,
     terms_matching_strategy: TermsMatchingStrategy,
 ) -> Result<Vec<BoxRankingRule<'ctx, QueryGraph>>> {
     // query graph search
@@ -192,8 +200,8 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
     let mut sort = false;
     let mut attribute = false;
     let mut exactness = false;
-    let mut asc = HashSet::new();
-    let mut desc = HashSet::new();
+    let mut sorted_fields = HashSet::new();
+    let mut geo_sorted = false;
 
     let mut ranking_rules: Vec<BoxRankingRule<QueryGraph>> = vec![];
     let settings_ranking_rules = ctx.index.criteria(ctx.txn)?;
@@ -245,7 +253,14 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                 if sort {
                     continue;
                 }
-                resolve_sort_criteria(sort_criteria, ctx, &mut ranking_rules, &mut asc, &mut desc)?;
+                resolve_sort_criteria(
+                    sort_criteria,
+                    ctx,
+                    &mut ranking_rules,
+                    &mut sorted_fields,
+                    &mut geo_sorted,
+                    geo_strategy,
+                )?;
                 sort = true;
             }
             crate::Criterion::Exactness => {
@@ -257,17 +272,17 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                 exactness = true;
             }
             crate::Criterion::Asc(field_name) => {
-                if asc.contains(&field_name) {
+                if sorted_fields.contains(&field_name) {
                     continue;
                 }
-                asc.insert(field_name.clone());
+                sorted_fields.insert(field_name.clone());
                 ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, true)?));
             }
             crate::Criterion::Desc(field_name) => {
-                if desc.contains(&field_name) {
+                if sorted_fields.contains(&field_name) {
                     continue;
                 }
-                desc.insert(field_name.clone());
+                sorted_fields.insert(field_name.clone());
                 ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, false)?));
             }
         }
@@ -279,33 +294,53 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
     sort_criteria: &Option<Vec<AscDesc>>,
     ctx: &SearchContext<'ctx>,
     ranking_rules: &mut Vec<BoxRankingRule<'ctx, Query>>,
-    asc: &mut HashSet<String>,
-    desc: &mut HashSet<String>,
+    sorted_fields: &mut HashSet<String>,
+    geo_sorted: &mut bool,
+    geo_strategy: geo_sort::Strategy,
 ) -> Result<()> {
     let sort_criteria = sort_criteria.clone().unwrap_or_default();
     ranking_rules.reserve(sort_criteria.len());
     for criterion in sort_criteria {
-        let sort_ranking_rule = match criterion {
+        match criterion {
             AscDesc::Asc(Member::Field(field_name)) => {
-                if asc.contains(&field_name) {
+                if sorted_fields.contains(&field_name) {
                     continue;
                 }
-                asc.insert(field_name.clone());
-                Sort::new(ctx.index, ctx.txn, field_name, true)?
+                sorted_fields.insert(field_name.clone());
+                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, true)?));
             }
             AscDesc::Desc(Member::Field(field_name)) => {
-                if desc.contains(&field_name) {
+                if sorted_fields.contains(&field_name) {
                     continue;
                 }
-                desc.insert(field_name.clone());
-                Sort::new(ctx.index, ctx.txn, field_name, false)?
+                sorted_fields.insert(field_name.clone());
+                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, false)?));
             }
-            // geosearch
-            _ => {
-                todo!()
+            AscDesc::Asc(Member::Geo(point)) => {
+                if *geo_sorted {
+                    continue;
+                }
+                let geo_faceted_docids = ctx.index.geo_faceted_documents_ids(ctx.txn)?;
+                ranking_rules.push(Box::new(GeoSort::new(
+                    geo_strategy,
+                    geo_faceted_docids,
+                    point,
+                    true,
+                )?));
+            }
+            AscDesc::Desc(Member::Geo(point)) => {
+                if *geo_sorted {
+                    continue;
+                }
+                let geo_faceted_docids = ctx.index.geo_faceted_documents_ids(ctx.txn)?;
+                ranking_rules.push(Box::new(GeoSort::new(
+                    geo_strategy,
+                    geo_faceted_docids,
+                    point,
+                    false,
+                )?));
             }
         };
-        ranking_rules.push(Box::new(sort_ranking_rule));
     }
     Ok(())
 }
@@ -318,6 +353,7 @@ pub fn execute_search(
     exhaustive_number_hits: bool,
     filters: &Option<Filter>,
     sort_criteria: &Option<Vec<AscDesc>>,
+    geo_strategy: geo_sort::Strategy,
     from: usize,
     length: usize,
     words_limit: Option<usize>,
@@ -373,7 +409,8 @@ pub fn execute_search(
 
         bucket_sort(ctx, ranking_rules, &graph, &universe, from, length, query_graph_logger)?
     } else {
-        let ranking_rules = get_ranking_rules_for_placeholder_search(ctx, sort_criteria)?;
+        let ranking_rules =
+            get_ranking_rules_for_placeholder_search(ctx, sort_criteria, geo_strategy)?;
         bucket_sort(
             ctx,
             ranking_rules,
