@@ -11,8 +11,8 @@ use crate::search::new::interner::Interned;
 use crate::search::new::query_graph::QueryNodeData;
 use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::search::new::ranking_rule_graph::{
-    AttributeCondition, AttributeGraph, Edge, ProximityCondition, ProximityGraph, RankingRuleGraph,
-    RankingRuleGraphTrait, TypoCondition, TypoGraph,
+    Edge, FidCondition, FidGraph, PositionCondition, PositionGraph, ProximityCondition,
+    ProximityGraph, RankingRuleGraph, RankingRuleGraphTrait, TypoCondition, TypoGraph,
 };
 use crate::search::new::ranking_rules::BoxRankingRule;
 use crate::search::new::{QueryGraph, QueryNode, RankingRule, SearchContext, SearchLogger};
@@ -29,15 +29,18 @@ pub enum SearchEvents {
     ProximityPaths { paths: Vec<Vec<Interned<ProximityCondition>>> },
     TypoGraph { graph: RankingRuleGraph<TypoGraph> },
     TypoPaths { paths: Vec<Vec<Interned<TypoCondition>>> },
-    AttributeGraph { graph: RankingRuleGraph<AttributeGraph> },
-    AttributePaths { paths: Vec<Vec<Interned<AttributeCondition>>> },
+    FidGraph { graph: RankingRuleGraph<FidGraph> },
+    FidPaths { paths: Vec<Vec<Interned<FidCondition>>> },
+    PositionGraph { graph: RankingRuleGraph<PositionGraph> },
+    PositionPaths { paths: Vec<Vec<Interned<PositionCondition>>> },
 }
 
 enum Location {
     Words,
     Typo,
     Proximity,
-    Attribute,
+    Fid,
+    Position,
     Other,
 }
 
@@ -84,7 +87,8 @@ impl SearchLogger<QueryGraph> for VisualSearchLogger {
             "words" => Location::Words,
             "typo" => Location::Typo,
             "proximity" => Location::Proximity,
-            "attribute" => Location::Attribute,
+            "fid" => Location::Fid,
+            "position" => Location::Position,
             _ => Location::Other,
         });
     }
@@ -156,13 +160,20 @@ impl SearchLogger<QueryGraph> for VisualSearchLogger {
                     self.events.push(SearchEvents::ProximityPaths { paths: paths.clone() });
                 }
             }
-            Location::Attribute => {
-                if let Some(graph) = state.downcast_ref::<RankingRuleGraph<AttributeGraph>>() {
-                    self.events.push(SearchEvents::AttributeGraph { graph: graph.clone() });
+            Location::Fid => {
+                if let Some(graph) = state.downcast_ref::<RankingRuleGraph<FidGraph>>() {
+                    self.events.push(SearchEvents::FidGraph { graph: graph.clone() });
                 }
-                if let Some(paths) = state.downcast_ref::<Vec<Vec<Interned<AttributeCondition>>>>()
-                {
-                    self.events.push(SearchEvents::AttributePaths { paths: paths.clone() });
+                if let Some(paths) = state.downcast_ref::<Vec<Vec<Interned<FidCondition>>>>() {
+                    self.events.push(SearchEvents::FidPaths { paths: paths.clone() });
+                }
+            }
+            Location::Position => {
+                if let Some(graph) = state.downcast_ref::<RankingRuleGraph<PositionGraph>>() {
+                    self.events.push(SearchEvents::PositionGraph { graph: graph.clone() });
+                }
+                if let Some(paths) = state.downcast_ref::<Vec<Vec<Interned<PositionCondition>>>>() {
+                    self.events.push(SearchEvents::PositionPaths { paths: paths.clone() });
                 }
             }
             Location::Other => {}
@@ -327,9 +338,13 @@ impl<'ctx> DetailedLoggerFinish<'ctx> {
             SearchEvents::TypoPaths { paths } => {
                 self.write_rr_graph_paths::<TypoGraph>(paths)?;
             }
-            SearchEvents::AttributeGraph { graph } => self.write_rr_graph(&graph)?,
-            SearchEvents::AttributePaths { paths } => {
-                self.write_rr_graph_paths::<AttributeGraph>(paths)?;
+            SearchEvents::FidGraph { graph } => self.write_rr_graph(&graph)?,
+            SearchEvents::FidPaths { paths } => {
+                self.write_rr_graph_paths::<FidGraph>(paths)?;
+            }
+            SearchEvents::PositionGraph { graph } => self.write_rr_graph(&graph)?,
+            SearchEvents::PositionPaths { paths } => {
+                self.write_rr_graph_paths::<PositionGraph>(paths)?;
             }
         }
         Ok(())

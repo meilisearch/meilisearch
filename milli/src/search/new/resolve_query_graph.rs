@@ -87,6 +87,41 @@ pub fn compute_query_term_subset_docids_within_field_id(
     Ok(docids)
 }
 
+pub fn compute_query_term_subset_docids_within_position(
+    ctx: &mut SearchContext,
+    term: &QueryTermSubset,
+    position: u16,
+) -> Result<RoaringBitmap> {
+    // TODO Use the roaring::MultiOps trait
+
+    let mut docids = RoaringBitmap::new();
+    for word in term.all_single_words_except_prefix_db(ctx)? {
+        if let Some(word_position_docids) =
+            ctx.get_db_word_position_docids(word.interned(), position)?
+        {
+            docids |= word_position_docids;
+        }
+    }
+
+    for phrase in term.all_phrases(ctx)? {
+        for &word in phrase.words(ctx).iter().flatten() {
+            if let Some(word_position_docids) = ctx.get_db_word_position_docids(word, position)? {
+                docids |= word_position_docids;
+            }
+        }
+    }
+
+    if let Some(word_prefix) = term.use_prefix_db(ctx) {
+        if let Some(word_position_docids) =
+            ctx.get_db_word_prefix_position_docids(word_prefix.interned(), position)?
+        {
+            docids |= word_position_docids;
+        }
+    }
+
+    Ok(docids)
+}
+
 pub fn compute_query_graph_docids(
     ctx: &mut SearchContext,
     q: &QueryGraph,

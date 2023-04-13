@@ -11,9 +11,11 @@ mod condition_docids_cache;
 mod dead_ends_cache;
 
 /// Implementation of the `attribute` ranking rule
-mod attribute;
+mod fid;
 /// Implementation of the `exactness` ranking rule
 mod exactness;
+/// Implementation of the `position` ranking rule
+mod position;
 /// Implementation of the `proximity` ranking rule
 mod proximity;
 /// Implementation of the `typo` ranking rule
@@ -21,11 +23,12 @@ mod typo;
 
 use std::hash::Hash;
 
-pub use attribute::{AttributeCondition, AttributeGraph};
+pub use fid::{FidCondition, FidGraph};
 pub use cheapest_paths::PathVisitor;
 pub use condition_docids_cache::ConditionDocIdsCache;
 pub use dead_ends_cache::DeadEndsCache;
 pub use exactness::{ExactnessCondition, ExactnessGraph};
+pub use position::{PositionCondition, PositionGraph};
 pub use proximity::{ProximityCondition, ProximityGraph};
 use roaring::RoaringBitmap;
 pub use typo::{TypoCondition, TypoGraph};

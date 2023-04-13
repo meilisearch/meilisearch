@@ -28,7 +28,7 @@ use std::collections::HashSet;
 use bucket_sort::bucket_sort;
 use charabia::TokenizerBuilder;
 use db_cache::DatabaseCache;
-use graph_based_ranking_rule::{Attribute, Proximity, Typo};
+use graph_based_ranking_rule::{Fid, Position, Proximity, Typo};
 use heed::RoTxn;
 use interner::DedupInterner;
 pub use logger::visual::VisualSearchLogger;
@@ -223,7 +223,8 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                     continue;
                 }
                 attribute = true;
-                ranking_rules.push(Box::new(Attribute::new(None)));
+                ranking_rules.push(Box::new(Fid::new(None)));
+                ranking_rules.push(Box::new(Position::new(None)));
             }
             crate::Criterion::Sort => {
                 if sort {

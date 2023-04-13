@@ -34,6 +34,10 @@ pub struct DatabaseCache<'ctx> {
 
     pub words_fst: Option<fst::Set<Cow<'ctx, [u8]>>>,
     pub word_position_docids: FxHashMap<(Interned<String>, u16), Option<&'ctx [u8]>>,
+    pub word_prefix_position_docids: FxHashMap<(Interned<String>, u16), Option<&'ctx [u8]>>,
+    pub word_positions: FxHashMap<Interned<String>, Vec<u16>>,
+    pub word_prefix_positions: FxHashMap<Interned<String>, Vec<u16>>,
+
     pub word_fid_docids: FxHashMap<(Interned<String>, u16), Option<&'ctx [u8]>>,
     pub word_prefix_fid_docids: FxHashMap<(Interned<String>, u16), Option<&'ctx [u8]>>,
     pub word_fids: FxHashMap<Interned<String>, Vec<u16>>,
@@ -355,5 +359,78 @@ impl<'ctx> SearchContext<'ctx> {
             }
         };
         Ok(fids)
+    }
+
+    pub fn get_db_word_prefix_position_docids(
+        &mut self,
+        word_prefix: Interned<String>,
+        position: u16,
+    ) -> Result<Option<RoaringBitmap>> {
+        DatabaseCache::get_value(
+            self.txn,
+            (word_prefix, position),
+            &(self.word_interner.get(word_prefix).as_str(), position),
+            &mut self.db_cache.word_prefix_position_docids,
+            self.index.word_prefix_position_docids.remap_data_type::<ByteSlice>(),
+        )?
+        .map(|bytes| CboRoaringBitmapCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding.into()))
+        .transpose()
+    }
+
+    pub fn get_db_word_positions(&mut self, word: Interned<String>) -> Result<Vec<u16>> {
+        let positions = match self.db_cache.word_positions.entry(word) {
+            Entry::Occupied(positions) => positions.get().clone(),
+            Entry::Vacant(entry) => {
+                let mut key = self.word_interner.get(word).as_bytes().to_owned();
+                key.push(0);
+                let mut positions = vec![];
+                let remap_key_type = self
+                    .index
+                    .word_position_docids
+                    .remap_types::<ByteSlice, ByteSlice>()
+                    .prefix_iter(self.txn, &key)?
+                    .remap_key_type::<StrBEU16Codec>();
+                for result in remap_key_type {
+                    let ((_, position), value) = result?;
+                    // filling other caches to avoid searching for them again
+                    self.db_cache.word_position_docids.insert((word, position), Some(value));
+                    positions.push(position);
+                }
+                entry.insert(positions.clone());
+                positions
+            }
+        };
+        Ok(positions)
+    }
+
+    pub fn get_db_word_prefix_positions(
+        &mut self,
+        word_prefix: Interned<String>,
+    ) -> Result<Vec<u16>> {
+        let positions = match self.db_cache.word_prefix_positions.entry(word_prefix) {
+            Entry::Occupied(positions) => positions.get().clone(),
+            Entry::Vacant(entry) => {
+                let mut key = self.word_interner.get(word_prefix).as_bytes().to_owned();
+                key.push(0);
+                let mut positions = vec![];
+                let remap_key_type = self
+                    .index
+                    .word_prefix_position_docids
+                    .remap_types::<ByteSlice, ByteSlice>()
+                    .prefix_iter(self.txn, &key)?
+                    .remap_key_type::<StrBEU16Codec>();
+                for result in remap_key_type {
+                    let ((_, position), value) = result?;
+                    // filling other caches to avoid searching for them again
+                    self.db_cache
+                        .word_prefix_position_docids
+                        .insert((word_prefix, position), Some(value));
+                    positions.push(position);
+                }
+                entry.insert(positions.clone());
+                positions
+            }
+        };
+        Ok(positions)
     }
 }

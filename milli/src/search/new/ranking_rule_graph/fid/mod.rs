@@ -9,22 +9,22 @@ use crate::search::new::SearchContext;
 use crate::Result;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct AttributeCondition {
+pub struct FidCondition {
     term: LocatedQueryTermSubset,
     fid: u16,
 }
 
-pub enum AttributeGraph {}
+pub enum FidGraph {}
 
-impl RankingRuleGraphTrait for AttributeGraph {
-    type Condition = AttributeCondition;
+impl RankingRuleGraphTrait for FidGraph {
+    type Condition = FidCondition;
 
     fn resolve_condition(
         ctx: &mut SearchContext,
         condition: &Self::Condition,
         universe: &RoaringBitmap,
     ) -> Result<ComputedCondition> {
-        let AttributeCondition { term, .. } = condition;
+        let FidCondition { term, .. } = condition;
         // maybe compute_query_term_subset_docids_within_field_id should accept a universe as argument
         let mut docids = compute_query_term_subset_docids_within_field_id(
             ctx,
@@ -73,7 +73,7 @@ impl RankingRuleGraphTrait for AttributeGraph {
             //       the term subsets associated to each field ids fetched.
             edges.push((
                 fid as u32 * term.term_ids.len() as u32, // TODO improve the fid score i.e. fid^10.
-                conditions_interner.insert(AttributeCondition {
+                conditions_interner.insert(FidCondition {
                     term: term.clone(), // TODO remove this ugly clone
                     fid,
                 }),

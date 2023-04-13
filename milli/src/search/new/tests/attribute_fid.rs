@@ -95,7 +95,7 @@ fn create_index() -> TempIndex {
 }
 
 #[test]
-fn test_attributes_simple() {
+fn test_attribute_fid_simple() {
     let index = create_index();
 
     let txn = index.read_txn().unwrap();
