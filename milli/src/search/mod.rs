@@ -20,6 +20,9 @@ static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
 static LEVDIST1: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(1, true));
 static LEVDIST2: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(2, true));
 
+/// The maximum number of facets returned by the facet search route.
+const MAX_NUMBER_OF_FACETS: usize = 1000;
+
 pub mod facet;
 mod fst_utils;
 pub mod new;
@@ -256,6 +259,7 @@ impl<'a> SearchForFacetValue<'a> {
 
                 let mut stream = fst.search(automaton).into_stream();
                 let mut result = vec![];
+                let mut length = 0;
                 while let Some(facet_value) = stream.next() {
                     let value = std::str::from_utf8(facet_value)?;
                     let key = FacetGroupKey { field_id, level: 0, left_bound: value };
@@ -266,6 +270,10 @@ impl<'a> SearchForFacetValue<'a> {
                     let count = search_candidates.intersection_len(&docids);
                     if count != 0 {
                         result.push(FacetSearchResult { value: value.to_string(), count });
+                        length += 1;
+                    }
+                    if length >= MAX_NUMBER_OF_FACETS {
+                        break;
                     }
                 }
 
@@ -274,6 +282,7 @@ impl<'a> SearchForFacetValue<'a> {
             None => {
                 let mut stream = fst.stream();
                 let mut result = vec![];
+                let mut length = 0;
                 while let Some(facet_value) = stream.next() {
                     let value = std::str::from_utf8(facet_value)?;
                     let key = FacetGroupKey { field_id, level: 0, left_bound: value };
@@ -284,6 +293,10 @@ impl<'a> SearchForFacetValue<'a> {
                     let count = search_candidates.intersection_len(&docids);
                     if count != 0 {
                         result.push(FacetSearchResult { value: value.to_string(), count });
+                        length += 1;
+                    }
+                    if length >= MAX_NUMBER_OF_FACETS {
+                        break;
                     }
                 }
 
