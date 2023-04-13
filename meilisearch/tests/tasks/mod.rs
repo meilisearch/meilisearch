@@ -1062,7 +1062,7 @@ async fn test_task_queue_is_full() {
     }
     "###);
 
-    // But we should still be able to register tasks deletion IF they delete something
+    // Now we should be able to register tasks again
     let (result, code) = server.create_index(json!({ "uid": "doggo" })).await;
     snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(result, { ".enqueuedAt" => "[date]", ".taskUid" => "uid" }), @r###"
