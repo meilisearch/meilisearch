@@ -7,9 +7,13 @@ use roaring::bitmap::RoaringBitmap;
 pub use self::facet::{FacetDistribution, Filter, DEFAULT_VALUES_PER_FACET};
 pub use self::new::matches::{FormatOptions, MatchBounds, Matcher, MatcherBuilder, MatchingWords};
 use self::new::PartialSearchResult;
+use crate::error::UserError;
+use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::{
-    execute_search, AscDesc, DefaultSearchLogger, DocumentId, Index, Result, SearchContext,
+    execute_search, AscDesc, DefaultSearchLogger, DocumentId, Index, Result, SearchContext, BEU16,
 };
+use fst::automaton::{Complement, Intersection, StartsWith, Str, Union};
+use fst::Streamer;
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
@@ -197,6 +201,103 @@ pub fn build_dfa(word: &str, typos: u8, is_prefix: bool) -> DFA {
     } else {
         lev.build_dfa(word)
     }
+}
+
+pub struct SearchForFacetValue<'a> {
+    query: Option<String>,
+    facet: String,
+    search_query: Search<'a>,
+}
+
+impl<'a> SearchForFacetValue<'a> {
+    fn new(facet: String, search_query: Search<'a>) -> SearchForFacetValue<'a> {
+        SearchForFacetValue { query: None, facet, search_query }
+    }
+
+    fn query(&mut self, query: impl Into<String>) -> &mut Self {
+        self.query = Some(query.into());
+        self
+    }
+
+    fn execute(&self) -> Result<Vec<FacetSearchResult>> {
+        let index = self.search_query.index;
+        let rtxn = self.search_query.rtxn;
+
+        let sortable_fields = index.sortable_fields(rtxn)?;
+        if !sortable_fields.contains(&self.facet) {
+            // TODO create a new type of error
+            return Err(UserError::InvalidSortableAttribute {
+                field: self.facet.clone(),
+                valid_fields: sortable_fields.into_iter().collect(),
+            })?;
+        }
+
+        let fields_ids_map = index.fields_ids_map(rtxn)?;
+        let (field_id, fst) = match fields_ids_map.id(&self.facet) {
+            Some(fid) => {
+                match self.search_query.index.facet_id_string_fst.get(rtxn, &BEU16::new(fid))? {
+                    Some(fst) => (fid, fst),
+                    None => todo!("return an error, is the user trying to search in numbers?"),
+                }
+            }
+            None => todo!("return an internal error bug"),
+        };
+
+        let search_candidates = self.search_query.execute()?.candidates;
+
+        match self.query.as_ref() {
+            Some(query) => {
+                let is_prefix = true;
+                let starts = StartsWith(Str::new(get_first(query)));
+                let first = Intersection(build_dfa(query, 1, is_prefix), Complement(&starts));
+                let second_dfa = build_dfa(query, 2, is_prefix);
+                let second = Intersection(&second_dfa, &starts);
+                let automaton = Union(first, &second);
+
+                let mut stream = fst.search(automaton).into_stream();
+                let mut result = vec![];
+                while let Some(facet_value) = stream.next() {
+                    let value = std::str::from_utf8(facet_value)?;
+                    let key = FacetGroupKey { field_id, level: 0, left_bound: value };
+                    let docids = match index.facet_id_string_docids.get(rtxn, &key)? {
+                        Some(FacetGroupValue { bitmap, .. }) => bitmap,
+                        None => todo!("return an internal error"),
+                    };
+                    let count = search_candidates.intersection_len(&docids);
+                    if count != 0 {
+                        result.push(FacetSearchResult { value: value.to_string(), count });
+                    }
+                }
+
+                Ok(result)
+            }
+            None => {
+                let mut stream = fst.stream();
+                let mut result = vec![];
+                while let Some(facet_value) = stream.next() {
+                    let value = std::str::from_utf8(facet_value)?;
+                    let key = FacetGroupKey { field_id, level: 0, left_bound: value };
+                    let docids = match index.facet_id_string_docids.get(rtxn, &key)? {
+                        Some(FacetGroupValue { bitmap, .. }) => bitmap,
+                        None => todo!("return an internal error"),
+                    };
+                    let count = search_candidates.intersection_len(&docids);
+                    if count != 0 {
+                        result.push(FacetSearchResult { value: value.to_string(), count });
+                    }
+                }
+
+                Ok(result)
+            }
+        }
+    }
+}
+
+pub struct FacetSearchResult {
+    /// The original facet value
+    pub value: String,
+    /// The number of documents associated to this facet
+    pub count: u64,
 }
 
 #[cfg(test)]
