@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 use std::time::Instant;
 
+use actix_http::header::q;
 use deserr::Deserr;
 use either::Either;
 use index_scheduler::RoFeatures;
@@ -10,9 +11,10 @@ use log::warn;
 use meilisearch_auth::IndexSearchRules;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
-use meilisearch_types::milli::{dot_product_similarity, InternalError};
+use meilisearch_types::milli::{dot_product_similarity, FacetSearchResult, InternalError};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::TokenizerBuilder;
@@ -26,6 +28,7 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 use crate::error::MeilisearchHttpError;
+use crate::routes::indexes::facet_search::FacetSearchQuery;
 
 type MatchesPosition = BTreeMap<String, Vec<MatchBounds>>;
 
@@ -199,7 +202,7 @@ impl SearchQueryWithIndex {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserr)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Deserr)]
 #[deserr(rename_all = camelCase)]
 pub enum MatchingStrategy {
     /// Remove query words from last to first
@@ -298,14 +301,12 @@ pub fn add_search_rules(query: &mut SearchQuery, rules: IndexSearchRules) {
     }
 }
 
-pub fn perform_search(
-    index: &Index,
-    query: SearchQuery,
+fn prepare_search<'t>(
+    index: &'t Index,
+    rtxn: &'t RoTxn,
+    query: &'t SearchQuery,
     features: RoFeatures,
-) -> Result<SearchResult, MeilisearchHttpError> {
-    let before_search = Instant::now();
-    let rtxn = index.read_txn()?;
-
+) -> Result<(milli::Search<'t>, bool, usize, usize), MeilisearchHttpError> {
     let mut search = index.search(&rtxn);
 
     if query.vector.is_some() && query.q.is_some() {
@@ -382,6 +383,20 @@ pub fn perform_search(
 
         search.sort_criteria(sort);
     }
+
+    Ok((search, is_finite_pagination, max_total_hits, offset))
+}
+
+pub fn perform_search(
+    index: &Index,
+    query: SearchQuery,
+    features: RoFeatures,
+) -> Result<SearchResult, MeilisearchHttpError> {
+    let before_search = Instant::now();
+    let rtxn = index.read_txn()?;
+
+    let (search, is_finite_pagination, max_total_hits, offset) =
+        prepare_search(index, &rtxn, &query, features)?;
 
     let milli::SearchResult { documents_ids, matching_words, candidates, document_scores, .. } =
         search.execute()?;
@@ -555,6 +570,21 @@ pub fn perform_search(
         facet_stats,
     };
     Ok(result)
+}
+
+pub fn perform_facet_search(
+    index: &Index,
+    search_query: SearchQuery,
+    facet_query: Option<String>,
+    facet_name: String,
+) -> Result<Vec<FacetSearchResult>, MeilisearchHttpError> {
+    let before_search = Instant::now();
+    let rtxn = index.read_txn()?;
+
+    let (search, is_finite_pagination, max_total_hits, offset) =
+        prepare_search(index, &rtxn, &search_query)?;
+
+    todo!("Execute the search")
 }
 
 fn insert_geo_distance(sorts: &[String], document: &mut Document) {
