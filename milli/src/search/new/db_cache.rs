@@ -309,13 +309,14 @@ impl<'ctx> SearchContext<'ctx> {
         let fids = match self.db_cache.word_fids.entry(word) {
             Entry::Occupied(fids) => fids.get().clone(),
             Entry::Vacant(entry) => {
-                let key = self.word_interner.get(word).as_bytes();
+                let mut key = self.word_interner.get(word).as_bytes().to_owned();
+                key.push(0);
                 let mut fids = vec![];
                 let remap_key_type = self
                     .index
                     .word_fid_docids
                     .remap_types::<ByteSlice, ByteSlice>()
-                    .prefix_iter(self.txn, key)?
+                    .prefix_iter(self.txn, &key)?
                     .remap_key_type::<StrBEU16Codec>();
                 for result in remap_key_type {
                     let ((_, fid), value) = result?;
@@ -334,13 +335,14 @@ impl<'ctx> SearchContext<'ctx> {
         let fids = match self.db_cache.word_prefix_fids.entry(word_prefix) {
             Entry::Occupied(fids) => fids.get().clone(),
             Entry::Vacant(entry) => {
-                let key = self.word_interner.get(word_prefix).as_bytes();
+                let mut key = self.word_interner.get(word_prefix).as_bytes().to_owned();
+                key.push(0);
                 let mut fids = vec![];
                 let remap_key_type = self
                     .index
                     .word_prefix_fid_docids
                     .remap_types::<ByteSlice, ByteSlice>()
-                    .prefix_iter(self.txn, key)?
+                    .prefix_iter(self.txn, &key)?
                     .remap_key_type::<StrBEU16Codec>();
                 for result in remap_key_type {
                     let ((_, fid), value) = result?;

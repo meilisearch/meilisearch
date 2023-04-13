@@ -11,8 +11,8 @@ use crate::search::new::interner::Interned;
 use crate::search::new::query_graph::QueryNodeData;
 use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::search::new::ranking_rule_graph::{
-    Edge, ProximityCondition, ProximityGraph, RankingRuleGraph, RankingRuleGraphTrait,
-    TypoCondition, TypoGraph,
+    AttributeCondition, AttributeGraph, Edge, ProximityCondition, ProximityGraph, RankingRuleGraph,
+    RankingRuleGraphTrait, TypoCondition, TypoGraph,
 };
 use crate::search::new::ranking_rules::BoxRankingRule;
 use crate::search::new::{QueryGraph, QueryNode, RankingRule, SearchContext, SearchLogger};
@@ -29,12 +29,15 @@ pub enum SearchEvents {
     ProximityPaths { paths: Vec<Vec<Interned<ProximityCondition>>> },
     TypoGraph { graph: RankingRuleGraph<TypoGraph> },
     TypoPaths { paths: Vec<Vec<Interned<TypoCondition>>> },
+    AttributeGraph { graph: RankingRuleGraph<AttributeGraph> },
+    AttributePaths { paths: Vec<Vec<Interned<AttributeCondition>>> },
 }
 
 enum Location {
     Words,
     Typo,
     Proximity,
+    Attribute,
     Other,
 }
 
@@ -81,6 +84,7 @@ impl SearchLogger<QueryGraph> for VisualSearchLogger {
             "words" => Location::Words,
             "typo" => Location::Typo,
             "proximity" => Location::Proximity,
+            "attribute" => Location::Attribute,
             _ => Location::Other,
         });
     }
@@ -150,6 +154,15 @@ impl SearchLogger<QueryGraph> for VisualSearchLogger {
                 if let Some(paths) = state.downcast_ref::<Vec<Vec<Interned<ProximityCondition>>>>()
                 {
                     self.events.push(SearchEvents::ProximityPaths { paths: paths.clone() });
+                }
+            }
+            Location::Attribute => {
+                if let Some(graph) = state.downcast_ref::<RankingRuleGraph<AttributeGraph>>() {
+                    self.events.push(SearchEvents::AttributeGraph { graph: graph.clone() });
+                }
+                if let Some(paths) = state.downcast_ref::<Vec<Vec<Interned<AttributeCondition>>>>()
+                {
+                    self.events.push(SearchEvents::AttributePaths { paths: paths.clone() });
                 }
             }
             Location::Other => {}
@@ -313,6 +326,10 @@ impl<'ctx> DetailedLoggerFinish<'ctx> {
             SearchEvents::TypoGraph { graph } => self.write_rr_graph(&graph)?,
             SearchEvents::TypoPaths { paths } => {
                 self.write_rr_graph_paths::<TypoGraph>(paths)?;
+            }
+            SearchEvents::AttributeGraph { graph } => self.write_rr_graph(&graph)?,
+            SearchEvents::AttributePaths { paths } => {
+                self.write_rr_graph_paths::<AttributeGraph>(paths)?;
             }
         }
         Ok(())

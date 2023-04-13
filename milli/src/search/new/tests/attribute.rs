@@ -1,9 +1,4 @@
-use std::collections::HashMap;
-
-use crate::{
-    index::tests::TempIndex, search::new::tests::collect_field_values, Criterion, Search,
-    SearchResult, TermsMatchingStrategy,
-};
+use crate::{index::tests::TempIndex, Criterion, Search, SearchResult, TermsMatchingStrategy};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -24,21 +19,75 @@ fn create_index() -> TempIndex {
         .add_documents(documents!([
             {
                 "id": 0,
-                "title": "the quick brown fox jumps over the lazy dog",
-                "description": "Pack my box with five dozen liquor jugs",
-                "plot": "How vexingly quick daft zebras jump",
+                "title": "",
+                "description": "",
+                "plot": "the quick brown fox jumps over the lazy dog",
             },
             {
                 "id": 1,
-                "title": "Pack my box with five dozen liquor jugs",
+                "title": "",
                 "description": "the quick brown foxes jump over the lazy dog",
-                "plot": "How vexingly quick daft zebras jump",
+                "plot": "",
             },
             {
                 "id": 2,
-                "title": "How vexingly quick daft zebras jump",
-                "description": "Pack my box with five dozen liquor jugs",
-                "plot": "the quick brown fox jumps over the lazy dog",
+                "title": "the quick brown fox jumps over the lazy dog",
+                "description": "",
+                "plot": "",
+            },
+            {
+                "id": 3,
+                "title": "the",
+                "description": "quick brown fox jumps over the lazy dog",
+                "plot": "",
+            },
+            {
+                "id": 4,
+                "title": "the quick",
+                "description": "brown fox jumps over the lazy dog",
+                "plot": "",
+            },
+            {
+                "id": 5,
+                "title": "the quick brown",
+                "description": "fox jumps over the lazy dog",
+                "plot": "",
+            },
+            {
+                "id": 6,
+                "title": "the quick brown fox",
+                "description": "jumps over the lazy dog",
+                "plot": "",
+            },
+            {
+                "id": 7,
+                "title": "the quick",
+                "description": "brown fox jumps",
+                "plot": "over the lazy dog",
+            },
+            {
+                "id": 8,
+                "title": "the quick brown",
+                "description": "fox",
+                "plot": "jumps over the lazy dog",
+            },
+            {
+                "id": 9,
+                "title": "the quick brown",
+                "description": "fox jumps",
+                "plot": "over the lazy dog",
+            },
+            {
+                "id": 10,
+                "title": "",
+                "description": "the quick brown fox",
+                "plot": "jumps over the lazy dog",
+            },
+            {
+                "id": 11,
+                "title": "the quick",
+                "description": "",
+                "plot": "brown fox jumps over the lazy dog",
             }
         ]))
         .unwrap();
@@ -46,13 +95,14 @@ fn create_index() -> TempIndex {
 }
 
 #[test]
-fn test_attributes_are_ranked_correctly() {
+fn test_attributes_simple() {
     let index = create_index();
+
     let txn = index.read_txn().unwrap();
 
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("the quick brown fox");
+    s.query("the quick brown fox jumps over the lazy dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1, 2]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 6, 5, 4, 3, 9, 7, 8, 11, 10, 0]");
 }
