@@ -10,6 +10,8 @@ mod cheapest_paths;
 mod condition_docids_cache;
 mod dead_ends_cache;
 
+/// Implementation of the `attribute` ranking rule
+mod attribute;
 /// Implementation of the `exactness` ranking rule
 mod exactness;
 /// Implementation of the `proximity` ranking rule
@@ -19,6 +21,7 @@ mod typo;
 
 use std::hash::Hash;
 
+pub use attribute::{AttributeCondition, AttributeGraph};
 pub use cheapest_paths::PathVisitor;
 pub use condition_docids_cache::ConditionDocIdsCache;
 pub use dead_ends_cache::DeadEndsCache;

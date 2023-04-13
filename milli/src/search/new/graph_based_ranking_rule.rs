@@ -44,8 +44,8 @@ use super::interner::{Interned, MappedInterner};
 use super::logger::SearchLogger;
 use super::query_graph::QueryNode;
 use super::ranking_rule_graph::{
-    ConditionDocIdsCache, DeadEndsCache, ExactnessGraph, ProximityGraph, RankingRuleGraph,
-    RankingRuleGraphTrait, TypoGraph,
+    AttributeGraph, ConditionDocIdsCache, DeadEndsCache, ExactnessGraph, ProximityGraph,
+    RankingRuleGraph, RankingRuleGraphTrait, TypoGraph,
 };
 use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, RankingRule, RankingRuleOutput, SearchContext};
@@ -57,6 +57,12 @@ pub type Proximity = GraphBasedRankingRule<ProximityGraph>;
 impl GraphBasedRankingRule<ProximityGraph> {
     pub fn new(terms_matching_strategy: Option<TermsMatchingStrategy>) -> Self {
         Self::new_with_id("proximity".to_owned(), terms_matching_strategy)
+    }
+}
+pub type Attribute = GraphBasedRankingRule<AttributeGraph>;
+impl GraphBasedRankingRule<AttributeGraph> {
+    pub fn new(terms_matching_strategy: Option<TermsMatchingStrategy>) -> Self {
+        Self::new_with_id("attribute".to_owned(), terms_matching_strategy)
     }
 }
 pub type Typo = GraphBasedRankingRule<TypoGraph>;
