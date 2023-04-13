@@ -1062,6 +1062,9 @@ async fn test_task_queue_is_full() {
     }
     "###);
 
+    let result = server.wait_task(result["taskUid"].as_u64().unwrap()).await;
+    snapshot!(json_string!(result["status"]), @r###""succeeded""###);
+
     // Now we should be able to register tasks again
     let (result, code) = server.create_index(json!({ "uid": "doggo" })).await;
     snapshot!(code, @"202 Accepted");
