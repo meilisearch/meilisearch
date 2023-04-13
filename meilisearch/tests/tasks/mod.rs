@@ -1064,7 +1064,7 @@ async fn test_task_queue_is_full() {
 
     // we're going to fill up the queue once again
     loop {
-        let (res, code) = server.create_index(json!({ "uid": "doggo" })).await;
+        let (res, code) = server.delete_tasks("uids=0").await;
         if code == 422 {
             break;
         }
