@@ -551,6 +551,7 @@ impl<'a> SearchForFacetValue<'a> {
     }
 }
 
+#[derive(Debug, serde::Serialize)]
 pub struct FacetSearchResult {
     /// The original facet value
     pub value: String,
