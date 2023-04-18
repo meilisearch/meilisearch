@@ -13,9 +13,7 @@ ENV     VERGEN_GIT_SHA=${COMMIT_SHA} VERGEN_GIT_COMMIT_TIMESTAMP=${COMMIT_DATE} 
 ENV     RUSTFLAGS="-C target-feature=-crt-static"
 
 COPY    --link . .
-RUN     --mount=type=cache,target=/usr/local/cargo/registry \
-        --mount=type=cache,target=/meilisearch/target \
-        set -eux; \
+RUN     set -eux; \
         apkArch="$(apk --print-arch)"; \
         if [ "$apkArch" = "aarch64" ]; then \
             export JEMALLOC_SYS_WITH_LG_PAGE=16; \
