@@ -2,4 +2,5 @@ target
 Dockerfile
 .dockerignore
 .gitignore
-.git
+**/.git
+
