@@ -290,7 +290,10 @@ impl DumpJob {
                 .map_err(|e| DumpActorError::Internal(e.into()))?;
 
             let dump_path = self.dump_path.join(self.uid).with_extension("dump");
+            log::info!("temp_dump_file: {:?}", temp_dump_file);
+            log::info!("temp dir: {:?}", temp_dump_dir);
             temp_dump_file.persist(&dump_path)?;
+            log::info!("dump path: {}", dump_path.display());
 
             Ok(dump_path)
         })
