@@ -292,7 +292,15 @@ impl DumpJob {
             let dump_path = self.dump_path.join(self.uid).with_extension("dump");
             log::info!("temp_dump_file: {:?}", temp_dump_file);
             log::info!("temp dir: {:?}", temp_dump_dir);
-            temp_dump_file.persist(&dump_path)?;
+            let res = temp_dump_file.persist(&dump_path);
+            if let Err(error) = res {
+                log::info!("could not persist: {:?}", error.file);
+                log::info!("underlying error {}", error.error);
+                log::info!("underlying error (dbg) {}", error.error);
+                log::info!("underlying error kind {}", error.error.kind());
+
+                return Err(error.into());
+            }
             log::info!("dump path: {}", dump_path.display());
 
             Ok(dump_path)
