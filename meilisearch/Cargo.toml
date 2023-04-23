@@ -106,7 +106,7 @@ vergen = { version = "7.5.1", default-features = false, features = ["git"] }
 zip = { version = "0.6.4", optional = true }
 
 [features]
-default = ["analytics", "meilisearch-types/default", "mini-dashboard"]
+default = ["analytics", "meilisearch-types/all-tokenizations", "mini-dashboard"]
 analytics = ["segment"]
 mini-dashboard = ["actix-web-static-files", "static-files", "anyhow", "cargo_toml", "hex", "reqwest", "sha-1", "tempfile", "zip"]
 chinese = ["meilisearch-types/chinese"]

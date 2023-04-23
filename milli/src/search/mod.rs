@@ -204,7 +204,7 @@ mod test {
     use super::*;
     use crate::index::tests::TempIndex;
 
-    #[cfg(feature = "default")]
+    #[cfg(feature = "japanese")]
     #[test]
     fn test_kanji_language_detection() {
         let index = TempIndex::new();

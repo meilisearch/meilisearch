@@ -22,7 +22,7 @@ file-store = { path = "../file-store" }
 flate2 = "1.0.25"
 fst = "0.4.7"
 memmap2 = "0.5.10"
-milli = { path = "../milli", default-features = false }
+milli = { path = "../milli" }
 roaring = { version = "0.10.1", features = ["serde"] }
 serde = { version = "1.0.160", features = ["derive"] }
 serde-cs = "0.2.4"
@@ -40,7 +40,7 @@ meili-snap = { path = "../meili-snap" }
 
 [features]
 # all specialized tokenizations
-default = ["milli/default"]
+all-tokenizations = ["milli/all-tokenizations"]
 
 # chinese specialized tokenization
 chinese = ["milli/chinese"]
