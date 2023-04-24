@@ -69,11 +69,16 @@ pub fn compute_query_term_subset_docids_within_field_id(
     }
 
     for phrase in term.all_phrases(ctx)? {
-        for &word in phrase.words(ctx).iter().flatten() {
-            if let Some(word_fid_docids) = ctx.get_db_word_fid_docids(word, fid)? {
-                docids |= word_fid_docids;
+        let mut phrase_docids = ctx.get_phrase_docids(phrase)?.clone();
+        // There may be false positives when resolving a phrase, so we're not
+        // guaranteed that all of its words are within a single fid.
+        // TODO: fix this?
+        if let Some(word) = phrase.words(ctx).iter().flatten().next() {
+            if let Some(word_fid_docids) = ctx.get_db_word_fid_docids(*word, fid)? {
+                phrase_docids &= word_fid_docids;
             }
         }
+        docids |= phrase_docids;
     }
 
     if let Some(word_prefix) = term.use_prefix_db(ctx) {
@@ -104,11 +109,16 @@ pub fn compute_query_term_subset_docids_within_position(
     }
 
     for phrase in term.all_phrases(ctx)? {
-        for &word in phrase.words(ctx).iter().flatten() {
-            if let Some(word_position_docids) = ctx.get_db_word_position_docids(word, position)? {
-                docids |= word_position_docids;
+        let mut phrase_docids = ctx.get_phrase_docids(phrase)?.clone();
+        // It's difficult to know the expected position of the words in the phrase,
+        // so instead we just check the first one.
+        // TODO: fix this?
+        if let Some(word) = phrase.words(ctx).iter().flatten().next() {
+            if let Some(word_position_docids) = ctx.get_db_word_position_docids(*word, position)? {
+                phrase_docids &= word_position_docids;
             }
         }
+        docids |= phrase_docids;
     }
 
     if let Some(word_prefix) = term.use_prefix_db(ctx) {

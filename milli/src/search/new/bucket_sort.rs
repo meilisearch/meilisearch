@@ -88,7 +88,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         };
     }
 
-    let mut all_candidates = RoaringBitmap::new();
+    let mut all_candidates = universe.clone();
     let mut valid_docids = vec![];
     let mut cur_offset = 0usize;
 
@@ -162,8 +162,6 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         )?;
     }
 
-    all_candidates |= &ranking_rule_universes[0];
-
     Ok(BucketSortOutput { docids: valid_docids, all_candidates })
 }
 
@@ -193,12 +191,14 @@ fn maybe_add_to_results<'ctx, Q: RankingRuleQueryTrait>(
             apply_distinct_rule(ctx, distinct_fid, &candidates)?;
         for universe in ranking_rule_universes.iter_mut() {
             *universe -= &excluded;
+            *all_candidates -= &excluded;
         }
         remaining
     } else {
         candidates.clone()
     };
     *all_candidates |= &candidates;
+
     // if the candidates are empty, there is nothing to do;
     if candidates.is_empty() {
         return Ok(());
@@ -216,8 +216,8 @@ fn maybe_add_to_results<'ctx, Q: RankingRuleQueryTrait>(
             );
         } else {
             // otherwise, skip some of the documents and add some of the rest, in order of ids
-            let all_candidates = candidates.iter().collect::<Vec<_>>();
-            let (skipped_candidates, candidates) = all_candidates.split_at(from - *cur_offset);
+            let candidates_vec = candidates.iter().collect::<Vec<_>>();
+            let (skipped_candidates, candidates) = candidates_vec.split_at(from - *cur_offset);
 
             logger.skip_bucket_ranking_rule(
                 cur_ranking_rule_index,

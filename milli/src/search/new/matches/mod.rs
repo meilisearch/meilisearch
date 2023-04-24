@@ -599,7 +599,7 @@ mod tests {
         // no crop should return complete text with highlighted matches.
         insta::assert_snapshot!(
             matcher.format(format_options),
-            @"<em>Ŵôřlḑ</em>ôle"
+            @"<em>Ŵôřlḑôle</em>"
         );
 
         // Text containing unicode match.
@@ -621,7 +621,7 @@ mod tests {
         // no crop should return complete text with highlighted matches.
         insta::assert_snapshot!(
             matcher.format(format_options),
-            @"<em>Westfáli</em>a"
+            @"<em>Westfália</em>"
         );
     }
 

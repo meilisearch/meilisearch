@@ -56,8 +56,13 @@ impl RankingRuleGraphTrait for PositionGraph {
         }
 
         for phrase in term.term_subset.all_phrases(ctx)? {
-            for &word in phrase.words(ctx).iter().flatten() {
-                let positions = ctx.get_db_word_positions(word)?;
+            // Only check the position of the first word in the phrase
+            // this is not correct, but it is the best we can do, since
+            // it is difficult/impossible to know the expected position
+            // of a word in a phrase.
+            // There is probably a more correct way to do it though.
+            if let Some(word) = phrase.words(ctx).iter().flatten().next() {
+                let positions = ctx.get_db_word_positions(*word)?;
                 all_positions.extend(positions);
             }
         }

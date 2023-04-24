@@ -243,7 +243,7 @@ pub(crate) mod tests {
         let temp_index = TempIndex::new();
         temp_index
             .add_documents(documents!([
-                { "id": 1, "name": "split this world westfali westfalia the" },
+                { "id": 1, "name": "split this world westfali westfalia the Ŵôřlḑôle" },
             ]))
             .unwrap();
         temp_index
@@ -305,7 +305,7 @@ pub(crate) mod tests {
                     ..Default::default()
                 })
                 .next(),
-            Some(MatchType::Full { char_len: 5, ids: &(2..=2) })
+            None
         );
         assert_eq!(
             matching_words

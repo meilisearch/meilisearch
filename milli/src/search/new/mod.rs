@@ -184,11 +184,7 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
     for rr in settings_ranking_rules {
         // Add Words before any of: typo, proximity, attribute, exactness
         match rr {
-            crate::Criterion::Typo
-            | crate::Criterion::Attribute
-            | crate::Criterion::Proximity
-            // TODO: no exactness
-            | crate::Criterion::Exactness => {
+            crate::Criterion::Typo | crate::Criterion::Attribute | crate::Criterion::Proximity => {
                 if !words {
                     ranking_rules.push(Box::new(Words::new(terms_matching_strategy)));
                     words = true;
@@ -339,6 +335,8 @@ pub fn execute_search(
 
         check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
+        // TODO: if the exactness criterion is the first one, then
+        // use a different strategy to find the universe (union of any term)
         universe = resolve_maximally_reduced_query_graph(
             ctx,
             &universe,

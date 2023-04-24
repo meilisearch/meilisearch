@@ -79,11 +79,6 @@ pub fn compute_docids(
         //
         // This is an optimisation to avoid checking for an excessive number of
         // pairs.
-        // WAIT, NO.
-        // This should only be done once per node.
-        // Here, we'll potentially do is.. 16 times?
-        // Maybe we should do it at edge-build time instead.
-        // Same for the future attribute ranking rule.
         let right_derivs = first_word_of_term_iter(ctx, &right_term.term_subset)?;
         if right_derivs.len() > 1 {
             let universe = &universe;
@@ -190,11 +185,6 @@ fn compute_non_prefix_edges(
     docids: &mut RoaringBitmap,
     universe: &RoaringBitmap,
 ) -> Result<()> {
-    let mut used_left_phrases = BTreeSet::new();
-    let mut used_right_phrases = BTreeSet::new();
-    let mut used_left_words = BTreeSet::new();
-    let mut used_right_words = BTreeSet::new();
-
     let mut universe = universe.clone();
 
     for phrase in left_phrase.iter().chain(right_phrase.iter()).copied() {
@@ -204,25 +194,19 @@ fn compute_non_prefix_edges(
             return Ok(());
         }
     }
-    if let Some(left_phrase) = left_phrase {
-        used_left_phrases.insert(left_phrase);
-    }
-    if let Some(right_phrase) = right_phrase {
-        used_right_phrases.insert(right_phrase);
-    }
 
     if let Some(new_docids) =
         ctx.get_db_word_pair_proximity_docids(word1, word2, forward_proximity)?
     {
         let new_docids = &universe & new_docids;
         if !new_docids.is_empty() {
-            used_left_words.insert(word1);
-            used_right_words.insert(word2);
             *docids |= new_docids;
         }
     }
     if backward_proximity >= 1
-            // no swapping when either term is a phrase
+            // TODO: for now, we don't do any swapping when either term is a phrase
+            // but maybe we should. We'd need to look at the first/last word of the phrase
+            // depending on the context.
             && left_phrase.is_none() && right_phrase.is_none()
     {
         if let Some(new_docids) =
@@ -230,8 +214,6 @@ fn compute_non_prefix_edges(
         {
             let new_docids = &universe & new_docids;
             if !new_docids.is_empty() {
-                used_left_words.insert(word2);
-                used_right_words.insert(word1);
                 *docids |= new_docids;
             }
         }

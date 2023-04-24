@@ -14,7 +14,7 @@ fn sort_ranking_rule_missing() {
     let mut search = Search::new(&rtxn, &index);
     search.query(search::TEST_QUERY);
     search.limit(EXTERNAL_DOCUMENTS_IDS.len());
-    search.authorize_typos(true);
+
     search.terms_matching_strategy(TermsMatchingStrategy::default());
     search.sort_criteria(vec![AscDesc::Asc(Member::Field(S("tag")))]);
 

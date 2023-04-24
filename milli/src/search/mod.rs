@@ -28,7 +28,6 @@ pub struct Search<'a> {
     limit: usize,
     sort_criteria: Option<Vec<AscDesc>>,
     terms_matching_strategy: TermsMatchingStrategy,
-    authorize_typos: bool,
     words_limit: usize,
     exhaustive_number_hits: bool,
     rtxn: &'a heed::RoTxn<'a>,
@@ -44,7 +43,6 @@ impl<'a> Search<'a> {
             limit: 20,
             sort_criteria: None,
             terms_matching_strategy: TermsMatchingStrategy::default(),
-            authorize_typos: true,
             exhaustive_number_hits: false,
             words_limit: 10,
             rtxn,
@@ -77,11 +75,6 @@ impl<'a> Search<'a> {
         self
     }
 
-    pub fn authorize_typos(&mut self, value: bool) -> &mut Search<'a> {
-        self.authorize_typos = value;
-        self
-    }
-
     pub fn words_limit(&mut self, value: usize) -> &mut Search<'a> {
         self.words_limit = value;
         self
@@ -97,13 +90,6 @@ impl<'a> Search<'a> {
     pub fn exhaustive_number_hits(&mut self, exhaustive_number_hits: bool) -> &mut Search<'a> {
         self.exhaustive_number_hits = exhaustive_number_hits;
         self
-    }
-
-    // TODO!
-    fn _is_typo_authorized(&self) -> Result<bool> {
-        let index_authorizes_typos = self.index.authorize_typos(self.rtxn)?;
-        // only authorize typos if both the index and the query allow it.
-        Ok(self.authorize_typos && index_authorizes_typos)
     }
 
     pub fn execute(&self) -> Result<SearchResult> {
@@ -142,7 +128,6 @@ impl fmt::Debug for Search<'_> {
             limit,
             sort_criteria,
             terms_matching_strategy,
-            authorize_typos,
             words_limit,
             exhaustive_number_hits,
             rtxn: _,
@@ -155,7 +140,6 @@ impl fmt::Debug for Search<'_> {
             .field("limit", limit)
             .field("sort_criteria", sort_criteria)
             .field("terms_matching_strategy", terms_matching_strategy)
-            .field("authorize_typos", authorize_typos)
             .field("exhaustive_number_hits", exhaustive_number_hits)
             .field("words_limit", words_limit)
             .finish()
@@ -231,92 +215,4 @@ mod test {
 
         assert_eq!(documents_ids, vec![1]);
     }
-
-    // #[test]
-    // fn test_is_authorized_typos() {
-    //     let index = TempIndex::new();
-    //     let mut txn = index.write_txn().unwrap();
-
-    //     let mut search = Search::new(&txn, &index);
-
-    //     // default is authorized
-    //     assert!(search.is_typo_authorized().unwrap());
-
-    //     search.authorize_typos(false);
-    //     assert!(!search.is_typo_authorized().unwrap());
-
-    //     index.put_authorize_typos(&mut txn, false).unwrap();
-    //     txn.commit().unwrap();
-
-    //     let txn = index.read_txn().unwrap();
-    //     let mut search = Search::new(&txn, &index);
-
-    //     assert!(!search.is_typo_authorized().unwrap());
-
-    //     search.authorize_typos(true);
-    //     assert!(!search.is_typo_authorized().unwrap());
-    // }
-
-    // #[test]
-    // fn test_one_typos_tolerance() {
-    //     let fst = fst::Set::from_iter(["zealand"].iter()).unwrap().map_data(Cow::Owned).unwrap();
-    //     let mut cache = HashMap::new();
-    //     let found = word_derivations("zealend", false, 1, &fst, &mut cache).unwrap();
-
-    //     assert_eq!(found, &[("zealand".to_string(), 1)]);
-    // }
-
-    // #[test]
-    // fn test_one_typos_first_letter() {
-    //     let fst = fst::Set::from_iter(["zealand"].iter()).unwrap().map_data(Cow::Owned).unwrap();
-    //     let mut cache = HashMap::new();
-    //     let found = word_derivations("sealand", false, 1, &fst, &mut cache).unwrap();
-
-    //     assert_eq!(found, &[]);
-    // }
-
-    // #[test]
-    // fn test_two_typos_tolerance() {
-    //     let fst = fst::Set::from_iter(["zealand"].iter()).unwrap().map_data(Cow::Owned).unwrap();
-    //     let mut cache = HashMap::new();
-    //     let found = word_derivations("zealemd", false, 2, &fst, &mut cache).unwrap();
-
-    //     assert_eq!(found, &[("zealand".to_string(), 2)]);
-    // }
-
-    // #[test]
-    // fn test_two_typos_first_letter() {
-    //     let fst = fst::Set::from_iter(["zealand"].iter()).unwrap().map_data(Cow::Owned).unwrap();
-    //     let mut cache = HashMap::new();
-    //     let found = word_derivations("sealand", false, 2, &fst, &mut cache).unwrap();
-
-    //     assert_eq!(found, &[("zealand".to_string(), 2)]);
-    // }
-
-    // #[test]
-    // fn test_prefix() {
-    //     let fst = fst::Set::from_iter(["zealand"].iter()).unwrap().map_data(Cow::Owned).unwrap();
-    //     let mut cache = HashMap::new();
-    //     let found = word_derivations("ze", true, 0, &fst, &mut cache).unwrap();
-
-    //     assert_eq!(found, &[("zealand".to_string(), 0)]);
-    // }
-
-    // #[test]
-    // fn test_bad_prefix() {
-    //     let fst = fst::Set::from_iter(["zealand"].iter()).unwrap().map_data(Cow::Owned).unwrap();
-    //     let mut cache = HashMap::new();
-    //     let found = word_derivations("se", true, 0, &fst, &mut cache).unwrap();
-
-    //     assert_eq!(found, &[]);
-    // }
-
-    // #[test]
-    // fn test_prefix_with_typo() {
-    //     let fst = fst::Set::from_iter(["zealand"].iter()).unwrap().map_data(Cow::Owned).unwrap();
-    //     let mut cache = HashMap::new();
-    //     let found = word_derivations("zae", true, 1, &fst, &mut cache).unwrap();
-
-    //     assert_eq!(found, &[("zealand".to_string(), 1)]);
-    // }
 }

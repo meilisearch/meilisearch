@@ -61,7 +61,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
 
     // index documents
     let config = IndexerConfig { max_memory: Some(10 * 1024 * 1024), ..Default::default() };
-    let indexing_config = IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+    let indexing_config = IndexDocumentsConfig::default();
 
     let builder =
         IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| (), || false).unwrap();
@@ -96,7 +96,6 @@ pub fn internal_to_external_ids(index: &Index, internal_ids: &[DocumentId]) -> V
 
 pub fn expected_order(
     criteria: &[Criterion],
-    authorize_typo: bool,
     optional_words: TermsMatchingStrategy,
     sort_by: &[AscDesc],
 ) -> Vec<TestDocument> {
@@ -156,14 +155,11 @@ pub fn expected_order(
         groups = std::mem::take(&mut new_groups);
     }
 
-    if authorize_typo && optional_words == TermsMatchingStrategy::default() {
-        groups.into_iter().flatten().collect()
-    } else if optional_words == TermsMatchingStrategy::default() {
-        groups.into_iter().flatten().filter(|d| d.typo_rank == 0).collect()
-    } else if authorize_typo {
-        groups.into_iter().flatten().filter(|d| d.word_rank == 0).collect()
-    } else {
-        groups.into_iter().flatten().filter(|d| d.word_rank == 0 && d.typo_rank == 0).collect()
+    match optional_words {
+        TermsMatchingStrategy::Last => groups.into_iter().flatten().collect(),
+        TermsMatchingStrategy::All => {
+            groups.into_iter().flatten().filter(|d| d.word_rank == 0).collect()
+        }
     }
 }
 
