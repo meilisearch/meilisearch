@@ -23,12 +23,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let dataset_path = args
         .next()
         .unwrap_or_else(|| panic!("{}", usage("Missing path to source dataset.", &program_name)));
-    let primary_key = args.next().unwrap_or_else(|| "id".into());
+    // let primary_key = args.next().unwrap_or_else(|| "id".into());
     // "title overview"
     let searchable_fields: Vec<String> = args
         .next()
         .map(|arg| arg.split_whitespace().map(ToString::to_string).collect())
         .unwrap_or_default();
+
+    println!("{searchable_fields:?}");
     // "release_date genres"
     let filterable_fields: Vec<String> = args
         .next()
@@ -44,17 +46,25 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let config = IndexerConfig::default();
     let mut builder = Settings::new(&mut wtxn, &index, &config);
-    builder.set_primary_key(primary_key);
+    // builder.set_primary_key(primary_key);
     let searchable_fields = searchable_fields.iter().map(|s| s.to_string()).collect();
     builder.set_searchable_fields(searchable_fields);
     let filterable_fields = filterable_fields.iter().map(|s| s.to_string()).collect();
     builder.set_filterable_fields(filterable_fields);
 
-    builder.set_criteria(vec![Criterion::Words, Criterion::Typo, Criterion::Proximity]);
+    builder.set_criteria(vec![
+        Criterion::Words,
+        Criterion::Typo,
+        Criterion::Proximity,
+        Criterion::Attribute,
+    ]);
     builder.execute(|_| (), || false).unwrap();
 
     let config = IndexerConfig::default();
-    let indexing_config = IndexDocumentsConfig::default();
+    let mut indexing_config = IndexDocumentsConfig::default();
+
+    indexing_config.autogenerate_docids = true;
+
     let builder =
         IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| (), || false).unwrap();
 
