@@ -68,7 +68,7 @@ const DEFAULT_LOG_EVERY_N: usize = 100_000;
 // The actual size of the virtual address space is computed at startup to determine how many 2TiB indexes can be
 // opened simultaneously.
 pub const INDEX_SIZE: u64 = 2 * 1024 * 1024 * 1024 * 1024; // 2 TiB
-pub const TASK_DB_SIZE: u64 = 10 * 1024 * 1024 * 1024; // 10 GiB
+pub const TASK_DB_SIZE: u64 = 20 * 1024 * 1024 * 1024; // 20 GiB
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
