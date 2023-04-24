@@ -940,14 +940,15 @@ impl IndexScheduler {
 
     /// Perform one iteration of the run loop.
     ///
-    /// 1. Find the next batch of tasks to be processed.
-    /// 2. Update the information of these tasks following the start of their processing.
-    /// 3. Update the in-memory list of processed tasks accordingly.
-    /// 4. Process the batch:
+    /// 1. See if we need to cleanup the task queue
+    /// 2. Find the next batch of tasks to be processed.
+    /// 3. Update the information of these tasks following the start of their processing.
+    /// 4. Update the in-memory list of processed tasks accordingly.
+    /// 5. Process the batch:
     ///    - perform the actions of each batched task
     ///    - update the information of each batched task following the end
     ///      of their processing.
-    /// 5. Reset the in-memory list of processed tasks.
+    /// 6. Reset the in-memory list of processed tasks.
     ///
     /// Returns the number of processed tasks.
     fn tick(&self) -> Result<TickOutcome> {
@@ -956,6 +957,8 @@ impl IndexScheduler {
             *self.run_loop_iteration.write().unwrap() += 1;
             self.breakpoint(Breakpoint::Start);
         }
+
+        self.cleanup_task_queue()?;
 
         let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
         let batch =
@@ -1091,6 +1094,41 @@ impl IndexScheduler {
         self.breakpoint(Breakpoint::AfterProcessing);
 
         Ok(TickOutcome::TickAgain(processed_tasks))
+    }
+
+    /// Register a task to cleanup the task queue if needed
+    fn cleanup_task_queue(&self) -> Result<()> {
+        // if less than 42% (~9GiB) of the task queue are being used we don't need to do anything
+        if ((self.env.non_free_pages_size()? * 100) / self.env.map_size()? as u64) < 42 {
+            return Ok(());
+        }
+
+        let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
+
+        let finished = self.status.get(&rtxn, &Status::Succeeded)?.unwrap_or_default()
+            | self.status.get(&rtxn, &Status::Failed)?.unwrap_or_default()
+            | self.status.get(&rtxn, &Status::Canceled)?.unwrap_or_default();
+        drop(rtxn);
+
+        let to_delete = RoaringBitmap::from_iter(finished.into_iter().rev().take(1_000_000));
+
+        // /!\ the len must be at least 2 or else we might enter an infinite loop where we only delete
+        //     the deletion tasks we enqueued ourselves.
+        if to_delete.len() < 2 {
+            // the only thing we can do is hope that the user tasks are going to finish
+            return Ok(());
+        }
+
+        self.register(KindWithContent::TaskDeletion {
+            query: format!(
+                "?from={},limit={},status=succeeded,failed,canceled",
+                to_delete.iter().last().unwrap_or(u32::MAX),
+                to_delete.len(),
+            ),
+            tasks: to_delete,
+        })?;
+
+        Ok(())
     }
 
     pub fn index_stats(&self, index_uid: &str) -> Result<IndexStats> {
@@ -1350,9 +1388,10 @@ mod tests {
     use big_s::S;
     use crossbeam::channel::RecvTimeoutError;
     use file_store::File;
-    use meili_snap::snapshot;
+    use meili_snap::{json_string, snapshot};
     use meilisearch_auth::AuthFilter;
     use meilisearch_types::document_formats::DocumentFormatError;
+    use meilisearch_types::error::ErrorCode;
     use meilisearch_types::index_uid_pattern::IndexUidPattern;
     use meilisearch_types::milli::obkv_to_json;
     use meilisearch_types::milli::update::IndexDocumentsMethod::{
@@ -3717,5 +3756,189 @@ mod tests {
         assert_eq!(*index_scheduler.run_loop_iteration.read().unwrap(), 1);
         // No matter what happens in process_batch, the index_scheduler should be internally consistent
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "index_creation_failed");
+    }
+
+    #[test]
+    fn test_task_queue_is_full_and_auto_deletion_of_tasks() {
+        let (mut index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        // on average this task takes ~500+ bytes, and since our task queue have 1MiB of
+        // storage we can enqueue ~2000 tasks before reaching the limit.
+
+        let mut dump = index_scheduler.register_dumped_task().unwrap();
+        let now = OffsetDateTime::now_utc();
+        for i in 0..2000 {
+            dump.register_dumped_task(
+                TaskDump {
+                    uid: i,
+                    index_uid: Some(S("doggo")),
+                    status: Status::Enqueued,
+                    kind: KindDump::IndexCreation { primary_key: None },
+                    canceled_by: None,
+                    details: None,
+                    error: None,
+                    enqueued_at: now,
+                    started_at: None,
+                    finished_at: None,
+                },
+                None,
+            )
+            .unwrap();
+        }
+        dump.finish().unwrap();
+
+        index_scheduler.assert_internally_consistent();
+
+        // at this point the task queue should be full and any new task should be refused
+
+        let result = index_scheduler
+            .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
+            .unwrap_err();
+
+        snapshot!(result, @"Meilisearch cannot receive write operations because the limit of the task database has been reached. Please delete tasks to continue performing write operations.");
+        // we won't be able to test this error in an integration test thus as a best effort test I still ensure the error return the expected error code
+        snapshot!(format!("{:?}", result.error_code()), @"NoSpaceLeftOnDevice");
+
+        // after advancing one batch, the engine should not being able to push a taskDeletion task because everything is finished
+        handle.advance_one_successful_batch();
+        index_scheduler.assert_internally_consistent();
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+        let ids = index_scheduler
+            .get_task_ids(
+                &rtxn,
+                &Query {
+                    statuses: Some(vec![Status::Succeeded, Status::Failed]),
+                    ..Query::default()
+                },
+            )
+            .unwrap();
+        let tasks = index_scheduler.get_existing_tasks(&rtxn, ids).unwrap();
+        snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]" }), @r###"
+        [
+          {
+            "uid": 0,
+            "enqueuedAt": "[date]",
+            "startedAt": "[date]",
+            "finishedAt": "[date]",
+            "error": null,
+            "canceledBy": null,
+            "details": {
+              "IndexInfo": {
+                "primary_key": null
+              }
+            },
+            "status": "succeeded",
+            "kind": {
+              "indexCreation": {
+                "index_uid": "doggo",
+                "primary_key": null
+              }
+            }
+          }
+        ]
+        "###);
+
+        // The next batch should try to process another task
+        handle.advance_one_failed_batch();
+        index_scheduler.assert_internally_consistent();
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+        let ids = index_scheduler
+            .get_task_ids(
+                &rtxn,
+                &Query {
+                    statuses: Some(vec![Status::Succeeded, Status::Failed]),
+                    ..Query::default()
+                },
+            )
+            .unwrap();
+        let tasks = index_scheduler.get_existing_tasks(&rtxn, ids).unwrap();
+        snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]" }), @r###"
+        [
+          {
+            "uid": 0,
+            "enqueuedAt": "[date]",
+            "startedAt": "[date]",
+            "finishedAt": "[date]",
+            "error": null,
+            "canceledBy": null,
+            "details": {
+              "IndexInfo": {
+                "primary_key": null
+              }
+            },
+            "status": "succeeded",
+            "kind": {
+              "indexCreation": {
+                "index_uid": "doggo",
+                "primary_key": null
+              }
+            }
+          },
+          {
+            "uid": 1,
+            "enqueuedAt": "[date]",
+            "startedAt": "[date]",
+            "finishedAt": "[date]",
+            "error": {
+              "message": "Index `doggo` already exists.",
+              "code": "index_already_exists",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#index_already_exists"
+            },
+            "canceledBy": null,
+            "details": null,
+            "status": "failed",
+            "kind": {
+              "indexCreation": {
+                "index_uid": "doggo",
+                "primary_key": null
+              }
+            }
+          }
+        ]
+        "###);
+
+        // The next batch should create a task deletion tasks that delete the succeeded and failed tasks
+        handle.advance_one_successful_batch();
+        index_scheduler.assert_internally_consistent();
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+        let ids = index_scheduler
+            .get_task_ids(
+                &rtxn,
+                &Query {
+                    statuses: Some(vec![Status::Succeeded, Status::Failed]),
+                    ..Query::default()
+                },
+            )
+            .unwrap();
+        let tasks = index_scheduler.get_existing_tasks(&rtxn, ids).unwrap();
+        snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]", "[].kind" => "[kind]" }), @r###"
+        [
+          {
+            "uid": 2000,
+            "enqueuedAt": "[date]",
+            "startedAt": "[date]",
+            "finishedAt": "[date]",
+            "error": null,
+            "canceledBy": null,
+            "details": {
+              "TaskDeletion": {
+                "matched_tasks": 2,
+                "deleted_tasks": 2,
+                "original_filter": "?from=1,limit=2,status=succeeded,failed,canceled"
+              }
+            },
+            "status": "succeeded",
+            "kind": "[kind]"
+          }
+        ]
+        "###);
+
+        let to_delete = match tasks[0].kind {
+            KindWithContent::TaskDeletion { ref tasks, .. } => tasks,
+            _ => unreachable!("the snapshot above should prevent us from running in this case"),
+        };
+
+        snapshot!(format!("{:?}", to_delete), @"RoaringBitmap<[0, 1]>");
     }
 }
