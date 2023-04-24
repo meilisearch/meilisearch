@@ -1,6 +1,7 @@
 pub mod attribute_fid;
 pub mod attribute_position;
 pub mod distinct;
+pub mod exactness;
 #[cfg(feature = "default")]
 pub mod language;
 pub mod ngram_split_words;
