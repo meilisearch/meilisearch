@@ -126,9 +126,9 @@ pub struct Index {
 
     /// Maps the field id and the word count with the docids that corresponds to it.
     pub field_id_word_count_docids: Database<FieldIdWordCountCodec, CboRoaringBitmapCodec>,
-    /// Maps the position of a word prefix with all the docids where this prefix appears.
+    /// Maps the word prefix and a position with all the docids where the prefix appears at the position.
     pub word_prefix_position_docids: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
-    /// Maps the word and the field id with the docids that corresponds to it.
+    /// Maps the word prefix and a field id with all the docids where the prefix appears inside the field
     pub word_prefix_fid_docids: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
 
     /// Maps the script and language with all the docids that corresponds to it.

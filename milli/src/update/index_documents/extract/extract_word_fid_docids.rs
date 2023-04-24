@@ -36,6 +36,7 @@ pub fn extract_word_fid_docids<R: io::Read + io::Seek>(
         for position in read_u32_ne_bytes(value) {
             key_buffer.clear();
             key_buffer.extend_from_slice(word_bytes);
+            key_buffer.push(0);
             let (fid, _) = relative_from_absolute_position(position);
             key_buffer.extend_from_slice(&fid.to_be_bytes());
             word_fid_docids_sorter.insert(&key_buffer, document_id.to_ne_bytes())?;

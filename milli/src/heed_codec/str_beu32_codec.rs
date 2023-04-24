@@ -45,11 +45,12 @@ impl<'a> heed::BytesDecode<'a> for StrBEU16Codec {
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
         let footer_len = size_of::<u16>();
 
-        if bytes.len() < footer_len {
+        if bytes.len() < footer_len + 1 {
             return None;
         }
 
-        let (word, bytes) = bytes.split_at(bytes.len() - footer_len);
+        let (word_plus_nul_byte, bytes) = bytes.split_at(bytes.len() - footer_len);
+        let (_, word) = word_plus_nul_byte.split_last()?;
         let word = str::from_utf8(word).ok()?;
         let pos = bytes.try_into().map(u16::from_be_bytes).ok()?;
 
@@ -63,8 +64,9 @@ impl<'a> heed::BytesEncode<'a> for StrBEU16Codec {
     fn bytes_encode((word, pos): &Self::EItem) -> Option<Cow<[u8]>> {
         let pos = pos.to_be_bytes();
 
-        let mut bytes = Vec::with_capacity(word.len() + pos.len());
+        let mut bytes = Vec::with_capacity(word.len() + 1 + pos.len());
         bytes.extend_from_slice(word.as_bytes());
+        bytes.push(0);
         bytes.extend_from_slice(&pos[..]);
 
         Some(Cow::Owned(bytes))

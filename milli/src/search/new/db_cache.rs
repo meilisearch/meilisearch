@@ -261,22 +261,6 @@ impl<'ctx> SearchContext<'ctx> {
         .transpose()
     }
 
-    pub fn get_db_word_position_docids(
-        &mut self,
-        word: Interned<String>,
-        position: u16,
-    ) -> Result<Option<RoaringBitmap>> {
-        DatabaseCache::get_value(
-            self.txn,
-            (word, position),
-            &(self.word_interner.get(word).as_str(), position),
-            &mut self.db_cache.word_position_docids,
-            self.index.word_position_docids.remap_data_type::<ByteSlice>(),
-        )?
-        .map(|bytes| CboRoaringBitmapCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding.into()))
-        .transpose()
-    }
-
     pub fn get_db_word_fid_docids(
         &mut self,
         word: Interned<String>,
@@ -359,6 +343,22 @@ impl<'ctx> SearchContext<'ctx> {
             }
         };
         Ok(fids)
+    }
+
+    pub fn get_db_word_position_docids(
+        &mut self,
+        word: Interned<String>,
+        position: u16,
+    ) -> Result<Option<RoaringBitmap>> {
+        DatabaseCache::get_value(
+            self.txn,
+            (word, position),
+            &(self.word_interner.get(word).as_str(), position),
+            &mut self.db_cache.word_position_docids,
+            self.index.word_position_docids.remap_data_type::<ByteSlice>(),
+        )?
+        .map(|bytes| CboRoaringBitmapCodec::bytes_decode(bytes).ok_or(heed::Error::Decoding.into()))
+        .transpose()
     }
 
     pub fn get_db_word_prefix_position_docids(
