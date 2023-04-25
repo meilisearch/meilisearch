@@ -658,9 +658,7 @@ mod tests {
         let dividers = [2, 3, 5, 7, 11, 6, 15, 35, 18, 14];
         let parts_candidates: Vec<RoaringBitmap> = dividers
             .iter()
-            .map(|&divider| {
-                (0..).map(|x| divider * x).take_while(|x| *x <= 210).collect()
-            })
+            .map(|&divider| (0..).map(|x| divider * x).take_while(|x| *x <= 210).collect())
             .collect();
 
         let combinations = create_disjoint_combinations(parts_candidates);
@@ -688,9 +686,7 @@ mod tests {
         ];
         let parts_candidates: Vec<RoaringBitmap> = dividers
             .iter()
-            .map(|divider| {
-                (0..).map(|x| divider * x).take_while(|x| *x <= 100).collect()
-            })
+            .map(|divider| (0..).map(|x| divider * x).take_while(|x| *x <= 100).collect())
             .collect();
 
         let combinations = create_non_disjoint_combinations(parts_candidates.clone());
