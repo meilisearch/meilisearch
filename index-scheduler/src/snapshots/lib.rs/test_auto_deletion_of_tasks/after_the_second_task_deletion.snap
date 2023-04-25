@@ -1,0 +1,44 @@
+---
+source: index-scheduler/src/lib.rs
+---
+### Autobatching Enabled = true
+### Processing Tasks:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+3 {uid: 3, status: enqueued, details: { primary_key: None }, kind: IndexCreation { index_uid: "doggo", primary_key: None }}
+5 {uid: 5, status: succeeded, details: { matched_tasks: 2, deleted_tasks: Some(2), original_filter: "?from=4,limit=2,status=succeeded,failed,canceled" }, kind: TaskDeletion { query: "?from=4,limit=2,status=succeeded,failed,canceled", tasks: RoaringBitmap<[2, 4]> }}
+----------------------------------------------------------------------
+### Status:
+enqueued [3,]
+succeeded [5,]
+failed []
+----------------------------------------------------------------------
+### Kind:
+"indexCreation" [3,]
+"taskDeletion" [5,]
+----------------------------------------------------------------------
+### Index Tasks:
+doggo [3,]
+----------------------------------------------------------------------
+### Index Mapper:
+doggo: { number_of_documents: 0, field_distribution: {} }
+
+----------------------------------------------------------------------
+### Canceled By:
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [3,]
+[timestamp] [5,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [5,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [5,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------
+

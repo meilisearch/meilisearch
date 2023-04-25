@@ -1,0 +1,49 @@
+---
+source: index-scheduler/src/lib.rs
+---
+### Autobatching Enabled = true
+### Processing Tasks:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, status: succeeded, details: { primary_key: None }, kind: IndexCreation { index_uid: "doggo", primary_key: None }}
+1 {uid: 1, status: failed, error: ResponseError { code: 200, message: "Index `doggo` already exists.", error_code: "index_already_exists", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#index_already_exists" }, details: { primary_key: None }, kind: IndexCreation { index_uid: "doggo", primary_key: None }}
+2 {uid: 2, status: enqueued, details: { primary_key: None }, kind: IndexCreation { index_uid: "doggo", primary_key: None }}
+3 {uid: 3, status: enqueued, details: { primary_key: None }, kind: IndexCreation { index_uid: "doggo", primary_key: None }}
+----------------------------------------------------------------------
+### Status:
+enqueued [2,3,]
+succeeded [0,]
+failed [1,]
+----------------------------------------------------------------------
+### Kind:
+"indexCreation" [0,1,2,3,]
+----------------------------------------------------------------------
+### Index Tasks:
+doggo [0,1,2,3,]
+----------------------------------------------------------------------
+### Index Mapper:
+doggo: { number_of_documents: 0, field_distribution: {} }
+
+----------------------------------------------------------------------
+### Canceled By:
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------
+
