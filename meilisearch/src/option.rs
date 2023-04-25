@@ -323,10 +323,10 @@ impl Opt {
             .clone()
             .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIG_FILE_PATH));
 
-        match std::fs::read(&config_file_path) {
+        match std::fs::read_to_string(&config_file_path) {
             Ok(config) => {
                 // If the file is successfully read, we deserialize it with `toml`.
-                let opt_from_config = toml::from_slice::<Opt>(&config)?;
+                let opt_from_config = toml::from_str::<Opt>(&config)?;
                 // Return an error if config file contains 'config_file_path'
                 // Using that key in the config file doesn't make sense bc it creates a logical loop (config file referencing itself)
                 if opt_from_config.config_file_path.is_some() {
