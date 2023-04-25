@@ -561,7 +561,7 @@ mod tests {
 
     #[test]
     fn compute_combinations_1() {
-        let b0: RoaringBitmap = (0..).into_iter().map(|x| 2 * x).take_while(|x| *x < 150).collect();
+        let b0: RoaringBitmap = (0..).map(|x| 2 * x).take_while(|x| *x < 150).collect();
 
         let parts_candidates = vec![b0];
 
@@ -575,8 +575,8 @@ mod tests {
 
     #[test]
     fn compute_combinations_2() {
-        let b0: RoaringBitmap = (0..).into_iter().map(|x| 2 * x).take_while(|x| *x < 150).collect();
-        let b1: RoaringBitmap = (0..).into_iter().map(|x| 3 * x).take_while(|x| *x < 150).collect();
+        let b0: RoaringBitmap = (0..).map(|x| 2 * x).take_while(|x| *x < 150).collect();
+        let b1: RoaringBitmap = (0..).map(|x| 3 * x).take_while(|x| *x < 150).collect();
 
         let parts_candidates = vec![b0, b1];
 
@@ -589,10 +589,10 @@ mod tests {
 
     #[test]
     fn compute_combinations_4() {
-        let b0: RoaringBitmap = (0..).into_iter().map(|x| 2 * x).take_while(|x| *x < 150).collect();
-        let b1: RoaringBitmap = (0..).into_iter().map(|x| 3 * x).take_while(|x| *x < 150).collect();
-        let b2: RoaringBitmap = (0..).into_iter().map(|x| 5 * x).take_while(|x| *x < 150).collect();
-        let b3: RoaringBitmap = (0..).into_iter().map(|x| 7 * x).take_while(|x| *x < 150).collect();
+        let b0: RoaringBitmap = (0..).map(|x| 2 * x).take_while(|x| *x < 150).collect();
+        let b1: RoaringBitmap = (0..).map(|x| 3 * x).take_while(|x| *x < 150).collect();
+        let b2: RoaringBitmap = (0..).map(|x| 5 * x).take_while(|x| *x < 150).collect();
+        let b3: RoaringBitmap = (0..).map(|x| 7 * x).take_while(|x| *x < 150).collect();
 
         let parts_candidates = vec![b0, b1, b2, b3];
 
@@ -610,10 +610,10 @@ mod tests {
     }
     #[test]
     fn compute_combinations_4_with_empty_results_at_end() {
-        let b0: RoaringBitmap = (1..).into_iter().map(|x| 2 * x).take_while(|x| *x < 150).collect();
-        let b1: RoaringBitmap = (1..).into_iter().map(|x| 3 * x).take_while(|x| *x < 150).collect();
-        let b2: RoaringBitmap = (1..).into_iter().map(|x| 5 * x).take_while(|x| *x < 150).collect();
-        let b3: RoaringBitmap = (1..).into_iter().map(|x| 7 * x).take_while(|x| *x < 150).collect();
+        let b0: RoaringBitmap = (1..).map(|x| 2 * x).take_while(|x| *x < 150).collect();
+        let b1: RoaringBitmap = (1..).map(|x| 3 * x).take_while(|x| *x < 150).collect();
+        let b2: RoaringBitmap = (1..).map(|x| 5 * x).take_while(|x| *x < 150).collect();
+        let b3: RoaringBitmap = (1..).map(|x| 7 * x).take_while(|x| *x < 150).collect();
 
         let parts_candidates = vec![b0, b1, b2, b3];
 
@@ -632,11 +632,11 @@ mod tests {
 
     #[test]
     fn compute_combinations_4_with_some_equal_bitmaps() {
-        let b0: RoaringBitmap = (0..).into_iter().map(|x| 2 * x).take_while(|x| *x < 150).collect();
-        let b1: RoaringBitmap = (0..).into_iter().map(|x| 3 * x).take_while(|x| *x < 150).collect();
-        let b2: RoaringBitmap = (0..).into_iter().map(|x| 5 * x).take_while(|x| *x < 150).collect();
+        let b0: RoaringBitmap = (0..).map(|x| 2 * x).take_while(|x| *x < 150).collect();
+        let b1: RoaringBitmap = (0..).map(|x| 3 * x).take_while(|x| *x < 150).collect();
+        let b2: RoaringBitmap = (0..).map(|x| 5 * x).take_while(|x| *x < 150).collect();
         // b3 == b1
-        let b3: RoaringBitmap = (0..).into_iter().map(|x| 3 * x).take_while(|x| *x < 150).collect();
+        let b3: RoaringBitmap = (0..).map(|x| 3 * x).take_while(|x| *x < 150).collect();
 
         let parts_candidates = vec![b0, b1, b2, b3];
 
@@ -659,7 +659,7 @@ mod tests {
         let parts_candidates: Vec<RoaringBitmap> = dividers
             .iter()
             .map(|&divider| {
-                (0..).into_iter().map(|x| divider * x).take_while(|x| *x <= 210).collect()
+                (0..).map(|x| divider * x).take_while(|x| *x <= 210).collect()
             })
             .collect();
 
@@ -689,7 +689,7 @@ mod tests {
         let parts_candidates: Vec<RoaringBitmap> = dividers
             .iter()
             .map(|divider| {
-                (0..).into_iter().map(|x| divider * x).take_while(|x| *x <= 100).collect()
+                (0..).map(|x| divider * x).take_while(|x| *x <= 100).collect()
             })
             .collect();
 

@@ -410,7 +410,7 @@ mod tests {
 
             let mut results = String::new();
 
-            for i in (0..=255).into_iter().rev() {
+            for i in (0..=255).rev() {
                 let i = i as f64;
                 let start = Bound::Included(i);
                 let end = Bound::Included(255.);
@@ -431,7 +431,7 @@ mod tests {
 
             let mut results = String::new();
 
-            for i in (0..=255).into_iter().rev() {
+            for i in (0..=255).rev() {
                 let i = i as f64;
                 let start = Bound::Excluded(i);
                 let end = Bound::Excluded(255.);
@@ -466,7 +466,7 @@ mod tests {
 
             let mut results = String::new();
 
-            for i in (0..=128).into_iter().rev() {
+            for i in (0..=128).rev() {
                 let i = i as f64;
                 let start = Bound::Included(i);
                 let end = Bound::Included(255. - i);
@@ -491,7 +491,7 @@ mod tests {
 
             let mut results = String::new();
 
-            for i in (0..=128).into_iter().rev() {
+            for i in (0..=128).rev() {
                 let i = i as f64;
                 let start = Bound::Excluded(i);
                 let end = Bound::Excluded(255. - i);
