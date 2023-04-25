@@ -699,21 +699,21 @@ mod tests {
     #[test]
     fn many_field_ids_prepend() {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
-        for i in (0..256).into_iter().rev() {
+        for i in (0..256).rev() {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(i as u32);
             let mut txn = index.env.write_txn().unwrap();
             index.insert(&mut txn, 0, &(i as f64), &bitmap);
             txn.commit().unwrap();
         }
-        for i in (0..256).into_iter().rev() {
+        for i in (0..256).rev() {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(i as u32);
             let mut txn = index.env.write_txn().unwrap();
             index.insert(&mut txn, 2, &(i as f64), &bitmap);
             txn.commit().unwrap();
         }
-        for i in (0..256).into_iter().rev() {
+        for i in (0..256).rev() {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(i as u32);
             let mut txn = index.env.write_txn().unwrap();
@@ -733,7 +733,7 @@ mod tests {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
         let mut txn = index.env.write_txn().unwrap();
 
-        for i in (0..256).into_iter().rev() {
+        for i in (0..256).rev() {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(i);
             index.insert(&mut txn, 0, &(i as f64), &bitmap);
@@ -749,7 +749,7 @@ mod tests {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
         let mut txn = index.env.write_txn().unwrap();
 
-        let mut keys = (0..256).into_iter().collect::<Vec<_>>();
+        let mut keys = (0..256).collect::<Vec<_>>();
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
         keys.shuffle(&mut rng);
 
@@ -768,7 +768,7 @@ mod tests {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
         let mut txn = index.env.write_txn().unwrap();
 
-        let mut keys = (0..256).into_iter().collect::<Vec<_>>();
+        let mut keys = (0..256).collect::<Vec<_>>();
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
         keys.shuffle(&mut rng);
 
@@ -796,7 +796,7 @@ mod tests {
             index.insert(&mut txn, 0, &(i as f64), &bitmap);
         }
 
-        for i in (200..256).into_iter().rev() {
+        for i in (200..256).rev() {
             index.verify_structure_validity(&txn, 0);
             index.delete_single_docid(&mut txn, 0, &(i as f64), i as u32);
         }
@@ -805,7 +805,7 @@ mod tests {
         milli_snap!(format!("{index}"), 200);
         let mut txn = index.env.write_txn().unwrap();
 
-        for i in (150..200).into_iter().rev() {
+        for i in (150..200).rev() {
             index.verify_structure_validity(&txn, 0);
             index.delete_single_docid(&mut txn, 0, &(i as f64), i as u32);
         }
@@ -813,7 +813,7 @@ mod tests {
         txn.commit().unwrap();
         milli_snap!(format!("{index}"), 150);
         let mut txn = index.env.write_txn().unwrap();
-        for i in (100..150).into_iter().rev() {
+        for i in (100..150).rev() {
             index.verify_structure_validity(&txn, 0);
             index.delete_single_docid(&mut txn, 0, &(i as f64), i as u32);
         }
@@ -821,7 +821,7 @@ mod tests {
         txn.commit().unwrap();
         milli_snap!(format!("{index}"), 100);
         let mut txn = index.env.write_txn().unwrap();
-        for i in (17..100).into_iter().rev() {
+        for i in (17..100).rev() {
             index.verify_structure_validity(&txn, 0);
             index.delete_single_docid(&mut txn, 0, &(i as f64), i as u32);
         }
@@ -829,14 +829,14 @@ mod tests {
         txn.commit().unwrap();
         milli_snap!(format!("{index}"), 17);
         let mut txn = index.env.write_txn().unwrap();
-        for i in (15..17).into_iter().rev() {
+        for i in (15..17).rev() {
             index.delete_single_docid(&mut txn, 0, &(i as f64), i as u32);
         }
         index.verify_structure_validity(&txn, 0);
         txn.commit().unwrap();
         milli_snap!(format!("{index}"), 15);
         let mut txn = index.env.write_txn().unwrap();
-        for i in (0..15).into_iter().rev() {
+        for i in (0..15).rev() {
             index.verify_structure_validity(&txn, 0);
             index.delete_single_docid(&mut txn, 0, &(i as f64), i as u32);
         }
@@ -893,7 +893,7 @@ mod tests {
             index.insert(&mut txn, 0, &(i as f64), &bitmap);
         }
 
-        let mut keys = (0..256).into_iter().collect::<Vec<_>>();
+        let mut keys = (0..256).collect::<Vec<_>>();
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
         keys.shuffle(&mut rng);
 
@@ -930,7 +930,7 @@ mod tests {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
         let mut txn = index.env.write_txn().unwrap();
 
-        let mut keys = (0..16).into_iter().collect::<Vec<_>>();
+        let mut keys = (0..16).collect::<Vec<_>>();
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
         keys.shuffle(&mut rng);
         for i in 0..4 {
@@ -951,7 +951,7 @@ mod tests {
         let index = FacetIndex::<OrderedF64Codec>::new(4, 8, 5);
         let mut txn = index.env.write_txn().unwrap();
 
-        let mut keys = (0..64).into_iter().collect::<Vec<_>>();
+        let mut keys = (0..64).collect::<Vec<_>>();
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
         keys.shuffle(&mut rng);
 
@@ -983,7 +983,7 @@ mod tests {
         let index = FacetIndex::<StrRefCodec>::new(4, 8, 5);
         let mut txn = index.env.write_txn().unwrap();
 
-        let mut keys = (1000..1064).into_iter().collect::<Vec<_>>();
+        let mut keys = (1000..1064).collect::<Vec<_>>();
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
         keys.shuffle(&mut rng);
 

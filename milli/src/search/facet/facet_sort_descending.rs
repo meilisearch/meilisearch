@@ -142,7 +142,7 @@ mod tests {
         ];
         for (i, index) in indexes.iter().enumerate() {
             let txn = index.env.read_txn().unwrap();
-            let candidates = (200..=300).into_iter().collect::<RoaringBitmap>();
+            let candidates = (200..=300).collect::<RoaringBitmap>();
             let mut results = String::new();
             let db = index.content.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>();
             let iter = descending_facet_sort(&txn, db, 0, candidates).unwrap();
@@ -165,7 +165,7 @@ mod tests {
         ];
         for (i, index) in indexes.iter().enumerate() {
             let txn = index.env.read_txn().unwrap();
-            let candidates = (200..=300).into_iter().collect::<RoaringBitmap>();
+            let candidates = (200..=300).collect::<RoaringBitmap>();
             let mut results = String::new();
             let db = index.content.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>();
             let iter = descending_facet_sort(&txn, db, 0, candidates.clone()).unwrap();

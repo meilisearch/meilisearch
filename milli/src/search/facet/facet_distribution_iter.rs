@@ -142,7 +142,7 @@ mod tests {
         let indexes = [get_simple_index(), get_random_looking_index()];
         for (i, index) in indexes.iter().enumerate() {
             let txn = index.env.read_txn().unwrap();
-            let candidates = (0..=255).into_iter().collect::<RoaringBitmap>();
+            let candidates = (0..=255).collect::<RoaringBitmap>();
             let mut results = String::new();
             iterate_over_facet_distribution(
                 &txn,
@@ -166,7 +166,7 @@ mod tests {
         let indexes = [get_simple_index(), get_random_looking_index()];
         for (i, index) in indexes.iter().enumerate() {
             let txn = index.env.read_txn().unwrap();
-            let candidates = (0..=255).into_iter().collect::<RoaringBitmap>();
+            let candidates = (0..=255).collect::<RoaringBitmap>();
             let mut results = String::new();
             let mut nbr_facets = 0;
             iterate_over_facet_distribution(
