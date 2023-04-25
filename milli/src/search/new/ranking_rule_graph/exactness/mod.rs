@@ -3,13 +3,14 @@ use roaring::RoaringBitmap;
 use super::{ComputedCondition, RankingRuleGraphTrait};
 use crate::search::new::interner::{DedupInterner, Interned};
 use crate::search::new::query_term::{ExactTerm, LocatedQueryTermSubset};
+use crate::search::new::resolve_query_graph::compute_query_term_subset_docids;
 use crate::search::new::Word;
 use crate::{Result, SearchContext};
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum ExactnessCondition {
     ExactInAttribute(LocatedQueryTermSubset),
-    Skip(LocatedQueryTermSubset),
+    Any(LocatedQueryTermSubset),
 }
 
 pub enum ExactnessGraph {}
@@ -54,7 +55,11 @@ impl RankingRuleGraphTrait for ExactnessGraph {
                 end_term_subset.term_subset.make_mandatory();
                 (compute_docids(ctx, dest_node, universe)?, end_term_subset)
             }
-            ExactnessCondition::Skip(dest_node) => (universe.clone(), dest_node.clone()),
+            ExactnessCondition::Any(dest_node) => {
+                let docids =
+                    universe & compute_query_term_subset_docids(ctx, &dest_node.term_subset)?;
+                (docids, dest_node.clone())
+            }
         };
 
         Ok(ComputedCondition {
@@ -74,7 +79,7 @@ impl RankingRuleGraphTrait for ExactnessGraph {
         let exact_condition = ExactnessCondition::ExactInAttribute(dest_node.clone());
         let exact_condition = conditions_interner.insert(exact_condition);
 
-        let skip_condition = ExactnessCondition::Skip(dest_node.clone());
+        let skip_condition = ExactnessCondition::Any(dest_node.clone());
         let skip_condition = conditions_interner.insert(skip_condition);
 
         Ok(vec![(0, exact_condition), (dest_node.term_ids.len() as u32, skip_condition)])

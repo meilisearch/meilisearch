@@ -51,7 +51,6 @@ use resolve_query_graph::compute_query_graph_docids;
 use sort::Sort;
 
 use self::interner::Interned;
-use self::query_term::ExactTerm;
 
 /// A structure used throughout the execution of a search query.
 pub struct SearchContext<'ctx> {
@@ -120,73 +119,20 @@ fn resolve_maximally_reduced_query_graph(
     Ok(docids)
 }
 
-fn resolve_docids_containing_any_exact_word(
-    ctx: &mut SearchContext,
-    universe: &RoaringBitmap,
-    query_graph: &QueryGraph,
-) -> Result<RoaringBitmap> {
-    let mut docids = RoaringBitmap::new();
-    for (_, node) in query_graph.nodes.iter() {
-        let term = match &node.data {
-            query_graph::QueryNodeData::Term(term) => term,
-            query_graph::QueryNodeData::Deleted
-            | query_graph::QueryNodeData::Start
-            | query_graph::QueryNodeData::End => {
-                continue;
-            }
-        };
-        if term.term_ids.len() != 1 {
-            continue;
-        }
-        let Some(exact_term) = term.term_subset.exact_term(ctx) else {
-            continue
-        };
-        let exact_term_docids = match exact_term {
-            ExactTerm::Phrase(phrase) => ctx.get_phrase_docids(phrase)? & universe,
-            ExactTerm::Word(word) => {
-                if let Some(word_docids) = ctx.word_docids(Word::Original(word))? {
-                    word_docids & universe
-                } else {
-                    continue;
-                }
-            }
-        };
-        docids |= exact_term_docids;
-    }
-    Ok(docids)
-}
-
 fn resolve_universe(
     ctx: &mut SearchContext,
     initial_universe: &RoaringBitmap,
     query_graph: &QueryGraph,
-    method: UniverseResolutionMethod,
     matching_strategy: TermsMatchingStrategy,
     logger: &mut dyn SearchLogger<QueryGraph>,
 ) -> Result<RoaringBitmap> {
-    match method {
-        UniverseResolutionMethod::TermMatchingStrategyOnly => {
-            resolve_maximally_reduced_query_graph(
-                ctx,
-                initial_universe,
-                query_graph,
-                matching_strategy,
-                logger,
-            )
-        }
-        UniverseResolutionMethod::TermMatchingStrategyAndExactness => {
-            let mut resolved_universe = resolve_maximally_reduced_query_graph(
-                ctx,
-                initial_universe,
-                query_graph,
-                matching_strategy,
-                logger,
-            )?;
-            resolved_universe |=
-                resolve_docids_containing_any_exact_word(ctx, initial_universe, query_graph)?;
-            Ok(resolved_universe)
-        }
-    }
+    resolve_maximally_reduced_query_graph(
+        ctx,
+        initial_universe,
+        query_graph,
+        matching_strategy,
+        logger,
+    )
 }
 
 /// Return the list of initialised ranking rules to be used for a placeholder search.
@@ -233,17 +179,12 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
     Ok(ranking_rules)
 }
 
-enum UniverseResolutionMethod {
-    TermMatchingStrategyOnly,
-    TermMatchingStrategyAndExactness,
-}
-
 /// Return the list of initialised ranking rules to be used for a query graph search.
 fn get_ranking_rules_for_query_graph_search<'ctx>(
     ctx: &SearchContext<'ctx>,
     sort_criteria: &Option<Vec<AscDesc>>,
     terms_matching_strategy: TermsMatchingStrategy,
-) -> Result<(Vec<BoxRankingRule<'ctx, QueryGraph>>, UniverseResolutionMethod)> {
+) -> Result<Vec<BoxRankingRule<'ctx, QueryGraph>>> {
     // query graph search
     let mut words = false;
     let mut typo = false;
@@ -254,14 +195,15 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
     let mut asc = HashSet::new();
     let mut desc = HashSet::new();
 
-    let mut universe_resolution_method = UniverseResolutionMethod::TermMatchingStrategyOnly;
-
     let mut ranking_rules: Vec<BoxRankingRule<QueryGraph>> = vec![];
     let settings_ranking_rules = ctx.index.criteria(ctx.txn)?;
     for rr in settings_ranking_rules {
         // Add Words before any of: typo, proximity, attribute
         match rr {
-            crate::Criterion::Typo | crate::Criterion::Attribute | crate::Criterion::Proximity => {
+            crate::Criterion::Typo
+            | crate::Criterion::Attribute
+            | crate::Criterion::Proximity
+            | crate::Criterion::Exactness => {
                 if !words {
                     ranking_rules.push(Box::new(Words::new(terms_matching_strategy)));
                     words = true;
@@ -313,11 +255,6 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                 ranking_rules.push(Box::new(ExactAttribute::new()));
                 ranking_rules.push(Box::new(Exactness::new()));
                 exactness = true;
-
-                if !words {
-                    universe_resolution_method =
-                        UniverseResolutionMethod::TermMatchingStrategyAndExactness;
-                }
             }
             crate::Criterion::Asc(field_name) => {
                 if asc.contains(&field_name) {
@@ -335,7 +272,7 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
             }
         }
     }
-    Ok((ranking_rules, universe_resolution_method))
+    Ok(ranking_rules)
 }
 
 fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
@@ -417,17 +354,11 @@ pub fn execute_search(
 
         check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
-        let (ranking_rules, universe_resolution_method) =
+        let ranking_rules =
             get_ranking_rules_for_query_graph_search(ctx, sort_criteria, terms_matching_strategy)?;
 
-        universe = resolve_universe(
-            ctx,
-            &universe,
-            &graph,
-            universe_resolution_method,
-            terms_matching_strategy,
-            query_graph_logger,
-        )?;
+        universe =
+            resolve_universe(ctx, &universe, &graph, terms_matching_strategy, query_graph_logger)?;
 
         bucket_sort(ctx, ranking_rules, &graph, &universe, from, length, query_graph_logger)?
     } else {

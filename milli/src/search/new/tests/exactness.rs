@@ -6,19 +6,17 @@ This module tests the following properties about the exactness ranking rule:
     2. documents which have an attribute which start with the whole query
     3. documents which contain the most exact words from the query
 
-- the set of all candidates when `exactness` precedes `word` is the union of:
-    1. the same set of candidates that would be returned normally
-    2. the set of documents that contain at least one exact word from the query
+- the `exactness` ranking rule must be preceded by the `words` ranking rule
 
-- if it is placed after `word`, then it will only sort documents by:
+- if `words` has already removed terms from the query, then exactness will sort documents as follows:
     1. those that have an attribute which is equal to the whole remaining query, if this query does not have any "gap"
     2. those that have an attribute which start with the whole remaining query, if this query does not have any "gap"
     3. those that contain the most exact words from the remaining query
 
-- if it is followed by other ranking rules, then:
-    1. `word` will not remove the exact terms matched by `exactness`
-    2. graph-based ranking rules (`typo`, `proximity`, `attribute`) will only work with
-       (1) the exact terms selected by `exactness` or (2) the full query term otherwise
+- if it is followed by other graph-based ranking rules (`typo`, `proximity`, `attribute`).
+Then these rules will only work with
+    1. the exact terms selected by `exactness
+    2. the full query term otherwise
 */
 
 use crate::{
@@ -440,14 +438,14 @@ fn test_exactness_simple_ordered() {
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 8, 6, 7, 5, 4, 3, 2, 1]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 8, 7, 6, 5, 4, 3, 2, 1]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
         "\"the quick brown fox jumps over the lazy dog\"",
         "\"the quick brown fox jumps over the lazy\"",
-        "\"the quick brown fox jumps over\"",
         "\"the quick brown fox jumps over the\"",
+        "\"the quick brown fox jumps over\"",
         "\"the quick brown fox jumps\"",
         "\"the quick brown fox\"",
         "\"the quick brown\"",
@@ -467,19 +465,17 @@ fn test_exactness_simple_reversed() {
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 8, 7, 6, 5, 4, 3, 2, 1]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 8, 3, 4, 5, 6, 7]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
         "\"the quick brown fox jumps over the lazy dog\"",
         "\"quick brown fox jumps over the lazy dog\"",
-        "\"brown fox jumps over the lazy dog\"",
-        "\"fox jumps over the lazy dog\"",
-        "\"jumps over the lazy dog\"",
-        "\"over the lazy dog\"",
         "\"the lazy dog\"",
-        "\"lazy dog\"",
-        "\"dog\"",
+        "\"over the lazy dog\"",
+        "\"jumps over the lazy dog\"",
+        "\"fox jumps over the lazy dog\"",
+        "\"brown fox jumps over the lazy dog\"",
     ]
     "###);
 
@@ -487,19 +483,17 @@ fn test_exactness_simple_reversed() {
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 8, 7, 6, 5, 4, 3, 2, 1]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 8, 3, 4, 5, 6, 7]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
         "\"the quick brown fox jumps over the lazy dog\"",
         "\"quick brown fox jumps over the lazy dog\"",
-        "\"brown fox jumps over the lazy dog\"",
-        "\"fox jumps over the lazy dog\"",
-        "\"jumps over the lazy dog\"",
-        "\"over the lazy dog\"",
         "\"the lazy dog\"",
-        "\"lazy dog\"",
-        "\"dog\"",
+        "\"over the lazy dog\"",
+        "\"jumps over the lazy dog\"",
+        "\"fox jumps over the lazy dog\"",
+        "\"brown fox jumps over the lazy dog\"",
     ]
     "###);
 }
@@ -514,18 +508,16 @@ fn test_exactness_simple_random() {
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[8, 7, 5, 6, 3, 4, 1, 2]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[8, 7, 4, 6, 3, 5]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
         "\"the jumps dog quick over brown lazy fox\"",
         "\"the dog brown over jumps quick lazy\"",
-        "\"fox the lazy dog brown\"",
+        "\"jump dog quick the\"",
         "\"jump fox quick lazy the dog\"",
         "\"brown the lazy\"",
-        "\"jump dog quick the\"",
-        "\"over\"",
-        "\"jump dog\"",
+        "\"fox the lazy dog brown\"",
     ]
     "###);
 }
@@ -540,17 +532,13 @@ fn test_exactness_attribute_starts_with_simple() {
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("this balcony");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 1, 0, 3, 4, 5, 6]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 1, 0]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
         "\"this balcony\"",
         "\"this balcony is overlooking the sea\"",
         "\"what a lovely view from this balcony, I love it\"",
-        "\"over looking the sea is a beautiful balcony\"",
-        "\"a beautiful balcony is overlooking the sea\"",
-        "\"overlooking the sea is a beautiful balcony, I love it\"",
-        "\"overlooking the sea is a beautiful balcony\"",
     ]
     "###);
 }
@@ -565,17 +553,14 @@ fn test_exactness_attribute_starts_with_phrase() {
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("\"overlooking the sea\" is a beautiful balcony");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6, 5, 4, 3, 1, 0, 2]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6, 5, 4, 1]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
         "\"overlooking the sea is a beautiful balcony\"",
         "\"overlooking the sea is a beautiful balcony, I love it\"",
         "\"a beautiful balcony is overlooking the sea\"",
-        "\"over looking the sea is a beautiful balcony\"",
         "\"this balcony is overlooking the sea\"",
-        "\"what a lovely view from this balcony, I love it\"",
-        "\"this balcony\"",
     ]
     "###);
 
@@ -583,7 +568,7 @@ fn test_exactness_attribute_starts_with_phrase() {
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("overlooking the sea is a beautiful balcony");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6, 5, 4, 3, 1, 0, 2, 7]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6, 5, 4, 3, 1, 7]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -592,8 +577,6 @@ fn test_exactness_attribute_starts_with_phrase() {
         "\"a beautiful balcony is overlooking the sea\"",
         "\"over looking the sea is a beautiful balcony\"",
         "\"this balcony is overlooking the sea\"",
-        "\"what a lovely view from this balcony, I love it\"",
-        "\"this balcony\"",
         "\"overlooking\"",
     ]
     "###);
@@ -609,19 +592,16 @@ fn test_exactness_all_candidates_with_typo() {
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("overlocking the sea is a beautiful balcony");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[3, 4, 5, 6, 1, 0, 2, 7]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[4, 5, 6, 1, 7]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     // "overlooking" is returned here because the term matching strategy allows it
     // but it has the worst exactness score (0 exact words)
     insta::assert_debug_snapshot!(texts, @r###"
     [
-        "\"over looking the sea is a beautiful balcony\"",
         "\"a beautiful balcony is overlooking the sea\"",
         "\"overlooking the sea is a beautiful balcony, I love it\"",
         "\"overlooking the sea is a beautiful balcony\"",
         "\"this balcony is overlooking the sea\"",
-        "\"what a lovely view from this balcony, I love it\"",
-        "\"this balcony\"",
         "\"overlooking\"",
     ]
     "###);
@@ -686,26 +666,26 @@ fn test_words_after_exactness() {
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[19, 18, 16, 17, 9, 15, 8, 14, 6, 7, 13, 5, 4, 12, 3, 2, 1, 11]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[19, 9, 18, 8, 17, 16, 6, 7, 15, 5, 14, 4, 13, 3, 12, 2, 1, 11]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
 
     insta::assert_debug_snapshot!(texts, @r###"
     [
         "\"the quick brown fox jumps over the lazy dog\"",
-        "\"the quick brown fox jumps over the lazy\"",
-        "\"the quick brown fox jumps over\"",
-        "\"the quick brown fox jumps over the\"",
         "\"the quack briwn fox jlmps over the lazy dog\"",
-        "\"the quick brown fox jumps\"",
+        "\"the quick brown fox jumps over the lazy\"",
         "\"the quack briwn fox jlmps over the lazy\"",
-        "\"the quick brown fox\"",
+        "\"the quick brown fox jumps over the\"",
+        "\"the quick brown fox jumps over\"",
         "\"the quack briwn fox jlmps over\"",
         "\"the quack briwn fox jlmps over the\"",
-        "\"the quick brown\"",
+        "\"the quick brown fox jumps\"",
         "\"the quack briwn fox jlmps\"",
+        "\"the quick brown fox\"",
         "\"the quack briwn fox\"",
-        "\"the quick\"",
+        "\"the quick brown\"",
         "\"the quack briwn\"",
+        "\"the quick\"",
         "\"the quack\"",
         "\"the\"",
         "\"the\"",
@@ -729,7 +709,7 @@ fn test_proximity_after_exactness() {
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 1, 0, 5, 4, 3, 8, 6, 7]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 1, 0, 4, 5, 8, 7, 3, 6]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
 
     insta::assert_debug_snapshot!(texts, @r###"
@@ -737,12 +717,12 @@ fn test_proximity_after_exactness() {
         "\"the quick brown fox jumps over the lazy dog\"",
         "\"the quick brown fox jumps over the very lazy dog\"",
         "\"lazy jumps dog brown quick the over fox the\"",
-        "\"the quick brown fox over the lazy dog\"",
         "\"the quick brown fox over the very lazy dog\"",
-        "\"dog brown quick the over fox the lazy\"",
+        "\"the quick brown fox over the lazy dog\"",
         "\"the quick brown fox over\"",
-        "\"brown quick the over fox\"",
         "\"the very quick brown fox over\"",
+        "\"dog brown quick the over fox the lazy\"",
+        "\"brown quick the over fox\"",
     ]
     "###);
 
