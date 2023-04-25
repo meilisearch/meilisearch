@@ -1115,9 +1115,15 @@ impl IndexScheduler {
         // /!\ the len must be at least 2 or else we might enter an infinite loop where we only delete
         //     the deletion tasks we enqueued ourselves.
         if to_delete.len() < 2 {
+            log::warn!("The task queue is almost full, but no task can be deleted yet.");
             // the only thing we can do is hope that the user tasks are going to finish
             return Ok(());
         }
+
+        log::info!(
+            "The task queue is almost full. Thus, meilisearch will delete the last {} finished tasks.",
+            to_delete.len()
+        );
 
         self.register(KindWithContent::TaskDeletion {
             query: format!(
