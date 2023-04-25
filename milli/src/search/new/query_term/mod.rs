@@ -4,6 +4,7 @@ mod parse_query;
 mod phrase;
 
 use std::collections::BTreeSet;
+use std::iter::FromIterator;
 use std::ops::RangeInclusive;
 
 use compute_derivations::partially_initialized_term_from_word;
@@ -30,6 +31,12 @@ pub struct QueryTermSubset {
     zero_typo_subset: NTypoTermSubset,
     one_typo_subset: NTypoTermSubset,
     two_typo_subset: NTypoTermSubset,
+    /// `true` if the term cannot be deleted through the term matching strategy
+    ///
+    /// Note that there are other reasons for which a term cannot be deleted, such as
+    /// being a phrase. In that case, this field could be set to `false`, but it
+    /// still wouldn't be deleteable by the term matching strategy.
+    mandatory: bool,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -114,6 +121,12 @@ impl ExactTerm {
 }
 
 impl QueryTermSubset {
+    pub fn is_mandatory(&self) -> bool {
+        self.mandatory
+    }
+    pub fn make_mandatory(&mut self) {
+        self.mandatory = true;
+    }
     pub fn exact_term(&self, ctx: &SearchContext) -> Option<ExactTerm> {
         let full_query_term = ctx.term_interner.get(self.original);
         if full_query_term.ngram_words.is_some() {
@@ -135,6 +148,7 @@ impl QueryTermSubset {
             zero_typo_subset: NTypoTermSubset::Nothing,
             one_typo_subset: NTypoTermSubset::Nothing,
             two_typo_subset: NTypoTermSubset::Nothing,
+            mandatory: false,
         }
     }
     pub fn full(for_term: Interned<QueryTerm>) -> Self {
@@ -143,6 +157,7 @@ impl QueryTermSubset {
             zero_typo_subset: NTypoTermSubset::All,
             one_typo_subset: NTypoTermSubset::All,
             two_typo_subset: NTypoTermSubset::All,
+            mandatory: false,
         }
     }
 
@@ -350,6 +365,28 @@ impl QueryTermSubset {
                 }
             }
             _ => panic!(),
+        }
+    }
+    pub fn keep_only_exact_term(&mut self, ctx: &SearchContext) {
+        if let Some(term) = self.exact_term(ctx) {
+            match term {
+                ExactTerm::Phrase(p) => {
+                    self.zero_typo_subset = NTypoTermSubset::Subset {
+                        words: BTreeSet::new(),
+                        phrases: BTreeSet::from_iter([p]),
+                    };
+                    self.clear_one_typo_subset();
+                    self.clear_two_typo_subset();
+                }
+                ExactTerm::Word(w) => {
+                    self.zero_typo_subset = NTypoTermSubset::Subset {
+                        words: BTreeSet::from_iter([w]),
+                        phrases: BTreeSet::new(),
+                    };
+                    self.clear_one_typo_subset();
+                    self.clear_two_typo_subset();
+                }
+            }
         }
     }
     pub fn clear_zero_typo_subset(&mut self) {

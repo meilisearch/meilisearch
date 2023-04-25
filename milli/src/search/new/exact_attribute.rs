@@ -91,6 +91,12 @@ impl State {
         universe: &RoaringBitmap,
         query_graph: &QueryGraph,
     ) -> Result<Self> {
+        // An ordered list of the (remaining) query terms, with data extracted from them:
+        // 0. exact subterm. If it doesn't exist, the term is skipped.
+        // 1. start position of the term
+        // 2. id of the term
+        let mut count_all_positions = 0;
+
         let mut exact_term_position_ids: Vec<(ExactTerm, u16, u8)> =
             Vec::with_capacity(query_graph.nodes.len() as usize);
         for (_, node) in query_graph.nodes.iter() {
@@ -101,6 +107,7 @@ impl State {
                     } else {
                         continue;
                     };
+                    count_all_positions += term.positions.len();
                     exact_term_position_ids.push((
                         exact_term,
                         *term.positions.start(),
@@ -195,13 +202,15 @@ impl State {
             if !intersection.is_empty() {
                 // TODO: although not really worth it in terms of performance,
                 // if would be good to put this in cache for the sake of consistency
-                let candidates_with_exact_word_count = ctx
-                    .index
-                    .field_id_word_count_docids
-                    .get(ctx.txn, &(fid, exact_term_position_ids.len() as u8))?
-                    .unwrap_or_default();
-                // TODO: consider if we must store the candidates as arrays, or if there is a way to perform the union
-                // here.
+                let candidates_with_exact_word_count = if count_all_positions < u8::MAX as usize {
+                    ctx.index
+                        .field_id_word_count_docids
+                        .get(ctx.txn, &(fid, count_all_positions as u8))?
+                        .unwrap_or_default()
+                } else {
+                    RoaringBitmap::default()
+                };
+
                 candidates_per_attribute.push(FieldCandidates {
                     start_with_exact: intersection,
                     exact_word_count: candidates_with_exact_word_count,

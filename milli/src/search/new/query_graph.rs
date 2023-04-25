@@ -310,11 +310,11 @@ impl QueryGraph {
             rank as u16
         };
         let mut nodes_to_remove = BTreeMap::<u16, SmallBitmap<QueryNode>>::new();
-        let mut at_least_one_phrase = false;
+        let mut at_least_one_mandatory_term = false;
         for (node_id, node) in self.nodes.iter() {
             let QueryNodeData::Term(t) = &node.data else { continue };
-            if t.term_subset.original_phrase(ctx).is_some() {
-                at_least_one_phrase = true;
+            if t.term_subset.original_phrase(ctx).is_some() || t.term_subset.is_mandatory() {
+                at_least_one_mandatory_term = true;
                 continue;
             }
             let mut cost = 0;
@@ -327,7 +327,7 @@ impl QueryGraph {
                 .insert(node_id);
         }
         let mut res: Vec<_> = nodes_to_remove.into_values().collect();
-        if !at_least_one_phrase {
+        if !at_least_one_mandatory_term {
             res.pop();
         }
         res

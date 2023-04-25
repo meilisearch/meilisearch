@@ -14,6 +14,11 @@ This module tests the following properties about the exactness ranking rule:
     1. those that have an attribute which is equal to the whole remaining query, if this query does not have any "gap"
     2. those that have an attribute which start with the whole remaining query, if this query does not have any "gap"
     3. those that contain the most exact words from the remaining query
+
+- if it is followed by other ranking rules, then:
+    1. `word` will not remove the exact terms matched by `exactness`
+    2. graph-based ranking rules (`typo`, `proximity`, `attribute`) will only work with
+       (1) the exact terms selected by `exactness` or (2) the full query term otherwise
 */
 
 use crate::{
@@ -21,7 +26,7 @@ use crate::{
     SearchResult, TermsMatchingStrategy,
 };
 
-fn create_index_exact_words_simple_ordered() -> TempIndex {
+fn create_index_simple_ordered() -> TempIndex {
     let index = TempIndex::new();
 
     index
@@ -80,7 +85,7 @@ fn create_index_exact_words_simple_ordered() -> TempIndex {
     index
 }
 
-fn create_index_exact_words_simple_reversed() -> TempIndex {
+fn create_index_simple_reversed() -> TempIndex {
     let index = TempIndex::new();
 
     index
@@ -138,7 +143,7 @@ fn create_index_exact_words_simple_reversed() -> TempIndex {
     index
 }
 
-fn create_index_exact_words_simple_random() -> TempIndex {
+fn create_index_simple_random() -> TempIndex {
     let index = TempIndex::new();
 
     index
@@ -242,9 +247,192 @@ fn create_index_attribute_starts_with() -> TempIndex {
     index
 }
 
+fn create_index_simple_ordered_with_typos() -> TempIndex {
+    let index = TempIndex::new();
+
+    index
+        .update_settings(|s| {
+            s.set_primary_key("id".to_owned());
+            s.set_searchable_fields(vec!["text".to_owned()]);
+            s.set_criteria(vec![Criterion::Exactness]);
+        })
+        .unwrap();
+
+    index
+        .add_documents(documents!([
+            {
+                "id": 0,
+                "text": "",
+            },
+            {
+                "id": 1,
+                "text": "the",
+            },
+            {
+                "id": 2,
+                "text": "the quack",
+            },
+            {
+                "id": 3,
+                "text": "the quack briwn",
+            },
+            {
+                "id": 4,
+                "text": "the quack briwn fox",
+            },
+            {
+                "id": 5,
+                "text": "the quack briwn fox jlmps",
+            },
+            {
+                "id": 6,
+                "text": "the quack briwn fox jlmps over",
+            },
+            {
+                "id": 7,
+                "text": "the quack briwn fox jlmps over the",
+            },
+            {
+                "id": 8,
+                "text": "the quack briwn fox jlmps over the lazy",
+            },
+            {
+                "id": 9,
+                "text": "the quack briwn fox jlmps over the lazy dog",
+            },
+            {
+                "id": 10,
+                "text": "",
+            },
+            {
+                "id": 11,
+                "text": "the",
+            },
+            {
+                "id": 12,
+                "text": "the quick",
+            },
+            {
+                "id": 13,
+                "text": "the quick brown",
+            },
+            {
+                "id": 14,
+                "text": "the quick brown fox",
+            },
+            {
+                "id": 15,
+                "text": "the quick brown fox jumps",
+            },
+
+            {
+                "id": 16,
+                "text": "the quick brown fox jumps over",
+            },
+            {
+                "id": 17,
+                "text": "the quick brown fox jumps over the",
+            },
+            {
+                "id": 18,
+                "text": "the quick brown fox jumps over the lazy",
+            },
+            {
+                "id": 19,
+                "text": "the quick brown fox jumps over the lazy dog",
+            },
+        ]))
+        .unwrap();
+    index
+}
+
+fn create_index_with_varying_proximities() -> TempIndex {
+    let index = TempIndex::new();
+
+    index
+        .update_settings(|s| {
+            s.set_primary_key("id".to_owned());
+            s.set_searchable_fields(vec!["text".to_owned()]);
+            s.set_criteria(vec![Criterion::Exactness, Criterion::Words, Criterion::Proximity]);
+        })
+        .unwrap();
+
+    index
+        .add_documents(documents!([
+            {
+                "id": 0,
+                "text": "lazy jumps dog brown quick the over fox the",
+            },
+            {
+                "id": 1,
+                "text": "the quick brown fox jumps over the very lazy dog"
+            },
+            {
+                "id": 2,
+                "text": "the quick brown fox jumps over the lazy dog",
+            },
+            {
+                "id": 3,
+                "text": "dog brown quick the over fox the lazy",
+            },
+            {
+                "id": 4,
+                "text": "the quick brown fox over the very lazy dog"
+            },
+            {
+                "id": 5,
+                "text": "the quick brown fox over the lazy dog",
+            },
+            {
+                "id": 6,
+                "text": "brown quick the over fox",
+            },
+            {
+                "id": 7,
+                "text": "the very quick brown fox over"
+            },
+            {
+                "id": 8,
+                "text": "the quick brown fox over",
+            },
+        ]))
+        .unwrap();
+    index
+}
+
+fn create_index_all_equal_except_proximity_between_ignored_terms() -> TempIndex {
+    let index = TempIndex::new();
+
+    index
+        .update_settings(|s| {
+            s.set_primary_key("id".to_owned());
+            s.set_searchable_fields(vec!["text".to_owned()]);
+            s.set_criteria(vec![Criterion::Exactness, Criterion::Words, Criterion::Proximity]);
+        })
+        .unwrap();
+
+    index
+        .add_documents(documents!([
+            {
+                "id": 0,
+                "text": "lazy jumps dog brown quick the over fox the"
+            },
+            {
+                "id": 1,
+                "text": "lazy jumps dog brown quick the over fox the. quack briwn jlmps",
+            },
+            {
+                "id": 2,
+                "text": "lazy jumps dog brown quick the over fox the. quack briwn jlmps overt",
+            },
+        ]))
+        .unwrap();
+    index
+}
+
 #[test]
 fn test_exactness_simple_ordered() {
-    let index = create_index_exact_words_simple_ordered();
+    let index = create_index_simple_ordered();
 
     let txn = index.read_txn().unwrap();
 
@@ -271,7 +459,7 @@ fn test_exactness_simple_ordered() {
 
 #[test]
 fn test_exactness_simple_reversed() {
-    let index = create_index_exact_words_simple_reversed();
+    let index = create_index_simple_reversed();
 
     let txn = index.read_txn().unwrap();
 
@@ -318,7 +506,7 @@ fn test_exactness_simple_reversed() {
 
 #[test]
 fn test_exactness_simple_random() {
-    let index = create_index_exact_words_simple_random();
+    let index = create_index_simple_random();
 
     let txn = index.read_txn().unwrap();
 
@@ -377,13 +565,12 @@ fn test_exactness_attribute_starts_with_phrase() {
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("\"overlooking the sea\" is a beautiful balcony");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[5, 6, 4, 3, 1, 0, 2]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6, 5, 4, 3, 1, 0, 2]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
-    // TODO: this is incorrect, the first document returned here should actually be the second one
     insta::assert_debug_snapshot!(texts, @r###"
     [
-        "\"overlooking the sea is a beautiful balcony, I love it\"",
         "\"overlooking the sea is a beautiful balcony\"",
+        "\"overlooking the sea is a beautiful balcony, I love it\"",
         "\"a beautiful balcony is overlooking the sea\"",
         "\"over looking the sea is a beautiful balcony\"",
         "\"this balcony is overlooking the sea\"",
@@ -398,7 +585,6 @@ fn test_exactness_attribute_starts_with_phrase() {
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6, 5, 4, 3, 1, 0, 2, 7]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
-    // TODO: this is correct, so the exactness ranking rule probably has a bug in the handling of phrases
     insta::assert_debug_snapshot!(texts, @r###"
     [
         "\"overlooking the sea is a beautiful balcony\"",
@@ -437,6 +623,151 @@ fn test_exactness_all_candidates_with_typo() {
         "\"what a lovely view from this balcony, I love it\"",
         "\"this balcony\"",
         "\"overlooking\"",
+    ]
+    "###);
+}
+
+#[test]
+fn test_exactness_after_words() {
+    let index = create_index_simple_ordered_with_typos();
+
+    index
+        .update_settings(|s| {
+            s.set_criteria(vec![Criterion::Words, Criterion::Exactness]);
+        })
+        .unwrap();
+
+    let txn = index.read_txn().unwrap();
+
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::Last);
+    s.query("the quick brown fox jumps over the lazy dog");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[19, 9, 18, 8, 17, 16, 6, 7, 15, 5, 14, 4, 13, 3, 12, 2, 1, 11]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+        "\"the quack briwn fox jlmps over the lazy dog\"",
+        "\"the quick brown fox jumps over the lazy\"",
+        "\"the quack briwn fox jlmps over the lazy\"",
+        "\"the quick brown fox jumps over the\"",
+        "\"the quick brown fox jumps over\"",
+        "\"the quack briwn fox jlmps over\"",
+        "\"the quack briwn fox jlmps over the\"",
+        "\"the quick brown fox jumps\"",
+        "\"the quack briwn fox jlmps\"",
+        "\"the quick brown fox\"",
+        "\"the quack briwn fox\"",
+        "\"the quick brown\"",
+        "\"the quack briwn\"",
+        "\"the quick\"",
+        "\"the quack\"",
+        "\"the\"",
+        "\"the\"",
+    ]
+    "###);
+}
+
+#[test]
+fn test_words_after_exactness() {
+    let index = create_index_simple_ordered_with_typos();
+
+    index
+        .update_settings(|s| {
+            s.set_criteria(vec![Criterion::Exactness, Criterion::Words]);
+        })
+        .unwrap();
+
+    let txn = index.read_txn().unwrap();
+
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::Last);
+    s.query("the quick brown fox jumps over the lazy dog");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[19, 18, 16, 17, 9, 15, 8, 14, 6, 7, 13, 5, 4, 12, 3, 2, 1, 11]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+        "\"the quick brown fox jumps over the lazy\"",
+        "\"the quick brown fox jumps over\"",
+        "\"the quick brown fox jumps over the\"",
+        "\"the quack briwn fox jlmps over the lazy dog\"",
+        "\"the quick brown fox jumps\"",
+        "\"the quack briwn fox jlmps over the lazy\"",
+        "\"the quick brown fox\"",
+        "\"the quack briwn fox jlmps over\"",
+        "\"the quack briwn fox jlmps over the\"",
+        "\"the quick brown\"",
+        "\"the quack briwn fox jlmps\"",
+        "\"the quack briwn fox\"",
+        "\"the quick\"",
+        "\"the quack briwn\"",
+        "\"the quack\"",
+        "\"the\"",
+        "\"the\"",
+    ]
+    "###);
+}
+
+#[test]
+fn test_proximity_after_exactness() {
+    let index = create_index_with_varying_proximities();
+
+    index
+        .update_settings(|s| {
+            s.set_criteria(vec![Criterion::Exactness, Criterion::Words, Criterion::Proximity]);
+        })
+        .unwrap();
+
+    let txn = index.read_txn().unwrap();
+
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::Last);
+    s.query("the quick brown fox jumps over the lazy dog");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 1, 0, 5, 4, 3, 8, 6, 7]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+        "\"the quick brown fox jumps over the very lazy dog\"",
+        "\"lazy jumps dog brown quick the over fox the\"",
+        "\"the quick brown fox over the lazy dog\"",
+        "\"the quick brown fox over the very lazy dog\"",
+        "\"dog brown quick the over fox the lazy\"",
+        "\"the quick brown fox over\"",
+        "\"brown quick the over fox\"",
+        "\"the very quick brown fox over\"",
+    ]
+    "###);
+
+    let index = create_index_all_equal_except_proximity_between_ignored_terms();
+
+    index
+        .update_settings(|s| {
+            s.set_criteria(vec![Criterion::Exactness, Criterion::Words, Criterion::Proximity]);
+        })
+        .unwrap();
+
+    let txn = index.read_txn().unwrap();
+
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::Last);
+    s.query("the quick brown fox jumps over the lazy dog");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1, 2]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"lazy jumps dog brown quick the over fox the\"",
+        "\"lazy jumps dog brown quick the over fox the. quack briwn jlmps\"",
+        "\"lazy jumps dog brown quick the over fox the. quack briwn jlmps overt\"",
     ]
     "###);
 }

@@ -34,7 +34,7 @@ fn compute_docids(
             }
         }
     };
-    // TODO: synonyms?
+
     candidates &= universe;
     Ok(candidates)
 }
@@ -47,18 +47,21 @@ impl RankingRuleGraphTrait for ExactnessGraph {
         condition: &Self::Condition,
         universe: &RoaringBitmap,
     ) -> Result<ComputedCondition> {
-        let (docids, dest_node) = match condition {
+        let (docids, end_term_subset) = match condition {
             ExactnessCondition::ExactInAttribute(dest_node) => {
-                (compute_docids(ctx, dest_node, universe)?, dest_node)
+                let mut end_term_subset = dest_node.clone();
+                end_term_subset.term_subset.keep_only_exact_term(ctx);
+                end_term_subset.term_subset.make_mandatory();
+                (compute_docids(ctx, dest_node, universe)?, end_term_subset)
             }
-            ExactnessCondition::Skip(dest_node) => (universe.clone(), dest_node),
+            ExactnessCondition::Skip(dest_node) => (universe.clone(), dest_node.clone()),
         };
+
         Ok(ComputedCondition {
             docids,
             universe_len: universe.len(),
             start_term_subset: None,
-            // TODO/FIXME:  modify `end_term_subset` to signal to the next ranking rules that the term cannot be removed
-            end_term_subset: dest_node.clone(),
+            end_term_subset,
         })
     }
 

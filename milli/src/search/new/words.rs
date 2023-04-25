@@ -33,7 +33,7 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for Words {
         &mut self,
         ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<QueryGraph>,
-        _parent_candidates: &RoaringBitmap,
+        _universe: &RoaringBitmap,
         parent_query_graph: &QueryGraph,
     ) -> Result<()> {
         self.exhausted = false;
@@ -77,7 +77,6 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for Words {
             let nodes_to_remove = self.nodes_to_remove.pop().unwrap();
             query_graph.remove_nodes_keep_edges(&nodes_to_remove.iter().collect::<Vec<_>>());
         }
-
         Ok(Some(RankingRuleOutput { query: child_query_graph, candidates: this_bucket }))
     }
 

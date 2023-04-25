@@ -165,8 +165,8 @@ pub fn compute_query_graph_docids(
                 positions: _,
                 term_ids: _,
             }) => {
-                let phrase_docids = compute_query_term_subset_docids(ctx, term_subset)?;
-                predecessors_docids & phrase_docids
+                let node_docids = compute_query_term_subset_docids(ctx, term_subset)?;
+                predecessors_docids & node_docids
             }
             QueryNodeData::Deleted => {
                 panic!()
