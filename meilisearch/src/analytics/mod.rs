@@ -25,6 +25,8 @@ pub type SegmentAnalytics = mock_analytics::MockAnalytics;
 pub type SearchAggregator = mock_analytics::SearchAggregator;
 #[cfg(any(debug_assertions, not(feature = "analytics")))]
 pub type MultiSearchAggregator = mock_analytics::MultiSearchAggregator;
+#[cfg(any(debug_assertions, not(feature = "analytics")))]
+pub type FacetSearchAggregator = mock_analytics::FacetSearchAggregator;
 
 // if we are in release mode and the feature analytics was enabled
 // we use the real analytics
@@ -34,6 +36,8 @@ pub type SegmentAnalytics = segment_analytics::SegmentAnalytics;
 pub type SearchAggregator = segment_analytics::SearchAggregator;
 #[cfg(all(not(debug_assertions), feature = "analytics"))]
 pub type MultiSearchAggregator = segment_analytics::MultiSearchAggregator;
+#[cfg(all(not(debug_assertions), feature = "analytics"))]
+pub type FacetSearchAggregator = segment_analytics::FacetSearchAggregator;
 
 /// The Meilisearch config dir:
 /// `~/.config/Meilisearch` on *NIX or *BSD.
@@ -80,6 +84,9 @@ pub trait Analytics: Sync + Send {
 
     /// This method should be called to aggregate a post array of searches
     fn post_multi_search(&self, aggregate: MultiSearchAggregator);
+
+    /// This method should be called to aggregate post facet values searches
+    fn post_facet_search(&self, aggregate: FacetSearchAggregator);
 
     // this method should be called to aggregate a add documents request
     fn add_documents(
