@@ -21,7 +21,7 @@ static LEVDIST1: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(1, true));
 static LEVDIST2: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(2, true));
 
 /// The maximum number of facets returned by the facet search route.
-const MAX_NUMBER_OF_FACETS: usize = 1000;
+const MAX_NUMBER_OF_FACETS: usize = 100;
 
 pub mod facet;
 mod fst_utils;
