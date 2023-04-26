@@ -119,7 +119,7 @@ pub async fn search(
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
-    let mut query = params.into_inner();
+    let query = params.into_inner();
     debug!("facet search called with params: {:?}", query);
 
     let facet_query = query.facet_query.clone();
