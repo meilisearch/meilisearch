@@ -330,6 +330,8 @@ pub fn execute_search(
         ctx.index.documents_ids(ctx.txn)?
     };
 
+    check_sort_criteria(ctx, sort_criteria.as_ref())?;
+
     let mut located_query_terms = None;
     let bucket_sort_output = if let Some(query) = query {
         // We make sure that the analyzer is aware of the stop words
@@ -351,8 +353,6 @@ pub fn execute_search(
         let query_terms = located_query_terms_from_string(ctx, tokens, words_limit)?;
         let graph = QueryGraph::from_query(ctx, &query_terms)?;
         located_query_terms = Some(query_terms);
-
-        check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
         let ranking_rules =
             get_ranking_rules_for_query_graph_search(ctx, sort_criteria, terms_matching_strategy)?;
