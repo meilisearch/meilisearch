@@ -38,6 +38,18 @@ impl MultiSearchAggregator {
     pub fn succeed(&mut self) {}
 }
 
+#[derive(Default)]
+pub struct FacetSearchAggregator;
+
+#[allow(dead_code)]
+impl FacetSearchAggregator {
+    pub fn from_query(_: &dyn Any, _: &dyn Any) -> Self {
+        Self::default()
+    }
+
+    pub fn succeed(&mut self, _: &dyn Any) {}
+}
+
 impl MockAnalytics {
     #[allow(clippy::new_ret_no_self)]
     pub fn new(opt: &Opt) -> Arc<dyn Analytics> {
@@ -56,6 +68,7 @@ impl Analytics for MockAnalytics {
     fn get_search(&self, _aggregate: super::SearchAggregator) {}
     fn post_search(&self, _aggregate: super::SearchAggregator) {}
     fn post_multi_search(&self, _aggregate: super::MultiSearchAggregator) {}
+    fn post_facet_search(&self, _aggregate: super::FacetSearchAggregator) {}
     fn add_documents(
         &self,
         _documents_query: &UpdateDocumentsQuery,
