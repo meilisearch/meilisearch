@@ -1131,7 +1131,7 @@ impl IndexScheduler {
         }
 
         log::info!(
-            "The task queue is almost full. Thus, meilisearch will delete the last {} finished tasks.",
+            "The task queue is almost full. Deleting the oldest {} finished tasks.",
             to_delete.len()
         );
 
