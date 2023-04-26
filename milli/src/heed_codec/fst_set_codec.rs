@@ -18,6 +18,6 @@ impl<'a> BytesDecode<'a> for FstSetCodec {
     type DItem = Set<&'a [u8]>;
 
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-        Some(Set::new(bytes).ok()?)
+        Set::new(bytes).ok()
     }
 }

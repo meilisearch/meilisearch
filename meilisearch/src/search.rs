@@ -315,7 +315,7 @@ fn prepare_search<'t>(
     query: &'t SearchQuery,
     features: RoFeatures,
 ) -> Result<(milli::Search<'t>, bool, usize, usize), MeilisearchHttpError> {
-    let mut search = index.search(&rtxn);
+    let mut search = index.search(rtxn);
 
     if query.vector.is_some() && query.q.is_some() {
         warn!("Ignoring the query string `q` when used with the `vector` parameter.");
@@ -337,7 +337,7 @@ fn prepare_search<'t>(
     search.terms_matching_strategy(query.matching_strategy.into());
 
     let max_total_hits = index
-        .pagination_max_total_hits(&rtxn)
+        .pagination_max_total_hits(rtxn)
         .map_err(milli::Error::from)?
         .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
 
