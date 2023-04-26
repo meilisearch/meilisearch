@@ -398,6 +398,44 @@ fn create_index_with_varying_proximities() -> TempIndex {
     index
 }
 
+fn create_index_with_typo_and_prefix() -> TempIndex {
+    let index = TempIndex::new();
+
+    index
+        .update_settings(|s| {
+            s.set_primary_key("id".to_owned());
+            s.set_searchable_fields(vec!["text".to_owned()]);
+            s.set_criteria(vec![Criterion::Exactness]);
+        })
+        .unwrap();
+
+    index
+        .add_documents(documents!([
+            {
+                "id": 0,
+                "text": "exPraordinarily quick brown fox",
+            },
+            {
+                "id": 1,
+                "text": "extraordinarily quick brown fox",
+            },
+            {
+                "id": 2,
+                "text": "extra quick brown fox",
+            },
+            {
+                "id": 3,
+                "text": "exPraordinarily quack brown fox",
+            },
+            {
+                "id": 4,
+                "text": "exPraordinaPily quick brown fox",
+            }
+        ]))
+        .unwrap();
+    index
+}
+
 fn create_index_all_equal_except_proximity_between_ignored_terms() -> TempIndex {
     let index = TempIndex::new();
 
@@ -748,6 +786,65 @@ fn test_proximity_after_exactness() {
         "\"lazy jumps dog brown quick the over fox the\"",
         "\"lazy jumps dog brown quick the over fox the. quack briwn jlmps\"",
         "\"lazy jumps dog brown quick the over fox the. quack briwn jlmps overt\"",
+    ]
+    "###);
+}
+
+#[test]
+fn test_exactness_followed_by_typo_prefer_no_typo_prefix() {
+    let index = create_index_with_typo_and_prefix();
+
+    index
+        .update_settings(|s| {
+            s.set_criteria(vec![Criterion::Exactness, Criterion::Words, Criterion::Typo]);
+        })
+        .unwrap();
+
+    let txn = index.read_txn().unwrap();
+
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::Last);
+    s.query("quick brown fox extra");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 1, 0, 4, 3]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"extra quick brown fox\"",
+        "\"extraordinarily quick brown fox\"",
+        "\"exPraordinarily quick brown fox\"",
+        "\"exPraordinaPily quick brown fox\"",
+        "\"exPraordinarily quack brown fox\"",
+    ]
+    "###);
+}
+
+#[test]
+fn test_typo_followed_by_exactness() {
+    let index = create_index_with_typo_and_prefix();
+
+    index
+        .update_settings(|s| {
+            s.set_criteria(vec![Criterion::Words, Criterion::Typo, Criterion::Exactness]);
+        })
+        .unwrap();
+
+    let txn = index.read_txn().unwrap();
+
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::Last);
+    s.query("extraordinarily quick brown fox");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[1, 0, 4, 3]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"extraordinarily quick brown fox\"",
+        "\"exPraordinarily quick brown fox\"",
+        "\"exPraordinaPily quick brown fox\"",
+        "\"exPraordinarily quack brown fox\"",
     ]
     "###);
 }
