@@ -122,6 +122,16 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
         }
     )]
     InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String> },
+    #[error("Attribute `{}` is not filterable. {}",
+        .field,
+        match .valid_fields.is_empty() {
+            true => "This index does not have configured filterable attributes.".to_string(),
+            false => format!("Available filterable attributes are: `{}`.",
+                    valid_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
+                ),
+        }
+    )]
+    InvalidSearchFacet { field: String, valid_fields: BTreeSet<String> },
     #[error("{}", HeedError::BadOpenOptions)]
     InvalidLmdbOpenOptions,
     #[error("The sort ranking rule must be specified in the ranking rules settings to use the sort parameter at search time.")]

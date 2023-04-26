@@ -472,8 +472,7 @@ impl<'a> SearchForFacetValue<'a> {
 
         let filterable_fields = index.filterable_fields(rtxn)?;
         if !filterable_fields.contains(&self.facet) {
-            // TODO create a new type of error
-            return Err(UserError::InvalidSortableAttribute {
+            return Err(UserError::InvalidSearchFacet {
                 field: self.facet.clone(),
                 valid_fields: filterable_fields.into_iter().collect(),
             })?;
