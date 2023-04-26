@@ -242,11 +242,14 @@ InvalidSearchMatchingStrategy         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchOffset                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchPage                     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchQ                        , InvalidRequest       , BAD_REQUEST ;
+InvalidFacetSearchQuery               , InvalidRequest       , BAD_REQUEST ;
+InvalidFacetSearchName                , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchVector                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowMatchesPosition      , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowRankingScore         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowRankingScoreDetails  , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchSort                     , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchFacet                    , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDisplayedAttributes    , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDistinctAttribute      , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFaceting               , InvalidRequest       , BAD_REQUEST ;
@@ -340,6 +343,7 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidSearchableAttribute { .. } => {
                         Code::InvalidAttributesToSearchOn
                     }
+                    UserError::InvalidSearchFacet { .. } => Code::InvalidSearchFacet,
                     UserError::CriterionError(_) => Code::InvalidSettingsRankingRules,
                     UserError::InvalidGeoField { .. } => Code::InvalidDocumentGeoField,
                     UserError::InvalidVectorDimensions { .. } => Code::InvalidVectorDimensions,
