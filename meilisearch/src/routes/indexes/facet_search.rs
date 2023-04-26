@@ -28,9 +28,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[derive(Debug, Clone, Default, PartialEq, Eq, deserr::Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct FacetSearchQuery {
-    #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
+    #[deserr(default, error = DeserrJsonError<InvalidFacetSearchQuery>)]
     pub facet_query: Option<String>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
+    #[deserr(error = DeserrJsonError<InvalidFacetSearchName>)]
     pub facet_name: String,
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
