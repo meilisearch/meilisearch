@@ -458,25 +458,25 @@ pub struct SearchForFacetValue<'a> {
 }
 
 impl<'a> SearchForFacetValue<'a> {
-    fn new(facet: String, search_query: Search<'a>) -> SearchForFacetValue<'a> {
+    pub fn new(facet: String, search_query: Search<'a>) -> SearchForFacetValue<'a> {
         SearchForFacetValue { query: None, facet, search_query }
     }
 
-    fn query(&mut self, query: impl Into<String>) -> &mut Self {
+    pub fn query(&mut self, query: impl Into<String>) -> &mut Self {
         self.query = Some(query.into());
         self
     }
 
-    fn execute(&self) -> Result<Vec<FacetSearchResult>> {
+    pub fn execute(&self) -> Result<Vec<FacetSearchResult>> {
         let index = self.search_query.index;
         let rtxn = self.search_query.rtxn;
 
-        let sortable_fields = index.sortable_fields(rtxn)?;
-        if !sortable_fields.contains(&self.facet) {
+        let filterable_fields = index.filterable_fields(rtxn)?;
+        if !filterable_fields.contains(&self.facet) {
             // TODO create a new type of error
             return Err(UserError::InvalidSortableAttribute {
                 field: self.facet.clone(),
-                valid_fields: sortable_fields.into_iter().collect(),
+                valid_fields: filterable_fields.into_iter().collect(),
             })?;
         }
 
