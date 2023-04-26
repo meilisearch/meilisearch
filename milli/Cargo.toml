@@ -91,4 +91,4 @@ korean = ["charabia/korean"]
 thai = ["charabia/thai"]
 
 # allow greek specialized tokenization
-greek = []
+greek = ["charabia/greek"]

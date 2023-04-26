@@ -113,6 +113,7 @@ chinese = ["meilisearch-types/chinese"]
 hebrew = ["meilisearch-types/hebrew"]
 japanese = ["meilisearch-types/japanese"]
 thai = ["meilisearch-types/thai"]
+greek = ["meilisearch-types/greek"]
 
 [package.metadata.mini-dashboard]
 assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.7/build.zip"
