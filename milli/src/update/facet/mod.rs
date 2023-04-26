@@ -163,7 +163,7 @@ impl<'i> FacetsUpdate<'i> {
         let mut text_fsts = vec![];
         let mut current_fst: Option<(u16, fst::SetBuilder<Vec<u8>>)> = None;
         let database = self.index.facet_id_string_docids.remap_data_type::<DecodeIgnore>();
-        for result in database.iter(&wtxn)? {
+        for result in database.iter(wtxn)? {
             let (facet_group_key, _) = result?;
             if let FacetGroupKey { field_id, level: 0, left_bound } = facet_group_key {
                 current_fst = match current_fst.take() {
