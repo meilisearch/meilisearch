@@ -91,13 +91,14 @@ impl State {
         universe: &RoaringBitmap,
         query_graph: &QueryGraph,
     ) -> Result<Self> {
-        // An ordered list of the (remaining) query terms, with data extracted from them:
-        // 0. exact subterm. If it doesn't exist, the term is skipped.
-        // 1. start position of the term
-        // 2. id of the term
-        let mut count_all_positions = 0;
+        struct ExactTermInfo {
+            exact_term: ExactTerm,
+            start_position: u16,
+            start_term_id: u8,
+            position_count: usize,
+        }
 
-        let mut exact_term_position_ids: Vec<(ExactTerm, u16, u8)> =
+        let mut exact_terms: Vec<ExactTermInfo> =
             Vec::with_capacity(query_graph.nodes.len() as usize);
         for (_, node) in query_graph.nodes.iter() {
             match &node.data {
@@ -107,34 +108,35 @@ impl State {
                     } else {
                         continue;
                     };
-                    count_all_positions += term.positions.len();
-                    exact_term_position_ids.push((
+                    exact_terms.push(ExactTermInfo {
                         exact_term,
-                        *term.positions.start(),
-                        *term.term_ids.start(),
-                    ))
+                        start_position: *term.positions.start(),
+                        start_term_id: *term.term_ids.start(),
+                        position_count: term.positions.len(),
+                    });
                 }
                 QueryNodeData::Deleted | QueryNodeData::Start | QueryNodeData::End => continue,
             }
         }
 
-        exact_term_position_ids.sort_by_key(|(_, _, id)| *id);
-        exact_term_position_ids.dedup_by_key(|(_, _, id)| *id);
+        exact_terms.sort_by_key(|x| x.start_term_id);
+        exact_terms.dedup_by_key(|x| x.start_term_id);
+        let count_all_positions = exact_terms.iter().fold(0, |acc, x| acc + x.position_count);
 
         // bail if there is a "hole" (missing word) in remaining query graph
-        if let Some((_, _, first_id)) = exact_term_position_ids.first() {
-            if *first_id != 0 {
+        if let Some(e) = exact_terms.first() {
+            if e.start_term_id != 0 {
                 return Ok(State::Empty(query_graph.clone()));
             }
         } else {
             return Ok(State::Empty(query_graph.clone()));
         }
         let mut previous_id = 0;
-        for (_, _, id) in exact_term_position_ids.iter().copied() {
-            if id < previous_id || id - previous_id > 1 {
+        for e in exact_terms.iter() {
+            if e.start_term_id < previous_id || e.start_term_id - previous_id > 1 {
                 return Ok(State::Empty(query_graph.clone()));
             } else {
-                previous_id = id;
+                previous_id = e.start_term_id;
             }
         }
 
@@ -147,10 +149,9 @@ impl State {
         // first check that for each term, there exists some attribute that has this term at the correct position
         //"word-position-docids";
         let mut candidates = universe.clone();
-        let words_positions: Vec<(Vec<_>, _)> = exact_term_position_ids
+        let words_positions: Vec<(Vec<_>, _)> = exact_terms
             .iter()
-            .copied()
-            .map(|(term, position, _)| (term.interned_words(ctx).collect(), position))
+            .map(|e| (e.exact_term.interned_words(ctx).collect(), e.start_position))
             .collect();
         for (words, position) in &words_positions {
             if candidates.is_empty() {
