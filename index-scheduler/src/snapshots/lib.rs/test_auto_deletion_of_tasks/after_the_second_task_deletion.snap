@@ -1,44 +1,68 @@
 ---
 source: index-scheduler/src/lib.rs
 ---
-### Autobatching Enabled = true
-### Processing Tasks:
-[]
-----------------------------------------------------------------------
-### All Tasks:
-3 {uid: 3, status: enqueued, details: { primary_key: None }, kind: IndexCreation { index_uid: "doggo", primary_key: None }}
-5 {uid: 5, status: succeeded, details: { matched_tasks: 2, deleted_tasks: Some(2), original_filter: "?from=4,limit=2,status=succeeded,failed,canceled" }, kind: TaskDeletion { query: "?from=4,limit=2,status=succeeded,failed,canceled", tasks: RoaringBitmap<[2, 4]> }}
-----------------------------------------------------------------------
-### Status:
-enqueued [3,]
-succeeded [5,]
-failed []
-----------------------------------------------------------------------
-### Kind:
-"indexCreation" [3,]
-"taskDeletion" [5,]
-----------------------------------------------------------------------
-### Index Tasks:
-doggo [3,]
-----------------------------------------------------------------------
-### Index Mapper:
-doggo: { number_of_documents: 0, field_distribution: {} }
-
-----------------------------------------------------------------------
-### Canceled By:
-
-----------------------------------------------------------------------
-### Enqueued At:
-[timestamp] [3,]
-[timestamp] [5,]
-----------------------------------------------------------------------
-### Started At:
-[timestamp] [5,]
-----------------------------------------------------------------------
-### Finished At:
-[timestamp] [5,]
-----------------------------------------------------------------------
-### File Store:
-
-----------------------------------------------------------------------
-
+[
+  {
+    "uid": 3,
+    "enqueuedAt": "[date]",
+    "startedAt": "[date]",
+    "finishedAt": "[date]",
+    "error": null,
+    "canceledBy": null,
+    "details": {
+      "IndexInfo": {
+        "primary_key": null
+      }
+    },
+    "status": "enqueued",
+    "kind": {
+      "indexCreation": {
+        "index_uid": "doggo",
+        "primary_key": null
+      }
+    }
+  },
+  {
+    "uid": 5,
+    "enqueuedAt": "[date]",
+    "startedAt": "[date]",
+    "finishedAt": "[date]",
+    "error": null,
+    "canceledBy": null,
+    "details": {
+      "TaskDeletion": {
+        "matched_tasks": 2,
+        "deleted_tasks": 2,
+        "original_filter": "[filter]"
+      }
+    },
+    "status": "succeeded",
+    "kind": {
+      "taskDeletion": {
+        "query": "[query]",
+        "tasks": [
+          58,
+          48,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          16,
+          0,
+          0,
+          0,
+          2,
+          0,
+          4,
+          0
+        ]
+      }
+    }
+  }
+]
