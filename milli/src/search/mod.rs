@@ -23,10 +23,9 @@ pub use self::matches::{
 use self::query_tree::QueryTreeBuilder;
 use crate::error::UserError;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
-use crate::index::db_name::EXACT_WORD_DOCIDS;
 use crate::search::criteria::r#final::{Final, FinalResult};
 use crate::search::criteria::InitialCandidates;
-use crate::{fields_ids_map, AscDesc, Criterion, DocumentId, Index, Member, Result, BEU16};
+use crate::{AscDesc, Criterion, DocumentId, Index, Member, Result, BEU16};
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
@@ -467,7 +466,7 @@ impl<'a> SearchForFacetValue<'a> {
         self
     }
 
-    pub fn execute(&self) -> Result<Vec<FacetSearchResult>> {
+    pub fn execute(&self) -> Result<Vec<FacetValueHit>> {
         let index = self.search_query.index;
         let rtxn = self.search_query.rtxn;
 
@@ -514,7 +513,7 @@ impl<'a> SearchForFacetValue<'a> {
                     };
                     let count = search_candidates.intersection_len(&docids);
                     if count != 0 {
-                        result.push(FacetSearchResult { value: value.to_string(), count });
+                        result.push(FacetValueHit { value: value.to_string(), count });
                         length += 1;
                     }
                     if length >= MAX_NUMBER_OF_FACETS {
@@ -537,7 +536,7 @@ impl<'a> SearchForFacetValue<'a> {
                     };
                     let count = search_candidates.intersection_len(&docids);
                     if count != 0 {
-                        result.push(FacetSearchResult { value: value.to_string(), count });
+                        result.push(FacetValueHit { value: value.to_string(), count });
                         length += 1;
                     }
                     if length >= MAX_NUMBER_OF_FACETS {
@@ -551,8 +550,8 @@ impl<'a> SearchForFacetValue<'a> {
     }
 }
 
-#[derive(Debug, serde::Serialize)]
-pub struct FacetSearchResult {
+#[derive(Debug, Clone, serde::Serialize, PartialEq)]
+pub struct FacetValueHit {
     /// The original facet value
     pub value: String,
     /// The number of documents associated to this facet

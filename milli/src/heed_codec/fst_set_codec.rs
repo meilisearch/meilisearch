@@ -1,6 +1,6 @@
-use fst::Set;
 use std::borrow::Cow;
 
+use fst::Set;
 use heed::{BytesDecode, BytesEncode};
 
 /// A codec for values of type `Set<&[u8]>`.

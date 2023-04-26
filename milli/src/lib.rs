@@ -43,7 +43,7 @@ pub use self::heed_codec::{
 };
 pub use self::index::Index;
 pub use self::search::{
-    CriterionImplementationStrategy, FacetDistribution, FacetSearchResult, Filter, FormatOptions,
+    CriterionImplementationStrategy, FacetDistribution, FacetValueHit, Filter, FormatOptions,
     MatchBounds, MatcherBuilder, MatchingWord, MatchingWords, Search, SearchForFacetValue,
     SearchResult, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
