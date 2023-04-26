@@ -20,10 +20,9 @@ if `words` doesn't exist before it.
 
 use std::collections::HashMap;
 
-use crate::{
-    index::tests::TempIndex, search::new::tests::collect_field_values, Criterion, Search,
-    SearchResult, TermsMatchingStrategy,
-};
+use crate::index::tests::TempIndex;
+use crate::search::new::tests::collect_field_values;
+use crate::{Criterion, Search, SearchResult, TermsMatchingStrategy};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -134,6 +133,14 @@ fn create_index() -> TempIndex {
                 "id": 23,
                 "text": "the quivk brown fox jumps over the lazy dog"
             },
+            {
+                "id": 24,
+                "tolerant_text": "the quick brown fox jumps over the lazy dog",
+            },
+            {
+                "id": 25,
+                "tolerant_text": "the quivk brown fox jumps over the lazy dog",
+            },
         ]))
         .unwrap();
     index
@@ -212,79 +219,6 @@ fn test_default_typo() {
         "\"the quickest brownest fox jumps over the laziest dog\"",
     ]
     "###);
-
-    // 1 typo on one word, swapped letters
-    let mut s = Search::new(&txn, &index);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("the quikc borwn fox jupms over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0]");
-    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
-    insta::assert_debug_snapshot!(texts, @r###"
-    [
-        "\"the quick brown fox jumps over the lazy dog\"",
-    ]
-    "###);
-
-    // 1 first letter typo on a word <5 bytes, replaced letter
-    let mut s = Search::new(&txn, &index);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("the nuick brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[]");
-
-    // 1 first letter typo on a word <5 bytes, missing letter
-    let mut s = Search::new(&txn, &index);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("the uick brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[]");
-
-    // 1 typo on all words >=5 bytes, replaced letters
-    let mut s = Search::new(&txn, &index);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("the quack brawn fox junps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0]");
-    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
-    insta::assert_debug_snapshot!(texts, @r###"
-    [
-        "\"the quick brown fox jumps over the lazy dog\"",
-    ]
-    "###);
-
-    // 2 typos on words < 9 bytes
-    let mut s = Search::new(&txn, &index);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("the quckest brawnert fox jumps over the aziest dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[]");
-
-    // 2 typos on words >= 9 bytes: missing letters, missing first letter, replaced letters
-    let mut s = Search::new(&txn, &index);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("the extravant fox kyrocketed over the lamguorout dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6]");
-    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
-    insta::assert_debug_snapshot!(texts, @r###"
-    [
-        "\"the extravagant fox skyrocketed over the languorous dog\"",
-    ]
-    "###);
-
-    // 2 typos on words >= 9 bytes: 2 extra letters in a single word, swapped letters + extra letter, replaced letters
-    let mut s = Search::new(&txn, &index);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("the extravaganttt fox sktyrocnketed over the lagnuorrous dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6]");
-    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
-    insta::assert_debug_snapshot!(texts, @r###"
-    [
-        "\"the extravagant fox skyrocketed over the languorous dog\"",
-    ]
-    "###);
 }
 
 #[test]
@@ -299,6 +233,160 @@ fn test_phrase_no_typo_allowed() {
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @"[]");
+}
+
+#[test]
+fn test_typo_exact_word() {
+    let index = create_index();
+
+    index
+        .update_settings(|s| {
+            s.set_exact_words(
+                ["quick", "quack", "sunflower"].iter().map(ToString::to_string).collect(),
+            )
+        })
+        .unwrap();
+
+    let txn = index.read_txn().unwrap();
+
+    let ot = index.min_word_len_one_typo(&txn).unwrap();
+    let tt = index.min_word_len_two_typos(&txn).unwrap();
+    insta::assert_debug_snapshot!(ot, @"5");
+    insta::assert_debug_snapshot!(tt, @"9");
+
+    // don't match quivk
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.query("the quick brown fox jumps over the lazy dog");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+    ]
+    "###);
+
+    // Don't match quick
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.query("the quack brown fox jumps over the lazy dog");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[]");
+
+    // words not in exact_words (quicest, jummps) have normal typo handling
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.query("the quicest brownest fox jummps over the laziest dog");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[3]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quickest brownest fox jumps over the laziest dog\"",
+    ]
+    "###);
+
+    // exact words do not disable prefix (sunflowering OK, but no sunflowar or sun flower)
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.query("network interconnection sunflower");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[16, 18]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"network interconnection sunflower\"",
+        "\"network interconnection sunflowering\"",
+    ]
+    "###);
+}
+
+#[test]
+fn test_typo_exact_attribute() {
+    let index = create_index();
+
+    index
+        .update_settings(|s| {
+            s.set_exact_attributes(["text"].iter().map(ToString::to_string).collect());
+            s.set_searchable_fields(
+                ["text", "tolerant_text"].iter().map(ToString::to_string).collect(),
+            );
+            s.set_exact_words(["quivk"].iter().map(ToString::to_string).collect())
+        })
+        .unwrap();
+
+    let txn = index.read_txn().unwrap();
+
+    let ot = index.min_word_len_one_typo(&txn).unwrap();
+    let tt = index.min_word_len_two_typos(&txn).unwrap();
+    insta::assert_debug_snapshot!(ot, @"5");
+    insta::assert_debug_snapshot!(tt, @"9");
+
+    // Exact match returns both exact attributes and tolerant ones.
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.query("the quick brown fox jumps over the lazy dog");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 24, 25]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+        "__does_not_exist__",
+        "__does_not_exist__",
+    ]
+    "###);
+    let texts = collect_field_values(&index, &txn, "tolerant_text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "__does_not_exist__",
+        "\"the quick brown fox jumps over the lazy dog\"",
+        "\"the quivk brown fox jumps over the lazy dog\"",
+    ]
+    "###);
+
+    // 1 typo only returns the tolerant attribute
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.query("the quidk brown fox jumps over the lazy dog");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[24, 25]");
+    let texts = collect_field_values(&index, &txn, "tolerant_text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quick brown fox jumps over the lazy dog\"",
+        "\"the quivk brown fox jumps over the lazy dog\"",
+    ]
+    "###);
+
+    // combine with exact words
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.query("the quivk brown fox jumps over the lazy dog");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[23, 25]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the quivk brown fox jumps over the lazy dog\"",
+        "__does_not_exist__",
+    ]
+    "###);
+    let texts = collect_field_values(&index, &txn, "tolerant_text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "__does_not_exist__",
+        "\"the quivk brown fox jumps over the lazy dog\"",
+    ]
+    "###);
+
+    // No result in tolerant attribute
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.query("the quicest brownest fox jummps over the laziest dog");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[]");
 }
 
 #[test]
