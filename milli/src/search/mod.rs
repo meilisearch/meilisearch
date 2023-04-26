@@ -222,7 +222,7 @@ impl<'a> SearchForFacetValue<'a> {
         self
     }
 
-    pub fn execute(&self) -> Result<Vec<FacetSearchResult>> {
+    pub fn execute(&self) -> Result<Vec<FacetValueHit>> {
         let index = self.search_query.index;
         let rtxn = self.search_query.rtxn;
 
@@ -269,7 +269,7 @@ impl<'a> SearchForFacetValue<'a> {
                     };
                     let count = search_candidates.intersection_len(&docids);
                     if count != 0 {
-                        result.push(FacetSearchResult { value: value.to_string(), count });
+                        result.push(FacetValueHit { value: value.to_string(), count });
                         length += 1;
                     }
                     if length >= MAX_NUMBER_OF_FACETS {
@@ -292,7 +292,7 @@ impl<'a> SearchForFacetValue<'a> {
                     };
                     let count = search_candidates.intersection_len(&docids);
                     if count != 0 {
-                        result.push(FacetSearchResult { value: value.to_string(), count });
+                        result.push(FacetValueHit { value: value.to_string(), count });
                         length += 1;
                     }
                     if length >= MAX_NUMBER_OF_FACETS {
@@ -306,8 +306,8 @@ impl<'a> SearchForFacetValue<'a> {
     }
 }
 
-#[derive(Debug, serde::Serialize)]
-pub struct FacetSearchResult {
+#[derive(Debug, Clone, serde::Serialize, PartialEq)]
+pub struct FacetValueHit {
     /// The original facet value
     pub value: String,
     /// The number of documents associated to this facet
