@@ -8,7 +8,11 @@ fn create_index() -> TempIndex {
     index
         .update_settings(|s| {
             s.set_primary_key("id".to_owned());
-            s.set_searchable_fields(vec!["text".to_owned(), "other".to_owned()]);
+            s.set_searchable_fields(vec![
+                "text".to_owned(),
+                "text2".to_owned(),
+                "other".to_owned(),
+            ]);
             s.set_criteria(vec![Criterion::Attribute]);
         })
         .unwrap();
@@ -83,7 +87,40 @@ fn create_index() -> TempIndex {
                 a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
                 a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
                 a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a  
+                quickbrown",
+            },
+            {
+                "id": 8,
+                "text": "a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a  
                 quick brown",
+            },
+            {
+                "id": 9,
+                "text": "a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a  
+                quickbrown",
+            },
+            {
+                "id": 10,
+                "text": "quick brown",
+                "text2": "brown quick",
+            },
+            {
+                "id": 11,
+                "text": "quickbrown",
+            },
+            {
+                "id": 12,
+                "text": "quick brown",
+            },
+            {
+                "id": 13,
+                "text": "quickbrown",
             },
         ]))
         .unwrap();
@@ -94,7 +131,7 @@ fn create_index() -> TempIndex {
 fn test_attribute_position_simple() {
     let index = create_index();
 
-    db_snap!(index, word_position_docids, @"fe86911166fa4c0903c512fd86ec65e4");
+    db_snap!(index, word_position_docids, @"1ad58847d772924d8aab5e92be8cf0cc");
 
     let txn = index.read_txn().unwrap();
 
@@ -102,7 +139,7 @@ fn test_attribute_position_simple() {
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("quick brown");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[3, 4, 2, 1, 0, 6, 7, 5]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 11, 12, 13, 3, 4, 2, 1, 0, 6, 8, 7, 9, 5]");
 }
 #[test]
 fn test_attribute_position_repeated() {
@@ -114,5 +151,31 @@ fn test_attribute_position_repeated() {
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("a a a a a");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[5, 7, 6]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[5, 7, 8, 9, 6]");
+}
+
+#[test]
+fn test_attribute_position_different_fields() {
+    let index = create_index();
+
+    let txn = index.read_txn().unwrap();
+
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.query("quick brown");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 11, 12, 13, 3, 4, 2, 1, 0, 6, 8, 7, 9, 5]");
+}
+
+#[test]
+fn test_attribute_position_ngrams() {
+    let index = create_index();
+
+    let txn = index.read_txn().unwrap();
+
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.query("quick brown");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 11, 12, 13, 3, 4, 2, 1, 0, 6, 8, 7, 9, 5]");
 }

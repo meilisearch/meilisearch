@@ -77,6 +77,10 @@ impl RankingRuleGraphTrait for PositionGraph {
             let cost = {
                 let mut cost = 0;
                 for i in 0..term.term_ids.len() {
+                    // This is actually not fully correct and slightly penalises ngrams unfairly.
+                    // Because if two words are in the same bucketed position (e.g. 32) and consecutive,
+                    // then their position cost will be 32+32=64, but an ngram of these two words at the
+                    // same position will have a cost of 32+32+1=65
                     cost += position as u32 + i as u32;
                 }
                 cost
