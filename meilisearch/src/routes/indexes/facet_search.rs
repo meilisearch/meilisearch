@@ -14,7 +14,7 @@ use meilisearch_types::milli::facet;
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 
-use crate::analytics::{Analytics, SearchAggregator};
+use crate::analytics::{Analytics, FacetSearchAggregator};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::search::{
@@ -122,6 +122,8 @@ pub async fn search(
     let query = params.into_inner();
     debug!("facet search called with params: {:?}", query);
 
+    let mut aggregate = FacetSearchAggregator::from_query(&query, &req);
+
     let facet_query = query.facet_query.clone();
     let facet_name = query.facet_name.clone();
     let mut search_query = SearchQuery::from(query);
@@ -131,21 +133,16 @@ pub async fn search(
         add_search_rules(&mut search_query, search_rules);
     }
 
-    // TODO log stuff
-    // let mut aggregate = SearchAggregator::from_query(&query, &req);
-
     let index = index_scheduler.index(&index_uid)?;
     let search_result = tokio::task::spawn_blocking(move || {
         perform_facet_search(&index, search_query, facet_query, facet_name)
     })
     .await?;
 
-    // TODO log stuff
-    // if let Ok(ref search_result) = search_result {
-    //     aggregate.succeed(search_result);
-    // }
-    // TODO analytics
-    // analytics.post_search(aggregate);
+    if let Ok(ref search_result) = search_result {
+        aggregate.succeed(search_result);
+    }
+    analytics.post_facet_search(aggregate);
 
     let search_result = search_result?;
 
