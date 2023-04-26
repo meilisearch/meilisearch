@@ -3,7 +3,6 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 use std::time::Instant;
 
-use actix_http::header::q;
 use deserr::Deserr;
 use either::Either;
 use index_scheduler::RoFeatures;
@@ -15,7 +14,7 @@ use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::{
-    dot_product_similarity, facet, FacetSearchResult, InternalError, SearchForFacetValue,
+    dot_product_similarity, FacetValueHit, InternalError, SearchForFacetValue,
 };
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
@@ -30,7 +29,6 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 use crate::error::MeilisearchHttpError;
-use crate::routes::indexes::facet_search::FacetSearchQuery;
 
 type MatchesPosition = BTreeMap<String, Vec<MatchBounds>>;
 
@@ -281,6 +279,14 @@ pub enum HitsInfo {
 pub struct FacetStats {
     pub min: f64,
     pub max: f64,
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FacetSearchResult {
+    pub hits: Vec<FacetValueHit>,
+    pub query: Option<String>,
+    pub processing_time_ms: u128,
 }
 
 /// Incorporate search rules in search query
@@ -577,19 +583,25 @@ pub fn perform_search(
 pub fn perform_facet_search(
     index: &Index,
     search_query: SearchQuery,
-    mut facet_query: Option<String>,
+    facet_query: Option<String>,
     facet_name: String,
-) -> Result<Vec<FacetSearchResult>, MeilisearchHttpError> {
+) -> Result<FacetSearchResult, MeilisearchHttpError> {
     let before_search = Instant::now();
     let rtxn = index.read_txn()?;
 
     let (search, _, _, _) = prepare_search(index, &rtxn, &search_query)?;
     let mut facet_search = SearchForFacetValue::new(facet_name, search);
-    if let Some(facet_query) = facet_query.take() {
+    if let Some(facet_query) = &facet_query {
         facet_search.query(facet_query);
     }
 
-    facet_search.execute().map_err(Into::into)
+    let hits = facet_search.execute()?;
+
+    Ok(FacetSearchResult {
+        hits,
+        query: facet_query,
+        processing_time_ms: before_search.elapsed().as_millis(),
+    })
 }
 
 fn insert_geo_distance(sorts: &[String], document: &mut Document) {

@@ -57,7 +57,7 @@ pub use self::heed_codec::{
 };
 pub use self::index::Index;
 pub use self::search::{
-    FacetDistribution, FacetSearchResult, Filter, FormatOptions, MatchBounds, MatcherBuilder,
+    FacetDistribution, FacetValueHit, Filter, FormatOptions, MatchBounds, MatcherBuilder,
     MatchingWords, Search, SearchForFacetValue, SearchResult, TermsMatchingStrategy,
     DEFAULT_VALUES_PER_FACET,
 };
