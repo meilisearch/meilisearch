@@ -231,18 +231,24 @@ impl<'a> SearchForFacetValue<'a> {
             return Err(UserError::InvalidSearchFacet {
                 field: self.facet.clone(),
                 valid_fields: filterable_fields.into_iter().collect(),
-            })?;
+            }
+            .into());
         }
 
         let fields_ids_map = index.fields_ids_map(rtxn)?;
-        let (field_id, fst) = match fields_ids_map.id(&self.facet) {
-            Some(fid) => {
-                match self.search_query.index.facet_id_string_fst.get(rtxn, &BEU16::new(fid))? {
-                    Some(fst) => (fid, fst),
-                    None => todo!("return an error, is the user trying to search in numbers?"),
+        let fid = match fields_ids_map.id(&self.facet) {
+            Some(fid) => fid,
+            None => {
+                return Err(FieldIdMapMissingEntry::FieldName {
+                    field_name: self.facet.clone(),
+                    process: "search for facet values",
                 }
+                .into());
             }
-            None => todo!("return an internal error bug"),
+        };
+        let fst = match self.search_query.index.facet_id_string_fst.get(rtxn, &BEU16::new(fid))? {
+            Some(fst) => fst,
+            None => return Ok(vec![]),
         };
 
         let search_candidates = self.search_query.execute()?.candidates;
@@ -261,7 +267,7 @@ impl<'a> SearchForFacetValue<'a> {
                 let mut length = 0;
                 while let Some(facet_value) = stream.next() {
                     let value = std::str::from_utf8(facet_value)?;
-                    let key = FacetGroupKey { field_id, level: 0, left_bound: value };
+                    let key = FacetGroupKey { field_id: fid, level: 0, left_bound: value };
                     let docids = match index.facet_id_string_docids.get(rtxn, &key)? {
                         Some(FacetGroupValue { bitmap, .. }) => bitmap,
                         None => todo!("return an internal error"),
@@ -284,7 +290,7 @@ impl<'a> SearchForFacetValue<'a> {
                 let mut length = 0;
                 while let Some(facet_value) = stream.next() {
                     let value = std::str::from_utf8(facet_value)?;
-                    let key = FacetGroupKey { field_id, level: 0, left_bound: value };
+                    let key = FacetGroupKey { field_id: fid, level: 0, left_bound: value };
                     let docids = match index.facet_id_string_docids.get(rtxn, &key)? {
                         Some(FacetGroupValue { bitmap, .. }) => bitmap,
                         None => todo!("return an internal error"),
