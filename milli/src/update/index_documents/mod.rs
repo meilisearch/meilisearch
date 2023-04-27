@@ -1758,6 +1758,187 @@ mod tests {
     }
 
     #[test]
+    fn index_documents_check_is_null_database() {
+        let content = || {
+            documents!([
+                {
+                    "id": 0,
+                    "colour": null,
+                },
+                {
+                    "id": 1,
+                    "colour": [null], // must not be returned
+                },
+                {
+                    "id": 6,
+                    "colour": {
+                        "green": null
+                    }
+                },
+                {
+                    "id": 7,
+                    "colour": {
+                        "green": {
+                            "blue": null
+                        }
+                    }
+                },
+                {
+                    "id": 8,
+                    "colour": 0,
+                },
+                {
+                    "id": 9,
+                    "colour": []
+                },
+                {
+                    "id": 10,
+                    "colour": {}
+                },
+                {
+                    "id": 12,
+                    "colour": [1]
+                },
+                {
+                    "id": 13
+                },
+                {
+                    "id": 14,
+                    "colour": {
+                        "green": 1
+                    }
+                },
+                {
+                    "id": 15,
+                    "colour": {
+                        "green": {
+                            "blue": []
+                        }
+                    }
+                }
+            ])
+        };
+
+        let check_ok = |index: &Index| {
+            let rtxn = index.read_txn().unwrap();
+            let facets = index.faceted_fields(&rtxn).unwrap();
+            assert_eq!(facets, hashset!(S("colour"), S("colour.green"), S("colour.green.blue")));
+
+            let colour_id = index.fields_ids_map(&rtxn).unwrap().id("colour").unwrap();
+            let colour_green_id = index.fields_ids_map(&rtxn).unwrap().id("colour.green").unwrap();
+            let colour_blue_id =
+                index.fields_ids_map(&rtxn).unwrap().id("colour.green.blue").unwrap();
+
+            let bitmap_null_colour =
+                index.facet_id_is_null_docids.get(&rtxn, &BEU16::new(colour_id)).unwrap().unwrap();
+            assert_eq!(bitmap_null_colour.into_iter().collect::<Vec<_>>(), vec![0]);
+
+            let bitmap_colour_green = index
+                .facet_id_is_null_docids
+                .get(&rtxn, &BEU16::new(colour_green_id))
+                .unwrap()
+                .unwrap();
+            assert_eq!(bitmap_colour_green.into_iter().collect::<Vec<_>>(), vec![2]);
+
+            let bitmap_colour_blue = index
+                .facet_id_is_null_docids
+                .get(&rtxn, &BEU16::new(colour_blue_id))
+                .unwrap()
+                .unwrap();
+            assert_eq!(bitmap_colour_blue.into_iter().collect::<Vec<_>>(), vec![3]);
+        };
+
+        let faceted_fields = hashset!(S("colour"));
+
+        let index = TempIndex::new();
+        index.add_documents(content()).unwrap();
+        index
+            .update_settings(|settings| {
+                settings.set_filterable_fields(faceted_fields.clone());
+            })
+            .unwrap();
+        check_ok(&index);
+
+        let index = TempIndex::new();
+        index
+            .update_settings(|settings| {
+                settings.set_filterable_fields(faceted_fields.clone());
+            })
+            .unwrap();
+        index.add_documents(content()).unwrap();
+        check_ok(&index);
+    }
+
+    #[test]
+    fn index_documents_check_is_empty_database() {
+        let content = || {
+            documents!([
+                {"id": 0, "tags": null },
+                {"id": 1, "tags": [null] },
+                {"id": 2, "tags": [] },
+                {"id": 3, "tags": ["hello","world"] },
+                {"id": 4, "tags": [""] },
+                {"id": 5 },
+                {"id": 6, "tags": {} },
+                {"id": 7, "tags": {"green": "cool"} },
+                {"id": 8, "tags": {"green": ""} },
+                {"id": 9, "tags": "" },
+                {"id": 10, "tags": { "green": null } },
+                {"id": 11, "tags": { "green": { "blue": null } } },
+                {"id": 12, "tags": { "green": { "blue": [] } } }
+            ])
+        };
+
+        let check_ok = |index: &Index| {
+            let rtxn = index.read_txn().unwrap();
+            let facets = index.faceted_fields(&rtxn).unwrap();
+            assert_eq!(facets, hashset!(S("tags"), S("tags.green"), S("tags.green.blue")));
+
+            let tags_id = index.fields_ids_map(&rtxn).unwrap().id("tags").unwrap();
+            let tags_green_id = index.fields_ids_map(&rtxn).unwrap().id("tags.green").unwrap();
+            let tags_blue_id = index.fields_ids_map(&rtxn).unwrap().id("tags.green.blue").unwrap();
+
+            let bitmap_empty_tags =
+                index.facet_id_is_empty_docids.get(&rtxn, &BEU16::new(tags_id)).unwrap().unwrap();
+            assert_eq!(bitmap_empty_tags.into_iter().collect::<Vec<_>>(), vec![2, 6, 9]);
+
+            let bitmap_tags_green = index
+                .facet_id_is_empty_docids
+                .get(&rtxn, &BEU16::new(tags_green_id))
+                .unwrap()
+                .unwrap();
+            assert_eq!(bitmap_tags_green.into_iter().collect::<Vec<_>>(), vec![8]);
+
+            let bitmap_tags_blue = index
+                .facet_id_is_empty_docids
+                .get(&rtxn, &BEU16::new(tags_blue_id))
+                .unwrap()
+                .unwrap();
+            assert_eq!(bitmap_tags_blue.into_iter().collect::<Vec<_>>(), vec![12]);
+        };
+
+        let faceted_fields = hashset!(S("tags"));
+
+        let index = TempIndex::new();
+        index.add_documents(content()).unwrap();
+        index
+            .update_settings(|settings| {
+                settings.set_filterable_fields(faceted_fields.clone());
+            })
+            .unwrap();
+        check_ok(&index);
+
+        let index = TempIndex::new();
+        index
+            .update_settings(|settings| {
+                settings.set_filterable_fields(faceted_fields.clone());
+            })
+            .unwrap();
+        index.add_documents(content()).unwrap();
+        check_ok(&index);
+    }
+
+    #[test]
     fn primary_key_must_not_contain_floats() {
         let index = TempIndex::new_with_map_size(4096 * 100);
 

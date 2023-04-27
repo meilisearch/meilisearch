@@ -39,6 +39,8 @@ pub(crate) enum TypedChunk {
     FieldIdFacetStringDocids(grenad::Reader<File>),
     FieldIdFacetNumberDocids(grenad::Reader<File>),
     FieldIdFacetExistsDocids(grenad::Reader<File>),
+    FieldIdFacetIsNullDocids(grenad::Reader<File>),
+    FieldIdFacetIsEmptyDocids(grenad::Reader<File>),
     GeoPoints(grenad::Reader<File>),
     ScriptLanguageDocids(HashMap<(Script, Language), RoaringBitmap>),
 }
@@ -154,6 +156,28 @@ pub(crate) fn write_typed_chunk_into_index(
             append_entries_into_database(
                 facet_id_exists_docids,
                 &index.facet_id_exists_docids,
+                wtxn,
+                index_is_empty,
+                |value, _buffer| Ok(value),
+                merge_cbo_roaring_bitmaps,
+            )?;
+            is_merged_database = true;
+        }
+        TypedChunk::FieldIdFacetIsNullDocids(facet_id_is_null_docids) => {
+            append_entries_into_database(
+                facet_id_is_null_docids,
+                &index.facet_id_is_null_docids,
+                wtxn,
+                index_is_empty,
+                |value, _buffer| Ok(value),
+                merge_cbo_roaring_bitmaps,
+            )?;
+            is_merged_database = true;
+        }
+        TypedChunk::FieldIdFacetIsEmptyDocids(facet_id_is_empty_docids) => {
+            append_entries_into_database(
+                facet_id_is_empty_docids,
+                &index.facet_id_is_empty_docids,
                 wtxn,
                 index_is_empty,
                 |value, _buffer| Ok(value),

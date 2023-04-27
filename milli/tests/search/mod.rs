@@ -205,6 +205,30 @@ fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
         } else if let Some(opt1) = &document.opt1 {
             id = contains_key_rec(opt1, "opt2").then(|| document.id.clone());
         }
+    } else if matches!(filter, "opt1 IS NULL" | "NOT opt1 IS NOT NULL") {
+        id = document.opt1.as_ref().map_or(false, |v| v.is_null()).then(|| document.id.clone());
+    } else if matches!(filter, "NOT opt1 IS NULL" | "opt1 IS NOT NULL") {
+        id = document.opt1.as_ref().map_or(true, |v| !v.is_null()).then(|| document.id.clone());
+    } else if matches!(filter, "opt1.opt2 IS NULL") {
+        if document.opt1opt2.as_ref().map_or(false, |v| v.is_null()) {
+            id = Some(document.id.clone());
+        } else if let Some(opt1) = &document.opt1 {
+            if !opt1.is_null() {
+                id = contains_null_rec(opt1, "opt2").then(|| document.id.clone());
+            }
+        }
+    } else if matches!(filter, "opt1 IS EMPTY" | "NOT opt1 IS NOT EMPTY") {
+        id = document.opt1.as_ref().map_or(false, is_empty_value).then(|| document.id.clone());
+    } else if matches!(filter, "NOT opt1 IS EMPTY" | "opt1 IS NOT EMPTY") {
+        id = document
+            .opt1
+            .as_ref()
+            .map_or(true, |v| !is_empty_value(v))
+            .then(|| document.id.clone());
+    } else if matches!(filter, "opt1.opt2 IS EMPTY") {
+        if document.opt1opt2.as_ref().map_or(false, is_empty_value) {
+            id = Some(document.id.clone());
+        }
     } else if matches!(
         filter,
         "tag_in IN[1, 2, 3, four, five]" | "NOT tag_in NOT IN[1, 2, 3, four, five]"
@@ -216,6 +240,15 @@ fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
             .then(|| document.id.clone());
     }
     id
+}
+
+pub fn is_empty_value(v: &serde_json::Value) -> bool {
+    match v {
+        serde_json::Value::String(s) => s.is_empty(),
+        serde_json::Value::Array(a) => a.is_empty(),
+        serde_json::Value::Object(o) => o.is_empty(),
+        _ => false,
+    }
 }
 
 pub fn contains_key_rec(v: &serde_json::Value, key: &str) -> bool {
@@ -231,6 +264,28 @@ pub fn contains_key_rec(v: &serde_json::Value, key: &str) -> bool {
         serde_json::Value::Object(v) => {
             for (k, v) in v.iter() {
                 if k == key || contains_key_rec(v, key) {
+                    return true;
+                }
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
+pub fn contains_null_rec(v: &serde_json::Value, key: &str) -> bool {
+    match v {
+        serde_json::Value::Object(v) => {
+            for (k, v) in v.iter() {
+                if k == key && v.is_null() || contains_null_rec(v, key) {
+                    return true;
+                }
+            }
+            false
+        }
+        serde_json::Value::Array(v) => {
+            for v in v.iter() {
+                if contains_null_rec(v, key) {
                     return true;
                 }
             }

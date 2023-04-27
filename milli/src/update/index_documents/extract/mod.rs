@@ -18,7 +18,7 @@ use rayon::prelude::*;
 use self::extract_docid_word_positions::extract_docid_word_positions;
 use self::extract_facet_number_docids::extract_facet_number_docids;
 use self::extract_facet_string_docids::extract_facet_string_docids;
-use self::extract_fid_docid_facet_values::extract_fid_docid_facet_values;
+use self::extract_fid_docid_facet_values::{extract_fid_docid_facet_values, ExtractedFacetValues};
 use self::extract_fid_word_count_docids::extract_fid_word_count_docids;
 use self::extract_geo_points::extract_geo_points;
 use self::extract_word_docids::extract_word_docids;
@@ -55,28 +55,35 @@ pub(crate) fn data_from_obkv_documents(
         .collect::<Result<()>>()?;
 
     #[allow(clippy::type_complexity)]
-    let result: Result<(Vec<_>, (Vec<_>, (Vec<_>, Vec<_>)))> = flattened_obkv_chunks
-        .par_bridge()
-        .map(|flattened_obkv_chunks| {
-            send_and_extract_flattened_documents_data(
-                flattened_obkv_chunks,
-                indexer,
-                lmdb_writer_sx.clone(),
-                &searchable_fields,
-                &faceted_fields,
-                primary_key_id,
-                geo_fields_ids,
-                &stop_words,
-                max_positions_per_attributes,
-            )
-        })
-        .collect();
+    let result: Result<(Vec<_>, (Vec<_>, (Vec<_>, (Vec<_>, (Vec<_>, Vec<_>)))))> =
+        flattened_obkv_chunks
+            .par_bridge()
+            .map(|flattened_obkv_chunks| {
+                send_and_extract_flattened_documents_data(
+                    flattened_obkv_chunks,
+                    indexer,
+                    lmdb_writer_sx.clone(),
+                    &searchable_fields,
+                    &faceted_fields,
+                    primary_key_id,
+                    geo_fields_ids,
+                    &stop_words,
+                    max_positions_per_attributes,
+                )
+            })
+            .collect();
 
     let (
         docid_word_positions_chunks,
         (
             docid_fid_facet_numbers_chunks,
-            (docid_fid_facet_strings_chunks, facet_exists_docids_chunks),
+            (
+                docid_fid_facet_strings_chunks,
+                (
+                    facet_is_null_docids_chunks,
+                    (facet_is_empty_docids_chunks, facet_exists_docids_chunks),
+                ),
+            ),
         ),
     ) = result?;
 
@@ -88,6 +95,38 @@ pub(crate) fn data_from_obkv_documents(
             match facet_exists_docids_chunks.merge(merge_cbo_roaring_bitmaps, &indexer) {
                 Ok(reader) => {
                     let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetExistsDocids(reader)));
+                }
+                Err(e) => {
+                    let _ = lmdb_writer_sx.send(Err(e));
+                }
+            }
+        });
+    }
+
+    // merge facet_is_null_docids and send them as a typed chunk
+    {
+        let lmdb_writer_sx = lmdb_writer_sx.clone();
+        rayon::spawn(move || {
+            debug!("merge {} database", "facet-id-is-null-docids");
+            match facet_is_null_docids_chunks.merge(merge_cbo_roaring_bitmaps, &indexer) {
+                Ok(reader) => {
+                    let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetIsNullDocids(reader)));
+                }
+                Err(e) => {
+                    let _ = lmdb_writer_sx.send(Err(e));
+                }
+            }
+        });
+    }
+
+    // merge facet_is_empty_docids and send them as a typed chunk
+    {
+        let lmdb_writer_sx = lmdb_writer_sx.clone();
+        rayon::spawn(move || {
+            debug!("merge {} database", "facet-id-is-empty-docids");
+            match facet_is_empty_docids_chunks.merge(merge_cbo_roaring_bitmaps, &indexer) {
+                Ok(reader) => {
+                    let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdFacetIsEmptyDocids(reader)));
                 }
                 Err(e) => {
                     let _ = lmdb_writer_sx.send(Err(e));
@@ -235,7 +274,10 @@ fn send_and_extract_flattened_documents_data(
     grenad::Reader<CursorClonableMmap>,
     (
         grenad::Reader<CursorClonableMmap>,
-        (grenad::Reader<CursorClonableMmap>, grenad::Reader<File>),
+        (
+            grenad::Reader<CursorClonableMmap>,
+            (grenad::Reader<File>, (grenad::Reader<File>, grenad::Reader<File>)),
+        ),
     ),
 )> {
     let flattened_documents_chunk =
@@ -281,11 +323,13 @@ fn send_and_extract_flattened_documents_data(
                 Ok(docid_word_positions_chunk)
             },
             || {
-                let (
+                let ExtractedFacetValues {
                     docid_fid_facet_numbers_chunk,
                     docid_fid_facet_strings_chunk,
+                    fid_facet_is_null_docids_chunk,
+                    fid_facet_is_empty_docids_chunk,
                     fid_facet_exists_docids_chunk,
-                ) = extract_fid_docid_facet_values(
+                } = extract_fid_docid_facet_values(
                     flattened_documents_chunk.clone(),
                     indexer,
                     faceted_fields,
@@ -309,7 +353,13 @@ fn send_and_extract_flattened_documents_data(
 
                 Ok((
                     docid_fid_facet_numbers_chunk,
-                    (docid_fid_facet_strings_chunk, fid_facet_exists_docids_chunk),
+                    (
+                        docid_fid_facet_strings_chunk,
+                        (
+                            fid_facet_is_null_docids_chunk,
+                            (fid_facet_is_empty_docids_chunk, fid_facet_exists_docids_chunk),
+                        ),
+                    ),
                 ))
             },
         );
