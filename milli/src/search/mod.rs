@@ -1,6 +1,7 @@
 use std::fmt;
 
 use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
+use log::{debug, error};
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
@@ -271,7 +272,10 @@ impl<'a> SearchForFacetValues<'a> {
                     let key = FacetGroupKey { field_id: fid, level: 0, left_bound: value };
                     let docids = match index.facet_id_string_docids.get(rtxn, &key)? {
                         Some(FacetGroupValue { bitmap, .. }) => bitmap,
-                        None => todo!("return an internal error"),
+                        None => {
+                            error!("the facet value is missing from the facet database: {key:?}");
+                            continue;
+                        }
                     };
                     let count = search_candidates.intersection_len(&docids);
                     if count != 0 {
@@ -294,7 +298,10 @@ impl<'a> SearchForFacetValues<'a> {
                     let key = FacetGroupKey { field_id: fid, level: 0, left_bound: value };
                     let docids = match index.facet_id_string_docids.get(rtxn, &key)? {
                         Some(FacetGroupValue { bitmap, .. }) => bitmap,
-                        None => todo!("return an internal error"),
+                        None => {
+                            error!("the facet value is missing from the facet database: {key:?}");
+                            continue;
+                        }
                     };
                     let count = search_candidates.intersection_len(&docids);
                     if count != 0 {
