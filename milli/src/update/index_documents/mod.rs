@@ -36,7 +36,7 @@ use crate::error::{Error, InternalError, UserError};
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
     self, DeletionStrategy, IndexerConfig, PrefixWordPairsProximityDocids, UpdateIndexingStep,
-    WordPrefixDocids, WordPrefixPositionDocids, WordsPrefixesFst,
+    WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
 use crate::{Index, Result, RoaringBitmapCodec};
 
@@ -373,6 +373,7 @@ where
         let mut final_documents_ids = RoaringBitmap::new();
         let mut word_pair_proximity_docids = None;
         let mut word_position_docids = None;
+        let mut word_fid_docids = None;
         let mut word_docids = None;
         let mut exact_word_docids = None;
 
@@ -405,6 +406,11 @@ where
                     let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
                     word_position_docids = Some(cloneable_chunk);
                     TypedChunk::WordPositionDocids(chunk)
+                }
+                TypedChunk::WordFidDocids(chunk) => {
+                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
+                    word_fid_docids = Some(cloneable_chunk);
+                    TypedChunk::WordFidDocids(chunk)
                 }
                 otherwise => otherwise,
             };
@@ -449,6 +455,7 @@ where
             exact_word_docids,
             word_pair_proximity_docids,
             word_position_docids,
+            word_fid_docids,
         )?;
 
         Ok(all_documents_ids.len())
@@ -461,6 +468,7 @@ where
         exact_word_docids: Option<grenad::Reader<CursorClonableMmap>>,
         word_pair_proximity_docids: Option<grenad::Reader<CursorClonableMmap>>,
         word_position_docids: Option<grenad::Reader<CursorClonableMmap>>,
+        word_fid_docids: Option<grenad::Reader<CursorClonableMmap>>,
     ) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
@@ -595,19 +603,36 @@ where
 
         if let Some(word_position_docids) = word_position_docids {
             // Run the words prefix position docids update operation.
-            let mut builder = WordPrefixPositionDocids::new(self.wtxn, self.index);
+            let mut builder = WordPrefixIntegerDocids::new(
+                self.wtxn,
+                self.index.word_prefix_position_docids,
+                self.index.word_position_docids,
+            );
             builder.chunk_compression_type = self.indexer_config.chunk_compression_type;
             builder.chunk_compression_level = self.indexer_config.chunk_compression_level;
             builder.max_nb_chunks = self.indexer_config.max_nb_chunks;
             builder.max_memory = self.indexer_config.max_memory;
-            if let Some(value) = self.config.words_positions_level_group_size {
-                builder.level_group_size(value);
-            }
-            if let Some(value) = self.config.words_positions_min_level_size {
-                builder.min_level_size(value);
-            }
+
             builder.execute(
                 word_position_docids,
+                &new_prefix_fst_words,
+                &common_prefix_fst_words,
+                &del_prefix_fst_words,
+            )?;
+        }
+        if let Some(word_fid_docids) = word_fid_docids {
+            // Run the words prefix fid docids update operation.
+            let mut builder = WordPrefixIntegerDocids::new(
+                self.wtxn,
+                self.index.word_prefix_fid_docids,
+                self.index.word_fid_docids,
+            );
+            builder.chunk_compression_type = self.indexer_config.chunk_compression_type;
+            builder.chunk_compression_level = self.indexer_config.chunk_compression_level;
+            builder.max_nb_chunks = self.indexer_config.max_nb_chunks;
+            builder.max_memory = self.indexer_config.max_memory;
+            builder.execute(
+                word_fid_docids,
                 &new_prefix_fst_words,
                 &common_prefix_fst_words,
                 &del_prefix_fst_words,
