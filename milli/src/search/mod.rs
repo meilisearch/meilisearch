@@ -258,7 +258,11 @@ impl<'a> SearchForFacetValues<'a> {
 
         match self.query.as_ref() {
             Some(query) => {
-                if self.search_query.index.authorize_typos(rtxn)? {
+                let authorize_typos = self.search_query.index.authorize_typos(rtxn)?;
+                let field_authorizes_typos =
+                    !self.search_query.index.exact_attributes_ids(rtxn)?.contains(&fid);
+
+                if authorize_typos && field_authorizes_typos {
                     let mut result = vec![];
 
                     let exact_words_fst = self.search_query.index.exact_words(rtxn)?;
