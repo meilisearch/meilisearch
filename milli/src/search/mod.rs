@@ -298,7 +298,7 @@ impl<'a> SearchForFacetValues<'a> {
                     !self.search_query.index.exact_attributes_ids(rtxn)?.contains(&fid);
 
                 if authorize_typos && field_authorizes_typos {
-                    let mut result = vec![];
+                    let mut results = vec![];
 
                     let exact_words_fst = self.search_query.index.exact_words(rtxn)?;
                     if exact_words_fst.map_or(false, |fst| fst.contains(query)) {
@@ -309,7 +309,7 @@ impl<'a> SearchForFacetValues<'a> {
                         {
                             let count = search_candidates.intersection_len(&bitmap);
                             if count != 0 {
-                                result.push(FacetValueHit { value: query.to_string(), count });
+                                results.push(FacetValueHit { value: query.to_string(), count });
                             }
                         }
                     } else {
@@ -337,7 +337,7 @@ impl<'a> SearchForFacetValues<'a> {
                             };
                             let count = search_candidates.intersection_len(&docids);
                             if count != 0 {
-                                result.push(FacetValueHit { value: value.to_string(), count });
+                                results.push(FacetValueHit { value: value.to_string(), count });
                                 length += 1;
                             }
                             if length >= MAX_NUMBER_OF_FACETS {
@@ -346,11 +346,11 @@ impl<'a> SearchForFacetValues<'a> {
                         }
                     }
 
-                    Ok(result)
+                    Ok(results)
                 } else {
                     let automaton = StartsWith(Str::new(query));
                     let mut stream = fst.search(automaton).into_stream();
-                    let mut result = vec![];
+                    let mut results = vec![];
                     let mut length = 0;
                     while let Some(facet_value) = stream.next() {
                         let value = std::str::from_utf8(facet_value)?;
@@ -366,7 +366,7 @@ impl<'a> SearchForFacetValues<'a> {
                         };
                         let count = search_candidates.intersection_len(&docids);
                         if count != 0 {
-                            result.push(FacetValueHit { value: value.to_string(), count });
+                            results.push(FacetValueHit { value: value.to_string(), count });
                             length += 1;
                         }
                         if length >= MAX_NUMBER_OF_FACETS {
@@ -374,34 +374,26 @@ impl<'a> SearchForFacetValues<'a> {
                         }
                     }
 
-                    Ok(result)
+                    Ok(results)
                 }
             }
             None => {
-                let mut stream = fst.stream();
-                let mut result = vec![];
+                let mut results = vec![];
                 let mut length = 0;
-                while let Some(facet_value) = stream.next() {
-                    let value = std::str::from_utf8(facet_value)?;
-                    let key = FacetGroupKey { field_id: fid, level: 0, left_bound: value };
-                    let docids = match index.facet_id_string_docids.get(rtxn, &key)? {
-                        Some(FacetGroupValue { bitmap, .. }) => bitmap,
-                        None => {
-                            error!("the facet value is missing from the facet database: {key:?}");
-                            continue;
-                        }
-                    };
-                    let count = search_candidates.intersection_len(&docids);
+                let prefix = FacetGroupKey { field_id: fid, level: 0, left_bound: "" };
+                for result in index.facet_id_string_docids.prefix_iter(rtxn, &prefix)? {
+                    let (FacetGroupKey { left_bound, .. }, FacetGroupValue { bitmap, .. }) =
+                        result?;
+                    let count = search_candidates.intersection_len(&bitmap);
                     if count != 0 {
-                        result.push(FacetValueHit { value: value.to_string(), count });
+                        results.push(FacetValueHit { value: left_bound.to_string(), count });
                         length += 1;
                     }
                     if length >= MAX_NUMBER_OF_FACETS {
                         break;
                     }
                 }
-
-                Ok(result)
+                Ok(results)
             }
         }
     }
