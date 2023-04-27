@@ -429,10 +429,10 @@ async fn delete_document_by_filter() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Json deserialize error: data did not match any variant of untagged enum DocumentDeletionQuery",
-      "code": "bad_request",
+      "message": "Invalid syntax for the filter parameter: `expected String, Array, found: null`.",
+      "code": "invalid_search_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
+      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
     }
     "###);
 

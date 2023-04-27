@@ -4,13 +4,13 @@ use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use bstr::ByteSlice;
-use deserr::actix_web::AwebQueryParameter;
+use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::Deserr;
 use futures::StreamExt;
 use index_scheduler::IndexScheduler;
 use log::debug;
 use meilisearch_types::deserr::query_params::Param;
-use meilisearch_types::deserr::DeserrQueryParamError;
+use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::{Code, ResponseError};
@@ -71,8 +71,11 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route(web::put().to(SeqHandler(update_documents)))
             .route(web::delete().to(SeqHandler(clear_all_documents))),
     )
-    // this route needs to be before the /documents/{document_id} to match properly
-    .service(web::resource("/delete-batch").route(web::post().to(SeqHandler(delete_documents))))
+    // these routes needs to be before the /documents/{document_id} to match properly
+    .service(
+        web::resource("/delete-batch").route(web::post().to(SeqHandler(delete_documents_batch))),
+    )
+    .service(web::resource("/delete").route(web::post().to(SeqHandler(delete_documents_by_filter))))
     .service(
         web::resource("/{document_id}")
             .route(web::get().to(SeqHandler(get_document)))
@@ -373,59 +376,22 @@ async fn document_addition(
     Ok(task.into())
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-pub enum DocumentDeletionQuery {
-    Ids(Vec<Value>),
-    Object { filter: Option<Value> },
-}
-
-pub async fn delete_documents(
+pub async fn delete_documents_batch(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    body: web::Json<DocumentDeletionQuery>,
+    body: web::Json<Vec<Value>>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", body);
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
-    let index_uid = index_uid.into_inner();
 
     analytics.delete_documents(DocumentDeletionKind::PerBatch, &req);
 
-    let ids = match body.into_inner() {
-        DocumentDeletionQuery::Ids(body) => body
-            .iter()
-            .map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string()))
-            .collect(),
-        DocumentDeletionQuery::Object { filter } => {
-            debug!("filter: {:?}", filter);
-
-            // FIXME: spawn_blocking
-            if let Some(mut filter) = filter {
-                if let Some(facets) = crate::search::parse_filter(&filter)? {
-                    debug!("facets: {:?}", facets);
-
-                    let task = KindWithContent::DocumentDeletionByFilter {
-                        index_uid: index_uid.to_string(),
-                        filter_expr: filter.take(),
-                    };
-
-                    let task: SummarizedTaskView =
-                        tokio::task::spawn_blocking(move || index_scheduler.register(task))
-                            .await??
-                            .into();
-
-                    debug!("returns: {:?}", task);
-                    return Ok(HttpResponse::Accepted().json(task));
-                } else {
-                    vec![]
-                }
-            } else {
-                vec![]
-            }
-        }
-    };
+    let ids = body
+        .iter()
+        .map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string()))
+        .collect();
 
     let task =
         KindWithContent::DocumentDeletion { index_uid: index_uid.to_string(), documents_ids: ids };
@@ -434,6 +400,45 @@ pub async fn delete_documents(
 
     debug!("returns: {:?}", task);
     Ok(HttpResponse::Accepted().json(task))
+}
+
+#[derive(Debug, Deserr)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+pub struct DocumentDeletionByFilter {
+    // TODO: Update the error code to something more appropriate
+    #[deserr(error = DeserrJsonError<InvalidDocumentOffset>)]
+    filter: Value,
+}
+
+pub async fn delete_documents_by_filter(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
+    body: AwebJson<DocumentDeletionByFilter, DeserrJsonError>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    println!("here");
+    debug!("called with params: {:?}", body);
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+    let index_uid = index_uid.into_inner();
+    let filter = body.into_inner().filter;
+
+    analytics.delete_documents(DocumentDeletionKind::PerBatch, &req);
+
+    debug!("filter: {:?}", filter);
+
+    // FIXME: spawn_blocking => tamo: but why, it's making zero IO and almost no allocation?
+    // TODO: what should we do in case of an empty filter? Create a task that does nothing (then we should be able to store a None in the task queue)
+    // or refuse the payload with a cool™️  error message 😎
+    let _ = crate::search::parse_filter(&filter)?.expect("You can't send an empty filter");
+
+    let task = KindWithContent::DocumentDeletionByFilter { index_uid, filter_expr: filter };
+
+    let task: SummarizedTaskView =
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
+
+    debug!("returns: {:?}", task);
+    return Ok(HttpResponse::Accepted().json(task));
 }
 
 pub async fn clear_all_documents(

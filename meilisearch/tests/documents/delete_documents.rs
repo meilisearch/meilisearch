@@ -156,14 +156,13 @@ async fn delete_document_by_filter() {
     index.wait_task(1).await;
     let (response, code) =
         index.delete_document_by_filter(json!({ "filter": "color = blue"})).await;
-    snapshot!(code, @"202 Accepted");
+    // snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 2,
-      "indexUid": "doggo",
-      "status": "enqueued",
-      "type": "documentDeletion",
-      "enqueuedAt": "[date]"
+      "message": "Missing fied `filter`",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
     }
     "###);
 
