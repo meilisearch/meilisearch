@@ -14,7 +14,7 @@ use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::{
-    dot_product_similarity, FacetValueHit, InternalError, SearchForFacetValue,
+    dot_product_similarity, FacetValueHit, InternalError, SearchForFacetValues,
 };
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
@@ -590,7 +590,7 @@ pub fn perform_facet_search(
     let rtxn = index.read_txn()?;
 
     let (search, _, _, _) = prepare_search(index, &rtxn, &search_query)?;
-    let mut facet_search = SearchForFacetValue::new(facet_name, search);
+    let mut facet_search = SearchForFacetValues::new(facet_name, search);
     if let Some(facet_query) = &facet_query {
         facet_search.query(facet_query);
     }
