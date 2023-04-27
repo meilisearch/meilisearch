@@ -333,7 +333,8 @@ pub fn execute_search(
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
     let mut located_query_terms = None;
-    let bucket_sort_output = if let Some(query) = query {
+
+    let query_terms = if let Some(query) = query {
         // We make sure that the analyzer is aware of the stop words
         // this ensures that the query builder is able to properly remove them.
         let mut tokbuilder = TokenizerBuilder::new();
@@ -351,6 +352,16 @@ pub fn execute_search(
         let tokens = tokenizer.tokenize(query);
 
         let query_terms = located_query_terms_from_string(ctx, tokens, words_limit)?;
+        if query_terms.is_empty() {
+            // Do a placeholder search instead
+            None
+        } else {
+            Some(query_terms)
+        }
+    } else {
+        None
+    };
+    let bucket_sort_output = if let Some(query_terms) = query_terms {
         let graph = QueryGraph::from_query(ctx, &query_terms)?;
         located_query_terms = Some(query_terms);
 

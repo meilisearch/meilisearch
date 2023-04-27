@@ -203,20 +203,15 @@ pub fn compute_phrase_docids(
     if words.is_empty() {
         return Ok(RoaringBitmap::new());
     }
-    if words.len() == 1 {
-        if let Some(word) = &words[0] {
-            if let Some(word_docids) = ctx.word_docids(Word::Original(*word))? {
-                return Ok(word_docids);
-            } else {
-                return Ok(RoaringBitmap::new());
-            }
+    let mut candidates = RoaringBitmap::new();
+    for word in words.iter().flatten().copied() {
+        if let Some(word_docids) = ctx.word_docids(Word::Original(word))? {
+            candidates |= word_docids;
         } else {
             return Ok(RoaringBitmap::new());
         }
     }
 
-    let mut candidates = RoaringBitmap::new();
-    let mut first_iter = true;
     let winsize = words.len().min(3);
 
     for win in words.windows(winsize) {
@@ -262,12 +257,8 @@ pub fn compute_phrase_docids(
         bitmaps.sort_unstable_by_key(|a| a.len());
 
         for bitmap in bitmaps {
-            if first_iter {
-                candidates = bitmap;
-                first_iter = false;
-            } else {
-                candidates &= bitmap;
-            }
+            candidates &= bitmap;
+
             // There will be no match, return early
             if candidates.is_empty() {
                 break;

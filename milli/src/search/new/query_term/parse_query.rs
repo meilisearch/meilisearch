@@ -241,7 +241,7 @@ impl PhraseBuilder {
     }
 
     fn is_empty(&self) -> bool {
-        self.words.is_empty()
+        self.words.is_empty() || self.words.iter().all(Option::is_none)
     }
 
     // precondition: token has kind Word or StopWord
