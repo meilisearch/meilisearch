@@ -294,35 +294,51 @@ impl<'a> SearchForFacetValues<'a> {
         match self.query.as_ref() {
             Some(query) => {
                 if self.search_query.index.authorize_typos(rtxn)? {
-                    let is_prefix = true;
-                    let starts = StartsWith(Str::new(get_first(query)));
-                    let first = Intersection(build_dfa(query, 1, is_prefix), Complement(&starts));
-                    let second_dfa = build_dfa(query, 2, is_prefix);
-                    let second = Intersection(&second_dfa, &starts);
-                    let automaton = Union(first, &second);
-
-                    let mut stream = fst.search(automaton).into_stream();
                     let mut result = vec![];
-                    let mut length = 0;
-                    while let Some(facet_value) = stream.next() {
-                        let value = std::str::from_utf8(facet_value)?;
-                        let key = FacetGroupKey { field_id: fid, level: 0, left_bound: value };
-                        let docids = match index.facet_id_string_docids.get(rtxn, &key)? {
-                            Some(FacetGroupValue { bitmap, .. }) => bitmap,
-                            None => {
-                                error!(
-                                    "the facet value is missing from the facet database: {key:?}"
-                                );
-                                continue;
+
+                    let exact_words_fst = self.search_query.index.exact_words(rtxn)?;
+                    if exact_words_fst.map_or(false, |fst| fst.contains(query)) {
+                        let key =
+                            FacetGroupKey { field_id: fid, level: 0, left_bound: query.as_ref() };
+                        if let Some(FacetGroupValue { bitmap, .. }) =
+                            index.facet_id_string_docids.get(rtxn, &key)?
+                        {
+                            let count = search_candidates.intersection_len(&bitmap);
+                            if count != 0 {
+                                result.push(FacetValueHit { value: query.to_string(), count });
                             }
-                        };
-                        let count = search_candidates.intersection_len(&docids);
-                        if count != 0 {
-                            result.push(FacetValueHit { value: value.to_string(), count });
-                            length += 1;
                         }
-                        if length >= MAX_NUMBER_OF_FACETS {
-                            break;
+                    } else {
+                        let is_prefix = true;
+                        let starts = StartsWith(Str::new(get_first(query)));
+                        let first =
+                            Intersection(build_dfa(query, 1, is_prefix), Complement(&starts));
+                        let second_dfa = build_dfa(query, 2, is_prefix);
+                        let second = Intersection(&second_dfa, &starts);
+                        let automaton = Union(first, &second);
+
+                        let mut stream = fst.search(automaton).into_stream();
+                        let mut length = 0;
+                        while let Some(facet_value) = stream.next() {
+                            let value = std::str::from_utf8(facet_value)?;
+                            let key = FacetGroupKey { field_id: fid, level: 0, left_bound: value };
+                            let docids = match index.facet_id_string_docids.get(rtxn, &key)? {
+                                Some(FacetGroupValue { bitmap, .. }) => bitmap,
+                                None => {
+                                    error!(
+                                        "the facet value is missing from the facet database: {key:?}"
+                                    );
+                                    continue;
+                                }
+                            };
+                            let count = search_candidates.intersection_len(&docids);
+                            if count != 0 {
+                                result.push(FacetValueHit { value: value.to_string(), count });
+                                length += 1;
+                            }
+                            if length >= MAX_NUMBER_OF_FACETS {
+                                break;
+                            }
                         }
                     }
 
