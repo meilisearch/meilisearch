@@ -159,10 +159,11 @@ async fn delete_document_by_filter() {
     // snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
     {
-      "message": "Missing fied `filter`",
-      "code": "bad_request",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
+      "taskUid": 2,
+      "indexUid": "doggo",
+      "status": "enqueued",
+      "type": "documentDeletion",
+      "enqueuedAt": "[date]"
     }
     "###);
 

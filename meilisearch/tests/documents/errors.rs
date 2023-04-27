@@ -429,10 +429,10 @@ async fn delete_document_by_filter() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid syntax for the filter parameter: `expected String, Array, found: null`.",
-      "code": "invalid_search_filter",
+      "message": "Invalid value type: expected an object, but found a string: `\"hello\"`",
+      "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+      "link": "https://docs.meilisearch.com/errors#bad_request"
     }
     "###);
 
