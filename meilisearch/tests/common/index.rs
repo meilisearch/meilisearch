@@ -226,7 +226,7 @@ impl Index<'_> {
     }
 
     pub async fn delete_document_by_filter(&self, body: Value) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/documents/delete-batch", urlencode(self.uid.as_ref()));
+        let url = format!("/indexes/{}/documents/delete", urlencode(self.uid.as_ref()));
         self.service.post_encoded(url, body, self.encoder).await
     }
 
