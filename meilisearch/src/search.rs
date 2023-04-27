@@ -10,7 +10,7 @@ use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
-use meilisearch_types::milli::{FacetValueHit, SearchForFacetValue};
+use meilisearch_types::milli::{FacetValueHit, SearchForFacetValues};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::TokenizerBuilder;
@@ -504,7 +504,7 @@ pub fn perform_facet_search(
     let rtxn = index.read_txn()?;
 
     let (search, _, _, _) = prepare_search(index, &rtxn, &search_query)?;
-    let mut facet_search = SearchForFacetValue::new(facet_name, search);
+    let mut facet_search = SearchForFacetValues::new(facet_name, search);
     if let Some(facet_query) = &facet_query {
         facet_search.query(facet_query);
     }
