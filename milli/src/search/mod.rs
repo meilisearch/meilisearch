@@ -10,7 +10,8 @@ use self::new::PartialSearchResult;
 use crate::error::UserError;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::{
-    execute_search, AscDesc, DefaultSearchLogger, DocumentId, Index, Result, SearchContext, BEU16,
+    execute_search, AscDesc, DefaultSearchLogger, DocumentId, FieldIdMapMissingEntry, Index,
+    Result, SearchContext, BEU16,
 };
 use fst::automaton::{Complement, Intersection, StartsWith, Str, Union};
 use fst::Streamer;
@@ -206,15 +207,15 @@ pub fn build_dfa(word: &str, typos: u8, is_prefix: bool) -> DFA {
     }
 }
 
-pub struct SearchForFacetValue<'a> {
+pub struct SearchForFacetValues<'a> {
     query: Option<String>,
     facet: String,
     search_query: Search<'a>,
 }
 
-impl<'a> SearchForFacetValue<'a> {
-    pub fn new(facet: String, search_query: Search<'a>) -> SearchForFacetValue<'a> {
-        SearchForFacetValue { query: None, facet, search_query }
+impl<'a> SearchForFacetValues<'a> {
+    pub fn new(facet: String, search_query: Search<'a>) -> SearchForFacetValues<'a> {
+        SearchForFacetValues { query: None, facet, search_query }
     }
 
     pub fn query(&mut self, query: impl Into<String>) -> &mut Self {
