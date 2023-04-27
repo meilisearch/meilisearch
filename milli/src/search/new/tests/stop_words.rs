@@ -125,7 +125,7 @@ fn test_stop_words_in_phrase() {
     s.query("how \"to\" train \"The dragon");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[3, 6, 5]");
 
     let mut s = Search::new(&txn, &index);
     s.query("\"to\"");
