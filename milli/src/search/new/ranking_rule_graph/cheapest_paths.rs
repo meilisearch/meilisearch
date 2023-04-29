@@ -100,16 +100,21 @@ impl<G: RankingRuleGraphTrait> VisitorState<G> {
             let ControlFlow::Continue(next_any_valid) = cf else {
                 return Ok(ControlFlow::Break(()));
             };
+            any_valid |= next_any_valid;
             if next_any_valid {
+                // backtrack as much as possible if a valid path was found and the dead_ends_cache
+                // was updated such that the current prefix is now invalid
                 self.forbidden_conditions = ctx
                     .dead_ends_cache
                     .forbidden_conditions_for_all_prefixes_up_to(self.path.iter().copied());
                 if self.visited_conditions.intersects(&self.forbidden_conditions) {
-                    break;
+                    return Ok(ControlFlow::Continue(true));
                 }
             }
-            any_valid |= next_any_valid;
         }
+        // if there wasn't any valid path from this node to the end node, then
+        // this node is a dead end **for this specific cost**.
+        // we could encode this in the dead-ends cache
 
         Ok(ControlFlow::Continue(any_valid))
     }
@@ -117,7 +122,7 @@ impl<G: RankingRuleGraphTrait> VisitorState<G> {
     fn visit_no_condition(
         &mut self,
         dest_node: Interned<QueryNode>,
-        edge_forbidden_nodes: &SmallBitmap<QueryNode>,
+        edge_new_nodes_to_skip: &SmallBitmap<QueryNode>,
         visit: VisitFn<G>,
         ctx: &mut VisitorContext<G>,
     ) -> Result<ControlFlow<(), bool>> {
@@ -137,7 +142,7 @@ impl<G: RankingRuleGraphTrait> VisitorState<G> {
             }
         } else {
             let old_fbct = self.forbidden_conditions_to_nodes.clone();
-            self.forbidden_conditions_to_nodes.union(edge_forbidden_nodes);
+            self.forbidden_conditions_to_nodes.union(edge_new_nodes_to_skip);
             let cf = self.visit_node(dest_node, visit, ctx)?;
             self.forbidden_conditions_to_nodes = old_fbct;
             Ok(cf)
@@ -147,14 +152,14 @@ impl<G: RankingRuleGraphTrait> VisitorState<G> {
         &mut self,
         condition: Interned<G::Condition>,
         dest_node: Interned<QueryNode>,
-        edge_forbidden_nodes: &SmallBitmap<QueryNode>,
+        edge_new_nodes_to_skip: &SmallBitmap<QueryNode>,
         visit: VisitFn<G>,
         ctx: &mut VisitorContext<G>,
     ) -> Result<ControlFlow<(), bool>> {
         assert!(dest_node != ctx.graph.query_graph.end_node);
 
         if self.forbidden_conditions_to_nodes.contains(dest_node)
-            || edge_forbidden_nodes.intersects(&self.visited_nodes)
+            || edge_new_nodes_to_skip.intersects(&self.visited_nodes)
         {
             return Ok(ControlFlow::Continue(false));
         }
@@ -162,11 +167,13 @@ impl<G: RankingRuleGraphTrait> VisitorState<G> {
             return Ok(ControlFlow::Continue(false));
         }
 
-        if ctx
+        // Checking that from the destination node, there is at least
+        // one cost that we can visit that corresponds to our remaining budget.
+        if !ctx
             .all_costs_from_node
             .get(dest_node)
             .iter()
-            .all(|next_cost| *next_cost != self.remaining_cost)
+            .any(|next_cost| *next_cost == self.remaining_cost)
         {
             return Ok(ControlFlow::Continue(false));
         }
@@ -182,7 +189,7 @@ impl<G: RankingRuleGraphTrait> VisitorState<G> {
             self.forbidden_conditions.union(&next_forbidden);
         }
         let old_fctn = self.forbidden_conditions_to_nodes.clone();
-        self.forbidden_conditions_to_nodes.union(edge_forbidden_nodes);
+        self.forbidden_conditions_to_nodes.union(edge_new_nodes_to_skip);
 
         let cf = self.visit_node(dest_node, visit, ctx)?;
 
@@ -212,22 +219,21 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         }
 
         while let Some(cur_node) = node_stack.pop_front() {
-            let mut self_costs = BTreeSet::<u64>::new();
+            let mut self_costs = Vec::<u64>::new();
 
             let cur_node_edges = &self.edges_of_node.get(cur_node);
             for edge_idx in cur_node_edges.iter() {
                 let edge = self.edges_store.get(edge_idx).as_ref().unwrap();
                 let succ_node = edge.dest_node;
                 let succ_costs = costs_to_end.get(succ_node);
-                for succ_distance in succ_costs {
-                    self_costs.insert(edge.cost as u64 + succ_distance);
+                for succ_cost in succ_costs {
+                    self_costs.push(edge.cost as u64 + succ_cost);
                 }
             }
-            let costs_to_end_cur_node = costs_to_end.get_mut(cur_node);
-            for cost in self_costs.iter() {
-                costs_to_end_cur_node.push(*cost);
-            }
-            *costs_to_end.get_mut(cur_node) = self_costs.into_iter().collect();
+            self_costs.sort_unstable();
+            self_costs.dedup();
+
+            *costs_to_end.get_mut(cur_node) = self_costs;
             for prev_node in self.query_graph.nodes.get(cur_node).predecessors.iter() {
                 if !enqueued.contains(prev_node) {
                     node_stack.push_back(prev_node);
@@ -236,5 +242,57 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
             }
         }
         costs_to_end
+    }
+
+    pub fn update_all_costs_before_nodes(
+        &self,
+        removed_nodes: &BTreeSet<Interned<QueryNode>>,
+        costs: &mut MappedInterner<QueryNode, Vec<u64>>,
+    ) {
+        // unsafe {
+        //     FIND_ALL_COSTS_INC_COUNT += 1;
+        //     println!(
+        //         "update_all_costs_after_removing_edge incrementally count: {}",
+        //         FIND_ALL_COSTS_INC_COUNT
+        //     );
+        // }
+
+        let mut enqueued = SmallBitmap::new(self.query_graph.nodes.len());
+        let mut node_stack = VecDeque::new();
+
+        for node in removed_nodes.iter() {
+            enqueued.insert(*node);
+            node_stack.push_back(*node);
+        }
+
+        while let Some(cur_node) = node_stack.pop_front() {
+            let mut self_costs = BTreeSet::<u64>::new();
+
+            let cur_node_edges = &self.edges_of_node.get(cur_node);
+            for edge_idx in cur_node_edges.iter() {
+                let edge = self.edges_store.get(edge_idx).as_ref().unwrap();
+                let succ_node = edge.dest_node;
+                let succ_costs = costs.get(succ_node);
+                for succ_distance in succ_costs {
+                    self_costs.insert(edge.cost as u64 + succ_distance);
+                }
+            }
+            let costs_to_end_cur_node = costs.get_mut(cur_node);
+            for cost in self_costs.iter() {
+                costs_to_end_cur_node.push(*cost);
+            }
+            let self_costs = self_costs.into_iter().collect::<Vec<_>>();
+            if &self_costs == costs.get(cur_node) {
+                continue;
+            }
+            *costs.get_mut(cur_node) = self_costs;
+
+            for prev_node in self.query_graph.nodes.get(cur_node).predecessors.iter() {
+                if !enqueued.contains(prev_node) {
+                    node_stack.push_back(prev_node);
+                    enqueued.insert(prev_node);
+                }
+            }
+        }
     }
 }

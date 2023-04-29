@@ -88,4 +88,12 @@ impl<T> DeadEndsCache<T> {
             }
         }
     }
+
+    // pub fn debug_print(&self, indent: usize) {
+    //     println!("{} {:?}", " ".repeat(indent), self.forbidden.iter().collect::<Vec<_>>());
+    //     for (condition, next) in self.conditions.iter().zip(self.next.iter()) {
+    //         println!("{} {condition}:", " ".repeat(indent));
+    //         next.debug_print(indent + 2);
+    //     }
+    // }
 }

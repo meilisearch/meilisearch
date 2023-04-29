@@ -6,7 +6,7 @@ use std::path::Path;
 use heed::EnvOpenOptions;
 use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
-use milli::{Criterion, Index, Object};
+use milli::{Index, Object};
 
 fn usage(error: &str, program_name: &str) -> String {
     format!(
@@ -52,18 +52,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let filterable_fields = filterable_fields.iter().map(|s| s.to_string()).collect();
     builder.set_filterable_fields(filterable_fields);
 
-    builder.set_criteria(vec![
-        Criterion::Words,
-        Criterion::Typo,
-        Criterion::Proximity,
-        Criterion::Attribute,
-    ]);
     builder.execute(|_| (), || false).unwrap();
 
     let config = IndexerConfig::default();
-    let mut indexing_config = IndexDocumentsConfig::default();
-
-    indexing_config.autogenerate_docids = true;
+    let indexing_config = IndexDocumentsConfig::default();
 
     let builder =
         IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| (), || false).unwrap();

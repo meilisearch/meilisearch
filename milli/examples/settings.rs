@@ -24,8 +24,8 @@ fn main() {
         Criterion::Typo,
         Criterion::Proximity,
         Criterion::Attribute,
+        Criterion::Sort,
         Criterion::Exactness,
-        // Criterion::Asc("release_date".to_owned()),
     ]);
 
     builder.execute(|_| (), || false).unwrap();

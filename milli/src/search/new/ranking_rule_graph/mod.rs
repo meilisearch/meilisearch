@@ -10,10 +10,10 @@ mod cheapest_paths;
 mod condition_docids_cache;
 mod dead_ends_cache;
 
-/// Implementation of the `attribute` ranking rule
-mod fid;
 /// Implementation of the `exactness` ranking rule
 mod exactness;
+/// Implementation of the `attribute` ranking rule
+mod fid;
 /// Implementation of the `position` ranking rule
 mod position;
 /// Implementation of the `proximity` ranking rule
@@ -21,13 +21,14 @@ mod proximity;
 /// Implementation of the `typo` ranking rule
 mod typo;
 
+use std::collections::BTreeSet;
 use std::hash::Hash;
 
-pub use fid::{FidCondition, FidGraph};
 pub use cheapest_paths::PathVisitor;
 pub use condition_docids_cache::ConditionDocIdsCache;
 pub use dead_ends_cache::DeadEndsCache;
 pub use exactness::{ExactnessCondition, ExactnessGraph};
+pub use fid::{FidCondition, FidGraph};
 pub use position::{PositionCondition, PositionGraph};
 pub use proximity::{ProximityCondition, ProximityGraph};
 use roaring::RoaringBitmap;
@@ -130,7 +131,12 @@ impl<G: RankingRuleGraphTrait> Clone for RankingRuleGraph<G> {
 }
 impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
     /// Remove all edges with the given condition
-    pub fn remove_edges_with_condition(&mut self, condition_to_remove: Interned<G::Condition>) {
+    /// Return a set of all the source nodes of the removed edges
+    pub fn remove_edges_with_condition(
+        &mut self,
+        condition_to_remove: Interned<G::Condition>,
+    ) -> BTreeSet<Interned<QueryNode>> {
+        let mut source_nodes = BTreeSet::new();
         for (edge_id, edge_opt) in self.edges_store.iter_mut() {
             let Some(edge) = edge_opt.as_mut() else { continue };
             let Some(condition) = edge.condition else { continue };
@@ -139,7 +145,9 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                 let (source_node, _dest_node) = (edge.source_node, edge.dest_node);
                 *edge_opt = None;
                 self.edges_of_node.get_mut(source_node).remove(edge_id);
+                source_nodes.insert(source_node);
             }
         }
+        source_nodes
     }
 }

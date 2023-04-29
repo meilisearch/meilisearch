@@ -36,6 +36,7 @@ That is we find the documents where either:
 - OR: `pretty` is 2-close to `house` AND `house` is 1-close to `by`
 */
 
+use std::collections::BTreeSet;
 use std::ops::ControlFlow;
 
 use roaring::RoaringBitmap;
@@ -99,6 +100,8 @@ impl<G: RankingRuleGraphTrait> GraphBasedRankingRule<G> {
     }
 }
 
+static mut COUNT_PATHS: usize = 0;
+
 /// The internal state of a graph-based ranking rule during iteration
 pub struct GraphBasedRankingRuleState<G: RankingRuleGraphTrait> {
     /// The current graph
@@ -110,7 +113,7 @@ pub struct GraphBasedRankingRuleState<G: RankingRuleGraphTrait> {
     /// A structure giving the list of possible costs from each node to the end node
     all_costs: MappedInterner<QueryNode, Vec<u64>>,
     /// An index in the first element of `all_distances`, giving the cost of the next bucket
-    cur_distance_idx: usize,
+    cur_cost: u64,
 }
 
 impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBasedRankingRule<G> {
@@ -160,7 +163,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
             conditions_cache: condition_docids_cache,
             dead_ends_cache,
             all_costs,
-            cur_distance_idx: 0,
+            cur_cost: 0,
         };
 
         self.state = Some(state);
@@ -181,16 +184,16 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         // should never happen
         let mut state = self.state.take().unwrap();
 
-        // If the cur_distance_idx does not point to a valid cost in the `all_distances`
-        // structure, then we have computed all the buckets and can return.
-        if state.cur_distance_idx >= state.all_costs.get(state.graph.query_graph.root_node).len() {
-            self.state = None;
-            return Ok(None);
-        }
-
         // Retrieve the cost of the paths to compute
-        let cost = state.all_costs.get(state.graph.query_graph.root_node)[state.cur_distance_idx];
-        state.cur_distance_idx += 1;
+        let Some(&cost) = state
+            .all_costs
+            .get(state.graph.query_graph.root_node)
+            .iter()
+            .find(|c| **c >= state.cur_cost) else {
+                self.state = None;
+                return Ok(None);
+        };
+        state.cur_cost = cost + 1;
 
         let mut bucket = RoaringBitmap::new();
 
@@ -199,7 +202,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
             conditions_cache: condition_docids_cache,
             dead_ends_cache,
             all_costs,
-            cur_distance_idx: _,
+            cur_cost: _,
         } = &mut state;
 
         let mut universe = universe.clone();
@@ -216,9 +219,34 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         // the number of future candidate paths given by that same function.
 
         let mut subpaths_docids: Vec<(Interned<G::Condition>, RoaringBitmap)> = vec![];
+        let mut at_least_one = false;
 
+        // unsafe {
+        //     if COUNT_PATHS >= 1489 && COUNT_PATHS < 1491 {
+        //         println!("COUNT_PATHS {COUNT_PATHS} COST {cost}, NODES {COUNT_VISITED_NODES}, UNIVERSE {}", universe.len());
+        //         // let all_costs = all_costs.get(graph.query_graph.root_node);
+        //         // println!("{all_costs:?}");
+        //         dead_ends_cache.debug_print(0);
+        //         println!("{universe:?}");
+
+        //         println!("==================");
+        //     }
+        // }
+        let mut nodes_with_removed_outgoing_conditions = BTreeSet::new();
         let visitor = PathVisitor::new(cost, graph, all_costs, dead_ends_cache);
+
         visitor.visit_paths(&mut |path, graph, dead_ends_cache| {
+            unsafe {
+                COUNT_PATHS += 1;
+            }
+            // if self.id == "position" {
+            // at_least_one = true;
+            //     print!(".");
+            // }
+            // if self.id == "fid" {
+            at_least_one = true;
+            //     print!("!");
+            // }
             considered_paths.push(path.to_vec());
             // If the universe is empty, stop exploring the graph, since no docids will ever be found anymore.
             if universe.is_empty() {
@@ -243,7 +271,6 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
             };
             // Then for the remaining of the path, we continue computing docids.
             for latest_condition in path[idx_of_first_different_condition..].iter().copied() {
-                // The visit_path_condition will stop
                 let success = visit_path_condition(
                     ctx,
                     graph,
@@ -251,6 +278,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                     dead_ends_cache,
                     condition_docids_cache,
                     &mut subpaths_docids,
+                    &mut nodes_with_removed_outgoing_conditions,
                     latest_condition,
                 )?;
                 if !success {
@@ -281,7 +309,11 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                 Ok(ControlFlow::Continue(()))
             }
         })?;
-
+        // if at_least_one {
+        //     unsafe {
+        //         println!("\n===== {id}  COST: {cost} ====  PATHS: {COUNT_PATHS} ==== NODES: {COUNT_VISITED_NODES} ===== UNIVERSE: {universe}", id=self.id, universe=universe.len());
+        //     }
+        // }
         logger.log_internal_state(graph);
         logger.log_internal_state(&good_paths);
 
@@ -305,6 +337,10 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
 
         let next_query_graph = QueryGraph::build_from_paths(paths);
 
+        if !nodes_with_removed_outgoing_conditions.is_empty() {
+            graph.update_all_costs_before_nodes(&nodes_with_removed_outgoing_conditions, all_costs);
+        }
+
         self.state = Some(state);
 
         Ok(Some(RankingRuleOutput { query: next_query_graph, candidates: bucket }))
@@ -321,6 +357,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
 
 /// Returns false if the intersection between the condition
 /// docids and the previous path docids is empty.
+#[allow(clippy::too_many_arguments)]
 fn visit_path_condition<G: RankingRuleGraphTrait>(
     ctx: &mut SearchContext,
     graph: &mut RankingRuleGraph<G>,
@@ -328,6 +365,7 @@ fn visit_path_condition<G: RankingRuleGraphTrait>(
     dead_ends_cache: &mut DeadEndsCache<G::Condition>,
     condition_docids_cache: &mut ConditionDocIdsCache<G>,
     subpath: &mut Vec<(Interned<G::Condition>, RoaringBitmap)>,
+    nodes_with_removed_outgoing_conditions: &mut BTreeSet<Interned<QueryNode>>,
     latest_condition: Interned<G::Condition>,
 ) -> Result<bool> {
     let condition_docids = &condition_docids_cache
@@ -337,7 +375,8 @@ fn visit_path_condition<G: RankingRuleGraphTrait>(
         // 1. Store in the cache that this edge is empty for this universe
         dead_ends_cache.forbid_condition(latest_condition);
         // 2. remove all the edges with this condition from the ranking rule graph
-        graph.remove_edges_with_condition(latest_condition);
+        let source_nodes = graph.remove_edges_with_condition(latest_condition);
+        nodes_with_removed_outgoing_conditions.extend(source_nodes);
         return Ok(false);
     }
 
