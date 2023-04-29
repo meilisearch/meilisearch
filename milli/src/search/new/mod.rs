@@ -401,8 +401,12 @@ pub fn execute_search(
         let graph = QueryGraph::from_query(ctx, &query_terms)?;
         located_query_terms = Some(query_terms);
 
-        let ranking_rules =
-            get_ranking_rules_for_query_graph_search(ctx, sort_criteria, terms_matching_strategy)?;
+        let ranking_rules = get_ranking_rules_for_query_graph_search(
+            ctx,
+            sort_criteria,
+            geo_strategy,
+            terms_matching_strategy,
+        )?;
 
         universe =
             resolve_universe(ctx, &universe, &graph, terms_matching_strategy, query_graph_logger)?;

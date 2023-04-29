@@ -105,7 +105,7 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
 
     /// Refill the internal buffer of cached docids based on the strategy.
     /// Drop the rtree if we don't need it anymore.
-    fn fill_buffer<'ctx>(&mut self, ctx: &mut SearchContext<'ctx>) -> Result<()> {
+    fn fill_buffer(&mut self, ctx: &mut SearchContext) -> Result<()> {
         debug_assert!(self.field_ids.is_some(), "fill_buffer can't be called without the lat&lng");
         debug_assert!(self.cached_sorted_docids.is_empty());
 
@@ -133,7 +133,13 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
                 // and only keep the latest candidates.
                 for point in rtree.nearest_neighbor_iter(&point) {
                     if self.geo_candidates.contains(point.data.0) {
-                        self.cached_sorted_docids.pop_front();
+                        // REVIEW COMMENT: that doesn't look right, because we only keep the furthest point in the cache.
+                        // Then the cache will be exhausted after the first bucket and we'll need to repopulate it again immediately.
+                        // I think it's okay if we keep every document id in the cache instead. It's a high memory usage,
+                        // but we already have the whole rtree in memory, which is bigger than a vector of all document ids.
+                        //
+                        //      self.cached_sorted_docids.pop_front();
+                        //
                         self.cached_sorted_docids.push_back(point.data.0);
                     }
                 }
@@ -163,7 +169,10 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
                     ))
                 })
                 .collect::<Result<Vec<(u32, [f64; 2])>>>()?;
-            documents.sort_by_key(|(_, p)| distance_between_two_points(&self.point, &p) as usize);
+            // REVIEW COMMENT: the haversine distance function can be quite expensive, I think, so it's probably faster
+            // to use `sort_by_cached_key` instead of `sort_by_key`.
+            documents
+                .sort_by_cached_key(|(_, p)| distance_between_two_points(&self.point, p) as usize);
             self.cached_sorted_docids.extend(documents.into_iter().map(|(doc_id, _)| doc_id));
         };
 
@@ -193,7 +202,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
         self.query = Some(query.clone());
         self.geo_candidates &= universe;
 
-        if self.geo_candidates.len() == 0 {
+        if self.geo_candidates.is_empty() {
             return Ok(());
         }
 
@@ -203,6 +212,10 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
         self.field_ids = Some([lat, lng]);
 
         if self.strategy.use_rtree(self.geo_candidates.len() as usize) {
+            // REVIEW COMMENT: I would prefer to always keep the rtree in memory so that we don't have to deserialize it
+            // every time the geosort ranking rule starts iterating.
+            // So we'd initialize it in `::new` and never drop it.
+            //
             self.rtree = Some(ctx.index.geo_rtree(ctx.txn)?.expect("geo candidates but no rtree"));
         }
 
@@ -210,6 +223,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
         Ok(())
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn next_bucket(
         &mut self,
         ctx: &mut SearchContext<'ctx>,
