@@ -1,7 +1,10 @@
 #![allow(clippy::too_many_arguments)]
 
 use std::collections::{BTreeSet, VecDeque};
+use std::iter::FromIterator;
 use std::ops::ControlFlow;
+
+use fxhash::FxHashSet;
 
 use super::{DeadEndsCache, RankingRuleGraph, RankingRuleGraphTrait};
 use crate::search::new::interner::{Interned, MappedInterner};
@@ -112,9 +115,6 @@ impl<G: RankingRuleGraphTrait> VisitorState<G> {
                 }
             }
         }
-        // if there wasn't any valid path from this node to the end node, then
-        // this node is a dead end **for this specific cost**.
-        // we could encode this in the dead-ends cache
 
         Ok(ControlFlow::Continue(any_valid))
     }
@@ -126,11 +126,11 @@ impl<G: RankingRuleGraphTrait> VisitorState<G> {
         visit: VisitFn<G>,
         ctx: &mut VisitorContext<G>,
     ) -> Result<ControlFlow<(), bool>> {
-        if ctx
+        if !ctx
             .all_costs_from_node
             .get(dest_node)
             .iter()
-            .all(|next_cost| *next_cost != self.remaining_cost)
+            .any(|next_cost| *next_cost == self.remaining_cost)
         {
             return Ok(ControlFlow::Continue(false));
         }
@@ -158,12 +158,10 @@ impl<G: RankingRuleGraphTrait> VisitorState<G> {
     ) -> Result<ControlFlow<(), bool>> {
         assert!(dest_node != ctx.graph.query_graph.end_node);
 
-        if self.forbidden_conditions_to_nodes.contains(dest_node)
+        if self.forbidden_conditions.contains(condition)
+            || self.forbidden_conditions_to_nodes.contains(dest_node)
             || edge_new_nodes_to_skip.intersects(&self.visited_nodes)
         {
-            return Ok(ControlFlow::Continue(false));
-        }
-        if self.forbidden_conditions.contains(condition) {
             return Ok(ControlFlow::Continue(false));
         }
 
@@ -244,48 +242,41 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         costs_to_end
     }
 
-    pub fn update_all_costs_before_nodes(
+    pub fn update_all_costs_before_node(
         &self,
-        removed_nodes: &BTreeSet<Interned<QueryNode>>,
+        node_with_removed_outgoing_conditions: Interned<QueryNode>,
         costs: &mut MappedInterner<QueryNode, Vec<u64>>,
     ) {
-        // unsafe {
-        //     FIND_ALL_COSTS_INC_COUNT += 1;
-        //     println!(
-        //         "update_all_costs_after_removing_edge incrementally count: {}",
-        //         FIND_ALL_COSTS_INC_COUNT
-        //     );
-        // }
-
         let mut enqueued = SmallBitmap::new(self.query_graph.nodes.len());
         let mut node_stack = VecDeque::new();
 
-        for node in removed_nodes.iter() {
-            enqueued.insert(*node);
-            node_stack.push_back(*node);
-        }
+        enqueued.insert(node_with_removed_outgoing_conditions);
+        node_stack.push_back(node_with_removed_outgoing_conditions);
 
-        while let Some(cur_node) = node_stack.pop_front() {
-            let mut self_costs = BTreeSet::<u64>::new();
+        'main_loop: while let Some(cur_node) = node_stack.pop_front() {
+            let mut costs_to_remove = FxHashSet::default();
+            for c in costs.get(cur_node) {
+                costs_to_remove.insert(*c);
+            }
 
             let cur_node_edges = &self.edges_of_node.get(cur_node);
             for edge_idx in cur_node_edges.iter() {
                 let edge = self.edges_store.get(edge_idx).as_ref().unwrap();
-                let succ_node = edge.dest_node;
-                let succ_costs = costs.get(succ_node);
-                for succ_distance in succ_costs {
-                    self_costs.insert(edge.cost as u64 + succ_distance);
+                for cost in costs.get(edge.dest_node).iter() {
+                    costs_to_remove.remove(&(*cost + edge.cost as u64));
+                    if costs_to_remove.is_empty() {
+                        continue 'main_loop;
+                    }
                 }
             }
-            let costs_to_end_cur_node = costs.get_mut(cur_node);
-            for cost in self_costs.iter() {
-                costs_to_end_cur_node.push(*cost);
+            if costs_to_remove.is_empty() {
+                continue 'main_loop;
             }
-            let self_costs = self_costs.into_iter().collect::<Vec<_>>();
-            if &self_costs == costs.get(cur_node) {
-                continue;
+            let mut new_costs = BTreeSet::from_iter(costs.get(cur_node).iter().copied());
+            for c in costs_to_remove {
+                new_costs.remove(&c);
             }
-            *costs.get_mut(cur_node) = self_costs;
+            *costs.get_mut(cur_node) = new_costs.into_iter().collect();
 
             for prev_node in self.query_graph.nodes.get(cur_node).predecessors.iter() {
                 if !enqueued.contains(prev_node) {

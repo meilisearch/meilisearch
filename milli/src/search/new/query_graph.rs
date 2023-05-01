@@ -8,7 +8,6 @@ use crate::search::new::interner::Interner;
 use crate::Result;
 use fxhash::{FxHashMap, FxHasher};
 use std::cmp::Ordering;
-use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 
@@ -364,8 +363,6 @@ impl QueryGraph {
            └──│ b2 │──│ c2 │───│ d  │───│ e2 │
               └────┘  └────┘   └────┘   └────┘
     ```
-    But we accept the first representation as it reduces the size
-    of the graph and shouldn't cause much problems.
     */
     pub fn build_from_paths(
         paths: Vec<Vec<(Option<LocatedQueryTermSubset>, LocatedQueryTermSubset)>>,

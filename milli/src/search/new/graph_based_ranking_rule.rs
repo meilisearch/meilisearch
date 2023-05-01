@@ -309,11 +309,6 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
                 Ok(ControlFlow::Continue(()))
             }
         })?;
-        // if at_least_one {
-        //     unsafe {
-        //         println!("\n===== {id}  COST: {cost} ====  PATHS: {COUNT_PATHS} ==== NODES: {COUNT_VISITED_NODES} ===== UNIVERSE: {universe}", id=self.id, universe=universe.len());
-        //     }
-        // }
         logger.log_internal_state(graph);
         logger.log_internal_state(&good_paths);
 
@@ -337,8 +332,14 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
 
         let next_query_graph = QueryGraph::build_from_paths(paths);
 
-        if !nodes_with_removed_outgoing_conditions.is_empty() {
-            graph.update_all_costs_before_nodes(&nodes_with_removed_outgoing_conditions, all_costs);
+        #[allow(clippy::comparison_chain)]
+        if nodes_with_removed_outgoing_conditions.len() == 1 {
+            graph.update_all_costs_before_node(
+                *nodes_with_removed_outgoing_conditions.first().unwrap(),
+                all_costs,
+            );
+        } else if nodes_with_removed_outgoing_conditions.len() > 1 {
+            *all_costs = graph.find_all_costs_to_end();
         }
 
         self.state = Some(state);
