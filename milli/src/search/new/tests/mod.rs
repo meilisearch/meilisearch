@@ -3,16 +3,17 @@ pub mod attribute_position;
 pub mod distinct;
 pub mod exactness;
 pub mod geo_sort;
+pub mod integration;
 #[cfg(feature = "default")]
 pub mod language;
 pub mod ngram_split_words;
 pub mod proximity;
 pub mod proximity_typo;
 pub mod sort;
+pub mod stop_words;
 pub mod typo;
 pub mod typo_proximity;
 pub mod words_tms;
-pub mod stop_words;
 
 fn collect_field_values(
     index: &crate::Index,

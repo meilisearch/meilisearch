@@ -100,8 +100,6 @@ impl<G: RankingRuleGraphTrait> GraphBasedRankingRule<G> {
     }
 }
 
-static mut COUNT_PATHS: usize = 0;
-
 /// The internal state of a graph-based ranking rule during iteration
 pub struct GraphBasedRankingRuleState<G: RankingRuleGraphTrait> {
     /// The current graph
@@ -219,34 +217,11 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         // the number of future candidate paths given by that same function.
 
         let mut subpaths_docids: Vec<(Interned<G::Condition>, RoaringBitmap)> = vec![];
-        let mut at_least_one = false;
 
-        // unsafe {
-        //     if COUNT_PATHS >= 1489 && COUNT_PATHS < 1491 {
-        //         println!("COUNT_PATHS {COUNT_PATHS} COST {cost}, NODES {COUNT_VISITED_NODES}, UNIVERSE {}", universe.len());
-        //         // let all_costs = all_costs.get(graph.query_graph.root_node);
-        //         // println!("{all_costs:?}");
-        //         dead_ends_cache.debug_print(0);
-        //         println!("{universe:?}");
-
-        //         println!("==================");
-        //     }
-        // }
         let mut nodes_with_removed_outgoing_conditions = BTreeSet::new();
         let visitor = PathVisitor::new(cost, graph, all_costs, dead_ends_cache);
 
         visitor.visit_paths(&mut |path, graph, dead_ends_cache| {
-            unsafe {
-                COUNT_PATHS += 1;
-            }
-            // if self.id == "position" {
-            // at_least_one = true;
-            //     print!(".");
-            // }
-            // if self.id == "fid" {
-            at_least_one = true;
-            //     print!("!");
-            // }
             considered_paths.push(path.to_vec());
             // If the universe is empty, stop exploring the graph, since no docids will ever be found anymore.
             if universe.is_empty() {
