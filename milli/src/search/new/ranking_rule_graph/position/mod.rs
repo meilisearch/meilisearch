@@ -1,4 +1,4 @@
-use fxhash::FxHashSet;
+use fxhash::{FxHashMap, FxHashSet};
 use roaring::RoaringBitmap;
 
 use super::{ComputedCondition, RankingRuleGraphTrait};
@@ -11,7 +11,7 @@ use crate::Result;
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PositionCondition {
     term: LocatedQueryTermSubset,
-    position: u16,
+    positions: Vec<u16>,
 }
 
 pub enum PositionGraph {}
@@ -24,14 +24,17 @@ impl RankingRuleGraphTrait for PositionGraph {
         condition: &Self::Condition,
         universe: &RoaringBitmap,
     ) -> Result<ComputedCondition> {
-        let PositionCondition { term, .. } = condition;
-        // maybe compute_query_term_subset_docids_within_position_id should accept a universe as argument
-        let mut docids = compute_query_term_subset_docids_within_position(
-            ctx,
-            &term.term_subset,
-            condition.position,
-        )?;
-        docids &= universe;
+        let PositionCondition { term, positions } = condition;
+        let mut docids = RoaringBitmap::new();
+        for position in positions {
+            // maybe compute_query_term_subset_docids_within_position should accept a universe as argument
+            docids |= universe
+                & compute_query_term_subset_docids_within_position(
+                    ctx,
+                    &term.term_subset,
+                    *position,
+                )?;
+        }
 
         Ok(ComputedCondition {
             docids,
@@ -72,7 +75,8 @@ impl RankingRuleGraphTrait for PositionGraph {
             all_positions.extend(positions);
         }
 
-        let mut edges = vec![];
+        let mut positions_for_costs = FxHashMap::<u32, Vec<u16>>::default();
+
         for position in all_positions {
             let cost = {
                 let mut cost = 0;
@@ -85,7 +89,11 @@ impl RankingRuleGraphTrait for PositionGraph {
                 }
                 cost
             };
+            positions_for_costs.entry(cost).or_default().push(position);
+        }
+        let mut edges = vec![];
 
+        for (cost, positions) in positions_for_costs {
             // TODO: We can improve performances and relevancy by storing
             //       the term subsets associated to each position fetched.
             //
@@ -94,7 +102,7 @@ impl RankingRuleGraphTrait for PositionGraph {
                 cost,
                 conditions_interner.insert(PositionCondition {
                     term: term.clone(), // TODO remove this ugly clone
-                    position,
+                    positions,
                 }),
             ));
         }
