@@ -74,22 +74,24 @@ impl RankingRuleGraphTrait for PositionGraph {
 
         let mut edges = vec![];
         for position in all_positions {
-            let sum_positions = {
+            let cost = {
                 let mut cost = 0;
                 for i in 0..term.term_ids.len() {
                     // This is actually not fully correct and slightly penalises ngrams unfairly.
                     // Because if two words are in the same bucketed position (e.g. 32) and consecutive,
                     // then their position cost will be 32+32=64, but an ngram of these two words at the
                     // same position will have a cost of 32+32+1=65
-                    cost += position as u32 + i as u32;
+                    cost += cost_from_position(position as u32 + i as u32);
                 }
                 cost
             };
 
             // TODO: We can improve performances and relevancy by storing
             //       the term subsets associated to each position fetched.
+            //
+            // TODO: group conditions by their cost
             edges.push((
-                cost_from_sum_positions(sum_positions),
+                cost,
                 conditions_interner.insert(PositionCondition {
                     term: term.clone(), // TODO remove this ugly clone
                     position,
@@ -101,7 +103,7 @@ impl RankingRuleGraphTrait for PositionGraph {
     }
 }
 
-fn cost_from_sum_positions(sum_positions: u32) -> u32 {
+fn cost_from_position(sum_positions: u32) -> u32 {
     match sum_positions {
         0 | 1 | 2 | 3 => sum_positions,
         4 | 5 => 4,
