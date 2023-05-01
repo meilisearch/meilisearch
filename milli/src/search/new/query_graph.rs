@@ -6,8 +6,11 @@ use super::small_bitmap::SmallBitmap;
 use super::SearchContext;
 use crate::search::new::interner::Interner;
 use crate::Result;
+use fxhash::{FxHashMap, FxHasher};
 use std::cmp::Ordering;
+use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
+use std::hash::{Hash, Hasher};
 
 /// A node of the [`QueryGraph`].
 ///
@@ -400,14 +403,29 @@ impl QueryGraph {
             paths_with_single_terms.push(processed_path);
         }
 
-        // TODO: make a prefix tree of the processed paths to avoid uselessly duplicating nodes
+        let mut paths_with_single_terms_and_suffix_hash = vec![];
+        for path in paths_with_single_terms {
+            let mut hasher = FxHasher::default();
+            let mut path_with_hash = vec![];
+            for term in path.into_iter().rev() {
+                term.hash(&mut hasher);
+                path_with_hash.push((term, hasher.finish()));
+            }
+            path_with_hash.reverse();
+            paths_with_single_terms_and_suffix_hash.push(path_with_hash);
+        }
+
+        let mut node_data_id_for_term_and_suffix_hash =
+            FxHashMap::<(LocatedQueryTermSubset, u64), Interned<QueryNodeData>>::default();
 
         let mut paths_with_ids = vec![];
-        for path in paths_with_single_terms {
+        for path in paths_with_single_terms_and_suffix_hash {
             let mut path_with_ids = vec![];
-            for term in path {
-                let id = node_data.push(QueryNodeData::Term(term));
-                path_with_ids.push(Interned::from_raw(id.into_raw()));
+            for (term, suffix_hash) in path {
+                let node_data_id = node_data_id_for_term_and_suffix_hash
+                    .entry((term.clone(), suffix_hash))
+                    .or_insert_with(|| node_data.push(QueryNodeData::Term(term)));
+                path_with_ids.push(Interned::from_raw(node_data_id.into_raw()));
             }
             paths_with_ids.push(path_with_ids);
         }
