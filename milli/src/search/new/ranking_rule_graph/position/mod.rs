@@ -91,13 +91,15 @@ impl RankingRuleGraphTrait for PositionGraph {
             };
             positions_for_costs.entry(cost).or_default().push(position);
         }
+        println!(
+            "positions for cost {} : {positions_for_costs:?}",
+            term.term_subset.description(ctx)
+        );
         let mut edges = vec![];
 
         for (cost, positions) in positions_for_costs {
             // TODO: We can improve performances and relevancy by storing
             //       the term subsets associated to each position fetched.
-            //
-            // TODO: group conditions by their cost
             edges.push((
                 cost,
                 conditions_interner.insert(PositionCondition {
