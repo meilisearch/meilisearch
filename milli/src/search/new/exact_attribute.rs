@@ -34,7 +34,6 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for ExactAttribute {
         query: &QueryGraph,
     ) -> Result<()> {
         self.state = State::start_iteration(ctx, universe, query)?;
-
         Ok(())
     }
 
@@ -169,7 +168,8 @@ impl State {
                 // longer phrases we'll be losing on precision here.
                 let bucketed_position = crate::bucketed_position(position + offset);
                 let word_position_docids =
-                    ctx.get_db_word_position_docids(*word, bucketed_position)?.unwrap_or_default();
+                    ctx.get_db_word_position_docids(*word, bucketed_position)?.unwrap_or_default()
+                        & universe;
                 candidates &= word_position_docids;
                 if candidates.is_empty() {
                     return Ok(State::Empty(query_graph.clone()));
@@ -183,10 +183,15 @@ impl State {
             return Ok(State::Empty(query_graph.clone()));
         }
 
-        let searchable_fields_ids = ctx.index.searchable_fields_ids(ctx.txn)?.unwrap_or_default();
+        let searchable_fields_ids = {
+            if let Some(fids) = ctx.index.searchable_fields_ids(ctx.txn)? {
+                fids
+            } else {
+                ctx.index.fields_ids_map(ctx.txn)?.ids().collect()
+            }
+        };
 
         let mut candidates_per_attribute = Vec::with_capacity(searchable_fields_ids.len());
-
         // then check that there exists at least one attribute that has all of the terms
         for fid in searchable_fields_ids {
             let mut intersection = MultiOps::intersection(
@@ -208,10 +213,10 @@ impl State {
                         .field_id_word_count_docids
                         .get(ctx.txn, &(fid, count_all_positions as u8))?
                         .unwrap_or_default()
+                        & universe
                 } else {
                     RoaringBitmap::default()
                 };
-
                 candidates_per_attribute.push(FieldCandidates {
                     start_with_exact: intersection,
                     exact_word_count: candidates_with_exact_word_count,
