@@ -68,11 +68,11 @@ Install one of our SDKs in your project for seamless integration between Meilise
 
 Take a look at the complete [Meilisearch integration list](https://meilisearch.com/docs/learn/what_is_meilisearch/sdks).
 
-[![Logos belonging to different languages and frameworks supported by Meilisearch, including React, Ruby on Rails, Go, Rust, and PHP](assets/integrations.png)](https://meilisearch.com/docs/learn/what_is_meilisearch/sdks.html)
+[![Logos belonging to different languages and frameworks supported by Meilisearch, including React, Ruby on Rails, Go, Rust, and PHP](assets/integrations.png)](https://www.meilisearch.com/docs/learn/what_is_meilisearch/sdks)
 
 ## ⚙️ Advanced usage
 
-Experienced users will want to keep our [API Reference](https://meilisearch.com/docs/reference/api) close at hand.
+Experienced users will want to keep our [API Reference](https://www.meilisearch.com/docs/reference/api/overview) close at hand.
 
 We also offer a wide range of dedicated guides to all Meilisearch features, such as [filtering](https://meilisearch.com/docs/learn/advanced/filtering), [sorting](https://meilisearch.com/docs/learn/advanced/sorting), [geosearch](https://meilisearch.com/docs/learn/advanced/geosearch), [API keys](https://meilisearch.com/docs/learn/security/master_api_keys), and [tenant tokens](https://meilisearch.com/docs/learn/security/tenant_tokens).
 
