@@ -118,9 +118,9 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
         let cache_size = self.strategy.cache_size();
         if use_rtree {
             let rtree = self.rtree.as_ref().unwrap();
-            let point = lat_lng_to_xyz(&self.point);
 
             if self.ascending {
+                let point = lat_lng_to_xyz(&self.point);
                 for point in rtree.nearest_neighbor_iter(&point) {
                     if self.geo_candidates.contains(point.data.0) {
                         self.cached_sorted_docids.push_back(point.data.0);
@@ -130,18 +130,15 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
                     }
                 }
             } else {
-                // in the case of the desc geo sort we have to scan the whole database
-                // and only keep the latest candidates.
+                // in the case of the desc geo sort we look for the closest point to the opposite of the queried point
+                // and we insert the points in reverse order they get reversed when emptying the cache later on
+                let point = lat_lng_to_xyz(&opposite_of(self.point));
                 for point in rtree.nearest_neighbor_iter(&point) {
                     if self.geo_candidates.contains(point.data.0) {
-                        // REVIEW COMMENT: that doesn't look right, because we only keep the furthest point in the cache.
-                        // Then the cache will be exhausted after the first bucket and we'll need to repopulate it again immediately.
-                        // I think it's okay if we keep every document id in the cache instead. It's a high memory usage,
-                        // but we already have the whole rtree in memory, which is bigger than a vector of all document ids.
-                        //
-                        //      self.cached_sorted_docids.pop_front();
-                        //
-                        self.cached_sorted_docids.push_back(point.data.0);
+                        self.cached_sorted_docids.push_front(point.data.0);
+                        if self.cached_sorted_docids.len() >= cache_size {
+                            break;
+                        }
                     }
                 }
             }
@@ -252,4 +249,17 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
         self.query = None;
         self.cached_sorted_docids.clear();
     }
+}
+
+/// Compute the antipodal coordinate of `coord`
+fn opposite_of(mut coord: [f64; 2]) -> [f64; 2] {
+    coord[0] *= -1.;
+    // in the case of x,0 we want to return x,180
+    if coord[1] > 0. {
+        coord[1] -= 180.;
+    } else {
+        coord[1] += 180.;
+    }
+
+    coord
 }
