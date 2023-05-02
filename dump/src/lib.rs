@@ -102,7 +102,7 @@ pub enum KindDump {
     },
     DocumentClear,
     DocumentDeletionByFilter {
-        filter: String,
+        filter: serde_json::Value,
     },
     Settings {
         settings: Box<meilisearch_types::settings::Settings<Unchecked>>,
@@ -170,7 +170,7 @@ impl From<KindWithContent> for KindDump {
                 KindDump::DocumentDeletion { documents_ids }
             }
             KindWithContent::DocumentDeletionByFilter { filter_expr, .. } => {
-                KindDump::DocumentDeletionByFilter { filter: filter_expr.to_string() }
+                KindDump::DocumentDeletionByFilter { filter: filter_expr }
             }
             KindWithContent::DocumentClear { .. } => KindDump::DocumentClear,
             KindWithContent::SettingsUpdate {

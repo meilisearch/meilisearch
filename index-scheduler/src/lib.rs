@@ -1210,8 +1210,7 @@ impl<'a> Dump<'a> {
                 },
                 KindDump::DocumentDeletionByFilter { filter } => {
                     KindWithContent::DocumentDeletionByFilter {
-                        filter_expr: serde_json::from_str(&filter)
-                            .map_err(|_| Error::CorruptedDump)?,
+                        filter_expr: filter,
                         index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
                     }
                 }

@@ -83,11 +83,6 @@ impl Task {
     }
 }
 
-pub enum DocumentDeletionContent {
-    ByDocumentIds(Vec<String>),
-    ByFilter(serde_json::Value),
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum KindWithContent {
