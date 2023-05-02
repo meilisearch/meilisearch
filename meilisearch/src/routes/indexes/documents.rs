@@ -147,13 +147,13 @@ pub struct BrowseQueryGet {
 #[derive(Debug, Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct BrowseQuery {
-    #[deserr(default, error = DeserrJsonError<InvalidSearchOffset>)]
+    #[deserr(default, error = DeserrJsonError<InvalidDocumentGetOffset>)]
     offset: usize,
-    #[deserr(default=PAGINATION_DEFAULT_LIMIT, error = DeserrJsonError<InvalidSearchLimit>)]
+    #[deserr(default = PAGINATION_DEFAULT_LIMIT, error = DeserrJsonError<InvalidDocumentGetLimit>)]
     limit: usize,
-    #[deserr(default, error = DeserrJsonError<InvalidDocumentFields>)]
+    #[deserr(default, error = DeserrJsonError<InvalidDocumentGetFields>)]
     fields: OptionStarOrList<String>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
+    #[deserr(default, error = DeserrJsonError<InvalidDocumentGetFilter>)]
     filter: Option<Value>,
 }
 
@@ -529,7 +529,13 @@ fn retrieve_documents<S: AsRef<str>>(
 ) -> Result<(u64, Vec<Document>), ResponseError> {
     let rtxn = index.read_txn()?;
     let filter = &filter;
-    let filter = if let Some(filter) = filter { parse_filter(filter)? } else { None };
+    let filter = if let Some(filter) = filter {
+        parse_filter(filter).map_err(|err| {
+            ResponseError::from_msg(err.to_string(), Code::InvalidDocumentGetFilter)
+        })?
+    } else {
+        None
+    };
 
     let candidates = if let Some(filter) = filter {
         filter.evaluate(&rtxn, index)?

@@ -570,3 +570,77 @@ async fn delete_document_by_filter() {
     }
     "###);
 }
+
+#[actix_rt::test]
+async fn fetch_document_by_filter() {
+    let server = Server::new().await;
+    let index = server.index("doggo");
+    index.update_settings_filterable_attributes(json!(["color"])).await;
+    index
+        .add_documents(
+            json!([
+                { "id": 0, "color": "red" },
+                { "id": 1, "color": "blue" },
+                { "id": 2, "color": "blue" },
+                { "id": 3 },
+            ]),
+            Some("id"),
+        )
+        .await;
+    index.wait_task(1).await;
+
+    let (response, code) = index.get_document_by_filter(json!(null)).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type: expected an object, but found null",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "###);
+
+    let (response, code) = index.get_document_by_filter(json!({ "offset": "doggo" })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.offset`: expected a positive integer, but found a string: `\"doggo\"`",
+      "code": "invalid_document_get_offset",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_get_offset"
+    }
+    "###);
+
+    let (response, code) = index.get_document_by_filter(json!({ "limit": "doggo" })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.limit`: expected a positive integer, but found a string: `\"doggo\"`",
+      "code": "invalid_document_get_limit",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_get_limit"
+    }
+    "###);
+
+    let (response, code) = index.get_document_by_filter(json!({ "fields": ["doggo"] })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.fields`: expected a string, but found an array: `[\"doggo\"]`",
+      "code": "invalid_document_get_fields",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_get_fields"
+    }
+    "###);
+
+    let (response, code) = index.get_document_by_filter(json!({ "filter": true })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid syntax for the filter parameter: `expected String, Array, found: true`.",
+      "code": "invalid_document_get_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_get_filter"
+    }
+    "###);
+}
