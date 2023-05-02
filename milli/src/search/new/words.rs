@@ -1,15 +1,15 @@
+use roaring::RoaringBitmap;
+
 use super::logger::SearchLogger;
 use super::query_graph::QueryNode;
 use super::resolve_query_graph::compute_query_graph_docids;
 use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, RankingRule, RankingRuleOutput, SearchContext};
 use crate::{Result, TermsMatchingStrategy};
-use roaring::RoaringBitmap;
 
 pub struct Words {
     exhausted: bool, // TODO: remove
     query_graph: Option<QueryGraph>,
-    iterating: bool, // TODO: remove
     nodes_to_remove: Vec<SmallBitmap<QueryNode>>,
     terms_matching_strategy: TermsMatchingStrategy,
 }
@@ -18,7 +18,6 @@ impl Words {
         Self {
             exhausted: true,
             query_graph: None,
-            iterating: false,
             nodes_to_remove: vec![],
             terms_matching_strategy,
         }
@@ -48,7 +47,6 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for Words {
                 vec![]
             }
         };
-        self.iterating = true;
         Ok(())
     }
 
@@ -58,9 +56,6 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for Words {
         logger: &mut dyn SearchLogger<QueryGraph>,
         universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<QueryGraph>>> {
-        assert!(self.iterating);
-        assert!(universe.len() > 1);
-
         if self.exhausted {
             return Ok(None);
         }
@@ -85,7 +80,6 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for Words {
         _ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<QueryGraph>,
     ) {
-        self.iterating = false;
         self.exhausted = true;
         self.nodes_to_remove = vec![];
         self.query_graph = None;
