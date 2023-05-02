@@ -64,6 +64,7 @@ pub enum DocumentDeletionKind {
     PerDocumentId,
     ClearAll,
     PerBatch,
+    PerFilter,
 }
 
 pub trait Analytics: Sync + Send {

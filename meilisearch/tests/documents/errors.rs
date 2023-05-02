@@ -436,15 +436,39 @@ async fn delete_document_by_filter() {
     }
     "###);
 
+    // send bad payload type
+    let (response, code) = index.delete_document_by_filter(json!({ "filter": true })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid syntax for the filter parameter: `expected String, Array, found: true`.",
+      "code": "invalid_document_delete_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_delete_filter"
+    }
+    "###);
+
     // send bad filter
     let (response, code) = index.delete_document_by_filter(json!({ "filter": "hello"})).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
       "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `_geoRadius`, or `_geoBoundingBox` at `hello`.\n1:6 hello",
-      "code": "invalid_search_filter",
+      "code": "invalid_document_delete_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_delete_filter"
+    }
+    "###);
+
+    // send empty filter
+    let (response, code) = index.delete_document_by_filter(json!({ "filter": ""})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Sending an empty filter is forbidden.",
+      "code": "invalid_document_delete_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_delete_filter"
     }
     "###);
 

@@ -405,8 +405,7 @@ pub async fn delete_documents_batch(
 #[derive(Debug, Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct DocumentDeletionByFilter {
-    // TODO: Update the error code to something more appropriate
-    #[deserr(error = DeserrJsonError<InvalidDocumentOffset>)]
+    #[deserr(error = DeserrJsonError<InvalidDocumentDeleteFilter>)]
     filter: Value,
 }
 
@@ -417,28 +416,26 @@ pub async fn delete_documents_by_filter(
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    println!("here");
     debug!("called with params: {:?}", body);
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let index_uid = index_uid.into_inner();
     let filter = body.into_inner().filter;
 
-    analytics.delete_documents(DocumentDeletionKind::PerBatch, &req);
+    analytics.delete_documents(DocumentDeletionKind::PerFilter, &req);
 
-    debug!("filter: {:?}", filter);
-
-    // FIXME: spawn_blocking => tamo: but why, it's making zero IO and almost no allocation?
-    // TODO: what should we do in case of an empty filter? Create a task that does nothing (then we should be able to store a None in the task queue)
-    // or refuse the payload with a cool™️  error message 😎
-    let _ = crate::search::parse_filter(&filter)?.expect("You can't send an empty filter");
-
+    // we ensure the filter is well formed before enqueuing it
+    || -> Result<_, ResponseError> {
+        Ok(crate::search::parse_filter(&filter)?.ok_or(MeilisearchHttpError::EmptyFilter)?)
+    }()
+    // and whatever was the error, the error code should always be an InvalidDocumentDeleteFilter
+    .map_err(|err| ResponseError::from_msg(err.message, Code::InvalidDocumentDeleteFilter))?;
     let task = KindWithContent::DocumentDeletionByFilter { index_uid, filter_expr: filter };
 
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
     debug!("returns: {:?}", task);
-    return Ok(HttpResponse::Accepted().json(task));
+    Ok(HttpResponse::Accepted().json(task))
 }
 
 pub async fn clear_all_documents(
