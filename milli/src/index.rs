@@ -19,7 +19,7 @@ use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
     FieldIdCodec, OrderedF64Codec,
 };
-use crate::heed_codec::{ScriptLanguageCodec, StrBEU16Codec, StrRefCodec};
+use crate::heed_codec::{FstSetCodec, ScriptLanguageCodec, StrBEU16Codec, StrRefCodec};
 use crate::{
     default_criteria, BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec, Criterion,
     DocumentId, ExternalDocumentsIds, FacetDistribution, FieldDistribution, FieldId,
@@ -85,6 +85,7 @@ pub mod db_name {
     pub const FACET_ID_IS_NULL_DOCIDS: &str = "facet-id-is-null-docids";
     pub const FACET_ID_IS_EMPTY_DOCIDS: &str = "facet-id-is-empty-docids";
     pub const FACET_ID_STRING_DOCIDS: &str = "facet-id-string-docids";
+    pub const FACET_ID_STRING_FST: &str = "facet-id-string-fst";
     pub const FIELD_ID_DOCID_FACET_F64S: &str = "field-id-docid-facet-f64s";
     pub const FIELD_ID_DOCID_FACET_STRINGS: &str = "field-id-docid-facet-strings";
     pub const DOCUMENTS: &str = "documents";
@@ -147,6 +148,8 @@ pub struct Index {
     pub facet_id_f64_docids: Database<FacetGroupKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>,
     /// Maps the facet field id and ranges of strings with the docids that corresponds to them.
     pub facet_id_string_docids: Database<FacetGroupKeyCodec<StrRefCodec>, FacetGroupValueCodec>,
+    /// Maps the facet field id of the string facets with an FST containing all the facets values.
+    pub facet_id_string_fst: Database<OwnedType<BEU16>, FstSetCodec>,
 
     /// Maps the document id, the facet field id and the numbers.
     pub field_id_docid_facet_f64s: Database<FieldDocIdFacetF64Codec, Unit>,
@@ -189,6 +192,7 @@ impl Index {
         let word_prefix_fid_docids = env.create_database(Some(WORD_PREFIX_FIELD_ID_DOCIDS))?;
         let facet_id_f64_docids = env.create_database(Some(FACET_ID_F64_DOCIDS))?;
         let facet_id_string_docids = env.create_database(Some(FACET_ID_STRING_DOCIDS))?;
+        let facet_id_string_fst = env.create_database(Some(FACET_ID_STRING_FST))?;
         let facet_id_exists_docids = env.create_database(Some(FACET_ID_EXISTS_DOCIDS))?;
         let facet_id_is_null_docids = env.create_database(Some(FACET_ID_IS_NULL_DOCIDS))?;
         let facet_id_is_empty_docids = env.create_database(Some(FACET_ID_IS_EMPTY_DOCIDS))?;
@@ -219,6 +223,7 @@ impl Index {
             field_id_word_count_docids,
             facet_id_f64_docids,
             facet_id_string_docids,
+            facet_id_string_fst,
             facet_id_exists_docids,
             facet_id_is_null_docids,
             facet_id_is_empty_docids,
@@ -1461,11 +1466,11 @@ pub(crate) mod tests {
         db_snap!(index, field_distribution);
 
         db_snap!(index, field_distribution,
-            @r###"
-        age              1     
-        id               2     
-        name             2     
-        "###
+            @"
+            age              1
+            id               2
+            name             2
+            "
         );
 
         // snapshot_index!(&index, "1", include: "^field_distribution$");
@@ -1482,10 +1487,10 @@ pub(crate) mod tests {
 
         db_snap!(index, field_distribution,
             @r###"
-        age              1     
-        id               2     
-        name             2     
-        "###
+            age              1
+            id               2
+            name             2
+            "###
         );
 
         // then we update a document by removing one field and another by adding one field
@@ -1498,10 +1503,10 @@ pub(crate) mod tests {
 
         db_snap!(index, field_distribution,
             @r###"
-        has_dog          1     
-        id               2     
-        name             2     
-        "###
+            has_dog          1
+            id               2
+            name             2
+            "###
         );
     }
 
