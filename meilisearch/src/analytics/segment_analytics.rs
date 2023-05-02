@@ -949,6 +949,7 @@ pub struct DocumentsDeletionAggregator {
     per_document_id: bool,
     clear_all: bool,
     per_batch: bool,
+    per_filter: bool,
 }
 
 impl DocumentsDeletionAggregator {
@@ -962,6 +963,7 @@ impl DocumentsDeletionAggregator {
             DocumentDeletionKind::PerDocumentId => ret.per_document_id = true,
             DocumentDeletionKind::ClearAll => ret.clear_all = true,
             DocumentDeletionKind::PerBatch => ret.per_batch = true,
+            DocumentDeletionKind::PerFilter => ret.per_batch = true,
         }
 
         ret
@@ -981,6 +983,7 @@ impl DocumentsDeletionAggregator {
         self.per_document_id |= other.per_document_id;
         self.clear_all |= other.clear_all;
         self.per_batch |= other.per_batch;
+        self.per_filter |= other.per_filter;
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
