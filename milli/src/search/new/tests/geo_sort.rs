@@ -1,9 +1,5 @@
 /*!
-This module tests the `geo_sort` ranking rule:
-
-REVIEW COMMENT:
-    - nice tests :)
-    - add anything that seems not obvious about the behaviour of the geosort ranking rule here
+This module tests the `geo_sort` ranking rule
 */
 
 use big_s::S;
@@ -62,84 +58,29 @@ fn execute_iterative_and_rtree_returns_the_same<'a>(
 fn test_geo_sort() {
     let index = create_index();
 
-    // REVIEW COMMENT:
-    // I prefer to make the external ids correspond to the internal ids so that
-    // we can check whether the ranking rules are actually doing work instead of
-    // returning documents in order of their internal ids.
-    //
     index
         .add_documents(documents!([
-            { "id": 0, "_geo": { "lat": 2, "lng": -1 } },
-            { "id": 1, "_geo": { "lat": -2, "lng": -2 } },
-            { "id": 2, "_geo": { "lat": 6, "lng": -5 } },
-            { "id": 3, "_geo": { "lat": 3, "lng": 5 } },
-            { "id": 4, "_geo": { "lat": 0, "lng": 0 } },
-            { "id": 5, "_geo": { "lat": 1, "lng": 1 } },
-            { "id": 6 },
-            { "id": 7 },
-            { "id": 8 },
-            { "id": 9 },
-            { "id": 10 },
+            { "id": 2, "_geo": { "lat": 2, "lng": -1 } },
+            { "id": 3, "_geo": { "lat": -2, "lng": -2 } },
+            { "id": 5, "_geo": { "lat": 6, "lng": -5 } },
+            { "id": 4, "_geo": { "lat": 3, "lng": 5 } },
+            { "id": 0, "_geo": { "lat": 0, "lng": 0 } },
+            { "id": 1, "_geo": { "lat": 1, "lng": 1 } },
+            { "id": 6 }, { "id": 8 }, { "id": 7 }, { "id": 10 }, { "id": 9 },
         ]))
         .unwrap();
 
-    let txn = index.read_txn().unwrap();
+    let rtxn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = Search::new(&rtxn, &index);
 
-    // --- asc
     s.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., 0.]))]);
+    let ids = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    insta::assert_snapshot!(format!("{ids:?}"), @"[0, 1, 2, 3, 4, 5, 6, 8, 7, 10, 9]");
 
-    s.geo_sort_strategy(GeoSortStrategy::Dynamic(100));
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[4, 5, 0, 1, 3, 2, 6, 7, 8, 9, 10]");
-
-    s.geo_sort_strategy(GeoSortStrategy::Dynamic(3));
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[4, 5, 0, 1, 3, 2, 6, 7, 8, 9, 10]");
-
-    s.geo_sort_strategy(GeoSortStrategy::AlwaysIterative(100));
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[4, 5, 0, 1, 3, 2, 6, 7, 8, 9, 10]");
-
-    s.geo_sort_strategy(GeoSortStrategy::AlwaysIterative(3));
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[4, 5, 0, 1, 3, 2, 6, 7, 8, 9, 10]");
-
-    s.geo_sort_strategy(GeoSortStrategy::AlwaysRtree(100));
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[4, 5, 0, 1, 3, 2, 6, 7, 8, 9, 10]");
-
-    s.geo_sort_strategy(GeoSortStrategy::AlwaysRtree(3));
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[4, 5, 0, 1, 3, 2, 6, 7, 8, 9, 10]");
-
-    // --- desc
     s.sort_criteria(vec![AscDesc::Desc(Member::Geo([0., 0.]))]);
-
-    s.geo_sort_strategy(GeoSortStrategy::Dynamic(100));
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 3, 1, 0, 5, 4, 6, 7, 8, 9, 10]");
-
-    s.geo_sort_strategy(GeoSortStrategy::Dynamic(3));
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 3, 1, 0, 5, 4, 6, 7, 8, 9, 10]");
-
-    s.geo_sort_strategy(GeoSortStrategy::AlwaysIterative(100));
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 3, 1, 0, 5, 4, 6, 7, 8, 9, 10]");
-
-    s.geo_sort_strategy(GeoSortStrategy::AlwaysIterative(3));
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 3, 1, 0, 5, 4, 6, 7, 8, 9, 10]");
-
-    s.geo_sort_strategy(GeoSortStrategy::AlwaysRtree(100));
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 3, 1, 0, 5, 4, 6, 7, 8, 9, 10]");
-
-    s.geo_sort_strategy(GeoSortStrategy::AlwaysRtree(3));
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 3, 1, 0, 5, 4, 6, 7, 8, 9, 10]");
+    let ids = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    insta::assert_snapshot!(format!("{ids:?}"), @"[5, 4, 3, 2, 1, 0, 6, 8, 7, 10, 9]");
 }
 
 #[test]
