@@ -111,12 +111,13 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
 
         // if we had an rtree and the strategy doesn't require one anymore we can drop it
         let use_rtree = self.strategy.use_rtree(self.geo_candidates.len() as usize);
-        if !use_rtree && self.rtree.is_some() {
-            self.rtree = None;
+        if use_rtree && self.rtree.is_none() {
+            self.rtree = Some(ctx.index.geo_rtree(ctx.txn)?.expect("geo candidates but no rtree"));
         }
 
         let cache_size = self.strategy.cache_size();
-        if let Some(ref mut rtree) = self.rtree {
+        if use_rtree {
+            let rtree = self.rtree.as_ref().unwrap();
             let point = lat_lng_to_xyz(&self.point);
 
             if self.ascending {
@@ -169,18 +170,12 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
                     ))
                 })
                 .collect::<Result<Vec<(u32, [f64; 2])>>>()?;
-            // REVIEW COMMENT: the haversine distance function can be quite expensive, I think, so it's probably faster
-            // to use `sort_by_cached_key` instead of `sort_by_key`.
+            // computing the distance between two points is expensive thus we cache the result
             documents
                 .sort_by_cached_key(|(_, p)| distance_between_two_points(&self.point, p) as usize);
             self.cached_sorted_docids.extend(documents.into_iter().map(|(doc_id, _)| doc_id));
         };
 
-        if self.cached_sorted_docids.is_empty() && matches!(self.strategy, Strategy::AlwaysRtree(_))
-        {
-            // this shouldn't be possible
-            self.rtree = None;
-        }
         Ok(())
     }
 }
@@ -210,15 +205,6 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
         let lat = fid_map.id("_geo.lat").expect("geo candidates but no fid for lat");
         let lng = fid_map.id("_geo.lng").expect("geo candidates but no fid for lng");
         self.field_ids = Some([lat, lng]);
-
-        if self.strategy.use_rtree(self.geo_candidates.len() as usize) {
-            // REVIEW COMMENT: I would prefer to always keep the rtree in memory so that we don't have to deserialize it
-            // every time the geosort ranking rule starts iterating.
-            // So we'd initialize it in `::new` and never drop it.
-            //
-            self.rtree = Some(ctx.index.geo_rtree(ctx.txn)?.expect("geo candidates but no rtree"));
-        }
-
         self.fill_buffer(ctx)?;
         Ok(())
     }
@@ -256,20 +242,14 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
         }
 
         // if we got out of this loop it means we've exhausted our cache.
-
-        if self.rtree.is_none() {
-            // with no rtree it means all geo candidates have been returned. We can return all the non geo-faceted documents
-            Ok(Some(RankingRuleOutput { query, candidates: universe.clone() }))
-        } else {
-            // else, we need to refill our bucket and run the function again
-            self.fill_buffer(ctx)?;
-            self.next_bucket(ctx, logger, universe)
-        }
+        // we need to refill it and run the function again.
+        self.fill_buffer(ctx)?;
+        self.next_bucket(ctx, logger, universe)
     }
 
     fn end_iteration(&mut self, _ctx: &mut SearchContext<'ctx>, _logger: &mut dyn SearchLogger<Q>) {
+        // we do not reset the rtree here, it could be used in a next iteration
         self.query = None;
-        self.rtree = None;
         self.cached_sorted_docids.clear();
     }
 }
