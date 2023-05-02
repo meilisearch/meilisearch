@@ -35,6 +35,7 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
             script_language_docids,
             facet_id_f64_docids,
             facet_id_string_docids,
+            facet_id_string_fst: _,
             facet_id_exists_docids,
             facet_id_is_null_docids,
             facet_id_is_empty_docids,
