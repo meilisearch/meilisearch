@@ -5,8 +5,7 @@ use super::*;
 use crate::{Result, SearchContext, MAX_WORD_LENGTH};
 
 /// Convert the tokenised search query into a list of located query terms.
-// TODO: checking if the positions are correct for phrases, separators, ngrams
-pub fn located_query_terms_from_string(
+pub fn located_query_terms_from_tokens(
     ctx: &mut SearchContext,
     query: NormalizedTokenIter<&[u8]>,
     words_limit: Option<usize>,

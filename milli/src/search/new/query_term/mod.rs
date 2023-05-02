@@ -10,7 +10,7 @@ use std::ops::RangeInclusive;
 use compute_derivations::partially_initialized_term_from_word;
 use either::Either;
 pub use ntypo_subset::NTypoTermSubset;
-pub use parse_query::{located_query_terms_from_string, make_ngram, number_of_typos_allowed};
+pub use parse_query::{located_query_terms_from_tokens, make_ngram, number_of_typos_allowed};
 pub use phrase::Phrase;
 
 use super::interner::{DedupInterner, Interned};

@@ -36,7 +36,7 @@ use interner::{DedupInterner, Interner};
 pub use logger::visual::VisualSearchLogger;
 pub use logger::{DefaultSearchLogger, SearchLogger};
 use query_graph::{QueryGraph, QueryNode};
-use query_term::{located_query_terms_from_string, LocatedQueryTerm, Phrase, QueryTerm};
+use query_term::{located_query_terms_from_tokens, LocatedQueryTerm, Phrase, QueryTerm};
 use ranking_rules::{
     BoxRankingRule, PlaceholderQuery, RankingRule, RankingRuleOutput, RankingRuleQueryTrait,
 };
@@ -387,7 +387,7 @@ pub fn execute_search(
         let tokenizer = tokbuilder.build();
         let tokens = tokenizer.tokenize(query);
 
-        let query_terms = located_query_terms_from_string(ctx, tokens, words_limit)?;
+        let query_terms = located_query_terms_from_tokens(ctx, tokens, words_limit)?;
         if query_terms.is_empty() {
             // Do a placeholder search instead
             None

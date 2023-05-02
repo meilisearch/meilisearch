@@ -235,7 +235,7 @@ pub(crate) mod tests {
 
     use charabia::{TokenKind, TokenizerBuilder};
 
-    use super::super::super::located_query_terms_from_string;
+    use super::super::super::located_query_terms_from_tokens;
     use super::*;
     use crate::index::tests::TempIndex;
 
@@ -256,7 +256,7 @@ pub(crate) mod tests {
         let mut ctx = SearchContext::new(&temp_index, &rtxn);
         let tokenizer = TokenizerBuilder::new().build();
         let tokens = tokenizer.tokenize("split this world");
-        let query_terms = located_query_terms_from_string(&mut ctx, tokens, None).unwrap();
+        let query_terms = located_query_terms_from_tokens(&mut ctx, tokens, None).unwrap();
         let matching_words = MatchingWords::new(ctx, query_terms);
 
         assert_eq!(

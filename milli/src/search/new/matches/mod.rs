@@ -499,7 +499,7 @@ mod tests {
     use charabia::TokenizerBuilder;
     use matching_words::tests::temp_index_with_documents;
 
-    use super::super::located_query_terms_from_string;
+    use super::super::located_query_terms_from_tokens;
     use super::*;
     use crate::SearchContext;
 
@@ -507,7 +507,7 @@ mod tests {
         pub fn new_test(mut ctx: SearchContext, query: &'a str) -> Self {
             let tokenizer = TokenizerBuilder::new().build();
             let tokens = tokenizer.tokenize(query);
-            let query_terms = located_query_terms_from_string(&mut ctx, tokens, None).unwrap();
+            let query_terms = located_query_terms_from_tokens(&mut ctx, tokens, None).unwrap();
             let matching_words = MatchingWords::new(ctx, query_terms);
             Self::new(matching_words, TokenizerBuilder::new().build())
         }
