@@ -485,6 +485,7 @@ async fn delete_document_by_filter() {
       "type": "documentDeletion",
       "canceledBy": null,
       "details": {
+        "providedIds": 0,
         "deletedDocuments": 0,
         "originalFilter": "\"doggo = bernese\""
       },
@@ -518,6 +519,7 @@ async fn delete_document_by_filter() {
       "type": "documentDeletion",
       "canceledBy": null,
       "details": {
+        "providedIds": 0,
         "deletedDocuments": 0,
         "originalFilter": "\"doggo = bernese\""
       },
@@ -551,6 +553,7 @@ async fn delete_document_by_filter() {
       "type": "documentDeletion",
       "canceledBy": null,
       "details": {
+        "providedIds": 0,
         "deletedDocuments": 0,
         "originalFilter": "\"catto = jorts\""
       },

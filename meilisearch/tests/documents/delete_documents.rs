@@ -176,6 +176,7 @@ async fn delete_document_by_filter() {
       "type": "documentDeletion",
       "canceledBy": null,
       "details": {
+        "providedIds": 0,
         "deletedDocuments": 2,
         "originalFilter": "\"color = blue\""
       },
@@ -228,6 +229,7 @@ async fn delete_document_by_filter() {
       "type": "documentDeletion",
       "canceledBy": null,
       "details": {
+        "providedIds": 0,
         "deletedDocuments": 2,
         "originalFilter": "\"color = blue\""
       },

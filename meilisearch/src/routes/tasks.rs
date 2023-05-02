@@ -135,6 +135,7 @@ impl From<Details> for DetailsView {
             },
             Details::DocumentDeletionByFilter { original_filter, deleted_documents } => {
                 DetailsView {
+                    provided_ids: Some(0),
                     original_filter: Some(original_filter),
                     deleted_documents: Some(deleted_documents),
                     ..DetailsView::default()
