@@ -92,7 +92,6 @@ impl Word {
 }
 
 /// Apply the [`TermsMatchingStrategy`] to the query graph and resolve it.
-#[allow(clippy::too_many_arguments)]
 fn resolve_maximally_reduced_query_graph(
     ctx: &mut SearchContext,
     universe: &RoaringBitmap,
