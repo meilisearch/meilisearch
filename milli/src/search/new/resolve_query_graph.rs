@@ -3,7 +3,7 @@
 use std::collections::VecDeque;
 
 use fxhash::FxHashMap;
-use roaring::RoaringBitmap;
+use roaring::{MultiOps, RoaringBitmap};
 
 use super::interner::Interned;
 use super::query_graph::QueryNodeData;
@@ -126,6 +126,7 @@ pub fn compute_query_term_subset_docids_within_position(
     Ok(docids)
 }
 
+/// Returns the subset of the input universe that satisfies the contraints of the input query graph.
 pub fn compute_query_graph_docids(
     ctx: &mut SearchContext,
     q: &QueryGraph,
@@ -148,10 +149,8 @@ pub fn compute_query_graph_docids(
             continue;
         }
         // Take union of all predecessors
-        let mut predecessors_docids = RoaringBitmap::new();
-        for p in predecessors.iter() {
-            predecessors_docids |= path_nodes_docids.get(p);
-        }
+        let predecessors_docids =
+            MultiOps::union(predecessors.iter().map(|p| path_nodes_docids.get(p)));
 
         let node_docids = match &node.data {
             QueryNodeData::Term(LocatedQueryTermSubset {
