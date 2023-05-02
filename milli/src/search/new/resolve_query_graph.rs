@@ -3,7 +3,7 @@
 use std::collections::VecDeque;
 
 use fxhash::FxHashMap;
-use roaring::RoaringBitmap;
+use roaring::{MultiOps, RoaringBitmap};
 
 use super::interner::Interned;
 use super::query_graph::QueryNodeData;
@@ -35,23 +35,23 @@ pub fn compute_query_term_subset_docids(
 ) -> Result<RoaringBitmap> {
     // TODO Use the roaring::MultiOps trait
 
-    let mut docids = RoaringBitmap::new();
+    let mut bitmaps = Vec::new();
     for word in term.all_single_words_except_prefix_db(ctx)? {
         if let Some(word_docids) = ctx.word_docids(word)? {
-            docids |= word_docids;
+            bitmaps.push(word_docids);
         }
     }
     for phrase in term.all_phrases(ctx)? {
-        docids |= ctx.get_phrase_docids(phrase)?;
+        bitmaps.push(ctx.get_phrase_docids(phrase)?.clone());
     }
 
     if let Some(prefix) = term.use_prefix_db(ctx) {
         if let Some(prefix_docids) = ctx.word_prefix_docids(prefix)? {
-            docids |= prefix_docids;
+            bitmaps.push(prefix_docids);
         }
     }
 
-    Ok(docids)
+    Ok(bitmaps.union())
 }
 
 pub fn compute_query_term_subset_docids_within_field_id(
@@ -61,10 +61,10 @@ pub fn compute_query_term_subset_docids_within_field_id(
 ) -> Result<RoaringBitmap> {
     // TODO Use the roaring::MultiOps trait
 
-    let mut docids = RoaringBitmap::new();
+    let mut bitmaps = Vec::new();
     for word in term.all_single_words_except_prefix_db(ctx)? {
         if let Some(word_fid_docids) = ctx.get_db_word_fid_docids(word.interned(), fid)? {
-            docids |= word_fid_docids;
+            bitmaps.push(word_fid_docids);
         }
     }
 
@@ -78,18 +78,18 @@ pub fn compute_query_term_subset_docids_within_field_id(
                 phrase_docids &= word_fid_docids;
             }
         }
-        docids |= phrase_docids;
+        bitmaps.push(phrase_docids);
     }
 
     if let Some(word_prefix) = term.use_prefix_db(ctx) {
         if let Some(word_fid_docids) =
             ctx.get_db_word_prefix_fid_docids(word_prefix.interned(), fid)?
         {
-            docids |= word_fid_docids;
+            bitmaps.push(word_fid_docids);
         }
     }
 
-    Ok(docids)
+    Ok(bitmaps.union())
 }
 
 pub fn compute_query_term_subset_docids_within_position(
@@ -99,12 +99,12 @@ pub fn compute_query_term_subset_docids_within_position(
 ) -> Result<RoaringBitmap> {
     // TODO Use the roaring::MultiOps trait
 
-    let mut docids = RoaringBitmap::new();
+    let mut bitmaps = Vec::new();
     for word in term.all_single_words_except_prefix_db(ctx)? {
         if let Some(word_position_docids) =
             ctx.get_db_word_position_docids(word.interned(), position)?
         {
-            docids |= word_position_docids;
+            bitmaps.push(word_position_docids);
         }
     }
 
@@ -118,18 +118,18 @@ pub fn compute_query_term_subset_docids_within_position(
                 phrase_docids &= word_position_docids;
             }
         }
-        docids |= phrase_docids;
+        bitmaps.push(phrase_docids);
     }
 
     if let Some(word_prefix) = term.use_prefix_db(ctx) {
         if let Some(word_position_docids) =
             ctx.get_db_word_prefix_position_docids(word_prefix.interned(), position)?
         {
-            docids |= word_position_docids;
+            bitmaps.push(word_position_docids);
         }
     }
 
-    Ok(docids)
+    Ok(bitmaps.union())
 }
 
 pub fn compute_query_graph_docids(
