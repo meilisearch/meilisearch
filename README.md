@@ -7,8 +7,8 @@
   <a href="https://www.meilisearch.com">Website</a> |
   <a href="https://roadmap.meilisearch.com/tabs/1-under-consideration">Roadmap</a> |
   <a href="https://blog.meilisearch.com">Blog</a> |
-  <a href="https://meilisearch.com/docs">Documentation</a> |
-  <a href="https://meilisearch.com/docs/faq">FAQ</a> |
+  <a href="https://www.meilisearch.com/docs">Documentation</a> |
+  <a href="https://www.meilisearch.com/docs/faq">FAQ</a> |
   <a href="https://discord.meilisearch.com">Discord</a>
 </h4>
 
@@ -36,27 +36,27 @@ Meilisearch helps you shape a delightful search experience in a snap, offering f
 ## ✨ Features
 
 - **Search-as-you-type:** find search results in less than 50 milliseconds
-- **[Typo tolerance](https://meilisearch.com/docs/learn/getting_started/customizing_relevancy#typo-tolerance):** get relevant matches even when queries contain typos and misspellings
-- **[Filtering](https://meilisearch.com/docs/learn/advanced/filtering) and [faceted search](https://meilisearch.com/docs/learn/advanced/faceted_search):** enhance your user's search experience with custom filters and build a faceted search interface in a few lines of code
-- **[Sorting](https://meilisearch.com/docs/learn/advanced/sorting):** sort results based on price, date, or pretty much anything else your users need
-- **[Synonym support](https://meilisearch.com/docs/learn/getting_started/customizing_relevancy#synonyms):** configure synonyms to include more relevant content in your search results
-- **[Geosearch](https://meilisearch.com/docs/learn/advanced/geosearch):** filter and sort documents based on geographic data
-- **[Extensive language support](https://meilisearch.com/docs/learn/what_is_meilisearch/language):** search datasets in any language, with optimized support for Chinese, Japanese, Hebrew, and languages using the Latin alphabet
-- **[Security management](https://meilisearch.com/docs/learn/security/master_api_keys):** control which users can access what data with API keys that allow fine-grained permissions handling
-- **[Multi-Tenancy](https://meilisearch.com/docs/learn/security/tenant_tokens):** personalize search results for any number of application tenants
+- **[Typo tolerance](https://www.meilisearch.com/docs/learn/getting_started/customizing_relevancy#typo-tolerance):** get relevant matches even when queries contain typos and misspellings
+- **[Filtering](https://www.meilisearch.com/docs/learn/advanced/filtering) and [faceted search](https://www.meilisearch.com/docs/learn/advanced/faceted_search):** enhance your user's search experience with custom filters and build a faceted search interface in a few lines of code
+- **[Sorting](https://www.meilisearch.com/docs/learn/advanced/sorting):** sort results based on price, date, or pretty much anything else your users need
+- **[Synonym support](https://www.meilisearch.com/docs/learn/getting_started/customizing_relevancy#synonyms):** configure synonyms to include more relevant content in your search results
+- **[Geosearch](https://www.meilisearch.com/docs/learn/advanced/geosearch):** filter and sort documents based on geographic data
+- **[Extensive language support](https://www.meilisearch.com/docs/learn/what_is_meilisearch/language):** search datasets in any language, with optimized support for Chinese, Japanese, Hebrew, and languages using the Latin alphabet
+- **[Security management](https://www.meilisearch.com/docs/learn/security/master_api_keys):** control which users can access what data with API keys that allow fine-grained permissions handling
+- **[Multi-Tenancy](https://www.meilisearch.com/docs/learn/security/tenant_tokens):** personalize search results for any number of application tenants
 - **Highly Customizable:** customize Meilisearch to your specific needs or use our out-of-the-box and hassle-free presets
-- **[RESTful API](https://meilisearch.com/docs/reference/api/overview):** integrate Meilisearch in your technical stack with our plugins and SDKs
+- **[RESTful API](https://www.meilisearch.com/docs/reference/api/overview):** integrate Meilisearch in your technical stack with our plugins and SDKs
 - **Easy to install, deploy, and maintain**
 
 ## 📖 Documentation
 
-You can consult Meilisearch's documentation at [https://meilisearch.com/docs](https://meilisearch.com/docs/).
+You can consult Meilisearch's documentation at [https://www.meilisearch.com/docs](https://www.meilisearch.com/docs/).
 
 ## 🚀 Getting started
 
-For basic instructions on how to set up Meilisearch, add documents to an index, and search for documents, take a look at our [Quick Start](https://meilisearch.com/docs/learn/getting_started/quick_start) guide.
+For basic instructions on how to set up Meilisearch, add documents to an index, and search for documents, take a look at our [Quick Start](https://www.meilisearch.com/docs/learn/getting_started/quick_start) guide.
 
-You may also want to check out [Meilisearch 101](https://meilisearch.com/docs/learn/getting_started/filtering_and_sorting) for an introduction to some of Meilisearch's most popular features.
+You may also want to check out [Meilisearch 101](https://www.meilisearch.com/docs/learn/getting_started/filtering_and_sorting) for an introduction to some of Meilisearch's most popular features.
 
 ## ☁️ Meilisearch cloud
 
@@ -66,7 +66,7 @@ Let us manage your infrastructure so you can focus on integrating a great search
 
 Install one of our SDKs in your project for seamless integration between Meilisearch and your favorite language or framework!
 
-Take a look at the complete [Meilisearch integration list](https://meilisearch.com/docs/learn/what_is_meilisearch/sdks).
+Take a look at the complete [Meilisearch integration list](https://www.meilisearch.com/docs/learn/what_is_meilisearch/sdks).
 
 [![Logos belonging to different languages and frameworks supported by Meilisearch, including React, Ruby on Rails, Go, Rust, and PHP](assets/integrations.png)](https://www.meilisearch.com/docs/learn/what_is_meilisearch/sdks)
 
@@ -74,17 +74,17 @@ Take a look at the complete [Meilisearch integration list](https://meilisearch.c
 
 Experienced users will want to keep our [API Reference](https://www.meilisearch.com/docs/reference/api/overview) close at hand.
 
-We also offer a wide range of dedicated guides to all Meilisearch features, such as [filtering](https://meilisearch.com/docs/learn/advanced/filtering), [sorting](https://meilisearch.com/docs/learn/advanced/sorting), [geosearch](https://meilisearch.com/docs/learn/advanced/geosearch), [API keys](https://meilisearch.com/docs/learn/security/master_api_keys), and [tenant tokens](https://meilisearch.com/docs/learn/security/tenant_tokens).
+We also offer a wide range of dedicated guides to all Meilisearch features, such as [filtering](https://www.meilisearch.com/docs/learn/advanced/filtering), [sorting](https://www.meilisearch.com/docs/learn/advanced/sorting), [geosearch](https://www.meilisearch.com/docs/learn/advanced/geosearch), [API keys](https://www.meilisearch.com/docs/learn/security/master_api_keys), and [tenant tokens](https://www.meilisearch.com/docs/learn/security/tenant_tokens).
 
-Finally, for more in-depth information, refer to our articles explaining fundamental Meilisearch concepts such as [documents](https://meilisearch.com/docs/learn/core_concepts/documents) and [indexes](https://meilisearch.com/docs/learn/core_concepts/indexes).
+Finally, for more in-depth information, refer to our articles explaining fundamental Meilisearch concepts such as [documents](https://www.meilisearch.com/docs/learn/core_concepts/documents) and [indexes](https://www.meilisearch.com/docs/learn/core_concepts/indexes).
 
 ## 📊 Telemetry
 
-Meilisearch collects **anonymized** data from users to help us improve our product. You can [deactivate this](https://meilisearch.com/docs/learn/what_is_meilisearch/telemetry#how-to-disable-data-collection) whenever you want.
+Meilisearch collects **anonymized** data from users to help us improve our product. You can [deactivate this](https://www.meilisearch.com/docs/learn/what_is_meilisearch/telemetry#how-to-disable-data-collection) whenever you want.
 
 To request deletion of collected data, please write to us at [privacy@meilisearch.com](mailto:privacy@meilisearch.com). Don't forget to include your `Instance UID` in the message, as this helps us quickly find and delete your data.
 
-If you want to know more about the kind of data we collect and what we use it for, check the [telemetry section](https://meilisearch.com/docs/learn/what_is_meilisearch/telemetry) of our documentation.
+If you want to know more about the kind of data we collect and what we use it for, check the [telemetry section](https://www.meilisearch.com/docs/learn/what_is_meilisearch/telemetry) of our documentation.
 
 ## 📫 Get in touch!
 
