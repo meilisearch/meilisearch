@@ -71,7 +71,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route(web::put().to(SeqHandler(update_documents)))
             .route(web::delete().to(SeqHandler(clear_all_documents))),
     )
-    // these routes needs to be before the /documents/{document_id} to match properly
+    // these routes need to be before the /documents/{document_id} to match properly
     .service(
         web::resource("/delete-batch").route(web::post().to(SeqHandler(delete_documents_batch))),
     )
