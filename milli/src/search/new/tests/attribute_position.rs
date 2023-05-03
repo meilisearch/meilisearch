@@ -1,6 +1,5 @@
-use crate::{
-    db_snap, index::tests::TempIndex, Criterion, Search, SearchResult, TermsMatchingStrategy,
-};
+use crate::index::tests::TempIndex;
+use crate::{db_snap, Criterion, Search, SearchResult, TermsMatchingStrategy};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();

@@ -1,6 +1,7 @@
 use itertools::Itertools;
 
-use crate::{search::new::interner::Interned, SearchContext};
+use crate::search::new::interner::Interned;
+use crate::SearchContext;
 
 /// A phrase in the user's search query, consisting of several words
 /// that must appear side-by-side in the search results.

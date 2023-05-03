@@ -12,10 +12,9 @@ account by the proximity ranking rule.
 7. The search is capable of returning no results if no documents match the query
 */
 
-use crate::{
-    index::tests::TempIndex, search::new::tests::collect_field_values, Criterion, Search,
-    SearchResult, TermsMatchingStrategy,
-};
+use crate::index::tests::TempIndex;
+use crate::search::new::tests::collect_field_values;
+use crate::{Criterion, Search, SearchResult, TermsMatchingStrategy};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();

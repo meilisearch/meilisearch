@@ -1,3 +1,9 @@
+use std::cmp::Ordering;
+use std::collections::BTreeMap;
+use std::hash::{Hash, Hasher};
+
+use fxhash::{FxHashMap, FxHasher};
+
 use super::interner::{FixedSizeInterner, Interned};
 use super::query_term::{
     self, number_of_typos_allowed, LocatedQueryTerm, LocatedQueryTermSubset, QueryTermSubset,
@@ -6,10 +12,6 @@ use super::small_bitmap::SmallBitmap;
 use super::SearchContext;
 use crate::search::new::interner::Interner;
 use crate::Result;
-use fxhash::{FxHashMap, FxHasher};
-use std::cmp::Ordering;
-use std::collections::BTreeMap;
-use std::hash::{Hash, Hasher};
 
 /// A node of the [`QueryGraph`].
 ///

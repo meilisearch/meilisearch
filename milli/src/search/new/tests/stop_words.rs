@@ -9,9 +9,11 @@ This module tests the following properties about stop words:
 - Phrases consisting only of stop words are ignored
 */
 
-use std::{collections::BTreeSet, iter::FromIterator};
+use std::collections::BTreeSet;
+use std::iter::FromIterator;
 
-use crate::{db_snap, index::tests::TempIndex, Search, SearchResult, TermsMatchingStrategy};
+use crate::index::tests::TempIndex;
+use crate::{db_snap, Search, SearchResult, TermsMatchingStrategy};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();

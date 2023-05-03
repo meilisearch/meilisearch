@@ -17,10 +17,9 @@ they store fewer sprximities than the regular word sprximity DB.
 
 use std::collections::HashMap;
 
-use crate::{
-    index::tests::TempIndex, search::new::tests::collect_field_values, Criterion, Search,
-    SearchResult, TermsMatchingStrategy,
-};
+use crate::index::tests::TempIndex;
+use crate::search::new::tests::collect_field_values;
+use crate::{Criterion, Search, SearchResult, TermsMatchingStrategy};
 
 fn create_simple_index() -> TempIndex {
     let index = TempIndex::new();

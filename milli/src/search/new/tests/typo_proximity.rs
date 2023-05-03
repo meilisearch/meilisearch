@@ -15,10 +15,9 @@ The proximity ranking rule is not allowed to look for the proximity between `bea
 because the typo ranking rule before it only used the derivation `beautiful`.
 */
 
-use crate::{
-    index::tests::TempIndex, search::new::tests::collect_field_values, Criterion, Search,
-    SearchResult, TermsMatchingStrategy,
-};
+use crate::index::tests::TempIndex;
+use crate::search::new::tests::collect_field_values;
+use crate::{Criterion, Search, SearchResult, TermsMatchingStrategy};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();

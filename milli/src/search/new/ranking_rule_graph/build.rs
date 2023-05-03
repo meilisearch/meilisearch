@@ -1,10 +1,11 @@
+use std::collections::HashSet;
+
 use super::{Edge, RankingRuleGraph, RankingRuleGraphTrait};
 use crate::search::new::interner::{DedupInterner, MappedInterner};
 use crate::search::new::query_graph::{QueryNode, QueryNodeData};
 use crate::search::new::small_bitmap::SmallBitmap;
 use crate::search::new::{QueryGraph, SearchContext};
 use crate::Result;
-use std::collections::HashSet;
 
 impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
     /// Build the ranking rule graph from the given query graph

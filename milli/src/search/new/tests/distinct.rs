@@ -17,12 +17,9 @@ use big_s::S;
 use heed::RoTxn;
 use maplit::hashset;
 
-use crate::{
-    index::tests::TempIndex, AscDesc, Criterion, Index, Member, Search, SearchResult,
-    TermsMatchingStrategy,
-};
-
 use super::collect_field_values;
+use crate::index::tests::TempIndex;
+use crate::{AscDesc, Criterion, Index, Member, Search, SearchResult, TermsMatchingStrategy};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();

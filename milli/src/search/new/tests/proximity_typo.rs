@@ -7,10 +7,9 @@ only contains the word pairs that it used to compute its bucket.
 TODO: This is not currently implemented.
 */
 
-use crate::{
-    index::tests::TempIndex, search::new::tests::collect_field_values, Criterion, Search,
-    SearchResult, TermsMatchingStrategy,
-};
+use crate::index::tests::TempIndex;
+use crate::search::new::tests::collect_field_values;
+use crate::{Criterion, Search, SearchResult, TermsMatchingStrategy};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();

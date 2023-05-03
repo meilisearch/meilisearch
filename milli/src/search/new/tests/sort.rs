@@ -14,10 +14,9 @@ This module tests the `sort` ranking rule:
 use big_s::S;
 use maplit::hashset;
 
-use crate::{
-    index::tests::TempIndex, search::new::tests::collect_field_values, AscDesc, Criterion, Member,
-    Search, SearchResult, TermsMatchingStrategy,
-};
+use crate::index::tests::TempIndex;
+use crate::search::new::tests::collect_field_values;
+use crate::{AscDesc, Criterion, Member, Search, SearchResult, TermsMatchingStrategy};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();

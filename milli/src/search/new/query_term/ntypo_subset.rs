@@ -1,8 +1,7 @@
 use std::collections::BTreeSet;
 
-use crate::search::new::interner::Interned;
-
 use super::Phrase;
+use crate::search::new::interner::Interned;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NTypoTermSubset {

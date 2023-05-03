@@ -19,10 +19,9 @@ Then these rules will only work with
     2. the full query term otherwise
 */
 
-use crate::{
-    index::tests::TempIndex, search::new::tests::collect_field_values, Criterion, Search,
-    SearchResult, TermsMatchingStrategy,
-};
+use crate::index::tests::TempIndex;
+use crate::search::new::tests::collect_field_values;
+use crate::{Criterion, Search, SearchResult, TermsMatchingStrategy};
 
 fn create_index_simple_ordered() -> TempIndex {
     let index = TempIndex::new();

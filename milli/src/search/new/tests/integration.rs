@@ -4,12 +4,9 @@ use big_s::S;
 use heed::EnvOpenOptions;
 use maplit::{hashmap, hashset};
 
-use crate::{
-    db_snap,
-    documents::{DocumentsBatchBuilder, DocumentsBatchReader},
-    update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings},
-    Criterion, Index, Object,
-};
+use crate::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
+use crate::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
+use crate::{db_snap, Criterion, Index, Object};
 pub const CONTENT: &str = include_str!("../../../../tests/assets/test_set.ndjson");
 
 pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {

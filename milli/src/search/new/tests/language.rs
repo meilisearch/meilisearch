@@ -1,4 +1,5 @@
-use crate::{index::tests::TempIndex, Search, SearchResult};
+use crate::index::tests::TempIndex;
+use crate::{Search, SearchResult};
 
 #[test]
 fn test_kanji_language_detection() {
