@@ -211,6 +211,14 @@ impl<'a> Filter<'a> {
             Condition::Between { from, to } => {
                 (Included(from.parse_finite_float()?), Included(to.parse_finite_float()?))
             }
+            Condition::Null => {
+                let is_null = index.null_faceted_documents_ids(rtxn, field_id)?;
+                return Ok(is_null);
+            }
+            Condition::Empty => {
+                let is_empty = index.empty_faceted_documents_ids(rtxn, field_id)?;
+                return Ok(is_empty);
+            }
             Condition::Exists => {
                 let exist = index.exists_faceted_documents_ids(rtxn, field_id)?;
                 return Ok(exist);

@@ -20,6 +20,8 @@ pub enum Condition<'a> {
     GreaterThanOrEqual(Token<'a>),
     Equal(Token<'a>),
     NotEqual(Token<'a>),
+    Null,
+    Empty,
     Exists,
     LowerThan(Token<'a>),
     LowerThanOrEqual(Token<'a>),
@@ -42,6 +44,38 @@ pub fn parse_condition(input: Span) -> IResult<FilterCondition> {
     };
 
     Ok((input, condition))
+}
+
+/// null          = value "IS" WS+ "NULL"
+pub fn parse_is_null(input: Span) -> IResult<FilterCondition> {
+    let (input, key) = parse_value(input)?;
+
+    let (input, _) = tuple((tag("IS"), multispace1, tag("NULL")))(input)?;
+    Ok((input, FilterCondition::Condition { fid: key, op: Null }))
+}
+
+/// null          = value "IS" WS+ "NOT" WS+ "NULL"
+pub fn parse_is_not_null(input: Span) -> IResult<FilterCondition> {
+    let (input, key) = parse_value(input)?;
+
+    let (input, _) = tuple((tag("IS"), multispace1, tag("NOT"), multispace1, tag("NULL")))(input)?;
+    Ok((input, FilterCondition::Not(Box::new(FilterCondition::Condition { fid: key, op: Null }))))
+}
+
+/// empty          = value "IS" WS+ "EMPTY"
+pub fn parse_is_empty(input: Span) -> IResult<FilterCondition> {
+    let (input, key) = parse_value(input)?;
+
+    let (input, _) = tuple((tag("IS"), multispace1, tag("EMPTY")))(input)?;
+    Ok((input, FilterCondition::Condition { fid: key, op: Empty }))
+}
+
+/// empty          = value "IS" WS+ "NOT" WS+ "EMPTY"
+pub fn parse_is_not_empty(input: Span) -> IResult<FilterCondition> {
+    let (input, key) = parse_value(input)?;
+
+    let (input, _) = tuple((tag("IS"), multispace1, tag("NOT"), multispace1, tag("EMPTY")))(input)?;
+    Ok((input, FilterCondition::Not(Box::new(FilterCondition::Condition { fid: key, op: Empty }))))
 }
 
 /// exist          = value "EXISTS"

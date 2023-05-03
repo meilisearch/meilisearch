@@ -68,7 +68,7 @@ const DEFAULT_LOG_EVERY_N: usize = 100_000;
 // The actual size of the virtual address space is computed at startup to determine how many 2TiB indexes can be
 // opened simultaneously.
 pub const INDEX_SIZE: u64 = 2 * 1024 * 1024 * 1024 * 1024; // 2 TiB
-pub const TASK_DB_SIZE: u64 = 10 * 1024 * 1024 * 1024; // 10 GiB
+pub const TASK_DB_SIZE: u64 = 20 * 1024 * 1024 * 1024; // 20 GiB
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
@@ -323,10 +323,10 @@ impl Opt {
             .clone()
             .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIG_FILE_PATH));
 
-        match std::fs::read(&config_file_path) {
+        match std::fs::read_to_string(&config_file_path) {
             Ok(config) => {
                 // If the file is successfully read, we deserialize it with `toml`.
-                let opt_from_config = toml::from_slice::<Opt>(&config)?;
+                let opt_from_config = toml::from_str::<Opt>(&config)?;
                 // Return an error if config file contains 'config_file_path'
                 // Using that key in the config file doesn't make sense bc it creates a logical loop (config file referencing itself)
                 if opt_from_config.config_file_path.is_some() {

@@ -26,7 +26,6 @@ impl CompatV2ToV3 {
         };
         v2_uuids
             .into_iter()
-            .into_iter()
             .map(|index| v3::meta::IndexUuid { uid: index.uid, uuid: index.uuid })
             .collect()
     }

@@ -1773,7 +1773,7 @@ async fn error_add_documents_payload_size() {
             "content": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec metus erat, consequat in blandit venenatis, ultricies eu ipsum. Etiam luctus elit et mollis ultrices. Nam turpis risus, dictum non eros in, eleifend feugiat elit. Morbi non dolor pulvinar, sagittis mi sed, ultricies lorem. Nulla ultricies sem metus. Donec at suscipit quam, sed elementum mi. Suspendisse potenti. Fusce pharetra turpis tortor, sed eleifend odio dapibus ut. Nulla facilisi. Suspendisse elementum, dui eget aliquet dignissim, ex tellus aliquam nisl, at eleifend nisl metus tempus diam. Mauris fermentum sollicitudin efficitur. Donec dignissim est vitae elit finibus faucibus"
         }
     );
-    let documents: Vec<_> = (0..16000).into_iter().map(|_| document.clone()).collect();
+    let documents: Vec<_> = (0..16000).map(|_| document.clone()).collect();
     let documents = json!(documents);
     let (response, code) = index.add_documents(documents, None).await;
 
@@ -1934,7 +1934,6 @@ async fn batch_several_documents_addition() {
     let index = server.index("test");
 
     let mut documents: Vec<_> = (0..150usize)
-        .into_iter()
         .map(|id| {
             json!(
                 {
