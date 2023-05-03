@@ -83,6 +83,110 @@ async fn get_all_documents_bad_limit() {
 }
 
 #[actix_rt::test]
+async fn get_all_documents_bad_filter() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    // Since the filter can't be parsed automatically by deserr, we have the wrong error message
+    // if the index does not exists
+    let (response, code) = index.get_all_documents_raw("?filter").await;
+    snapshot!(code, @"404 Not Found");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Index `test` not found.",
+      "code": "index_not_found",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#index_not_found"
+    }
+    "###);
+
+    let (response, code) = index.get_all_documents_raw("?filter=doggo").await;
+    snapshot!(code, @"404 Not Found");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Index `test` not found.",
+      "code": "index_not_found",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#index_not_found"
+    }
+    "###);
+
+    let (response, code) = index.get_all_documents_raw("?filter=doggo=bernese").await;
+    snapshot!(code, @"404 Not Found");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Index `test` not found.",
+      "code": "index_not_found",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#index_not_found"
+    }
+    "###);
+
+    let (response, code) = index.create(None).await;
+    snapshot!(code, @"202 Accepted");
+    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
+    {
+      "taskUid": 0,
+      "indexUid": "test",
+      "status": "enqueued",
+      "type": "indexCreation",
+      "enqueuedAt": "[date]"
+    }
+    "###);
+    let response = server.wait_task(0).await;
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }), @r###"
+    {
+      "uid": 0,
+      "indexUid": "test",
+      "status": "succeeded",
+      "type": "indexCreation",
+      "canceledBy": null,
+      "details": {
+        "primaryKey": null
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let (response, code) = index.get_all_documents_raw("?filter").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response), @r###"
+    {
+      "results": [],
+      "offset": 0,
+      "limit": 20,
+      "total": 0
+    }
+    "###);
+
+    let (response, code) = index.get_all_documents_raw("?filter=doggo").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` at `doggo`.\n1:6 doggo",
+      "code": "invalid_document_get_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_get_filter"
+    }
+    "###);
+
+    let (response, code) = index.get_all_documents_raw("?filter=doggo=bernese").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Attribute `doggo` is not filterable. This index does not have configured filterable attributes.\n1:6 doggo=bernese",
+      "code": "invalid_search_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn delete_documents_batch() {
     let server = Server::new().await;
     let index = server.index("test");
