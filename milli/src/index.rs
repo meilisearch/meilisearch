@@ -166,7 +166,7 @@ impl Index {
     ) -> Result<Index> {
         use db_name::*;
 
-        options.max_dbs(21);
+        options.max_dbs(23);
         unsafe { options.flag(Flags::MdbAlwaysFreePages) };
 
         let env = options.open(path)?;
@@ -1461,11 +1461,11 @@ pub(crate) mod tests {
         db_snap!(index, field_distribution);
 
         db_snap!(index, field_distribution,
-            @"
-            age              1     
-            id               2     
-            name             2     
-            "
+            @r###"
+        age              1     
+        id               2     
+        name             2     
+        "###
         );
 
         // snapshot_index!(&index, "1", include: "^field_distribution$");
@@ -1482,10 +1482,10 @@ pub(crate) mod tests {
 
         db_snap!(index, field_distribution,
             @r###"
-            age              1     
-            id               2     
-            name             2     
-            "###
+        age              1     
+        id               2     
+        name             2     
+        "###
         );
 
         // then we update a document by removing one field and another by adding one field
@@ -1498,10 +1498,10 @@ pub(crate) mod tests {
 
         db_snap!(index, field_distribution,
             @r###"
-            has_dog          1     
-            id               2     
-            name             2     
-            "###
+        has_dog          1     
+        id               2     
+        name             2     
+        "###
         );
     }
 
