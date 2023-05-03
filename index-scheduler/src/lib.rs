@@ -3835,7 +3835,7 @@ mod tests {
 
         // But a task deletion that delete something should works
         index_scheduler
-            .register(KindWithContent::TaskDeletion { query: S("test"), tasks: (0..50).collect() })
+            .register(KindWithContent::TaskDeletion { query: S("test"), tasks: (0..100).collect() })
             .unwrap();
         handle.advance_one_successful_batch();
 
