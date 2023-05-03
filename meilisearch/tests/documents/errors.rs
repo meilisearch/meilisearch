@@ -726,11 +726,11 @@ async fn fetch_document_by_filter() {
     }
     "###);
 
-    let (response, code) = index.get_document_by_filter(json!({ "fields": ["doggo"] })).await;
+    let (response, code) = index.get_document_by_filter(json!({ "fields": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid value type at `.fields`: expected a string, but found an array: `[\"doggo\"]`",
+      "message": "Invalid value type at `.fields`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_document_get_fields",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_document_get_fields"

@@ -152,7 +152,7 @@ pub struct BrowseQuery {
     #[deserr(default = PAGINATION_DEFAULT_LIMIT, error = DeserrJsonError<InvalidDocumentGetLimit>)]
     limit: usize,
     #[deserr(default, error = DeserrJsonError<InvalidDocumentGetFields>)]
-    fields: OptionStarOrList<String>,
+    fields: Option<Vec<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidDocumentGetFilter>)]
     filter: Option<Value>,
 }
@@ -184,7 +184,12 @@ pub async fn get_documents(
         None => None,
     };
 
-    let query = BrowseQuery { offset: offset.0, limit: limit.0, fields, filter };
+    let query = BrowseQuery {
+        offset: offset.0,
+        limit: limit.0,
+        fields: fields.merge_star_and_none(),
+        filter,
+    };
 
     documents_by_query(&index_scheduler, index_uid, query)
 }
@@ -196,11 +201,9 @@ fn documents_by_query(
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let BrowseQuery { offset, limit, fields, filter } = query;
-    let attributes_to_retrieve = fields.merge_star_and_none();
 
     let index = index_scheduler.index(&index_uid)?;
-    let (total, documents) =
-        retrieve_documents(&index, offset, limit, filter, attributes_to_retrieve)?;
+    let (total, documents) = retrieve_documents(&index, offset, limit, filter, fields)?;
 
     let ret = PaginationView::new(offset, limit, total as usize, documents);
 

@@ -473,7 +473,9 @@ async fn get_document_by_filter() {
     assert_eq!(response, response2);
 
     let (response, code) = index
-        .get_document_by_filter(json!({ "limit": 1, "filter": "color != blue", "fields": "color" }))
+        .get_document_by_filter(
+            json!({ "limit": 1, "filter": "color != blue", "fields": ["color"] }),
+        )
         .await;
     let (response2, code2) =
         index.get_all_documents_raw("?limit=1&filter=color!=blue&fields=color").await;
