@@ -963,7 +963,7 @@ impl DocumentsDeletionAggregator {
             DocumentDeletionKind::PerDocumentId => ret.per_document_id = true,
             DocumentDeletionKind::ClearAll => ret.clear_all = true,
             DocumentDeletionKind::PerBatch => ret.per_batch = true,
-            DocumentDeletionKind::PerFilter => ret.per_batch = true,
+            DocumentDeletionKind::PerFilter => ret.per_filter = true,
         }
 
         ret
