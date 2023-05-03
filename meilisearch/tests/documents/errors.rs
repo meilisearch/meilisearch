@@ -453,7 +453,7 @@ async fn delete_document_by_filter() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `_geoRadius`, or `_geoBoundingBox` at `hello`.\n1:6 hello",
+      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` at `hello`.\n1:6 hello",
       "code": "invalid_document_delete_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_document_delete_filter"
