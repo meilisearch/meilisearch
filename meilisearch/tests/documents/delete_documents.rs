@@ -220,18 +220,18 @@ async fn delete_document_by_filter() {
     }
     "###);
 
-    let response = index.wait_task(2).await;
+    let response = index.wait_task(3).await;
     snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
     {
-      "uid": 2,
+      "uid": 3,
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentDeletion",
       "canceledBy": null,
       "details": {
         "providedIds": 0,
-        "deletedDocuments": 2,
-        "originalFilter": "\"color = blue\""
+        "deletedDocuments": 1,
+        "originalFilter": "\"color NOT EXISTS\""
       },
       "error": null,
       "duration": "[duration]",
