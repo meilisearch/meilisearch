@@ -1329,10 +1329,10 @@ pub(crate) mod tests {
             let index_documents_config = IndexDocumentsConfig::default();
             Self { inner, indexer_config, index_documents_config, _tempdir }
         }
-        /// Creates a temporary index, with a default `4096 * 1000` size. This should be enough for
+        /// Creates a temporary index, with a default `4096 * 2000` size. This should be enough for
         /// most tests.
         pub fn new() -> Self {
-            Self::new_with_map_size(4096 * 1000)
+            Self::new_with_map_size(4096 * 2000)
         }
         pub fn add_documents_using_wtxn<'t, R>(
             &'t self,
