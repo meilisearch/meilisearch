@@ -140,11 +140,6 @@ impl Index<'_> {
         }
     }
 
-    pub async fn get_document_by_filter(&self, payload: Value) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/documents/fetch", urlencode(self.uid.as_ref()));
-        self.service.post(url, payload).await
-    }
-
     pub async fn wait_task(&self, update_id: u64) -> Value {
         // try several times to get status, or panic to not wait forever
         let url = format!("/tasks/{}", update_id);
@@ -201,6 +196,11 @@ impl Index<'_> {
             let _ = write!(url, "?fields={}", fields.join(","));
         }
         self.service.get(url).await
+    }
+
+    pub async fn get_document_by_filter(&self, payload: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/documents/fetch", urlencode(self.uid.as_ref()));
+        self.service.post(url, payload).await
     }
 
     pub async fn get_all_documents_raw(&self, options: &str) -> (Value, StatusCode) {

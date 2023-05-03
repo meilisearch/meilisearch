@@ -381,7 +381,7 @@ async fn get_documents_displayed_attributes_is_ignored() {
 }
 
 #[actix_rt::test]
-async fn fetch_document_by_filter() {
+async fn get_document_by_filter() {
     let server = Server::new().await;
     let index = server.index("doggo");
     index.update_settings_filterable_attributes(json!(["color"])).await;
@@ -399,6 +399,7 @@ async fn fetch_document_by_filter() {
     index.wait_task(1).await;
 
     let (response, code) = index.get_document_by_filter(json!({})).await;
+    let (response2, code2) = index.get_all_documents_raw("").await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
     {
@@ -424,8 +425,11 @@ async fn fetch_document_by_filter() {
       "total": 4
     }
     "###);
+    assert_eq!(code, code2);
+    assert_eq!(response, response2);
 
     let (response, code) = index.get_document_by_filter(json!({ "filter": "color = blue" })).await;
+    let (response2, code2) = index.get_all_documents_raw("?filter=color=blue").await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
     {
@@ -444,10 +448,14 @@ async fn fetch_document_by_filter() {
       "total": 2
     }
     "###);
+    assert_eq!(code, code2);
+    assert_eq!(response, response2);
 
     let (response, code) = index
         .get_document_by_filter(json!({ "offset": 1, "limit": 1, "filter": "color != blue" }))
         .await;
+    let (response2, code2) =
+        index.get_all_documents_raw("?filter=color!=blue&offset=1&limit=1").await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
     {
@@ -461,10 +469,14 @@ async fn fetch_document_by_filter() {
       "total": 2
     }
     "###);
+    assert_eq!(code, code2);
+    assert_eq!(response, response2);
 
     let (response, code) = index
         .get_document_by_filter(json!({ "limit": 1, "filter": "color != blue", "fields": "color" }))
         .await;
+    let (response2, code2) =
+        index.get_all_documents_raw("?limit=1&filter=color!=blue&fields=color").await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
     {
@@ -476,6 +488,53 @@ async fn fetch_document_by_filter() {
       "offset": 0,
       "limit": 1,
       "total": 2
+    }
+    "###);
+    assert_eq!(code, code2);
+    assert_eq!(response, response2);
+
+    // Now testing more complex filter that the get route can't represent
+
+    let (response, code) =
+        index.get_document_by_filter(json!({ "filter": [["color = blue", "color = red"]] })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
+    {
+      "results": [
+        {
+          "id": 0,
+          "color": "red"
+        },
+        {
+          "id": 1,
+          "color": "blue"
+        },
+        {
+          "id": 2,
+          "color": "blue"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 3
+    }
+    "###);
+
+    let (response, code) = index
+        .get_document_by_filter(json!({ "filter": [["color != blue"], "color EXISTS"] }))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
+    {
+      "results": [
+        {
+          "id": 0,
+          "color": "red"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
     }
     "###);
 }
