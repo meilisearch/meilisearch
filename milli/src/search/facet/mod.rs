@@ -2,17 +2,51 @@ pub use facet_sort_ascending::ascending_facet_sort;
 pub use facet_sort_descending::descending_facet_sort;
 use heed::types::{ByteSlice, DecodeIgnore};
 use heed::{BytesDecode, RoTxn};
+use roaring::RoaringBitmap;
 
 pub use self::facet_distribution::{FacetDistribution, DEFAULT_VALUES_PER_FACET};
 pub use self::filter::{BadGeoError, Filter};
-use crate::heed_codec::facet::{FacetGroupKeyCodec, FacetGroupValueCodec};
+use crate::heed_codec::facet::{FacetGroupKeyCodec, FacetGroupValueCodec, OrderedF64Codec};
 use crate::heed_codec::ByteSliceRefCodec;
+use crate::{Index, Result};
 mod facet_distribution;
 mod facet_distribution_iter;
 mod facet_range_search;
 mod facet_sort_ascending;
 mod facet_sort_descending;
 mod filter;
+
+fn facet_extreme_value<'t>(
+    mut extreme_it: impl Iterator<Item = heed::Result<(RoaringBitmap, &'t [u8])>> + 't,
+) -> Result<Option<f64>> {
+    let extreme_value =
+        if let Some(extreme_value) = extreme_it.next() { extreme_value } else { return Ok(None) };
+    let (_, extreme_value) = extreme_value?;
+
+    Ok(OrderedF64Codec::bytes_decode(extreme_value))
+}
+
+pub fn facet_min_value<'t>(
+    index: &'t Index,
+    rtxn: &'t heed::RoTxn,
+    field_id: u16,
+    candidates: RoaringBitmap,
+) -> Result<Option<f64>> {
+    let db = index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>();
+    let it = ascending_facet_sort(rtxn, db, field_id, candidates)?;
+    facet_extreme_value(it)
+}
+
+pub fn facet_max_value<'t>(
+    index: &'t Index,
+    rtxn: &'t heed::RoTxn,
+    field_id: u16,
+    candidates: RoaringBitmap,
+) -> Result<Option<f64>> {
+    let db = index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>();
+    let it = descending_facet_sort(rtxn, db, field_id, candidates)?;
+    facet_extreme_value(it)
+}
 
 /// Get the first facet value in the facet database
 pub(crate) fn get_first_facet_value<'t, BoundCodec>(

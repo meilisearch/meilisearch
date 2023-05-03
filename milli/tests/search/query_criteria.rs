@@ -13,14 +13,12 @@ use Criterion::*;
 
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
 
-const ALLOW_TYPOS: bool = true;
-const DISALLOW_TYPOS: bool = false;
 const ALLOW_OPTIONAL_WORDS: TermsMatchingStrategy = TermsMatchingStrategy::Last;
 const DISALLOW_OPTIONAL_WORDS: TermsMatchingStrategy = TermsMatchingStrategy::All;
 const ASC_DESC_CANDIDATES_THRESHOLD: usize = 1000;
 
 macro_rules! test_criterion {
-    ($func:ident, $optional_word:ident, $authorize_typos:ident, $criteria:expr, $sort_criteria:expr) => {
+    ($func:ident, $optional_word:ident, $criteria:expr, $sort_criteria:expr) => {
         #[test]
         fn $func() {
             let criteria = $criteria;
@@ -30,169 +28,60 @@ macro_rules! test_criterion {
             let mut search = Search::new(&rtxn, &index);
             search.query(search::TEST_QUERY);
             search.limit(EXTERNAL_DOCUMENTS_IDS.len());
-            search.authorize_typos($authorize_typos);
             search.terms_matching_strategy($optional_word);
             search.sort_criteria($sort_criteria);
 
             let SearchResult { documents_ids, .. } = search.execute().unwrap();
 
-            let expected_external_ids: Vec<_> = search::expected_order(
-                &criteria,
-                $authorize_typos,
-                $optional_word,
-                &$sort_criteria[..],
-            )
-            .into_iter()
-            .map(|d| d.id)
-            .collect();
+            let expected_external_ids: Vec<_> =
+                search::expected_order(&criteria, $optional_word, &$sort_criteria[..])
+                    .into_iter()
+                    .map(|d| d.id)
+                    .collect();
             let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
             assert_eq!(documents_ids, expected_external_ids);
         }
     };
 }
 
-test_criterion!(none_allow_typo, DISALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, vec![], vec![]);
-test_criterion!(none_disallow_typo, DISALLOW_OPTIONAL_WORDS, DISALLOW_TYPOS, vec![], vec![]);
-test_criterion!(words_allow_typo, ALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, vec![Words], vec![]);
+test_criterion!(none, DISALLOW_OPTIONAL_WORDS, vec![], vec![]);
+test_criterion!(words, ALLOW_OPTIONAL_WORDS, vec![Words], vec![]);
+test_criterion!(attribute, DISALLOW_OPTIONAL_WORDS, vec![Attribute], vec![]);
+test_criterion!(typo, DISALLOW_OPTIONAL_WORDS, vec![Typo], vec![]);
+test_criterion!(exactness, DISALLOW_OPTIONAL_WORDS, vec![Exactness], vec![]);
+test_criterion!(proximity, DISALLOW_OPTIONAL_WORDS, vec![Proximity], vec![]);
+test_criterion!(asc, DISALLOW_OPTIONAL_WORDS, vec![Asc(S("asc_desc_rank"))], vec![]);
+test_criterion!(desc, DISALLOW_OPTIONAL_WORDS, vec![Desc(S("asc_desc_rank"))], vec![]);
 test_criterion!(
-    attribute_allow_typo,
+    asc_unexisting_field,
     DISALLOW_OPTIONAL_WORDS,
-    ALLOW_TYPOS,
-    vec![Attribute],
-    vec![]
-);
-test_criterion!(typo, DISALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, vec![Typo], vec![]);
-test_criterion!(
-    attribute_disallow_typo,
-    DISALLOW_OPTIONAL_WORDS,
-    DISALLOW_TYPOS,
-    vec![Attribute],
-    vec![]
-);
-test_criterion!(
-    exactness_allow_typo,
-    DISALLOW_OPTIONAL_WORDS,
-    ALLOW_TYPOS,
-    vec![Exactness],
-    vec![]
-);
-test_criterion!(
-    exactness_disallow_typo,
-    DISALLOW_OPTIONAL_WORDS,
-    DISALLOW_TYPOS,
-    vec![Exactness],
-    vec![]
-);
-test_criterion!(
-    proximity_allow_typo,
-    DISALLOW_OPTIONAL_WORDS,
-    ALLOW_TYPOS,
-    vec![Proximity],
-    vec![]
-);
-test_criterion!(
-    proximity_disallow_typo,
-    DISALLOW_OPTIONAL_WORDS,
-    DISALLOW_TYPOS,
-    vec![Proximity],
-    vec![]
-);
-test_criterion!(
-    asc_allow_typo,
-    DISALLOW_OPTIONAL_WORDS,
-    ALLOW_TYPOS,
-    vec![Asc(S("asc_desc_rank"))],
-    vec![]
-);
-test_criterion!(
-    asc_disallow_typo,
-    DISALLOW_OPTIONAL_WORDS,
-    DISALLOW_TYPOS,
-    vec![Asc(S("asc_desc_rank"))],
-    vec![]
-);
-test_criterion!(
-    desc_allow_typo,
-    DISALLOW_OPTIONAL_WORDS,
-    ALLOW_TYPOS,
-    vec![Desc(S("asc_desc_rank"))],
-    vec![]
-);
-test_criterion!(
-    desc_disallow_typo,
-    DISALLOW_OPTIONAL_WORDS,
-    DISALLOW_TYPOS,
-    vec![Desc(S("asc_desc_rank"))],
-    vec![]
-);
-test_criterion!(
-    asc_unexisting_field_allow_typo,
-    DISALLOW_OPTIONAL_WORDS,
-    ALLOW_TYPOS,
     vec![Asc(S("unexisting_field"))],
     vec![]
 );
+
 test_criterion!(
-    asc_unexisting_field_disallow_typo,
+    desc_unexisting_field,
     DISALLOW_OPTIONAL_WORDS,
-    DISALLOW_TYPOS,
-    vec![Asc(S("unexisting_field"))],
-    vec![]
-);
-test_criterion!(
-    desc_unexisting_field_allow_typo,
-    DISALLOW_OPTIONAL_WORDS,
-    ALLOW_TYPOS,
     vec![Desc(S("unexisting_field"))],
     vec![]
 );
+
+test_criterion!(empty_sort_by, DISALLOW_OPTIONAL_WORDS, vec![Sort], vec![]);
 test_criterion!(
-    desc_unexisting_field_disallow_typo,
+    sort_by_asc,
     DISALLOW_OPTIONAL_WORDS,
-    DISALLOW_TYPOS,
-    vec![Desc(S("unexisting_field"))],
-    vec![]
-);
-test_criterion!(empty_sort_by_allow_typo, DISALLOW_OPTIONAL_WORDS, ALLOW_TYPOS, vec![Sort], vec![]);
-test_criterion!(
-    empty_sort_by_disallow_typo,
-    DISALLOW_OPTIONAL_WORDS,
-    DISALLOW_TYPOS,
-    vec![Sort],
-    vec![]
-);
-test_criterion!(
-    sort_by_asc_allow_typo,
-    DISALLOW_OPTIONAL_WORDS,
-    ALLOW_TYPOS,
     vec![Sort],
     vec![AscDesc::Asc(Member::Field(S("tag")))]
 );
 test_criterion!(
-    sort_by_asc_disallow_typo,
+    sort_by_desc,
     DISALLOW_OPTIONAL_WORDS,
-    DISALLOW_TYPOS,
-    vec![Sort],
-    vec![AscDesc::Asc(Member::Field(S("tag")))]
-);
-test_criterion!(
-    sort_by_desc_allow_typo,
-    DISALLOW_OPTIONAL_WORDS,
-    ALLOW_TYPOS,
-    vec![Sort],
-    vec![AscDesc::Desc(Member::Field(S("tag")))]
-);
-test_criterion!(
-    sort_by_desc_disallow_typo,
-    DISALLOW_OPTIONAL_WORDS,
-    DISALLOW_TYPOS,
     vec![Sort],
     vec![AscDesc::Desc(Member::Field(S("tag")))]
 );
 test_criterion!(
     default_criteria_order,
     ALLOW_OPTIONAL_WORDS,
-    ALLOW_TYPOS,
     vec![Words, Typo, Proximity, Attribute, Exactness],
     vec![]
 );
@@ -354,12 +243,11 @@ fn criteria_mixup() {
         search.query(search::TEST_QUERY);
         search.limit(EXTERNAL_DOCUMENTS_IDS.len());
         search.terms_matching_strategy(ALLOW_OPTIONAL_WORDS);
-        search.authorize_typos(ALLOW_TYPOS);
 
         let SearchResult { documents_ids, .. } = search.execute().unwrap();
 
         let expected_external_ids: Vec<_> =
-            search::expected_order(&criteria, ALLOW_TYPOS, ALLOW_OPTIONAL_WORDS, &[])
+            search::expected_order(&criteria, ALLOW_OPTIONAL_WORDS, &[])
                 .into_iter()
                 .map(|d| d.id)
                 .collect();

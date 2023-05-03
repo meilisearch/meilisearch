@@ -26,7 +26,6 @@ fn test_phrase_search_with_stop_words_given_criteria(criteria: &[Criterion]) {
     let mut search = Search::new(&txn, &index);
     search.query("\"the use of force\"");
     search.limit(10);
-    search.authorize_typos(false);
     search.terms_matching_strategy(TermsMatchingStrategy::All);
 
     let result = search.execute().unwrap();

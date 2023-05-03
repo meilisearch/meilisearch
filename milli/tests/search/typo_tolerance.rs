@@ -19,7 +19,7 @@ fn test_typo_tolerance_one_typo() {
         let mut search = Search::new(&txn, &index);
         search.query("zeal");
         search.limit(10);
-        search.authorize_typos(true);
+
         search.terms_matching_strategy(TermsMatchingStrategy::default());
 
         let result = search.execute().unwrap();
@@ -28,7 +28,7 @@ fn test_typo_tolerance_one_typo() {
         let mut search = Search::new(&txn, &index);
         search.query("zean");
         search.limit(10);
-        search.authorize_typos(true);
+
         search.terms_matching_strategy(TermsMatchingStrategy::default());
 
         let result = search.execute().unwrap();
@@ -46,7 +46,7 @@ fn test_typo_tolerance_one_typo() {
     let mut search = Search::new(&txn, &index);
     search.query("zean");
     search.limit(10);
-    search.authorize_typos(true);
+
     search.terms_matching_strategy(TermsMatchingStrategy::default());
 
     let result = search.execute().unwrap();
@@ -65,7 +65,7 @@ fn test_typo_tolerance_two_typo() {
         let mut search = Search::new(&txn, &index);
         search.query("zealand");
         search.limit(10);
-        search.authorize_typos(true);
+
         search.terms_matching_strategy(TermsMatchingStrategy::default());
 
         let result = search.execute().unwrap();
@@ -74,7 +74,7 @@ fn test_typo_tolerance_two_typo() {
         let mut search = Search::new(&txn, &index);
         search.query("zealemd");
         search.limit(10);
-        search.authorize_typos(true);
+
         search.terms_matching_strategy(TermsMatchingStrategy::default());
 
         let result = search.execute().unwrap();
@@ -92,7 +92,7 @@ fn test_typo_tolerance_two_typo() {
     let mut search = Search::new(&txn, &index);
     search.query("zealemd");
     search.limit(10);
-    search.authorize_typos(true);
+
     search.terms_matching_strategy(TermsMatchingStrategy::default());
 
     let result = search.execute().unwrap();
@@ -142,7 +142,7 @@ fn test_typo_disabled_on_word() {
         let mut search = Search::new(&txn, &index);
         search.query("zealand");
         search.limit(10);
-        search.authorize_typos(true);
+
         search.terms_matching_strategy(TermsMatchingStrategy::default());
 
         let result = search.execute().unwrap();
@@ -162,7 +162,7 @@ fn test_typo_disabled_on_word() {
     let mut search = Search::new(&txn, &index);
     search.query("zealand");
     search.limit(10);
-    search.authorize_typos(true);
+
     search.terms_matching_strategy(TermsMatchingStrategy::default());
 
     let result = search.execute().unwrap();
@@ -182,7 +182,7 @@ fn test_disable_typo_on_attribute() {
         // typo in `antebel(l)um`
         search.query("antebelum");
         search.limit(10);
-        search.authorize_typos(true);
+
         search.terms_matching_strategy(TermsMatchingStrategy::default());
 
         let result = search.execute().unwrap();
@@ -200,7 +200,7 @@ fn test_disable_typo_on_attribute() {
     let mut search = Search::new(&txn, &index);
     search.query("antebelum");
     search.limit(10);
-    search.authorize_typos(true);
+
     search.terms_matching_strategy(TermsMatchingStrategy::default());
 
     let result = search.execute().unwrap();

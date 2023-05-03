@@ -28,7 +28,7 @@ macro_rules! test_distinct {
             search.query(search::TEST_QUERY);
             search.limit($limit);
             search.exhaustive_number_hits($exhaustive);
-            search.authorize_typos(true);
+
             search.terms_matching_strategy(TermsMatchingStrategy::default());
 
             let SearchResult { documents_ids, candidates, .. } = search.execute().unwrap();
@@ -37,7 +37,7 @@ macro_rules! test_distinct {
 
             let mut distinct_values = HashSet::new();
             let expected_external_ids: Vec<_> =
-                search::expected_order(&criteria, true, TermsMatchingStrategy::default(), &[])
+                search::expected_order(&criteria, TermsMatchingStrategy::default(), &[])
                     .into_iter()
                     .filter_map(|d| {
                         if distinct_values.contains(&d.$distinct) {

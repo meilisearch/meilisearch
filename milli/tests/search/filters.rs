@@ -18,7 +18,7 @@ macro_rules! test_filter {
             let mut search = Search::new(&rtxn, &index);
             search.query(search::TEST_QUERY);
             search.limit(EXTERNAL_DOCUMENTS_IDS.len());
-            search.authorize_typos(true);
+
             search.terms_matching_strategy(TermsMatchingStrategy::default());
             search.filter(filter_conditions);
 
@@ -26,7 +26,7 @@ macro_rules! test_filter {
 
             let filtered_ids = search::expected_filtered_ids($filter);
             let expected_external_ids: Vec<_> =
-                search::expected_order(&criteria, true, TermsMatchingStrategy::default(), &[])
+                search::expected_order(&criteria, TermsMatchingStrategy::default(), &[])
                     .into_iter()
                     .filter_map(|d| if filtered_ids.contains(&d.id) { Some(d.id) } else { None })
                     .collect();

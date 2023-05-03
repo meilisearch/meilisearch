@@ -19,12 +19,12 @@ use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
     FieldIdCodec, OrderedF64Codec,
 };
-use crate::heed_codec::{ScriptLanguageCodec, StrRefCodec};
+use crate::heed_codec::{ScriptLanguageCodec, StrBEU16Codec, StrRefCodec};
 use crate::{
     default_criteria, BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec, Criterion,
     DocumentId, ExternalDocumentsIds, FacetDistribution, FieldDistribution, FieldId,
     FieldIdWordCountCodec, GeoPoint, ObkvCodec, Result, RoaringBitmapCodec, RoaringBitmapLenCodec,
-    Search, StrBEU32Codec, U8StrStrCodec, BEU16, BEU32,
+    Search, U8StrStrCodec, BEU16, BEU32,
 };
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
@@ -76,7 +76,9 @@ pub mod db_name {
     pub const WORD_PREFIX_PAIR_PROXIMITY_DOCIDS: &str = "word-prefix-pair-proximity-docids";
     pub const PREFIX_WORD_PAIR_PROXIMITY_DOCIDS: &str = "prefix-word-pair-proximity-docids";
     pub const WORD_POSITION_DOCIDS: &str = "word-position-docids";
+    pub const WORD_FIELD_ID_DOCIDS: &str = "word-field-id-docids";
     pub const WORD_PREFIX_POSITION_DOCIDS: &str = "word-prefix-position-docids";
+    pub const WORD_PREFIX_FIELD_ID_DOCIDS: &str = "word-prefix-field-id-docids";
     pub const FIELD_ID_WORD_COUNT_DOCIDS: &str = "field-id-word-count-docids";
     pub const FACET_ID_F64_DOCIDS: &str = "facet-id-f64-docids";
     pub const FACET_ID_EXISTS_DOCIDS: &str = "facet-id-exists-docids";
@@ -120,11 +122,16 @@ pub struct Index {
     pub prefix_word_pair_proximity_docids: Database<U8StrStrCodec, CboRoaringBitmapCodec>,
 
     /// Maps the word and the position with the docids that corresponds to it.
-    pub word_position_docids: Database<StrBEU32Codec, CboRoaringBitmapCodec>,
+    pub word_position_docids: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
+    /// Maps the word and the field id with the docids that corresponds to it.
+    pub word_fid_docids: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
+
     /// Maps the field id and the word count with the docids that corresponds to it.
     pub field_id_word_count_docids: Database<FieldIdWordCountCodec, CboRoaringBitmapCodec>,
-    /// Maps the position of a word prefix with all the docids where this prefix appears.
-    pub word_prefix_position_docids: Database<StrBEU32Codec, CboRoaringBitmapCodec>,
+    /// Maps the word prefix and a position with all the docids where the prefix appears at the position.
+    pub word_prefix_position_docids: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
+    /// Maps the word prefix and a field id with all the docids where the prefix appears inside the field
+    pub word_prefix_fid_docids: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
 
     /// Maps the script and language with all the docids that corresponds to it.
     pub script_language_docids: Database<ScriptLanguageCodec, RoaringBitmapCodec>,
@@ -159,7 +166,7 @@ impl Index {
     ) -> Result<Index> {
         use db_name::*;
 
-        options.max_dbs(21);
+        options.max_dbs(23);
         unsafe { options.flag(Flags::MdbAlwaysFreePages) };
 
         let env = options.open(path)?;
@@ -176,8 +183,10 @@ impl Index {
         let prefix_word_pair_proximity_docids =
             env.create_database(Some(PREFIX_WORD_PAIR_PROXIMITY_DOCIDS))?;
         let word_position_docids = env.create_database(Some(WORD_POSITION_DOCIDS))?;
+        let word_fid_docids = env.create_database(Some(WORD_FIELD_ID_DOCIDS))?;
         let field_id_word_count_docids = env.create_database(Some(FIELD_ID_WORD_COUNT_DOCIDS))?;
         let word_prefix_position_docids = env.create_database(Some(WORD_PREFIX_POSITION_DOCIDS))?;
+        let word_prefix_fid_docids = env.create_database(Some(WORD_PREFIX_FIELD_ID_DOCIDS))?;
         let facet_id_f64_docids = env.create_database(Some(FACET_ID_F64_DOCIDS))?;
         let facet_id_string_docids = env.create_database(Some(FACET_ID_STRING_DOCIDS))?;
         let facet_id_exists_docids = env.create_database(Some(FACET_ID_EXISTS_DOCIDS))?;
@@ -204,7 +213,9 @@ impl Index {
             word_prefix_pair_proximity_docids,
             prefix_word_pair_proximity_docids,
             word_position_docids,
+            word_fid_docids,
             word_prefix_position_docids,
+            word_prefix_fid_docids,
             field_id_word_count_docids,
             facet_id_f64_docids,
             facet_id_string_docids,
@@ -1318,10 +1329,10 @@ pub(crate) mod tests {
             let index_documents_config = IndexDocumentsConfig::default();
             Self { inner, indexer_config, index_documents_config, _tempdir }
         }
-        /// Creates a temporary index, with a default `4096 * 1000` size. This should be enough for
+        /// Creates a temporary index, with a default `4096 * 2000` size. This should be enough for
         /// most tests.
         pub fn new() -> Self {
-            Self::new_with_map_size(4096 * 1000)
+            Self::new_with_map_size(4096 * 2000)
         }
         pub fn add_documents_using_wtxn<'t, R>(
             &'t self,
@@ -1450,11 +1461,11 @@ pub(crate) mod tests {
         db_snap!(index, field_distribution);
 
         db_snap!(index, field_distribution,
-            @"
-            age              1     
-            id               2     
-            name             2     
-            "
+            @r###"
+        age              1     
+        id               2     
+        name             2     
+        "###
         );
 
         // snapshot_index!(&index, "1", include: "^field_distribution$");
@@ -1471,10 +1482,10 @@ pub(crate) mod tests {
 
         db_snap!(index, field_distribution,
             @r###"
-            age              1     
-            id               2     
-            name             2     
-            "###
+        age              1     
+        id               2     
+        name             2     
+        "###
         );
 
         // then we update a document by removing one field and another by adding one field
@@ -1487,10 +1498,10 @@ pub(crate) mod tests {
 
         db_snap!(index, field_distribution,
             @r###"
-            has_dog          1     
-            id               2     
-            name             2     
-            "###
+        has_dog          1     
+        id               2     
+        name             2     
+        "###
         );
     }
 

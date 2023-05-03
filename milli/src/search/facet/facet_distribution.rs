@@ -73,7 +73,7 @@ impl<'a> FacetDistribution<'a> {
 
                 let distribution_prelength = distribution.len();
                 let db = self.index.field_id_docid_facet_f64s;
-                for docid in candidates.into_iter() {
+                for docid in candidates {
                     key_buffer.truncate(mem::size_of::<FieldId>());
                     key_buffer.extend_from_slice(&docid.to_be_bytes());
                     let iter = db
@@ -97,7 +97,7 @@ impl<'a> FacetDistribution<'a> {
                 let mut key_buffer: Vec<_> = field_id.to_be_bytes().to_vec();
 
                 let db = self.index.field_id_docid_facet_strings;
-                'outer: for docid in candidates.into_iter() {
+                'outer: for docid in candidates {
                     key_buffer.truncate(mem::size_of::<FieldId>());
                     key_buffer.extend_from_slice(&docid.to_be_bytes());
                     let iter = db
@@ -309,7 +309,7 @@ impl<'a> FacetDistribution<'a> {
         let mut distribution = BTreeMap::new();
         for (fid, name) in fields_ids_map.iter() {
             if crate::is_faceted(name, &fields) {
-                let min_value = if let Some(min_value) = crate::search::criteria::facet_min_value(
+                let min_value = if let Some(min_value) = crate::search::facet::facet_min_value(
                     self.index,
                     self.rtxn,
                     fid,
@@ -319,7 +319,7 @@ impl<'a> FacetDistribution<'a> {
                 } else {
                     continue;
                 };
-                let max_value = if let Some(max_value) = crate::search::criteria::facet_max_value(
+                let max_value = if let Some(max_value) = crate::search::facet::facet_max_value(
                     self.index,
                     self.rtxn,
                     fid,

@@ -1,4 +1,56 @@
 #![cfg_attr(all(test, fuzzing), feature(no_coverage))]
+#![allow(clippy::type_complexity)]
+
+#[cfg(test)]
+#[global_allocator]
+pub static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+// #[cfg(test)]
+// pub mod allocator {
+//     use std::alloc::{GlobalAlloc, System};
+//     use std::sync::atomic::{self, AtomicI64};
+
+//     #[global_allocator]
+//     pub static ALLOC: CountingAlloc = CountingAlloc {
+//         max_resident: AtomicI64::new(0),
+//         resident: AtomicI64::new(0),
+//         allocated: AtomicI64::new(0),
+//     };
+
+//     pub struct CountingAlloc {
+//         pub max_resident: AtomicI64,
+//         pub resident: AtomicI64,
+//         pub allocated: AtomicI64,
+//     }
+//     unsafe impl GlobalAlloc for CountingAlloc {
+//         unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
+//             self.allocated.fetch_add(layout.size() as i64, atomic::Ordering::SeqCst);
+//             let old_resident =
+//                 self.resident.fetch_add(layout.size() as i64, atomic::Ordering::SeqCst);
+
+//             let resident = old_resident + layout.size() as i64;
+//             self.max_resident.fetch_max(resident, atomic::Ordering::SeqCst);
+
+//             // if layout.size() > 1_000_000 {
+//             //     eprintln!(
+//             //         "allocating {} with new resident size: {resident}",
+//             //         layout.size() / 1_000_000
+//             //     );
+//             //     // let trace = std::backtrace::Backtrace::capture();
+//             //     // let t = trace.to_string();
+//             //     // eprintln!("{t}");
+//             // }
+
+//             System.alloc(layout)
+//         }
+
+//         unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
+//             self.resident.fetch_sub(layout.size() as i64, atomic::Ordering::Relaxed);
+//             System.dealloc(ptr, layout)
+//         }
+//     }
+// }
+
 #[macro_use]
 pub mod documents;
 
@@ -26,6 +78,10 @@ use charabia::normalizer::{CharNormalizer, CompatibilityDecompositionNormalizer}
 pub use filter_parser::{Condition, FilterCondition, Span, Token};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
+pub use search::new::{
+    execute_search, DefaultSearchLogger, GeoSortStrategy, SearchContext, SearchLogger,
+    VisualSearchLogger,
+};
 use serde_json::Value;
 pub use {charabia as tokenizer, heed};
 
@@ -43,9 +99,8 @@ pub use self::heed_codec::{
 };
 pub use self::index::Index;
 pub use self::search::{
-    CriterionImplementationStrategy, FacetDistribution, Filter, FormatOptions, MatchBounds,
-    MatcherBuilder, MatchingWord, MatchingWords, Search, SearchResult, TermsMatchingStrategy,
-    DEFAULT_VALUES_PER_FACET,
+    FacetDistribution, Filter, FormatOptions, MatchBounds, MatcherBuilder, MatchingWords, Search,
+    SearchResult, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
 
 pub type Result<T> = std::result::Result<T, error::Error>;
@@ -99,6 +154,23 @@ pub fn relative_from_absolute_position(absolute: Position) -> (FieldId, Relative
 // Compute the absolute word position with the field id of the attribute and relative position in the attribute.
 pub fn absolute_from_relative_position(field_id: FieldId, relative: RelativePosition) -> Position {
     (field_id as u32) << 16 | (relative as u32)
+}
+// TODO: this is wrong, but will do for now
+/// Compute the "bucketed" absolute position from the field id and relative position in the field.
+///
+/// In a bucketed position, the accuracy of the relative position is reduced exponentially as it gets larger.
+pub fn bucketed_position(relative: u16) -> u16 {
+    // The first few relative positions are kept intact.
+    if relative < 16 {
+        relative
+    } else if relative < 24 {
+        // Relative positions between 16 and 24 all become equal to 24
+        24
+    } else {
+        // Then, groups of positions that have the same base-2 logarithm are reduced to
+        // the same relative position: the smallest power of 2 that is greater than them
+        (relative as f64).log2().ceil().exp2() as u16
+    }
 }
 
 /// Transform a raw obkv store into a JSON Object.

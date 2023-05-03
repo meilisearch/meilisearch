@@ -2739,6 +2739,7 @@ dependencies = [
  "maplit",
  "md5",
  "memmap2",
+ "mimalloc",
  "obkv",
  "once_cell",
  "ordered-float",

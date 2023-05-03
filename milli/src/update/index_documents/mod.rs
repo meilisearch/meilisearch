@@ -36,7 +36,7 @@ use crate::error::{Error, InternalError, UserError};
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
     self, DeletionStrategy, IndexerConfig, PrefixWordPairsProximityDocids, UpdateIndexingStep,
-    WordPrefixDocids, WordPrefixPositionDocids, WordsPrefixesFst,
+    WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
 use crate::{Index, Result, RoaringBitmapCodec};
 
@@ -373,6 +373,7 @@ where
         let mut final_documents_ids = RoaringBitmap::new();
         let mut word_pair_proximity_docids = None;
         let mut word_position_docids = None;
+        let mut word_fid_docids = None;
         let mut word_docids = None;
         let mut exact_word_docids = None;
 
@@ -405,6 +406,11 @@ where
                     let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
                     word_position_docids = Some(cloneable_chunk);
                     TypedChunk::WordPositionDocids(chunk)
+                }
+                TypedChunk::WordFidDocids(chunk) => {
+                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
+                    word_fid_docids = Some(cloneable_chunk);
+                    TypedChunk::WordFidDocids(chunk)
                 }
                 otherwise => otherwise,
             };
@@ -449,6 +455,7 @@ where
             exact_word_docids,
             word_pair_proximity_docids,
             word_position_docids,
+            word_fid_docids,
         )?;
 
         Ok(all_documents_ids.len())
@@ -461,6 +468,7 @@ where
         exact_word_docids: Option<grenad::Reader<CursorClonableMmap>>,
         word_pair_proximity_docids: Option<grenad::Reader<CursorClonableMmap>>,
         word_position_docids: Option<grenad::Reader<CursorClonableMmap>>,
+        word_fid_docids: Option<grenad::Reader<CursorClonableMmap>>,
     ) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
@@ -595,19 +603,36 @@ where
 
         if let Some(word_position_docids) = word_position_docids {
             // Run the words prefix position docids update operation.
-            let mut builder = WordPrefixPositionDocids::new(self.wtxn, self.index);
+            let mut builder = WordPrefixIntegerDocids::new(
+                self.wtxn,
+                self.index.word_prefix_position_docids,
+                self.index.word_position_docids,
+            );
             builder.chunk_compression_type = self.indexer_config.chunk_compression_type;
             builder.chunk_compression_level = self.indexer_config.chunk_compression_level;
             builder.max_nb_chunks = self.indexer_config.max_nb_chunks;
             builder.max_memory = self.indexer_config.max_memory;
-            if let Some(value) = self.config.words_positions_level_group_size {
-                builder.level_group_size(value);
-            }
-            if let Some(value) = self.config.words_positions_min_level_size {
-                builder.min_level_size(value);
-            }
+
             builder.execute(
                 word_position_docids,
+                &new_prefix_fst_words,
+                &common_prefix_fst_words,
+                &del_prefix_fst_words,
+            )?;
+        }
+        if let Some(word_fid_docids) = word_fid_docids {
+            // Run the words prefix fid docids update operation.
+            let mut builder = WordPrefixIntegerDocids::new(
+                self.wtxn,
+                self.index.word_prefix_fid_docids,
+                self.index.word_fid_docids,
+            );
+            builder.chunk_compression_type = self.indexer_config.chunk_compression_type;
+            builder.chunk_compression_level = self.indexer_config.chunk_compression_level;
+            builder.max_nb_chunks = self.indexer_config.max_nb_chunks;
+            builder.max_memory = self.indexer_config.max_memory;
+            builder.execute(
+                word_fid_docids,
                 &new_prefix_fst_words,
                 &common_prefix_fst_words,
                 &del_prefix_fst_words,
@@ -1229,7 +1254,6 @@ mod tests {
         // testing the simple query search
         let mut search = crate::Search::new(&rtxn, &index);
         search.query("document");
-        search.authorize_typos(true);
         search.terms_matching_strategy(TermsMatchingStrategy::default());
         // all documents should be returned
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
@@ -1335,7 +1359,6 @@ mod tests {
         // testing the simple query search
         let mut search = crate::Search::new(&rtxn, &index);
         search.query("document");
-        search.authorize_typos(true);
         search.terms_matching_strategy(TermsMatchingStrategy::default());
         // all documents should be returned
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
@@ -1582,7 +1605,6 @@ mod tests {
 
         let mut search = crate::Search::new(&rtxn, &index);
         search.query("化妆包");
-        search.authorize_typos(true);
         search.terms_matching_strategy(TermsMatchingStrategy::default());
 
         // only 1 document should be returned
@@ -2435,5 +2457,62 @@ mod tests {
         db_snap!(index, documents, @r###"
         {"id":1,"catto":"jorts"}
         "###);
+    }
+
+    #[test]
+    fn test_word_fid_position() {
+        let index = TempIndex::new();
+
+        index
+            .add_documents(documents!([
+              {"id": 0, "text": "sun flowers are looking at the sun" },
+              {"id": 1, "text": "sun flowers are looking at the sun" },
+              {"id": 2, "text": "the sun is shining today" },
+              {
+                "id": 3,
+                "text": "a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a 
+                a a a a a a a a a a a a a a a a a a a a a a a a a a 
+                a a a a a a a a a a a a a a a a a a a a a a a a a a 
+                a a a a a a a a a a a a a a a a a a a a a a a a a a 
+                a a a a a a a a a a a a a a a a a a a a a a a a a a 
+                a a a a a a a a a a a a a a a a a a a a a "
+             }
+            ]))
+            .unwrap();
+
+        db_snap!(index, word_fid_docids, 1, @"bf3355e493330de036c8823ddd1dbbd9");
+        db_snap!(index, word_position_docids, 1, @"896d54b29ed79c4c6f14084f326dcf6f");
+
+        index
+            .add_documents(documents!([
+              {"id": 4, "text": "sun flowers are looking at the sun" },
+              {"id": 5, "text2": "sun flowers are looking at the sun" },
+              {"id": 6, "text": "b b b" },
+              {
+                "id": 7,
+                "text2": "a a a a"
+             }
+            ]))
+            .unwrap();
+
+        db_snap!(index, word_fid_docids, 2, @"a48d3f88db33f94bc23110a673ea49e4");
+        db_snap!(index, word_position_docids, 2, @"3c9e66c6768ae2cf42b46b2c46e46a83");
+
+        let mut wtxn = index.write_txn().unwrap();
+
+        // Delete not all of the documents but some of them.
+        let mut builder = DeleteDocuments::new(&mut wtxn, &index).unwrap();
+        builder.strategy(DeletionStrategy::AlwaysHard);
+        builder.delete_external_id("0");
+        builder.delete_external_id("3");
+        let result = builder.execute().unwrap();
+        println!("{result:?}");
+
+        wtxn.commit().unwrap();
+
+        db_snap!(index, word_fid_docids, 3, @"4c2e2a1832e5802796edc1638136d933");
+        db_snap!(index, word_position_docids, 3, @"74f556b91d161d997a89468b4da1cb8f");
+        db_snap!(index, docid_word_positions, 3, @"5287245332627675740b28bd46e1cde1");
     }
 }
