@@ -109,16 +109,23 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
         debug_assert!(self.field_ids.is_some(), "fill_buffer can't be called without the lat&lng");
         debug_assert!(self.cached_sorted_docids.is_empty());
 
-        // if we had an rtree and the strategy doesn't require one anymore we can drop it
-        let use_rtree = self.strategy.use_rtree(self.geo_candidates.len() as usize);
-        if use_rtree && self.rtree.is_none() {
-            self.rtree = Some(ctx.index.geo_rtree(ctx.txn)?.expect("geo candidates but no rtree"));
-        }
+        // lazily initialize the rtree if needed by the strategy, and cache it in `self.rtree`
+        let rtree = if self.strategy.use_rtree(self.geo_candidates.len() as usize) {
+            if let Some(rtree) = self.rtree.as_ref() {
+                // get rtree from cache
+                Some(rtree)
+            } else {
+                let rtree = ctx.index.geo_rtree(ctx.txn)?.expect("geo candidates but no rtree");
+                // insert rtree in cache and returns it.
+                // Can't use `get_or_insert_with` because getting the rtree from the DB is a fallible operation.
+                Some(&*self.rtree.insert(rtree))
+            }
+        } else {
+            None
+        };
 
         let cache_size = self.strategy.cache_size();
-        if use_rtree {
-            let rtree = self.rtree.as_ref().unwrap();
-
+        if let Some(rtree) = rtree {
             if self.ascending {
                 let point = lat_lng_to_xyz(&self.point);
                 for point in rtree.nearest_neighbor_iter(&point) {
