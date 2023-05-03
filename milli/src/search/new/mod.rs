@@ -397,8 +397,8 @@ pub fn execute_search(
         None
     };
     let bucket_sort_output = if let Some(query_terms) = query_terms {
-        let graph = QueryGraph::from_query(ctx, &query_terms)?;
-        located_query_terms = Some(query_terms);
+        let (graph, new_located_query_terms) = QueryGraph::from_query(ctx, &query_terms)?;
+        located_query_terms = Some(new_located_query_terms);
 
         let ranking_rules = get_ranking_rules_for_query_graph_search(
             ctx,
