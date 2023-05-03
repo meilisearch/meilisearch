@@ -412,7 +412,7 @@ fn create_index_with_typo_and_prefix() -> TempIndex {
         .add_documents(documents!([
             {
                 "id": 0,
-                "text": "exPraordinarily quick brown fox",
+                "text": "expraordinarily quick brown fox",
             },
             {
                 "id": 1,
@@ -424,11 +424,11 @@ fn create_index_with_typo_and_prefix() -> TempIndex {
             },
             {
                 "id": 3,
-                "text": "exPraordinarily quack brown fox",
+                "text": "expraordinarily quack brown fox",
             },
             {
                 "id": 4,
-                "text": "exPraordinaPily quick brown fox",
+                "text": "expraordinapily quick brown fox",
             }
         ]))
         .unwrap();
@@ -812,9 +812,9 @@ fn test_exactness_followed_by_typo_prefer_no_typo_prefix() {
     [
         "\"extra quick brown fox\"",
         "\"extraordinarily quick brown fox\"",
-        "\"exPraordinarily quick brown fox\"",
-        "\"exPraordinaPily quick brown fox\"",
-        "\"exPraordinarily quack brown fox\"",
+        "\"expraordinarily quick brown fox\"",
+        "\"expraordinapily quick brown fox\"",
+        "\"expraordinarily quack brown fox\"",
     ]
     "###);
 }
@@ -841,9 +841,9 @@ fn test_typo_followed_by_exactness() {
     insta::assert_debug_snapshot!(texts, @r###"
     [
         "\"extraordinarily quick brown fox\"",
-        "\"exPraordinarily quick brown fox\"",
-        "\"exPraordinaPily quick brown fox\"",
-        "\"exPraordinarily quack brown fox\"",
+        "\"expraordinarily quick brown fox\"",
+        "\"expraordinapily quick brown fox\"",
+        "\"expraordinarily quack brown fox\"",
     ]
     "###);
 }
