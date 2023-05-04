@@ -52,7 +52,7 @@ impl MatchingWords {
             words.push(LocatedMatchingWords {
                 value: matching_words,
                 positions: located_term.positions.clone(),
-                is_prefix: term.is_cached_prefix(),
+                is_prefix: term.is_prefix(),
                 original_char_count: term.original_word(&ctx).chars().count(),
             });
         }
@@ -244,6 +244,8 @@ pub(crate) mod tests {
         temp_index
             .add_documents(documents!([
                 { "id": 1, "name": "split this world westfali westfalia the Ŵôřlḑôle" },
+                { "id": 2, "name": "Westfália" },
+                { "id": 3, "name": "Ŵôřlḑôle" },
             ]))
             .unwrap();
         temp_index
@@ -305,7 +307,7 @@ pub(crate) mod tests {
                     ..Default::default()
                 })
                 .next(),
-            None
+            Some(MatchType::Full { char_len: 5, ids: &(2..=2) })
         );
         assert_eq!(
             matching_words
