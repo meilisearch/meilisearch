@@ -1137,13 +1137,17 @@ impl IndexScheduler {
 
         // it's safe to unwrap here because we checked the len above
         let newest_task_id = to_delete.iter().last().unwrap();
-        let task = self.get_task(&rtxn, newest_task_id)?.ok_or(Error::CorruptedTaskQueue)?;
+        let last_task_to_delete =
+            self.get_task(&rtxn, newest_task_id)?.ok_or(Error::CorruptedTaskQueue)?;
         drop(rtxn);
+
+        // increase time by one nanosecond so that the enqueuedAt of the last task to delete is also lower than that date.
+        let delete_before = last_task_to_delete.enqueued_at + Duration::from_nanos(1);
 
         self.register(KindWithContent::TaskDeletion {
             query: format!(
                 "?beforeEnqueuedAt={},status=succeeded,failed,canceled",
-                task.enqueued_at.format(&Rfc3339).map_err(|_| Error::CorruptedTaskQueue)?,
+                delete_before.format(&Rfc3339).map_err(|_| Error::CorruptedTaskQueue)?,
             ),
             tasks: to_delete,
         })?;
