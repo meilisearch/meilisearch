@@ -19,8 +19,8 @@ If Meilisearch does not offer optimized support for your language, please consid
 ## Assumptions
 
 1. **You're familiar with [GitHub](https://github.com) and the [Pull Requests (PR)](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/about-pull-requests) workflow.**
-2. **You've read the Meilisearch [documentation](https://docs.meilisearch.com).**
-3. **You know about the [Meilisearch community](https://docs.meilisearch.com/learn/what_is_meilisearch/contact.html).
+2. **You've read the Meilisearch [documentation](https://www.meilisearch.com/docs).**
+3. **You know about the [Meilisearch community on Discord](https://discord.meilisearch.com).
    Please use this for help.**
 
 ## How to Contribute

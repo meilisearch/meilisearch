@@ -119,9 +119,9 @@ _[Download the `smol-wiki` dataset](https://milli-benchmarks.fra1.digitaloceansp
 
 ### Movies
 
-`movies` is a really small dataset we uses as our example in the [getting started](https://docs.meilisearch.com/learn/getting_started/)
+`movies` is a really small dataset we uses as our example in the [getting started](https://www.meilisearch.com/docs/learn/getting_started/quick_start)
 
-_[Download the `movies` dataset](https://docs.meilisearch.com/movies.json)._
+_[Download the `movies` dataset](https://www.meilisearch.com/movies.json)._
 
 
 ### All Countries
