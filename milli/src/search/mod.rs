@@ -1,9 +1,9 @@
 use std::fmt;
 
-use fst::automaton::{Complement, Intersection, StartsWith, Str, Union};
-use fst::Streamer;
+use fst::automaton::{Automaton, Str};
+use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
-use log::{debug, error};
+use log::error;
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
@@ -314,12 +314,12 @@ impl<'a> SearchForFacetValues<'a> {
                         }
                     } else {
                         let is_prefix = true;
-                        let starts = StartsWith(Str::new(get_first(query)));
-                        let first =
-                            Intersection(build_dfa(query, 1, is_prefix), Complement(&starts));
+                        let starts = Str::new(get_first(query)).starts_with();
+                        let first = build_dfa(query, 1, is_prefix)
+                            .intersection(starts.clone().complement());
                         let second_dfa = build_dfa(query, 2, is_prefix);
-                        let second = Intersection(&second_dfa, &starts);
-                        let automaton = Union(first, &second);
+                        let second = second_dfa.intersection(starts);
+                        let automaton = first.union(&second);
 
                         let mut stream = fst.search(automaton).into_stream();
                         let mut length = 0;
@@ -348,7 +348,7 @@ impl<'a> SearchForFacetValues<'a> {
 
                     Ok(results)
                 } else {
-                    let automaton = StartsWith(Str::new(query));
+                    let automaton = Str::new(query).starts_with();
                     let mut stream = fst.search(automaton).into_stream();
                     let mut results = vec![];
                     let mut length = 0;

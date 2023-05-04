@@ -585,11 +585,12 @@ pub fn perform_facet_search(
     search_query: SearchQuery,
     facet_query: Option<String>,
     facet_name: String,
+    features: RoFeatures,
 ) -> Result<FacetSearchResult, MeilisearchHttpError> {
     let before_search = Instant::now();
     let rtxn = index.read_txn()?;
 
-    let (search, _, _, _) = prepare_search(index, &rtxn, &search_query)?;
+    let (search, _, _, _) = prepare_search(index, &rtxn, &search_query, features)?;
     let mut facet_search = SearchForFacetValues::new(facet_name, search);
     if let Some(facet_query) = &facet_query {
         facet_search.query(facet_query);

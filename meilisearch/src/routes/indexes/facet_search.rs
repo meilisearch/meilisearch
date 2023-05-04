@@ -25,7 +25,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 // TODO improve the error messages
-#[derive(Debug, Clone, Default, PartialEq, Eq, deserr::Deserr)]
+#[derive(Debug, Clone, Default, PartialEq, deserr::Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct FacetSearchQuery {
     #[deserr(default, error = DeserrJsonError<InvalidFacetSearchQuery>)]
@@ -34,6 +34,8 @@ pub struct FacetSearchQuery {
     pub facet_name: String,
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
+    pub vector: Option<Vec<f32>>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
@@ -52,6 +54,10 @@ pub struct FacetSearchQuery {
     pub attributes_to_highlight: Option<HashSet<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>, default)]
     pub show_matches_position: bool,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScore>, default)]
+    pub show_ranking_score: bool,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>, default)]
+    pub show_ranking_score_details: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
@@ -92,8 +98,9 @@ pub async fn search(
     }
 
     let index = index_scheduler.index(&index_uid)?;
+    let features = index_scheduler.features()?;
     let search_result = tokio::task::spawn_blocking(move || {
-        perform_facet_search(&index, search_query, facet_query, facet_name)
+        perform_facet_search(&index, search_query, facet_query, facet_name, features)
     })
     .await?;
 
@@ -121,6 +128,8 @@ impl From<FacetSearchQuery> for SearchQuery {
             crop_length: value.crop_length,
             attributes_to_highlight: value.attributes_to_highlight,
             show_matches_position: value.show_matches_position,
+            show_ranking_score: value.show_ranking_score,
+            show_ranking_score_details: value.show_ranking_score_details,
             filter: value.filter,
             sort: value.sort,
             facets: value.facets,
@@ -128,6 +137,7 @@ impl From<FacetSearchQuery> for SearchQuery {
             highlight_post_tag: value.highlight_post_tag,
             crop_marker: value.crop_marker,
             matching_strategy: value.matching_strategy,
+            vector: value.vector,
         }
     }
 }
