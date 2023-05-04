@@ -88,7 +88,8 @@ async fn get_all_documents_bad_filter() {
     let index = server.index("test");
 
     // Since the filter can't be parsed automatically by deserr, we have the wrong error message
-    // if the index does not exists
+    // if the index does not exist: we could expect to get an error message about the invalid filter before
+    // the existence of the index is checked, but it is not the case.
     let (response, code) = index.get_all_documents_raw("?filter").await;
     snapshot!(code, @"404 Not Found");
     snapshot!(json_string!(response), @r###"
