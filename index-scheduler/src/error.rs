@@ -134,6 +134,48 @@ pub enum Error {
     TaskDatabaseUpdate(Box<Self>),
     #[error(transparent)]
     HeedTransaction(heed::Error),
+
+    #[cfg(test)]
+    #[error("Planned failure for tests.")]
+    PlannedFailure,
+}
+
+impl Error {
+    pub fn is_recoverable(&self) -> bool {
+        match self {
+            Error::IndexNotFound(_)
+            | Error::IndexAlreadyExists(_)
+            | Error::SwapDuplicateIndexFound(_)
+            | Error::SwapDuplicateIndexesFound(_)
+            | Error::SwapIndexNotFound(_)
+            | Error::NoSpaceLeftInTaskQueue
+            | Error::SwapIndexesNotFound(_)
+            | Error::CorruptedDump
+            | Error::InvalidTaskDate { .. }
+            | Error::InvalidTaskUids { .. }
+            | Error::InvalidTaskStatuses { .. }
+            | Error::InvalidTaskTypes { .. }
+            | Error::InvalidTaskCanceledBy { .. }
+            | Error::InvalidIndexUid { .. }
+            | Error::TaskNotFound(_)
+            | Error::TaskDeletionWithEmptyQuery
+            | Error::TaskCancelationWithEmptyQuery
+            | Error::Dump(_)
+            | Error::Heed(_)
+            | Error::Milli(_)
+            | Error::ProcessBatchPanicked
+            | Error::FileStore(_)
+            | Error::IoError(_)
+            | Error::Persist(_)
+            | Error::Anyhow(_) => true,
+            Error::CreateBatch(_)
+            | Error::CorruptedTaskQueue
+            | Error::TaskDatabaseUpdate(_)
+            | Error::HeedTransaction(_) => false,
+            #[cfg(test)]
+            Error::PlannedFailure => false,
+        }
+    }
 }
 
 impl ErrorCode for Error {
@@ -171,6 +213,9 @@ impl ErrorCode for Error {
             Error::CorruptedDump => Code::Internal,
             Error::TaskDatabaseUpdate(_) => Code::Internal,
             Error::CreateBatch(_) => Code::Internal,
+
+            #[cfg(test)]
+            Error::PlannedFailure => Code::Internal,
         }
     }
 }

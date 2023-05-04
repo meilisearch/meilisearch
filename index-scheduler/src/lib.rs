@@ -540,13 +540,7 @@ impl IndexScheduler {
                         Err(e) => {
                             log::error!("{}", e);
                             // Wait one second when an irrecoverable error occurs.
-                            if matches!(
-                                e,
-                                Error::CorruptedTaskQueue
-                                    | Error::TaskDatabaseUpdate(_)
-                                    | Error::HeedTransaction(_)
-                                    | Error::CreateBatch(_)
-                            ) {
+                            if !e.is_recoverable() {
                                 std::thread::sleep(Duration::from_secs(1));
                             }
                         }
@@ -1500,7 +1494,7 @@ mod tests {
             (index_scheduler, index_scheduler_handle)
         }
 
-        /// Return a [`CorruptedTaskQueue`](Error::CorruptedTaskQueue) error if a failure is planned
+        /// Return a [`PlannedFailure`](Error::PlannedFailure) error if a failure is planned
         /// for the given location and current run loop iteration.
         pub fn maybe_fail(&self, location: FailureLocation) -> Result<()> {
             if self.planned_failures.contains(&(*self.run_loop_iteration.read().unwrap(), location))
@@ -1509,7 +1503,7 @@ mod tests {
                     FailureLocation::PanicInsideProcessBatch => {
                         panic!("simulated panic")
                     }
-                    _ => Err(Error::CorruptedTaskQueue),
+                    _ => Err(Error::PlannedFailure),
                 }
             } else {
                 Ok(())
