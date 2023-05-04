@@ -168,9 +168,9 @@ async fn get_all_documents_bad_filter() {
     snapshot!(json_string!(response), @r###"
     {
       "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` at `doggo`.\n1:6 doggo",
-      "code": "invalid_document_get_filter",
+      "code": "invalid_document_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_get_filter"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
     }
     "###);
 
@@ -709,9 +709,9 @@ async fn fetch_document_by_filter() {
     snapshot!(json_string!(response), @r###"
     {
       "message": "Invalid value type at `.offset`: expected a positive integer, but found a string: `\"doggo\"`",
-      "code": "invalid_document_get_offset",
+      "code": "invalid_document_offset",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_get_offset"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_offset"
     }
     "###);
 
@@ -720,9 +720,9 @@ async fn fetch_document_by_filter() {
     snapshot!(json_string!(response), @r###"
     {
       "message": "Invalid value type at `.limit`: expected a positive integer, but found a string: `\"doggo\"`",
-      "code": "invalid_document_get_limit",
+      "code": "invalid_document_limit",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_get_limit"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_limit"
     }
     "###);
 
@@ -731,9 +731,9 @@ async fn fetch_document_by_filter() {
     snapshot!(json_string!(response), @r###"
     {
       "message": "Invalid value type at `.fields`: expected an array, but found a string: `\"doggo\"`",
-      "code": "invalid_document_get_fields",
+      "code": "invalid_document_fields",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_get_fields"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_fields"
     }
     "###);
 
@@ -742,9 +742,9 @@ async fn fetch_document_by_filter() {
     snapshot!(json_string!(response), @r###"
     {
       "message": "Invalid syntax for the filter parameter: `expected String, Array, found: true`.",
-      "code": "invalid_document_get_filter",
+      "code": "invalid_document_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_get_filter"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
     }
     "###);
 }

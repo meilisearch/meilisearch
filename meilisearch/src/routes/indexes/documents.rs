@@ -140,20 +140,20 @@ pub struct BrowseQueryGet {
     limit: Param<usize>,
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
     fields: OptionStarOrList<String>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidSearchFilter>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFilter>)]
     filter: Option<String>,
 }
 
 #[derive(Debug, Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct BrowseQuery {
-    #[deserr(default, error = DeserrJsonError<InvalidDocumentGetOffset>)]
+    #[deserr(default, error = DeserrJsonError<InvalidDocumentOffset>)]
     offset: usize,
-    #[deserr(default = PAGINATION_DEFAULT_LIMIT, error = DeserrJsonError<InvalidDocumentGetLimit>)]
+    #[deserr(default = PAGINATION_DEFAULT_LIMIT, error = DeserrJsonError<InvalidDocumentLimit>)]
     limit: usize,
-    #[deserr(default, error = DeserrJsonError<InvalidDocumentGetFields>)]
+    #[deserr(default, error = DeserrJsonError<InvalidDocumentFields>)]
     fields: Option<Vec<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidDocumentGetFilter>)]
+    #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
     filter: Option<Value>,
 }
 
@@ -533,9 +533,8 @@ fn retrieve_documents<S: AsRef<str>>(
     let rtxn = index.read_txn()?;
     let filter = &filter;
     let filter = if let Some(filter) = filter {
-        parse_filter(filter).map_err(|err| {
-            ResponseError::from_msg(err.to_string(), Code::InvalidDocumentGetFilter)
-        })?
+        parse_filter(filter)
+            .map_err(|err| ResponseError::from_msg(err.to_string(), Code::InvalidDocumentFilter))?
     } else {
         None
     };
