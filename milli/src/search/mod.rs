@@ -201,12 +201,14 @@ pub fn build_dfa(word: &str, typos: u8, is_prefix: bool) -> DFA {
 
 #[cfg(test)]
 mod test {
+    #[allow(unused_imports)]
     use super::*;
-    use crate::index::tests::TempIndex;
 
-    #[cfg(feature = "default")]
+    #[cfg(feature = "japanese")]
     #[test]
     fn test_kanji_language_detection() {
+        use crate::index::tests::TempIndex;
+
         let index = TempIndex::new();
 
         index

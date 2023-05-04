@@ -13,7 +13,7 @@ license.workspace = true
 [dependencies]
 anyhow = "1.0.70"
 csv = "1.2.1"
-milli = { path = "../milli", default-features = false }
+milli = { path = "../milli" }
 mimalloc = { version = "0.1.36", default-features = false }
 serde_json = { version = "1.0.95", features = ["preserve_order"] }
 
@@ -31,7 +31,7 @@ flate2 = "1.0.25"
 reqwest = { version = "0.11.16", features = ["blocking", "rustls-tls"], default-features = false }
 
 [features]
-default = ["milli/default"]
+default = ["milli/all-tokenizations"]
 
 [[bench]]
 name = "search_songs"

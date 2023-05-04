@@ -4,7 +4,7 @@ pub mod distinct;
 pub mod exactness;
 pub mod geo_sort;
 pub mod integration;
-#[cfg(feature = "default")]
+#[cfg(feature = "all-tokenizations")]
 pub mod language;
 pub mod ngram_split_words;
 pub mod proximity;

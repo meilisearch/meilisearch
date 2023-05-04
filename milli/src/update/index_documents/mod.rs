@@ -1581,7 +1581,7 @@ mod tests {
         assert_eq!(count, 4);
     }
 
-    #[cfg(feature = "default")]
+    #[cfg(feature = "chinese")]
     #[test]
     fn test_meilisearch_1714() {
         let index = TempIndex::new();
