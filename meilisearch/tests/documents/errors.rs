@@ -83,6 +83,111 @@ async fn get_all_documents_bad_limit() {
 }
 
 #[actix_rt::test]
+async fn get_all_documents_bad_filter() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    // Since the filter can't be parsed automatically by deserr, we have the wrong error message
+    // if the index does not exist: we could expect to get an error message about the invalid filter before
+    // the existence of the index is checked, but it is not the case.
+    let (response, code) = index.get_all_documents_raw("?filter").await;
+    snapshot!(code, @"404 Not Found");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Index `test` not found.",
+      "code": "index_not_found",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#index_not_found"
+    }
+    "###);
+
+    let (response, code) = index.get_all_documents_raw("?filter=doggo").await;
+    snapshot!(code, @"404 Not Found");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Index `test` not found.",
+      "code": "index_not_found",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#index_not_found"
+    }
+    "###);
+
+    let (response, code) = index.get_all_documents_raw("?filter=doggo=bernese").await;
+    snapshot!(code, @"404 Not Found");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Index `test` not found.",
+      "code": "index_not_found",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#index_not_found"
+    }
+    "###);
+
+    let (response, code) = index.create(None).await;
+    snapshot!(code, @"202 Accepted");
+    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
+    {
+      "taskUid": 0,
+      "indexUid": "test",
+      "status": "enqueued",
+      "type": "indexCreation",
+      "enqueuedAt": "[date]"
+    }
+    "###);
+    let response = server.wait_task(0).await;
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }), @r###"
+    {
+      "uid": 0,
+      "indexUid": "test",
+      "status": "succeeded",
+      "type": "indexCreation",
+      "canceledBy": null,
+      "details": {
+        "primaryKey": null
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let (response, code) = index.get_all_documents_raw("?filter").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response), @r###"
+    {
+      "results": [],
+      "offset": 0,
+      "limit": 20,
+      "total": 0
+    }
+    "###);
+
+    let (response, code) = index.get_all_documents_raw("?filter=doggo").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` at `doggo`.\n1:6 doggo",
+      "code": "invalid_document_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+    }
+    "###);
+
+    let (response, code) = index.get_all_documents_raw("?filter=doggo=bernese").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Attribute `doggo` is not filterable. This index does not have configured filterable attributes.\n1:6 doggo=bernese",
+      "code": "invalid_search_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn delete_documents_batch() {
     let server = Server::new().await;
     let index = server.index("test");
@@ -567,6 +672,80 @@ async fn delete_document_by_filter() {
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn fetch_document_by_filter() {
+    let server = Server::new().await;
+    let index = server.index("doggo");
+    index.update_settings_filterable_attributes(json!(["color"])).await;
+    index
+        .add_documents(
+            json!([
+                { "id": 0, "color": "red" },
+                { "id": 1, "color": "blue" },
+                { "id": 2, "color": "blue" },
+                { "id": 3 },
+            ]),
+            Some("id"),
+        )
+        .await;
+    index.wait_task(1).await;
+
+    let (response, code) = index.get_document_by_filter(json!(null)).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type: expected an object, but found null",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "###);
+
+    let (response, code) = index.get_document_by_filter(json!({ "offset": "doggo" })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.offset`: expected a positive integer, but found a string: `\"doggo\"`",
+      "code": "invalid_document_offset",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_offset"
+    }
+    "###);
+
+    let (response, code) = index.get_document_by_filter(json!({ "limit": "doggo" })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.limit`: expected a positive integer, but found a string: `\"doggo\"`",
+      "code": "invalid_document_limit",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_limit"
+    }
+    "###);
+
+    let (response, code) = index.get_document_by_filter(json!({ "fields": "doggo" })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.fields`: expected an array, but found a string: `\"doggo\"`",
+      "code": "invalid_document_fields",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_fields"
+    }
+    "###);
+
+    let (response, code) = index.get_document_by_filter(json!({ "filter": true })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid syntax for the filter parameter: `expected String, Array, found: true`.",
+      "code": "invalid_document_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
     }
     "###);
 }

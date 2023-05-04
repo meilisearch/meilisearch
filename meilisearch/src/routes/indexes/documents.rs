@@ -17,6 +17,7 @@ use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
+use meilisearch_types::milli::DocumentId;
 use meilisearch_types::star_or::OptionStarOrList;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::{milli, Document, Index};
@@ -36,6 +37,7 @@ use crate::extractors::authentication::GuardedData;
 use crate::extractors::payload::Payload;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::{PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
+use crate::search::parse_filter;
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]
@@ -66,7 +68,7 @@ pub struct DocumentParam {
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
-            .route(web::get().to(SeqHandler(get_all_documents)))
+            .route(web::get().to(SeqHandler(get_documents)))
             .route(web::post().to(SeqHandler(replace_documents)))
             .route(web::put().to(SeqHandler(update_documents)))
             .route(web::delete().to(SeqHandler(clear_all_documents))),
@@ -76,6 +78,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         web::resource("/delete-batch").route(web::post().to(SeqHandler(delete_documents_batch))),
     )
     .service(web::resource("/delete").route(web::post().to(SeqHandler(delete_documents_by_filter))))
+    .service(web::resource("/fetch").route(web::post().to(SeqHandler(documents_by_query_post))))
     .service(
         web::resource("/{document_id}")
             .route(web::get().to(SeqHandler(get_document)))
@@ -130,29 +133,79 @@ pub async fn delete_document(
 
 #[derive(Debug, Deserr)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
-pub struct BrowseQuery {
+pub struct BrowseQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentOffset>)]
     offset: Param<usize>,
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidDocumentLimit>)]
     limit: Param<usize>,
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
     fields: OptionStarOrList<String>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFilter>)]
+    filter: Option<String>,
 }
 
-pub async fn get_all_documents(
+#[derive(Debug, Deserr)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+pub struct BrowseQuery {
+    #[deserr(default, error = DeserrJsonError<InvalidDocumentOffset>)]
+    offset: usize,
+    #[deserr(default = PAGINATION_DEFAULT_LIMIT, error = DeserrJsonError<InvalidDocumentLimit>)]
+    limit: usize,
+    #[deserr(default, error = DeserrJsonError<InvalidDocumentFields>)]
+    fields: Option<Vec<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
+    filter: Option<Value>,
+}
+
+pub async fn documents_by_query_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    params: AwebQueryParameter<BrowseQuery, DeserrQueryParamError>,
+    body: AwebJson<BrowseQuery, DeserrJsonError>,
+) -> Result<HttpResponse, ResponseError> {
+    debug!("called with body: {:?}", body);
+
+    documents_by_query(&index_scheduler, index_uid, body.into_inner())
+}
+
+pub async fn get_documents(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
+    params: AwebQueryParameter<BrowseQueryGet, DeserrQueryParamError>,
+) -> Result<HttpResponse, ResponseError> {
+    debug!("called with params: {:?}", params);
+
+    let BrowseQueryGet { limit, offset, fields, filter } = params.into_inner();
+
+    let filter = match filter {
+        Some(f) => match serde_json::from_str(&f) {
+            Ok(v) => Some(v),
+            _ => Some(Value::String(f)),
+        },
+        None => None,
+    };
+
+    let query = BrowseQuery {
+        offset: offset.0,
+        limit: limit.0,
+        fields: fields.merge_star_and_none(),
+        filter,
+    };
+
+    documents_by_query(&index_scheduler, index_uid, query)
+}
+
+fn documents_by_query(
+    index_scheduler: &IndexScheduler,
+    index_uid: web::Path<String>,
+    query: BrowseQuery,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
-    debug!("called with params: {:?}", params);
-    let BrowseQuery { limit, offset, fields } = params.into_inner();
-    let attributes_to_retrieve = fields.merge_star_and_none();
+    let BrowseQuery { offset, limit, fields, filter } = query;
 
     let index = index_scheduler.index(&index_uid)?;
-    let (total, documents) = retrieve_documents(&index, offset.0, limit.0, attributes_to_retrieve)?;
+    let (total, documents) = retrieve_documents(&index, offset, limit, filter, fields)?;
 
-    let ret = PaginationView::new(offset.0, limit.0, total as usize, documents);
+    let ret = PaginationView::new(offset, limit, total as usize, documents);
 
     debug!("returns: {:?}", ret);
     Ok(HttpResponse::Ok().json(ret))
@@ -455,14 +508,15 @@ pub async fn clear_all_documents(
     Ok(HttpResponse::Accepted().json(task))
 }
 
-fn all_documents<'a>(
-    index: &Index,
-    rtxn: &'a RoTxn,
+fn some_documents<'a, 't: 'a>(
+    index: &'a Index,
+    rtxn: &'t RoTxn,
+    doc_ids: impl IntoIterator<Item = DocumentId> + 'a,
 ) -> Result<impl Iterator<Item = Result<Document, ResponseError>> + 'a, ResponseError> {
     let fields_ids_map = index.fields_ids_map(rtxn)?;
     let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
 
-    Ok(index.all_documents(rtxn)?.map(move |ret| {
+    Ok(index.iter_documents(rtxn, doc_ids)?.map(move |ret| {
         ret.map_err(ResponseError::from).and_then(|(_key, document)| -> Result<_, ResponseError> {
             Ok(milli::obkv_to_json(&all_fields, &fields_ids_map, document)?)
         })
@@ -473,24 +527,45 @@ fn retrieve_documents<S: AsRef<str>>(
     index: &Index,
     offset: usize,
     limit: usize,
+    filter: Option<Value>,
     attributes_to_retrieve: Option<Vec<S>>,
 ) -> Result<(u64, Vec<Document>), ResponseError> {
     let rtxn = index.read_txn()?;
+    let filter = &filter;
+    let filter = if let Some(filter) = filter {
+        parse_filter(filter)
+            .map_err(|err| ResponseError::from_msg(err.to_string(), Code::InvalidDocumentFilter))?
+    } else {
+        None
+    };
 
-    let mut documents = Vec::new();
-    for document in all_documents(index, &rtxn)?.skip(offset).take(limit) {
-        let document = match &attributes_to_retrieve {
-            Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
-                &document?,
-                attributes_to_retrieve.iter().map(|s| s.as_ref()),
-            ),
-            None => document?,
-        };
-        documents.push(document);
-    }
+    let candidates = if let Some(filter) = filter {
+        filter.evaluate(&rtxn, index)?
+    } else {
+        index.documents_ids(&rtxn)?
+    };
 
-    let number_of_documents = index.number_of_documents(&rtxn)?;
-    Ok((number_of_documents, documents))
+    let (it, number_of_documents) = {
+        let number_of_documents = candidates.len();
+        (
+            some_documents(index, &rtxn, candidates.into_iter().skip(offset).take(limit))?,
+            number_of_documents,
+        )
+    };
+
+    let documents: Result<Vec<_>, ResponseError> = it
+        .map(|document| {
+            Ok(match &attributes_to_retrieve {
+                Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
+                    &document?,
+                    attributes_to_retrieve.iter().map(|s| s.as_ref()),
+                ),
+                None => document?,
+            })
+        })
+        .collect();
+
+    Ok((number_of_documents, documents?))
 }
 
 fn retrieve_document<S: AsRef<str>>(
