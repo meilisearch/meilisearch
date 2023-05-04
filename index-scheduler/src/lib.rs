@@ -1146,7 +1146,7 @@ impl IndexScheduler {
 
         self.register(KindWithContent::TaskDeletion {
             query: format!(
-                "?beforeEnqueuedAt={},status=succeeded,failed,canceled",
+                "?beforeEnqueuedAt={}&statuses=succeeded,failed,canceled",
                 delete_before.format(&Rfc3339).map_err(|_| Error::CorruptedTaskQueue)?,
             ),
             tasks: to_delete,
