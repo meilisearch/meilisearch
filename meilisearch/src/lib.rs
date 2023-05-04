@@ -234,6 +234,7 @@ fn open_or_create_database_unchecked(
             index_base_map_size: opt.max_index_size.get_bytes() as usize,
             indexer_config: (&opt.indexer_options).try_into()?,
             autobatching_enabled: true,
+            max_number_of_tasks: 1_000_000,
             index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().get_bytes() as usize,
             index_count: DEFAULT_INDEX_COUNT,
         })?)
