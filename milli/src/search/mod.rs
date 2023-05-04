@@ -313,13 +313,17 @@ impl<'a> SearchForFacetValues<'a> {
                             }
                         }
                     } else {
+                        let one_typo = self.search_query.index.min_word_len_one_typo(rtxn)?;
+                        let two_typos = self.search_query.index.min_word_len_two_typos(rtxn)?;
+
                         let is_prefix = true;
-                        let starts = Str::new(get_first(query)).starts_with();
-                        let first = build_dfa(query, 1, is_prefix)
-                            .intersection(starts.clone().complement());
-                        let second_dfa = build_dfa(query, 2, is_prefix);
-                        let second = second_dfa.intersection(starts);
-                        let automaton = first.union(&second);
+                        let automaton = if query.len() < one_typo as usize {
+                            build_dfa(query, 0, is_prefix)
+                        } else if query.len() < two_typos as usize {
+                            build_dfa(query, 1, is_prefix)
+                        } else {
+                            build_dfa(query, 2, is_prefix)
+                        };
 
                         let mut stream = fst.search(automaton).into_stream();
                         let mut length = 0;
