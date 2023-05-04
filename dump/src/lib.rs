@@ -110,6 +110,9 @@ pub enum KindDump {
         allow_index_creation: bool,
     },
     IndexDeletion,
+    IndexClear {
+        index_uids: Vec<String>,
+    },
     IndexCreation {
         primary_key: Option<String>,
     },
@@ -180,6 +183,7 @@ impl From<KindWithContent> for KindDump {
                 ..
             } => KindDump::Settings { settings: new_settings, is_deletion, allow_index_creation },
             KindWithContent::IndexDeletion { .. } => KindDump::IndexDeletion,
+            KindWithContent::IndexClear { index_uids } => KindDump::IndexClear { index_uids },
             KindWithContent::IndexCreation { primary_key, .. } => {
                 KindDump::IndexCreation { primary_key }
             }
@@ -211,8 +215,8 @@ pub(crate) mod test {
     use maplit::btreeset;
     use meilisearch_types::index_uid_pattern::IndexUidPattern;
     use meilisearch_types::keys::{Action, Key};
+    use meilisearch_types::milli;
     use meilisearch_types::milli::update::Setting;
-    use meilisearch_types::milli::{self};
     use meilisearch_types::settings::{Checked, Settings};
     use meilisearch_types::tasks::{Details, Status};
     use serde_json::{json, Map, Value};
