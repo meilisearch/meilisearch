@@ -239,6 +239,7 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
     match &mut task.kind {
         K::DocumentAdditionOrUpdate { index_uid, .. } => index_uids.push(index_uid),
         K::DocumentDeletion { index_uid, .. } => index_uids.push(index_uid),
+        K::DocumentDeletionByFilter { index_uid, .. } => index_uids.push(index_uid),
         K::DocumentClear { index_uid } => index_uids.push(index_uid),
         K::SettingsUpdate { index_uid, .. } => index_uids.push(index_uid),
         K::IndexDeletion { index_uid } => index_uids.push(index_uid),
@@ -461,6 +462,29 @@ impl IndexScheduler {
                             Status::Failed | Status::Canceled => {
                                 assert!(deleted_documents == Some(0));
                                 assert!(documents_ids.len() == received_document_ids);
+                            }
+                        }
+                    }
+                    Details::DocumentDeletionByFilter { deleted_documents, original_filter: _ } => {
+                        assert_eq!(kind.as_kind(), Kind::DocumentDeletionByFilter);
+                        let (index_uid, _) = if let KindWithContent::DocumentDeletionByFilter {
+                            ref index_uid,
+                            ref filter_expr,
+                        } = kind
+                        {
+                            (index_uid, filter_expr)
+                        } else {
+                            unreachable!()
+                        };
+                        assert_eq!(&task_index_uid.unwrap(), index_uid);
+
+                        match status {
+                            Status::Enqueued | Status::Processing => (),
+                            Status::Succeeded => {
+                                assert!(deleted_documents.is_some());
+                            }
+                            Status::Failed | Status::Canceled => {
+                                assert!(deleted_documents == Some(0));
                             }
                         }
                     }

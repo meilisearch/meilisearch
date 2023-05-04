@@ -5,6 +5,7 @@ use std::ops::Bound::{self, Excluded, Included};
 use either::Either;
 pub use filter_parser::{Condition, Error as FPError, FilterCondition, Span, Token};
 use roaring::RoaringBitmap;
+use serde_json::Value;
 
 use super::facet_range_search;
 use crate::error::{Error, UserError};
@@ -112,6 +113,52 @@ impl<'a> From<Filter<'a>> for FilterCondition<'a> {
 }
 
 impl<'a> Filter<'a> {
+    pub fn from_json(facets: &'a Value) -> Result<Option<Self>> {
+        match facets {
+            Value::String(expr) => {
+                let condition = Filter::from_str(expr)?;
+                Ok(condition)
+            }
+            Value::Array(arr) => Self::parse_filter_array(arr),
+            v => Err(Error::UserError(UserError::InvalidFilterExpression(
+                &["String", "Array"],
+                v.clone(),
+            ))),
+        }
+    }
+
+    fn parse_filter_array(arr: &'a [Value]) -> Result<Option<Self>> {
+        let mut ands = Vec::new();
+        for value in arr {
+            match value {
+                Value::String(s) => ands.push(Either::Right(s.as_str())),
+                Value::Array(arr) => {
+                    let mut ors = Vec::new();
+                    for value in arr {
+                        match value {
+                            Value::String(s) => ors.push(s.as_str()),
+                            v => {
+                                return Err(Error::UserError(UserError::InvalidFilterExpression(
+                                    &["String"],
+                                    v.clone(),
+                                )))
+                            }
+                        }
+                    }
+                    ands.push(Either::Left(ors));
+                }
+                v => {
+                    return Err(Error::UserError(UserError::InvalidFilterExpression(
+                        &["String", "[String]"],
+                        v.clone(),
+                    )))
+                }
+            }
+        }
+
+        Filter::from_array(ands)
+    }
+
     pub fn from_array<I, J>(array: I) -> Result<Option<Self>>
     where
         I: IntoIterator<Item = Either<J, &'a str>>,

@@ -20,6 +20,8 @@ pub enum MeilisearchHttpError {
     InvalidContentType(String, Vec<String>),
     #[error("Document `{0}` not found.")]
     DocumentNotFound(String),
+    #[error("Sending an empty filter is forbidden.")]
+    EmptyFilter,
     #[error("Invalid syntax for the filter parameter: `expected {}, found: {1}`.", .0.join(", "))]
     InvalidExpression(&'static [&'static str], Value),
     #[error("A {0} payload is missing.")]
@@ -58,6 +60,7 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::MissingPayload(_) => Code::MissingPayload,
             MeilisearchHttpError::InvalidContentType(_, _) => Code::InvalidContentType,
             MeilisearchHttpError::DocumentNotFound(_) => Code::DocumentNotFound,
+            MeilisearchHttpError::EmptyFilter => Code::InvalidDocumentDeleteFilter,
             MeilisearchHttpError::InvalidExpression(_, _) => Code::InvalidSearchFilter,
             MeilisearchHttpError::PayloadTooLarge => Code::PayloadTooLarge,
             MeilisearchHttpError::SwapIndexPayloadWrongLength(_) => Code::InvalidSwapIndexes,

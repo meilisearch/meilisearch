@@ -28,9 +28,10 @@ use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
 use meilisearch_types::milli::heed::CompactionOption;
 use meilisearch_types::milli::update::{
-    DocumentDeletionResult, IndexDocumentsConfig, IndexDocumentsMethod, Settings as MilliSettings,
+    DeleteDocuments, DocumentDeletionResult, IndexDocumentsConfig, IndexDocumentsMethod,
+    Settings as MilliSettings,
 };
-use meilisearch_types::milli::{self, BEU32};
+use meilisearch_types::milli::{self, Filter, BEU32};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::{compression, Index, VERSION_FILE_NAME};
@@ -64,6 +65,10 @@ pub(crate) enum Batch {
     IndexOperation {
         op: IndexOperation,
         must_create_index: bool,
+    },
+    IndexDocumentDeletionByFilter {
+        index_uid: String,
+        task: Task,
     },
     IndexCreation {
         index_uid: String,
@@ -149,6 +154,7 @@ impl Batch {
             | Batch::TaskDeletion(task)
             | Batch::Dump(task)
             | Batch::IndexCreation { task, .. }
+            | Batch::IndexDocumentDeletionByFilter { task, .. }
             | Batch::IndexUpdate { task, .. } => vec![task.uid],
             Batch::SnapshotCreation(tasks) | Batch::IndexDeletion { tasks, .. } => {
                 tasks.iter().map(|task| task.uid).collect()
@@ -187,7 +193,8 @@ impl Batch {
             IndexOperation { op, .. } => Some(op.index_uid()),
             IndexCreation { index_uid, .. }
             | IndexUpdate { index_uid, .. }
-            | IndexDeletion { index_uid, .. } => Some(index_uid),
+            | IndexDeletion { index_uid, .. }
+            | IndexDocumentDeletionByFilter { index_uid, .. } => Some(index_uid),
         }
     }
 }
@@ -227,6 +234,18 @@ impl IndexScheduler {
                 },
                 must_create_index,
             })),
+            BatchKind::DocumentDeletionByFilter { id } => {
+                let task = self.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
+                match &task.kind {
+                    KindWithContent::DocumentDeletionByFilter { index_uid, .. } => {
+                        Ok(Some(Batch::IndexDocumentDeletionByFilter {
+                            index_uid: index_uid.clone(),
+                            task,
+                        }))
+                    }
+                    _ => unreachable!(),
+                }
+            }
             BatchKind::DocumentOperation { method, operation_ids, .. } => {
                 let tasks = self.get_existing_tasks(rtxn, operation_ids)?;
                 let primary_key = tasks
@@ -867,6 +886,51 @@ impl IndexScheduler {
 
                 Ok(tasks)
             }
+            Batch::IndexDocumentDeletionByFilter { mut task, index_uid: _ } => {
+                let (index_uid, filter) =
+                    if let KindWithContent::DocumentDeletionByFilter { index_uid, filter_expr } =
+                        &task.kind
+                    {
+                        (index_uid, filter_expr)
+                    } else {
+                        unreachable!()
+                    };
+                let index = {
+                    let rtxn = self.env.read_txn()?;
+                    self.index_mapper.index(&rtxn, index_uid)?
+                };
+                let deleted_documents = delete_document_by_filter(filter, index);
+                let original_filter = if let Some(Details::DocumentDeletionByFilter {
+                    original_filter,
+                    deleted_documents: _,
+                }) = task.details
+                {
+                    original_filter
+                } else {
+                    // In the case of a `documentDeleteByFilter` the details MUST be set
+                    unreachable!();
+                };
+
+                match deleted_documents {
+                    Ok(deleted_documents) => {
+                        task.status = Status::Succeeded;
+                        task.details = Some(Details::DocumentDeletionByFilter {
+                            original_filter,
+                            deleted_documents: Some(deleted_documents),
+                        });
+                    }
+                    Err(e) => {
+                        task.status = Status::Failed;
+                        task.details = Some(Details::DocumentDeletionByFilter {
+                            original_filter,
+                            deleted_documents: Some(0),
+                        });
+                        task.error = Some(e.into());
+                    }
+                }
+
+                Ok(vec![task])
+            }
             Batch::IndexCreation { index_uid, primary_key, task } => {
                 let wtxn = self.env.write_txn()?;
                 if self.index_mapper.exists(&wtxn, &index_uid)? {
@@ -1420,4 +1484,21 @@ impl IndexScheduler {
 
         Ok(content_files_to_delete)
     }
+}
+
+fn delete_document_by_filter(filter: &serde_json::Value, index: Index) -> Result<u64> {
+    let filter = Filter::from_json(filter)?;
+    Ok(if let Some(filter) = filter {
+        let mut wtxn = index.write_txn()?;
+
+        let candidates = filter.evaluate(&wtxn, &index)?;
+        let mut delete_operation = DeleteDocuments::new(&mut wtxn, &index)?;
+        delete_operation.delete_documents(&candidates);
+        let deleted_documents =
+            delete_operation.execute().map(|result| result.deleted_documents)?;
+        wtxn.commit()?;
+        deleted_documents
+    } else {
+        0
+    })
 }

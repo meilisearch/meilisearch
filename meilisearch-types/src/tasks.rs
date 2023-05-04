@@ -49,6 +49,7 @@ impl Task {
             | IndexSwap { .. } => None,
             DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentDeletion { index_uid, .. }
+            | DocumentDeletionByFilter { index_uid, .. }
             | DocumentClear { index_uid }
             | SettingsUpdate { index_uid, .. }
             | IndexCreation { index_uid, .. }
@@ -67,6 +68,7 @@ impl Task {
         match self.kind {
             KindWithContent::DocumentAdditionOrUpdate { content_file, .. } => Some(content_file),
             KindWithContent::DocumentDeletion { .. }
+            | KindWithContent::DocumentDeletionByFilter { .. }
             | KindWithContent::DocumentClear { .. }
             | KindWithContent::SettingsUpdate { .. }
             | KindWithContent::IndexDeletion { .. }
@@ -95,6 +97,10 @@ pub enum KindWithContent {
     DocumentDeletion {
         index_uid: String,
         documents_ids: Vec<String>,
+    },
+    DocumentDeletionByFilter {
+        index_uid: String,
+        filter_expr: serde_json::Value,
     },
     DocumentClear {
         index_uid: String,
@@ -145,6 +151,7 @@ impl KindWithContent {
         match self {
             KindWithContent::DocumentAdditionOrUpdate { .. } => Kind::DocumentAdditionOrUpdate,
             KindWithContent::DocumentDeletion { .. } => Kind::DocumentDeletion,
+            KindWithContent::DocumentDeletionByFilter { .. } => Kind::DocumentDeletion,
             KindWithContent::DocumentClear { .. } => Kind::DocumentDeletion,
             KindWithContent::SettingsUpdate { .. } => Kind::SettingsUpdate,
             KindWithContent::IndexCreation { .. } => Kind::IndexCreation,
@@ -168,6 +175,7 @@ impl KindWithContent {
             | TaskDeletion { .. } => vec![],
             DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentDeletion { index_uid, .. }
+            | DocumentDeletionByFilter { index_uid, .. }
             | DocumentClear { index_uid }
             | SettingsUpdate { index_uid, .. }
             | IndexCreation { index_uid, .. }
@@ -197,6 +205,12 @@ impl KindWithContent {
             KindWithContent::DocumentDeletion { index_uid: _, documents_ids } => {
                 Some(Details::DocumentDeletion {
                     provided_ids: documents_ids.len(),
+                    deleted_documents: None,
+                })
+            }
+            KindWithContent::DocumentDeletionByFilter { index_uid: _, filter_expr } => {
+                Some(Details::DocumentDeletionByFilter {
+                    original_filter: filter_expr.to_string(),
                     deleted_documents: None,
                 })
             }
@@ -242,6 +256,12 @@ impl KindWithContent {
                     deleted_documents: Some(0),
                 })
             }
+            KindWithContent::DocumentDeletionByFilter { index_uid: _, filter_expr } => {
+                Some(Details::DocumentDeletionByFilter {
+                    original_filter: filter_expr.to_string(),
+                    deleted_documents: Some(0),
+                })
+            }
             KindWithContent::DocumentClear { .. } => {
                 Some(Details::ClearAll { deleted_documents: None })
             }
@@ -282,6 +302,7 @@ impl From<&KindWithContent> for Option<Details> {
                 })
             }
             KindWithContent::DocumentDeletion { .. } => None,
+            KindWithContent::DocumentDeletionByFilter { .. } => None,
             KindWithContent::DocumentClear { .. } => None,
             KindWithContent::SettingsUpdate { new_settings, .. } => {
                 Some(Details::SettingsUpdate { settings: new_settings.clone() })
@@ -374,6 +395,7 @@ impl std::error::Error for ParseTaskStatusError {}
 pub enum Kind {
     DocumentAdditionOrUpdate,
     DocumentDeletion,
+    DocumentDeletionByFilter,
     SettingsUpdate,
     IndexCreation,
     IndexDeletion,
@@ -390,6 +412,7 @@ impl Kind {
         match self {
             Kind::DocumentAdditionOrUpdate
             | Kind::DocumentDeletion
+            | Kind::DocumentDeletionByFilter
             | Kind::SettingsUpdate
             | Kind::IndexCreation
             | Kind::IndexDeletion
@@ -407,6 +430,7 @@ impl Display for Kind {
         match self {
             Kind::DocumentAdditionOrUpdate => write!(f, "documentAdditionOrUpdate"),
             Kind::DocumentDeletion => write!(f, "documentDeletion"),
+            Kind::DocumentDeletionByFilter => write!(f, "documentDeletionByFilter"),
             Kind::SettingsUpdate => write!(f, "settingsUpdate"),
             Kind::IndexCreation => write!(f, "indexCreation"),
             Kind::IndexDeletion => write!(f, "indexDeletion"),
@@ -478,6 +502,7 @@ pub enum Details {
     SettingsUpdate { settings: Box<Settings<Unchecked>> },
     IndexInfo { primary_key: Option<String> },
     DocumentDeletion { provided_ids: usize, deleted_documents: Option<u64> },
+    DocumentDeletionByFilter { original_filter: String, deleted_documents: Option<u64> },
     ClearAll { deleted_documents: Option<u64> },
     TaskCancelation { matched_tasks: u64, canceled_tasks: Option<u64>, original_filter: String },
     TaskDeletion { matched_tasks: u64, deleted_tasks: Option<u64>, original_filter: String },
@@ -493,6 +518,9 @@ impl Details {
                 *indexed_documents = Some(0)
             }
             Self::DocumentDeletion { deleted_documents, .. } => *deleted_documents = Some(0),
+            Self::DocumentDeletionByFilter { deleted_documents, .. } => {
+                *deleted_documents = Some(0)
+            }
             Self::ClearAll { deleted_documents } => *deleted_documents = Some(0),
             Self::TaskCancelation { canceled_tasks, .. } => *canceled_tasks = Some(0),
             Self::TaskDeletion { deleted_tasks, .. } => *deleted_tasks = Some(0),

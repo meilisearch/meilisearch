@@ -225,6 +225,11 @@ impl Index<'_> {
         self.service.delete(url).await
     }
 
+    pub async fn delete_document_by_filter(&self, body: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/documents/delete", urlencode(self.uid.as_ref()));
+        self.service.post_encoded(url, body, self.encoder).await
+    }
+
     pub async fn clear_all_documents(&self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/documents", urlencode(self.uid.as_ref()));
         self.service.delete(url).await

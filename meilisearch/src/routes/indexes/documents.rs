@@ -4,13 +4,13 @@ use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use bstr::ByteSlice;
-use deserr::actix_web::AwebQueryParameter;
+use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::Deserr;
 use futures::StreamExt;
 use index_scheduler::IndexScheduler;
 use log::debug;
 use meilisearch_types::deserr::query_params::Param;
-use meilisearch_types::deserr::DeserrQueryParamError;
+use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::{Code, ResponseError};
@@ -71,8 +71,11 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route(web::put().to(SeqHandler(update_documents)))
             .route(web::delete().to(SeqHandler(clear_all_documents))),
     )
-    // this route needs to be before the /documents/{document_id} to match properly
-    .service(web::resource("/delete-batch").route(web::post().to(SeqHandler(delete_documents))))
+    // these routes need to be before the /documents/{document_id} to match properly
+    .service(
+        web::resource("/delete-batch").route(web::post().to(SeqHandler(delete_documents_batch))),
+    )
+    .service(web::resource("/delete").route(web::post().to(SeqHandler(delete_documents_by_filter))))
     .service(
         web::resource("/{document_id}")
             .route(web::get().to(SeqHandler(get_document)))
@@ -373,7 +376,7 @@ async fn document_addition(
     Ok(task.into())
 }
 
-pub async fn delete_documents(
+pub async fn delete_documents_batch(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     body: web::Json<Vec<Value>>,
@@ -392,6 +395,42 @@ pub async fn delete_documents(
 
     let task =
         KindWithContent::DocumentDeletion { index_uid: index_uid.to_string(), documents_ids: ids };
+    let task: SummarizedTaskView =
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
+
+    debug!("returns: {:?}", task);
+    Ok(HttpResponse::Accepted().json(task))
+}
+
+#[derive(Debug, Deserr)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+pub struct DocumentDeletionByFilter {
+    #[deserr(error = DeserrJsonError<InvalidDocumentDeleteFilter>)]
+    filter: Value,
+}
+
+pub async fn delete_documents_by_filter(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
+    body: AwebJson<DocumentDeletionByFilter, DeserrJsonError>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    debug!("called with params: {:?}", body);
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+    let index_uid = index_uid.into_inner();
+    let filter = body.into_inner().filter;
+
+    analytics.delete_documents(DocumentDeletionKind::PerFilter, &req);
+
+    // we ensure the filter is well formed before enqueuing it
+    || -> Result<_, ResponseError> {
+        Ok(crate::search::parse_filter(&filter)?.ok_or(MeilisearchHttpError::EmptyFilter)?)
+    }()
+    // and whatever was the error, the error code should always be an InvalidDocumentDeleteFilter
+    .map_err(|err| ResponseError::from_msg(err.message, Code::InvalidDocumentDeleteFilter))?;
+    let task = KindWithContent::DocumentDeletionByFilter { index_uid, filter_expr: filter };
+
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 

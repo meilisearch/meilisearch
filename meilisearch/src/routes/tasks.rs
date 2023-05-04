@@ -133,6 +133,14 @@ impl From<Details> for DetailsView {
                 deleted_documents: Some(deleted_documents),
                 ..DetailsView::default()
             },
+            Details::DocumentDeletionByFilter { original_filter, deleted_documents } => {
+                DetailsView {
+                    provided_ids: Some(0),
+                    original_filter: Some(original_filter),
+                    deleted_documents: Some(deleted_documents),
+                    ..DetailsView::default()
+                }
+            }
             Details::ClearAll { deleted_documents } => {
                 DetailsView { deleted_documents: Some(deleted_documents), ..DetailsView::default() }
             }
@@ -721,7 +729,7 @@ mod tests {
             let err = deserr_query_params::<TaskDeletionOrCancelationQuery>(params).unwrap_err();
             snapshot!(meili_snap::json_string!(err), @r###"
             {
-              "message": "Invalid value in parameter `types`: `createIndex` is not a valid task type. Available types are `documentAdditionOrUpdate`, `documentDeletion`, `settingsUpdate`, `indexCreation`, `indexDeletion`, `indexUpdate`, `indexSwap`, `taskCancelation`, `taskDeletion`, `dumpCreation`, `snapshotCreation`.",
+              "message": "Invalid value in parameter `types`: `createIndex` is not a valid task type. Available types are `documentAdditionOrUpdate`, `documentDeletion`, `documentDeletionByFilter`, `settingsUpdate`, `indexCreation`, `indexDeletion`, `indexUpdate`, `indexSwap`, `taskCancelation`, `taskDeletion`, `dumpCreation`, `snapshotCreation`.",
               "code": "invalid_task_types",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_task_types"

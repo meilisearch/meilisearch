@@ -1264,6 +1264,12 @@ impl<'a> Dump<'a> {
                     documents_ids,
                     index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
                 },
+                KindDump::DocumentDeletionByFilter { filter } => {
+                    KindWithContent::DocumentDeletionByFilter {
+                        filter_expr: filter,
+                        index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
+                    }
+                }
                 KindDump::DocumentClear => KindWithContent::DocumentClear {
                     index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
                 },
