@@ -1,5 +1,7 @@
 use std::fmt;
 
+use fst::automaton::{Automaton, Str};
+use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
 use log::error;
 use once_cell::sync::Lazy;
@@ -14,8 +16,6 @@ use crate::{
     execute_search, AscDesc, DefaultSearchLogger, DocumentId, FieldIdMapMissingEntry, Index,
     Result, SearchContext, BEU16,
 };
-use fst::automaton::{Automaton, Str};
-use fst::{IntoStreamer, Streamer};
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
