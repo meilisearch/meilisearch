@@ -1,128 +1,128 @@
 # This file shows the default configuration of Meilisearch.
 # All variables are defined here: https://www.meilisearch.com/docs/learn/configuration/instance_options#environment-variables
 
-db_path = "./data.ms"
 # Designates the location where database files will be created and retrieved.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#database-path
+db_path = "./data.ms"
 
-env = "development"
 # Configures the instance's environment. Value must be either `production` or `development`.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#environment
+env = "development"
 
-http_addr = "localhost:7700"
 # The address on which the HTTP server will listen.
+http_addr = "localhost:7700"
 
-# master_key = "YOUR_MASTER_KEY_VALUE"
 # Sets the instance's master key, automatically protecting all routes except GET /health.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#master-key
+# master_key = "YOUR_MASTER_KEY_VALUE"
 
-# no_analytics = true
 # Deactivates Meilisearch's built-in telemetry when provided.
 # Meilisearch automatically collects data from all instances that do not opt out using this flag.
 # All gathered data is used solely for the purpose of improving Meilisearch, and can be deleted at any time.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#disable-analytics
+# no_analytics = true
 
-http_payload_size_limit = "100 MB"
 # Sets the maximum size of accepted payloads.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#payload-limit-size
+http_payload_size_limit = "100 MB"
 
-log_level = "INFO"
 # Defines how much detail should be present in Meilisearch's logs.
 # Meilisearch currently supports six log levels, listed in order of increasing verbosity:  `OFF`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE`
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#log-level
+log_level = "INFO"
 
-# max_indexing_memory = "2 GiB"
 # Sets the maximum amount of RAM Meilisearch can use when indexing.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#max-indexing-memory
+# max_indexing_memory = "2 GiB"
 
-# max_indexing_threads = 4
 # Sets the maximum number of threads Meilisearch can use during indexing.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#max-indexing-threads
+# max_indexing_threads = 4
 
 #############
 ### DUMPS ###
 #############
 
-dump_dir = "dumps/"
 # Sets the directory where Meilisearch will create dump files.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#dump-directory
+dump_dir = "dumps/"
 
-# import_dump = "./path/to/my/file.dump"
 # Imports the dump file located at the specified path. Path must point to a .dump file.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#import-dump
+# import_dump = "./path/to/my/file.dump"
 
-ignore_missing_dump = false
 # Prevents Meilisearch from throwing an error when `import_dump` does not point to a valid dump file.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#ignore-missing-dump
+ignore_missing_dump = false
 
-ignore_dump_if_db_exists = false
 # Prevents a Meilisearch instance with an existing database from throwing an error when using `import_dump`.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#ignore-dump-if-db-exists
+ignore_dump_if_db_exists = false
 
 
 #################
 ### SNAPSHOTS ###
 #################
 
-schedule_snapshot = false
 # Enables scheduled snapshots when true, disable when false (the default).
 # If the value is given as an integer, then enables the scheduled snapshot with the passed value as the interval
 # between each snapshot, in seconds.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#schedule-snapshot-creation
+schedule_snapshot = false
 
-snapshot_dir = "snapshots/"
 # Sets the directory where Meilisearch will store snapshots.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#snapshot-destination
+snapshot_dir = "snapshots/"
 
-# import_snapshot = "./path/to/my/snapshot"
 # Launches Meilisearch after importing a previously-generated snapshot at the given filepath.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#import-snapshot
+# import_snapshot = "./path/to/my/snapshot"
 
-ignore_missing_snapshot = false
 # Prevents a Meilisearch instance from throwing an error when `import_snapshot` does not point to a valid snapshot file.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#ignore-missing-snapshot
+ignore_missing_snapshot = false
 
-ignore_snapshot_if_db_exists = false
 # Prevents a Meilisearch instance with an existing database from throwing an error when using `import_snapshot`.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#ignore-snapshot-if-db-exists
+ignore_snapshot_if_db_exists = false
 
 
 ###########
 ### SSL ###
 ###########
 
-# ssl_auth_path = "./path/to/root"
 # Enables client authentication in the specified path.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#ssl-authentication-path
+# ssl_auth_path = "./path/to/root"
 
-# ssl_cert_path = "./path/to/certfile"
 # Sets the server's SSL certificates.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#ssl-certificates-path
+# ssl_cert_path = "./path/to/certfile"
 
-# ssl_key_path = "./path/to/private-key"
 # Sets the server's SSL key files.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#ssl-key-path
+# ssl_key_path = "./path/to/private-key"
 
-# ssl_ocsp_path = "./path/to/ocsp-file"
 # Sets the server's OCSP file.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#ssl-ocsp-path
+# ssl_ocsp_path = "./path/to/ocsp-file"
 
-ssl_require_auth = false
 # Makes SSL authentication mandatory.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#ssl-require-auth
+ssl_require_auth = false
 
-ssl_resumption = false
 # Activates SSL session resumption.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#ssl-resumption
+ssl_resumption = false
 
-ssl_tickets = false
 # Activates SSL tickets.
 # https://www.meilisearch.com/docs/learn/configuration/instance_options#ssl-tickets
+ssl_tickets = false
 
 #############################
 ### Experimental features ###
 #############################
 
-experimental_enable_metrics = false
 # Experimental metrics feature. For more information, see: <https://github.com/meilisearch/meilisearch/discussions/3518>
 # Enables the Prometheus metrics on the `GET /metrics` endpoint.
+experimental_enable_metrics = false
