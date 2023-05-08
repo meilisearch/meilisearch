@@ -205,18 +205,12 @@ impl<G: RankingRuleGraphTrait> VisitorState<G> {
 impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
     pub fn find_all_costs_to_end(&self) -> MappedInterner<QueryNode, Vec<u64>> {
         let mut costs_to_end = self.query_graph.nodes.map(|_| vec![]);
-        let mut enqueued = SmallBitmap::new(self.query_graph.nodes.len());
 
-        let mut node_stack = VecDeque::new();
-
-        *costs_to_end.get_mut(self.query_graph.end_node) = vec![0];
-
-        for prev_node in self.query_graph.nodes.get(self.query_graph.end_node).predecessors.iter() {
-            node_stack.push_back(prev_node);
-            enqueued.insert(prev_node);
-        }
-
-        while let Some(cur_node) = node_stack.pop_front() {
+        self.traverse_breadth_first_backward(self.query_graph.end_node, |cur_node| {
+            if cur_node == self.query_graph.end_node {
+                *costs_to_end.get_mut(self.query_graph.end_node) = vec![0];
+                return true;
+            }
             let mut self_costs = Vec::<u64>::new();
 
             let cur_node_edges = &self.edges_of_node.get(cur_node);
@@ -232,13 +226,8 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
             self_costs.dedup();
 
             *costs_to_end.get_mut(cur_node) = self_costs;
-            for prev_node in self.query_graph.nodes.get(cur_node).predecessors.iter() {
-                if !enqueued.contains(prev_node) {
-                    node_stack.push_back(prev_node);
-                    enqueued.insert(prev_node);
-                }
-            }
-        }
+            true
+        });
         costs_to_end
     }
 
@@ -247,17 +236,9 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         node_with_removed_outgoing_conditions: Interned<QueryNode>,
         costs: &mut MappedInterner<QueryNode, Vec<u64>>,
     ) {
-        let mut enqueued = SmallBitmap::new(self.query_graph.nodes.len());
-        let mut node_stack = VecDeque::new();
-
-        enqueued.insert(node_with_removed_outgoing_conditions);
-        node_stack.push_back(node_with_removed_outgoing_conditions);
-
-        'main_loop: while let Some(cur_node) = node_stack.pop_front() {
+        self.traverse_breadth_first_backward(node_with_removed_outgoing_conditions, |cur_node| {
             let mut costs_to_remove = FxHashSet::default();
-            for c in costs.get(cur_node) {
-                costs_to_remove.insert(*c);
-            }
+            costs_to_remove.extend(costs.get(cur_node).iter().copied());
 
             let cur_node_edges = &self.edges_of_node.get(cur_node);
             for edge_idx in cur_node_edges.iter() {
@@ -265,23 +246,79 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                 for cost in costs.get(edge.dest_node).iter() {
                     costs_to_remove.remove(&(*cost + edge.cost as u64));
                     if costs_to_remove.is_empty() {
-                        continue 'main_loop;
+                        return false;
                     }
                 }
             }
             if costs_to_remove.is_empty() {
-                continue 'main_loop;
+                return false;
             }
             let mut new_costs = BTreeSet::from_iter(costs.get(cur_node).iter().copied());
             for c in costs_to_remove {
                 new_costs.remove(&c);
             }
             *costs.get_mut(cur_node) = new_costs.into_iter().collect();
+            true
+        });
+    }
 
-            for prev_node in self.query_graph.nodes.get(cur_node).predecessors.iter() {
-                if !enqueued.contains(prev_node) {
-                    node_stack.push_back(prev_node);
-                    enqueued.insert(prev_node);
+    /// Traverse the graph backwards from the given node such that every time
+    /// a node is visited, we are guaranteed that all its successors either:
+    /// 1. have already been visited; OR
+    /// 2. were not reachable from the given node
+    pub fn traverse_breadth_first_backward(
+        &self,
+        from: Interned<QueryNode>,
+        mut visit: impl FnMut(Interned<QueryNode>) -> bool,
+    ) {
+        let mut reachable = SmallBitmap::for_interned_values_in(&self.query_graph.nodes);
+        {
+            // go backward to get the set of all reachable nodes from the given node
+            // the nodes that are not reachable will be set as `visited`
+            let mut stack = VecDeque::new();
+            let mut enqueued = SmallBitmap::for_interned_values_in(&self.query_graph.nodes);
+            enqueued.insert(from);
+            stack.push_back(from);
+            while let Some(n) = stack.pop_front() {
+                if reachable.contains(n) {
+                    continue;
+                }
+                reachable.insert(n);
+                for prev_node in self.query_graph.nodes.get(n).predecessors.iter() {
+                    if !enqueued.contains(prev_node) && !reachable.contains(prev_node) {
+                        stack.push_back(prev_node);
+                        enqueued.insert(prev_node);
+                    }
+                }
+            }
+        };
+        let mut unreachable_or_visited =
+            SmallBitmap::for_interned_values_in(&self.query_graph.nodes);
+        for (n, _) in self.query_graph.nodes.iter() {
+            if !reachable.contains(n) {
+                unreachable_or_visited.insert(n);
+            }
+        }
+
+        let mut enqueued = SmallBitmap::for_interned_values_in(&self.query_graph.nodes);
+        let mut stack = VecDeque::new();
+
+        enqueued.insert(from);
+        stack.push_back(from);
+
+        while let Some(cur_node) = stack.pop_front() {
+            if !self.query_graph.nodes.get(cur_node).successors.is_subset(&unreachable_or_visited) {
+                stack.push_back(cur_node);
+                continue;
+            }
+            unreachable_or_visited.insert(cur_node);
+            if visit(cur_node) {
+                for prev_node in self.query_graph.nodes.get(cur_node).predecessors.iter() {
+                    if !enqueued.contains(prev_node) && !unreachable_or_visited.contains(prev_node)
+                    {
+                        stack.push_back(prev_node);
+                        enqueued.insert(prev_node);
+                    }
                 }
             }
         }
