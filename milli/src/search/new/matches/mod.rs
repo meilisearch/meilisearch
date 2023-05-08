@@ -528,7 +528,7 @@ mod tests {
                 None => MatchingWords::default(),
             };
 
-            MatcherBuilder::new(dbg!(matching_words), TokenizerBuilder::new().build())
+            MatcherBuilder::new(matching_words, TokenizerBuilder::new().build())
         }
     }
 
