@@ -91,7 +91,7 @@ fn document_word_positions_into_sorter(
     while !word_positions_heap.is_empty() {
         while let Some(peeked_word_position) = word_positions_heap.pop() {
             ordered_peeked_word_positions.push(peeked_word_position);
-            if ordered_peeked_word_positions.len() == 7 {
+            if ordered_peeked_word_positions.len() == (MAX_DISTANCE - 1) as usize {
                 break;
             }
         }

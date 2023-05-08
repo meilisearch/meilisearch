@@ -6,6 +6,8 @@ use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::search::new::SearchContext;
 use crate::Result;
 
+const MAX_PROX: usize = crate::proximity::MAX_DISTANCE as usize;
+
 pub fn build_edges(
     _ctx: &mut SearchContext,
     conditions_interner: &mut DedupInterner<ProximityCondition>,
@@ -35,7 +37,7 @@ pub fn build_edges(
     }
 
     let mut conditions = vec![];
-    for cost in right_ngram_length..(7 + right_ngram_length) {
+    for cost in right_ngram_length..(MAX_PROX + right_ngram_length) {
         conditions.push((
             cost as u32,
             conditions_interner.insert(ProximityCondition::Uninit {
@@ -47,7 +49,7 @@ pub fn build_edges(
     }
 
     conditions.push((
-        (7 + right_ngram_length) as u32,
+        (MAX_PROX + right_ngram_length) as u32,
         conditions_interner.insert(ProximityCondition::Term { term: right_term.clone() }),
     ));
 
