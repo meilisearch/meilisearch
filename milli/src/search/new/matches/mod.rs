@@ -499,17 +499,36 @@ mod tests {
     use charabia::TokenizerBuilder;
     use matching_words::tests::temp_index_with_documents;
 
-    use super::super::located_query_terms_from_tokens;
     use super::*;
-    use crate::SearchContext;
+    use crate::index::tests::TempIndex;
+    use crate::{execute_search, SearchContext};
 
     impl<'a> MatcherBuilder<'a, &[u8]> {
-        pub fn new_test(mut ctx: SearchContext, query: &'a str) -> Self {
-            let tokenizer = TokenizerBuilder::new().build();
-            let tokens = tokenizer.tokenize(query);
-            let query_terms = located_query_terms_from_tokens(&mut ctx, tokens, None).unwrap();
-            let matching_words = MatchingWords::new(ctx, query_terms);
-            Self::new(matching_words, TokenizerBuilder::new().build())
+        fn new_test(rtxn: &'a heed::RoTxn, index: &'a TempIndex, query: &str) -> Self {
+            let mut ctx = SearchContext::new(index, rtxn);
+            let crate::search::PartialSearchResult { located_query_terms, .. } = execute_search(
+                &mut ctx,
+                &Some(query.to_string()),
+                crate::TermsMatchingStrategy::default(),
+                false,
+                &None,
+                &None,
+                crate::search::new::GeoSortStrategy::default(),
+                0,
+                100,
+                Some(10),
+                &mut crate::DefaultSearchLogger,
+                &mut crate::DefaultSearchLogger,
+            )
+            .unwrap();
+
+            // consume context and located_query_terms to build MatchingWords.
+            let matching_words = match located_query_terms {
+                Some(located_query_terms) => MatchingWords::new(ctx, located_query_terms),
+                None => MatchingWords::default(),
+            };
+
+            MatcherBuilder::new(matching_words, TokenizerBuilder::new().build())
         }
     }
 
@@ -517,8 +536,7 @@ mod tests {
     fn format_identity() {
         let temp_index = temp_index_with_documents();
         let rtxn = temp_index.read_txn().unwrap();
-        let ctx = SearchContext::new(&temp_index, &rtxn);
-        let builder = MatcherBuilder::new_test(ctx, "split the world");
+        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "split the world");
 
         let format_options = FormatOptions { highlight: false, crop: None };
 
@@ -545,8 +563,7 @@ mod tests {
     fn format_highlight() {
         let temp_index = temp_index_with_documents();
         let rtxn = temp_index.read_txn().unwrap();
-        let ctx = SearchContext::new(&temp_index, &rtxn);
-        let builder = MatcherBuilder::new_test(ctx, "split the world");
+        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "split the world");
 
         let format_options = FormatOptions { highlight: true, crop: None };
 
@@ -589,8 +606,7 @@ mod tests {
     fn highlight_unicode() {
         let temp_index = temp_index_with_documents();
         let rtxn = temp_index.read_txn().unwrap();
-        let ctx = SearchContext::new(&temp_index, &rtxn);
-        let builder = MatcherBuilder::new_test(ctx, "world");
+        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "world");
         let format_options = FormatOptions { highlight: true, crop: None };
 
         // Text containing prefix match.
@@ -599,7 +615,7 @@ mod tests {
         // no crop should return complete text with highlighted matches.
         insta::assert_snapshot!(
             matcher.format(format_options),
-            @"<em>Ŵôřlḑôle</em>"
+            @"<em>Ŵôřlḑ</em>ôle"
         );
 
         // Text containing unicode match.
@@ -611,8 +627,7 @@ mod tests {
             @"<em>Ŵôřlḑ</em>"
         );
 
-        let ctx = SearchContext::new(&temp_index, &rtxn);
-        let builder = MatcherBuilder::new_test(ctx, "westfali");
+        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "westfali");
         let format_options = FormatOptions { highlight: true, crop: None };
 
         // Text containing unicode match.
@@ -621,7 +636,7 @@ mod tests {
         // no crop should return complete text with highlighted matches.
         insta::assert_snapshot!(
             matcher.format(format_options),
-            @"<em>Westfália</em>"
+            @"<em>Westfáli</em>a"
         );
     }
 
@@ -629,8 +644,7 @@ mod tests {
     fn format_crop() {
         let temp_index = temp_index_with_documents();
         let rtxn = temp_index.read_txn().unwrap();
-        let ctx = SearchContext::new(&temp_index, &rtxn);
-        let builder = MatcherBuilder::new_test(ctx, "split the world");
+        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "split the world");
 
         let format_options = FormatOptions { highlight: false, crop: Some(10) };
 
@@ -727,8 +741,7 @@ mod tests {
     fn format_highlight_crop() {
         let temp_index = temp_index_with_documents();
         let rtxn = temp_index.read_txn().unwrap();
-        let ctx = SearchContext::new(&temp_index, &rtxn);
-        let builder = MatcherBuilder::new_test(ctx, "split the world");
+        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "split the world");
 
         let format_options = FormatOptions { highlight: true, crop: Some(10) };
 
@@ -790,8 +803,7 @@ mod tests {
         //! testing: https://github.com/meilisearch/specifications/pull/120#discussion_r836536295
         let temp_index = temp_index_with_documents();
         let rtxn = temp_index.read_txn().unwrap();
-        let ctx = SearchContext::new(&temp_index, &rtxn);
-        let builder = MatcherBuilder::new_test(ctx, "split the world");
+        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "split the world");
 
         let text = "void void split the world void void.";
 
@@ -827,8 +839,8 @@ mod tests {
     fn partial_matches() {
         let temp_index = temp_index_with_documents();
         let rtxn = temp_index.read_txn().unwrap();
-        let ctx = SearchContext::new(&temp_index, &rtxn);
-        let mut builder = MatcherBuilder::new_test(ctx, "the \"t he\" door \"do or\"");
+        let mut builder =
+            MatcherBuilder::new_test(&rtxn, &temp_index, "the \"t he\" door \"do or\"");
         builder.highlight_prefix("_".to_string());
         builder.highlight_suffix("_".to_string());
 

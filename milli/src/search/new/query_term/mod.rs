@@ -470,6 +470,9 @@ impl QueryTerm {
     pub fn is_cached_prefix(&self) -> bool {
         self.zero_typo.use_prefix_db.is_some()
     }
+    pub fn is_prefix(&self) -> bool {
+        self.is_prefix
+    }
     pub fn original_word(&self, ctx: &SearchContext) -> String {
         ctx.word_interner.get(self.original).clone()
     }
