@@ -1,0 +1,49 @@
+use roaring::RoaringBitmap;
+
+use super::{ComputedCondition, RankingRuleGraphTrait};
+use crate::search::new::interner::{DedupInterner, Interned};
+use crate::search::new::query_term::LocatedQueryTermSubset;
+use crate::search::new::resolve_query_graph::compute_query_term_subset_docids;
+use crate::search::new::SearchContext;
+use crate::Result;
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct WordsCondition {
+    term: LocatedQueryTermSubset,
+}
+
+pub enum WordsGraph {}
+
+impl RankingRuleGraphTrait for WordsGraph {
+    type Condition = WordsCondition;
+
+    fn resolve_condition(
+        ctx: &mut SearchContext,
+        condition: &Self::Condition,
+        universe: &RoaringBitmap,
+    ) -> Result<ComputedCondition> {
+        let WordsCondition { term, .. } = condition;
+        // maybe compute_query_term_subset_docids should accept a universe as argument
+        let mut docids = compute_query_term_subset_docids(ctx, &term.term_subset)?;
+        docids &= universe;
+
+        Ok(ComputedCondition {
+            docids,
+            universe_len: universe.len(),
+            start_term_subset: None,
+            end_term_subset: term.clone(),
+        })
+    }
+
+    fn build_edges(
+        _ctx: &mut SearchContext,
+        conditions_interner: &mut DedupInterner<Self::Condition>,
+        _from: Option<&LocatedQueryTermSubset>,
+        to_term: &LocatedQueryTermSubset,
+    ) -> Result<Vec<(u32, Interned<Self::Condition>)>> {
+        Ok(vec![(
+            to_term.term_ids.len() as u32,
+            conditions_interner.insert(WordsCondition { term: to_term.clone() }),
+        )])
+    }
+}

@@ -11,11 +11,10 @@ It doesn't test properly:
 - distinct attributes with arrays (because we know it's incorrect as well)
 */
 
-use std::collections::HashSet;
-
 use big_s::S;
 use heed::RoTxn;
 use maplit::hashset;
+use std::collections::HashSet;
 
 use super::collect_field_values;
 use crate::index::tests::TempIndex;

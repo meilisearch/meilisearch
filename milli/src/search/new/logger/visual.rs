@@ -13,6 +13,7 @@ use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::search::new::ranking_rule_graph::{
     Edge, FidCondition, FidGraph, PositionCondition, PositionGraph, ProximityCondition,
     ProximityGraph, RankingRuleGraph, RankingRuleGraphTrait, TypoCondition, TypoGraph,
+    WordsCondition, WordsGraph,
 };
 use crate::search::new::ranking_rules::BoxRankingRule;
 use crate::search::new::{QueryGraph, QueryNode, RankingRule, SearchContext, SearchLogger};
@@ -24,11 +25,12 @@ pub enum SearchEvents {
     RankingRuleSkipBucket { ranking_rule_idx: usize, bucket_len: u64 },
     RankingRuleEndIteration { ranking_rule_idx: usize, universe_len: u64 },
     ExtendResults { new: Vec<u32> },
-    WordsGraph { query_graph: QueryGraph },
     ProximityGraph { graph: RankingRuleGraph<ProximityGraph> },
     ProximityPaths { paths: Vec<Vec<Interned<ProximityCondition>>> },
     TypoGraph { graph: RankingRuleGraph<TypoGraph> },
     TypoPaths { paths: Vec<Vec<Interned<TypoCondition>>> },
+    WordsGraph { graph: RankingRuleGraph<WordsGraph> },
+    WordsPaths { paths: Vec<Vec<Interned<WordsCondition>>> },
     FidGraph { graph: RankingRuleGraph<FidGraph> },
     FidPaths { paths: Vec<Vec<Interned<FidCondition>>> },
     PositionGraph { graph: RankingRuleGraph<PositionGraph> },
@@ -139,8 +141,11 @@ impl SearchLogger<QueryGraph> for VisualSearchLogger {
         let Some(location) = self.location.last() else { return };
         match location {
             Location::Words => {
-                if let Some(query_graph) = state.downcast_ref::<QueryGraph>() {
-                    self.events.push(SearchEvents::WordsGraph { query_graph: query_graph.clone() });
+                if let Some(graph) = state.downcast_ref::<RankingRuleGraph<WordsGraph>>() {
+                    self.events.push(SearchEvents::WordsGraph { graph: graph.clone() });
+                }
+                if let Some(paths) = state.downcast_ref::<Vec<Vec<Interned<WordsCondition>>>>() {
+                    self.events.push(SearchEvents::WordsPaths { paths: paths.clone() });
                 }
             }
             Location::Typo => {
@@ -329,7 +334,6 @@ impl<'ctx> DetailedLoggerFinish<'ctx> {
             SearchEvents::ExtendResults { new } => {
                 self.write_extend_results(new)?;
             }
-            SearchEvents::WordsGraph { query_graph } => self.write_words_graph(query_graph)?,
             SearchEvents::ProximityGraph { graph } => self.write_rr_graph(&graph)?,
             SearchEvents::ProximityPaths { paths } => {
                 self.write_rr_graph_paths::<ProximityGraph>(paths)?;
@@ -337,6 +341,10 @@ impl<'ctx> DetailedLoggerFinish<'ctx> {
             SearchEvents::TypoGraph { graph } => self.write_rr_graph(&graph)?,
             SearchEvents::TypoPaths { paths } => {
                 self.write_rr_graph_paths::<TypoGraph>(paths)?;
+            }
+            SearchEvents::WordsGraph { graph } => self.write_rr_graph(&graph)?,
+            SearchEvents::WordsPaths { paths } => {
+                self.write_rr_graph_paths::<WordsGraph>(paths)?;
             }
             SearchEvents::FidGraph { graph } => self.write_rr_graph(&graph)?,
             SearchEvents::FidPaths { paths } => {
@@ -482,13 +490,13 @@ fill: \"#B6E2D3\"
         }
         Ok(())
     }
-    fn write_words_graph(&mut self, qg: QueryGraph) -> Result<()> {
-        self.make_new_file_for_internal_state_if_needed()?;
+    // fn write_words_graph(&mut self, qg: QueryGraph) -> Result<()> {
+    //     self.make_new_file_for_internal_state_if_needed()?;
 
-        self.write_query_graph(&qg)?;
+    //     self.write_query_graph(&qg)?;
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
     fn write_rr_graph<R: RankingRuleGraphTrait>(
         &mut self,
         graph: &RankingRuleGraph<R>,
