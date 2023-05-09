@@ -59,7 +59,9 @@ impl Stream for Payload {
                         self.limit = new_limit;
                         Poll::Ready(Some(Ok(bytes)))
                     }
-                    None => Poll::Ready(Some(Err(MeilisearchHttpError::PayloadTooLarge))),
+                    None => {
+                        Poll::Ready(Some(Err(MeilisearchHttpError::PayloadTooLarge(self.limit))))
+                    }
                 },
                 x => Poll::Ready(Some(x.map_err(MeilisearchHttpError::from))),
             },

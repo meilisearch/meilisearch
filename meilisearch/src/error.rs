@@ -1,5 +1,6 @@
 use actix_web as aweb;
 use aweb::error::{JsonPayloadError, QueryPayloadError};
+use byte_unit::Byte;
 use meilisearch_types::document_formats::{DocumentFormatError, PayloadType};
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::index_uid::{IndexUid, IndexUidFormatError};
@@ -26,8 +27,8 @@ pub enum MeilisearchHttpError {
     InvalidExpression(&'static [&'static str], Value),
     #[error("A {0} payload is missing.")]
     MissingPayload(PayloadType),
-    #[error("The provided payload reached the size limit.")]
-    PayloadTooLarge,
+    #[error("The provided payload reached the size limit. The maximum accepted payload size is {}.",  Byte::from_bytes(*.0 as u64).get_appropriate_unit(true))]
+    PayloadTooLarge(usize),
     #[error("Two indexes must be given for each swap. The list `[{}]` contains {} indexes.",
         .0.iter().map(|uid| format!("\"{uid}\"")).collect::<Vec<_>>().join(", "), .0.len()
     )]
@@ -62,7 +63,7 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::DocumentNotFound(_) => Code::DocumentNotFound,
             MeilisearchHttpError::EmptyFilter => Code::InvalidDocumentDeleteFilter,
             MeilisearchHttpError::InvalidExpression(_, _) => Code::InvalidSearchFilter,
-            MeilisearchHttpError::PayloadTooLarge => Code::PayloadTooLarge,
+            MeilisearchHttpError::PayloadTooLarge(_) => Code::PayloadTooLarge,
             MeilisearchHttpError::SwapIndexPayloadWrongLength(_) => Code::InvalidSwapIndexes,
             MeilisearchHttpError::IndexUid(e) => e.error_code(),
             MeilisearchHttpError::SerdeJson(_) => Code::Internal,
