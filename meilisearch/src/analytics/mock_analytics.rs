@@ -5,7 +5,7 @@ use actix_web::HttpRequest;
 use meilisearch_types::InstanceUid;
 use serde_json::Value;
 
-use super::{find_user_id, Analytics, DocumentDeletionKind};
+use super::{find_user_id, Analytics, DocumentDeletionKind, DocumentFetchKind};
 use crate::routes::indexes::documents::UpdateDocumentsQuery;
 use crate::routes::tasks::TasksFilterQuery;
 use crate::Opt;
@@ -71,6 +71,8 @@ impl Analytics for MockAnalytics {
         _request: &HttpRequest,
     ) {
     }
+    fn get_fetch_documents(&self, _documents_query: &DocumentFetchKind, _request: &HttpRequest) {}
+    fn post_fetch_documents(&self, _documents_query: &DocumentFetchKind, _request: &HttpRequest) {}
     fn get_tasks(&self, _query: &TasksFilterQuery, _request: &HttpRequest) {}
     fn health_seen(&self, _request: &HttpRequest) {}
 }
