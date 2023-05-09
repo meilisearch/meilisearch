@@ -61,10 +61,18 @@ async fn swap_indexes() {
     }
     "###);
 
-    let (res, code) = server.index_swap(json!([{ "indexes": ["a", "b"] }])).await;
-    snapshot!(code, @"202 Accepted");
-    snapshot!(res["taskUid"], @"2");
-    server.wait_task(2).await;
+    let task = server.index_swap(json!([{ "indexes": ["a", "b"] }])).await;
+    snapshot!(task, @r###"
+    202 Accepted
+    {
+      "taskUid": 2,
+      "indexUid": null,
+      "status": "enqueued",
+      "type": "indexSwap",
+      "enqueuedAt": "[time]"
+    }
+    "###);
+    task.wait_for_completion().await;
 
     let (tasks, code) = server.tasks().await;
     snapshot!(code, @"200 OK");
@@ -201,11 +209,10 @@ async fn swap_indexes() {
 
     // It's happening 😲
 
-    let (res, code) =
+    let task =
         server.index_swap(json!([{ "indexes": ["a", "b"] }, { "indexes": ["c", "d"] } ])).await;
-    snapshot!(res["taskUid"], @"5");
-    snapshot!(code, @"202 Accepted");
-    server.wait_task(5).await;
+    snapshot!(task, @"5");
+    task.wait_for_completion().await;
 
     // ensure the index creation worked properly
     let (tasks, code) = server.tasks().await;

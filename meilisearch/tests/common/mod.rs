@@ -2,6 +2,7 @@ pub mod encoder;
 pub mod index;
 pub mod server;
 pub mod service;
+pub mod task;
 
 pub use index::{GetAllDocumentsOptions, GetDocumentOptions};
 pub use server::{default_settings, Server};

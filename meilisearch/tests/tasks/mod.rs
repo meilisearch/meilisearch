@@ -1,6 +1,7 @@
 mod errors;
 
 use meili_snap::insta::assert_json_snapshot;
+use meili_snap::snapshot;
 use serde_json::json;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
@@ -832,15 +833,13 @@ async fn test_summarized_index_update() {
 #[actix_web::test]
 async fn test_summarized_index_swap() {
     let server = Server::new().await;
-    server
+    let task = server
         .index_swap(json!([
             { "indexes": ["doggos", "cattos"] }
         ]))
         .await;
-    server.wait_task(0).await;
-    let (task, _) = server.get_task(0).await;
-    assert_json_snapshot!(task,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+    let task = task.wait_for_completion().await;
+    snapshot!(task,
         @r###"
     {
       "uid": 0,
@@ -873,15 +872,13 @@ async fn test_summarized_index_swap() {
 
     server.index("doggos").create(None).await;
     server.index("cattos").create(None).await;
-    server
+    let task = server
         .index_swap(json!([
             { "indexes": ["doggos", "cattos"] }
         ]))
         .await;
-    server.wait_task(3).await;
-    let (task, _) = server.get_task(3).await;
-    assert_json_snapshot!(task,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+    let task = task.wait_for_completion().await;
+    snapshot!(task,
         @r###"
     {
       "uid": 3,

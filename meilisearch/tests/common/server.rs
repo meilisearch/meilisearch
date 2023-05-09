@@ -17,6 +17,7 @@ use tokio::time::sleep;
 
 use super::index::Index;
 use super::service::Service;
+use super::task::Task;
 use crate::common::encoder::Encoder;
 
 pub struct Server {
@@ -156,8 +157,9 @@ impl Server {
         self.service.post("/dumps", json!(null)).await
     }
 
-    pub async fn index_swap(&self, value: Value) -> (Value, StatusCode) {
-        self.service.post("/swap-indexes", value).await
+    pub async fn index_swap(&self, value: Value) -> Task<'_> {
+        let (value, code) = self.service.post("/swap-indexes", value).await;
+        Task::new(&self.service, code, value)
     }
 
     pub async fn cancel_tasks(&self, value: &str) -> (Value, StatusCode) {
