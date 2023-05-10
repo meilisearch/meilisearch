@@ -3,9 +3,9 @@ This module tests the following properties:
 
 1. Two consecutive words from a query can be combined into a "2gram"
 2. Three consecutive words from a query can be combined into a "3gram"
-3. A word from the query can be split into two consecutive words (split words)
+3. A word from the query can be split into two consecutive words (split words), no matter how short it is
 4. A 2gram can be split into two words
-5. A 3gram cannot be split into two words
+5. A 3gram can be split into two words
 6. 2grams can contain up to 1 typo
 7. 3grams cannot have typos
 8. 2grams and 3grams can be prefix tolerant
@@ -14,6 +14,7 @@ This module tests the following properties:
 11. Disabling typo tolerance does not disable ngram tolerance
 12. Prefix tolerance is disabled for the last word if a space follows it
 13. Ngrams cannot be formed by combining a phrase and a word or two phrases
+14. Split words are not disabled by the `disableOnAttribute` or `disableOnWords` typo settings
 */
 
 use crate::index::tests::TempIndex;
@@ -56,6 +57,10 @@ fn create_index() -> TempIndex {
             {
                 "id": 5,
                 "text": "sunflowering is not a verb"
+            },
+            {
+                "id": 6,
+                "text": "xy z"
             }
         ]))
         .unwrap();
@@ -263,10 +268,11 @@ fn test_disable_split_words() {
     s.query("sunflower ");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     // no document containing `sun flower`
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[3]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[1, 3]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
+        "\"the sun flower is tall\"",
         "\"the sunflower is tall\"",
     ]
     "###);
@@ -307,10 +313,11 @@ fn test_3gram_no_split_words() {
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
     // no document with `sun flower`
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 3, 5]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[1, 2, 3, 5]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
+        "\"the sun flower is tall\"",
         "\"the sunflowers are pretty\"",
         "\"the sunflower is tall\"",
         "\"sunflowering is not a verb\"",
@@ -366,6 +373,53 @@ fn test_no_ngram_phrases() {
     insta::assert_debug_snapshot!(texts, @r###"
     [
         "\"the sun flower is tall\"",
+    ]
+    "###);
+}
+
+#[test]
+fn test_short_split_words() {
+    let index = create_index();
+    let txn = index.read_txn().unwrap();
+
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.query("xyz");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"xy z\"",
+    ]
+    "###);
+}
+
+#[test]
+fn test_split_words_never_disabled() {
+    let index = create_index();
+
+    index
+        .update_settings(|s| {
+            s.set_exact_words(["sunflower"].iter().map(ToString::to_string).collect());
+            s.set_exact_attributes(["text"].iter().map(ToString::to_string).collect());
+        })
+        .unwrap();
+
+    let txn = index.read_txn().unwrap();
+
+    let mut s = Search::new(&txn, &index);
+    s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.query("the sunflower is tall");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[1, 3]");
+    let texts = collect_field_values(&index, &txn, "text", &documents_ids);
+    insta::assert_debug_snapshot!(texts, @r###"
+    [
+        "\"the sun flower is tall\"",
+        "\"the sunflower is tall\"",
     ]
     "###);
 }

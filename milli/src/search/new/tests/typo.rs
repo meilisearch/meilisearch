@@ -9,7 +9,7 @@ This module tests the following properties:
 6. A typo on the first letter of a word counts as two typos
 7. Phrases are not typo tolerant
 8. 2grams can have 1 typo if they are larger than `min_word_len_two_typos`
-9. 3grams are not typo tolerant
+9. 3grams are not typo tolerant (but they can be split into two words)
 10. The `typo` ranking rule assumes the role of the `words` ranking rule implicitly
 if `words` doesn't exist before it.
 11. The `typo` ranking rule places documents with the same number of typos in the same bucket
@@ -287,16 +287,17 @@ fn test_typo_exact_word() {
     ]
     "###);
 
-    // exact words do not disable prefix (sunflowering OK, but no sunflowar or sun flower)
+    // exact words do not disable prefix (sunflowering OK, but no sunflowar)
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("network interconnection sunflower");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[16, 18]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[16, 17, 18]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
         "\"network interconnection sunflower\"",
+        "\"network interconnection sun flower\"",
         "\"network interconnection sunflowering\"",
     ]
     "###);
