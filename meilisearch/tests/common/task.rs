@@ -49,7 +49,7 @@ impl fmt::Display for Task<'_> {
     }
 }
 
-pub struct FinishedTask(Value);
+pub struct FinishedTask(pub Value);
 
 impl fmt::Display for FinishedTask {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

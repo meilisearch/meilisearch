@@ -96,8 +96,9 @@ impl Server {
         self.index_with_encoder(uid, Encoder::Plain)
     }
 
-    pub async fn create_index(&self, body: Value) -> (Value, StatusCode) {
-        self.service.post("/indexes", body).await
+    pub async fn create_index(&self, body: Value) -> Task<'_> {
+        let (value, code) = self.service.post("/indexes", body).await;
+        Task::new(&self.service, code, value)
     }
 
     pub fn index_with_encoder(&self, uid: impl AsRef<str>, encoder: Encoder) -> Index<'_> {
@@ -108,8 +109,9 @@ impl Server {
         self.service.post("/multi-search", queries).await
     }
 
-    pub async fn list_indexes_raw(&self, parameters: &str) -> (Value, StatusCode) {
-        self.service.get(format!("/indexes{parameters}")).await
+    pub async fn list_indexes_raw(&self, parameters: &str) -> Task<'_> {
+        let (value, code) = self.service.get(format!("/indexes{parameters}")).await;
+        Task::new(&self.service, code, value)
     }
 
     pub async fn list_indexes(
@@ -141,20 +143,23 @@ impl Server {
         self.service.get("/stats").await
     }
 
-    pub async fn tasks(&self) -> (Value, StatusCode) {
-        self.service.get("/tasks").await
+    pub async fn tasks(&self) -> Task<'_> {
+        let (value, code) = self.service.get("/tasks").await;
+        Task::new(&self.service, code, value)
     }
 
-    pub async fn tasks_filter(&self, filter: &str) -> (Value, StatusCode) {
-        self.service.get(format!("/tasks?{}", filter)).await
+    pub async fn tasks_filter(&self, filter: &str) -> Task<'_> {
+        let (value, code) = self.service.get(format!("/tasks?{}", filter)).await;
+        Task::new(&self.service, code, value)
     }
 
     pub async fn get_dump_status(&self, uid: &str) -> (Value, StatusCode) {
         self.service.get(format!("/dumps/{}/status", uid)).await
     }
 
-    pub async fn create_dump(&self) -> (Value, StatusCode) {
-        self.service.post("/dumps", json!(null)).await
+    pub async fn create_dump(&self) -> Task<'_> {
+        let (value, code) = self.service.post("/dumps", json!(null)).await;
+        Task::new(&self.service, code, value)
     }
 
     pub async fn index_swap(&self, value: Value) -> Task<'_> {
@@ -162,12 +167,15 @@ impl Server {
         Task::new(&self.service, code, value)
     }
 
-    pub async fn cancel_tasks(&self, value: &str) -> (Value, StatusCode) {
-        self.service.post(format!("/tasks/cancel?{}", value), json!(null)).await
+    pub async fn cancel_tasks(&self, value: &str) -> Task<'_> {
+        let (value, code) =
+            self.service.post(format!("/tasks/cancel?{}", value), json!(null)).await;
+        Task::new(&self.service, code, value)
     }
 
-    pub async fn delete_tasks(&self, value: &str) -> (Value, StatusCode) {
-        self.service.delete(format!("/tasks?{}", value)).await
+    pub async fn delete_tasks(&self, value: &str) -> Task<'_> {
+        let (value, code) = self.service.delete(format!("/tasks?{}", value)).await;
+        Task::new(&self.service, code, value)
     }
 
     pub async fn wait_task(&self, update_id: u64) -> Value {
@@ -187,9 +195,10 @@ impl Server {
         panic!("Timeout waiting for update id");
     }
 
-    pub async fn get_task(&self, update_id: u64) -> (Value, StatusCode) {
+    pub async fn get_task(&self, update_id: u64) -> Task<'_> {
         let url = format!("/tasks/{}", update_id);
-        self.service.get(url).await
+        let (value, code) = self.service.get(url).await;
+        Task::new(&self.service, code, value)
     }
 }
 

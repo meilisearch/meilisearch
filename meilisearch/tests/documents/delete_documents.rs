@@ -7,12 +7,9 @@ use crate::common::{GetAllDocumentsOptions, Server};
 async fn delete_one_document_unexisting_index() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (_response, code) = index.delete_document(0).await;
-    assert_eq!(code, 202);
-
-    let response = index.wait_task(0).await;
-
-    assert_eq!(response["status"], "failed");
+    let task = index.delete_document(0).await;
+    let task = task.wait_for_completion().await;
+    snapshot!(task, @"failed");
 }
 
 #[actix_rt::test]
@@ -20,24 +17,22 @@ async fn delete_one_unexisting_document() {
     let server = Server::new().await;
     let index = server.index("test");
     index.create(None).await;
-    let (response, code) = index.delete_document(0).await;
-    assert_eq!(code, 202, "{}", response);
-    let update = index.wait_task(0).await;
-    assert_eq!(update["status"], "succeeded");
+    let task = index.delete_document(0).await;
+    let task = task.wait_for_completion().await;
+    snapshot!(task, @"succeeded");
 }
 
 #[actix_rt::test]
 async fn delete_one_document() {
     let server = Server::new().await;
     let index = server.index("test");
-    index.add_documents(json!([{ "id": 0, "content": "foobar" }]), None).await;
-    index.wait_task(0).await;
-    let (_response, code) = server.index("test").delete_document(0).await;
-    assert_eq!(code, 202);
-    index.wait_task(1).await;
+    let task = index.add_documents(json!([{ "id": 0, "content": "foobar" }]), None).await;
+    task.wait_for_completion();
+    let task = server.index("test").delete_document(0).await;
+    task.wait_for_completion();
 
     let (_response, code) = index.get_document(0, None).await;
-    assert_eq!(code, 404);
+    snapshot!(code, @"404");
 }
 
 #[actix_rt::test]

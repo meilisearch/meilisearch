@@ -265,22 +265,22 @@ macro_rules! compute_authorized_single_search {
         server.use_admin_key("MASTER_KEY").await;
         let index = server.index("sales");
         let documents = DOCUMENTS.clone();
-        index.add_documents(documents, None).await;
-        index.wait_task(0).await;
-        index
+        let task = index.add_documents(documents, None).await;
+        task.wait_for_completion().await;
+        let task = index
             .update_settings(json!({"filterableAttributes": ["color"]}))
             .await;
-        index.wait_task(1).await;
+        task.wait_for_completion().await;
         drop(index);
 
         let index = server.index("products");
         let documents = NESTED_DOCUMENTS.clone();
-        index.add_documents(documents, None).await;
-        index.wait_task(2).await;
+        let task = index.add_documents(documents, None).await;
+        task.wait_for_completion().await;
         index
             .update_settings(json!({"filterableAttributes": ["doggos"]}))
             .await;
-        index.wait_task(3).await;
+        task.wait_for_completion().await;
         drop(index);
 
 
@@ -319,22 +319,22 @@ macro_rules! compute_authorized_multiple_search {
         server.use_admin_key("MASTER_KEY").await;
         let index = server.index("sales");
         let documents = DOCUMENTS.clone();
-        index.add_documents(documents, None).await;
-        index.wait_task(0).await;
-        index
+        let task = index.add_documents(documents, None).await;
+        task.wait_for_completion().await;
+        let task = index
             .update_settings(json!({"filterableAttributes": ["color"]}))
             .await;
-        index.wait_task(1).await;
+        task.wait_for_completion().await;
         drop(index);
 
         let index = server.index("products");
         let documents = NESTED_DOCUMENTS.clone();
-        index.add_documents(documents, None).await;
-        index.wait_task(2).await;
-        index
+        let task = index.add_documents(documents, None).await;
+        task.wait_for_completion().await;
+        let task = index
             .update_settings(json!({"filterableAttributes": ["doggos"]}))
             .await;
-        index.wait_task(3).await;
+        task.wait_for_completion().await;
         drop(index);
 
 
@@ -384,22 +384,22 @@ macro_rules! compute_forbidden_single_search {
         server.use_admin_key("MASTER_KEY").await;
         let index = server.index("sales");
         let documents = DOCUMENTS.clone();
-        index.add_documents(documents, None).await;
-        index.wait_task(0).await;
-        index
+        let task = index.add_documents(documents, None).await;
+        task.wait_for_completion().await;
+        let task = index
             .update_settings(json!({"filterableAttributes": ["color"]}))
             .await;
-        index.wait_task(1).await;
+        task.wait_for_completion().await;
         drop(index);
 
         let index = server.index("products");
         let documents = NESTED_DOCUMENTS.clone();
-        index.add_documents(documents, None).await;
-        index.wait_task(2).await;
-        index
+        let task = index.add_documents(documents, None).await;
+        task.wait_for_completion().await;
+        let task = index
             .update_settings(json!({"filterableAttributes": ["doggos"]}))
             .await;
-        index.wait_task(3).await;
+        task.wait_for_completion().await;
         drop(index);
 
         assert_eq!($parent_keys.len(), $failed_query_indexes.len(), "keys != query_indexes");
@@ -439,22 +439,22 @@ macro_rules! compute_forbidden_multiple_search {
         server.use_admin_key("MASTER_KEY").await;
         let index = server.index("sales");
         let documents = DOCUMENTS.clone();
-        index.add_documents(documents, None).await;
-        index.wait_task(0).await;
-        index
+        let task = index.add_documents(documents, None).await;
+        task.wait_for_completion().await;
+        let task = index
             .update_settings(json!({"filterableAttributes": ["color"]}))
             .await;
-        index.wait_task(1).await;
+        task.wait_for_completion().await;
         drop(index);
 
         let index = server.index("products");
         let documents = NESTED_DOCUMENTS.clone();
-        index.add_documents(documents, None).await;
-        index.wait_task(2).await;
-        index
+        let task = index.add_documents(documents, None).await;
+        task.wait_for_completion().await;
+        let task = index
             .update_settings(json!({"filterableAttributes": ["doggos"]}))
             .await;
-        index.wait_task(3).await;
+        task.wait_for_completion().await;
         drop(index);
 
         assert_eq!($parent_keys.len(), $failed_query_indexes.len(), "keys != query_indexes");

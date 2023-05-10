@@ -9,6 +9,7 @@ use urlencoding::encode as urlencode;
 
 use super::encoder::Encoder;
 use super::service::Service;
+use super::task::Task;
 
 pub struct Index<'a> {
     pub uid: String,
@@ -55,45 +56,46 @@ impl Index<'_> {
         update_id as u64
     }
 
-    pub async fn create(&self, primary_key: Option<&str>) -> (Value, StatusCode) {
+    pub async fn create(&self, primary_key: Option<&str>) -> Task<'_> {
         let body = json!({
             "uid": self.uid,
             "primaryKey": primary_key,
         });
-        self.service.post_encoded("/indexes", body, self.encoder).await
+        let (value, code) = self.service.post_encoded("/indexes", body, self.encoder).await;
+        Task::new(&self.service, code, value)
     }
 
-    pub async fn update_raw(&self, body: Value) -> (Value, StatusCode) {
+    pub async fn update_raw(&self, body: Value) -> Task<'_> {
         let url = format!("/indexes/{}", urlencode(self.uid.as_ref()));
-        self.service.patch_encoded(url, body, self.encoder).await
+        let (value, code) = self.service.patch_encoded(url, body, self.encoder).await;
+        Task::new(&self.service, code, value)
     }
 
-    pub async fn update(&self, primary_key: Option<&str>) -> (Value, StatusCode) {
+    pub async fn update(&self, primary_key: Option<&str>) -> Task<'_> {
         let body = json!({
             "primaryKey": primary_key,
         });
         let url = format!("/indexes/{}", urlencode(self.uid.as_ref()));
 
-        self.service.patch_encoded(url, body, self.encoder).await
+        let (value, code) = self.service.patch_encoded(url, body, self.encoder).await;
+        Task::new(&self.service, code, value)
     }
 
-    pub async fn delete(&self) -> (Value, StatusCode) {
+    pub async fn delete(&self) -> Task<'_> {
         let url = format!("/indexes/{}", urlencode(self.uid.as_ref()));
-        self.service.delete(url).await
+        let (value, code) = self.service.delete(url).await;
+        Task::new(&self.service, code, value)
     }
 
-    pub async fn add_documents(
-        &self,
-        documents: Value,
-        primary_key: Option<&str>,
-    ) -> (Value, StatusCode) {
+    pub async fn add_documents(&self, documents: Value, primary_key: Option<&str>) -> Task<'_> {
         let url = match primary_key {
             Some(key) => {
                 format!("/indexes/{}/documents?primaryKey={}", urlencode(self.uid.as_ref()), key)
             }
             None => format!("/indexes/{}/documents", urlencode(self.uid.as_ref())),
         };
-        self.service.post_encoded(url, documents, self.encoder).await
+        let (value, code) = self.service.post_encoded(url, documents, self.encoder).await;
+        Task::new(&self.service, code, value)
     }
 
     pub async fn raw_add_documents(
@@ -101,28 +103,26 @@ impl Index<'_> {
         payload: &str,
         content_type: Option<&str>,
         query_parameter: &str,
-    ) -> (Value, StatusCode) {
+    ) -> Task<'_> {
         let url = format!("/indexes/{}/documents{}", urlencode(self.uid.as_ref()), query_parameter);
 
-        if let Some(content_type) = content_type {
+        let (value, code) = if let Some(content_type) = content_type {
             self.service.post_str(url, payload, vec![("Content-Type", content_type)]).await
         } else {
             self.service.post_str(url, payload, Vec::new()).await
-        }
+        };
+        Task::new(&self.service, code, value)
     }
 
-    pub async fn update_documents(
-        &self,
-        documents: Value,
-        primary_key: Option<&str>,
-    ) -> (Value, StatusCode) {
+    pub async fn update_documents(&self, documents: Value, primary_key: Option<&str>) -> Task<'_> {
         let url = match primary_key {
             Some(key) => {
                 format!("/indexes/{}/documents?primaryKey={}", urlencode(self.uid.as_ref()), key)
             }
             None => format!("/indexes/{}/documents", urlencode(self.uid.as_ref())),
         };
-        self.service.put_encoded(url, documents, self.encoder).await
+        let (value, code) = self.service.put_encoded(url, documents, self.encoder).await;
+        Task::new(&self.service, code, value)
     }
 
     pub async fn raw_update_documents(
@@ -130,14 +130,15 @@ impl Index<'_> {
         payload: &str,
         content_type: Option<&str>,
         query_parameter: &str,
-    ) -> (Value, StatusCode) {
+    ) -> Task<'_> {
         let url = format!("/indexes/{}/documents{}", urlencode(self.uid.as_ref()), query_parameter);
 
-        if let Some(content_type) = content_type {
+        let (value, code) = if let Some(content_type) = content_type {
             self.service.put_str(url, payload, vec![("Content-Type", content_type)]).await
         } else {
             self.service.put_str(url, payload, Vec::new()).await
-        }
+        };
+        Task::new(&self.service, code, value)
     }
 
     pub async fn wait_task(&self, update_id: u64) -> Value {
@@ -225,114 +226,136 @@ impl Index<'_> {
         self.service.get(url).await
     }
 
-    pub async fn delete_document(&self, id: u64) -> (Value, StatusCode) {
+    pub async fn delete_document(&self, id: u64) -> Task<'_> {
         let url = format!("/indexes/{}/documents/{}", urlencode(self.uid.as_ref()), id);
-        self.service.delete(url).await
+        let (value, code) = self.service.delete(url).await;
+        Task::new(self.service, code, value)
     }
 
-    pub async fn delete_document_by_filter(&self, body: Value) -> (Value, StatusCode) {
+    pub async fn delete_document_by_filter(&self, body: Value) -> Task<'_> {
         let url = format!("/indexes/{}/documents/delete", urlencode(self.uid.as_ref()));
-        self.service.post_encoded(url, body, self.encoder).await
+        let (value, code) = self.service.post_encoded(url, body, self.encoder).await;
+        Task::new(self.service, code, value)
     }
 
-    pub async fn clear_all_documents(&self) -> (Value, StatusCode) {
+    pub async fn clear_all_documents(&self) -> Task<'_> {
         let url = format!("/indexes/{}/documents", urlencode(self.uid.as_ref()));
-        self.service.delete(url).await
+        let (value, code) = self.service.delete(url).await;
+        Task::new(self.service, code, value)
     }
 
-    pub async fn delete_batch(&self, ids: Vec<u64>) -> (Value, StatusCode) {
+    pub async fn delete_batch(&self, ids: Vec<u64>) -> Task<'_> {
         let url = format!("/indexes/{}/documents/delete-batch", urlencode(self.uid.as_ref()));
-        self.service.post_encoded(url, serde_json::to_value(&ids).unwrap(), self.encoder).await
+        let (value, code) =
+            self.service.post_encoded(url, serde_json::to_value(&ids).unwrap(), self.encoder).await;
+        Task::new(self.service, code, value)
     }
 
-    pub async fn delete_batch_raw(&self, body: Value) -> (Value, StatusCode) {
+    pub async fn delete_batch_raw(&self, body: Value) -> Task<'_> {
         let url = format!("/indexes/{}/documents/delete-batch", urlencode(self.uid.as_ref()));
-        self.service.post_encoded(url, body, self.encoder).await
+        let (value, code) = self.service.post_encoded(url, body, self.encoder).await;
+        Task::new(self.service, code, value)
     }
 
-    pub async fn settings(&self) -> (Value, StatusCode) {
+    pub async fn settings(&self) -> Task<'_> {
         let url = format!("/indexes/{}/settings", urlencode(self.uid.as_ref()));
-        self.service.get(url).await
+        let (value, code) = self.service.get(url).await;
+        Task::new(self.service, code, value)
     }
 
-    pub async fn update_settings(&self, settings: Value) -> (Value, StatusCode) {
+    pub async fn update_settings(&self, settings: Value) -> Task<'_> {
         let url = format!("/indexes/{}/settings", urlencode(self.uid.as_ref()));
-        self.service.patch_encoded(url, settings, self.encoder).await
+        let (value, code) = self.service.patch_encoded(url, settings, self.encoder).await;
+        Task::new(self.service, code, value)
     }
 
-    pub async fn update_settings_displayed_attributes(
-        &self,
-        settings: Value,
-    ) -> (Value, StatusCode) {
+    pub async fn update_settings_displayed_attributes(&self, settings: Value) -> Task<'_> {
         let url =
             format!("/indexes/{}/settings/displayed-attributes", urlencode(self.uid.as_ref()));
-        self.service.put_encoded(url, settings, self.encoder).await
+        let (value, code) = self.service.put_encoded(url, settings, self.encoder).await;
+        Task::new(self.service, code, value)
     }
 
-    pub async fn update_settings_searchable_attributes(
-        &self,
-        settings: Value,
-    ) -> (Value, StatusCode) {
+    pub async fn update_settings_searchable_attributes(&self, settings: Value) -> Task<'_> {
         let url =
             format!("/indexes/{}/settings/searchable-attributes", urlencode(self.uid.as_ref()));
-        self.service.put_encoded(url, settings, self.encoder).await
+        let (value, code) = self.service.put_encoded(url, settings, self.encoder).await;
+        Task::new(self.service, code, value)
     }
 
-    pub async fn update_settings_filterable_attributes(
-        &self,
-        settings: Value,
-    ) -> (Value, StatusCode) {
+    pub async fn update_settings_filterable_attributes(&self, settings: Value) -> Task<'_> {
         let url =
             format!("/indexes/{}/settings/filterable-attributes", urlencode(self.uid.as_ref()));
-        self.service.put_encoded(url, settings, self.encoder).await
+        let (value, code) = self.service.put_encoded(url, settings, self.encoder).await;
+        Task::new(self.service, code, value)
     }
 
-    pub async fn update_settings_sortable_attributes(
-        &self,
-        settings: Value,
-    ) -> (Value, StatusCode) {
+    pub async fn update_settings_sortable_attributes(&self, settings: Value) -> Task<'_> {
         let url = format!("/indexes/{}/settings/sortable-attributes", urlencode(self.uid.as_ref()));
-        self.service.put_encoded(url, settings, self.encoder).await
+        let (value, code) = self.service.put_encoded(url, settings, self.encoder).await;
+        Task::new(self.service, code, value)
     }
 
-    pub async fn update_settings_ranking_rules(&self, settings: Value) -> (Value, StatusCode) {
+    pub async fn update_settings_ranking_rules(&self, settings: Value) -> Task<'_> {
         let url = format!("/indexes/{}/settings/ranking-rules", urlencode(self.uid.as_ref()));
-        self.service.put_encoded(url, settings, self.encoder).await
+        let (value, code) = self.service.put_encoded(url, settings, self.encoder).await;
+        Task::new(self.service, code, value)
     }
 
-    pub async fn update_settings_stop_words(&self, settings: Value) -> (Value, StatusCode) {
+    pub async fn update_settings_stop_words(&self, settings: Value) -> Task<'_> {
         let url = format!("/indexes/{}/settings/stop-words", urlencode(self.uid.as_ref()));
-        self.service.put_encoded(url, settings, self.encoder).await
+        let (value, code) = self.service.put_encoded(url, settings, self.encoder).await;
+        Task::new(self.service, code, value)
     }
 
-    pub async fn update_settings_synonyms(&self, settings: Value) -> (Value, StatusCode) {
+    pub async fn update_settings_synonyms(&self, settings: Value) -> Task<'_> {
         let url = format!("/indexes/{}/settings/synonyms", urlencode(self.uid.as_ref()));
-        self.service.put_encoded(url, settings, self.encoder).await
+        let (value, code) = self.service.put_encoded(url, settings, self.encoder).await;
+        Task::new(self.service, code, value)
     }
 
-    pub async fn update_settings_distinct_attribute(&self, settings: Value) -> (Value, StatusCode) {
+    pub async fn update_settings_distinct_attribute(&self, settings: Value) -> Task<'_> {
         let url = format!("/indexes/{}/settings/distinct-attribute", urlencode(self.uid.as_ref()));
-        self.service.put_encoded(url, settings, self.encoder).await
+        let (value, code) = self.service.put_encoded(url, settings, self.encoder).await;
+        Task::new(self.service, code, value)
     }
 
-    pub async fn update_settings_typo_tolerance(&self, settings: Value) -> (Value, StatusCode) {
+    pub async fn update_settings_typo_tolerance(&self, settings: Value) -> Task<'_> {
         let url = format!("/indexes/{}/settings/typo-tolerance", urlencode(self.uid.as_ref()));
-        self.service.patch_encoded(url, settings, self.encoder).await
+        let (value, code) = self.service.patch_encoded(url, settings, self.encoder).await;
+        Task::new(self.service, code, value)
     }
 
-    pub async fn update_settings_faceting(&self, settings: Value) -> (Value, StatusCode) {
+    pub async fn update_settings_faceting(&self, settings: Value) -> Task<'_> {
         let url = format!("/indexes/{}/settings/faceting", urlencode(self.uid.as_ref()));
-        self.service.patch_encoded(url, settings, self.encoder).await
+        let (value, code) = self.service.patch_encoded(url, settings, self.encoder).await;
+        Task::new(self.service, code, value)
     }
 
-    pub async fn update_settings_pagination(&self, settings: Value) -> (Value, StatusCode) {
+    pub async fn update_settings_pagination(&self, settings: Value) -> Task<'_> {
         let url = format!("/indexes/{}/settings/pagination", urlencode(self.uid.as_ref()));
-        self.service.patch_encoded(url, settings, self.encoder).await
+        let (value, code) = self.service.patch_encoded(url, settings, self.encoder).await;
+        Task::new(self.service, code, value)
     }
 
-    pub async fn delete_settings(&self) -> (Value, StatusCode) {
+    pub async fn update_distinct_attribute(&self, value: Value) -> Task<'_> {
+        let url =
+            format!("/indexes/{}/settings/{}", urlencode(self.uid.as_ref()), "distinct-attribute");
+        let (value, code) = self.service.put_encoded(url, value, self.encoder).await;
+        Task::new(self.service, code, value)
+    }
+
+    pub async fn get_distinct_attribute(&self) -> Task<'_> {
+        let url =
+            format!("/indexes/{}/settings/{}", urlencode(self.uid.as_ref()), "distinct-attribute");
+        let (value, code) = self.service.get(url).await;
+        Task::new(self.service, code, value)
+    }
+
+    pub async fn delete_settings(&self) -> Task<'_> {
         let url = format!("/indexes/{}/settings", urlencode(self.uid.as_ref()));
-        self.service.delete(url).await
+        let (value, code) = self.service.delete(url).await;
+        Task::new(self.service, code, value)
     }
 
     pub async fn stats(&self) -> (Value, StatusCode) {
@@ -367,18 +390,6 @@ impl Index<'_> {
 
     pub async fn search_get(&self, query: &str) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/search?{}", urlencode(self.uid.as_ref()), query);
-        self.service.get(url).await
-    }
-
-    pub async fn update_distinct_attribute(&self, value: Value) -> (Value, StatusCode) {
-        let url =
-            format!("/indexes/{}/settings/{}", urlencode(self.uid.as_ref()), "distinct-attribute");
-        self.service.put_encoded(url, value, self.encoder).await
-    }
-
-    pub async fn get_distinct_attribute(&self) -> (Value, StatusCode) {
-        let url =
-            format!("/indexes/{}/settings/{}", urlencode(self.uid.as_ref()), "distinct-attribute");
         self.service.get(url).await
     }
 }
