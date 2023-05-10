@@ -1175,6 +1175,7 @@ pub struct DocumentsFetchAggregator {
     #[serde(rename = "user-agent")]
     user_agents: HashSet<String>,
 
+    #[serde(rename = "requests.max_limit")]
     total_received: usize,
 
     // a call on ../documents/:doc_id
@@ -1183,7 +1184,9 @@ pub struct DocumentsFetchAggregator {
     per_filter: bool,
 
     // pagination
+    #[serde(rename = "pagination.max_limit")]
     max_limit: usize,
+    #[serde(rename = "pagination.max_offset")]
     max_offset: usize,
 }
 
