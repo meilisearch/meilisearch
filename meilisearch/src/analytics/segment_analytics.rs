@@ -1218,7 +1218,7 @@ impl DocumentsFetchAggregator {
         self.per_filter |= other.per_filter;
 
         self.max_limit = self.max_limit.max(other.max_limit);
-        self.max_offset |= self.max_offset.max(other.max_offset);
+        self.max_offset = self.max_offset.max(other.max_offset);
     }
 
     pub fn into_event(self, user: &User, event_name: &str) -> Option<Track> {
