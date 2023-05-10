@@ -11,6 +11,7 @@ use crate::error::MeilisearchHttpError;
 pub struct Payload {
     payload: Decompress<dev::Payload>,
     limit: usize,
+    remaining: usize,
 }
 
 pub struct PayloadConfig {
@@ -43,6 +44,7 @@ impl FromRequest for Payload {
         ready(Ok(Payload {
             payload: Decompress::from_headers(payload.take(), req.headers()),
             limit,
+            remaining: limit,
         }))
     }
 }
@@ -54,9 +56,9 @@ impl Stream for Payload {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match Pin::new(&mut self.payload).poll_next(cx) {
             Poll::Ready(Some(result)) => match result {
-                Ok(bytes) => match self.limit.checked_sub(bytes.len()) {
+                Ok(bytes) => match self.remaining.checked_sub(bytes.len()) {
                     Some(new_limit) => {
-                        self.limit = new_limit;
+                        self.remaining = new_limit;
                         Poll::Ready(Some(Ok(bytes)))
                     }
                     None => {
