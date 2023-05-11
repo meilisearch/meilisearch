@@ -198,7 +198,7 @@ async fn get_task_filter_error() {
 
     let (response, code) = server.tasks_filter("lol=pied").await;
     assert_eq!(code, 400, "{}", response);
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    snapshot!(meili_snap::json_string!(response), @r###"
     {
       "message": "Unknown parameter `lol`: expected one of `limit`, `from`, `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
       "code": "bad_request",
@@ -209,7 +209,7 @@ async fn get_task_filter_error() {
 
     let (response, code) = server.tasks_filter("uids=pied").await;
     assert_eq!(code, 400, "{}", response);
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    snapshot!(meili_snap::json_string!(response), @r###"
     {
       "message": "Invalid value in parameter `uids`: could not parse `pied` as a positive integer",
       "code": "invalid_task_uids",
@@ -220,7 +220,7 @@ async fn get_task_filter_error() {
 
     let (response, code) = server.tasks_filter("from=pied").await;
     assert_eq!(code, 400, "{}", response);
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    snapshot!(meili_snap::json_string!(response), @r###"
     {
       "message": "Invalid value in parameter `from`: could not parse `pied` as a positive integer",
       "code": "invalid_task_from",
@@ -231,7 +231,7 @@ async fn get_task_filter_error() {
 
     let (response, code) = server.tasks_filter("beforeStartedAt=pied").await;
     assert_eq!(code, 400, "{}", response);
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    snapshot!(meili_snap::json_string!(response), @r###"
     {
       "message": "Invalid value in parameter `beforeStartedAt`: `pied` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
       "code": "invalid_task_before_started_at",
@@ -245,9 +245,8 @@ async fn get_task_filter_error() {
 async fn delete_task_filter_error() {
     let server = Server::new().await;
 
-    let (response, code) = server.delete_tasks("").await;
-    assert_eq!(code, 400, "{}", response);
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    let task = server.delete_tasks("").await;
+    snapshot!(task, @r###"
     {
       "message": "Query parameters to filter the tasks to delete are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
       "code": "missing_task_filters",
@@ -256,9 +255,8 @@ async fn delete_task_filter_error() {
     }
     "###);
 
-    let (response, code) = server.delete_tasks("lol=pied").await;
-    assert_eq!(code, 400, "{}", response);
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    let task = server.delete_tasks("lol=pied").await;
+    snapshot!(task, @r###"
     {
       "message": "Unknown parameter `lol`: expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
       "code": "bad_request",
@@ -267,9 +265,8 @@ async fn delete_task_filter_error() {
     }
     "###);
 
-    let (response, code) = server.delete_tasks("uids=pied").await;
-    assert_eq!(code, 400, "{}", response);
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    let task = server.delete_tasks("uids=pied").await;
+    snapshot!(task, @r###"
     {
       "message": "Invalid value in parameter `uids`: could not parse `pied` as a positive integer",
       "code": "invalid_task_uids",
@@ -283,9 +280,8 @@ async fn delete_task_filter_error() {
 async fn cancel_task_filter_error() {
     let server = Server::new().await;
 
-    let (response, code) = server.cancel_tasks("").await;
-    assert_eq!(code, 400, "{}", response);
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    let task = server.cancel_tasks("").await;
+    snapshot!(task, @r###"
     {
       "message": "Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
       "code": "missing_task_filters",
@@ -294,9 +290,8 @@ async fn cancel_task_filter_error() {
     }
     "###);
 
-    let (response, code) = server.cancel_tasks("lol=pied").await;
-    assert_eq!(code, 400, "{}", response);
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    let task = server.cancel_tasks("lol=pied").await;
+    snapshot!(task, @r###"
     {
       "message": "Unknown parameter `lol`: expected one of `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
       "code": "bad_request",
@@ -305,9 +300,8 @@ async fn cancel_task_filter_error() {
     }
     "###);
 
-    let (response, code) = server.cancel_tasks("uids=pied").await;
-    assert_eq!(code, 400, "{}", response);
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    let task = server.cancel_tasks("uids=pied").await;
+    snapshot!(task, @r###"
     {
       "message": "Invalid value in parameter `uids`: could not parse `pied` as a positive integer",
       "code": "invalid_task_uids",
@@ -335,29 +329,29 @@ async fn test_summarized_task_view() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let (response, _) = index.create(None).await;
-    assert_valid_summarized_task!(response, "indexCreation", "test");
+    let task = index.create(None).await;
+    assert_valid_summarized_task!(task.value, "indexCreation", "test");
 
-    let (response, _) = index.update(None).await;
-    assert_valid_summarized_task!(response, "indexUpdate", "test");
+    let task = index.update(None).await;
+    assert_valid_summarized_task!(task.value, "indexUpdate", "test");
 
-    let (response, _) = index.update_settings(json!({})).await;
-    assert_valid_summarized_task!(response, "settingsUpdate", "test");
+    let task = index.update_settings(json!({})).await;
+    assert_valid_summarized_task!(task.value, "settingsUpdate", "test");
 
-    let (response, _) = index.update_documents(json!([{"id": 1}]), None).await;
-    assert_valid_summarized_task!(response, "documentAdditionOrUpdate", "test");
+    let task = index.update_documents(json!([{"id": 1}]), None).await;
+    assert_valid_summarized_task!(task.value, "documentAdditionOrUpdate", "test");
 
-    let (response, _) = index.add_documents(json!([{"id": 1}]), None).await;
-    assert_valid_summarized_task!(response, "documentAdditionOrUpdate", "test");
+    let task = index.add_documents(json!([{"id": 1}]), None).await;
+    assert_valid_summarized_task!(task.value, "documentAdditionOrUpdate", "test");
 
-    let (response, _) = index.delete_document(1).await;
-    assert_valid_summarized_task!(response, "documentDeletion", "test");
+    let task = index.delete_document(1).await;
+    assert_valid_summarized_task!(task.value, "documentDeletion", "test");
 
-    let (response, _) = index.clear_all_documents().await;
-    assert_valid_summarized_task!(response, "documentDeletion", "test");
+    let task = index.clear_all_documents().await;
+    assert_valid_summarized_task!(task.value, "documentDeletion", "test");
 
-    let (response, _) = index.delete().await;
-    assert_valid_summarized_task!(response, "indexDeletion", "test");
+    let task = index.delete().await;
+    assert_valid_summarized_task!(task.value, "indexDeletion", "test");
 }
 
 #[actix_web::test]
@@ -536,9 +530,8 @@ async fn test_summarized_settings_update() {
     let server = Server::new().await;
     let index = server.index("test");
     // here we should find my payload even in the failed task.
-    let (response, code) = index.update_settings(json!({ "rankingRules": ["custom"] })).await;
-    meili_snap::snapshot!(code, @"400 Bad Request");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    let task = index.update_settings(json!({ "rankingRules": ["custom"] })).await;
+    snapshot!(task, @r###"
     {
       "message": "Invalid value at `.rankingRules[0]`: `custom` ranking rule is invalid. Valid ranking rules are words, typo, sort, proximity, attribute, exactness and custom ranking rules.",
       "code": "invalid_settings_ranking_rules",
@@ -910,13 +903,11 @@ async fn test_summarized_task_cancelation() {
     let server = Server::new().await;
     let index = server.index("doggos");
     // to avoid being flaky we're only going to cancel an already finished task :(
-    index.create(None).await;
-    index.wait_task(0).await;
-    server.cancel_tasks("uids=0").await;
-    index.wait_task(1).await;
-    let (task, _) = index.get_task(1).await;
-    assert_json_snapshot!(task,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+    let task = index.create(None).await;
+    task.wait_for_completion().await;
+    let task = server.delete_tasks("uids=0").await;
+    let task = task.wait_for_completion().await;
+    snapshot!(task,
         @r###"
     {
       "uid": 1,
@@ -943,13 +934,11 @@ async fn test_summarized_task_deletion() {
     let server = Server::new().await;
     let index = server.index("doggos");
     // to avoid being flaky we're only going to delete an already finished task :(
-    index.create(None).await;
-    index.wait_task(0).await;
-    server.delete_tasks("uids=0").await;
-    index.wait_task(1).await;
-    let (task, _) = index.get_task(1).await;
-    assert_json_snapshot!(task,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+    let task = index.create(None).await;
+    task.wait_for_completion().await;
+    let task = server.delete_tasks("uids=0").await;
+    let task = task.wait_for_completion().await;
+    snapshot!(task,
         @r###"
     {
       "uid": 1,
@@ -974,11 +963,9 @@ async fn test_summarized_task_deletion() {
 #[actix_web::test]
 async fn test_summarized_dump_creation() {
     let server = Server::new().await;
-    server.create_dump().await;
-    server.wait_task(0).await;
-    let (task, _) = server.get_task(0).await;
-    assert_json_snapshot!(task,
-        { ".details.dumpUid" => "[dumpUid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+    let task = server.create_dump().await;
+    task.wait_for_completion().await;
+    snapshot!(task,
         @r###"
     {
       "uid": 0,

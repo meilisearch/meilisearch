@@ -148,9 +148,8 @@ impl Server {
         Task::new(&self.service, code, value)
     }
 
-    pub async fn tasks_filter(&self, filter: &str) -> Task<'_> {
-        let (value, code) = self.service.get(format!("/tasks?{}", filter)).await;
-        Task::new(&self.service, code, value)
+    pub async fn tasks_filter(&self, filter: &str) -> (Value, StatusCode) {
+        self.service.get(format!("/tasks?{}", filter)).await
     }
 
     pub async fn get_dump_status(&self, uid: &str) -> (Value, StatusCode) {

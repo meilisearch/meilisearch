@@ -39,12 +39,9 @@ async fn delete_one_document() {
 async fn clear_all_documents_unexisting_index() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (_response, code) = index.clear_all_documents().await;
-    assert_eq!(code, 202);
-
-    let response = index.wait_task(0).await;
-
-    assert_eq!(response["status"], "failed");
+    let task = index.clear_all_documents().await;
+    task.wait_for_completion().await;
+    snapshot!(task, @"failed");
 }
 
 #[actix_rt::test]
@@ -58,10 +55,9 @@ async fn clear_all_documents() {
         )
         .await;
     index.wait_task(0).await;
-    let (_response, code) = index.clear_all_documents().await;
-    assert_eq!(code, 202);
-
-    let _update = index.wait_task(1).await;
+    let task = index.clear_all_documents().await;
+    task.wait_for_completion().await;
+    snapshot!(task);
     let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
     assert_eq!(code, 200);
     assert!(response["results"].as_array().unwrap().is_empty());
@@ -73,10 +69,9 @@ async fn clear_all_documents_empty_index() {
     let index = server.index("test");
     index.create(None).await;
 
-    let (_response, code) = index.clear_all_documents().await;
-    assert_eq!(code, 202);
-
-    let _update = index.wait_task(0).await;
+    let task = index.clear_all_documents().await;
+    task.wait_for_completion().await;
+    snapshot!(task);
     let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
     assert_eq!(code, 200);
     assert!(response["results"].as_array().unwrap().is_empty());
@@ -86,33 +81,24 @@ async fn clear_all_documents_empty_index() {
 async fn error_delete_batch_unexisting_index() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (_, code) = index.delete_batch(vec![]).await;
-    let expected_response = json!({
-        "message": "Index `test` not found.",
-        "code": "index_not_found",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_not_found"
-    });
-    assert_eq!(code, 202);
-
-    let response = index.wait_task(0).await;
-
-    assert_eq!(response["status"], "failed");
-    assert_eq!(response["error"], expected_response);
+    let task = index.delete_batch(vec![]).await;
+    let task = task.wait_for_completion().await;
+    snapshot!(task, @"");
 }
 
 #[actix_rt::test]
 async fn delete_batch() {
     let server = Server::new().await;
     let index = server.index("test");
-    index.add_documents(json!([{ "id": 1, "content": "foobar" }, { "id": 0, "content": "foobar" }, { "id": 3, "content": "foobar" }]), Some("id")).await;
-    index.wait_task(0).await;
-    let (_response, code) = index.delete_batch(vec![1, 0]).await;
-    assert_eq!(code, 202);
+    let task = index.add_documents(json!([{ "id": 1, "content": "foobar" }, { "id": 0, "content": "foobar" }, { "id": 3, "content": "foobar" }]), Some("id")).await;
+    task.wait_for_completion().await;
 
-    let _update = index.wait_task(1).await;
+    let task = index.delete_batch(vec![1, 0]).await;
+    task.wait_for_completion().await;
+    snapshot!(task);
+
     let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
-    assert_eq!(code, 200);
+    snapshot!(code, @"");
     assert_eq!(response["results"].as_array().unwrap().len(), 1);
     assert_eq!(response["results"][0]["id"], json!(3));
 }
@@ -123,8 +109,8 @@ async fn delete_no_document_batch() {
     let index = server.index("test");
     index.add_documents(json!([{ "id": 1, "content": "foobar" }, { "id": 0, "content": "foobar" }, { "id": 3, "content": "foobar" }]), Some("id")).await;
     index.wait_task(0).await;
-    let (_response, code) = index.delete_batch(vec![]).await;
-    assert_eq!(code, 202, "{}", _response);
+    let task = index.delete_batch(vec![]).await;
+    snapshot!(task);
 
     let _update = index.wait_task(1).await;
     let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
@@ -137,7 +123,7 @@ async fn delete_document_by_filter() {
     let server = Server::new().await;
     let index = server.index("doggo");
     index.update_settings_filterable_attributes(json!(["color"])).await;
-    index
+    let task = index
         .add_documents(
             json!([
                 { "id": 0, "color": "red" },
@@ -148,11 +134,9 @@ async fn delete_document_by_filter() {
             Some("id"),
         )
         .await;
-    index.wait_task(1).await;
-    let (response, code) =
-        index.delete_document_by_filter(json!({ "filter": "color = blue"})).await;
-    snapshot!(code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
+    task.wait_for_completion().await;
+    let task = index.delete_document_by_filter(json!({ "filter": "color = blue"})).await;
+    snapshot!(task, @r###"
     {
       "taskUid": 2,
       "indexUid": "doggo",
@@ -162,8 +146,8 @@ async fn delete_document_by_filter() {
     }
     "###);
 
-    let response = index.wait_task(2).await;
-    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
+    let task = task.wait_for_completion().await;
+    snapshot!(task, @r###"
     {
       "uid": 2,
       "indexUid": "doggo",
@@ -202,10 +186,8 @@ async fn delete_document_by_filter() {
     }
     "###);
 
-    let (response, code) =
-        index.delete_document_by_filter(json!({ "filter": "color NOT EXISTS"})).await;
-    snapshot!(code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
+    let task = index.delete_document_by_filter(json!({ "filter": "color NOT EXISTS"})).await;
+    snapshot!(task, @r###"
     {
       "taskUid": 3,
       "indexUid": "doggo",
@@ -215,8 +197,8 @@ async fn delete_document_by_filter() {
     }
     "###);
 
-    let response = index.wait_task(3).await;
-    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
+    let task = task.wait_for_completion().await;
+    snapshot!(task, @r###"
     {
       "uid": 3,
       "indexUid": "doggo",
@@ -258,7 +240,7 @@ async fn delete_document_by_complex_filter() {
     let server = Server::new().await;
     let index = server.index("doggo");
     index.update_settings_filterable_attributes(json!(["color"])).await;
-    index
+    let task = index
         .add_documents(
             json!([
                 { "id": 0, "color": "red" },
@@ -270,14 +252,13 @@ async fn delete_document_by_complex_filter() {
             Some("id"),
         )
         .await;
-    index.wait_task(1).await;
-    let (response, code) = index
+    task.wait_for_completion().await;
+    let task = index
         .delete_document_by_filter(
             json!({ "filter": ["color != red", "color != green", "color EXISTS"] }),
         )
         .await;
-    snapshot!(code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
+    snapshot!(task, @r###"
     {
       "taskUid": 2,
       "indexUid": "doggo",
@@ -287,8 +268,8 @@ async fn delete_document_by_complex_filter() {
     }
     "###);
 
-    let response = index.wait_task(2).await;
-    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
+    let task = task.wait_for_completion().await;
+    snapshot!(task, @r###"
     {
       "uid": 2,
       "indexUid": "doggo",
@@ -331,11 +312,10 @@ async fn delete_document_by_complex_filter() {
     }
     "###);
 
-    let (response, code) = index
+    let task = index
         .delete_document_by_filter(json!({ "filter": [["color = green", "color NOT EXISTS"]] }))
         .await;
-    snapshot!(code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
+    snapshot!(task, @r###"
     {
       "taskUid": 3,
       "indexUid": "doggo",
@@ -345,8 +325,8 @@ async fn delete_document_by_complex_filter() {
     }
     "###);
 
-    let response = index.wait_task(3).await;
-    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
+    let task = task.wait_for_completion().await;
+    snapshot!(task, @r###"
     {
       "uid": 3,
       "indexUid": "doggo",

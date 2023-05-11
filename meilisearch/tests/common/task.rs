@@ -11,8 +11,8 @@ use super::service::Service;
 #[must_use = "You must use the task you send. Either `wait_for_completion` or drop it."]
 pub struct Task<'a> {
     service: &'a Service,
-    code: StatusCode,
-    value: Value,
+    pub code: StatusCode,
+    pub value: Value,
 }
 
 impl<'a> Task<'a> {
