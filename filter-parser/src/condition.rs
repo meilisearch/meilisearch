@@ -56,6 +56,17 @@ pub fn parse_contains(input: Span) -> IResult<FilterCondition> {
     Ok((input, FilterCondition::Condition { fid, op: Contains(value) }))
 }
 
+/// contains        = value "NOT" WS+ "CONTAINS" value
+pub fn parse_not_contains(input: Span) -> IResult<FilterCondition> {
+    let keyword = tuple((tag("NOT"), multispace1, tag("CONTAINS")));
+    let (input, (fid, _, value)) = tuple((parse_value, keyword, cut(parse_value)))(input)?;
+
+    Ok((
+        input,
+        FilterCondition::Not(Box::new(FilterCondition::Condition { fid, op: Contains(value) })),
+    ))
+}
+
 /// starts with     = value "STARTS" WS+ "WITH" value
 pub fn parse_starts_with(input: Span) -> IResult<FilterCondition> {
     let keyword = tuple((tag("STARTS"), multispace1, tag("WITH")));
@@ -64,12 +75,34 @@ pub fn parse_starts_with(input: Span) -> IResult<FilterCondition> {
     Ok((input, FilterCondition::Condition { fid, op: StartsWith(value) }))
 }
 
+/// starts with     = value "NOT" WS+ "STARTS" WS+ "WITH" value
+pub fn parse_not_starts_with(input: Span) -> IResult<FilterCondition> {
+    let keyword = tuple((tag("NOT"), multispace1, tag("STARTS"), multispace1, tag("WITH")));
+    let (input, (fid, _, value)) = tuple((parse_value, keyword, cut(parse_value)))(input)?;
+
+    Ok((
+        input,
+        FilterCondition::Not(Box::new(FilterCondition::Condition { fid, op: StartsWith(value) })),
+    ))
+}
+
 /// ends with       = value "ENDS" WS+ "WITH" value
 pub fn parse_ends_with(input: Span) -> IResult<FilterCondition> {
     let keyword = tuple((tag("ENDS"), multispace1, tag("WITH")));
     let (input, (fid, _, value)) = tuple((parse_value, keyword, cut(parse_value)))(input)?;
 
     Ok((input, FilterCondition::Condition { fid, op: EndsWith(value) }))
+}
+
+/// ends with       = value "NOT" WS+ "ENDS" WS+ "WITH" value
+pub fn parse_not_ends_with(input: Span) -> IResult<FilterCondition> {
+    let keyword = tuple((tag("NOT"), multispace1, tag("ENDS"), multispace1, tag("WITH")));
+    let (input, (fid, _, value)) = tuple((parse_value, keyword, cut(parse_value)))(input)?;
+
+    Ok((
+        input,
+        FilterCondition::Not(Box::new(FilterCondition::Condition { fid, op: EndsWith(value) })),
+    ))
 }
 
 /// null          = value "IS" WS+ "NULL"
