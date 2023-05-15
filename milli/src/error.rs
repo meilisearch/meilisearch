@@ -126,7 +126,7 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String> },
     #[error("{}", HeedError::BadOpenOptions)]
     InvalidLmdbOpenOptions,
-    #[error("The sort ranking rule must be specified in the ranking rules settings to use the sort parameter at search time.")]
+    #[error("You must specify where `sort` is listed in the rankingRules setting to use the sort parameter at search time")]
     SortRankingRuleMissing,
     #[error("The database file is in an invalid state.")]
     InvalidStoreFile,
