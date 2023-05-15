@@ -26,6 +26,9 @@ pub enum Condition<'a> {
     LowerThan(Token<'a>),
     LowerThanOrEqual(Token<'a>),
     Between { from: Token<'a>, to: Token<'a> },
+    StartsWith(Token<'a>),
+    EndsWith(Token<'a>),
+    Contains(Token<'a>),
 }
 
 /// condition      = value ("==" | ">" ...) value
@@ -44,6 +47,29 @@ pub fn parse_condition(input: Span) -> IResult<FilterCondition> {
     };
 
     Ok((input, condition))
+}
+
+/// contains        = value "CONTAINS" value
+pub fn parse_contains(input: Span) -> IResult<FilterCondition> {
+    let (input, (fid, _, value)) = tuple((parse_value, tag("CONTAINS"), cut(parse_value)))(input)?;
+
+    Ok((input, FilterCondition::Condition { fid, op: Contains(value) }))
+}
+
+/// starts with     = value "STARTS" WS+ "WITH" value
+pub fn parse_starts_with(input: Span) -> IResult<FilterCondition> {
+    let keyword = tuple((tag("STARTS"), multispace1, tag("WITH")));
+    let (input, (fid, _, value)) = tuple((parse_value, keyword, cut(parse_value)))(input)?;
+
+    Ok((input, FilterCondition::Condition { fid, op: StartsWith(value) }))
+}
+
+/// ends with       = value "ENDS" WS+ "WITH" value
+pub fn parse_ends_with(input: Span) -> IResult<FilterCondition> {
+    let keyword = tuple((tag("ENDS"), multispace1, tag("WITH")));
+    let (input, (fid, _, value)) = tuple((parse_value, keyword, cut(parse_value)))(input)?;
+
+    Ok((input, FilterCondition::Condition { fid, op: EndsWith(value) }))
 }
 
 /// null          = value "IS" WS+ "NULL"

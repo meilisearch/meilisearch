@@ -298,6 +298,15 @@ impl<'a> Filter<'a> {
                 let all_ids = index.documents_ids(rtxn)?;
                 return Ok(all_ids - docids);
             }
+            Condition::Contains(val) => {
+                todo!()
+            }
+            Condition::StartsWith(val) => {
+                todo!()
+            }
+            Condition::EndsWith(val) => {
+                todo!()
+            }
         };
 
         let mut output = RoaringBitmap::new();
