@@ -233,6 +233,8 @@ pub struct IndexSchedulerOptions {
     pub task_db_size: usize,
     /// The size, in bytes, with which a meilisearch index is opened the first time of each meilisearch index.
     pub index_base_map_size: usize,
+    /// Whether we open a meilisearch index with the MDB_WRITEMAP option or not.
+    pub enable_mdb_writemap: bool,
     /// The size, in bytes, by which the map size of an index is increased when it resized due to being full.
     pub index_growth_amount: usize,
     /// The number of indexes that can be concurrently opened in memory.
@@ -374,6 +376,11 @@ impl IndexScheduler {
         std::fs::create_dir_all(&options.indexes_path)?;
         std::fs::create_dir_all(&options.dumps_path)?;
 
+        if cfg!(windows) && options.enable_mdb_writemap {
+            // programmer error if this happens: in normal use passing the option on Windows is an error in main
+            panic!("Windows doesn't support the MDB_WRITEMAP LMDB option");
+        }
+
         let task_db_size = clamp_to_page_size(options.task_db_size);
         let budget = if options.indexer_config.skip_index_budget {
             IndexBudget {
@@ -396,25 +403,37 @@ impl IndexScheduler {
             .open(options.tasks_path)?;
         let file_store = FileStore::new(&options.update_file_path)?;
 
+        let mut wtxn = env.write_txn()?;
+        let all_tasks = env.create_database(&mut wtxn, Some(db_name::ALL_TASKS))?;
+        let status = env.create_database(&mut wtxn, Some(db_name::STATUS))?;
+        let kind = env.create_database(&mut wtxn, Some(db_name::KIND))?;
+        let index_tasks = env.create_database(&mut wtxn, Some(db_name::INDEX_TASKS))?;
+        let canceled_by = env.create_database(&mut wtxn, Some(db_name::CANCELED_BY))?;
+        let enqueued_at = env.create_database(&mut wtxn, Some(db_name::ENQUEUED_AT))?;
+        let started_at = env.create_database(&mut wtxn, Some(db_name::STARTED_AT))?;
+        let finished_at = env.create_database(&mut wtxn, Some(db_name::FINISHED_AT))?;
+        wtxn.commit()?;
+
         // allow unreachable_code to get rids of the warning in the case of a test build.
         let this = Self {
             must_stop_processing: MustStopProcessing::default(),
             processing_tasks: Arc::new(RwLock::new(ProcessingTasks::new())),
             file_store,
-            all_tasks: env.create_database(Some(db_name::ALL_TASKS))?,
-            status: env.create_database(Some(db_name::STATUS))?,
-            kind: env.create_database(Some(db_name::KIND))?,
-            index_tasks: env.create_database(Some(db_name::INDEX_TASKS))?,
-            canceled_by: env.create_database(Some(db_name::CANCELED_BY))?,
-            enqueued_at: env.create_database(Some(db_name::ENQUEUED_AT))?,
-            started_at: env.create_database(Some(db_name::STARTED_AT))?,
-            finished_at: env.create_database(Some(db_name::FINISHED_AT))?,
+            all_tasks,
+            status,
+            kind,
+            index_tasks,
+            canceled_by,
+            enqueued_at,
+            started_at,
+            finished_at,
             index_mapper: IndexMapper::new(
                 &env,
                 options.indexes_path,
                 budget.map_size,
                 options.index_growth_amount,
                 budget.index_count,
+                options.enable_mdb_writemap,
                 options.indexer_config,
             )?,
             env,
@@ -1471,6 +1490,7 @@ mod tests {
                 dumps_path: tempdir.path().join("dumps"),
                 task_db_size: 1000 * 1000, // 1 MB, we don't use MiB on purpose.
                 index_base_map_size: 1000 * 1000, // 1 MB, we don't use MiB on purpose.
+                enable_mdb_writemap: false,
                 index_growth_amount: 1000 * 1000, // 1 MB
                 index_count: 5,
                 indexer_config,

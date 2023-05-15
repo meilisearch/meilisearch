@@ -55,9 +55,11 @@ impl HeedAuthStore {
         let path = path.as_ref().join(AUTH_DB_PATH);
         create_dir_all(&path)?;
         let env = Arc::new(open_auth_store_env(path.as_ref())?);
-        let keys = env.create_database(Some(KEY_DB_NAME))?;
+        let mut wtxn = env.write_txn()?;
+        let keys = env.create_database(&mut wtxn, Some(KEY_DB_NAME))?;
         let action_keyid_index_expiration =
-            env.create_database(Some(KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME))?;
+            env.create_database(&mut wtxn, Some(KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME))?;
+        wtxn.commit()?;
         Ok(Self { env, keys, action_keyid_index_expiration, should_close_on_drop: true })
     }
 

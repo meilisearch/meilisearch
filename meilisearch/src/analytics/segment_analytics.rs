@@ -225,6 +225,7 @@ impl super::Analytics for SegmentAnalytics {
 struct Infos {
     env: String,
     experimental_enable_metrics: bool,
+    experimental_reduce_indexing_memory_usage: bool,
     db_path: bool,
     import_dump: bool,
     dump_dir: bool,
@@ -258,6 +259,7 @@ impl From<Opt> for Infos {
         let Opt {
             db_path,
             experimental_enable_metrics,
+            experimental_reduce_indexing_memory_usage,
             http_addr,
             master_key: _,
             env,
@@ -300,6 +302,7 @@ impl From<Opt> for Infos {
         Self {
             env,
             experimental_enable_metrics,
+            experimental_reduce_indexing_memory_usage,
             db_path: db_path != PathBuf::from("./data.ms"),
             import_dump: import_dump.is_some(),
             dump_dir: dump_dir != PathBuf::from("dumps/"),

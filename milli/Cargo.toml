@@ -25,8 +25,13 @@ flatten-serde-json = { path = "../flatten-serde-json" }
 fst = "0.4.7"
 fxhash = "0.2.1"
 geoutils = "0.5.1"
-grenad = { version = "0.4.4", default-features = false, features = ["tempfile"] }
-heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.5", default-features = false, features = ["lmdb", "sync-read-txn"] }
+grenad = { version = "0.4.4", default-features = false, features = [
+    "tempfile",
+] }
+heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.6", default-features = false, features = [
+    "lmdb",
+    "sync-read-txn",
+] }
 json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
 memmap2 = "0.5.10"
@@ -39,12 +44,17 @@ rstar = { version = "0.10.0", features = ["serde"] }
 serde = { version = "1.0.160", features = ["derive"] }
 serde_json = { version = "1.0.95", features = ["preserve_order"] }
 slice-group-by = "0.3.0"
-smallstr =  { version = "0.3.0", features = ["serde"] }
+smallstr = { version = "0.3.0", features = ["serde"] }
 smallvec = "1.10.0"
 smartstring = "1.0.1"
 tempfile = "3.5.0"
 thiserror = "1.0.40"
-time = { version = "0.3.20", features = ["serde-well-known", "formatting", "parsing", "macros"] }
+time = { version = "0.3.20", features = [
+    "serde-well-known",
+    "formatting",
+    "parsing",
+    "macros",
+] }
 uuid = { version = "1.3.1", features = ["v4"] }
 
 filter-parser = { path = "../filter-parser" }
@@ -63,13 +73,13 @@ big_s = "1.0.2"
 insta = "1.29.0"
 maplit = "1.0.2"
 md5 = "0.7.0"
-rand = {version = "0.8.5", features = ["small_rng"] }
+rand = { version = "0.8.5", features = ["small_rng"] }
 
 [target.'cfg(fuzzing)'.dev-dependencies]
 fuzzcheck = "0.12.1"
 
 [features]
-all-tokenizations = [ "charabia/default" ]
+all-tokenizations = ["charabia/default"]
 
 # Use POSIX semaphores instead of SysV semaphores in LMDB
 # For more information on this feature, see heed's Cargo.toml
