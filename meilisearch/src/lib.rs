@@ -232,6 +232,7 @@ fn open_or_create_database_unchecked(
             dumps_path: opt.dump_dir.clone(),
             task_db_size: opt.max_task_db_size.get_bytes() as usize,
             index_base_map_size: opt.max_index_size.get_bytes() as usize,
+            enable_mdb_writemap: opt.experimental_reduce_indexing_memory_usage,
             indexer_config: (&opt.indexer_options).try_into()?,
             autobatching_enabled: true,
             max_number_of_tasks: 1_000_000,

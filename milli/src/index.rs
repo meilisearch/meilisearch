@@ -167,7 +167,7 @@ impl Index {
         use db_name::*;
 
         options.max_dbs(23);
-        unsafe { options.flag(Flags::MdbAlwaysFreePages).flag(Flags::MdbWriteMap) };
+        unsafe { options.flag(Flags::MdbAlwaysFreePages) };
 
         let env = options.open(path)?;
         let mut wtxn = env.write_txn()?;

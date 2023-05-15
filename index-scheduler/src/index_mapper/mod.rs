@@ -66,6 +66,8 @@ pub struct IndexMapper {
     index_base_map_size: usize,
     /// The quantity by which the map size of an index is incremented upon reopening, in bytes.
     index_growth_amount: usize,
+    /// Weither we open a meilisearch index with the MDB_WRITEMAP option or not.
+    enable_mdb_writemap: bool,
     pub indexer_config: Arc<IndexerConfig>,
 }
 
@@ -123,6 +125,7 @@ impl IndexMapper {
         index_base_map_size: usize,
         index_growth_amount: usize,
         index_count: usize,
+        enable_mdb_writemap: bool,
         indexer_config: IndexerConfig,
     ) -> Result<Self> {
         let mut wtxn = env.write_txn()?;
@@ -137,6 +140,7 @@ impl IndexMapper {
             base_path,
             index_base_map_size,
             index_growth_amount,
+            enable_mdb_writemap,
             indexer_config: Arc::new(indexer_config),
         })
     }
@@ -167,6 +171,7 @@ impl IndexMapper {
                     &uuid,
                     &index_path,
                     date,
+                    self.enable_mdb_writemap,
                     self.index_base_map_size,
                 )?;
 
@@ -278,7 +283,11 @@ impl IndexMapper {
             .ok_or_else(|| Error::IndexNotFound(name.to_string()))?;
 
         // We remove the index from the in-memory index map.
-        self.index_map.write().unwrap().close_for_resize(&uuid, self.index_growth_amount);
+        self.index_map.write().unwrap().close_for_resize(
+            &uuid,
+            self.enable_mdb_writemap,
+            self.index_growth_amount,
+        );
 
         Ok(())
     }
@@ -343,6 +352,7 @@ impl IndexMapper {
                                 &uuid,
                                 &index_path,
                                 None,
+                                self.enable_mdb_writemap,
                                 self.index_base_map_size,
                             )?;
                         }
