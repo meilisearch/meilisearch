@@ -66,7 +66,7 @@ pub struct IndexMapper {
     index_base_map_size: usize,
     /// The quantity by which the map size of an index is incremented upon reopening, in bytes.
     index_growth_amount: usize,
-    /// Weither we open a meilisearch index with the MDB_WRITEMAP option or not.
+    /// Whether we open a meilisearch index with the MDB_WRITEMAP option or not.
     enable_mdb_writemap: bool,
     pub indexer_config: Arc<IndexerConfig>,
 }

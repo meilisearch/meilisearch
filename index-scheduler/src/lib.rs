@@ -233,7 +233,7 @@ pub struct IndexSchedulerOptions {
     pub task_db_size: usize,
     /// The size, in bytes, with which a meilisearch index is opened the first time of each meilisearch index.
     pub index_base_map_size: usize,
-    /// Weither we open a meilisearch index with the MDB_WRITEMAP option or not.
+    /// Whether we open a meilisearch index with the MDB_WRITEMAP option or not.
     pub enable_mdb_writemap: bool,
     /// The size, in bytes, by which the map size of an index is increased when it resized due to being full.
     pub index_growth_amount: usize,
@@ -377,6 +377,7 @@ impl IndexScheduler {
         std::fs::create_dir_all(&options.dumps_path)?;
 
         if cfg!(windows) && options.enable_mdb_writemap {
+            // programmer error if this happens: in normal use passing the option on Windows is an error in main
             panic!("Windows doesn't support the MDB_WRITEMAP LMDB option");
         }
 

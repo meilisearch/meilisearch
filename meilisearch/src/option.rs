@@ -295,16 +295,7 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_enable_metrics: bool,
 
-    /// Experimentally reduces the amount of RAM used by the engine when indexing documents.
-    ///
-    /// You must not use this flag in production. It is experimental and can corrupt the database
-    /// or be removed in future versions. It can also be stabilized or directly integrated
-    /// into the engine later.
-    ///
-    /// This flag enables the MDB_WRITEMAP option of LMDB, making the internal key-value store
-    /// use much less RAM than usual. Unfortunately, it can reduce the write speed of it and therefore
-    /// slow down the engine. You can read more and tell us about your experience on the dedicated
-    /// discussion: <https://github.com/meilisearch/product/discussions/652>.
+    /// Experimental RAM reduction during indexing, do not use in production, see: <https://github.com/meilisearch/product/discussions/652>
     #[clap(long, env = MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE)]
     #[serde(default)]
     pub experimental_reduce_indexing_memory_usage: bool,
