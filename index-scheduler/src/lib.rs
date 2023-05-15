@@ -396,19 +396,30 @@ impl IndexScheduler {
             .open(options.tasks_path)?;
         let file_store = FileStore::new(&options.update_file_path)?;
 
+        let mut wtxn = env.write_txn()?;
+        let all_tasks = env.create_database(&mut wtxn, Some(db_name::ALL_TASKS))?;
+        let status = env.create_database(&mut wtxn, Some(db_name::STATUS))?;
+        let kind = env.create_database(&mut wtxn, Some(db_name::KIND))?;
+        let index_tasks = env.create_database(&mut wtxn, Some(db_name::INDEX_TASKS))?;
+        let canceled_by = env.create_database(&mut wtxn, Some(db_name::CANCELED_BY))?;
+        let enqueued_at = env.create_database(&mut wtxn, Some(db_name::ENQUEUED_AT))?;
+        let started_at = env.create_database(&mut wtxn, Some(db_name::STARTED_AT))?;
+        let finished_at = env.create_database(&mut wtxn, Some(db_name::FINISHED_AT))?;
+        wtxn.commit()?;
+
         // allow unreachable_code to get rids of the warning in the case of a test build.
         let this = Self {
             must_stop_processing: MustStopProcessing::default(),
             processing_tasks: Arc::new(RwLock::new(ProcessingTasks::new())),
             file_store,
-            all_tasks: env.create_database(Some(db_name::ALL_TASKS))?,
-            status: env.create_database(Some(db_name::STATUS))?,
-            kind: env.create_database(Some(db_name::KIND))?,
-            index_tasks: env.create_database(Some(db_name::INDEX_TASKS))?,
-            canceled_by: env.create_database(Some(db_name::CANCELED_BY))?,
-            enqueued_at: env.create_database(Some(db_name::ENQUEUED_AT))?,
-            started_at: env.create_database(Some(db_name::STARTED_AT))?,
-            finished_at: env.create_database(Some(db_name::FINISHED_AT))?,
+            all_tasks,
+            status,
+            kind,
+            index_tasks,
+            canceled_by,
+            enqueued_at,
+            started_at,
+            finished_at,
             index_mapper: IndexMapper::new(
                 &env,
                 options.indexes_path,

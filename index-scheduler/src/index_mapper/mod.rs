@@ -125,10 +125,15 @@ impl IndexMapper {
         index_count: usize,
         indexer_config: IndexerConfig,
     ) -> Result<Self> {
+        let mut wtxn = env.write_txn()?;
+        let index_mapping = env.create_database(&mut wtxn, Some(INDEX_MAPPING))?;
+        let index_stats = env.create_database(&mut wtxn, Some(INDEX_STATS))?;
+        wtxn.commit()?;
+
         Ok(Self {
             index_map: Arc::new(RwLock::new(IndexMap::new(index_count))),
-            index_mapping: env.create_database(Some(INDEX_MAPPING))?,
-            index_stats: env.create_database(Some(INDEX_STATS))?,
+            index_mapping,
+            index_stats,
             base_path,
             index_base_map_size,
             index_growth_amount,
