@@ -209,7 +209,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         self.traverse_breadth_first_backward(self.query_graph.end_node, |cur_node| {
             if cur_node == self.query_graph.end_node {
                 *costs_to_end.get_mut(self.query_graph.end_node) = vec![0];
-                return true;
+                return;
             }
             let mut self_costs = Vec::<u64>::new();
 
@@ -226,7 +226,6 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
             self_costs.dedup();
 
             *costs_to_end.get_mut(cur_node) = self_costs;
-            true
         });
         costs_to_end
     }
@@ -246,19 +245,18 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                 for cost in costs.get(edge.dest_node).iter() {
                     costs_to_remove.remove(&(*cost + edge.cost as u64));
                     if costs_to_remove.is_empty() {
-                        return false;
+                        return;
                     }
                 }
             }
             if costs_to_remove.is_empty() {
-                return false;
+                return;
             }
             let mut new_costs = BTreeSet::from_iter(costs.get(cur_node).iter().copied());
             for c in costs_to_remove {
                 new_costs.remove(&c);
             }
             *costs.get_mut(cur_node) = new_costs.into_iter().collect();
-            true
         });
     }
 
@@ -269,7 +267,7 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
     pub fn traverse_breadth_first_backward(
         &self,
         from: Interned<QueryNode>,
-        mut visit: impl FnMut(Interned<QueryNode>) -> bool,
+        mut visit: impl FnMut(Interned<QueryNode>),
     ) {
         let mut reachable = SmallBitmap::for_interned_values_in(&self.query_graph.nodes);
         {
@@ -312,13 +310,11 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                 continue;
             }
             unreachable_or_visited.insert(cur_node);
-            if visit(cur_node) {
-                for prev_node in self.query_graph.nodes.get(cur_node).predecessors.iter() {
-                    if !enqueued.contains(prev_node) && !unreachable_or_visited.contains(prev_node)
-                    {
-                        stack.push_back(prev_node);
-                        enqueued.insert(prev_node);
-                    }
+            visit(cur_node);
+            for prev_node in self.query_graph.nodes.get(cur_node).predecessors.iter() {
+                if !enqueued.contains(prev_node) && !unreachable_or_visited.contains(prev_node) {
+                    stack.push_back(prev_node);
+                    enqueued.insert(prev_node);
                 }
             }
         }
