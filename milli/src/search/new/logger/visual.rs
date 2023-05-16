@@ -462,7 +462,7 @@ fill: \"#B6E2D3\"
                 shape: class
                 max_nbr_typo: {}",
                     term_subset.description(ctx),
-                    term_subset.max_nbr_typos(ctx)
+                    term_subset.max_typo_cost(ctx)
                 )?;
 
                 for w in term_subset.all_single_words_except_prefix_db(ctx)? {

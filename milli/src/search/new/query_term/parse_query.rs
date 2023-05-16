@@ -217,7 +217,7 @@ pub fn make_ngram(
         original: ngram_str_interned,
         ngram_words: Some(words_interned),
         is_prefix,
-        max_nbr_typos,
+        max_levenshtein_distance: max_nbr_typos,
         zero_typo: term.zero_typo,
         one_typo: Lazy::Uninit,
         two_typo: Lazy::Uninit,
@@ -271,7 +271,7 @@ impl PhraseBuilder {
                 QueryTerm {
                     original: ctx.word_interner.insert(phrase_desc),
                     ngram_words: None,
-                    max_nbr_typos: 0,
+                    max_levenshtein_distance: 0,
                     is_prefix: false,
                     zero_typo: ZeroTypoTerm {
                         phrase: Some(phrase),

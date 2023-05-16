@@ -50,7 +50,7 @@ impl RankingRuleGraphTrait for TypoGraph {
         // 3-gram -> equivalent to 2 typos
         let base_cost = if term.term_ids.len() == 1 { 0 } else { term.term_ids.len() as u32 };
 
-        for nbr_typos in 0..=term.term_subset.max_nbr_typos(ctx) {
+        for nbr_typos in 0..=term.term_subset.max_typo_cost(ctx) {
             let mut term = term.clone();
             match nbr_typos {
                 0 => {
