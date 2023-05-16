@@ -13,7 +13,7 @@ use serde_json::Value;
 use super::facet_range_search;
 use crate::error::{Error, UserError};
 use crate::heed_codec::facet::{
-    FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec, OrderedF64Codec,
+    FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec, OrderedF64Codec,
 };
 use crate::{distance_between_two_points, lat_lng_to_xyz, FieldId, Index, Result};
 
@@ -309,9 +309,10 @@ impl<'a> Filter<'a> {
                     .remap_data_type::<LazyDecode<FacetGroupValueCodec>>()
                     .filter_map(|result| match result {
                         Ok((FacetGroupKey { left_bound, .. }, lazy_group_value)) => {
-                            match finder.find(left_bound.as_bytes()) {
-                                Some(_) => Some(lazy_group_value.decode().map(|gv| gv.bitmap)),
-                                None => None,
+                            if finder.find(left_bound.as_bytes()).is_some() {
+                                Some(lazy_group_value.decode().map(|gv| gv.bitmap))
+                            } else {
+                                None
                             }
                         }
                         Err(e) => Some(Err(e)),
@@ -334,18 +335,22 @@ impl<'a> Filter<'a> {
                 let finder = FinderRev::new(val.value());
                 let value_len = finder.needle().len();
                 let base = FacetGroupKey { field_id, level: 0, left_bound: "" };
-                // TODO use the roaring::MultiOps trait
-                let mut docids = RoaringBitmap::new();
-                for result in strings_db
+                let docids = strings_db
                     .prefix_iter(rtxn, &base)?
                     .remap_data_type::<LazyDecode<FacetGroupValueCodec>>()
-                {
-                    let (FacetGroupKey { left_bound, .. }, lazy_group_value) = result?;
-                    if finder.rfind(left_bound.as_bytes()) == Some(left_bound.len() - value_len) {
-                        let FacetGroupValue { bitmap, .. } = lazy_group_value.decode()?;
-                        docids |= bitmap;
-                    }
-                }
+                    .filter_map(|result| match result {
+                        Ok((FacetGroupKey { left_bound, .. }, lazy_group_value)) => {
+                            if finder.rfind(left_bound.as_bytes())
+                                == Some(left_bound.len() - value_len)
+                            {
+                                Some(lazy_group_value.decode().map(|gv| gv.bitmap))
+                            } else {
+                                None
+                            }
+                        }
+                        Err(e) => Some(Err(e)),
+                    })
+                    .union()?;
 
                 return Ok(docids);
             }
