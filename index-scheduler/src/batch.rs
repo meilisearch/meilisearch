@@ -24,6 +24,7 @@ use std::io::BufWriter;
 
 use dump::IndexMetadata;
 use log::{debug, error, info};
+use meilisearch_types::error::Code;
 use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
 use meilisearch_types::milli::heed::CompactionOption;
@@ -1491,7 +1492,12 @@ fn delete_document_by_filter(filter: &serde_json::Value, index: Index) -> Result
     Ok(if let Some(filter) = filter {
         let mut wtxn = index.write_txn()?;
 
-        let candidates = filter.evaluate(&wtxn, &index)?;
+        let candidates = filter.evaluate(&wtxn, &index).map_err(|err| match err {
+            milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
+                Error::from(err).with_custom_error_code(Code::InvalidDocumentFilter)
+            }
+            e => e.into(),
+        })?;
         let mut delete_operation = DeleteDocuments::new(&mut wtxn, &index)?;
         delete_operation.delete_documents(&candidates);
         let deleted_documents =
