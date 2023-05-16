@@ -4,6 +4,7 @@ use std::ops::Bound::{self, Excluded, Included};
 
 use either::Either;
 pub use filter_parser::{Condition, Error as FPError, FilterCondition, Span, Token};
+use heed::types::DecodeIgnore;
 use heed::LazyDecode;
 use memchr::memmem::{Finder, FinderRev};
 use roaring::RoaringBitmap;
@@ -319,7 +320,17 @@ impl<'a> Filter<'a> {
                 return Ok(docids);
             }
             Condition::StartsWith(val) => {
-                todo!()
+                let prefix = FacetGroupKey { field_id, level: 0, left_bound: val.value() };
+                // TODO use the roaring::MultiOps trait
+                let mut docids = RoaringBitmap::new();
+                for result in
+                    strings_db.prefix_iter(rtxn, &prefix)?.remap_key_type::<DecodeIgnore>()
+                {
+                    let ((), group_value) = result?;
+                    docids |= group_value.bitmap;
+                }
+
+                return Ok(docids);
             }
             Condition::EndsWith(val) => {
                 let finder = FinderRev::new(val.value());
