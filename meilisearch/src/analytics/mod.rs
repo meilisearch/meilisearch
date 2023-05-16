@@ -67,6 +67,12 @@ pub enum DocumentDeletionKind {
     PerFilter,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum DocumentFetchKind {
+    PerDocumentId,
+    Normal { with_filter: bool, limit: usize, offset: usize },
+}
+
 pub trait Analytics: Sync + Send {
     fn instance_uid(&self) -> Option<&InstanceUid>;
 
@@ -89,6 +95,12 @@ pub trait Analytics: Sync + Send {
         index_creation: bool,
         request: &HttpRequest,
     );
+
+    // this method should be called to aggregate a fetch documents request
+    fn get_fetch_documents(&self, documents_query: &DocumentFetchKind, request: &HttpRequest);
+
+    // this method should be called to aggregate a fetch documents request
+    fn post_fetch_documents(&self, documents_query: &DocumentFetchKind, request: &HttpRequest);
 
     // this method should be called to aggregate a add documents request
     fn delete_documents(&self, kind: DocumentDeletionKind, request: &HttpRequest);
