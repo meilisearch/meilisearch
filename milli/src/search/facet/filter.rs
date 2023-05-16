@@ -5,7 +5,7 @@ use std::ops::Bound::{self, Excluded, Included};
 use either::Either;
 pub use filter_parser::{Condition, Error as FPError, FilterCondition, Span, Token};
 use heed::LazyDecode;
-use memchr::memmem::Finder;
+use memchr::memmem::{Finder, FinderRev};
 use roaring::RoaringBitmap;
 use serde_json::Value;
 
@@ -322,7 +322,23 @@ impl<'a> Filter<'a> {
                 todo!()
             }
             Condition::EndsWith(val) => {
-                todo!()
+                let finder = FinderRev::new(val.value());
+                let value_len = finder.needle().len();
+                let base = FacetGroupKey { field_id, level: 0, left_bound: "" };
+                // TODO use the roaring::MultiOps trait
+                let mut docids = RoaringBitmap::new();
+                for result in strings_db
+                    .prefix_iter(rtxn, &base)?
+                    .remap_data_type::<LazyDecode<FacetGroupValueCodec>>()
+                {
+                    let (FacetGroupKey { left_bound, .. }, lazy_group_value) = result?;
+                    if finder.rfind(left_bound.as_bytes()) == Some(left_bound.len() - value_len) {
+                        let FacetGroupValue { bitmap, .. } = lazy_group_value.decode()?;
+                        docids |= bitmap;
+                    }
+                }
+
+                return Ok(docids);
             }
         };
 
