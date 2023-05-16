@@ -295,12 +295,6 @@ impl<'a> Filter<'a> {
                 };
                 return Ok(string_docids | number_docids);
             }
-            Condition::NotEqual(val) => {
-                let operator = Condition::Equal(val.clone());
-                let docids = Self::evaluate_operator(rtxn, index, field_id, &operator)?;
-                let all_ids = index.documents_ids(rtxn)?;
-                return Ok(all_ids - docids);
-            }
             Condition::Contains(val) => {
                 let value = crate::normalize_facet(val.value());
                 let finder = Finder::new(&value);

@@ -19,7 +19,6 @@ pub enum Condition<'a> {
     GreaterThan(Token<'a>),
     GreaterThanOrEqual(Token<'a>),
     Equal(Token<'a>),
-    NotEqual(Token<'a>),
     Null,
     Empty,
     Exists,
@@ -39,7 +38,9 @@ pub fn parse_condition(input: Span) -> IResult<FilterCondition> {
     let condition = match *op.fragment() {
         "<=" => FilterCondition::Condition { fid, op: LowerThanOrEqual(value) },
         ">=" => FilterCondition::Condition { fid, op: GreaterThanOrEqual(value) },
-        "!=" => FilterCondition::Condition { fid, op: NotEqual(value) },
+        "!=" => {
+            FilterCondition::Not(Box::new(FilterCondition::Condition { fid, op: Equal(value) }))
+        }
         "<" => FilterCondition::Condition { fid, op: LowerThan(value) },
         ">" => FilterCondition::Condition { fid, op: GreaterThan(value) },
         "=" => FilterCondition::Condition { fid, op: Equal(value) },

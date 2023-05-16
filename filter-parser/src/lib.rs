@@ -534,7 +534,7 @@ pub mod tests {
         insta::assert_display_snapshot!(p(" colour IN [green, blue] "), @"{colour} IN[{green}, {blue}, ]");
 
         // Test conditions
-        insta::assert_display_snapshot!(p("channel != ponce"), @"{channel} != {ponce}");
+        insta::assert_display_snapshot!(p("channel != ponce"), @"NOT ({channel} = {ponce})");
         insta::assert_display_snapshot!(p("NOT channel = ponce"), @"NOT ({channel} = {ponce})");
         insta::assert_display_snapshot!(p("subscribers < 1000"), @"{subscribers} < {1000}");
         insta::assert_display_snapshot!(p("subscribers > 1000"), @"{subscribers} > {1000}");
@@ -604,17 +604,17 @@ pub mod tests {
         insta::assert_display_snapshot!(p("_geoBoundingBox([12,13],[14,15])"), @"_geoBoundingBox([{12}, {13}], [{14}, {15}])");
 
         // Test OR + AND
-        insta::assert_display_snapshot!(p("channel = ponce AND 'dog race' != 'bernese mountain'"), @"AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ]");
-        insta::assert_display_snapshot!(p("channel = ponce OR 'dog race' != 'bernese mountain'"), @"OR[{channel} = {ponce}, {dog race} != {bernese mountain}, ]");
-        insta::assert_display_snapshot!(p("channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000"), @"OR[AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ], {subscribers} > {1000}, ]");
+        insta::assert_display_snapshot!(p("channel = ponce AND 'dog race' != 'bernese mountain'"), @"AND[{channel} = {ponce}, NOT ({dog race} = {bernese mountain}), ]");
+        insta::assert_display_snapshot!(p("channel = ponce OR 'dog race' != 'bernese mountain'"), @"OR[{channel} = {ponce}, NOT ({dog race} = {bernese mountain}), ]");
+        insta::assert_display_snapshot!(p("channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000"), @"OR[AND[{channel} = {ponce}, NOT ({dog race} = {bernese mountain}), ], {subscribers} > {1000}, ]");
         insta::assert_display_snapshot!(
         p("channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000 OR colour = red OR colour = blue AND size = 7"),
-        @"OR[AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ], {subscribers} > {1000}, {colour} = {red}, AND[{colour} = {blue}, {size} = {7}, ], ]"
+        @"OR[AND[{channel} = {ponce}, NOT ({dog race} = {bernese mountain}), ], {subscribers} > {1000}, {colour} = {red}, AND[{colour} = {blue}, {size} = {7}, ], ]"
         );
 
         // Test parentheses
-        insta::assert_display_snapshot!(p("channel = ponce AND ( 'dog race' != 'bernese mountain' OR subscribers > 1000 )"), @"AND[{channel} = {ponce}, OR[{dog race} != {bernese mountain}, {subscribers} > {1000}, ], ]");
-        insta::assert_display_snapshot!(p("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000) AND _geoRadius(12, 13, 14)"), @"AND[OR[AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ], {subscribers} > {1000}, ], _geoRadius({12}, {13}, {14}), ]");
+        insta::assert_display_snapshot!(p("channel = ponce AND ( 'dog race' != 'bernese mountain' OR subscribers > 1000 )"), @"AND[{channel} = {ponce}, OR[NOT ({dog race} = {bernese mountain}), {subscribers} > {1000}, ], ]");
+        insta::assert_display_snapshot!(p("(channel = ponce AND 'dog race' != 'bernese mountain' OR subscribers > 1000) AND _geoRadius(12, 13, 14)"), @"AND[OR[AND[{channel} = {ponce}, NOT ({dog race} = {bernese mountain}), ], {subscribers} > {1000}, ], _geoRadius({12}, {13}, {14}), ]");
 
         // Test recursion
         // This is the most that is allowed
@@ -939,7 +939,6 @@ impl<'a> std::fmt::Display for Condition<'a> {
             Condition::GreaterThan(token) => write!(f, "> {token}"),
             Condition::GreaterThanOrEqual(token) => write!(f, ">= {token}"),
             Condition::Equal(token) => write!(f, "= {token}"),
-            Condition::NotEqual(token) => write!(f, "!= {token}"),
             Condition::Null => write!(f, "IS NULL"),
             Condition::Empty => write!(f, "IS EMPTY"),
             Condition::Exists => write!(f, "EXISTS"),
