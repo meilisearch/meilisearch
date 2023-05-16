@@ -7,7 +7,7 @@ pub use filter_parser::{Condition, Error as FPError, FilterCondition, Span, Toke
 use heed::types::DecodeIgnore;
 use heed::LazyDecode;
 use memchr::memmem::{Finder, FinderRev};
-use roaring::RoaringBitmap;
+use roaring::{MultiOps, RoaringBitmap};
 use serde_json::Value;
 
 use super::facet_range_search;
@@ -320,16 +320,13 @@ impl<'a> Filter<'a> {
                 return Ok(docids);
             }
             Condition::StartsWith(val) => {
+                // This can be implemented with the string level layers for a faster execution
                 let prefix = FacetGroupKey { field_id, level: 0, left_bound: val.value() };
-                // TODO use the roaring::MultiOps trait
-                let mut docids = RoaringBitmap::new();
-                for result in
-                    strings_db.prefix_iter(rtxn, &prefix)?.remap_key_type::<DecodeIgnore>()
-                {
-                    let ((), group_value) = result?;
-                    docids |= group_value.bitmap;
-                }
-
+                let docids = strings_db
+                    .prefix_iter(rtxn, &prefix)?
+                    .remap_key_type::<DecodeIgnore>()
+                    .map(|result| result.map(|(_, gv)| gv.bitmap))
+                    .union()?;
                 return Ok(docids);
             }
             Condition::EndsWith(val) => {
