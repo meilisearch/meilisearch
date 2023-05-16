@@ -275,7 +275,8 @@ fn find_split_words(ctx: &mut SearchContext, word: &str) -> Result<Option<Intern
 impl Interned<QueryTerm> {
     fn initialize_one_typo_subterm(self, ctx: &mut SearchContext) -> Result<()> {
         let self_mut = ctx.term_interner.get_mut(self);
-        let QueryTerm { original, is_prefix, one_typo, max_nbr_typos, .. } = self_mut;
+        let QueryTerm { original, is_prefix, zero_typo, one_typo, max_nbr_typos, .. } = self_mut;
+        let is_phrase = zero_typo.phrase.is_some();
         let original = *original;
         let is_prefix = *is_prefix;
         // let original_str = ctx.word_interner.get(*original).to_owned();
@@ -300,13 +301,17 @@ impl Interned<QueryTerm> {
             })?;
         }
 
-        let original_str = ctx.word_interner.get(original).to_owned();
-        let split_words = find_split_words(ctx, original_str.as_str())?;
+        let split_words = if !is_phrase {
+            let original_str = ctx.word_interner.get(original).to_owned();
+            find_split_words(ctx, original_str.as_str())?
+        } else {
+            None
+        };
 
         let self_mut = ctx.term_interner.get_mut(self);
 
         // Only add the split words to the derivations if:
-        // 1. the term is not an ngram; OR
+        // 1. the term is neither an ngram nor a phrase; OR
         // 2. the term is an ngram, but the split words are different from the ngram's component words
         let split_words = if let Some((ngram_words, split_words)) =
             self_mut.ngram_words.as_ref().zip(split_words.as_ref())
