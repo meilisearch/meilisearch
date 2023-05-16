@@ -302,7 +302,8 @@ impl<'a> Filter<'a> {
                 return Ok(all_ids - docids);
             }
             Condition::Contains(val) => {
-                let finder = Finder::new(val.value());
+                let value = crate::normalize_facet(val.value());
+                let finder = Finder::new(&value);
                 let base = FacetGroupKey { field_id, level: 0, left_bound: "" };
                 let docids = strings_db
                     .prefix_iter(rtxn, &base)?
@@ -323,7 +324,8 @@ impl<'a> Filter<'a> {
             }
             Condition::StartsWith(val) => {
                 // This can be implemented with the string level layers for a faster execution
-                let prefix = FacetGroupKey { field_id, level: 0, left_bound: val.value() };
+                let value = crate::normalize_facet(val.value());
+                let prefix = FacetGroupKey { field_id, level: 0, left_bound: value.as_str() };
                 let docids = strings_db
                     .prefix_iter(rtxn, &prefix)?
                     .remap_key_type::<DecodeIgnore>()
@@ -332,7 +334,8 @@ impl<'a> Filter<'a> {
                 return Ok(docids);
             }
             Condition::EndsWith(val) => {
-                let finder = FinderRev::new(val.value());
+                let value = crate::normalize_facet(val.value());
+                let finder = FinderRev::new(&value);
                 let value_len = finder.needle().len();
                 let base = FacetGroupKey { field_id, level: 0, left_bound: "" };
                 let docids = strings_db
@@ -340,9 +343,7 @@ impl<'a> Filter<'a> {
                     .remap_data_type::<LazyDecode<FacetGroupValueCodec>>()
                     .filter_map(|result| match result {
                         Ok((FacetGroupKey { left_bound, .. }, lazy_group_value)) => {
-                            if finder.rfind(left_bound.as_bytes())
-                                == Some(left_bound.len() - value_len)
-                            {
+                            if finder.rfind(left_bound) == Some(left_bound.len() - value_len) {
                                 Some(lazy_group_value.decode().map(|gv| gv.bitmap))
                             } else {
                                 None
