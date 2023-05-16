@@ -4,13 +4,15 @@ use std::ops::Bound::{self, Excluded, Included};
 
 use either::Either;
 pub use filter_parser::{Condition, Error as FPError, FilterCondition, Span, Token};
+use heed::LazyDecode;
+use memchr::memmem::Finder;
 use roaring::RoaringBitmap;
 use serde_json::Value;
 
 use super::facet_range_search;
 use crate::error::{Error, UserError};
 use crate::heed_codec::facet::{
-    FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec, OrderedF64Codec,
+    FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec, OrderedF64Codec,
 };
 use crate::{distance_between_two_points, lat_lng_to_xyz, FieldId, Index, Result};
 
@@ -299,7 +301,22 @@ impl<'a> Filter<'a> {
                 return Ok(all_ids - docids);
             }
             Condition::Contains(val) => {
-                todo!()
+                let finder = Finder::new(val.value());
+                let base = FacetGroupKey { field_id, level: 0, left_bound: "" };
+                // TODO use the roaring::MultiOps trait
+                let mut docids = RoaringBitmap::new();
+                for result in strings_db
+                    .prefix_iter(rtxn, &base)?
+                    .remap_data_type::<LazyDecode<FacetGroupValueCodec>>()
+                {
+                    let (FacetGroupKey { left_bound, .. }, lazy_group_value) = result?;
+                    if finder.find(left_bound.as_bytes()).is_some() {
+                        let FacetGroupValue { bitmap, .. } = lazy_group_value.decode()?;
+                        docids |= bitmap;
+                    }
+                }
+
+                return Ok(docids);
             }
             Condition::StartsWith(val) => {
                 todo!()
