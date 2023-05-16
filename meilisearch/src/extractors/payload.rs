@@ -83,7 +83,7 @@ mod tests {
     use super::*;
 
     #[actix_rt::test]
-    async fn example_test() {
+    async fn payload_to_large() {
         let stream = futures::stream::iter(vec![
             Ok(Bytes::from("1")),
             Ok(Bytes::from("2")),
