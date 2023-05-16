@@ -540,7 +540,12 @@ fn retrieve_documents<S: AsRef<str>>(
     };
 
     let candidates = if let Some(filter) = filter {
-        filter.evaluate(&rtxn, index)?
+        filter.evaluate(&rtxn, index).map_err(|err| match err {
+            milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
+                ResponseError::from_msg(err.to_string(), Code::InvalidDocumentFilter)
+            }
+            e => e.into(),
+        })?
     } else {
         index.documents_ids(&rtxn)?
     };
