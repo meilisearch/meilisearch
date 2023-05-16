@@ -304,18 +304,19 @@ impl<'a> Filter<'a> {
             Condition::Contains(val) => {
                 let finder = Finder::new(val.value());
                 let base = FacetGroupKey { field_id, level: 0, left_bound: "" };
-                // TODO use the roaring::MultiOps trait
-                let mut docids = RoaringBitmap::new();
-                for result in strings_db
+                let docids = strings_db
                     .prefix_iter(rtxn, &base)?
                     .remap_data_type::<LazyDecode<FacetGroupValueCodec>>()
-                {
-                    let (FacetGroupKey { left_bound, .. }, lazy_group_value) = result?;
-                    if finder.find(left_bound.as_bytes()).is_some() {
-                        let FacetGroupValue { bitmap, .. } = lazy_group_value.decode()?;
-                        docids |= bitmap;
-                    }
-                }
+                    .filter_map(|result| match result {
+                        Ok((FacetGroupKey { left_bound, .. }, lazy_group_value)) => {
+                            match finder.find(left_bound.as_bytes()) {
+                                Some(_) => Some(lazy_group_value.decode().map(|gv| gv.bitmap)),
+                                None => None,
+                            }
+                        }
+                        Err(e) => Some(Err(e)),
+                    })
+                    .union()?;
 
                 return Ok(docids);
             }
