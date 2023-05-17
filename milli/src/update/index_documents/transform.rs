@@ -21,15 +21,14 @@ use crate::error::{Error, InternalError, UserError};
 use crate::index::{db_name, main_key};
 use crate::update::{AvailableDocumentsIds, ClearDocuments, UpdateIndexingStep};
 use crate::{
-    ExternalDocumentsIds, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldsIdsMap, Index,
-    Result, BEU32,
+    FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldsIdsMap, Index, Result, BEU32,
 };
 
 pub struct TransformOutput {
     pub primary_key: String,
     pub fields_ids_map: FieldsIdsMap,
     pub field_distribution: FieldDistribution,
-    pub external_documents_ids: ExternalDocumentsIds<'static>,
+    pub new_external_documents_ids: fst::Map<Cow<'static, [u8]>>,
     pub new_documents_ids: RoaringBitmap,
     pub replaced_documents_ids: RoaringBitmap,
     pub documents_count: usize,
@@ -58,8 +57,8 @@ pub struct Transform<'a, 'i> {
     original_sorter: grenad::Sorter<MergeFn>,
     flattened_sorter: grenad::Sorter<MergeFn>,
 
-    replaced_documents_ids: RoaringBitmap,
-    new_documents_ids: RoaringBitmap,
+    pub replaced_documents_ids: RoaringBitmap,
+    pub new_documents_ids: RoaringBitmap,
     // To increase the cache locality and decrease the heap usage we use compact smartstring.
     new_external_documents_ids_builder: FxHashMap<SmartString<smartstring::Compact>, u64>,
     documents_count: usize,
@@ -568,8 +567,6 @@ impl<'a, 'i> Transform<'a, 'i> {
             }))?
             .to_string();
 
-        let mut external_documents_ids = self.index.external_documents_ids(wtxn)?;
-
         // We create a final writer to write the new documents in order from the sorter.
         let mut writer = create_writer(
             self.indexer_settings.chunk_compression_type,
@@ -651,13 +648,14 @@ impl<'a, 'i> Transform<'a, 'i> {
             fst_new_external_documents_ids_builder.insert(key, value)
         })?;
         let new_external_documents_ids = fst_new_external_documents_ids_builder.into_map();
-        external_documents_ids.insert_ids(&new_external_documents_ids)?;
 
         Ok(TransformOutput {
             primary_key,
             fields_ids_map: self.fields_ids_map,
             field_distribution,
-            external_documents_ids: external_documents_ids.into_static(),
+            new_external_documents_ids: new_external_documents_ids
+                .map_data(|c| Cow::Owned(c))
+                .unwrap(),
             new_documents_ids: self.new_documents_ids,
             replaced_documents_ids: self.replaced_documents_ids,
             documents_count: self.documents_count,
@@ -691,7 +689,8 @@ impl<'a, 'i> Transform<'a, 'i> {
         let new_external_documents_ids = {
             let mut external_documents_ids = self.index.external_documents_ids(wtxn)?;
             external_documents_ids.delete_soft_deleted_documents_ids_from_fsts()?;
-            external_documents_ids
+            // it is safe to get the hard document IDs
+            external_documents_ids.into_static().hard
         };
 
         let documents_ids = self.index.documents_ids(wtxn)?;
@@ -776,7 +775,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             primary_key,
             fields_ids_map: new_fields_ids_map,
             field_distribution,
-            external_documents_ids: new_external_documents_ids.into_static(),
+            new_external_documents_ids,
             new_documents_ids: documents_ids,
             replaced_documents_ids: RoaringBitmap::default(),
             documents_count,

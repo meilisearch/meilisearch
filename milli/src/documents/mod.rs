@@ -111,7 +111,6 @@ pub enum Error {
     Io(#[from] io::Error),
 }
 
-#[cfg(test)]
 pub fn objects_from_json_value(json: serde_json::Value) -> Vec<crate::Object> {
     let documents = match json {
         object @ serde_json::Value::Object(_) => vec![object],
@@ -141,7 +140,6 @@ macro_rules! documents {
     }};
 }
 
-#[cfg(test)]
 pub fn documents_batch_reader_from_objects(
     objects: impl IntoIterator<Item = Object>,
 ) -> DocumentsBatchReader<std::io::Cursor<Vec<u8>>> {

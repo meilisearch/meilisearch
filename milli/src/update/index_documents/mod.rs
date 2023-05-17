@@ -198,6 +198,7 @@ where
             let number_of_documents = self.index.number_of_documents(self.wtxn)?;
             return Ok(DocumentAdditionResult { indexed_documents: 0, number_of_documents });
         }
+
         let output = self
             .transform
             .take()
@@ -220,6 +221,7 @@ where
         }
 
         let indexed_documents = output.documents_count as u64;
+
         let number_of_documents = self.execute_raw(output)?;
 
         Ok(DocumentAdditionResult { indexed_documents, number_of_documents })
@@ -236,7 +238,7 @@ where
             primary_key,
             fields_ids_map,
             field_distribution,
-            mut external_documents_ids,
+            new_external_documents_ids,
             new_documents_ids,
             replaced_documents_ids,
             documents_count,
@@ -363,9 +365,6 @@ where
             deletion_builder.delete_documents(&replaced_documents_ids);
             let deleted_documents_result = deletion_builder.execute_inner()?;
             debug!("{} documents actually deleted", deleted_documents_result.deleted_documents);
-            if !deleted_documents_result.soft_deletion_used {
-                external_documents_ids.delete_soft_deleted_documents_ids_from_fsts()?;
-            }
         }
 
         let index_documents_ids = self.index.documents_ids(self.wtxn)?;
@@ -445,6 +444,9 @@ where
         self.index.put_primary_key(self.wtxn, &primary_key)?;
 
         // We write the external documents ids into the main database.
+        let mut external_documents_ids = self.index.external_documents_ids(self.wtxn)?;
+        external_documents_ids.insert_ids(&new_external_documents_ids)?;
+        let external_documents_ids = external_documents_ids.into_static();
         self.index.put_external_documents_ids(self.wtxn, &external_documents_ids)?;
 
         let all_documents_ids = index_documents_ids | new_documents_ids;
@@ -2514,5 +2516,171 @@ mod tests {
         db_snap!(index, word_fid_docids, 3, @"4c2e2a1832e5802796edc1638136d933");
         db_snap!(index, word_position_docids, 3, @"74f556b91d161d997a89468b4da1cb8f");
         db_snap!(index, docid_word_positions, 3, @"5287245332627675740b28bd46e1cde1");
+    }
+
+    #[test]
+    fn reproduce_the_bug() {
+        /*
+            [milli/examples/fuzz.rs:69] &batches = [
+            Batch(
+                [
+                    AddDoc(
+                        { "id": 1, "doggo": "bernese" }, => internal 0
+                    ),
+                ],
+            ),
+            Batch(
+                [
+                    DeleteDoc(
+                        1, => delete internal 0
+                    ),
+                    AddDoc(
+                        { "id": 0, "catto": "jorts" }, => internal 1
+                    ),
+                ],
+            ),
+            Batch(
+                [
+                    AddDoc(
+                        { "id": 1, "catto": "jorts" }, => internal 2
+                    ),
+                ],
+            ),
+        ]
+        */
+        let mut index = TempIndex::new();
+        index.index_documents_config.deletion_strategy = DeletionStrategy::AlwaysHard;
+
+        // START OF BATCH
+
+        println!("--- ENTERING BATCH 1");
+
+        let mut wtxn = index.write_txn().unwrap();
+
+        let builder = IndexDocuments::new(
+            &mut wtxn,
+            &index,
+            &index.indexer_config,
+            index.index_documents_config.clone(),
+            |_| (),
+            || false,
+        )
+        .unwrap();
+
+        // OP
+
+        let documents = documents!([
+            { "id": 1, "doggo": "bernese" },
+        ]);
+        let (builder, added) = builder.add_documents(documents).unwrap();
+        insta::assert_display_snapshot!(added.unwrap(), @"1");
+
+        // FINISHING
+        let addition = builder.execute().unwrap();
+        insta::assert_debug_snapshot!(addition, @r###"
+        DocumentAdditionResult {
+            indexed_documents: 1,
+            number_of_documents: 1,
+        }
+        "###);
+        wtxn.commit().unwrap();
+
+        db_snap!(index, documents, @r###"
+        {"id":1,"doggo":"bernese"}
+        "###);
+        db_snap!(index, external_documents_ids, @r###"
+        soft:
+        hard:
+        1                        0
+        "###);
+
+        // A first batch of documents has been inserted
+
+        // BATCH 2
+
+        println!("--- ENTERING BATCH 2");
+
+        let mut wtxn = index.write_txn().unwrap();
+
+        let builder = IndexDocuments::new(
+            &mut wtxn,
+            &index,
+            &index.indexer_config,
+            index.index_documents_config.clone(),
+            |_| (),
+            || false,
+        )
+        .unwrap();
+
+        let (builder, removed) = builder.remove_documents(vec![S("1")]).unwrap();
+        insta::assert_display_snapshot!(removed.unwrap(), @"1");
+
+        let documents = documents!([
+            { "id": 0, "catto": "jorts" },
+        ]);
+        let (builder, added) = builder.add_documents(documents).unwrap();
+        insta::assert_display_snapshot!(added.unwrap(), @"1");
+
+        let addition = builder.execute().unwrap();
+        insta::assert_debug_snapshot!(addition, @r###"
+        DocumentAdditionResult {
+            indexed_documents: 1,
+            number_of_documents: 1,
+        }
+        "###);
+        wtxn.commit().unwrap();
+
+        db_snap!(index, documents, @r###"
+        {"id":0,"catto":"jorts"}
+        "###);
+
+        db_snap!(index, external_documents_ids, @r###"
+        soft:
+        hard:
+        0                        1
+        "###);
+
+        db_snap!(index, soft_deleted_documents_ids, @"[]");
+
+        // BATCH 3
+
+        println!("--- ENTERING BATCH 3");
+
+        let mut wtxn = index.write_txn().unwrap();
+
+        let builder = IndexDocuments::new(
+            &mut wtxn,
+            &index,
+            &index.indexer_config,
+            index.index_documents_config.clone(),
+            |_| (),
+            || false,
+        )
+        .unwrap();
+
+        let documents = documents!([
+            { "id": 1, "catto": "jorts" },
+        ]);
+        let (builder, added) = builder.add_documents(documents).unwrap();
+        insta::assert_display_snapshot!(added.unwrap(), @"1");
+
+        let addition = builder.execute().unwrap();
+        insta::assert_debug_snapshot!(addition, @r###"
+        DocumentAdditionResult {
+            indexed_documents: 1,
+            number_of_documents: 2,
+        }
+        "###);
+        wtxn.commit().unwrap();
+
+        db_snap!(index, documents, @r###"
+        {"id":1,"catto":"jorts"}
+        {"id":0,"catto":"jorts"}
+        "###);
+
+        // Ensuring all the returned IDs actually exists
+        let rtxn = index.read_txn().unwrap();
+        let res = index.search(&rtxn).execute().unwrap();
+        index.documents(&rtxn, res.documents_ids).unwrap();
     }
 }
