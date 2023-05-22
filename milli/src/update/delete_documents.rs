@@ -72,7 +72,6 @@ impl std::fmt::Display for DeletionStrategy {
 pub(crate) struct DetailedDocumentDeletionResult {
     pub deleted_documents: u64,
     pub remaining_documents: u64,
-    pub soft_deletion_used: bool,
 }
 
 impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
@@ -109,11 +108,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         Some(docid)
     }
     pub fn execute(self) -> Result<DocumentDeletionResult> {
-        let DetailedDocumentDeletionResult {
-            deleted_documents,
-            remaining_documents,
-            soft_deletion_used: _,
-        } = self.execute_inner()?;
+        let DetailedDocumentDeletionResult { deleted_documents, remaining_documents } =
+            self.execute_inner()?;
 
         Ok(DocumentDeletionResult { deleted_documents, remaining_documents })
     }
@@ -134,7 +130,6 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             return Ok(DetailedDocumentDeletionResult {
                 deleted_documents: 0,
                 remaining_documents: 0,
-                soft_deletion_used: false,
             });
         }
 
@@ -150,7 +145,6 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             return Ok(DetailedDocumentDeletionResult {
                 deleted_documents: current_documents_ids_len,
                 remaining_documents,
-                soft_deletion_used: false,
             });
         }
 
@@ -219,7 +213,6 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             return Ok(DetailedDocumentDeletionResult {
                 deleted_documents: self.to_delete_docids.len(),
                 remaining_documents: documents_ids.len(),
-                soft_deletion_used: true,
             });
         }
 
@@ -472,7 +465,6 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         Ok(DetailedDocumentDeletionResult {
             deleted_documents: self.to_delete_docids.len(),
             remaining_documents: documents_ids.len(),
-            soft_deletion_used: false,
         })
     }
 
