@@ -57,8 +57,8 @@ pub struct Transform<'a, 'i> {
     original_sorter: grenad::Sorter<MergeFn>,
     flattened_sorter: grenad::Sorter<MergeFn>,
 
-    pub replaced_documents_ids: RoaringBitmap,
-    pub new_documents_ids: RoaringBitmap,
+    replaced_documents_ids: RoaringBitmap,
+    new_documents_ids: RoaringBitmap,
     // To increase the cache locality and decrease the heap usage we use compact smartstring.
     new_external_documents_ids_builder: FxHashMap<SmartString<smartstring::Compact>, u64>,
     documents_count: usize,
@@ -653,9 +653,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             primary_key,
             fields_ids_map: self.fields_ids_map,
             field_distribution,
-            new_external_documents_ids: new_external_documents_ids
-                .map_data(|c| Cow::Owned(c))
-                .unwrap(),
+            new_external_documents_ids: new_external_documents_ids.map_data(Cow::Owned).unwrap(),
             new_documents_ids: self.new_documents_ids,
             replaced_documents_ids: self.replaced_documents_ids,
             documents_count: self.documents_count,
@@ -689,8 +687,8 @@ impl<'a, 'i> Transform<'a, 'i> {
         let new_external_documents_ids = {
             let mut external_documents_ids = self.index.external_documents_ids(wtxn)?;
             external_documents_ids.delete_soft_deleted_documents_ids_from_fsts()?;
-            // it is safe to get the hard document IDs
-            external_documents_ids.into_static().hard
+            // This call should be free and can't fail since the previous method merged both fsts.
+            external_documents_ids.into_static().to_fst()?.into_owned()
         };
 
         let documents_ids = self.index.documents_ids(wtxn)?;

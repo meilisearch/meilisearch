@@ -198,7 +198,6 @@ where
             let number_of_documents = self.index.number_of_documents(self.wtxn)?;
             return Ok(DocumentAdditionResult { indexed_documents: 0, number_of_documents });
         }
-
         let output = self
             .transform
             .take()
@@ -221,7 +220,6 @@ where
         }
 
         let indexed_documents = output.documents_count as u64;
-
         let number_of_documents = self.execute_raw(output)?;
 
         Ok(DocumentAdditionResult { indexed_documents, number_of_documents })
