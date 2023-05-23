@@ -50,34 +50,27 @@ enum Operation {
 }
 
 #[derive(Debug, Arbitrary)]
-struct Batch([Operation; 2]);
+struct Batch([Operation; 5]);
 
 fn main() {
     let mut options = EnvOpenOptions::new();
     options.map_size(1024 * 1024 * 1024 * 1024);
-    let _tempdir = TempDir::new_in("ramdisk").unwrap();
+    let _tempdir = TempDir::new().unwrap();
     let index = Index::new(options, _tempdir.path()).unwrap();
     let indexer_config = IndexerConfig::default();
     let index_documents_config = IndexDocumentsConfig::default();
 
     loop {
-        // let v: Vec<u8> = std::iter::repeat_with(|| fastrand::u8(..)).take(1000).collect();
+        let v: Vec<u8> = std::iter::repeat_with(|| fastrand::u8(..)).take(1000).collect();
 
-        // let data = Unstructured::new(&v);
-        // let batches = <[Batch; 3]>::arbitrary(&mut data).unwrap();
-        let batches = [
-            Batch([Operation::AddDoc(Document::Five), Operation::AddDoc(Document::Three)]),
-            Batch([Operation::DeleteDoc(DocId::One), Operation::AddDoc(Document::Two)]),
-            Batch([Operation::DeleteDoc(DocId::Zero), Operation::AddDoc(Document::Five)]),
-        ];
+        let mut data = Unstructured::new(&v);
+        let batches = <[Batch; 5]>::arbitrary(&mut data).unwrap();
 
         dbg!(&batches);
 
         let mut wtxn = index.write_txn().unwrap();
 
         for batch in batches {
-            dbg!(&batch);
-
             let mut builder = IndexDocuments::new(
                 &mut wtxn,
                 &index,
