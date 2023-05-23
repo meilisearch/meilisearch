@@ -235,6 +235,9 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
         node_with_removed_outgoing_conditions: Interned<QueryNode>,
         costs: &mut MappedInterner<QueryNode, Vec<u64>>,
     ) {
+        // Traverse the graph backward from the target node, recomputing the cost for each of its predecessors.
+        // We first check that no other node is contributing the same total cost to a predecessor before removing
+        // the cost from the predecessor. 
         self.traverse_breadth_first_backward(node_with_removed_outgoing_conditions, |cur_node| {
             let mut costs_to_remove = FxHashSet::default();
             costs_to_remove.extend(costs.get(cur_node).iter().copied());
