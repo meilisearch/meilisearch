@@ -99,7 +99,7 @@ pub struct DetailsView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deleted_tasks: Option<Option<u64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub original_filter: Option<String>,
+    pub original_filter: Option<Option<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dump_uid: Option<Option<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -131,12 +131,13 @@ impl From<Details> for DetailsView {
             } => DetailsView {
                 provided_ids: Some(received_document_ids),
                 deleted_documents: Some(deleted_documents),
+                original_filter: Some(None),
                 ..DetailsView::default()
             },
             Details::DocumentDeletionByFilter { original_filter, deleted_documents } => {
                 DetailsView {
                     provided_ids: Some(0),
-                    original_filter: Some(original_filter),
+                    original_filter: Some(Some(original_filter)),
                     deleted_documents: Some(deleted_documents),
                     ..DetailsView::default()
                 }
@@ -148,7 +149,7 @@ impl From<Details> for DetailsView {
                 DetailsView {
                     matched_tasks: Some(matched_tasks),
                     canceled_tasks: Some(canceled_tasks),
-                    original_filter: Some(original_filter),
+                    original_filter: Some(Some(original_filter)),
                     ..DetailsView::default()
                 }
             }
@@ -156,7 +157,7 @@ impl From<Details> for DetailsView {
                 DetailsView {
                     matched_tasks: Some(matched_tasks),
                     deleted_tasks: Some(deleted_tasks),
-                    original_filter: Some(original_filter),
+                    original_filter: Some(Some(original_filter)),
                     ..DetailsView::default()
                 }
             }
