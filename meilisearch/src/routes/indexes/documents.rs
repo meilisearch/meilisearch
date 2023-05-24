@@ -486,7 +486,7 @@ pub async fn delete_documents_batch(
 #[derive(Debug, Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct DocumentDeletionByFilter {
-    #[deserr(error = DeserrJsonError<InvalidDocumentDeleteFilter>, missing_field_error = DeserrJsonError::missing_document_filter)]
+    #[deserr(error = DeserrJsonError<InvalidDocumentFilter>, missing_field_error = DeserrJsonError::missing_document_filter)]
     filter: Value,
 }
 
@@ -508,8 +508,8 @@ pub async fn delete_documents_by_filter(
     || -> Result<_, ResponseError> {
         Ok(crate::search::parse_filter(&filter)?.ok_or(MeilisearchHttpError::EmptyFilter)?)
     }()
-    // and whatever was the error, the error code should always be an InvalidDocumentDeleteFilter
-    .map_err(|err| ResponseError::from_msg(err.message, Code::InvalidDocumentDeleteFilter))?;
+    // and whatever was the error, the error code should always be an InvalidDocumentFilter
+    .map_err(|err| ResponseError::from_msg(err.message, Code::InvalidDocumentFilter))?;
     let task = KindWithContent::DocumentDeletionByFilter { index_uid, filter_expr: filter };
 
     let task: SummarizedTaskView =

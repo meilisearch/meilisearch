@@ -61,7 +61,7 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::MissingPayload(_) => Code::MissingPayload,
             MeilisearchHttpError::InvalidContentType(_, _) => Code::InvalidContentType,
             MeilisearchHttpError::DocumentNotFound(_) => Code::DocumentNotFound,
-            MeilisearchHttpError::EmptyFilter => Code::InvalidDocumentDeleteFilter,
+            MeilisearchHttpError::EmptyFilter => Code::InvalidDocumentFilter,
             MeilisearchHttpError::InvalidExpression(_, _) => Code::InvalidSearchFilter,
             MeilisearchHttpError::PayloadTooLarge(_) => Code::PayloadTooLarge,
             MeilisearchHttpError::SwapIndexPayloadWrongLength(_) => Code::InvalidSwapIndexes,
