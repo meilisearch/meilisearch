@@ -577,6 +577,18 @@ async fn delete_document_by_filter() {
     }
     "###);
 
+    // do not send any filter
+    let (response, code) = index.delete_document_by_filter(json!({})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Missing field `filter`",
+      "code": "missing_document_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_document_filter"
+    }
+    "###);
+
     // index does not exists
     let (response, code) =
         index.delete_document_by_filter(json!({ "filter": "doggo = bernese"})).await;
