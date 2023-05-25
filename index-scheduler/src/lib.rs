@@ -31,7 +31,7 @@ mod uuid_codec;
 pub type Result<T> = std::result::Result<T, Error>;
 pub type TaskId = u32;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ops::{Bound, RangeBounds};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -735,6 +735,34 @@ impl IndexScheduler {
         }
 
         Ok(tasks)
+    }
+
+    pub fn get_stats(&self) -> Result<BTreeMap<String, BTreeMap<String, u64>>> {
+        let rtxn = self.read_txn()?;
+
+        let mut res = BTreeMap::new();
+
+        res.insert(
+            "statuses".to_string(),
+            enum_iterator::all::<Status>()
+                .map(|s| Ok((s.to_string(), self.get_status(&rtxn, s)?.len())))
+                .collect::<Result<BTreeMap<String, u64>>>()?,
+        );
+        res.insert(
+            "types".to_string(),
+            enum_iterator::all::<Kind>()
+                .map(|s| Ok((s.to_string(), self.get_kind(&rtxn, s)?.len())))
+                .collect::<Result<BTreeMap<String, u64>>>()?,
+        );
+        res.insert(
+            "indexes".to_string(),
+            self.index_tasks
+                .iter(&rtxn)?
+                .map(|res| Ok(res.map(|(name, bitmap)| (name.to_string(), bitmap.len()))?))
+                .collect::<Result<BTreeMap<String, u64>>>()?,
+        );
+
+        Ok(res)
     }
 
     /// Return true iff there is at least one task associated with this index

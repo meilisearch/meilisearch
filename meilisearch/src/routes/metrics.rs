@@ -39,6 +39,12 @@ pub async fn get_metrics(
             .set(value.number_of_documents as i64);
     }
 
+    for (kind, value) in index_scheduler.get_stats()? {
+        for (value, count) in value {
+            crate::metrics::NB_TASKS.with_label_values(&[&kind, &value]).set(count as i64);
+        }
+    }
+
     let encoder = TextEncoder::new();
     let mut buffer = vec![];
     encoder.encode(&prometheus::gather(), &mut buffer).expect("Failed to encode metrics");

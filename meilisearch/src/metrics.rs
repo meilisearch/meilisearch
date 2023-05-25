@@ -40,4 +40,7 @@ lazy_static! {
         HTTP_RESPONSE_TIME_CUSTOM_BUCKETS.to_vec()
     )
     .expect("Can't create a metric");
+    pub static ref NB_TASKS: IntGaugeVec =
+        register_int_gauge_vec!(opts!("nb_tasks", "Number of tasks"), &["kind", "value"])
+            .expect("Can't create a metric");
 }
