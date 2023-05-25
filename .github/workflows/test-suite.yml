@@ -124,7 +124,7 @@ jobs:
       - name: Run cargo tree without default features and check lindera is not present
         run: |
           cargo tree -f '{p} {f}' -e normal --no-default-features | grep lindera -vqz
-      - name: Run cargo tree with default features
+      - name: Run cargo tree with default features and check lindera is pressent
         run: |
           cargo tree -f '{p} {f}' -e normal | grep lindera -qz
                 
