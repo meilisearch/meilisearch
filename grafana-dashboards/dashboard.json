@@ -387,6 +387,9 @@
               "viz": false
             },
             "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
             "lineWidth": 1,
             "pointSize": 5,
             "scaleDistribution": {
@@ -396,7 +399,7 @@
             "spanNulls": false,
             "stacking": {
               "group": "A",
-              "mode": "normal"
+              "mode": "none"
             },
             "thresholdsStyle": {
               "mode": "off"
@@ -1368,6 +1371,6 @@
   "timezone": "",
   "title": "Meilisearch",
   "uid": "7wcZ94dnz",
-  "version": 4,
+  "version": 5,
   "weekStart": ""
 }
