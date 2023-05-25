@@ -19,7 +19,7 @@ use crate::DocumentId;
 ///
 /// The return value of the closure is a `ControlFlow<()>` which indicates whether we should
 /// keep iterating over the different facet values or stop.
-pub fn iterate_over_facet_distribution<'t, CB>(
+pub fn lexicographically_iterate_over_facet_distribution<'t, CB>(
     rtxn: &'t heed::RoTxn<'t>,
     db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
@@ -29,7 +29,7 @@ pub fn iterate_over_facet_distribution<'t, CB>(
 where
     CB: FnMut(&'t [u8], u64, DocumentId) -> Result<ControlFlow<()>>,
 {
-    let mut fd = FacetDistribution { rtxn, db, field_id, callback };
+    let mut fd = LexicographicFacetDistribution { rtxn, db, field_id, callback };
     let highest_level = get_highest_level(
         rtxn,
         db.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
@@ -44,7 +44,7 @@ where
     }
 }
 
-struct FacetDistribution<'t, CB>
+struct LexicographicFacetDistribution<'t, CB>
 where
     CB: FnMut(&'t [u8], u64, DocumentId) -> Result<ControlFlow<()>>,
 {
@@ -54,7 +54,7 @@ where
     callback: CB,
 }
 
-impl<'t, CB> FacetDistribution<'t, CB>
+impl<'t, CB> LexicographicFacetDistribution<'t, CB>
 where
     CB: FnMut(&'t [u8], u64, DocumentId) -> Result<ControlFlow<()>>,
 {
@@ -86,6 +86,7 @@ where
         }
         Ok(ControlFlow::Continue(()))
     }
+
     fn iterate(
         &mut self,
         candidates: &RoaringBitmap,
@@ -116,7 +117,7 @@ where
                     value.size as usize,
                 )?;
                 match cf {
-                    ControlFlow::Continue(_) => {}
+                    ControlFlow::Continue(_) => (),
                     ControlFlow::Break(_) => return Ok(ControlFlow::Break(())),
                 }
             }
@@ -132,7 +133,7 @@ mod tests {
     use heed::BytesDecode;
     use roaring::RoaringBitmap;
 
-    use super::iterate_over_facet_distribution;
+    use super::lexicographically_iterate_over_facet_distribution;
     use crate::heed_codec::facet::OrderedF64Codec;
     use crate::milli_snap;
     use crate::search::facet::tests::{get_random_looking_index, get_simple_index};
@@ -144,7 +145,7 @@ mod tests {
             let txn = index.env.read_txn().unwrap();
             let candidates = (0..=255).collect::<RoaringBitmap>();
             let mut results = String::new();
-            iterate_over_facet_distribution(
+            lexicographically_iterate_over_facet_distribution(
                 &txn,
                 index.content,
                 0,
@@ -161,6 +162,7 @@ mod tests {
             txn.commit().unwrap();
         }
     }
+
     #[test]
     fn filter_distribution_all_stop_early() {
         let indexes = [get_simple_index(), get_random_looking_index()];
@@ -169,7 +171,7 @@ mod tests {
             let candidates = (0..=255).collect::<RoaringBitmap>();
             let mut results = String::new();
             let mut nbr_facets = 0;
-            iterate_over_facet_distribution(
+            lexicographically_iterate_over_facet_distribution(
                 &txn,
                 index.content,
                 0,
