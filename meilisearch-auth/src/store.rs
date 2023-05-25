@@ -73,6 +73,11 @@ impl HeedAuthStore {
         Ok(self.env.real_disk_size()?)
     }
 
+    /// Return the number of bytes actually used in the database
+    pub fn used_size(&self) -> Result<u64> {
+        Ok(self.env.non_free_pages_size()?)
+    }
+
     pub fn set_drop_on_close(&mut self, v: bool) {
         self.should_close_on_drop = v;
     }

@@ -59,71 +59,6 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "continuous-GrYlRd"
-          },
-          "decimals": 0,
-          "mappings": [],
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 4,
-        "x": 0,
-        "y": 1
-      },
-      "id": 2,
-      "interval": "5s",
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "9.5.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus"
-          },
-          "editorMode": "builder",
-          "exemplar": true,
-          "expr": "meilisearch_db_size_bytes{job=\"meilisearch\", instance=\"$instance\"}",
-          "interval": "",
-          "legendFormat": "",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Database Size",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
             "fixedColor": "purple",
             "mode": "fixed"
           },
@@ -145,7 +80,7 @@
       "gridPos": {
         "h": 6,
         "w": 4,
-        "x": 4,
+        "x": 0,
         "y": 1
       },
       "id": 22,
@@ -206,7 +141,7 @@
       "gridPos": {
         "h": 6,
         "w": 4,
-        "x": 8,
+        "x": 4,
         "y": 1
       },
       "id": 18,
@@ -431,10 +366,11 @@
         "type": "prometheus",
         "uid": "c4085c47-f6d3-45dd-b761-6809055bb749"
       },
+      "description": "",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "continuous-YlBl"
+            "mode": "palette-classic"
           },
           "custom": {
             "axisCenteredZero": false,
@@ -443,7 +379,7 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 15,
+            "fillOpacity": 25,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -456,18 +392,18 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "never",
+            "showPoints": "auto",
             "spanNulls": false,
             "stacking": {
               "group": "A",
-              "mode": "none"
+              "mode": "normal"
             },
             "thresholdsStyle": {
               "mode": "off"
             }
           },
-          "decimals": 2,
           "mappings": [],
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -480,7 +416,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "bytes"
         },
         "overrides": []
       },
@@ -490,13 +427,13 @@
         "x": 0,
         "y": 7
       },
-      "id": 1,
+      "id": 2,
       "interval": "5s",
       "options": {
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "right",
+          "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
@@ -504,6 +441,7 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "9.5.2",
       "targets": [
         {
           "datasource": {
@@ -511,14 +449,26 @@
           },
           "editorMode": "builder",
           "exemplar": true,
-          "expr": "rate(meilisearch_http_requests_total{instance=\"$instance\", job=\"meilisearch\"}[5m])",
+          "expr": "meilisearch_db_size_bytes{job=\"meilisearch\", instance=\"$instance\"}",
           "interval": "",
-          "legendFormat": "{{method}} {{path}}",
+          "legendFormat": "Database size on disk",
           "range": true,
-          "refId": "A"
+          "refId": "DB Size on disk"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "c4085c47-f6d3-45dd-b761-6809055bb749"
+          },
+          "editorMode": "builder",
+          "expr": "meilisearch_used_db_size_bytes{job=\"meilisearch\", instance=\"$instance\"}",
+          "hide": false,
+          "legendFormat": "Used bytes",
+          "range": true,
+          "refId": "Actual used bytes"
         }
       ],
-      "title": "HTTP requests per second (All Indexes)",
+      "title": "Database Size in bytes",
       "type": "timeseries"
     },
     {
@@ -617,6 +567,101 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "c4085c47-f6d3-45dd-b761-6809055bb749"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "continuous-YlBl"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 12,
+        "x": 0,
+        "y": 18
+      },
+      "id": 1,
+      "interval": "5s",
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus"
+          },
+          "editorMode": "builder",
+          "exemplar": true,
+          "expr": "rate(meilisearch_http_requests_total{instance=\"$instance\", job=\"meilisearch\"}[5m])",
+          "interval": "",
+          "legendFormat": "{{method}} {{path}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "HTTP requests per second (All Indexes)",
+      "type": "timeseries"
+    },
+    {
       "cards": {},
       "color": {
         "cardColor": "#b4ff00",
@@ -648,7 +693,7 @@
         "h": 11,
         "w": 24,
         "x": 0,
-        "y": 18
+        "y": 29
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -790,7 +835,7 @@
         "h": 11,
         "w": 12,
         "x": 0,
-        "y": 29
+        "y": 40
       },
       "id": 23,
       "interval": "5s",
@@ -883,7 +928,7 @@
         "h": 11,
         "w": 12,
         "x": 12,
-        "y": 29
+        "y": 40
       },
       "id": 24,
       "interval": "5s",
@@ -976,7 +1021,7 @@
         "h": 11,
         "w": 12,
         "x": 0,
-        "y": 40
+        "y": 51
       },
       "id": 25,
       "interval": "5s",
@@ -1020,7 +1065,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 51
+        "y": 62
       },
       "id": 12,
       "panels": [],
@@ -1098,7 +1143,7 @@
         "h": 11,
         "w": 12,
         "x": 0,
-        "y": 52
+        "y": 63
       },
       "id": 4,
       "interval": "5s",
@@ -1201,7 +1246,7 @@
         "h": 11,
         "w": 12,
         "x": 12,
-        "y": 52
+        "y": 63
       },
       "id": 5,
       "interval": "5s",
@@ -1323,6 +1368,6 @@
   "timezone": "",
   "title": "Meilisearch",
   "uid": "7wcZ94dnz",
-  "version": 3,
+  "version": 4,
   "weekStart": ""
 }

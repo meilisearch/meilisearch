@@ -90,6 +90,8 @@ pub struct IndexStats {
     pub number_of_documents: u64,
     /// Size of the index' DB, in bytes.
     pub database_size: u64,
+    /// Size of the index' DB, in bytes.
+    pub used_database_size: u64,
     /// Association of every field name with the number of times it occurs in the documents.
     pub field_distribution: FieldDistribution,
     /// Creation date of the index.
@@ -105,10 +107,10 @@ impl IndexStats {
     ///
     /// - rtxn: a RO transaction for the index, obtained from `Index::read_txn()`.
     pub fn new(index: &Index, rtxn: &RoTxn) -> Result<Self> {
-        let database_size = index.on_disk_size()?;
         Ok(IndexStats {
             number_of_documents: index.number_of_documents(rtxn)?,
-            database_size,
+            database_size: index.on_disk_size()?,
+            used_database_size: index.used_size()?,
             field_distribution: index.field_distribution(rtxn)?,
             created_at: index.created_at(rtxn)?,
             updated_at: index.updated_at(rtxn)?,

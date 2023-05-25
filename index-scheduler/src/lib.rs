@@ -554,8 +554,14 @@ impl IndexScheduler {
         &self.index_mapper.indexer_config
     }
 
+    /// Return the real database size (i.e.: The size **with** the free pages)
     pub fn size(&self) -> Result<u64> {
         Ok(self.env.real_disk_size()?)
+    }
+
+    /// Return the used database size (i.e.: The size **without** the free pages)
+    pub fn used_size(&self) -> Result<u64> {
+        Ok(self.env.non_free_pages_size()?)
     }
 
     /// Return the index corresponding to the name.

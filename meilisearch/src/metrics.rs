@@ -23,8 +23,13 @@ lazy_static! {
     )
     .expect("Can't create a metric");
     pub static ref MEILISEARCH_DB_SIZE_BYTES: IntGauge =
-        register_int_gauge!(opts!("meilisearch_db_size_bytes", "Meilisearch Db Size In Bytes"))
+        register_int_gauge!(opts!("meilisearch_db_size_bytes", "Meilisearch DB Size In Bytes"))
             .expect("Can't create a metric");
+    pub static ref MEILISEARCH_USED_DB_SIZE_BYTES: IntGauge = register_int_gauge!(opts!(
+        "meilisearch_used_db_size_bytes",
+        "Meilisearch Used DB Size In Bytes"
+    ))
+    .expect("Can't create a metric");
     pub static ref MEILISEARCH_INDEX_COUNT: IntGauge =
         register_int_gauge!(opts!("meilisearch_index_count", "Meilisearch Index Count"))
             .expect("Can't create a metric");

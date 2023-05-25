@@ -31,6 +31,7 @@ pub async fn get_metrics(
     let response = create_all_stats((*index_scheduler).clone(), auth_controller, auth_filters)?;
 
     crate::metrics::MEILISEARCH_DB_SIZE_BYTES.set(response.database_size as i64);
+    crate::metrics::MEILISEARCH_USED_DB_SIZE_BYTES.set(response.used_database_size as i64);
     crate::metrics::MEILISEARCH_INDEX_COUNT.set(response.indexes.len() as i64);
 
     for (index, value) in response.indexes.iter() {

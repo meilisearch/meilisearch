@@ -231,6 +231,8 @@ pub async fn running() -> HttpResponse {
 #[serde(rename_all = "camelCase")]
 pub struct Stats {
     pub database_size: u64,
+    #[serde(skip)]
+    pub used_database_size: u64,
     #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
     pub last_update: Option<OffsetDateTime>,
     pub indexes: BTreeMap<String, indexes::IndexStats>,
@@ -259,6 +261,7 @@ pub fn create_all_stats(
     let mut last_task: Option<OffsetDateTime> = None;
     let mut indexes = BTreeMap::new();
     let mut database_size = 0;
+    let mut used_database_size = 0;
 
     for index_uid in index_scheduler.index_names()? {
         // Accumulate the size of all indexes, even unauthorized ones, so
@@ -266,6 +269,7 @@ pub fn create_all_stats(
         // See <https://github.com/meilisearch/meilisearch/pull/3541#discussion_r1126747643> for context.
         let stats = index_scheduler.index_stats(&index_uid)?;
         database_size += stats.inner_stats.database_size;
+        used_database_size += stats.inner_stats.used_database_size;
 
         if !filters.is_index_authorized(&index_uid) {
             continue;
@@ -278,10 +282,14 @@ pub fn create_all_stats(
     }
 
     database_size += index_scheduler.size()?;
+    used_database_size += index_scheduler.used_size()?;
     database_size += auth_controller.size()?;
-    database_size += index_scheduler.compute_update_file_size()?;
+    used_database_size += auth_controller.used_size()?;
+    let update_file_size = index_scheduler.compute_update_file_size()?;
+    database_size += update_file_size;
+    used_database_size += update_file_size;
 
-    let stats = Stats { database_size, last_update: last_task, indexes };
+    let stats = Stats { database_size, used_database_size, last_update: last_task, indexes };
     Ok(stats)
 }
 
