@@ -106,7 +106,7 @@ jobs:
           args: --workspace --locked --release --all-features
 
   test-disabled-tokenization:
-    name: Test Disabled Tokenization
+    name: Test disabled tokenization
     runs-on: ubuntu-latest
     container:
       image: ubuntu:18.04
