@@ -5,18 +5,18 @@ use prometheus::{
 };
 
 /// Create evenly distributed buckets
-fn create_buckets<const N: usize>() -> [f64; N] {
-    let mut array = [0.0; N];
-
-    for i in 0..N {
-        array[i] = ((i + 1) as f64) / N as f64;
-    }
-
-    array
+fn create_buckets() -> [f64; 29] {
+    (0..10)
+        .chain((10..100).step_by(10))
+        .chain((100..=1000).step_by(100))
+        .map(|i| i as f64 / 1000.)
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap()
 }
 
 lazy_static! {
-    pub static ref HTTP_RESPONSE_TIME_CUSTOM_BUCKETS: [f64; 100] = create_buckets();
+    pub static ref HTTP_RESPONSE_TIME_CUSTOM_BUCKETS: [f64; 29] = create_buckets();
     pub static ref HTTP_REQUESTS_TOTAL: IntCounterVec = register_int_counter_vec!(
         opts!("http_requests_total", "HTTP requests total"),
         &["method", "path"]
