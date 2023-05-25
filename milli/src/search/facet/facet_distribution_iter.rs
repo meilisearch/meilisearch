@@ -1,3 +1,5 @@
+use std::cmp::Reverse;
+use std::collections::{BTreeMap, BinaryHeap};
 use std::ops::ControlFlow;
 
 use heed::Result;
@@ -44,6 +46,96 @@ where
     }
 }
 
+pub fn count_iterate_over_facet_distribution<'t, CB>(
+    rtxn: &'t heed::RoTxn<'t>,
+    db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
+    field_id: u16,
+    candidates: &RoaringBitmap,
+) -> Result<Vec<(u64, &'t [u8])>>
+where
+    CB: FnMut(&'t [u8], u64, DocumentId) -> Result<ControlFlow<()>>,
+{
+    #[derive(Debug, PartialOrd, Ord, PartialEq, Eq)]
+    struct LevelEntry<'t> {
+        /// The number of candidates in this entry.
+        count: u64,
+        /// The key level of the entry.
+        level: Reverse<u8>,
+        /// The left bound key.
+        left_bound: &'t [u8],
+        /// The number of keys we must look for after `left_bound`.
+        group_size: u8,
+    }
+
+    // Represents the list of keys that we must explore.
+    let mut heap = BinaryHeap::new();
+    let mut results = Vec::new();
+
+    let highest_level = get_highest_level(
+        rtxn,
+        db.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
+        field_id,
+    )?;
+
+    if let Some(first_bound) = get_first_facet_value::<ByteSliceRefCodec>(rtxn, db, field_id)? {
+        // We first fill the heap with values from the highest level
+        let starting_key =
+            FacetGroupKey { field_id, level: highest_level, left_bound: first_bound };
+        for el in db.range(rtxn, &(&starting_key..)).unwrap().take(usize::MAX) {
+            let (key, value) = el.unwrap();
+            // The range is unbounded on the right and the group size for the highest level is MAX,
+            // so we need to check that we are not iterating over the next field id
+            if key.field_id != field_id {
+                break;
+            }
+            let count = value.bitmap.intersection_len(&candidates);
+            if count != 0 {
+                heap.push(LevelEntry {
+                    count,
+                    level: Reverse(key.level),
+                    left_bound: key.left_bound,
+                    group_size: value.size,
+                });
+            }
+        }
+
+        while let Some(LevelEntry { count, level, left_bound, group_size }) = heap.pop() {
+            if let Reverse(0) = level {
+                results.push((count, left_bound));
+                // TODO better just call the user callback and ask for a ControlFlow
+                if results.len() == 20 {
+                    break;
+                }
+            } else {
+                let starting_key =
+                    FacetGroupKey { field_id, level: level.0 - 1, left_bound: left_bound };
+                for el in db.range(rtxn, &(&starting_key..)).unwrap().take(group_size as usize) {
+                    let (key, value) = el.unwrap();
+                    // The range is unbounded on the right and the group size for the highest level is MAX,
+                    // so we need to check that we are not iterating over the next field id
+                    if key.field_id != field_id {
+                        break;
+                    }
+                    let count = value.bitmap.intersection_len(&candidates);
+                    if count != 0 {
+                        heap.push(LevelEntry {
+                            count,
+                            level: Reverse(key.level),
+                            left_bound: key.left_bound,
+                            group_size: value.size,
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(results)
+    } else {
+        Ok(Default::default())
+    }
+}
+
+/// Iterate over the facets values by lexicographic order.
 struct LexicographicFacetDistribution<'t, CB>
 where
     CB: FnMut(&'t [u8], u64, DocumentId) -> Result<ControlFlow<()>>,
