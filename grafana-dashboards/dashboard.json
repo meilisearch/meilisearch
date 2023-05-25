@@ -24,7 +24,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 4,
+  "id": 2,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -59,20 +59,17 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "continuous-YlBl"
+            "mode": "continuous-GrYlRd"
           },
           "decimals": 0,
           "mappings": [],
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
           },
@@ -89,6 +86,9 @@
       "id": 2,
       "interval": "5s",
       "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
           "calcs": [
@@ -97,9 +97,7 @@
           "fields": "",
           "values": false
         },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true,
-        "text": {}
+        "textMode": "auto"
       },
       "pluginVersion": "9.5.2",
       "targets": [
@@ -117,7 +115,7 @@
         }
       ],
       "title": "Database Size",
-      "type": "gauge"
+      "type": "stat"
     },
     {
       "datasource": {
@@ -243,7 +241,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": "c4085c47-f6d3-45dd-b761-6809055bb749"
       },
       "fieldConfig": {
         "defaults": {
@@ -295,7 +294,7 @@
           },
           "editorMode": "builder",
           "exemplar": true,
-          "expr": "round(increase(http_requests_total{method=\"POST\", path=\"/indexes/$Index/search\", job=\"meilisearch\"}[1h]))",
+          "expr": "round(increase(meilisearch_http_requests_total{method=\"POST\", path=\"/indexes/$Index/search\", job=\"meilisearch\"}[1h]))",
           "interval": "",
           "legendFormat": "",
           "range": true,
@@ -307,7 +306,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": "c4085c47-f6d3-45dd-b761-6809055bb749"
       },
       "fieldConfig": {
         "defaults": {
@@ -355,7 +355,7 @@
           },
           "editorMode": "builder",
           "exemplar": true,
-          "expr": "round(increase(http_requests_total{method=\"POST\", path=\"/indexes/$Index/search\", job=\"meilisearch\"}[24h]))",
+          "expr": "round(increase(meilisearch_http_requests_total{method=\"POST\", path=\"/indexes/$Index/search\", job=\"meilisearch\"}[24h]))",
           "interval": "",
           "legendFormat": "",
           "range": true,
@@ -367,7 +367,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": "c4085c47-f6d3-45dd-b761-6809055bb749"
       },
       "fieldConfig": {
         "defaults": {
@@ -415,7 +416,7 @@
           },
           "editorMode": "builder",
           "exemplar": true,
-          "expr": "round(increase(http_requests_total{method=\"POST\", path=\"/indexes/$Index/search\", job=\"meilisearch\"}[30d]))",
+          "expr": "round(increase(meilisearch_http_requests_total{method=\"POST\", path=\"/indexes/$Index/search\", job=\"meilisearch\"}[30d]))",
           "interval": "",
           "legendFormat": "",
           "range": true,
@@ -427,7 +428,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": "c4085c47-f6d3-45dd-b761-6809055bb749"
       },
       "fieldConfig": {
         "defaults": {
@@ -509,7 +511,7 @@
           },
           "editorMode": "builder",
           "exemplar": true,
-          "expr": "rate(http_requests_total{instance=\"$instance\", job=\"meilisearch\"}[5m])",
+          "expr": "rate(meilisearch_http_requests_total{instance=\"$instance\", job=\"meilisearch\"}[5m])",
           "interval": "",
           "legendFormat": "{{method}} {{path}}",
           "range": true,
@@ -643,7 +645,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 12,
+        "h": 11,
         "w": 24,
         "x": 0,
         "y": 18
@@ -664,9 +666,9 @@
           "exponent": 0.5,
           "fill": "#b4ff00",
           "mode": "scheme",
-          "reverse": false,
+          "reverse": true,
           "scale": "exponential",
-          "scheme": "Blues",
+          "scheme": "RdYlBu",
           "steps": 128
         },
         "exemplars": {
@@ -688,7 +690,7 @@
         },
         "yAxis": {
           "axisPlacement": "left",
-          "decimals": 2,
+          "decimals": 0,
           "reverse": false,
           "unit": "s"
         }
@@ -730,10 +732,7 @@
       "yBucketNumber": 10
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "bb3298a4-9acf-4da1-b86a-813f29f50888"
-      },
+      "datasource": {},
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -785,38 +784,13 @@
           },
           "unit": "none"
         },
-        "overrides": [
-          {
-            "__systemRef": "hideSeriesFrom",
-            "matcher": {
-              "id": "byNames",
-              "options": {
-                "mode": "exclude",
-                "names": [
-                  "succeeded "
-                ],
-                "prefix": "All except:",
-                "readOnly": true
-              }
-            },
-            "properties": [
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": true
-                }
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 11,
         "w": 12,
         "x": 0,
-        "y": 30
+        "y": 29
       },
       "id": 23,
       "interval": "5s",
@@ -840,7 +814,7 @@
           },
           "editorMode": "builder",
           "exemplar": true,
-          "expr": "nb_tasks{instance=\"$instance\", job=\"meilisearch\", kind=\"statuses\"}",
+          "expr": "meilisearch_nb_tasks{instance=\"$instance\", job=\"meilisearch\", kind=\"statuses\"}",
           "interval": "",
           "legendFormat": "{{value}} ",
           "range": true,
@@ -851,10 +825,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "bb3298a4-9acf-4da1-b86a-813f29f50888"
-      },
+      "datasource": {},
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -912,7 +883,7 @@
         "h": 11,
         "w": 12,
         "x": 12,
-        "y": 30
+        "y": 29
       },
       "id": 24,
       "interval": "5s",
@@ -936,7 +907,7 @@
           },
           "editorMode": "builder",
           "exemplar": true,
-          "expr": "nb_tasks{instance=\"$instance\", job=\"meilisearch\", kind=\"types\"}",
+          "expr": "meilisearch_nb_tasks{instance=\"$instance\", job=\"meilisearch\", kind=\"types\"}",
           "interval": "",
           "legendFormat": "{{value}} ",
           "range": true,
@@ -947,10 +918,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "bb3298a4-9acf-4da1-b86a-813f29f50888"
-      },
+      "datasource": {},
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1008,7 +976,7 @@
         "h": 11,
         "w": 12,
         "x": 0,
-        "y": 41
+        "y": 40
       },
       "id": 25,
       "interval": "5s",
@@ -1032,7 +1000,7 @@
           },
           "editorMode": "builder",
           "exemplar": true,
-          "expr": "nb_tasks{instance=\"$instance\", job=\"meilisearch\", kind=\"indexes\"}",
+          "expr": "meilisearch_nb_tasks{instance=\"$instance\", job=\"meilisearch\", kind=\"indexes\"}",
           "interval": "",
           "legendFormat": "{{value}} ",
           "range": true,
@@ -1052,7 +1020,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 52
+        "y": 51
       },
       "id": 12,
       "panels": [],
@@ -1130,7 +1098,7 @@
         "h": 11,
         "w": 12,
         "x": 0,
-        "y": 53
+        "y": 52
       },
       "id": 4,
       "interval": "5s",
@@ -1233,7 +1201,7 @@
         "h": 11,
         "w": 12,
         "x": 12,
-        "y": 53
+        "y": 52
       },
       "id": 5,
       "interval": "5s",
@@ -1355,6 +1323,6 @@
   "timezone": "",
   "title": "Meilisearch",
   "uid": "7wcZ94dnz",
-  "version": 6,
+  "version": 3,
   "weekStart": ""
 }

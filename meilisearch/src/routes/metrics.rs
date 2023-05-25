@@ -41,7 +41,9 @@ pub async fn get_metrics(
 
     for (kind, value) in index_scheduler.get_stats()? {
         for (value, count) in value {
-            crate::metrics::NB_TASKS.with_label_values(&[&kind, &value]).set(count as i64);
+            crate::metrics::MEILISEARCH_NB_TASKS
+                .with_label_values(&[&kind, &value])
+                .set(count as i64);
         }
     }
 

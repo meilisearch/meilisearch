@@ -52,11 +52,11 @@ where
         if is_registered_resource {
             let request_method = req.method().to_string();
             histogram_timer = Some(
-                crate::metrics::HTTP_RESPONSE_TIME_SECONDS
+                crate::metrics::MEILISEARCH_HTTP_RESPONSE_TIME_SECONDS
                     .with_label_values(&[&request_method, request_path])
                     .start_timer(),
             );
-            crate::metrics::HTTP_REQUESTS_TOTAL
+            crate::metrics::MEILISEARCH_HTTP_REQUESTS_TOTAL
                 .with_label_values(&[&request_method, request_path])
                 .inc();
         }
