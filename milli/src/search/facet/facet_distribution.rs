@@ -136,7 +136,7 @@ impl<'a> FacetDistribution<'a> {
         candidates: &RoaringBitmap,
         distribution: &mut BTreeMap<String, u64>,
     ) -> heed::Result<()> {
-        facet_distribution_iter::iterate_over_facet_distribution(
+        facet_distribution_iter::lexicographically_iterate_over_facet_distribution(
             self.rtxn,
             self.index
                 .facet_id_f64_docids
@@ -161,7 +161,7 @@ impl<'a> FacetDistribution<'a> {
         candidates: &RoaringBitmap,
         distribution: &mut BTreeMap<String, u64>,
     ) -> heed::Result<()> {
-        facet_distribution_iter::iterate_over_facet_distribution(
+        facet_distribution_iter::lexicographically_iterate_over_facet_distribution(
             self.rtxn,
             self.index
                 .facet_id_string_docids
