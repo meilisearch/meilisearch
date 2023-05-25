@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.4
 # Compile
 FROM    rust:alpine3.16 AS compiler
 
@@ -12,7 +11,7 @@ ARG     GIT_TAG
 ENV     VERGEN_GIT_SHA=${COMMIT_SHA} VERGEN_GIT_COMMIT_TIMESTAMP=${COMMIT_DATE} VERGEN_GIT_SEMVER_LIGHTWEIGHT=${GIT_TAG}
 ENV     RUSTFLAGS="-C target-feature=-crt-static"
 
-COPY    --link . .
+COPY    . .
 RUN     set -eux; \
         apkArch="$(apk --print-arch)"; \
         if [ "$apkArch" = "aarch64" ]; then \
@@ -31,7 +30,7 @@ RUN     apk update --quiet \
 
 # add meilisearch to the `/bin` so you can run it from anywhere and it's easy
 # to find.
-COPY    --from=compiler --link /meilisearch/target/release/meilisearch /bin/meilisearch
+COPY    --from=compiler /meilisearch/target/release/meilisearch /bin/meilisearch
 # To stay compatible with the older version of the container (pre v0.27.0) we're
 # going to symlink the meilisearch binary in the path to `/meilisearch`
 RUN     ln -s /bin/meilisearch /meilisearch
