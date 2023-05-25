@@ -121,7 +121,7 @@ jobs:
         with: 
           toolchain: stable 
           override: true 
-      - name: Run cargo tree without default features
+      - name: Run cargo tree without default features and check lindera is not present
         run: |
           cargo tree -f '{p} {f}' -e normal --no-default-features | grep lindera -vqz
       - name: Run cargo tree with default features
