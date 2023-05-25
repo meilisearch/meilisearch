@@ -105,6 +105,29 @@ jobs:
           command: test
           args: --workspace --locked --release --all-features
 
+  test-disabled-tokenization:
+    name: Test disabled tokenization
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:18.04
+    if: github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install needed dependencies
+        run: |
+          apt-get update
+          apt-get install --assume-yes build-essential curl
+      - uses: actions-rs/toolchain@v1 
+        with: 
+          toolchain: stable 
+          override: true 
+      - name: Run cargo tree without default features and check lindera is not present
+        run: |
+          cargo tree -f '{p} {f}' -e normal --no-default-features | grep lindera -vqz
+      - name: Run cargo tree with default features and check lindera is pressent
+        run: |
+          cargo tree -f '{p} {f}' -e normal | grep lindera -qz
+                
   # We run tests in debug also, to make sure that the debug_assertions are hit
   test-debug:
     name: Run tests in debug
