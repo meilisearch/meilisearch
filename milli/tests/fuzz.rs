@@ -52,7 +52,9 @@ enum Operation {
 #[derive(Debug, Arbitrary)]
 struct Batch([Operation; 5]);
 
-fn main() {
+#[test]
+#[ignore]
+fn fuzz() {
     let mut options = EnvOpenOptions::new();
     options.map_size(1024 * 1024 * 1024 * 1024);
     let _tempdir = TempDir::new().unwrap();
