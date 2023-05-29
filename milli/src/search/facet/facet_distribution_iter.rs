@@ -46,12 +46,16 @@ where
     }
 }
 
-pub fn count_iterate_over_facet_distribution<'t>(
+pub fn count_iterate_over_facet_distribution<'t, CB>(
     rtxn: &'t heed::RoTxn<'t>,
     db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
     candidates: &RoaringBitmap,
-) -> Result<Vec<(u64, &'t [u8], u32)>> {
+    mut callback: CB,
+) -> Result<()>
+where
+    CB: FnMut(&'t [u8], u64, DocumentId) -> Result<ControlFlow<()>>,
+{
     #[derive(Debug, PartialOrd, Ord, PartialEq, Eq)]
     struct LevelEntry<'t> {
         /// The number of candidates in this entry.
@@ -68,8 +72,6 @@ pub fn count_iterate_over_facet_distribution<'t>(
 
     // Represents the list of keys that we must explore.
     let mut heap = BinaryHeap::new();
-    let mut results = Vec::new();
-
     let highest_level = get_highest_level(
         rtxn,
         db.remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
@@ -103,10 +105,9 @@ pub fn count_iterate_over_facet_distribution<'t>(
         while let Some(LevelEntry { count, level, left_bound, group_size, any_docid }) = heap.pop()
         {
             if let Reverse(0) = level {
-                results.push((count, left_bound, any_docid));
-                // TODO better just call the user callback and ask for a ControlFlow
-                if results.len() == 20 {
-                    break;
+                match (callback)(left_bound, count, any_docid)? {
+                    ControlFlow::Continue(_) => (),
+                    ControlFlow::Break(_) => return Ok(()),
                 }
             } else {
                 let starting_key =
@@ -132,11 +133,9 @@ pub fn count_iterate_over_facet_distribution<'t>(
                 }
             }
         }
-
-        Ok(results)
-    } else {
-        Ok(Default::default())
     }
+
+    Ok(())
 }
 
 /// Iterate over the facets values by lexicographic order.

@@ -9,12 +9,14 @@ use roaring::RoaringBitmap;
 use crate::error::UserError;
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{
-    FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
-    OrderedF64Codec,
+    FacetGroupKeyCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec, OrderedF64Codec,
 };
 use crate::heed_codec::{ByteSliceRefCodec, StrRefCodec};
 use crate::search::facet::facet_distribution_iter;
 use crate::{FieldId, Index, Result};
+use facet_distribution_iter::{
+    count_iterate_over_facet_distribution, lexicographically_iterate_over_facet_distribution,
+};
 
 /// The default number of values by facets that will
 /// be fetched from the key-value store.
@@ -24,10 +26,20 @@ pub const DEFAULT_VALUES_PER_FACET: usize = 100;
 /// the system to choose between one algorithm or another.
 const CANDIDATES_THRESHOLD: u64 = 3000;
 
+/// How should we fetch the facets?
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum OrderBy {
+    /// By lexicographic order...
+    Lexicographic,
+    /// Or by number of docids in common?
+    Count,
+}
+
 pub struct FacetDistribution<'a> {
     facets: Option<HashSet<String>>,
     candidates: Option<RoaringBitmap>,
     max_values_per_facet: usize,
+    order_by: OrderBy,
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
 }
@@ -38,6 +50,7 @@ impl<'a> FacetDistribution<'a> {
             facets: None,
             candidates: None,
             max_values_per_facet: DEFAULT_VALUES_PER_FACET,
+            order_by: OrderBy::Count,
             rtxn,
             index,
         }
@@ -50,6 +63,11 @@ impl<'a> FacetDistribution<'a> {
 
     pub fn max_values_per_facet(&mut self, max: usize) -> &mut Self {
         self.max_values_per_facet = max;
+        self
+    }
+
+    pub fn order_by(&mut self, order_by: OrderBy) -> &mut Self {
+        self.order_by = order_by;
         self
     }
 
@@ -134,9 +152,15 @@ impl<'a> FacetDistribution<'a> {
         &self,
         field_id: FieldId,
         candidates: &RoaringBitmap,
+        order_by: OrderBy,
         distribution: &mut BTreeMap<String, u64>,
     ) -> heed::Result<()> {
-        facet_distribution_iter::lexicographically_iterate_over_facet_distribution(
+        let search_function = match order_by {
+            OrderBy::Lexicographic => lexicographically_iterate_over_facet_distribution,
+            OrderBy::Count => count_iterate_over_facet_distribution,
+        };
+
+        search_function(
             self.rtxn,
             self.index
                 .facet_id_f64_docids
@@ -159,9 +183,15 @@ impl<'a> FacetDistribution<'a> {
         &self,
         field_id: FieldId,
         candidates: &RoaringBitmap,
+        order_by: OrderBy,
         distribution: &mut BTreeMap<String, u64>,
     ) -> heed::Result<()> {
-        facet_distribution_iter::lexicographically_iterate_over_facet_distribution(
+        let search_function = match order_by {
+            OrderBy::Lexicographic => lexicographically_iterate_over_facet_distribution,
+            OrderBy::Count => count_iterate_over_facet_distribution,
+        };
+
+        search_function(
             self.rtxn,
             self.index
                 .facet_id_string_docids
@@ -189,98 +219,42 @@ impl<'a> FacetDistribution<'a> {
         )
     }
 
-    /// Placeholder search, a.k.a. no candidates were specified. We iterate throught the
-    /// facet values one by one and iterate on the facet level 0 for numbers.
-    fn facet_values_from_raw_facet_database(
-        &self,
-        field_id: FieldId,
-    ) -> heed::Result<BTreeMap<String, u64>> {
-        let mut distribution = BTreeMap::new();
-
-        let db = self.index.facet_id_f64_docids;
-        let mut prefix = vec![];
-        prefix.extend_from_slice(&field_id.to_be_bytes());
-        prefix.push(0); // read values from level 0 only
-
-        let iter = db
-            .as_polymorph()
-            .prefix_iter::<_, ByteSlice, ByteSlice>(self.rtxn, prefix.as_slice())?
-            .remap_types::<FacetGroupKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>();
-
-        for result in iter {
-            let (key, value) = result?;
-            distribution.insert(key.left_bound.to_string(), value.bitmap.len());
-            if distribution.len() == self.max_values_per_facet {
-                break;
-            }
-        }
-
-        let iter = self
-            .index
-            .facet_id_string_docids
-            .as_polymorph()
-            .prefix_iter::<_, ByteSlice, ByteSlice>(self.rtxn, prefix.as_slice())?
-            .remap_types::<FacetGroupKeyCodec<StrRefCodec>, FacetGroupValueCodec>();
-
-        for result in iter {
-            let (key, value) = result?;
-
-            let docid = value.bitmap.iter().next().unwrap();
-            let key: (FieldId, _, &'a str) = (field_id, docid, key.left_bound);
-            let original_string =
-                self.index.field_id_docid_facet_strings.get(self.rtxn, &key)?.unwrap().to_owned();
-
-            distribution.insert(original_string, value.bitmap.len());
-            if distribution.len() == self.max_values_per_facet {
-                break;
-            }
-        }
-
-        Ok(distribution)
-    }
-
     fn facet_values(&self, field_id: FieldId) -> heed::Result<BTreeMap<String, u64>> {
-        // use FacetType::{Number, String};
-
-        let candidates = match self.candidates.as_ref() {
-            Some(candidates) => candidates.clone(),
-            None => todo!("fetch candidates"),
-        };
+        use FacetType::{Number, String};
 
         let mut distribution = BTreeMap::new();
+        match (self.order_by, &self.candidates) {
+            (OrderBy::Lexicographic, Some(cnd)) if cnd.len() <= CANDIDATES_THRESHOLD => {
+                // Classic search, candidates were specified, we must return facet values only related
+                // to those candidates. We also enter here for facet strings for performance reasons.
+                self.facet_distribution_from_documents(field_id, Number, cnd, &mut distribution)?;
+                self.facet_distribution_from_documents(field_id, String, cnd, &mut distribution)?;
+            }
+            _ => {
+                let universe;
+                let candidates;
+                match &self.candidates {
+                    Some(cnd) => candidates = cnd,
+                    None => {
+                        universe = self.index.documents_ids(self.rtxn)?;
+                        candidates = &universe;
+                    }
+                }
 
-        let number_distribution = facet_distribution_iter::count_iterate_over_facet_distribution(
-            self.rtxn,
-            self.index
-                .facet_id_f64_docids
-                .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
-            field_id,
-            &candidates,
-        )?;
-
-        for (count, facet_key, _) in number_distribution {
-            let facet_key = OrderedF64Codec::bytes_decode(facet_key).unwrap();
-            distribution.insert(facet_key.to_string(), count);
-        }
-
-        let string_distribution = facet_distribution_iter::count_iterate_over_facet_distribution(
-            self.rtxn,
-            self.index
-                .facet_id_string_docids
-                .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
-            field_id,
-            &candidates,
-        )?;
-
-        for (count, facet_key, any_docid) in string_distribution {
-            let facet_key = StrRefCodec::bytes_decode(facet_key).unwrap();
-
-            let key: (FieldId, _, &str) = (field_id, any_docid, facet_key);
-            let original_string =
-                self.index.field_id_docid_facet_strings.get(self.rtxn, &key)?.unwrap().to_owned();
-
-            distribution.insert(original_string, count);
-        }
+                self.facet_numbers_distribution_from_facet_levels(
+                    field_id,
+                    candidates,
+                    self.order_by,
+                    &mut distribution,
+                )?;
+                self.facet_strings_distribution_from_facet_levels(
+                    field_id,
+                    candidates,
+                    self.order_by,
+                    &mut distribution,
+                )?;
+            }
+        };
 
         Ok(distribution)
     }
@@ -381,13 +355,20 @@ impl<'a> FacetDistribution<'a> {
 
 impl fmt::Debug for FacetDistribution<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let FacetDistribution { facets, candidates, max_values_per_facet, rtxn: _, index: _ } =
-            self;
+        let FacetDistribution {
+            facets,
+            candidates,
+            max_values_per_facet,
+            order_by,
+            rtxn: _,
+            index: _,
+        } = self;
 
         f.debug_struct("FacetDistribution")
             .field("facets", facets)
             .field("candidates", candidates)
             .field("max_values_per_facet", max_values_per_facet)
+            .field("order_by", order_by)
             .finish()
     }
 }
