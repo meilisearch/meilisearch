@@ -240,42 +240,49 @@ impl<'a> FacetDistribution<'a> {
     }
 
     fn facet_values(&self, field_id: FieldId) -> heed::Result<BTreeMap<String, u64>> {
-        use FacetType::{Number, String};
+        // use FacetType::{Number, String};
 
-        match self.candidates {
-            Some(ref candidates) => {
-                // Classic search, candidates were specified, we must return facet values only related
-                // to those candidates. We also enter here for facet strings for performance reasons.
-                let mut distribution = BTreeMap::new();
-                if candidates.len() <= CANDIDATES_THRESHOLD {
-                    self.facet_distribution_from_documents(
-                        field_id,
-                        Number,
-                        candidates,
-                        &mut distribution,
-                    )?;
-                    self.facet_distribution_from_documents(
-                        field_id,
-                        String,
-                        candidates,
-                        &mut distribution,
-                    )?;
-                } else {
-                    self.facet_numbers_distribution_from_facet_levels(
-                        field_id,
-                        candidates,
-                        &mut distribution,
-                    )?;
-                    self.facet_strings_distribution_from_facet_levels(
-                        field_id,
-                        candidates,
-                        &mut distribution,
-                    )?;
-                }
-                Ok(distribution)
-            }
-            None => self.facet_values_from_raw_facet_database(field_id),
+        let candidates = match self.candidates.as_ref() {
+            Some(candidates) => candidates.clone(),
+            None => todo!("fetch candidates"),
+        };
+
+        let mut distribution = BTreeMap::new();
+
+        let number_distribution = facet_distribution_iter::count_iterate_over_facet_distribution(
+            self.rtxn,
+            self.index
+                .facet_id_f64_docids
+                .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
+            field_id,
+            &candidates,
+        )?;
+
+        for (count, facet_key, _) in number_distribution {
+            let facet_key = OrderedF64Codec::bytes_decode(facet_key).unwrap();
+            distribution.insert(facet_key.to_string(), count);
         }
+
+        let string_distribution = facet_distribution_iter::count_iterate_over_facet_distribution(
+            self.rtxn,
+            self.index
+                .facet_id_string_docids
+                .remap_key_type::<FacetGroupKeyCodec<ByteSliceRefCodec>>(),
+            field_id,
+            &candidates,
+        )?;
+
+        for (count, facet_key, any_docid) in string_distribution {
+            let facet_key = StrRefCodec::bytes_decode(facet_key).unwrap();
+
+            let key: (FieldId, _, &str) = (field_id, any_docid, facet_key);
+            let original_string =
+                self.index.field_id_docid_facet_strings.get(self.rtxn, &key)?.unwrap().to_owned();
+
+            distribution.insert(original_string, count);
+        }
+
+        Ok(distribution)
     }
 
     pub fn compute_stats(&self) -> Result<BTreeMap<String, (f64, f64)>> {

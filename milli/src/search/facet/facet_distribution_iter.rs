@@ -1,5 +1,5 @@
 use std::cmp::Reverse;
-use std::collections::{BTreeMap, BinaryHeap};
+use std::collections::BinaryHeap;
 use std::ops::ControlFlow;
 
 use heed::Result;
@@ -46,15 +46,12 @@ where
     }
 }
 
-pub fn count_iterate_over_facet_distribution<'t, CB>(
+pub fn count_iterate_over_facet_distribution<'t>(
     rtxn: &'t heed::RoTxn<'t>,
     db: heed::Database<FacetGroupKeyCodec<ByteSliceRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
     candidates: &RoaringBitmap,
-) -> Result<Vec<(u64, &'t [u8])>>
-where
-    CB: FnMut(&'t [u8], u64, DocumentId) -> Result<ControlFlow<()>>,
-{
+) -> Result<Vec<(u64, &'t [u8], u32)>> {
     #[derive(Debug, PartialOrd, Ord, PartialEq, Eq)]
     struct LevelEntry<'t> {
         /// The number of candidates in this entry.
@@ -65,6 +62,8 @@ where
         left_bound: &'t [u8],
         /// The number of keys we must look for after `left_bound`.
         group_size: u8,
+        /// Any docid in the set of matching documents. Used to find the original facet string.
+        any_docid: u32,
     }
 
     // Represents the list of keys that we must explore.
@@ -88,20 +87,23 @@ where
             if key.field_id != field_id {
                 break;
             }
-            let count = value.bitmap.intersection_len(&candidates);
+            let intersection = value.bitmap & candidates;
+            let count = intersection.len();
             if count != 0 {
                 heap.push(LevelEntry {
                     count,
                     level: Reverse(key.level),
                     left_bound: key.left_bound,
                     group_size: value.size,
+                    any_docid: intersection.min().unwrap(),
                 });
             }
         }
 
-        while let Some(LevelEntry { count, level, left_bound, group_size }) = heap.pop() {
+        while let Some(LevelEntry { count, level, left_bound, group_size, any_docid }) = heap.pop()
+        {
             if let Reverse(0) = level {
-                results.push((count, left_bound));
+                results.push((count, left_bound, any_docid));
                 // TODO better just call the user callback and ask for a ControlFlow
                 if results.len() == 20 {
                     break;
@@ -116,13 +118,15 @@ where
                     if key.field_id != field_id {
                         break;
                     }
-                    let count = value.bitmap.intersection_len(&candidates);
+                    let intersection = value.bitmap & candidates;
+                    let count = intersection.len();
                     if count != 0 {
                         heap.push(LevelEntry {
                             count,
                             level: Reverse(key.level),
                             left_bound: key.left_bound,
                             group_size: value.size,
+                            any_docid: intersection.min().unwrap(),
                         });
                     }
                 }
