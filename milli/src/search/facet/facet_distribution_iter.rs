@@ -110,8 +110,7 @@ where
                     ControlFlow::Break(_) => return Ok(()),
                 }
             } else {
-                let starting_key =
-                    FacetGroupKey { field_id, level: level.0 - 1, left_bound: left_bound };
+                let starting_key = FacetGroupKey { field_id, level: level.0 - 1, left_bound };
                 for el in db.range(rtxn, &(&starting_key..)).unwrap().take(group_size as usize) {
                     let (key, value) = el.unwrap();
                     // The range is unbounded on the right and the group size for the highest level is MAX,

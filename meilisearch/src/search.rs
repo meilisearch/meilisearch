@@ -236,17 +236,17 @@ impl From<MatchingStrategy> for TermsMatchingStrategy {
 #[derive(Debug, Default, Clone, PartialEq, Eq, Deserr)]
 #[deserr(rename_all = camelCase)]
 pub enum FacetValuesSort {
-    /// Facet values are sorted by decreasing count.
-    /// The count is the number of records containing this facet value in the results of the query.
+    /// Facet values are sorted in alphabetical order, ascending from A to Z.
     #[default]
     Alpha,
-    /// Facet values are sorted in alphabetical order, ascending from A to Z.
+    /// Facet values are sorted by decreasing count.
+    /// The count is the number of records containing this facet value in the results of the query.
     Count,
 }
 
-impl Into<OrderBy> for FacetValuesSort {
-    fn into(self) -> OrderBy {
-        match self {
+impl From<FacetValuesSort> for OrderBy {
+    fn from(val: FacetValuesSort) -> Self {
+        match val {
             FacetValuesSort::Alpha => OrderBy::Lexicographic,
             FacetValuesSort::Count => OrderBy::Count,
         }
