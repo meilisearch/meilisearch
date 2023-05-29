@@ -14,14 +14,27 @@ default-run = "meilisearch"
 
 [dependencies]
 actix-cors = "0.6.4"
-actix-http = { version = "3.3.1", default-features = false, features = ["compress-brotli", "compress-gzip", "rustls"] }
-actix-web = { version = "4.3.1", default-features = false, features = ["macros", "compress-brotli", "compress-gzip", "cookies", "rustls"] }
+actix-http = { version = "3.3.1", default-features = false, features = [
+    "compress-brotli",
+    "compress-gzip",
+    "rustls",
+] }
+actix-web = { version = "4.3.1", default-features = false, features = [
+    "macros",
+    "compress-brotli",
+    "compress-gzip",
+    "cookies",
+    "rustls",
+] }
 actix-web-static-files = { git = "https://github.com/kilork/actix-web-static-files.git", rev = "2d3b6160", optional = true }
 anyhow = { version = "1.0.70", features = ["backtrace"] }
 async-stream = "0.3.5"
 async-trait = "0.1.68"
 bstr = "1.4.0"
-byte-unit = { version = "4.0.19", default-features = false, features = ["std", "serde"] }
+byte-unit = { version = "4.0.19", default-features = false, features = [
+    "std",
+    "serde",
+] }
 bytes = "1.4.0"
 clap = { version = "4.2.1", features = ["derive", "env"] }
 crossbeam-channel = "0.5.8"
@@ -56,7 +69,10 @@ prometheus = { version = "0.13.3", features = ["process"] }
 rand = "0.8.5"
 rayon = "1.7.0"
 regex = "1.7.3"
-reqwest = { version = "0.11.16", features = ["rustls-tls", "json"], default-features = false }
+reqwest = { version = "0.11.16", features = [
+    "rustls-tls",
+    "json",
+], default-features = false }
 rustls = "0.20.8"
 rustls-pemfile = "1.0.2"
 segment = { version = "0.2.2", optional = true }
@@ -70,7 +86,12 @@ sysinfo = "0.28.4"
 tar = "0.4.38"
 tempfile = "3.5.0"
 thiserror = "1.0.40"
-time = { version = "0.3.20", features = ["serde-well-known", "formatting", "parsing", "macros"] }
+time = { version = "0.3.20", features = [
+    "serde-well-known",
+    "formatting",
+    "parsing",
+    "macros",
+] }
 tokio = { version = "1.27.0", features = ["full"] }
 tokio-stream = "0.1.12"
 toml = "0.7.3"
@@ -89,7 +110,7 @@ brotli = "3.3.4"
 insta = "1.29.0"
 manifest-dir-macros = "0.1.16"
 maplit = "1.0.2"
-meili-snap = {path = "../meili-snap"}
+meili-snap = { path = "../meili-snap" }
 temp-env = "0.3.3"
 urlencoding = "2.1.2"
 yaup = "0.2.1"
@@ -98,7 +119,10 @@ yaup = "0.2.1"
 anyhow = { version = "1.0.70", optional = true }
 cargo_toml = { version = "0.15.2", optional = true }
 hex = { version = "0.4.3", optional = true }
-reqwest = { version = "0.11.16", features = ["blocking", "rustls-tls"], default-features = false, optional = true }
+reqwest = { version = "0.11.16", features = [
+    "blocking",
+    "rustls-tls",
+], default-features = false, optional = true }
 sha-1 = { version = "0.10.1", optional = true }
 static-files = { version = "0.2.3", optional = true }
 tempfile = { version = "3.5.0", optional = true }
@@ -108,7 +132,17 @@ zip = { version = "0.6.4", optional = true }
 [features]
 default = ["analytics", "meilisearch-types/all-tokenizations", "mini-dashboard"]
 analytics = ["segment"]
-mini-dashboard = ["actix-web-static-files", "static-files", "anyhow", "cargo_toml", "hex", "reqwest", "sha-1", "tempfile", "zip"]
+mini-dashboard = [
+    "actix-web-static-files",
+    "static-files",
+    "anyhow",
+    "cargo_toml",
+    "hex",
+    "reqwest",
+    "sha-1",
+    "tempfile",
+    "zip",
+]
 chinese = ["meilisearch-types/chinese"]
 hebrew = ["meilisearch-types/hebrew"]
 japanese = ["meilisearch-types/japanese"]

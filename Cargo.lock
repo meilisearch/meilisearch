@@ -2730,6 +2730,7 @@ dependencies = [
  "geoutils",
  "grenad",
  "heed",
+ "indexmap",
  "insta",
  "itertools",
  "json-depth-checker",

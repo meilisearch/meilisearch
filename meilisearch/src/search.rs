@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use deserr::Deserr;
 use either::Either;
+use indexmap::IndexMap;
 use meilisearch_auth::IndexSearchRules;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
@@ -240,7 +241,7 @@ pub struct SearchResult {
     #[serde(flatten)]
     pub hits_info: HitsInfo,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub facet_distribution: Option<BTreeMap<String, BTreeMap<String, u64>>>,
+    pub facet_distribution: Option<BTreeMap<String, IndexMap<String, u64>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facet_stats: Option<BTreeMap<String, FacetStats>>,
 }

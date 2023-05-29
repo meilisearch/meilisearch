@@ -4,6 +4,7 @@ use std::{fmt, mem};
 
 use heed::types::ByteSlice;
 use heed::BytesDecode;
+use indexmap::IndexMap;
 use roaring::RoaringBitmap;
 
 use crate::error::UserError;
@@ -83,7 +84,7 @@ impl<'a> FacetDistribution<'a> {
         field_id: FieldId,
         facet_type: FacetType,
         candidates: &RoaringBitmap,
-        distribution: &mut BTreeMap<String, u64>,
+        distribution: &mut IndexMap<String, u64>,
     ) -> heed::Result<()> {
         match facet_type {
             FacetType::Number => {
@@ -153,7 +154,7 @@ impl<'a> FacetDistribution<'a> {
         field_id: FieldId,
         candidates: &RoaringBitmap,
         order_by: OrderBy,
-        distribution: &mut BTreeMap<String, u64>,
+        distribution: &mut IndexMap<String, u64>,
     ) -> heed::Result<()> {
         let search_function = match order_by {
             OrderBy::Lexicographic => lexicographically_iterate_over_facet_distribution,
@@ -184,7 +185,7 @@ impl<'a> FacetDistribution<'a> {
         field_id: FieldId,
         candidates: &RoaringBitmap,
         order_by: OrderBy,
-        distribution: &mut BTreeMap<String, u64>,
+        distribution: &mut IndexMap<String, u64>,
     ) -> heed::Result<()> {
         let search_function = match order_by {
             OrderBy::Lexicographic => lexicographically_iterate_over_facet_distribution,
@@ -219,10 +220,10 @@ impl<'a> FacetDistribution<'a> {
         )
     }
 
-    fn facet_values(&self, field_id: FieldId) -> heed::Result<BTreeMap<String, u64>> {
+    fn facet_values(&self, field_id: FieldId) -> heed::Result<IndexMap<String, u64>> {
         use FacetType::{Number, String};
 
-        let mut distribution = BTreeMap::new();
+        let mut distribution = IndexMap::new();
         match (self.order_by, &self.candidates) {
             (OrderBy::Lexicographic, Some(cnd)) if cnd.len() <= CANDIDATES_THRESHOLD => {
                 // Classic search, candidates were specified, we must return facet values only related
@@ -318,7 +319,7 @@ impl<'a> FacetDistribution<'a> {
         Ok(distribution)
     }
 
-    pub fn execute(&self) -> Result<BTreeMap<String, BTreeMap<String, u64>>> {
+    pub fn execute(&self) -> Result<BTreeMap<String, IndexMap<String, u64>>> {
         let fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
         let filterable_fields = self.index.filterable_fields(self.rtxn)?;
 
