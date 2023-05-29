@@ -1,6 +1,6 @@
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use arbitrary::{Arbitrary, Unstructured};
@@ -41,6 +41,7 @@ struct Opt {
 fn main() {
     let opt = Opt::parse();
     let progression: &'static AtomicUsize = Box::leak(Box::new(AtomicUsize::new(0)));
+    let stop: &'static AtomicBool = Box::leak(Box::new(AtomicBool::new(false)));
 
     let par = opt.par.unwrap_or_else(|| std::thread::available_parallelism().unwrap()).get();
     let mut handles = Vec::with_capacity(par);
@@ -61,6 +62,9 @@ fn main() {
 
             std::thread::scope(|s| {
                 loop {
+                    if stop.load(Ordering::Relaxed) {
+                        return;
+                    }
                     let v: Vec<u8> =
                         std::iter::repeat_with(|| fastrand::u8(..)).take(1000).collect();
 
@@ -111,7 +115,10 @@ fn main() {
                         }
                         wtxn.abort().unwrap();
                     });
-                    handle.join().expect(&dbg_input);
+                    if let err @ Err(_) = handle.join() {
+                        stop.store(true, Ordering::Relaxed);
+                        err.expect(&dbg_input);
+                    }
                 }
             });
         });
