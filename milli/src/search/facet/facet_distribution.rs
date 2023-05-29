@@ -12,11 +12,10 @@ use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec, OrderedF64Codec,
 };
 use crate::heed_codec::{ByteSliceRefCodec, StrRefCodec};
-use crate::search::facet::facet_distribution_iter;
-use crate::{FieldId, Index, Result};
-use facet_distribution_iter::{
+use crate::search::facet::facet_distribution_iter::{
     count_iterate_over_facet_distribution, lexicographically_iterate_over_facet_distribution,
 };
+use crate::{FieldId, Index, Result};
 
 /// The default number of values by facets that will
 /// be fetched from the key-value store.
@@ -27,9 +26,10 @@ pub const DEFAULT_VALUES_PER_FACET: usize = 100;
 const CANDIDATES_THRESHOLD: u64 = 3000;
 
 /// How should we fetch the facets?
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum OrderBy {
     /// By lexicographic order...
+    #[default]
     Lexicographic,
     /// Or by number of docids in common?
     Count,
@@ -50,7 +50,7 @@ impl<'a> FacetDistribution<'a> {
             facets: None,
             candidates: None,
             max_values_per_facet: DEFAULT_VALUES_PER_FACET,
-            order_by: OrderBy::Count,
+            order_by: OrderBy::default(),
             rtxn,
             index,
         }

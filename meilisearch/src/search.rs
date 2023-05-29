@@ -14,7 +14,7 @@ use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::{
-    dot_product_similarity, FacetValueHit, InternalError, SearchForFacetValues,
+    dot_product_similarity, FacetValueHit, OrderBy, InternalError, SearchForFacetValues,
 };
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
@@ -74,6 +74,8 @@ pub struct SearchQuery {
     pub sort: Option<Vec<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)] // TODO
+    pub sort_facet_values_by: Option<FacetValuesSort>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
     pub highlight_pre_tag: String,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
@@ -133,6 +135,8 @@ pub struct SearchQueryWithIndex {
     pub sort: Option<Vec<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)] // TODO
+    pub sort_facet_values_by: Option<FacetValuesSort>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
     pub highlight_pre_tag: String,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
@@ -165,6 +169,7 @@ impl SearchQueryWithIndex {
             filter,
             sort,
             facets,
+            sort_facet_values_by,
             highlight_pre_tag,
             highlight_post_tag,
             crop_marker,
@@ -190,6 +195,7 @@ impl SearchQueryWithIndex {
                 filter,
                 sort,
                 facets,
+                sort_facet_values_by,
                 highlight_pre_tag,
                 highlight_post_tag,
                 crop_marker,
@@ -222,6 +228,26 @@ impl From<MatchingStrategy> for TermsMatchingStrategy {
         match other {
             MatchingStrategy::Last => Self::Last,
             MatchingStrategy::All => Self::All,
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Deserr)]
+#[deserr(rename_all = camelCase)]
+pub enum FacetValuesSort {
+    /// Facet values are sorted by decreasing count.
+    /// The count is the number of records containing this facet value in the results of the query.
+    #[default]
+    Alpha,
+    /// Facet values are sorted in alphabetical order, ascending from A to Z.
+    Count,
+}
+
+impl Into<OrderBy> for FacetValuesSort {
+    fn into(self) -> OrderBy {
+        match self {
+            FacetValuesSort::Alpha => OrderBy::Lexicographic,
+            FacetValuesSort::Count => OrderBy::Count,
         }
     }
 }
@@ -557,7 +583,10 @@ pub fn perform_search(
             if fields.iter().all(|f| f != "*") {
                 facet_distribution.facets(fields);
             }
-            let distribution = facet_distribution.candidates(candidates).execute()?;
+            let distribution = facet_distribution
+                .candidates(candidates)
+                .order_by(query.sort_facet_values_by.map_or_else(Default::default, Into::into))
+                .execute()?;
             let stats = facet_distribution.compute_stats()?;
             (Some(distribution), Some(stats))
         }
