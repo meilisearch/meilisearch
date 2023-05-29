@@ -58,7 +58,7 @@ pub struct SearchQueryGet {
     show_matches_position: Param<bool>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchFacets>)]
     facets: Option<CS<String>>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidSearchFacets>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchFacets>)] // TODO
     sort_facet_values_by: Option<FacetValuesSort>,
     #[deserr( default = DEFAULT_HIGHLIGHT_PRE_TAG(), error = DeserrQueryParamError<InvalidSearchHighlightPreTag>)]
     highlight_pre_tag: String,
