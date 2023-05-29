@@ -34,7 +34,6 @@ struct Opt {
     /// diskutil erasevolume HFS+ 'RAM Disk' `hdiutil attach -nobrowse -nomount ram://4194304 # create it
     ///
     /// hdiutil detach /dev/:the_disk
-    ///
     #[clap(long)]
     path: Option<PathBuf>,
 }
@@ -60,56 +59,61 @@ fn main() {
             let indexer_config = IndexerConfig::default();
             let index_documents_config = IndexDocumentsConfig::default();
 
-            loop {
-                let v: Vec<u8> = std::iter::repeat_with(|| fastrand::u8(..)).take(1000).collect();
+            std::thread::scope(|s| {
+                loop {
+                    let v: Vec<u8> =
+                        std::iter::repeat_with(|| fastrand::u8(..)).take(1000).collect();
 
-                let mut data = Unstructured::new(&v);
-                let batches = <[Batch; 5]>::arbitrary(&mut data).unwrap();
-                // will be used to display the error once a thread crashes
-                let dbg_input = format!("{:#?}", batches);
+                    let mut data = Unstructured::new(&v);
+                    let batches = <[Batch; 5]>::arbitrary(&mut data).unwrap();
+                    // will be used to display the error once a thread crashes
+                    let dbg_input = format!("{:#?}", batches);
 
-                let mut wtxn = index.write_txn().unwrap();
+                    let handle = s.spawn(|| {
+                        let mut wtxn = index.write_txn().unwrap();
 
-                for batch in batches {
-                    let mut builder = IndexDocuments::new(
-                        &mut wtxn,
-                        &index,
-                        &indexer_config,
-                        index_documents_config.clone(),
-                        |_| (),
-                        || false,
-                    )
-                    .unwrap();
+                        for batch in batches {
+                            let mut builder = IndexDocuments::new(
+                                &mut wtxn,
+                                &index,
+                                &indexer_config,
+                                index_documents_config.clone(),
+                                |_| (),
+                                || false,
+                            )
+                            .unwrap();
 
-                    for op in batch.0 {
-                        match op {
-                            Operation::AddDoc(doc) => {
-                                let documents =
-                                    milli::documents::objects_from_json_value(doc.to_d());
-                                let documents =
-                                    milli::documents::documents_batch_reader_from_objects(
-                                        documents,
-                                    );
-                                let (b, _added) =
-                                    builder.add_documents(documents).expect(&dbg_input);
-                                builder = b;
+                            for op in batch.0 {
+                                match op {
+                                    Operation::AddDoc(doc) => {
+                                        let documents =
+                                            milli::documents::objects_from_json_value(doc.to_d());
+                                        let documents =
+                                            milli::documents::documents_batch_reader_from_objects(
+                                                documents,
+                                            );
+                                        let (b, _added) = builder.add_documents(documents).unwrap();
+                                        builder = b;
+                                    }
+                                    Operation::DeleteDoc(id) => {
+                                        let (b, _removed) =
+                                            builder.remove_documents(vec![id.to_s()]).unwrap();
+                                        builder = b;
+                                    }
+                                }
                             }
-                            Operation::DeleteDoc(id) => {
-                                let (b, _removed) =
-                                    builder.remove_documents(vec![id.to_s()]).unwrap();
-                                builder = b;
-                            }
+                            builder.execute().unwrap();
+
+                            // after executing a batch we check if the database is corrupted
+                            let res = index.search(&wtxn).execute().unwrap();
+                            index.documents(&wtxn, res.documents_ids).unwrap();
+                            progression.fetch_add(1, Ordering::Relaxed);
                         }
-                    }
-                    builder.execute().expect(&dbg_input);
-
-                    // after executing a batch we check if the database is corrupted
-                    let res = index.search(&wtxn).execute().expect(&dbg_input);
-                    index.documents(&wtxn, res.documents_ids).expect(&dbg_input);
-                    progression.fetch_add(1, Ordering::Relaxed);
+                        wtxn.abort().unwrap();
+                    });
+                    handle.join().expect(&dbg_input);
                 }
-                wtxn.abort().unwrap();
-            }
+            });
         });
         handles.push(handle);
     }
