@@ -2731,6 +2731,7 @@ dependencies = [
  "grenad",
  "heed",
  "hnsw",
+ "indexmap",
  "insta",
  "itertools",
  "json-depth-checker",
