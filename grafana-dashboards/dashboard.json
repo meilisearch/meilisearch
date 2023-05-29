@@ -694,9 +694,9 @@
       },
       "gridPos": {
         "h": 11,
-        "w": 24,
-        "x": 0,
-        "y": 29
+        "w": 12,
+        "x": 12,
+        "y": 18
       },
       "heatmap": {},
       "hideZeroBuckets": false,
@@ -711,12 +711,12 @@
         "cellGap": 2,
         "cellValues": {},
         "color": {
-          "exponent": 0.5,
+          "exponent": 0.4,
           "fill": "#b4ff00",
           "mode": "scheme",
-          "reverse": true,
+          "reverse": false,
           "scale": "exponential",
-          "scheme": "RdYlBu",
+          "scheme": "Blues",
           "steps": 128
         },
         "exemplars": {
@@ -838,7 +838,7 @@
         "h": 11,
         "w": 12,
         "x": 0,
-        "y": 40
+        "y": 29
       },
       "id": 23,
       "interval": "5s",
@@ -931,7 +931,7 @@
         "h": 11,
         "w": 12,
         "x": 12,
-        "y": 40
+        "y": 29
       },
       "id": 24,
       "interval": "5s",
@@ -1024,7 +1024,7 @@
         "h": 11,
         "w": 12,
         "x": 0,
-        "y": 51
+        "y": 40
       },
       "id": 25,
       "interval": "5s",
@@ -1068,7 +1068,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 62
+        "y": 51
       },
       "id": 12,
       "panels": [],
@@ -1146,7 +1146,7 @@
         "h": 11,
         "w": 12,
         "x": 0,
-        "y": 63
+        "y": 52
       },
       "id": 4,
       "interval": "5s",
@@ -1249,7 +1249,7 @@
         "h": 11,
         "w": 12,
         "x": 12,
-        "y": 63
+        "y": 52
       },
       "id": 5,
       "interval": "5s",
@@ -1371,6 +1371,6 @@
   "timezone": "",
   "title": "Meilisearch",
   "uid": "7wcZ94dnz",
-  "version": 5,
+  "version": 6,
   "weekStart": ""
 }
