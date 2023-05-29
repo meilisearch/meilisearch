@@ -77,13 +77,9 @@ pub fn located_query_terms_from_tokens(
                 }
             }
             TokenKind::Separator(separator_kind) => {
-                match separator_kind {
-                    SeparatorKind::Hard => {
-                        position += 1;
-                    }
-                    SeparatorKind::Soft => {
-                        position += 0;
-                    }
+                // add penalty for hard separators
+                if let SeparatorKind::Hard = separator_kind {
+                    position = position.wrapping_add(1);
                 }
 
                 phrase = 'phrase: {
@@ -286,5 +282,38 @@ impl PhraseBuilder {
             }),
             positions: self.start..=self.end,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use charabia::TokenizerBuilder;
+
+    use super::*;
+    use crate::index::tests::TempIndex;
+
+    fn temp_index_with_documents() -> TempIndex {
+        let temp_index = TempIndex::new();
+        temp_index
+            .add_documents(documents!([
+                { "id": 1, "name": "split this world westfali westfalia the Ŵôřlḑôle" },
+                { "id": 2, "name": "Westfália" },
+                { "id": 3, "name": "Ŵôřlḑôle" },
+            ]))
+            .unwrap();
+        temp_index
+    }
+
+    #[test]
+    fn start_with_hard_separator() -> Result<()> {
+        let tokenizer = TokenizerBuilder::new().build();
+        let tokens = tokenizer.tokenize(".");
+        let index = temp_index_with_documents();
+        let rtxn = index.read_txn()?;
+        let mut ctx = SearchContext::new(&index, &rtxn);
+        // panics with `attempt to add with overflow` before <https://github.com/meilisearch/meilisearch/issues/3785>
+        let located_query_terms = located_query_terms_from_tokens(&mut ctx, tokens, None)?;
+        assert!(located_query_terms.is_empty());
+        Ok(())
     }
 }
