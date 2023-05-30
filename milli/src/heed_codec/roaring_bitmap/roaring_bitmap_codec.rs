@@ -8,7 +8,7 @@ impl heed::BytesDecode<'_> for RoaringBitmapCodec {
     type DItem = RoaringBitmap;
 
     fn bytes_decode(bytes: &[u8]) -> Option<Self::DItem> {
-        RoaringBitmap::deserialize_from(bytes).ok()
+        RoaringBitmap::deserialize_unchecked_from(bytes).ok()
     }
 }
 
