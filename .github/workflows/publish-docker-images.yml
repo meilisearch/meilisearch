@@ -11,6 +11,9 @@ on:
   # Both `schedule` and `workflow_dispatch` build the nightly tag
   schedule:
     - cron: '0 23 * * *' # Every day at 11:00pm
+  # This workflow is reusable, i.e. it may be called from another workflow.
+  # See https://docs.github.com/en/actions/using-workflows/reusing-workflows
+  workflow_call:
   workflow_dispatch:
 
 jobs:

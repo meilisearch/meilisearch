@@ -1,11 +1,14 @@
 name: Publish binaries to GitHub release
 
 on:
-  workflow_dispatch:
   schedule:
     - cron: '0 2 * * *' # Every day at 2:00am
   release:
     types: [published]
+  # This workflow is reusable, i.e. it may be called from another workflow.
+  # See https://docs.github.com/en/actions/using-workflows/reusing-workflows
+  workflow_call:
+  workflow_dispatch:
 
 jobs:
   check-version:

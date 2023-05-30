@@ -1,0 +1,15 @@
+name: Publish binaries, images, and packages
+
+on:
+  release:
+    types: [released]
+  workflow_dispatch:
+
+jobs:
+  publish-binaries:
+    uses: ./.github/workflows/publish-binaries.yml
+  publish-images:
+    uses: ./.github/workflows/publish-docker-images.yml
+  publish-packages:
+    needs: [publish-binaries, publish-images]
+    uses: ./.github/workflows/publish-apt-brew-pkg.yml

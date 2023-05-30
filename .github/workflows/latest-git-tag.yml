@@ -1,9 +1,9 @@
 # Create or update a latest git tag when releasing a stable version of Meilisearch
 name: Update latest git tag
 on:
-  workflow_dispatch:
   release:
     types: [released]
+  workflow_dispatch:
 
 jobs:
   check-version:

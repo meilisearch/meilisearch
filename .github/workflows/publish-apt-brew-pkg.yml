@@ -1,8 +1,9 @@
 name: Publish to APT & Homebrew
 
 on:
-  release:
-    types: [released]
+  # This workflow is reusable, i.e. it may be called from another workflow.
+  # See https://docs.github.com/en/actions/using-workflows/reusing-workflows
+  workflow_call:
 
 jobs:
   check-version:
@@ -14,7 +15,7 @@ jobs:
         run: bash .github/scripts/check-release.sh
 
   debian:
-    name: Publish debian package
+    name: Publish Debian package
     runs-on: ubuntu-latest
     needs: check-version
     container:
@@ -41,7 +42,7 @@ jobs:
         file: target/debian/meilisearch.deb
         asset_name: meilisearch.deb
         tag: ${{ github.ref }}
-    - name: Upload debian pkg to apt repository
+    - name: Upload Debian package to apt repository
       run: curl -F package=@target/debian/meilisearch.deb https://${{ secrets.GEMFURY_PUSH_TOKEN }}@push.fury.io/meilisearch/
 
   homebrew:
