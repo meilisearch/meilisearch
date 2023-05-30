@@ -14,7 +14,7 @@ jobs:
         run: bash .github/scripts/check-release.sh
 
   debian:
-    name: Publish debian packagge
+    name: Publish debian package
     runs-on: ubuntu-latest
     needs: check-version
     container:
