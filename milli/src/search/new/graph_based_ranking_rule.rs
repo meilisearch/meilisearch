@@ -181,9 +181,6 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         logger: &mut dyn SearchLogger<QueryGraph>,
         universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<QueryGraph>>> {
-        // If universe.len() <= 1, the bucket sort algorithm
-        // should not have called this function.
-        assert!(universe.len() > 1);
         // Will crash if `next_bucket` is called before `start_iteration` or after `end_iteration`,
         // should never happen
         let mut state = self.state.take().unwrap();

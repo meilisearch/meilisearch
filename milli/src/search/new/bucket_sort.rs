@@ -116,16 +116,15 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     }
 
     while valid_docids.len() < length {
-        // The universe for this bucket is zero or one element, so we don't need to sort
-        // anything, just extend the results and go back to the parent ranking rule.
-        if ranking_rule_universes[cur_ranking_rule_index].len() <= 1 {
-            let bucket = std::mem::take(&mut ranking_rule_universes[cur_ranking_rule_index]);
-            maybe_add_to_results!(bucket);
+        // The universe for this bucket is zero element, so we don't need to sort
+        // anything, just go back to the parent ranking rule.
+        if ranking_rule_universes[cur_ranking_rule_index].is_empty() {
             back!();
             continue;
         }
 
-        let Some(next_bucket) = ranking_rules[cur_ranking_rule_index].next_bucket(ctx, logger, &ranking_rule_universes[cur_ranking_rule_index])? else {
+        let Some(next_bucket) = ranking_rules[cur_ranking_rule_index].next_bucket(ctx, logger, &ranking_rule_universes[cur_ranking_rule_index])?
+        else {
             back!();
             continue;
         };
