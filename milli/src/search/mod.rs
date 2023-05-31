@@ -28,6 +28,7 @@ pub struct Search<'a> {
     offset: usize,
     limit: usize,
     sort_criteria: Option<Vec<AscDesc>>,
+    searchable_attributes: Option<Vec<String>>,
     geo_strategy: new::GeoSortStrategy,
     terms_matching_strategy: TermsMatchingStrategy,
     scoring_strategy: ScoringStrategy,
@@ -45,6 +46,7 @@ impl<'a> Search<'a> {
             offset: 0,
             limit: 20,
             sort_criteria: None,
+            searchable_attributes: None,
             geo_strategy: new::GeoSortStrategy::default(),
             terms_matching_strategy: TermsMatchingStrategy::default(),
             scoring_strategy: Default::default(),
@@ -72,6 +74,11 @@ impl<'a> Search<'a> {
 
     pub fn sort_criteria(&mut self, criteria: Vec<AscDesc>) -> &mut Search<'a> {
         self.sort_criteria = Some(criteria);
+        self
+    }
+
+    pub fn searchable_attributes(&mut self, searchable: Vec<String>) -> &mut Search<'a> {
+        self.searchable_attributes = Some(searchable);
         self
     }
 
@@ -145,6 +152,7 @@ impl fmt::Debug for Search<'_> {
             offset,
             limit,
             sort_criteria,
+            searchable_attributes,
             geo_strategy: _,
             terms_matching_strategy,
             scoring_strategy,
@@ -159,6 +167,7 @@ impl fmt::Debug for Search<'_> {
             .field("offset", offset)
             .field("limit", limit)
             .field("sort_criteria", sort_criteria)
+            .field("searchable_attributes", searchable_attributes)
             .field("terms_matching_strategy", terms_matching_strategy)
             .field("scoring_strategy", scoring_strategy)
             .field("exhaustive_number_hits", exhaustive_number_hits)
