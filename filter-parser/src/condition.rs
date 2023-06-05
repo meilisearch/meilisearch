@@ -19,13 +19,15 @@ pub enum Condition<'a> {
     GreaterThan(Token<'a>),
     GreaterThanOrEqual(Token<'a>),
     Equal(Token<'a>),
-    NotEqual(Token<'a>),
     Null,
     Empty,
     Exists,
     LowerThan(Token<'a>),
     LowerThanOrEqual(Token<'a>),
     Between { from: Token<'a>, to: Token<'a> },
+    StartsWith(Token<'a>),
+    EndsWith(Token<'a>),
+    Contains(Token<'a>),
 }
 
 /// condition      = value ("==" | ">" ...) value
@@ -36,7 +38,9 @@ pub fn parse_condition(input: Span) -> IResult<FilterCondition> {
     let condition = match *op.fragment() {
         "<=" => FilterCondition::Condition { fid, op: LowerThanOrEqual(value) },
         ">=" => FilterCondition::Condition { fid, op: GreaterThanOrEqual(value) },
-        "!=" => FilterCondition::Condition { fid, op: NotEqual(value) },
+        "!=" => {
+            FilterCondition::Not(Box::new(FilterCondition::Condition { fid, op: Equal(value) }))
+        }
         "<" => FilterCondition::Condition { fid, op: LowerThan(value) },
         ">" => FilterCondition::Condition { fid, op: GreaterThan(value) },
         "=" => FilterCondition::Condition { fid, op: Equal(value) },
@@ -44,6 +48,62 @@ pub fn parse_condition(input: Span) -> IResult<FilterCondition> {
     };
 
     Ok((input, condition))
+}
+
+/// contains        = value "CONTAINS" value
+pub fn parse_contains(input: Span) -> IResult<FilterCondition> {
+    let (input, (fid, _, value)) = tuple((parse_value, tag("CONTAINS"), cut(parse_value)))(input)?;
+
+    Ok((input, FilterCondition::Condition { fid, op: Contains(value) }))
+}
+
+/// contains        = value "NOT" WS+ "CONTAINS" value
+pub fn parse_not_contains(input: Span) -> IResult<FilterCondition> {
+    let keyword = tuple((tag("NOT"), multispace1, tag("CONTAINS")));
+    let (input, (fid, _, value)) = tuple((parse_value, keyword, cut(parse_value)))(input)?;
+
+    Ok((
+        input,
+        FilterCondition::Not(Box::new(FilterCondition::Condition { fid, op: Contains(value) })),
+    ))
+}
+
+/// starts with     = value "STARTS" WS+ "WITH" value
+pub fn parse_starts_with(input: Span) -> IResult<FilterCondition> {
+    let keyword = tuple((tag("STARTS"), multispace1, tag("WITH")));
+    let (input, (fid, _, value)) = tuple((parse_value, keyword, cut(parse_value)))(input)?;
+
+    Ok((input, FilterCondition::Condition { fid, op: StartsWith(value) }))
+}
+
+/// starts with     = value "NOT" WS+ "STARTS" WS+ "WITH" value
+pub fn parse_not_starts_with(input: Span) -> IResult<FilterCondition> {
+    let keyword = tuple((tag("NOT"), multispace1, tag("STARTS"), multispace1, tag("WITH")));
+    let (input, (fid, _, value)) = tuple((parse_value, keyword, cut(parse_value)))(input)?;
+
+    Ok((
+        input,
+        FilterCondition::Not(Box::new(FilterCondition::Condition { fid, op: StartsWith(value) })),
+    ))
+}
+
+/// ends with       = value "ENDS" WS+ "WITH" value
+pub fn parse_ends_with(input: Span) -> IResult<FilterCondition> {
+    let keyword = tuple((tag("ENDS"), multispace1, tag("WITH")));
+    let (input, (fid, _, value)) = tuple((parse_value, keyword, cut(parse_value)))(input)?;
+
+    Ok((input, FilterCondition::Condition { fid, op: EndsWith(value) }))
+}
+
+/// ends with       = value "NOT" WS+ "ENDS" WS+ "WITH" value
+pub fn parse_not_ends_with(input: Span) -> IResult<FilterCondition> {
+    let keyword = tuple((tag("NOT"), multispace1, tag("ENDS"), multispace1, tag("WITH")));
+    let (input, (fid, _, value)) = tuple((parse_value, keyword, cut(parse_value)))(input)?;
+
+    Ok((
+        input,
+        FilterCondition::Not(Box::new(FilterCondition::Condition { fid, op: EndsWith(value) })),
+    ))
 }
 
 /// null          = value "IS" WS+ "NULL"
