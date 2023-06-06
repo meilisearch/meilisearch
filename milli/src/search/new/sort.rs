@@ -67,7 +67,7 @@ impl<'ctx, Query> Sort<'ctx, Query> {
 impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx, Query> {
     fn id(&self) -> String {
         let Self { field_name, is_ascending, .. } = self;
-        format!("{field_name}:{}", if *is_ascending { "asc" } else { "desc " })
+        format!("{field_name}:{}", if *is_ascending { "asc" } else { "desc" })
     }
     fn start_iteration(
         &mut self,
