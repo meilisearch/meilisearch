@@ -9,6 +9,7 @@ use meilisearch_auth::IndexSearchRules;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::TokenizerBuilder;
@@ -54,6 +55,10 @@ pub struct SearchQuery {
     pub attributes_to_highlight: Option<HashSet<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>, default)]
     pub show_matches_position: bool,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScore>, default)]
+    pub show_ranking_score: bool,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>, default)]
+    pub show_ranking_score_details: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
@@ -103,6 +108,10 @@ pub struct SearchQueryWithIndex {
     pub crop_length: usize,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
     pub attributes_to_highlight: Option<HashSet<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScore>, default)]
+    pub show_ranking_score: bool,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>, default)]
+    pub show_ranking_score_details: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>, default)]
     pub show_matches_position: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
@@ -134,6 +143,8 @@ impl SearchQueryWithIndex {
             attributes_to_crop,
             crop_length,
             attributes_to_highlight,
+            show_ranking_score,
+            show_ranking_score_details,
             show_matches_position,
             filter,
             sort,
@@ -155,6 +166,8 @@ impl SearchQueryWithIndex {
                 attributes_to_crop,
                 crop_length,
                 attributes_to_highlight,
+                show_ranking_score,
+                show_ranking_score_details,
                 show_matches_position,
                 filter,
                 sort,
@@ -194,7 +207,7 @@ impl From<MatchingStrategy> for TermsMatchingStrategy {
     }
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct SearchHit {
     #[serde(flatten)]
     pub document: Document,
@@ -202,6 +215,10 @@ pub struct SearchHit {
     pub formatted: Document,
     #[serde(rename = "_matchesPosition", skip_serializing_if = "Option::is_none")]
     pub matches_position: Option<MatchesPosition>,
+    #[serde(rename = "_rankingScore", skip_serializing_if = "Option::is_none")]
+    pub ranking_score: Option<f64>,
+    #[serde(rename = "_rankingScoreDetails", skip_serializing_if = "Option::is_none")]
+    pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -283,6 +300,11 @@ pub fn perform_search(
         .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
 
     search.exhaustive_number_hits(is_finite_pagination);
+    search.scoring_strategy(if query.show_ranking_score || query.show_ranking_score_details {
+        ScoringStrategy::Detailed
+    } else {
+        ScoringStrategy::Skip
+    });
 
     // compute the offset on the limit depending on the pagination mode.
     let (offset, limit) = if is_finite_pagination {
@@ -320,7 +342,8 @@ pub fn perform_search(
         search.sort_criteria(sort);
     }
 
-    let milli::SearchResult { documents_ids, matching_words, candidates, .. } = search.execute()?;
+    let milli::SearchResult { documents_ids, matching_words, candidates, document_scores, .. } =
+        search.execute()?;
 
     let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
@@ -392,7 +415,7 @@ pub fn perform_search(
 
     let documents_iter = index.documents(&rtxn, documents_ids)?;
 
-    for (_id, obkv) in documents_iter {
+    for ((_id, obkv), score) in documents_iter.into_iter().zip(document_scores.into_iter()) {
         // First generate a document with all the displayed fields
         let displayed_document = make_document(&displayed_ids, &fields_ids_map, obkv)?;
 
@@ -416,7 +439,18 @@ pub fn perform_search(
             insert_geo_distance(sort, &mut document);
         }
 
-        let hit = SearchHit { document, formatted, matches_position };
+        let ranking_score =
+            query.show_ranking_score.then(|| ScoreDetails::global_score(score.iter()));
+        let ranking_score_details =
+            query.show_ranking_score_details.then(|| ScoreDetails::to_json_map(score.iter()));
+
+        let hit = SearchHit {
+            document,
+            formatted,
+            matches_position,
+            ranking_score_details,
+            ranking_score,
+        };
         documents.push(hit);
     }
 

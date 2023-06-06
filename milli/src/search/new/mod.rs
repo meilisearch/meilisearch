@@ -351,6 +351,7 @@ pub fn execute_search(
     ctx: &mut SearchContext,
     query: &Option<String>,
     terms_matching_strategy: TermsMatchingStrategy,
+    scoring_strategy: ScoringStrategy,
     exhaustive_number_hits: bool,
     filters: &Option<Filter>,
     sort_criteria: &Option<Vec<AscDesc>>,
@@ -419,7 +420,7 @@ pub fn execute_search(
             &universe,
             from,
             length,
-            ScoringStrategy::Skip,
+            scoring_strategy,
             query_graph_logger,
         )?
     } else {
@@ -432,7 +433,7 @@ pub fn execute_search(
             &universe,
             from,
             length,
-            ScoringStrategy::Skip,
+            scoring_strategy,
             placeholder_search_logger,
         )?
     };
@@ -453,6 +454,7 @@ pub fn execute_search(
 
     Ok(PartialSearchResult {
         candidates: all_candidates,
+        document_scores: scores,
         documents_ids: docids,
         located_query_terms,
     })
@@ -504,4 +506,5 @@ pub struct PartialSearchResult {
     pub located_query_terms: Option<Vec<LocatedQueryTerm>>,
     pub candidates: RoaringBitmap,
     pub documents_ids: Vec<DocumentId>,
+    pub document_scores: Vec<Vec<ScoreDetails>>,
 }
