@@ -180,9 +180,9 @@ async fn get_all_documents_bad_filter() {
     snapshot!(json_string!(response), @r###"
     {
       "message": "Attribute `doggo` is not filterable. This index does not have configured filterable attributes.\n1:6 doggo=bernese",
-      "code": "invalid_search_filter",
+      "code": "invalid_document_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
     }
     "###);
 }
@@ -547,9 +547,9 @@ async fn delete_document_by_filter() {
     snapshot!(json_string!(response), @r###"
     {
       "message": "Invalid syntax for the filter parameter: `expected String, Array, found: true`.",
-      "code": "invalid_document_delete_filter",
+      "code": "invalid_document_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_delete_filter"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
     }
     "###);
 
@@ -559,9 +559,9 @@ async fn delete_document_by_filter() {
     snapshot!(json_string!(response), @r###"
     {
       "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` at `hello`.\n1:6 hello",
-      "code": "invalid_document_delete_filter",
+      "code": "invalid_document_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_delete_filter"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
     }
     "###);
 
@@ -571,9 +571,21 @@ async fn delete_document_by_filter() {
     snapshot!(json_string!(response), @r###"
     {
       "message": "Sending an empty filter is forbidden.",
-      "code": "invalid_document_delete_filter",
+      "code": "invalid_document_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_delete_filter"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+    }
+    "###);
+
+    // do not send any filter
+    let (response, code) = index.delete_document_by_filter(json!({})).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Missing field `filter`",
+      "code": "missing_document_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#missing_document_filter"
     }
     "###);
 
@@ -630,9 +642,9 @@ async fn delete_document_by_filter() {
       },
       "error": {
         "message": "Attribute `doggo` is not filterable. This index does not have configured filterable attributes.\n1:6 doggo = bernese",
-        "code": "invalid_search_filter",
+        "code": "invalid_document_filter",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+        "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -664,9 +676,9 @@ async fn delete_document_by_filter() {
       },
       "error": {
         "message": "Attribute `catto` is not filterable. Available filterable attributes are: `doggo`.\n1:6 catto = jorts",
-        "code": "invalid_search_filter",
+        "code": "invalid_document_filter",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+        "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -743,6 +755,29 @@ async fn fetch_document_by_filter() {
     snapshot!(json_string!(response), @r###"
     {
       "message": "Invalid syntax for the filter parameter: `expected String, Array, found: true`.",
+      "code": "invalid_document_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+    }
+    "###);
+
+    let (response, code) = index.get_document_by_filter(json!({ "filter": "cool doggo" })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `_geoRadius`, or `_geoBoundingBox` at `cool doggo`.\n1:11 cool doggo",
+      "code": "invalid_document_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+    }
+    "###);
+
+    let (response, code) =
+        index.get_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Attribute `doggo` is not filterable. Available filterable attributes are: `color`.\n1:6 doggo = bernese",
       "code": "invalid_document_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_document_filter"

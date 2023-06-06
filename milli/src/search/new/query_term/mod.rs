@@ -43,7 +43,7 @@ pub struct QueryTermSubset {
 pub struct QueryTerm {
     original: Interned<String>,
     ngram_words: Option<Vec<Interned<String>>>,
-    max_nbr_typos: u8,
+    max_levenshtein_distance: u8,
     is_prefix: bool,
     zero_typo: ZeroTypoTerm,
     // May not be computed yet
@@ -342,10 +342,16 @@ impl QueryTermSubset {
         }
         None
     }
-    pub fn max_nbr_typos(&self, ctx: &SearchContext) -> u8 {
+    pub fn max_typo_cost(&self, ctx: &SearchContext) -> u8 {
         let t = ctx.term_interner.get(self.original);
-        match t.max_nbr_typos {
-            0 => 0,
+        match t.max_levenshtein_distance {
+            0 => {
+                if t.allows_split_words() {
+                    1
+                } else {
+                    0
+                }
+            }
             1 => {
                 if self.one_typo_subset.is_empty() {
                     0
@@ -437,6 +443,9 @@ impl QueryTerm {
         };
 
         self.zero_typo.is_empty() && one_typo.is_empty() && two_typo.is_empty()
+    }
+    fn allows_split_words(&self) -> bool {
+        self.zero_typo.phrase.is_none()
     }
 }
 

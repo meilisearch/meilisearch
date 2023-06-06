@@ -150,6 +150,7 @@ make_missing_field_convenience_builder!(MissingApiKeyActions, missing_api_key_ac
 make_missing_field_convenience_builder!(MissingApiKeyExpiresAt, missing_api_key_expires_at);
 make_missing_field_convenience_builder!(MissingApiKeyIndexes, missing_api_key_indexes);
 make_missing_field_convenience_builder!(MissingSwapIndexes, missing_swap_indexes);
+make_missing_field_convenience_builder!(MissingDocumentFilter, missing_document_filter);
 
 // Integrate a sub-error into a [`DeserrError`] by taking its error message but using
 // the default error code (C) from `Self`

@@ -28,16 +28,14 @@ pub enum ZeroOrOneTypo {
 impl Interned<QueryTerm> {
     pub fn compute_fully_if_needed(self, ctx: &mut SearchContext) -> Result<()> {
         let s = ctx.term_interner.get_mut(self);
-        if s.max_nbr_typos == 0 {
-            s.one_typo = Lazy::Init(OneTypoTerm::default());
-            s.two_typo = Lazy::Init(TwoTypoTerm::default());
-        } else if s.max_nbr_typos == 1 && s.one_typo.is_uninit() {
+        if s.max_levenshtein_distance <= 1 && s.one_typo.is_uninit() {
             assert!(s.two_typo.is_uninit());
+            // Initialize one_typo subterm even if max_nbr_typo is 0 because of split words
             self.initialize_one_typo_subterm(ctx)?;
             let s = ctx.term_interner.get_mut(self);
             assert!(s.one_typo.is_init());
             s.two_typo = Lazy::Init(TwoTypoTerm::default());
-        } else if s.max_nbr_typos > 1 && s.two_typo.is_uninit() {
+        } else if s.max_levenshtein_distance > 1 && s.two_typo.is_uninit() {
             assert!(s.two_typo.is_uninit());
             self.initialize_one_and_two_typo_subterm(ctx)?;
             let s = ctx.term_interner.get_mut(self);
@@ -187,7 +185,7 @@ pub fn partially_initialized_term_from_word(
                 original: ctx.word_interner.insert(word.to_owned()),
                 ngram_words: None,
                 is_prefix: false,
-                max_nbr_typos: 0,
+                max_levenshtein_distance: 0,
                 zero_typo: <_>::default(),
                 one_typo: Lazy::Init(<_>::default()),
                 two_typo: Lazy::Init(<_>::default()),
@@ -258,7 +256,7 @@ pub fn partially_initialized_term_from_word(
     Ok(QueryTerm {
         original: word_interned,
         ngram_words: None,
-        max_nbr_typos: max_typo,
+        max_levenshtein_distance: max_typo,
         is_prefix,
         zero_typo,
         one_typo: Lazy::Uninit,
@@ -277,7 +275,16 @@ fn find_split_words(ctx: &mut SearchContext, word: &str) -> Result<Option<Intern
 impl Interned<QueryTerm> {
     fn initialize_one_typo_subterm(self, ctx: &mut SearchContext) -> Result<()> {
         let self_mut = ctx.term_interner.get_mut(self);
-        let QueryTerm { original, is_prefix, one_typo, .. } = self_mut;
+
+        let allows_split_words = self_mut.allows_split_words();
+        let QueryTerm {
+            original,
+            is_prefix,
+            one_typo,
+            max_levenshtein_distance: max_nbr_typos,
+            ..
+        } = self_mut;
+
         let original = *original;
         let is_prefix = *is_prefix;
         // let original_str = ctx.word_interner.get(*original).to_owned();
@@ -286,26 +293,33 @@ impl Interned<QueryTerm> {
         }
         let mut one_typo_words = BTreeSet::new();
 
-        find_zero_one_typo_derivations(ctx, original, is_prefix, |derived_word, nbr_typos| {
-            match nbr_typos {
-                ZeroOrOneTypo::Zero => {}
-                ZeroOrOneTypo::One => {
-                    if one_typo_words.len() < limits::MAX_ONE_TYPO_COUNT {
-                        one_typo_words.insert(derived_word);
-                    } else {
-                        return Ok(ControlFlow::Break(()));
+        if *max_nbr_typos > 0 {
+            find_zero_one_typo_derivations(ctx, original, is_prefix, |derived_word, nbr_typos| {
+                match nbr_typos {
+                    ZeroOrOneTypo::Zero => {}
+                    ZeroOrOneTypo::One => {
+                        if one_typo_words.len() < limits::MAX_ONE_TYPO_COUNT {
+                            one_typo_words.insert(derived_word);
+                        } else {
+                            return Ok(ControlFlow::Break(()));
+                        }
                     }
                 }
-            }
-            Ok(ControlFlow::Continue(()))
-        })?;
-        let original_str = ctx.word_interner.get(original).to_owned();
-        let split_words = find_split_words(ctx, original_str.as_str())?;
+                Ok(ControlFlow::Continue(()))
+            })?;
+        }
+
+        let split_words = if allows_split_words {
+            let original_str = ctx.word_interner.get(original).to_owned();
+            find_split_words(ctx, original_str.as_str())?
+        } else {
+            None
+        };
 
         let self_mut = ctx.term_interner.get_mut(self);
 
         // Only add the split words to the derivations if:
-        // 1. the term is not an ngram; OR
+        // 1. the term is neither an ngram nor a phrase; OR
         // 2. the term is an ngram, but the split words are different from the ngram's component words
         let split_words = if let Some((ngram_words, split_words)) =
             self_mut.ngram_words.as_ref().zip(split_words.as_ref())
@@ -327,7 +341,13 @@ impl Interned<QueryTerm> {
     }
     fn initialize_one_and_two_typo_subterm(self, ctx: &mut SearchContext) -> Result<()> {
         let self_mut = ctx.term_interner.get_mut(self);
-        let QueryTerm { original, is_prefix, two_typo, .. } = self_mut;
+        let QueryTerm {
+            original,
+            is_prefix,
+            two_typo,
+            max_levenshtein_distance: max_nbr_typos,
+            ..
+        } = self_mut;
         let original_str = ctx.word_interner.get(*original).to_owned();
         if two_typo.is_init() {
             return Ok(());
@@ -335,34 +355,37 @@ impl Interned<QueryTerm> {
         let mut one_typo_words = BTreeSet::new();
         let mut two_typo_words = BTreeSet::new();
 
-        find_zero_one_two_typo_derivations(
-            *original,
-            *is_prefix,
-            ctx.index.words_fst(ctx.txn)?,
-            &mut ctx.word_interner,
-            |derived_word, nbr_typos| {
-                if one_typo_words.len() >= limits::MAX_ONE_TYPO_COUNT
-                    && two_typo_words.len() >= limits::MAX_TWO_TYPOS_COUNT
-                {
-                    // No chance we will add either one- or two-typo derivations anymore, stop iterating.
-                    return Ok(ControlFlow::Break(()));
-                }
-                match nbr_typos {
-                    NumberOfTypos::Zero => {}
-                    NumberOfTypos::One => {
-                        if one_typo_words.len() < limits::MAX_ONE_TYPO_COUNT {
-                            one_typo_words.insert(derived_word);
+        if *max_nbr_typos > 0 {
+            find_zero_one_two_typo_derivations(
+                *original,
+                *is_prefix,
+                ctx.index.words_fst(ctx.txn)?,
+                &mut ctx.word_interner,
+                |derived_word, nbr_typos| {
+                    if one_typo_words.len() >= limits::MAX_ONE_TYPO_COUNT
+                        && two_typo_words.len() >= limits::MAX_TWO_TYPOS_COUNT
+                    {
+                        // No chance we will add either one- or two-typo derivations anymore, stop iterating.
+                        return Ok(ControlFlow::Break(()));
+                    }
+                    match nbr_typos {
+                        NumberOfTypos::Zero => {}
+                        NumberOfTypos::One => {
+                            if one_typo_words.len() < limits::MAX_ONE_TYPO_COUNT {
+                                one_typo_words.insert(derived_word);
+                            }
+                        }
+                        NumberOfTypos::Two => {
+                            if two_typo_words.len() < limits::MAX_TWO_TYPOS_COUNT {
+                                two_typo_words.insert(derived_word);
+                            }
                         }
                     }
-                    NumberOfTypos::Two => {
-                        if two_typo_words.len() < limits::MAX_TWO_TYPOS_COUNT {
-                            two_typo_words.insert(derived_word);
-                        }
-                    }
-                }
-                Ok(ControlFlow::Continue(()))
-            },
-        )?;
+                    Ok(ControlFlow::Continue(()))
+                },
+            )?;
+        }
+
         let split_words = find_split_words(ctx, original_str.as_str())?;
         let self_mut = ctx.term_interner.get_mut(self);
 

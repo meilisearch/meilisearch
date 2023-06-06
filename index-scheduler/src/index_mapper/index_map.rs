@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::Duration;
 
+use meilisearch_types::heed::flags::Flags;
 use meilisearch_types::heed::{EnvClosingEvent, EnvOpenOptions};
 use meilisearch_types::milli::Index;
 use time::OffsetDateTime;
@@ -53,6 +54,7 @@ pub struct IndexMap {
 pub struct ClosingIndex {
     uuid: Uuid,
     closing_event: EnvClosingEvent,
+    enable_mdb_writemap: bool,
     map_size: usize,
     generation: usize,
 }
@@ -68,6 +70,7 @@ impl ClosingIndex {
     pub fn wait_timeout(self, timeout: Duration) -> Option<ReopenableIndex> {
         self.closing_event.wait_timeout(timeout).then_some(ReopenableIndex {
             uuid: self.uuid,
+            enable_mdb_writemap: self.enable_mdb_writemap,
             map_size: self.map_size,
             generation: self.generation,
         })
@@ -76,6 +79,7 @@ impl ClosingIndex {
 
 pub struct ReopenableIndex {
     uuid: Uuid,
+    enable_mdb_writemap: bool,
     map_size: usize,
     generation: usize,
 }
@@ -103,7 +107,7 @@ impl ReopenableIndex {
                 return Ok(());
             }
             map.unavailable.remove(&self.uuid);
-            map.create(&self.uuid, path, None, self.map_size)?;
+            map.create(&self.uuid, path, None, self.enable_mdb_writemap, self.map_size)?;
         }
         Ok(())
     }
@@ -170,16 +174,17 @@ impl IndexMap {
         uuid: &Uuid,
         path: &Path,
         date: Option<(OffsetDateTime, OffsetDateTime)>,
+        enable_mdb_writemap: bool,
         map_size: usize,
     ) -> Result<Index> {
         if !matches!(self.get_unavailable(uuid), Missing) {
             panic!("Attempt to open an index that was unavailable");
         }
-        let index = create_or_open_index(path, date, map_size)?;
+        let index = create_or_open_index(path, date, enable_mdb_writemap, map_size)?;
         match self.available.insert(*uuid, index.clone()) {
             InsertionOutcome::InsertedNew => (),
             InsertionOutcome::Evicted(evicted_uuid, evicted_index) => {
-                self.close(evicted_uuid, evicted_index, 0);
+                self.close(evicted_uuid, evicted_index, enable_mdb_writemap, 0);
             }
             InsertionOutcome::Replaced(_) => {
                 panic!("Attempt to open an index that was already opened")
@@ -212,17 +217,30 @@ impl IndexMap {
     /// | Closing         | Closing       |
     /// | Available       | Closing       |
     ///
-    pub fn close_for_resize(&mut self, uuid: &Uuid, map_size_growth: usize) {
+    pub fn close_for_resize(
+        &mut self,
+        uuid: &Uuid,
+        enable_mdb_writemap: bool,
+        map_size_growth: usize,
+    ) {
         let Some(index) = self.available.remove(uuid) else { return; };
-        self.close(*uuid, index, map_size_growth);
+        self.close(*uuid, index, enable_mdb_writemap, map_size_growth);
     }
 
-    fn close(&mut self, uuid: Uuid, index: Index, map_size_growth: usize) {
+    fn close(
+        &mut self,
+        uuid: Uuid,
+        index: Index,
+        enable_mdb_writemap: bool,
+        map_size_growth: usize,
+    ) {
         let map_size = index.map_size().unwrap_or(DEFAULT_MAP_SIZE) + map_size_growth;
         let closing_event = index.prepare_for_closing();
         let generation = self.next_generation();
-        self.unavailable
-            .insert(uuid, Some(ClosingIndex { uuid, closing_event, map_size, generation }));
+        self.unavailable.insert(
+            uuid,
+            Some(ClosingIndex { uuid, closing_event, enable_mdb_writemap, map_size, generation }),
+        );
     }
 
     /// Attempts to delete and index.
@@ -282,11 +300,15 @@ impl IndexMap {
 fn create_or_open_index(
     path: &Path,
     date: Option<(OffsetDateTime, OffsetDateTime)>,
+    enable_mdb_writemap: bool,
     map_size: usize,
 ) -> Result<Index> {
     let mut options = EnvOpenOptions::new();
     options.map_size(clamp_to_page_size(map_size));
     options.max_readers(1024);
+    if enable_mdb_writemap {
+        unsafe { options.flag(Flags::MdbWriteMap) };
+    }
 
     if let Some((created, updated)) = date {
         Ok(Index::new_with_creation_dates(options, path, created, updated)?)

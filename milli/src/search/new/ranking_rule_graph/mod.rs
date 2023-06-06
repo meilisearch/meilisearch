@@ -20,6 +20,8 @@ mod position;
 mod proximity;
 /// Implementation of the `typo` ranking rule
 mod typo;
+/// Implementation of the `words` ranking rule
+mod words;
 
 use std::collections::BTreeSet;
 use std::hash::Hash;
@@ -33,6 +35,7 @@ pub use position::{PositionCondition, PositionGraph};
 pub use proximity::{ProximityCondition, ProximityGraph};
 use roaring::RoaringBitmap;
 pub use typo::{TypoCondition, TypoGraph};
+pub use words::{WordsCondition, WordsGraph};
 
 use super::interner::{DedupInterner, FixedSizeInterner, Interned, MappedInterner};
 use super::query_term::LocatedQueryTermSubset;

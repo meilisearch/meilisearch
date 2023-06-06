@@ -46,6 +46,8 @@ impl From<DateField> for Code {
 #[allow(clippy::large_enum_variant)]
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("{1}")]
+    WithCustomErrorCode(Code, Box<Self>),
     #[error("Index `{0}` not found.")]
     IndexNotFound(String),
     #[error("Index `{0}` already exists.")]
@@ -144,6 +146,7 @@ impl Error {
     pub fn is_recoverable(&self) -> bool {
         match self {
             Error::IndexNotFound(_)
+            | Error::WithCustomErrorCode(_, _)
             | Error::IndexAlreadyExists(_)
             | Error::SwapDuplicateIndexFound(_)
             | Error::SwapDuplicateIndexesFound(_)
@@ -176,11 +179,16 @@ impl Error {
             Error::PlannedFailure => false,
         }
     }
+
+    pub fn with_custom_error_code(self, code: Code) -> Self {
+        Self::WithCustomErrorCode(code, Box::new(self))
+    }
 }
 
 impl ErrorCode for Error {
     fn error_code(&self) -> Code {
         match self {
+            Error::WithCustomErrorCode(code, _) => *code,
             Error::IndexNotFound(_) => Code::IndexNotFound,
             Error::IndexAlreadyExists(_) => Code::IndexAlreadyExists,
             Error::SwapDuplicateIndexesFound(_) => Code::InvalidSwapDuplicateIndexFound,

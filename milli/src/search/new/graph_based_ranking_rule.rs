@@ -46,7 +46,7 @@ use super::logger::SearchLogger;
 use super::query_graph::QueryNode;
 use super::ranking_rule_graph::{
     ConditionDocIdsCache, DeadEndsCache, ExactnessGraph, FidGraph, PositionGraph, ProximityGraph,
-    RankingRuleGraph, RankingRuleGraphTrait, TypoGraph,
+    RankingRuleGraph, RankingRuleGraphTrait, TypoGraph, WordsGraph,
 };
 use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, RankingRule, RankingRuleOutput, SearchContext};
@@ -54,6 +54,12 @@ use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::search::new::ranking_rule_graph::PathVisitor;
 use crate::{Result, TermsMatchingStrategy};
 
+pub type Words = GraphBasedRankingRule<WordsGraph>;
+impl GraphBasedRankingRule<WordsGraph> {
+    pub fn new(terms_matching_strategy: TermsMatchingStrategy) -> Self {
+        Self::new_with_id("words".to_owned(), Some(terms_matching_strategy))
+    }
+}
 pub type Proximity = GraphBasedRankingRule<ProximityGraph>;
 impl GraphBasedRankingRule<ProximityGraph> {
     pub fn new(terms_matching_strategy: Option<TermsMatchingStrategy>) -> Self {

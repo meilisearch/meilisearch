@@ -29,7 +29,7 @@ use tempfile::tempfile;
 use tokio::fs::File;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
 
-use crate::analytics::{Analytics, DocumentDeletionKind};
+use crate::analytics::{Analytics, DocumentDeletionKind, DocumentFetchKind};
 use crate::error::MeilisearchHttpError;
 use crate::error::PayloadError::ReceivePayload;
 use crate::extractors::authentication::policies::*;
@@ -97,9 +97,13 @@ pub async fn get_document(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     document_param: web::Path<DocumentParam>,
     params: AwebQueryParameter<GetDocument, DeserrQueryParamError>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let DocumentParam { index_uid, document_id } = document_param.into_inner();
     let index_uid = IndexUid::try_from(index_uid)?;
+
+    analytics.get_fetch_documents(&DocumentFetchKind::PerDocumentId, &req);
 
     let GetDocument { fields } = params.into_inner();
     let attributes_to_retrieve = fields.merge_star_and_none();
@@ -161,16 +165,31 @@ pub async fn documents_by_query_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     body: AwebJson<BrowseQuery, DeserrJsonError>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with body: {:?}", body);
 
-    documents_by_query(&index_scheduler, index_uid, body.into_inner())
+    let body = body.into_inner();
+
+    analytics.post_fetch_documents(
+        &DocumentFetchKind::Normal {
+            with_filter: body.filter.is_some(),
+            limit: body.limit,
+            offset: body.offset,
+        },
+        &req,
+    );
+
+    documents_by_query(&index_scheduler, index_uid, body)
 }
 
 pub async fn get_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     params: AwebQueryParameter<BrowseQueryGet, DeserrQueryParamError>,
+    req: HttpRequest,
+    analytics: web::Data<dyn Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
 
@@ -190,6 +209,15 @@ pub async fn get_documents(
         fields: fields.merge_star_and_none(),
         filter,
     };
+
+    analytics.get_fetch_documents(
+        &DocumentFetchKind::Normal {
+            with_filter: query.filter.is_some(),
+            limit: query.limit,
+            offset: query.offset,
+        },
+        &req,
+    );
 
     documents_by_query(&index_scheduler, index_uid, query)
 }
@@ -458,7 +486,7 @@ pub async fn delete_documents_batch(
 #[derive(Debug, Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct DocumentDeletionByFilter {
-    #[deserr(error = DeserrJsonError<InvalidDocumentDeleteFilter>)]
+    #[deserr(error = DeserrJsonError<InvalidDocumentFilter>, missing_field_error = DeserrJsonError::missing_document_filter)]
     filter: Value,
 }
 
@@ -480,8 +508,8 @@ pub async fn delete_documents_by_filter(
     || -> Result<_, ResponseError> {
         Ok(crate::search::parse_filter(&filter)?.ok_or(MeilisearchHttpError::EmptyFilter)?)
     }()
-    // and whatever was the error, the error code should always be an InvalidDocumentDeleteFilter
-    .map_err(|err| ResponseError::from_msg(err.message, Code::InvalidDocumentDeleteFilter))?;
+    // and whatever was the error, the error code should always be an InvalidDocumentFilter
+    .map_err(|err| ResponseError::from_msg(err.message, Code::InvalidDocumentFilter))?;
     let task = KindWithContent::DocumentDeletionByFilter { index_uid, filter_expr: filter };
 
     let task: SummarizedTaskView =
@@ -540,7 +568,12 @@ fn retrieve_documents<S: AsRef<str>>(
     };
 
     let candidates = if let Some(filter) = filter {
-        filter.evaluate(&rtxn, index)?
+        filter.evaluate(&rtxn, index).map_err(|err| match err {
+            milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
+                ResponseError::from_msg(err.to_string(), Code::InvalidDocumentFilter)
+            }
+            e => e.into(),
+        })?
     } else {
         index.documents_ids(&rtxn)?
     };

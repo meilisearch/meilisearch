@@ -946,7 +946,7 @@ async fn sort_unset_ranking_rule() {
     index.wait_task(1).await;
 
     let expected_response = json!({
-        "message": "The sort ranking rule must be specified in the ranking rules settings to use the sort parameter at search time.",
+        "message": "You must specify where `sort` is listed in the rankingRules setting to use the sort parameter at search time.",
         "code": "invalid_search_sort",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_search_sort"
