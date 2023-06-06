@@ -65,13 +65,6 @@ pub fn compute_docids(
         }
     }
 
-    // TODO: add safeguard in case the cartesian product is too large!
-    // even if we restrict the word derivations to a maximum of 100, the size of the
-    // caterisan product could reach a maximum of 10_000 derivations, which is way too much.
-    // Maybe prioritise the product of zero typo derivations, then the product of zero-typo/one-typo
-    // + one-typo/zero-typo, then one-typo/one-typo, then ... until an arbitrary limit has been
-    // reached
-
     for (left_phrase, left_word) in last_words_of_term_derivations(ctx, &left_term.term_subset)? {
         // Before computing the edges, check that the left word and left phrase
         // aren't disjoint with the universe, but only do it if there is more than
@@ -111,8 +104,6 @@ pub fn compute_docids(
     Ok(ComputedCondition {
         docids,
         universe_len: universe.len(),
-        // TODO: think about whether we want to reduce the subset,
-        // we probably should!
         start_term_subset: Some(left_term.clone()),
         end_term_subset: right_term.clone(),
     })
@@ -203,12 +194,7 @@ fn compute_non_prefix_edges(
             *docids |= new_docids;
         }
     }
-    if backward_proximity >= 1
-            // TODO: for now, we don't do any swapping when either term is a phrase
-            // but maybe we should. We'd need to look at the first/last word of the phrase
-            // depending on the context.
-            && left_phrase.is_none() && right_phrase.is_none()
-    {
+    if backward_proximity >= 1 && left_phrase.is_none() && right_phrase.is_none() {
         if let Some(new_docids) =
             ctx.get_db_word_pair_proximity_docids(word2, word1, backward_proximity)?
         {

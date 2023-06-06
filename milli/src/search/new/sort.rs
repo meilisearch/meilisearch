@@ -141,10 +141,6 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
         universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<Query>>> {
         let iter = self.iter.as_mut().unwrap();
-        // TODO: we should make use of the universe in the function below
-        // good for correctness, but ideally iter.next_bucket would take the current universe into account,
-        // as right now it could return buckets that don't intersect with the universe, meaning we will make many
-        // unneeded calls.
         if let Some(mut bucket) = iter.next_bucket()? {
             bucket.candidates &= universe;
             Ok(Some(bucket))

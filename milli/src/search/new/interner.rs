@@ -32,7 +32,7 @@ impl<T> Interned<T> {
 #[derive(Clone)]
 pub struct DedupInterner<T> {
     stable_store: Vec<T>,
-    lookup: FxHashMap<T, Interned<T>>, // TODO: Arc
+    lookup: FxHashMap<T, Interned<T>>,
 }
 impl<T> Default for DedupInterner<T> {
     fn default() -> Self {

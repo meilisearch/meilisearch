@@ -132,7 +132,6 @@ impl QueryTermSubset {
         if full_query_term.ngram_words.is_some() {
             return None;
         }
-        // TODO: included in subset
         if let Some(phrase) = full_query_term.zero_typo.phrase {
             self.zero_typo_subset.contains_phrase(phrase).then_some(ExactTerm::Phrase(phrase))
         } else if let Some(word) = full_query_term.zero_typo.exact {
@@ -182,7 +181,6 @@ impl QueryTermSubset {
         let word = match &self.zero_typo_subset {
             NTypoTermSubset::All => Some(use_prefix_db),
             NTypoTermSubset::Subset { words, phrases: _ } => {
-                // TODO: use a subset of prefix words instead
                 if words.contains(&use_prefix_db) {
                     Some(use_prefix_db)
                 } else {
@@ -204,7 +202,6 @@ impl QueryTermSubset {
         ctx: &mut SearchContext,
     ) -> Result<BTreeSet<Word>> {
         let mut result = BTreeSet::default();
-        // TODO: a compute_partially funtion
         if !self.one_typo_subset.is_empty() || !self.two_typo_subset.is_empty() {
             self.original.compute_fully_if_needed(ctx)?;
         }
@@ -300,7 +297,6 @@ impl QueryTermSubset {
         let mut result = BTreeSet::default();
 
         if !self.one_typo_subset.is_empty() {
-            // TODO: compute less than fully if possible
             self.original.compute_fully_if_needed(ctx)?;
         }
         let original = ctx.term_interner.get_mut(self.original);

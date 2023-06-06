@@ -94,14 +94,9 @@ impl RankingRuleGraphTrait for PositionGraph {
         let mut edges = vec![];
 
         for (cost, positions) in positions_for_costs {
-            // TODO: We can improve performances and relevancy by storing
-            //       the term subsets associated to each position fetched
             edges.push((
                 cost,
-                conditions_interner.insert(PositionCondition {
-                    term: term.clone(), // TODO remove this ugly clone
-                    positions,
-                }),
+                conditions_interner.insert(PositionCondition { term: term.clone(), positions }),
             ));
         }
 

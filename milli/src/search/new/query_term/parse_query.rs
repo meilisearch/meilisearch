@@ -139,7 +139,6 @@ pub fn number_of_typos_allowed<'ctx>(
     let min_len_one_typo = ctx.index.min_word_len_one_typo(ctx.txn)?;
     let min_len_two_typos = ctx.index.min_word_len_two_typos(ctx.txn)?;
 
-    // TODO: should `exact_words` also disable prefix search, ngrams, split words, or synonyms?
     let exact_words = ctx.index.exact_words(ctx.txn)?;
 
     Ok(Box::new(move |word: &str| {
@@ -250,8 +249,6 @@ impl PhraseBuilder {
         } else {
             // token has kind Word
             let word = ctx.word_interner.insert(token.lemma().to_string());
-            // TODO: in a phrase, check that every word exists
-            // otherwise return an empty term
             self.words.push(Some(word));
         }
     }
