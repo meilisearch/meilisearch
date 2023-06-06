@@ -41,6 +41,7 @@ use super::interner::{DedupInterner, FixedSizeInterner, Interned, MappedInterner
 use super::query_term::LocatedQueryTermSubset;
 use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, QueryNode, SearchContext};
+use crate::score_details::{Rank, ScoreDetails};
 use crate::Result;
 
 pub struct ComputedCondition {
@@ -110,6 +111,9 @@ pub trait RankingRuleGraphTrait: Sized + 'static {
         source_node: Option<&LocatedQueryTermSubset>,
         dest_node: &LocatedQueryTermSubset,
     ) -> Result<Vec<(u32, Interned<Self::Condition>)>>;
+
+    /// Convert the rank of a path to its corresponding score for the ranking rule
+    fn rank_to_score(rank: Rank) -> ScoreDetails;
 }
 
 /// The graph used by graph-based ranking rules.

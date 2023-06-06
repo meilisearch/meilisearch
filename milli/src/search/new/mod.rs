@@ -44,6 +44,7 @@ use self::geo_sort::GeoSort;
 pub use self::geo_sort::Strategy as GeoSortStrategy;
 use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
+use crate::score_details::ScoreDetails;
 use crate::search::new::distinct::apply_distinct_rule;
 use crate::{AscDesc, DocumentId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError};
 

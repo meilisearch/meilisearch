@@ -1,9 +1,11 @@
+use heed::BytesDecode;
 use roaring::RoaringBitmap;
 
 use super::logger::SearchLogger;
 use super::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait, SearchContext};
-use crate::heed_codec::facet::FacetGroupKeyCodec;
-use crate::heed_codec::ByteSliceRefCodec;
+use crate::heed_codec::facet::{FacetGroupKeyCodec, OrderedF64Codec};
+use crate::heed_codec::{ByteSliceRefCodec, StrRefCodec};
+use crate::score_details::{self, ScoreDetails};
 use crate::search::facet::{ascending_facet_sort, descending_facet_sort};
 use crate::{FieldId, Index, Result};
 
@@ -118,12 +120,43 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
 
                     (itertools::Either::Right(number_iter), itertools::Either::Right(string_iter))
                 };
+                let number_iter = number_iter.map(|r| -> Result<_> {
+                    let (docids, bytes) = r?;
+                    Ok((
+                        docids,
+                        serde_json::Value::Number(
+                            serde_json::Number::from_f64(
+                                OrderedF64Codec::bytes_decode(bytes).expect("some number"),
+                            )
+                            .expect("too big float"),
+                        ),
+                    ))
+                });
+                let string_iter = string_iter.map(|r| -> Result<_> {
+                    let (docids, bytes) = r?;
+                    Ok((
+                        docids,
+                        serde_json::Value::String(
+                            StrRefCodec::bytes_decode(bytes).expect("some string").to_owned(),
+                        ),
+                    ))
+                });
 
                 let query_graph = parent_query.clone();
+                let ascending = self.is_ascending;
+                let field_name = self.field_name.clone();
                 RankingRuleOutputIterWrapper::new(Box::new(number_iter.chain(string_iter).map(
                     move |r| {
-                        let (docids, _) = r?;
-                        Ok(RankingRuleOutput { query: query_graph.clone(), candidates: docids })
+                        let (docids, value) = r?;
+                        Ok(RankingRuleOutput {
+                            query: query_graph.clone(),
+                            candidates: docids,
+                            score: ScoreDetails::Sort(score_details::Sort {
+                                field_name: field_name.clone(),
+                                ascending,
+                                value,
+                            }),
+                        })
                     },
                 )))
             }
@@ -150,7 +183,15 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
             Ok(Some(bucket))
         } else {
             let query = self.original_query.as_ref().unwrap().clone();
-            Ok(Some(RankingRuleOutput { query, candidates: universe.clone() }))
+            Ok(Some(RankingRuleOutput {
+                query,
+                candidates: universe.clone(),
+                score: ScoreDetails::Sort(score_details::Sort {
+                    field_name: self.field_name.clone(),
+                    ascending: self.is_ascending,
+                    value: serde_json::Value::Null,
+                }),
+            }))
         }
     }
 

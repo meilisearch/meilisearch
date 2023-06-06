@@ -1,6 +1,7 @@
 use roaring::RoaringBitmap;
 
 use super::{ComputedCondition, RankingRuleGraphTrait};
+use crate::score_details::{Rank, ScoreDetails};
 use crate::search::new::interner::{DedupInterner, Interned};
 use crate::search::new::query_term::{ExactTerm, LocatedQueryTermSubset};
 use crate::search::new::resolve_query_graph::compute_query_term_subset_docids;
@@ -83,5 +84,9 @@ impl RankingRuleGraphTrait for ExactnessGraph {
         let skip_condition = conditions_interner.insert(skip_condition);
 
         Ok(vec![(0, exact_condition), (dest_node.term_ids.len() as u32, skip_condition)])
+    }
+
+    fn rank_to_score(rank: Rank) -> ScoreDetails {
+        ScoreDetails::Exactness(rank)
     }
 }

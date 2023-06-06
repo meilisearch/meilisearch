@@ -2,6 +2,7 @@ use roaring::RoaringBitmap;
 
 use super::logger::SearchLogger;
 use super::{QueryGraph, SearchContext};
+use crate::score_details::ScoreDetails;
 use crate::Result;
 
 /// An internal trait implemented by only [`PlaceholderQuery`] and [`QueryGraph`]
@@ -66,4 +67,6 @@ pub struct RankingRuleOutput<Q> {
     pub query: Q,
     /// The allowed candidates for the child ranking rule
     pub candidates: RoaringBitmap,
+    /// The score for the candidates of the current bucket
+    pub score: ScoreDetails,
 }

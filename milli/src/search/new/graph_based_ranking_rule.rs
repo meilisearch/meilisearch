@@ -50,6 +50,7 @@ use super::ranking_rule_graph::{
 };
 use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, RankingRule, RankingRuleOutput, SearchContext};
+use crate::score_details::Rank;
 use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::search::new::ranking_rule_graph::PathVisitor;
 use crate::{Result, TermsMatchingStrategy};
@@ -118,6 +119,8 @@ pub struct GraphBasedRankingRuleState<G: RankingRuleGraphTrait> {
     all_costs: MappedInterner<QueryNode, Vec<u64>>,
     /// An index in the first element of `all_distances`, giving the cost of the next bucket
     cur_cost: u64,
+    /// One above the highest possible cost for this rule
+    next_max_cost: u64,
 }
 
 impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBasedRankingRule<G> {
@@ -161,12 +164,16 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         // Then pre-compute the cost of all paths from each node to the end node
         let all_costs = graph.find_all_costs_to_end();
 
+        let next_max_cost =
+            all_costs.get(graph.query_graph.root_node).iter().copied().max().unwrap_or(0) + 1;
+
         let state = GraphBasedRankingRuleState {
             graph,
             conditions_cache: condition_docids_cache,
             dead_ends_cache,
             all_costs,
             cur_cost: 0,
+            next_max_cost,
         };
 
         self.state = Some(state);
@@ -180,17 +187,13 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         logger: &mut dyn SearchLogger<QueryGraph>,
         universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<QueryGraph>>> {
-        // If universe.len() <= 1, the bucket sort algorithm
-        // should not have called this function.
-        assert!(universe.len() > 1);
         // Will crash if `next_bucket` is called before `start_iteration` or after `end_iteration`,
         // should never happen
         let mut state = self.state.take().unwrap();
 
+        let all_costs = state.all_costs.get(state.graph.query_graph.root_node);
         // Retrieve the cost of the paths to compute
-        let Some(&cost) = state
-            .all_costs
-            .get(state.graph.query_graph.root_node)
+        let Some(&cost) = all_costs
             .iter()
             .find(|c| **c >= state.cur_cost) else {
                 self.state = None;
@@ -206,7 +209,11 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
             dead_ends_cache,
             all_costs,
             cur_cost: _,
+            next_max_cost,
         } = &mut state;
+
+        let rank = *next_max_cost - cost;
+        let score = G::rank_to_score(Rank { rank: rank as u32, max_rank: *next_max_cost as u32 });
 
         let mut universe = universe.clone();
 
@@ -324,7 +331,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
 
         self.state = Some(state);
 
-        Ok(Some(RankingRuleOutput { query: next_query_graph, candidates: bucket }))
+        Ok(Some(RankingRuleOutput { query: next_query_graph, candidates: bucket, score }))
     }
 
     fn end_iteration(
