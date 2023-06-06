@@ -79,7 +79,7 @@ pub fn located_query_terms_from_tokens(
             TokenKind::Separator(separator_kind) => {
                 // add penalty for hard separators
                 if let SeparatorKind::Hard = separator_kind {
-                    position = position.wrapping_add(1);
+                    position = position.wrapping_add(7);
                 }
 
                 phrase = 'phrase: {
