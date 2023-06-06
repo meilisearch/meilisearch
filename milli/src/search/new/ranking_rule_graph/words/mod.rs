@@ -41,9 +41,6 @@ impl RankingRuleGraphTrait for WordsGraph {
         _from: Option<&LocatedQueryTermSubset>,
         to_term: &LocatedQueryTermSubset,
     ) -> Result<Vec<(u32, Interned<Self::Condition>)>> {
-        Ok(vec![(
-            to_term.term_ids.len() as u32,
-            conditions_interner.insert(WordsCondition { term: to_term.clone() }),
-        )])
+        Ok(vec![(0, conditions_interner.insert(WordsCondition { term: to_term.clone() }))])
     }
 }
