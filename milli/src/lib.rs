@@ -17,6 +17,7 @@ mod fields_ids_map;
 pub mod heed_codec;
 pub mod index;
 pub mod proximity;
+pub mod score_details;
 mod search;
 pub mod update;
 
