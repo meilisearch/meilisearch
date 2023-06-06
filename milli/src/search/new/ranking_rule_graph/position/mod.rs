@@ -93,12 +93,23 @@ impl RankingRuleGraphTrait for PositionGraph {
             positions_for_costs.entry(cost).or_default().push(position);
         }
 
-        let mut edges = vec![];
+        let max_cost = term.term_ids.len() as u32 * 10;
+        let max_cost_exists = positions_for_costs.contains_key(&max_cost);
 
+        let mut edges = vec![];
         for (cost, positions) in positions_for_costs {
             edges.push((
                 cost,
                 conditions_interner.insert(PositionCondition { term: term.clone(), positions }),
+            ));
+        }
+
+        if !max_cost_exists {
+            // artificial empty condition for computing max cost
+            edges.push((
+                max_cost,
+                conditions_interner
+                    .insert(PositionCondition { term: term.clone(), positions: Vec::default() }),
             ));
         }
 
