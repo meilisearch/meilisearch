@@ -443,6 +443,7 @@ pub fn execute_search(
 
     Ok(PartialSearchResult {
         candidates: all_candidates,
+        document_scores: scores,
         documents_ids: docids,
         located_query_terms,
     })
@@ -494,4 +495,5 @@ pub struct PartialSearchResult {
     pub located_query_terms: Option<Vec<LocatedQueryTerm>>,
     pub candidates: RoaringBitmap,
     pub documents_ids: Vec<DocumentId>,
+    pub document_scores: Vec<Vec<ScoreDetails>>,
 }

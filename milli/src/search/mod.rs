@@ -7,6 +7,7 @@ use roaring::bitmap::RoaringBitmap;
 pub use self::facet::{FacetDistribution, Filter, DEFAULT_VALUES_PER_FACET};
 pub use self::new::matches::{FormatOptions, MatchBounds, Matcher, MatcherBuilder, MatchingWords};
 use self::new::PartialSearchResult;
+use crate::score_details::ScoreDetails;
 use crate::{
     execute_search, AscDesc, DefaultSearchLogger, DocumentId, Index, Result, SearchContext,
 };
@@ -93,7 +94,7 @@ impl<'a> Search<'a> {
         self
     }
 
-    /// Force the search to exhastivelly compute the number of candidates,
+    /// Forces the search to exhaustively compute the number of candidates,
     /// this will increase the search time but allows finite pagination.
     pub fn exhaustive_number_hits(&mut self, exhaustive_number_hits: bool) -> &mut Search<'a> {
         self.exhaustive_number_hits = exhaustive_number_hits;
@@ -102,7 +103,7 @@ impl<'a> Search<'a> {
 
     pub fn execute(&self) -> Result<SearchResult> {
         let mut ctx = SearchContext::new(self.index, self.rtxn);
-        let PartialSearchResult { located_query_terms, candidates, documents_ids } =
+        let PartialSearchResult { located_query_terms, candidates, documents_ids, document_scores } =
             execute_search(
                 &mut ctx,
                 &self.query,
@@ -124,7 +125,7 @@ impl<'a> Search<'a> {
             None => MatchingWords::default(),
         };
 
-        Ok(SearchResult { matching_words, candidates, documents_ids })
+        Ok(SearchResult { matching_words, candidates, document_scores, documents_ids })
     }
 }
 
@@ -160,8 +161,8 @@ impl fmt::Debug for Search<'_> {
 pub struct SearchResult {
     pub matching_words: MatchingWords,
     pub candidates: RoaringBitmap,
-    // TODO those documents ids should be associated with their criteria scores.
     pub documents_ids: Vec<DocumentId>,
+    pub document_scores: Vec<Vec<ScoreDetails>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
