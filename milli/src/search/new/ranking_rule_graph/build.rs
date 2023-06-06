@@ -49,10 +49,15 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
                 if let Some((cost_of_ignoring, forbidden_nodes)) =
                     cost_of_ignoring_node.get(dest_idx)
                 {
+                    let dest = graph_nodes.get(dest_idx);
+                    let dest_size = match &dest.data {
+                        QueryNodeData::Term(term) => term.term_ids.len(),
+                        _ => panic!(),
+                    };
                     let new_edge_id = edges_store.insert(Some(Edge {
                         source_node: source_id,
                         dest_node: dest_idx,
-                        cost: *cost_of_ignoring,
+                        cost: *cost_of_ignoring * dest_size as u32,
                         condition: None,
                         nodes_to_skip: forbidden_nodes.clone(),
                     }));
