@@ -68,7 +68,7 @@ impl RankingRuleGraphTrait for FidGraph {
         }
 
         let mut edges = vec![];
-        for fid in all_fields {
+        for fid in all_fields.iter().copied() {
             // TODO: We can improve performances and relevancy by storing
             //       the term subsets associated to each field ids fetched.
             edges.push((
@@ -78,6 +78,31 @@ impl RankingRuleGraphTrait for FidGraph {
                     fid,
                 }),
             ));
+        }
+
+        // always lookup the max_fid if we don't already and add an artificial condition for max scoring
+        let max_fid: Option<u16> = {
+            if let Some(max_fid) = ctx
+                .index
+                .searchable_fields_ids(ctx.txn)?
+                .map(|field_ids| field_ids.into_iter().max())
+            {
+                max_fid
+            } else {
+                ctx.index.fields_ids_map(ctx.txn)?.ids().max()
+            }
+        };
+
+        if let Some(max_fid) = max_fid {
+            if !all_fields.contains(&max_fid) {
+                edges.push((
+                    max_fid as u32 * term.term_ids.len() as u32, // TODO improve the fid score i.e. fid^10.
+                    conditions_interner.insert(FidCondition {
+                        term: term.clone(), // TODO remove this ugly clone
+                        fid: max_fid,
+                    }),
+                ));
+            }
         }
 
         Ok(edges)
