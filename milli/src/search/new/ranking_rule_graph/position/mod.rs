@@ -105,6 +105,14 @@ impl RankingRuleGraphTrait for PositionGraph {
             ));
         }
 
+        // artificial empty condition for computing max cost
+        let max_cost = term.term_ids.len() as u32 * 10;
+        edges.push((
+            max_cost,
+            conditions_interner
+                .insert(PositionCondition { term: term.clone(), positions: Vec::default() }),
+        ));
+
         Ok(edges)
     }
 }
