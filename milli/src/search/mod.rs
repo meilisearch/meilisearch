@@ -7,6 +7,7 @@ use roaring::bitmap::RoaringBitmap;
 pub use self::facet::{FacetDistribution, Filter, DEFAULT_VALUES_PER_FACET};
 pub use self::new::matches::{FormatOptions, MatchBounds, Matcher, MatcherBuilder, MatchingWords};
 use self::new::PartialSearchResult;
+use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::{
     execute_search, AscDesc, DefaultSearchLogger, DocumentId, Index, Result, SearchContext,
 };
@@ -29,6 +30,7 @@ pub struct Search<'a> {
     sort_criteria: Option<Vec<AscDesc>>,
     geo_strategy: new::GeoSortStrategy,
     terms_matching_strategy: TermsMatchingStrategy,
+    scoring_strategy: ScoringStrategy,
     words_limit: usize,
     exhaustive_number_hits: bool,
     rtxn: &'a heed::RoTxn<'a>,
@@ -45,6 +47,7 @@ impl<'a> Search<'a> {
             sort_criteria: None,
             geo_strategy: new::GeoSortStrategy::default(),
             terms_matching_strategy: TermsMatchingStrategy::default(),
+            scoring_strategy: Default::default(),
             exhaustive_number_hits: false,
             words_limit: 10,
             rtxn,
@@ -77,6 +80,11 @@ impl<'a> Search<'a> {
         self
     }
 
+    pub fn scoring_strategy(&mut self, value: ScoringStrategy) -> &mut Search<'a> {
+        self.scoring_strategy = value;
+        self
+    }
+
     pub fn words_limit(&mut self, value: usize) -> &mut Search<'a> {
         self.words_limit = value;
         self
@@ -93,7 +101,7 @@ impl<'a> Search<'a> {
         self
     }
 
-    /// Force the search to exhastivelly compute the number of candidates,
+    /// Forces the search to exhaustively compute the number of candidates,
     /// this will increase the search time but allows finite pagination.
     pub fn exhaustive_number_hits(&mut self, exhaustive_number_hits: bool) -> &mut Search<'a> {
         self.exhaustive_number_hits = exhaustive_number_hits;
@@ -102,11 +110,12 @@ impl<'a> Search<'a> {
 
     pub fn execute(&self) -> Result<SearchResult> {
         let mut ctx = SearchContext::new(self.index, self.rtxn);
-        let PartialSearchResult { located_query_terms, candidates, documents_ids } =
+        let PartialSearchResult { located_query_terms, candidates, documents_ids, document_scores } =
             execute_search(
                 &mut ctx,
                 &self.query,
                 self.terms_matching_strategy,
+                self.scoring_strategy,
                 self.exhaustive_number_hits,
                 &self.filter,
                 &self.sort_criteria,
@@ -124,7 +133,7 @@ impl<'a> Search<'a> {
             None => MatchingWords::default(),
         };
 
-        Ok(SearchResult { matching_words, candidates, documents_ids })
+        Ok(SearchResult { matching_words, candidates, document_scores, documents_ids })
     }
 }
 
@@ -138,6 +147,7 @@ impl fmt::Debug for Search<'_> {
             sort_criteria,
             geo_strategy: _,
             terms_matching_strategy,
+            scoring_strategy,
             words_limit,
             exhaustive_number_hits,
             rtxn: _,
@@ -150,6 +160,7 @@ impl fmt::Debug for Search<'_> {
             .field("limit", limit)
             .field("sort_criteria", sort_criteria)
             .field("terms_matching_strategy", terms_matching_strategy)
+            .field("scoring_strategy", scoring_strategy)
             .field("exhaustive_number_hits", exhaustive_number_hits)
             .field("words_limit", words_limit)
             .finish()
@@ -160,8 +171,8 @@ impl fmt::Debug for Search<'_> {
 pub struct SearchResult {
     pub matching_words: MatchingWords,
     pub candidates: RoaringBitmap,
-    // TODO those documents ids should be associated with their criteria scores.
     pub documents_ids: Vec<DocumentId>,
+    pub document_scores: Vec<Vec<ScoreDetails>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

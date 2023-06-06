@@ -53,6 +53,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 &mut ctx,
                 &(!query.trim().is_empty()).then(|| query.trim().to_owned()),
                 TermsMatchingStrategy::Last,
+                milli::score_details::ScoringStrategy::Skip,
                 false,
                 &None,
                 &None,

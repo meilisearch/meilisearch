@@ -56,6 +56,10 @@ pub struct SearchQueryGet {
     sort: Option<String>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowMatchesPosition>)]
     show_matches_position: Param<bool>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowRankingScore>)]
+    show_ranking_score: Param<bool>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowRankingScoreDetails>)]
+    show_ranking_score_details: Param<bool>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchFacets>)]
     facets: Option<CS<String>>,
     #[deserr( default = DEFAULT_HIGHLIGHT_PRE_TAG(), error = DeserrQueryParamError<InvalidSearchHighlightPreTag>)]
@@ -91,6 +95,8 @@ impl From<SearchQueryGet> for SearchQuery {
             filter,
             sort: other.sort.map(|attr| fix_sort_query_parameters(&attr)),
             show_matches_position: other.show_matches_position.0,
+            show_ranking_score: other.show_ranking_score.0,
+            show_ranking_score_details: other.show_ranking_score_details.0,
             facets: other.facets.map(|o| o.into_iter().collect()),
             highlight_pre_tag: other.highlight_pre_tag,
             highlight_post_tag: other.highlight_post_tag,
