@@ -2108,7 +2108,7 @@ mod tests {
         index.add_documents(doc1).unwrap();
     }
 
-    #[cfg(feature = "default")]
+    #[cfg(feature = "chinese")]
     #[test]
     fn store_detected_script_and_language_per_document_during_indexing() {
         use charabia::{Language, Script};

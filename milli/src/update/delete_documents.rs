@@ -1152,6 +1152,7 @@ mod tests {
         stats_should_not_return_deleted_documents_(DeletionStrategy::AlwaysSoft);
     }
 
+    #[cfg(feature = "chinese")]
     fn stored_detected_script_and_language_should_not_return_deleted_documents_(
         deletion_strategy: DeletionStrategy,
     ) {
@@ -1190,6 +1191,7 @@ mod tests {
         assert_eq!(cj_cmn_docs, expected_cj_cmn_docids);
     }
 
+    #[cfg(feature = "chinese")]
     #[test]
     fn stored_detected_script_and_language_should_not_return_deleted_documents() {
         stored_detected_script_and_language_should_not_return_deleted_documents_(

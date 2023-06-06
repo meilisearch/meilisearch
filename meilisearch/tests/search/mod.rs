@@ -3,6 +3,7 @@
 
 mod errors;
 mod formatted;
+mod japanese;
 mod multi;
 mod pagination;
 

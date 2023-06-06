@@ -79,7 +79,7 @@ rand = { version = "0.8.5", features = ["small_rng"] }
 fuzzcheck = "0.12.1"
 
 [features]
-all-tokenizations = ["charabia/default"]
+all-tokenizations = [ "charabia/japanese", "charabia/hebrew", "charabia/korean", "charabia/thai", "charabia/greek" ]
 
 # Use POSIX semaphores instead of SysV semaphores in LMDB
 # For more information on this feature, see heed's Cargo.toml
