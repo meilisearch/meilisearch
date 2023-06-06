@@ -104,23 +104,23 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
                 length,
                 logger,
                 &mut valid_docids,
+                &mut valid_scores,
                 &mut all_candidates,
                 &mut ranking_rule_universes,
                 &mut ranking_rules,
                 cur_ranking_rule_index,
                 &mut cur_offset,
                 distinct_fid,
+                &ranking_rule_scores,
                 $candidates,
             )?;
         };
     }
 
     while valid_docids.len() < length {
-        // The universe for this bucket is zero or one element, so we don't need to sort
-        // anything, just extend the results and go back to the parent ranking rule.
-        if ranking_rule_universes[cur_ranking_rule_index].len() <= 1 {
-            let bucket = std::mem::take(&mut ranking_rule_universes[cur_ranking_rule_index]);
-            maybe_add_to_results!(bucket);
+        // The universe for this bucket is zero, so we don't need to sort
+        // anything, just go back to the parent ranking rule.
+        if ranking_rule_universes[cur_ranking_rule_index].is_empty() {
             back!();
             continue;
         }
@@ -143,7 +143,6 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         ranking_rule_universes[cur_ranking_rule_index] -= &next_bucket.candidates;
 
         if cur_ranking_rule_index == ranking_rules_len - 1
-            || next_bucket.candidates.len() <= 1
             || cur_offset + (next_bucket.candidates.len() as usize) < from
         {
             maybe_add_to_results!(next_bucket.candidates);
