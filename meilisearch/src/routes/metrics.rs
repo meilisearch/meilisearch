@@ -17,7 +17,7 @@ pub fn configure(config: &mut web::ServiceConfig) {
 
 pub async fn get_metrics(
     index_scheduler: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, Data<IndexScheduler>>,
-    auth_controller: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, Data<AuthController>>,
+    auth_controller: Data<AuthController>,
 ) -> Result<HttpResponse, ResponseError> {
     let auth_filters = index_scheduler.filters();
     if !auth_filters.all_indexes_authorized() {
@@ -28,16 +28,24 @@ pub async fn get_metrics(
         return Err(error);
     }
 
-    let response =
-        create_all_stats((*index_scheduler).clone(), (*auth_controller).clone(), auth_filters)?;
+    let response = create_all_stats((*index_scheduler).clone(), auth_controller, auth_filters)?;
 
     crate::metrics::MEILISEARCH_DB_SIZE_BYTES.set(response.database_size as i64);
+    crate::metrics::MEILISEARCH_USED_DB_SIZE_BYTES.set(response.used_database_size as i64);
     crate::metrics::MEILISEARCH_INDEX_COUNT.set(response.indexes.len() as i64);
 
     for (index, value) in response.indexes.iter() {
         crate::metrics::MEILISEARCH_INDEX_DOCS_COUNT
             .with_label_values(&[index])
             .set(value.number_of_documents as i64);
+    }
+
+    for (kind, value) in index_scheduler.get_stats()? {
+        for (value, count) in value {
+            crate::metrics::MEILISEARCH_NB_TASKS
+                .with_label_values(&[&kind, &value])
+                .set(count as i64);
+        }
     }
 
     let encoder = TextEncoder::new();

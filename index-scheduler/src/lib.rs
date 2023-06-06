@@ -31,7 +31,7 @@ mod uuid_codec;
 pub type Result<T> = std::result::Result<T, Error>;
 pub type TaskId = u32;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ops::{Bound, RangeBounds};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -554,8 +554,14 @@ impl IndexScheduler {
         &self.index_mapper.indexer_config
     }
 
+    /// Return the real database size (i.e.: The size **with** the free pages)
     pub fn size(&self) -> Result<u64> {
         Ok(self.env.real_disk_size()?)
+    }
+
+    /// Return the used database size (i.e.: The size **without** the free pages)
+    pub fn used_size(&self) -> Result<u64> {
+        Ok(self.env.non_free_pages_size()?)
     }
 
     /// Return the index corresponding to the name.
@@ -735,6 +741,38 @@ impl IndexScheduler {
         }
 
         Ok(tasks)
+    }
+
+    /// The returned structure contains:
+    /// 1. The name of the property being observed can be `statuses`, `types`, or `indexes`.
+    /// 2. The name of the specific data related to the property can be `enqueued` for the `statuses`, `settingsUpdate` for the `types`, or the name of the index for the `indexes`, for example.
+    /// 3. The number of times the properties appeared.
+    pub fn get_stats(&self) -> Result<BTreeMap<String, BTreeMap<String, u64>>> {
+        let rtxn = self.read_txn()?;
+
+        let mut res = BTreeMap::new();
+
+        res.insert(
+            "statuses".to_string(),
+            enum_iterator::all::<Status>()
+                .map(|s| Ok((s.to_string(), self.get_status(&rtxn, s)?.len())))
+                .collect::<Result<BTreeMap<String, u64>>>()?,
+        );
+        res.insert(
+            "types".to_string(),
+            enum_iterator::all::<Kind>()
+                .map(|s| Ok((s.to_string(), self.get_kind(&rtxn, s)?.len())))
+                .collect::<Result<BTreeMap<String, u64>>>()?,
+        );
+        res.insert(
+            "indexes".to_string(),
+            self.index_tasks
+                .iter(&rtxn)?
+                .map(|res| Ok(res.map(|(name, bitmap)| (name.to_string(), bitmap.len()))?))
+                .collect::<Result<BTreeMap<String, u64>>>()?,
+        );
+
+        Ok(res)
     }
 
     /// Return true iff there is at least one task associated with this index
