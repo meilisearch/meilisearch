@@ -88,9 +88,16 @@ pub enum IndexStatus {
 pub struct IndexStats {
     /// Number of documents in the index.
     pub number_of_documents: u64,
-    /// Size of the index' DB, in bytes.
+    /// Size taken up by the index' DB, in bytes.
+    ///
+    /// This includes the size taken by both the used and free pages of the DB, and as the free pages
+    /// are not returned to the disk after a deletion, this number is typically larger than 
+    /// `used_database_size` that only includes the size of the used pages.
     pub database_size: u64,
-    /// Size of the index' DB, in bytes.
+    /// Size taken by the used pages of the index' DB, in bytes.
+    ///
+    /// As the DB backend does not return to the disk the pages that are not currently used by the DB,
+    /// this value is typically smaller than `database_size`.
     pub used_database_size: u64,
     /// Association of every field name with the number of times it occurs in the documents.
     pub field_distribution: FieldDistribution,
