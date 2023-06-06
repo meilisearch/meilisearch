@@ -427,13 +427,15 @@ pub fn execute_search(
         )?
     };
 
-    let BucketSortOutput { docids, mut all_candidates } = bucket_sort_output;
+    let BucketSortOutput { docids, scores, mut all_candidates } = bucket_sort_output;
+
+    let fields_ids_map = ctx.index.fields_ids_map(ctx.txn)?;
 
     // The candidates is the universe unless the exhaustive number of hits
     // is requested and a distinct attribute is set.
     if exhaustive_number_hits {
         if let Some(f) = ctx.index.distinct_field(ctx.txn)? {
-            if let Some(distinct_fid) = ctx.index.fields_ids_map(ctx.txn)?.id(f) {
+            if let Some(distinct_fid) = fields_ids_map.id(f) {
                 all_candidates = apply_distinct_rule(ctx, distinct_fid, &all_candidates)?.remaining;
             }
         }
