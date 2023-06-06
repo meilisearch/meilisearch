@@ -91,7 +91,7 @@ pub struct IndexStats {
     /// Size taken up by the index' DB, in bytes.
     ///
     /// This includes the size taken by both the used and free pages of the DB, and as the free pages
-    /// are not returned to the disk after a deletion, this number is typically larger than 
+    /// are not returned to the disk after a deletion, this number is typically larger than
     /// `used_database_size` that only includes the size of the used pages.
     pub database_size: u64,
     /// Size taken by the used pages of the index' DB, in bytes.

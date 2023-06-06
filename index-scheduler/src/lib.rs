@@ -743,6 +743,10 @@ impl IndexScheduler {
         Ok(tasks)
     }
 
+    /// The returned structure contains:
+    /// 1. The name of the property being observed can be `statuses`, `types`, or `indexes`.
+    /// 2. The name of the specific data related to the property can be `enqueued` for the `statuses`, `settingsUpdate` for the `types`, or the name of the index for the `indexes`, for example.
+    /// 3. The number of times the properties appeared.
     pub fn get_stats(&self) -> Result<BTreeMap<String, BTreeMap<String, u64>>> {
         let rtxn = self.read_txn()?;
 
