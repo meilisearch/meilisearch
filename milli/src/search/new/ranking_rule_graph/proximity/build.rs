@@ -1,6 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use super::ProximityCondition;
+use crate::proximity::MAX_DISTANCE;
 use crate::search::new::interner::{DedupInterner, Interned};
 use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::search::new::SearchContext;
@@ -47,7 +48,7 @@ pub fn build_edges(
     }
 
     conditions.push((
-        (7 + right_ngram_length) as u32,
+        MAX_DISTANCE - 1 + right_ngram_length as u32,
         conditions_interner.insert(ProximityCondition::Term { term: right_term.clone() }),
     ));
 
