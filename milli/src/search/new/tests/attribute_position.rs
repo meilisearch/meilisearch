@@ -138,7 +138,7 @@ fn test_attribute_position_simple() {
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("quick brown");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 11, 12, 13, 2, 3, 4, 1, 0, 6, 8, 7, 9, 5]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 12, 11, 13, 3, 4, 2, 0, 1, 6, 8, 7, 9, 5]");
 }
 #[test]
 fn test_attribute_position_repeated() {
@@ -163,7 +163,7 @@ fn test_attribute_position_different_fields() {
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("quick brown");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 11, 12, 13, 2, 3, 4, 1, 0, 6, 8, 7, 9, 5]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 12, 11, 13, 3, 4, 2, 0, 1, 6, 8, 7, 9, 5]");
 }
 
 #[test]
@@ -176,5 +176,5 @@ fn test_attribute_position_ngrams() {
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("quick brown");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 11, 12, 13, 2, 3, 4, 1, 0, 6, 8, 7, 9, 5]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 12, 11, 13, 3, 4, 2, 0, 1, 6, 8, 7, 9, 5]");
 }

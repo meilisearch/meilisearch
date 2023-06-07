@@ -270,13 +270,13 @@ fn test_proximity_simple() {
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quick brown fox jumps over the lazy dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[4, 9, 10, 7, 6, 5, 2, 3, 0, 1]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 10, 4, 7, 6, 5, 2, 3, 0, 1]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
-        "\"the quickbrown fox jumps over the lazy dog\"",
         "\"the quack brown fox jumps over the lazy dog\"",
         "\"the quick brown fox jumps over the lazy dog\"",
+        "\"the quickbrown fox jumps over the lazy dog\"",
         "\"the really quick brown fox jumps over the lazy dog\"",
         "\"the really quick brown fox jumps over the very lazy dog\"",
         "\"brown quick fox jumps over the lazy dog\"",
