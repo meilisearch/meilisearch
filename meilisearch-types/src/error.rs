@@ -250,7 +250,6 @@ InvalidSearchShowMatchesPosition      , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowRankingScore         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowRankingScoreDetails  , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchSort                     , InvalidRequest       , BAD_REQUEST ;
-InvalidSearchFacet                    , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDisplayedAttributes    , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDistinctAttribute      , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFaceting               , InvalidRequest       , BAD_REQUEST ;
