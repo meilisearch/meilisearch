@@ -244,7 +244,6 @@ InvalidFacetSearchQuery               , InvalidRequest       , BAD_REQUEST ;
 InvalidFacetSearchName                , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowMatchesPosition      , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchSort                     , InvalidRequest       , BAD_REQUEST ;
-InvalidSearchFacet                    , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDisplayedAttributes    , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDistinctAttribute      , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFaceting               , InvalidRequest       , BAD_REQUEST ;
