@@ -21,10 +21,9 @@ use crate::heed_codec::facet::{
 };
 use crate::heed_codec::{ScriptLanguageCodec, StrBEU16Codec, StrRefCodec};
 use crate::{
-    default_criteria, BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec, Criterion,
-    DocumentId, ExternalDocumentsIds, FacetDistribution, FieldDistribution, FieldId,
-    FieldIdWordCountCodec, GeoPoint, ObkvCodec, Result, RoaringBitmapCodec, RoaringBitmapLenCodec,
-    Search, U8StrStrCodec, BEU16, BEU32,
+    default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
+    FacetDistribution, FieldDistribution, FieldId, FieldIdWordCountCodec, GeoPoint, ObkvCodec,
+    Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, BEU16, BEU32,
 };
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
@@ -111,9 +110,6 @@ pub struct Index {
     /// A prefix of word and all the documents ids containing this prefix, from attributes for which typos are not allowed.
     pub exact_word_prefix_docids: Database<Str, RoaringBitmapCodec>,
 
-    /// Maps a word and a document id (u32) to all the positions where the given word appears.
-    pub docid_word_positions: Database<BEU32StrCodec, BoRoaringBitmapCodec>,
-
     /// Maps the proximity between a pair of words with all the docids where this relation appears.
     pub word_pair_proximity_docids: Database<U8StrStrCodec, CboRoaringBitmapCodec>,
     /// Maps the proximity between a pair of word and prefix with all the docids where this relation appears.
@@ -177,7 +173,6 @@ impl Index {
         let word_prefix_docids = env.create_database(&mut wtxn, Some(WORD_PREFIX_DOCIDS))?;
         let exact_word_prefix_docids =
             env.create_database(&mut wtxn, Some(EXACT_WORD_PREFIX_DOCIDS))?;
-        let docid_word_positions = env.create_database(&mut wtxn, Some(DOCID_WORD_POSITIONS))?;
         let word_pair_proximity_docids =
             env.create_database(&mut wtxn, Some(WORD_PAIR_PROXIMITY_DOCIDS))?;
         let script_language_docids =
@@ -220,7 +215,6 @@ impl Index {
             exact_word_docids,
             word_prefix_docids,
             exact_word_prefix_docids,
-            docid_word_positions,
             word_pair_proximity_docids,
             script_language_docids,
             word_prefix_pair_proximity_docids,

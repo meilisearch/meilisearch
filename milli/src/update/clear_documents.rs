@@ -23,7 +23,6 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
             exact_word_docids,
             word_prefix_docids,
             exact_word_prefix_docids,
-            docid_word_positions,
             word_pair_proximity_docids,
             word_prefix_pair_proximity_docids,
             prefix_word_pair_proximity_docids,
@@ -80,7 +79,6 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         exact_word_docids.clear(self.wtxn)?;
         word_prefix_docids.clear(self.wtxn)?;
         exact_word_prefix_docids.clear(self.wtxn)?;
-        docid_word_positions.clear(self.wtxn)?;
         word_pair_proximity_docids.clear(self.wtxn)?;
         word_prefix_pair_proximity_docids.clear(self.wtxn)?;
         prefix_word_pair_proximity_docids.clear(self.wtxn)?;
@@ -141,7 +139,6 @@ mod tests {
 
         assert!(index.word_docids.is_empty(&rtxn).unwrap());
         assert!(index.word_prefix_docids.is_empty(&rtxn).unwrap());
-        assert!(index.docid_word_positions.is_empty(&rtxn).unwrap());
         assert!(index.word_pair_proximity_docids.is_empty(&rtxn).unwrap());
         assert!(index.field_id_word_count_docids.is_empty(&rtxn).unwrap());
         assert!(index.word_prefix_pair_proximity_docids.is_empty(&rtxn).unwrap());
