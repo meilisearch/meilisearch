@@ -325,8 +325,6 @@ fn send_and_extract_flattened_documents_data(
                 // send docid_word_positions_chunk to DB writer
                 let docid_word_positions_chunk =
                     unsafe { as_cloneable_grenad(&docid_word_positions_chunk)? };
-                let _ = lmdb_writer_sx
-                    .send(Ok(TypedChunk::DocidWordPositions(docid_word_positions_chunk.clone())));
 
                 let _ =
                     lmdb_writer_sx.send(Ok(TypedChunk::ScriptLanguageDocids(script_language_pair)));

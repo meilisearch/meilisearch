@@ -89,7 +89,6 @@ Create a snapshot test of the given database.
     - `exact_word_docids`
     - `word_prefix_docids`
     - `exact_word_prefix_docids`
-    - `docid_word_positions`
     - `word_pair_proximity_docids`
     - `word_prefix_pair_proximity_docids`
     - `word_position_docids`
@@ -215,11 +214,6 @@ pub fn snap_word_prefix_docids(index: &Index) -> String {
 pub fn snap_exact_word_prefix_docids(index: &Index) -> String {
     make_db_snap_from_iter!(index, exact_word_prefix_docids, |(s, b)| {
         &format!("{s:<16} {}", display_bitmap(&b))
-    })
-}
-pub fn snap_docid_word_positions(index: &Index) -> String {
-    make_db_snap_from_iter!(index, docid_word_positions, |((idx, s), b)| {
-        &format!("{idx:<6} {s:<16} {}", display_bitmap(&b))
     })
 }
 pub fn snap_word_pair_proximity_docids(index: &Index) -> String {
@@ -476,9 +470,6 @@ macro_rules! full_snap_of_db {
     }};
     ($index:ident, exact_word_prefix_docids) => {{
         $crate::snapshot_tests::snap_exact_word_prefix_docids(&$index)
-    }};
-    ($index:ident, docid_word_positions) => {{
-        $crate::snapshot_tests::snap_docid_word_positions(&$index)
     }};
     ($index:ident, word_pair_proximity_docids) => {{
         $crate::snapshot_tests::snap_word_pair_proximity_docids(&$index)

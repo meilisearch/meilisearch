@@ -2471,11 +2471,11 @@ mod tests {
               {
                 "id": 3,
                 "text": "a a a a a a a a a a a a a a a a a
-                a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a 
+                a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a
                 a a a a a a a a a a a a a a a a a a a a a "
              }
             ]))
@@ -2513,6 +2513,5 @@ mod tests {
 
         db_snap!(index, word_fid_docids, 3, @"4c2e2a1832e5802796edc1638136d933");
         db_snap!(index, word_position_docids, 3, @"74f556b91d161d997a89468b4da1cb8f");
-        db_snap!(index, docid_word_positions, 3, @"5287245332627675740b28bd46e1cde1");
     }
 }

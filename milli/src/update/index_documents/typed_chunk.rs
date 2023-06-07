@@ -7,24 +7,19 @@ use std::io;
 use charabia::{Language, Script};
 use grenad::MergerBuilder;
 use heed::types::ByteSlice;
-use heed::{BytesDecode, RwTxn};
+use heed::RwTxn;
 use roaring::RoaringBitmap;
 
 use super::helpers::{
-    self, merge_ignore_values, roaring_bitmap_from_u32s_array, serialize_roaring_bitmap,
-    valid_lmdb_key, CursorClonableMmap,
+    self, merge_ignore_values, serialize_roaring_bitmap, valid_lmdb_key, CursorClonableMmap,
 };
 use super::{ClonableMmap, MergeFn};
 use crate::facet::FacetType;
 use crate::update::facet::FacetsUpdate;
 use crate::update::index_documents::helpers::as_cloneable_grenad;
-use crate::{
-    lat_lng_to_xyz, BoRoaringBitmapCodec, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index,
-    Result,
-};
+use crate::{lat_lng_to_xyz, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index, Result};
 
 pub(crate) enum TypedChunk {
-    DocidWordPositions(grenad::Reader<CursorClonableMmap>),
     FieldIdDocidFacetStrings(grenad::Reader<CursorClonableMmap>),
     FieldIdDocidFacetNumbers(grenad::Reader<CursorClonableMmap>),
     Documents(grenad::Reader<CursorClonableMmap>),
@@ -56,29 +51,6 @@ pub(crate) fn write_typed_chunk_into_index(
 ) -> Result<(RoaringBitmap, bool)> {
     let mut is_merged_database = false;
     match typed_chunk {
-        TypedChunk::DocidWordPositions(docid_word_positions_iter) => {
-            write_entries_into_database(
-                docid_word_positions_iter,
-                &index.docid_word_positions,
-                wtxn,
-                index_is_empty,
-                |value, buffer| {
-                    // ensure that values are unique and ordered
-                    let positions = roaring_bitmap_from_u32s_array(value);
-                    BoRoaringBitmapCodec::serialize_into(&positions, buffer);
-                    Ok(buffer)
-                },
-                |new_values, db_values, buffer| {
-                    let new_values = roaring_bitmap_from_u32s_array(new_values);
-                    let positions = match BoRoaringBitmapCodec::bytes_decode(db_values) {
-                        Some(db_values) => new_values | db_values,
-                        None => new_values, // should not happen
-                    };
-                    BoRoaringBitmapCodec::serialize_into(&positions, buffer);
-                    Ok(())
-                },
-            )?;
-        }
         TypedChunk::Documents(obkv_documents_iter) => {
             let mut cursor = obkv_documents_iter.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
