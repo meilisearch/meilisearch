@@ -65,7 +65,7 @@ async fn simple_search_single_index() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    insta::assert_json_snapshot!(response["results"], { "[].processingTimeMs" => "[time]" }, @r###"
+    insta::assert_json_snapshot!(response["results"], { "[].processingTimeMs" => "[time]", ".**._rankingScore" => "[score]" }, @r###"
     [
       {
         "indexUid": "test",
@@ -170,7 +170,7 @@ async fn simple_search_two_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    insta::assert_json_snapshot!(response["results"], { "[].processingTimeMs" => "[time]" }, @r###"
+    insta::assert_json_snapshot!(response["results"], { "[].processingTimeMs" => "[time]", ".**._rankingScore" => "[score]" }, @r###"
     [
       {
         "indexUid": "test",

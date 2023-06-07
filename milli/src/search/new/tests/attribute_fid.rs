@@ -123,7 +123,7 @@ fn test_attribute_fid_simple() {
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quick brown fox jumps over the lazy dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 6, 5, 4, 3, 9, 7, 8, 11, 10, 12, 13, 14, 0]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 6, 5, 4, 3, 9, 8, 7, 11, 10, 13, 12, 14, 0]");
 }
 
 #[test]
@@ -136,5 +136,5 @@ fn test_attribute_fid_ngrams() {
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quick brown fox jumps over the lazy dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 6, 5, 4, 3, 9, 7, 8, 11, 10, 12, 13, 14, 0]");
+    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 6, 5, 4, 3, 9, 8, 7, 11, 10, 13, 12, 14, 0]");
 }
