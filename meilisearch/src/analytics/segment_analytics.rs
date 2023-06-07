@@ -527,11 +527,13 @@ impl Segment {
             let _ = self.batcher.push(update_documents).await;
         }
         if let Some(get_fetch_documents) =
-            take(get_fetch_documents_aggregator).into_event(&user, "Documents Fetched GET") {
+            take(get_fetch_documents_aggregator).into_event(&user, "Documents Fetched GET")
+        {
             let _ = self.batcher.push(get_fetch_documents).await;
         }
         if let Some(post_fetch_documents) =
-            take(post_fetch_documents_aggregator).into_event(&user, "Documents Fetched POST") {
+            take(post_fetch_documents_aggregator).into_event(&user, "Documents Fetched POST")
+        {
             let _ = self.batcher.push(post_fetch_documents).await;
         }
         if let Some(get_tasks) = take(get_tasks_aggregator).into_event(&user, "Tasks Seen") {
