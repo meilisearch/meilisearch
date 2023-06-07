@@ -65,14 +65,15 @@ async fn simple_search_single_index() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    insta::assert_json_snapshot!(response["results"], { "[].processingTimeMs" => "[time]" }, @r###"
+    insta::assert_json_snapshot!(response["results"], { "[].processingTimeMs" => "[time]", ".**._rankingScore" => "[score]" }, @r###"
     [
       {
         "indexUid": "test",
         "hits": [
           {
             "title": "Gläss",
-            "id": "450465"
+            "id": "450465",
+            "_rankingScore": "[score]"
           }
         ],
         "query": "glass",
@@ -86,7 +87,8 @@ async fn simple_search_single_index() {
         "hits": [
           {
             "title": "Captain Marvel",
-            "id": "299537"
+            "id": "299537",
+            "_rankingScore": "[score]"
           }
         ],
         "query": "captain",
@@ -170,14 +172,15 @@ async fn simple_search_two_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    insta::assert_json_snapshot!(response["results"], { "[].processingTimeMs" => "[time]" }, @r###"
+    insta::assert_json_snapshot!(response["results"], { "[].processingTimeMs" => "[time]", ".**._rankingScore" => "[score]" }, @r###"
     [
       {
         "indexUid": "test",
         "hits": [
           {
             "title": "Gläss",
-            "id": "450465"
+            "id": "450465",
+            "_rankingScore": "[score]"
           }
         ],
         "query": "glass",
@@ -203,7 +206,8 @@ async fn simple_search_two_indexes() {
                 "age": 4
               }
             ],
-            "cattos": "pésti"
+            "cattos": "pésti",
+            "_rankingScore": "[score]"
           },
           {
             "id": 654,
@@ -218,7 +222,8 @@ async fn simple_search_two_indexes() {
             "cattos": [
               "simba",
               "pestiféré"
-            ]
+            ],
+            "_rankingScore": "[score]"
           }
         ],
         "query": "pésti",
