@@ -169,7 +169,7 @@ impl<'i> FacetsUpdate<'i> {
                 current_fst = match current_fst.take() {
                     Some((fid, fst_builder)) if fid != field_id => {
                         let fst = fst_builder.into_set();
-                        text_fsts.push((field_id, fst));
+                        text_fsts.push((fid, fst));
                         Some((field_id, fst::SetBuilder::memory()))
                     }
                     Some((field_id, fst_builder)) => Some((field_id, fst_builder)),
