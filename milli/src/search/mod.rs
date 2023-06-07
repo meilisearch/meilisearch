@@ -13,8 +13,7 @@ use self::new::PartialSearchResult;
 use crate::error::UserError;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::{
-    execute_search, AscDesc, DefaultSearchLogger, DocumentId, FieldIdMapMissingEntry, Index,
-    Result, SearchContext, BEU16,
+    execute_search, AscDesc, DefaultSearchLogger, DocumentId, Index, Result, SearchContext, BEU16,
 };
 
 // Building these factories is not free.
@@ -240,13 +239,9 @@ impl<'a> SearchForFacetValues<'a> {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         let fid = match fields_ids_map.id(&self.facet) {
             Some(fid) => fid,
-            None => {
-                return Err(FieldIdMapMissingEntry::FieldName {
-                    field_name: self.facet.clone(),
-                    process: "search for facet values",
-                }
-                .into());
-            }
+            // we return an empty list of results when the attribute has been
+            // set as filterable but no document contains this field (yet).
+            None => return Ok(Vec::new()),
         };
 
         let fst = match self.search_query.index.facet_id_string_fst.get(rtxn, &BEU16::new(fid))? {
