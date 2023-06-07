@@ -133,7 +133,7 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
                 ),
         }
     )]
-    InvalidSearchFacet { field: String, valid_fields: BTreeSet<String> },
+    InvalidFacetSearchFacetName { field: String, valid_fields: BTreeSet<String> },
     #[error("{}", HeedError::BadOpenOptions)]
     InvalidLmdbOpenOptions,
     #[error("You must specify where `sort` is listed in the rankingRules setting to use the sort parameter at search time.")]

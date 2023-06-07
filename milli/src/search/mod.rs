@@ -229,7 +229,7 @@ impl<'a> SearchForFacetValues<'a> {
 
         let filterable_fields = index.filterable_fields(rtxn)?;
         if !filterable_fields.contains(&self.facet) {
-            return Err(UserError::InvalidSearchFacet {
+            return Err(UserError::InvalidFacetSearchFacetName {
                 field: self.facet.clone(),
                 valid_fields: filterable_fields.into_iter().collect(),
             }

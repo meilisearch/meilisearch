@@ -230,6 +230,7 @@ InvalidSearchAttributesToRetrieve     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchCropLength               , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchCropMarker               , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchFacets                   , InvalidRequest       , BAD_REQUEST ;
+InvalidFacetSearchFacetName           , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchFilter                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchHighlightPostTag         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchHighlightPreTag          , InvalidRequest       , BAD_REQUEST ;
@@ -333,7 +334,9 @@ impl ErrorCode for milli::Error {
                     UserError::SortRankingRuleMissing => Code::InvalidSearchSort,
                     UserError::InvalidFacetsDistribution { .. } => Code::InvalidSearchFacets,
                     UserError::InvalidSortableAttribute { .. } => Code::InvalidSearchSort,
-                    UserError::InvalidSearchFacet { .. } => Code::InvalidSearchFacet,
+                    UserError::InvalidFacetSearchFacetName { .. } => {
+                        Code::InvalidFacetSearchFacetName
+                    }
                     UserError::CriterionError(_) => Code::InvalidSettingsRankingRules,
                     UserError::InvalidGeoField { .. } => Code::InvalidDocumentGeoField,
                     UserError::SortError(_) => Code::InvalidSearchSort,
