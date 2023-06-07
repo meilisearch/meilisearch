@@ -281,6 +281,7 @@ MissingApiKeyIndexes                  , InvalidRequest       , BAD_REQUEST ;
 MissingAuthorizationHeader            , Auth                 , UNAUTHORIZED ;
 MissingContentType                    , InvalidRequest       , UNSUPPORTED_MEDIA_TYPE ;
 MissingDocumentId                     , InvalidRequest       , BAD_REQUEST ;
+MissingFacetSearchFacetName           , InvalidRequest       , BAD_REQUEST ;
 MissingIndexUid                       , InvalidRequest       , BAD_REQUEST ;
 MissingMasterKey                      , Auth                 , UNAUTHORIZED ;
 MissingPayload                        , InvalidRequest       , BAD_REQUEST ;
