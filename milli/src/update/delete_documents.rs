@@ -15,8 +15,7 @@ use crate::facet::FacetType;
 use crate::heed_codec::facet::FieldDocIdFacetCodec;
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::{
-    ExternalDocumentsIds, FieldId, FieldIdMapMissingEntry, Index, Result, RoaringBitmapCodec,
-    SmallString32, BEU32,
+    ExternalDocumentsIds, FieldId, FieldIdMapMissingEntry, Index, Result, RoaringBitmapCodec, BEU32,
 };
 
 pub struct DeleteDocuments<'t, 'u, 'i> {
@@ -252,6 +251,11 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             documents,
         } = self.index;
 
+        struct AffectedWord {
+            word: String,
+            must_remove: bool,
+            must_keep: bool,
+        }
         // Retrieve the words contained in the documents.
         let mut words = Vec::new();
         for docid in &self.to_delete_docids {
@@ -264,7 +268,11 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             while let Some(result) = iter.next() {
                 let ((_docid, word), _positions) = result?;
                 // This boolean will indicate if we must remove this word from the words FST.
-                words.push((SmallString32::from(word), false));
+                words.push(AffectedWord {
+                    word: word.to_owned(),
+                    must_remove: false,
+                    must_keep: false,
+                });
                 // safety: we don't keep references from inside the LMDB database.
                 unsafe { iter.del_current()? };
             }
@@ -280,16 +288,17 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
         // Maybe we can improve the get performance of the words
         // if we sort the words first, keeping the LMDB pages in cache.
-        words.sort_unstable();
+        words.sort_unstable_by(|w1, w2| w1.word.cmp(&w2.word));
 
         // We iterate over the words and delete the documents ids
         // from the word docids database.
-        for (word, must_remove) in &mut words {
+        for AffectedWord { word, must_remove, must_keep } in &mut words {
             remove_from_word_docids(
                 self.wtxn,
                 word_docids,
                 word.as_str(),
                 must_remove,
+                must_keep,
                 &self.to_delete_docids,
             )?;
 
@@ -298,21 +307,20 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                 exact_word_docids,
                 word.as_str(),
                 must_remove,
+                must_keep,
                 &self.to_delete_docids,
             )?;
         }
 
         // We construct an FST set that contains the words to delete from the words FST.
         let words_to_delete =
-            words.iter().filter_map(
-                |(word, must_remove)| {
-                    if *must_remove {
-                        Some(word.as_str())
-                    } else {
-                        None
-                    }
-                },
-            );
+            words.iter().filter_map(|AffectedWord { word, must_remove, must_keep }| {
+                if *must_remove && !*must_keep {
+                    Some(word.as_str())
+                } else {
+                    None
+                }
+            });
         let words_to_delete = fst::Set::from_iter(words_to_delete)?;
 
         let new_words_fst = {
@@ -534,6 +542,7 @@ fn remove_from_word_docids(
     db: &heed::Database<Str, RoaringBitmapCodec>,
     word: &str,
     must_remove: &mut bool,
+    must_keep: &mut bool,
     to_remove: &RoaringBitmap,
 ) -> Result<()> {
     // We create an iterator to be able to get the content and delete the word docids.
@@ -548,10 +557,13 @@ fn remove_from_word_docids(
                 // safety: we don't keep references from inside the LMDB database.
                 unsafe { iter.del_current()? };
                 *must_remove = true;
-            } else if docids.len() != previous_len {
-                let key = key.to_owned();
-                // safety: we don't keep references from inside the LMDB database.
-                unsafe { iter.put_current(&key, &docids)? };
+            } else {
+                *must_keep = true;
+                if docids.len() != previous_len {
+                    let key = key.to_owned();
+                    // safety: we don't keep references from inside the LMDB database.
+                    unsafe { iter.put_current(&key, &docids)? };
+                }
             }
         }
     }
@@ -1198,5 +1210,52 @@ mod tests {
         stored_detected_script_and_language_should_not_return_deleted_documents_(
             DeletionStrategy::AlwaysSoft,
         );
+    }
+    #[test]
+    fn delete_words_exact_attributes() {
+        let index = TempIndex::new();
+
+        index
+            .update_settings(|settings| {
+                settings.set_primary_key(S("id"));
+                settings.set_searchable_fields(vec![S("text"), S("exact")]);
+                settings.set_exact_attributes(vec![S("exact")].into_iter().collect());
+            })
+            .unwrap();
+
+        index
+            .add_documents(documents!([
+                { "id": 0, "text": "hello" },
+                { "id": 1, "exact": "hello"}
+            ]))
+            .unwrap();
+        db_snap!(index, word_docids, 1, @r###"
+        hello            [0, ]
+        "###);
+        db_snap!(index, exact_word_docids, 1, @r###"
+        hello            [1, ]
+        "###);
+        db_snap!(index, words_fst, 1, @"300000000000000001084cfcfc2ce1000000016000000090ea47f");
+
+        let mut wtxn = index.write_txn().unwrap();
+        let deleted_internal_ids =
+            delete_documents(&mut wtxn, &index, &["1"], DeletionStrategy::AlwaysHard);
+        wtxn.commit().unwrap();
+
+        db_snap!(index, word_docids, 2, @r###"
+        hello            [0, ]
+        "###);
+        db_snap!(index, exact_word_docids, 2, @"");
+        db_snap!(index, words_fst, 2, @"300000000000000001084cfcfc2ce1000000016000000090ea47f");
+
+        insta::assert_snapshot!(format!("{deleted_internal_ids:?}"), @"[1]");
+        let txn = index.read_txn().unwrap();
+        let words = index.words_fst(&txn).unwrap().into_stream().into_strs().unwrap();
+        insta::assert_snapshot!(format!("{words:?}"), @r###"["hello"]"###);
+
+        let mut s = crate::Search::new(&txn, &index);
+        s.query("hello");
+        let crate::SearchResult { documents_ids, .. } = s.execute().unwrap();
+        insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0]");
     }
 }
