@@ -246,8 +246,8 @@ pub struct FacetStats {
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct FacetSearchResult {
-    pub hits: Vec<FacetValueHit>,
-    pub query: Option<String>,
+    pub facet_hits: Vec<FacetValueHit>,
+    pub facet_query: Option<String>,
     pub processing_time_ms: u128,
 }
 
@@ -509,11 +509,9 @@ pub fn perform_facet_search(
         facet_search.query(facet_query);
     }
 
-    let hits = facet_search.execute()?;
-
     Ok(FacetSearchResult {
-        hits,
-        query: facet_query,
+        facet_hits: facet_search.execute()?,
+        facet_query,
         processing_time_ms: before_search.elapsed().as_millis(),
     })
 }
