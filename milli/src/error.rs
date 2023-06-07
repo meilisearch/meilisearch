@@ -137,7 +137,7 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
                 ),
         }
     )]
-    InvalidSearchFacet { field: String, valid_fields: BTreeSet<String> },
+    InvalidFacetSearchFacetName { field: String, valid_fields: BTreeSet<String> },
     #[error("Attribute `{}` is not searchable. Available searchable attributes are: `{}{}`.",
         .field,
         .valid_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
