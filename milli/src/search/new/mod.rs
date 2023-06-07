@@ -355,6 +355,7 @@ pub fn execute_search(
     exhaustive_number_hits: bool,
     filters: &Option<Filter>,
     sort_criteria: &Option<Vec<AscDesc>>,
+    searchable_attributes: Option<&[String]>,
     geo_strategy: geo_sort::Strategy,
     from: usize,
     length: usize,

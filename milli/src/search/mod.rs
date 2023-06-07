@@ -28,7 +28,7 @@ pub struct Search<'a> {
     offset: usize,
     limit: usize,
     sort_criteria: Option<Vec<AscDesc>>,
-    searchable_attributes: Option<Vec<String>>,
+    searchable_attributes: Option<&'a [String]>,
     geo_strategy: new::GeoSortStrategy,
     terms_matching_strategy: TermsMatchingStrategy,
     scoring_strategy: ScoringStrategy,
@@ -77,7 +77,7 @@ impl<'a> Search<'a> {
         self
     }
 
-    pub fn searchable_attributes(&mut self, searchable: Vec<String>) -> &mut Search<'a> {
+    pub fn searchable_attributes(&mut self, searchable: &'a [String]) -> &mut Search<'a> {
         self.searchable_attributes = Some(searchable);
         self
     }
@@ -126,6 +126,7 @@ impl<'a> Search<'a> {
                 self.exhaustive_number_hits,
                 &self.filter,
                 &self.sort_criteria,
+                self.searchable_attributes,
                 self.geo_strategy,
                 self.offset,
                 self.limit,
