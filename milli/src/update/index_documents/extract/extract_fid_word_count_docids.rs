@@ -82,7 +82,7 @@ fn drain_document_fid_wordcount_into_sorter(
     let mut key_buffer = Vec::new();
 
     for (fid, count) in document_fid_wordcount.drain() {
-        if count <= 10 {
+        if count <= 30 {
             key_buffer.clear();
             key_buffer.extend_from_slice(&fid.to_be_bytes());
             key_buffer.push(count as u8);
