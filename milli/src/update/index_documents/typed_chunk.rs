@@ -38,6 +38,7 @@ pub(crate) enum TypedChunk {
     FieldIdFacetIsNullDocids(grenad::Reader<File>),
     FieldIdFacetIsEmptyDocids(grenad::Reader<File>),
     GeoPoints(grenad::Reader<File>),
+    VectorPoints(grenad::Reader<File>),
     ScriptLanguageDocids(HashMap<(Script, Language), RoaringBitmap>),
 }
 
@@ -220,6 +221,29 @@ pub(crate) fn write_typed_chunk_into_index(
             }
             index.put_geo_rtree(wtxn, &rtree)?;
             index.put_geo_faceted_documents_ids(wtxn, &geo_faceted_docids)?;
+        }
+        TypedChunk::VectorPoints(vector_points) => {
+            // let mut rtree = index.geo_rtree(wtxn)?.unwrap_or_default();
+            // let mut geo_faceted_docids = index.geo_faceted_documents_ids(wtxn)?;
+
+            // let mut cursor = geo_points.into_cursor()?;
+            // while let Some((key, value)) = cursor.move_on_next()? {
+            //     // convert the key back to a u32 (4 bytes)
+            //     let docid = key.try_into().map(DocumentId::from_be_bytes).unwrap();
+
+            //     // convert the latitude and longitude back to a f64 (8 bytes)
+            //     let (lat, tail) = helpers::try_split_array_at::<u8, 8>(value).unwrap();
+            //     let (lng, _) = helpers::try_split_array_at::<u8, 8>(tail).unwrap();
+            //     let point = [f64::from_ne_bytes(lat), f64::from_ne_bytes(lng)];
+            //     let xyz_point = lat_lng_to_xyz(&point);
+
+            //     rtree.insert(GeoPoint::new(xyz_point, (docid, point)));
+            //     geo_faceted_docids.insert(docid);
+            // }
+            // index.put_geo_rtree(wtxn, &rtree)?;
+            // index.put_geo_faceted_documents_ids(wtxn, &geo_faceted_docids)?;
+
+            todo!("index vector points")
         }
         TypedChunk::ScriptLanguageDocids(hash_pair) => {
             let mut buffer = Vec::new();
