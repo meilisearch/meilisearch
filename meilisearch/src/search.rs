@@ -31,11 +31,13 @@ pub const DEFAULT_CROP_MARKER: fn() -> String = || "…".to_string();
 pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserr)]
+#[derive(Debug, Clone, Default, PartialEq, Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
+    pub vector: Option<Vec<f32>>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
@@ -80,13 +82,15 @@ impl SearchQuery {
 // This struct contains the fields of `SearchQuery` inline.
 // This is because neither deserr nor serde support `flatten` when using `deny_unknown_fields.
 // The `From<SearchQueryWithIndex>` implementation ensures both structs remain up to date.
-#[derive(Debug, Clone, PartialEq, Eq, Deserr)]
+#[derive(Debug, Clone, PartialEq, Deserr)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQueryWithIndex {
     #[deserr(error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
     pub index_uid: IndexUid,
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
+    pub vector: Option<Vec<f32>>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
@@ -126,6 +130,7 @@ impl SearchQueryWithIndex {
         let SearchQueryWithIndex {
             index_uid,
             q,
+            vector,
             offset,
             limit,
             page,
@@ -147,6 +152,7 @@ impl SearchQueryWithIndex {
             index_uid,
             SearchQuery {
                 q,
+                vector,
                 offset,
                 limit,
                 page,
