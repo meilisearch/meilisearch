@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::{cmp, io};
+use std::io;
 
 use grenad::Sorter;
 
@@ -54,11 +54,10 @@ pub fn extract_fid_word_count_docids<R: io::Read + io::Seek>(
         }
 
         for position in read_u32_ne_bytes(value) {
-            let (field_id, position) = relative_from_absolute_position(position);
-            let word_count = position as u32 + 1;
+            let (field_id, _) = relative_from_absolute_position(position);
 
             let value = document_fid_wordcount.entry(field_id as FieldId).or_insert(0);
-            *value = cmp::max(*value, word_count);
+            *value += 1;
         }
     }
 
