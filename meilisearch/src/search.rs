@@ -295,6 +295,10 @@ pub fn perform_search(
 
     let mut search = index.search(&rtxn);
 
+    if let Some(ref vector) = query.vector {
+        search.vector(vector.clone());
+    }
+
     if let Some(ref query) = query.q {
         search.query(query);
     }
