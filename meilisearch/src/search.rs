@@ -55,6 +55,8 @@ pub struct SearchQuery {
     pub attributes_to_highlight: Option<HashSet<String>>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>, default)]
     pub show_matches_position: bool,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScore>, default)]
+    pub show_ranking_score: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>, default)]
     pub show_ranking_score_details: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
@@ -106,6 +108,8 @@ pub struct SearchQueryWithIndex {
     pub crop_length: usize,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
     pub attributes_to_highlight: Option<HashSet<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScore>, default)]
+    pub show_ranking_score: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>, default)]
     pub show_ranking_score_details: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>, default)]
@@ -139,6 +143,7 @@ impl SearchQueryWithIndex {
             attributes_to_crop,
             crop_length,
             attributes_to_highlight,
+            show_ranking_score,
             show_ranking_score_details,
             show_matches_position,
             filter,
@@ -161,6 +166,7 @@ impl SearchQueryWithIndex {
                 attributes_to_crop,
                 crop_length,
                 attributes_to_highlight,
+                show_ranking_score,
                 show_ranking_score_details,
                 show_matches_position,
                 filter,
@@ -209,10 +215,10 @@ pub struct SearchHit {
     pub formatted: Document,
     #[serde(rename = "_matchesPosition", skip_serializing_if = "Option::is_none")]
     pub matches_position: Option<MatchesPosition>,
+    #[serde(rename = "_rankingScore", skip_serializing_if = "Option::is_none")]
+    pub ranking_score: Option<u64>,
     #[serde(rename = "_rankingScoreDetails", skip_serializing_if = "Option::is_none")]
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
-    #[serde(rename = "_rankingScore")]
-    pub ranking_score: u64,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -428,7 +434,8 @@ pub fn perform_search(
             insert_geo_distance(sort, &mut document);
         }
 
-        let ranking_score = ScoreDetails::global_score_linear_scale(score.iter());
+        let ranking_score =
+            query.show_ranking_score.then(|| ScoreDetails::global_score_linear_scale(score.iter()));
         let ranking_score_details =
             query.show_ranking_score_details.then(|| ScoreDetails::to_json_map(score.iter()));
 
