@@ -236,6 +236,7 @@ InvalidSearchHighlightPreTag          , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchHitsPerPage              , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchLimit                    , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchMatchingStrategy         , InvalidRequest       , BAD_REQUEST ;
+InvalidMultiSearchMergeStrategy       , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchOffset                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchPage                     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchQ                        , InvalidRequest       , BAD_REQUEST ;
