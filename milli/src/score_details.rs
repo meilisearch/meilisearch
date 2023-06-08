@@ -38,6 +38,10 @@ impl ScoreDetails {
         Rank::global_score(details.filter_map(Self::rank))
     }
 
+    pub fn global_score_linear_scale<'a>(details: impl Iterator<Item = &'a Self>) -> u64 {
+        (Self::global_score(details) * LINEAR_SCALE_FACTOR).round() as u64
+    }
+
     /// Panics
     ///
     /// - If Position is not preceded by Fid
@@ -55,7 +59,7 @@ impl ScoreDetails {
                             "order": order,
                             "matchingWords": words.matching_words,
                             "maxMatchingWords": words.max_matching_words,
-                            "score": words.rank().local_score(),
+                            "score": words.rank().local_score_linear_scale(),
                     });
                     details_map.insert("words".into(), words_details);
                     order += 1;
@@ -65,7 +69,7 @@ impl ScoreDetails {
                         "order": order,
                         "typoCount": typo.typo_count,
                         "maxTypoCount": typo.max_typo_count,
-                        "score": typo.rank().local_score(),
+                        "score": typo.rank().local_score_linear_scale(),
                     });
                     details_map.insert("typo".into(), typo_details);
                     order += 1;
@@ -73,7 +77,7 @@ impl ScoreDetails {
                 ScoreDetails::Proximity(proximity) => {
                     let proximity_details = serde_json::json!({
                         "order": order,
-                        "score": proximity.local_score(),
+                        "score": proximity.local_score_linear_scale(),
                     });
                     details_map.insert("proximity".into(), proximity_details);
                     order += 1;
@@ -82,7 +86,7 @@ impl ScoreDetails {
                     // For now, fid is a virtual rule always followed by the "position" rule
                     let fid_details = serde_json::json!({
                         "order": order,
-                        "vertical_score": fid.local_score(),
+                        "attributes_ranking_order": fid.local_score_linear_scale(),
                     });
                     details_map.insert("attribute".into(), fid_details);
                     order += 1;
@@ -95,15 +99,17 @@ impl ScoreDetails {
                     let attribute_details = attribute_details
                         .as_object_mut()
                         .expect("attribute details was not an object");
-                    attribute_details
-                        .insert("horizontal_score".into(), position.local_score().into());
+                    attribute_details.insert(
+                        "attributes_query_word_order".into(),
+                        position.local_score_linear_scale().into(),
+                    );
                     // do not update the order since this was already done by fid
                 }
                 ScoreDetails::ExactAttribute(exact_attribute) => {
                     let exactness_details = serde_json::json!({
                         "order": order,
                         "exactIn": exact_attribute,
-                        "score": exact_attribute.rank().local_score(),
+                        "score": exact_attribute.rank().local_score_linear_scale(),
                     });
                     details_map.insert("exactness".into(), exactness_details);
                     order += 1;
@@ -119,7 +125,7 @@ impl ScoreDetails {
                     if exactness_details.get("exactIn").expect("missing 'exactIn'")
                         == &serde_json::json!(ExactAttribute::NoExactMatch)
                     {
-                        let score = Rank::global_score(
+                        let score = Rank::global_score_linear_scale(
                             [ExactAttribute::NoExactMatch.rank(), *details].iter().copied(),
                         );
                         *exactness_details.get_mut("score").expect("missing score") = score.into();
@@ -225,6 +231,10 @@ impl Rank {
         self.rank as f64 / self.max_rank as f64
     }
 
+    pub fn local_score_linear_scale(self) -> u64 {
+        (self.local_score() * LINEAR_SCALE_FACTOR).round() as u64
+    }
+
     pub fn global_score(details: impl Iterator<Item = Self>) -> f64 {
         let mut rank = Rank { rank: 1, max_rank: 1 };
         for inner_rank in details {
@@ -236,6 +246,10 @@ impl Rank {
             rank.rank += inner_rank.rank;
         }
         rank.local_score()
+    }
+
+    pub fn global_score_linear_scale(details: impl Iterator<Item = Self>) -> u64 {
+        (Self::global_score(details) * LINEAR_SCALE_FACTOR).round() as u64
     }
 }
 
@@ -277,3 +291,5 @@ impl GeoSort {
         self.value.map(|value| distance_between_two_points(&self.target_point, &value))
     }
 }
+
+const LINEAR_SCALE_FACTOR: f64 = 1000.0;
