@@ -22,6 +22,7 @@ pub mod new;
 
 pub struct Search<'a> {
     query: Option<String>,
+    vector: Option<Vec<f32>>,
     // this should be linked to the String in the query
     filter: Option<Filter<'a>>,
     offset: usize,
@@ -39,6 +40,7 @@ impl<'a> Search<'a> {
     pub fn new(rtxn: &'a heed::RoTxn, index: &'a Index) -> Search<'a> {
         Search {
             query: None,
+            vector: None,
             filter: None,
             offset: 0,
             limit: 20,
@@ -54,6 +56,11 @@ impl<'a> Search<'a> {
 
     pub fn query(&mut self, query: impl Into<String>) -> &mut Search<'a> {
         self.query = Some(query.into());
+        self
+    }
+
+    pub fn vector(&mut self, vector: impl Into<Vec<f32>>) -> &mut Search<'a> {
+        self.vector = Some(vector.into());
         self
     }
 
@@ -106,6 +113,7 @@ impl<'a> Search<'a> {
             execute_search(
                 &mut ctx,
                 &self.query,
+                &self.vector,
                 self.terms_matching_strategy,
                 self.exhaustive_number_hits,
                 &self.filter,
@@ -132,6 +140,7 @@ impl fmt::Debug for Search<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let Search {
             query,
+            vector: _,
             filter,
             offset,
             limit,
@@ -145,6 +154,7 @@ impl fmt::Debug for Search<'_> {
         } = self;
         f.debug_struct("Search")
             .field("query", query)
+            .field("vector", &"[...]")
             .field("filter", filter)
             .field("offset", offset)
             .field("limit", limit)

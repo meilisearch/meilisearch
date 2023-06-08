@@ -509,6 +509,7 @@ mod tests {
             let crate::search::PartialSearchResult { located_query_terms, .. } = execute_search(
                 &mut ctx,
                 &Some(query.to_string()),
+                &None,
                 crate::TermsMatchingStrategy::default(),
                 false,
                 &None,

@@ -52,6 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let docs = execute_search(
                 &mut ctx,
                 &(!query.trim().is_empty()).then(|| query.trim().to_owned()),
+                &None,
                 TermsMatchingStrategy::Last,
                 false,
                 &None,

@@ -28,6 +28,7 @@ use db_cache::DatabaseCache;
 use exact_attribute::ExactAttribute;
 use graph_based_ranking_rule::{Exactness, Fid, Position, Proximity, Typo};
 use heed::RoTxn;
+use hnsw::Searcher;
 use interner::{DedupInterner, Interner};
 pub use logger::visual::VisualSearchLogger;
 pub use logger::{DefaultSearchLogger, SearchLogger};
@@ -39,13 +40,16 @@ use ranking_rules::{
 use resolve_query_graph::{compute_query_graph_docids, PhraseDocIdsCache};
 use roaring::RoaringBitmap;
 use sort::Sort;
+use space::Neighbor;
 
 use self::geo_sort::GeoSort;
 pub use self::geo_sort::Strategy as GeoSortStrategy;
 use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
 use crate::search::new::distinct::apply_distinct_rule;
-use crate::{AscDesc, DocumentId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError};
+use crate::{
+    AscDesc, DocumentId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError, BEU32,
+};
 
 /// A structure used throughout the execution of a search query.
 pub struct SearchContext<'ctx> {
@@ -349,6 +353,7 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
 pub fn execute_search(
     ctx: &mut SearchContext,
     query: &Option<String>,
+    vector: &Option<Vec<f32>>,
     terms_matching_strategy: TermsMatchingStrategy,
     exhaustive_number_hits: bool,
     filters: &Option<Filter>,
@@ -427,6 +432,34 @@ pub fn execute_search(
     };
 
     let BucketSortOutput { docids, mut all_candidates } = bucket_sort_output;
+
+    let docids = match vector {
+        Some(vector) => {
+            // return the nearest documents that are also part of the candidates.
+            let mut searcher = Searcher::new();
+            let hnsw = ctx.index.vector_hnsw(ctx.txn)?.unwrap_or_default();
+            let ef = hnsw.len().min(100);
+            let mut dest = vec![Neighbor { index: 0, distance: 0 }; ef];
+            let neighbors = hnsw.nearest(&vector, ef, &mut searcher, &mut dest[..]);
+
+            let mut docids = Vec::new();
+            for Neighbor { index, distance } in neighbors.iter() {
+                let index = BEU32::new(*index as u32);
+                let docid = ctx.index.vector_id_docid.get(ctx.txn, &index)?.unwrap().get();
+                dbg!(distance, f32::from_bits(*distance));
+                if universe.contains(docid) {
+                    docids.push(docid);
+                    if docids.len() == length {
+                        break;
+                    }
+                }
+            }
+
+            docids
+        }
+        // return the search docids if the vector field is not specified
+        None => docids,
+    };
 
     // The candidates is the universe unless the exhaustive number of hits
     // is requested and a distinct attribute is set.
