@@ -212,7 +212,7 @@ pub struct SearchHit {
     #[serde(rename = "_rankingScoreDetails", skip_serializing_if = "Option::is_none")]
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
     #[serde(rename = "_rankingScore")]
-    pub ranking_score: f64,
+    pub ranking_score: u64,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -428,7 +428,7 @@ pub fn perform_search(
             insert_geo_distance(sort, &mut document);
         }
 
-        let ranking_score = ScoreDetails::global_score(score.iter());
+        let ranking_score = ScoreDetails::global_score_linear_scale(score.iter());
         let ranking_score_details =
             query.show_ranking_score_details.then(|| ScoreDetails::to_json_map(score.iter()));
 
