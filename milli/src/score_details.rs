@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use serde::Serialize;
 
 use crate::distance_between_two_points;
@@ -13,6 +15,36 @@ pub enum ScoreDetails {
     Exactness(Rank),
     Sort(Sort),
     GeoSort(GeoSort),
+}
+
+impl PartialOrd for ScoreDetails {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        use ScoreDetails::*;
+        match (self, other) {
+            // matching left and right hands => defer to sub impl
+            (Words(left), Words(right)) => left.partial_cmp(right),
+            (Typo(left), Typo(right)) => left.partial_cmp(right),
+            (Proximity(left), Proximity(right)) => left.partial_cmp(right),
+            (Fid(left), Fid(right)) => left.partial_cmp(right),
+            (Position(left), Position(right)) => left.partial_cmp(right),
+            (ExactAttribute(left), ExactAttribute(right)) => left.partial_cmp(right),
+            (Exactness(left), Exactness(right)) => left.partial_cmp(right),
+            (Sort(left), Sort(right)) => left.partial_cmp(right),
+            (GeoSort(left), GeoSort(right)) => left.partial_cmp(right),
+            // non matching left and right hands => None
+            // written this way rather than with a single `_` arm, so that adding a new variant
+            // still results in a compile error
+            (Words(_), _) => None,
+            (Typo(_), _) => None,
+            (Proximity(_), _) => None,
+            (Fid(_), _) => None,
+            (Position(_), _) => None,
+            (ExactAttribute(_), _) => None,
+            (Exactness(_), _) => None,
+            (Sort(_), _) => None,
+            (GeoSort(_), _) => None,
+        }
+    }
 }
 
 impl ScoreDetails {
@@ -169,12 +201,51 @@ impl ScoreDetails {
         }
         details_map
     }
+
+    pub fn partial_cmp_iter<'a>(
+        mut left: impl Iterator<Item = &'a Self>,
+        mut right: impl Iterator<Item = &'a Self>,
+    ) -> Result<Ordering, NotComparable> {
+        let mut index = 0;
+        let mut order = match (left.next(), right.next()) {
+            (Some(left), Some(right)) => left.partial_cmp(right).incomparable(index)?,
+            _ => return Ok(Ordering::Equal),
+        };
+        for (left, right) in left.zip(right) {
+            index += 1;
+            order = order.then(left.partial_cmp(right).incomparable(index)?);
+        }
+        Ok(order)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NotComparable(pub usize);
+
+trait OptionToNotComparable<T> {
+    fn incomparable(self, index: usize) -> Result<T, NotComparable>;
+}
+
+impl<T> OptionToNotComparable<T> for Option<T> {
+    fn incomparable(self, index: usize) -> Result<T, NotComparable> {
+        match self {
+            Some(t) => Ok(t),
+            None => Err(NotComparable(index)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Words {
     pub matching_words: u32,
     pub max_matching_words: u32,
+}
+
+impl PartialOrd for Words {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        (self.max_matching_words == other.max_matching_words)
+            .then(|| self.matching_words.cmp(&other.matching_words))
+    }
 }
 
 impl Words {
@@ -187,10 +258,19 @@ impl Words {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Typo {
     pub typo_count: u32,
     pub max_typo_count: u32,
+}
+
+impl PartialOrd for Typo {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        (self.max_typo_count == other.max_typo_count).then(|| {
+            // the order is reverted as having fewer typos gives a better score
+            self.typo_count.cmp(&other.typo_count).reverse()
+        })
+    }
 }
 
 impl Typo {
@@ -213,7 +293,7 @@ impl Typo {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Rank {
     /// The ordinal rank, such that `max_rank` is the first rank, and 0 is the last rank.
     ///
@@ -224,6 +304,12 @@ pub struct Rank {
     ///
     /// The max rank should not be 0.
     pub max_rank: u32,
+}
+
+impl PartialOrd for Rank {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        (self.max_rank == other.max_rank).then(|| self.rank.cmp(&other.rank))
+    }
 }
 
 impl Rank {
@@ -256,9 +342,10 @@ impl Rank {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ExactAttribute {
-    MatchesFull,
-    MatchesStart,
+    // Do not reorder as the order is significant, from least relevant to most relevant
     NoExactMatch,
+    MatchesStart,
+    MatchesFull,
 }
 
 impl ExactAttribute {
@@ -279,11 +366,66 @@ pub struct Sort {
     pub value: serde_json::Value,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+impl PartialOrd for Sort {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self.field_name != other.field_name {
+            return None;
+        }
+        if self.ascending != other.ascending {
+            return None;
+        }
+        match (&self.value, &other.value) {
+            (serde_json::Value::Null, serde_json::Value::Null) => Some(Ordering::Equal),
+            (serde_json::Value::Null, _) => Some(Ordering::Less),
+            (_, serde_json::Value::Null) => Some(Ordering::Greater),
+            // numbers are always before strings
+            (serde_json::Value::Number(_), serde_json::Value::String(_)) => Some(Ordering::Greater),
+            (serde_json::Value::String(_), serde_json::Value::Number(_)) => Some(Ordering::Less),
+            (serde_json::Value::Number(left), serde_json::Value::Number(right)) => {
+                //FIXME: unwrap permitted here?
+                let order = left.as_f64().unwrap().partial_cmp(&right.as_f64().unwrap())?;
+                // always reverted, as bigger is better
+                Some(if self.ascending { order.reverse() } else { order })
+            }
+            (serde_json::Value::String(left), serde_json::Value::String(right)) => {
+                let order = left.cmp(right);
+                Some(if self.ascending { order.reverse() } else { order })
+            }
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GeoSort {
     pub target_point: [f64; 2],
     pub ascending: bool,
     pub value: Option<[f64; 2]>,
+}
+
+impl PartialOrd for GeoSort {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self.target_point != other.target_point {
+            return None;
+        }
+        if self.ascending != other.ascending {
+            return None;
+        }
+        Some(match (self.distance(), other.distance()) {
+            (None, None) => Ordering::Equal,
+            (None, Some(_)) => Ordering::Less,
+            (Some(_), None) => Ordering::Greater,
+            (Some(left), Some(right)) => {
+                let order = left.partial_cmp(&right)?;
+                if self.ascending {
+                    // when ascending, the one with the smallest distance has the best score
+                    order.reverse()
+                } else {
+                    order
+                }
+            }
+        })
+    }
 }
 
 impl GeoSort {
@@ -293,3 +435,106 @@ impl GeoSort {
 }
 
 const LINEAR_SCALE_FACTOR: f64 = 1000.0;
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn compare() {
+        let left = [
+            ScoreDetails::Words(Words { matching_words: 3, max_matching_words: 4 }),
+            ScoreDetails::Sort(Sort {
+                field_name: "doggo".into(),
+                ascending: true,
+                value: "Intel the Beagle".into(),
+            }),
+        ];
+        let right = [
+            ScoreDetails::Words(Words { matching_words: 3, max_matching_words: 4 }),
+            ScoreDetails::Sort(Sort {
+                field_name: "doggo".into(),
+                ascending: true,
+                value: "Max the Labrador".into(),
+            }),
+        ];
+        assert_eq!(
+            Ok(Ordering::Greater),
+            ScoreDetails::partial_cmp_iter(left.iter(), right.iter())
+        );
+        // equal when all the common components are equal
+        assert_eq!(
+            Ok(Ordering::Equal),
+            ScoreDetails::partial_cmp_iter(left[0..1].iter(), right.iter())
+        );
+
+        let right = [
+            ScoreDetails::Words(Words { matching_words: 4, max_matching_words: 4 }),
+            ScoreDetails::Sort(Sort {
+                field_name: "doggo".into(),
+                ascending: true,
+                value: "Max the Labrador".into(),
+            }),
+        ];
+
+        assert_eq!(Ok(Ordering::Less), ScoreDetails::partial_cmp_iter(left.iter(), right.iter()));
+    }
+
+    #[test]
+    fn sort_not_comparable() {
+        let left = [
+            ScoreDetails::Words(Words { matching_words: 3, max_matching_words: 4 }),
+            ScoreDetails::Sort(Sort {
+                // not the same field name
+                field_name: "catto".into(),
+                ascending: true,
+                value: "Sylver the cat".into(),
+            }),
+        ];
+        let right = [
+            ScoreDetails::Words(Words { matching_words: 3, max_matching_words: 4 }),
+            ScoreDetails::Sort(Sort {
+                field_name: "doggo".into(),
+                ascending: true,
+                value: "Max the Labrador".into(),
+            }),
+        ];
+        assert_eq!(
+            Err(NotComparable(1)),
+            ScoreDetails::partial_cmp_iter(left.iter(), right.iter())
+        );
+        let left = [
+            ScoreDetails::Words(Words { matching_words: 3, max_matching_words: 4 }),
+            ScoreDetails::Sort(Sort {
+                field_name: "doggo".into(),
+                // Not the same order
+                ascending: false,
+                value: "Intel the Beagle".into(),
+            }),
+        ];
+        let right = [
+            ScoreDetails::Words(Words { matching_words: 3, max_matching_words: 4 }),
+            ScoreDetails::Sort(Sort {
+                field_name: "doggo".into(),
+                ascending: true,
+                value: "Max the Labrador".into(),
+            }),
+        ];
+        assert_eq!(
+            Err(NotComparable(1)),
+            ScoreDetails::partial_cmp_iter(left.iter(), right.iter())
+        );
+    }
+
+    #[test]
+    fn sort_behavior() {
+        let left = Sort { field_name: "price".into(), ascending: true, value: "5400".into() };
+        let right = Sort { field_name: "price".into(), ascending: true, value: 53.into() };
+        // number always better match than strings
+        assert_eq!(Some(Ordering::Less), left.partial_cmp(&right));
+
+        let left = Sort { field_name: "price".into(), ascending: false, value: "5400".into() };
+        let right = Sort { field_name: "price".into(), ascending: false, value: 53.into() };
+        // true regardless of the sort direction
+        assert_eq!(Some(Ordering::Less), left.partial_cmp(&right));
+    }
+}
