@@ -2683,6 +2683,7 @@ dependencies = [
  "bimap",
  "bincode",
  "bstr",
+ "bytemuck",
  "byteorder",
  "charabia",
  "concat-arrays",
