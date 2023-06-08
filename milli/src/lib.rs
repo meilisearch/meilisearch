@@ -10,6 +10,7 @@ pub mod documents;
 
 mod asc_desc;
 mod criterion;
+pub mod dot_product;
 mod error;
 mod external_documents_ids;
 pub mod facet;

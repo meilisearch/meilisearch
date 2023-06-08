@@ -240,6 +240,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             facet_id_exists_docids,
             facet_id_is_null_docids,
             facet_id_is_empty_docids,
+            vector_id_docid,
             documents,
         } = self.index;
         // Remove from the documents database
