@@ -219,6 +219,8 @@ pub struct SearchHit {
     pub ranking_score: Option<u64>,
     #[serde(rename = "_rankingScoreDetails", skip_serializing_if = "Option::is_none")]
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
+    #[serde(skip)]
+    pub ranking_score_raw: Vec<ScoreDetails>,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -445,6 +447,7 @@ pub fn perform_search(
             matches_position,
             ranking_score_details,
             ranking_score,
+            ranking_score_raw: score,
         };
         documents.push(hit);
     }

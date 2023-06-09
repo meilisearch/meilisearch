@@ -1,3 +1,6 @@
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
+
 use actix_http::StatusCode;
 use actix_web::web::{self, Data};
 use actix_web::{HttpRequest, HttpResponse};
@@ -9,12 +12,14 @@ use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::InvalidMultiSearchMergeStrategy;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
+use meilisearch_types::milli::score_details::NotComparable;
 use serde::Serialize;
 
 use crate::analytics::{Analytics, MultiSearchAggregator};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::milli::score_details::ScoreDetails;
 use crate::search::{
     add_search_rules, perform_search, SearchHit, SearchQueryWithIndex, SearchResultWithIndex,
 };
@@ -135,13 +140,79 @@ pub async fn multi_search_with_post(
 
     let aggregate_hits = match merge_strategy {
         MergeStrategy::None => None,
-        MergeStrategy::ByScoreDetails => todo!(),
+        MergeStrategy::ByScoreDetails => Some(merge_by_score_details(&search_results, max_hits)),
         MergeStrategy::ByNormalizedScore => {
             Some(merge_by_normalized_score(&search_results, max_hits))
         }
     };
 
     Ok(HttpResponse::Ok().json(SearchResults { aggregate_hits, results: search_results }))
+}
+
+fn merge_by_score_details(
+    search_results: &[SearchResultWithIndex],
+    max_hits: usize,
+) -> Vec<SearchHitWithIndex> {
+    let mut iterators: Vec<_> = search_results
+        .iter()
+        .filter_map(|SearchResultWithIndex { index_uid, result }| {
+            let mut it = result.hits.iter();
+            let next = it.next()?;
+            Some((index_uid, it, next))
+        })
+        .collect();
+
+    let mut hits = Vec::with_capacity(max_hits);
+
+    let mut inconsistent_indexes = HashMap::new();
+
+    for _ in 0..max_hits {
+        iterators.sort_by(|(left_uid, _, left_hit), (right_uid, _, right_hit)| {
+            let error = match ScoreDetails::partial_cmp_iter(
+                left_hit.ranking_score_raw.iter(),
+                right_hit.ranking_score_raw.iter(),
+            ) {
+                Ok(ord) => return ord,
+                Err(NotComparable(incomparable_index)) => incomparable_index,
+            };
+            inconsistent_indexes.entry((left_uid.to_owned(), right_uid.to_owned())).or_insert_with(
+                || {
+                    format!(
+                        "Detailed score {:?} is not comparable with {:?}: (left: {:#?}, right: {:#?})",
+                        left_hit.ranking_score_raw.get(error),
+                        right_hit.ranking_score_raw.get(error),
+                        left_hit.ranking_score_raw,
+                        right_hit.ranking_score_raw
+                    )
+                },
+            );
+            std::cmp::Ordering::Less
+        });
+        if !inconsistent_indexes.is_empty() {
+            let mut s = String::new();
+            for ((left_uid, right_uid), error) in &inconsistent_indexes {
+                use std::fmt::Write;
+                writeln!(s, "Indexes {} and {} are inconsistent: {}", left_uid, right_uid, error)
+                    .unwrap();
+            }
+            // Replace panic with proper error
+            panic!("{}", s);
+        }
+
+        let Some((index_uid, it, next)) = iterators.last_mut()
+        else {
+            break;
+        };
+
+        let hit = SearchHitWithIndex { index_uid: index_uid.clone(), hit: next.clone() };
+        if let Some(next_hit) = it.next() {
+            *next = next_hit;
+        } else {
+            iterators.pop();
+        }
+        hits.push(hit);
+    }
+    hits
 }
 
 fn merge_by_normalized_score(
@@ -160,7 +231,9 @@ fn merge_by_normalized_score(
     let mut hits = Vec::with_capacity(max_hits);
 
     for _ in 0..max_hits {
-        iterators.sort_by_key(|(_, _, peeked)| peeked.ranking_score.unwrap());
+        iterators.sort_by_key(|(_, _, hit)| {
+            ScoreDetails::global_score_linear_scale(hit.ranking_score_raw.iter())
+        });
 
         let Some((index_uid, it, next)) = iterators.last_mut()
         else {
