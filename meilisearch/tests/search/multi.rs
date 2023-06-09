@@ -72,8 +72,7 @@ async fn simple_search_single_index() {
         "hits": [
           {
             "title": "Gläss",
-            "id": "450465",
-            "_rankingScore": "[score]"
+            "id": "450465"
           }
         ],
         "query": "glass",
@@ -87,8 +86,7 @@ async fn simple_search_single_index() {
         "hits": [
           {
             "title": "Captain Marvel",
-            "id": "299537",
-            "_rankingScore": "[score]"
+            "id": "299537"
           }
         ],
         "query": "captain",
@@ -179,8 +177,7 @@ async fn simple_search_two_indexes() {
         "hits": [
           {
             "title": "Gläss",
-            "id": "450465",
-            "_rankingScore": "[score]"
+            "id": "450465"
           }
         ],
         "query": "glass",
@@ -206,8 +203,7 @@ async fn simple_search_two_indexes() {
                 "age": 4
               }
             ],
-            "cattos": "pésti",
-            "_rankingScore": "[score]"
+            "cattos": "pésti"
           },
           {
             "id": 654,
@@ -222,8 +218,7 @@ async fn simple_search_two_indexes() {
             "cattos": [
               "simba",
               "pestiféré"
-            ],
-            "_rankingScore": "[score]"
+            ]
           }
         ],
         "query": "pésti",

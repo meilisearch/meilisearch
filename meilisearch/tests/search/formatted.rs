@@ -35,8 +35,7 @@ async fn formatted_contain_wildcard() {
                       "length": 5
                     }
                   ]
-                },
-                "_rankingScore": "[score]"
+                }
               }
               "###);
             }
@@ -53,8 +52,7 @@ async fn formatted_contain_wildcard() {
                 @r###"
                 {
                   "id": 852,
-                  "cattos": "pésti",
-                  "_rankingScore": "[score]"
+                  "cattos": "pésti"
                 }
                 "###)
             }
@@ -84,8 +82,7 @@ async fn formatted_contain_wildcard() {
                           "length": 5
                         }
                       ]
-                    },
-                    "_rankingScore": "[score]"
+                    }
                   }
                   "###)
              }
@@ -107,8 +104,7 @@ async fn formatted_contain_wildcard() {
                       "_formatted": {
                         "id": "852",
                         "cattos": "pésti"
-                      },
-                      "_rankingScore": "[score]"
+                      }
                     }
                     "###);
                 }
@@ -129,8 +125,7 @@ async fn formatted_contain_wildcard() {
                   "_formatted": {
                     "id": "852",
                     "cattos": "pésti"
-                  },
-                  "_rankingScore": "[score]"
+                  }
                 }
                 "###)
             }
@@ -164,8 +159,7 @@ async fn format_nested() {
                       "name": "buddy",
                       "age": 4
                     }
-                  ],
-                  "_rankingScore": "[score]"
+                  ]
                 }
                 "###)
             }
@@ -189,8 +183,7 @@ async fn format_nested() {
                         {
                           "name": "buddy"
                         }
-                      ],
-                      "_rankingScore": "[score]"
+                      ]
                     }
                     "###)
                 }
@@ -223,8 +216,7 @@ async fn format_nested() {
                             "length": 5
                           }
                         ]
-                      },
-                      "_rankingScore": "[score]"
+                      }
                     }
                     "###)
                 }
@@ -250,8 +242,7 @@ async fn format_nested() {
                         "name": "buddy"
                       }
                     ]
-                  },
-                  "_rankingScore": "[score]"
+                  }
                 }
                 "###)
             }
@@ -276,8 +267,7 @@ async fn format_nested() {
                         "name": "buddy"
                       }
                     ]
-                  },
-                  "_rankingScore": "[score]"
+                  }
                 }
                 "###)
             }
@@ -312,8 +302,7 @@ async fn format_nested() {
                 "age": "4"
               }
             ]
-          },
-          "_rankingScore": "[score]"
+          }
         }
         "###)
     }
@@ -340,8 +329,7 @@ async fn format_nested() {
                             "age": "4"
                           }
                         ]
-                      },
-                      "_rankingScore": "[score]"
+                      }
                     }
                     "###)
                 }
@@ -371,8 +359,7 @@ async fn displayedattr_2_smol() {
         { "._rankingScore" => "[score]" },
         @r###"
         {
-          "id": 852,
-          "_rankingScore": "[score]"
+          "id": 852
         }
         "###)
     }
@@ -387,8 +374,7 @@ async fn displayedattr_2_smol() {
                 { "._rankingScore" => "[score]" },
                 @r###"
                 {
-                  "id": 852,
-                  "_rankingScore": "[score]"
+                  "id": 852
                 }
                 "###)
             }
@@ -406,8 +392,7 @@ async fn displayedattr_2_smol() {
                   "id": 852,
                   "_formatted": {
                     "id": "852"
-                  },
-                  "_rankingScore": "[score]"
+                  }
                 }
                 "###)
             }
@@ -425,8 +410,7 @@ async fn displayedattr_2_smol() {
                   "id": 852,
                   "_formatted": {
                     "id": "852"
-                  },
-                  "_rankingScore": "[score]"
+                  }
                 }
                 "###)
             }
@@ -446,8 +430,7 @@ async fn displayedattr_2_smol() {
                       "id": 852,
                       "_formatted": {
                         "id": "852"
-                      },
-                      "_rankingScore": "[score]"
+                      }
                     }
                     "###)
                 }
@@ -463,8 +446,7 @@ async fn displayedattr_2_smol() {
                 { "._rankingScore" => "[score]" },
                 @r###"
                 {
-                  "id": 852,
-                  "_rankingScore": "[score]"
+                  "id": 852
                 }
                 "###)
             }
@@ -479,8 +461,7 @@ async fn displayedattr_2_smol() {
                 { "._rankingScore" => "[score]" },
                 @r###"
                 {
-                  "id": 852,
-                  "_rankingScore": "[score]"
+                  "id": 852
                 }
                 "###)
             }
@@ -493,11 +474,7 @@ async fn displayedattr_2_smol() {
             allow_duplicates! {
                 assert_json_snapshot!(response["hits"][0],
                 { "._rankingScore" => "[score]" },
-                @r###"
-                {
-                  "_rankingScore": "[score]"
-                }
-                "###)
+                @"{}")
             }
         })
         .await;
@@ -510,11 +487,7 @@ async fn displayedattr_2_smol() {
     allow_duplicates! {
         assert_json_snapshot!(response["hits"][0],
         { "._rankingScore" => "[score]" },
-        @r###"
-        {
-          "_rankingScore": "[score]"
-        }
-        "###)
+        @"{}")
     }
 
             }
@@ -533,8 +506,7 @@ async fn displayedattr_2_smol() {
                     {
                       "_formatted": {
                         "id": "852"
-                      },
-                      "_rankingScore": "[score]"
+                      }
                     }
                     "###)
                 }
@@ -554,8 +526,7 @@ async fn displayedattr_2_smol() {
                     {
                       "_formatted": {
                         "id": "852"
-                      },
-                      "_rankingScore": "[score]"
+                      }
                     }
                     "###)
                 }
