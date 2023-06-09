@@ -212,8 +212,12 @@ impl ScoreDetails {
             _ => return Ok(Ordering::Equal),
         };
         for (left, right) in left.zip(right) {
+            if order != Ordering::Equal {
+                return Ok(order);
+            };
+
             index += 1;
-            order = order.then(left.partial_cmp(right).incomparable(index)?);
+            order = left.partial_cmp(right).incomparable(index)?;
         }
         Ok(order)
     }
