@@ -14,7 +14,8 @@ use crate::error::UserError;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::{
-    execute_search, AscDesc, DefaultSearchLogger, DocumentId, Index, Result, SearchContext, BEU16,
+    execute_search, normalize_facet, AscDesc, DefaultSearchLogger, DocumentId, Index, Result,
+    SearchContext, BEU16,
 };
 
 // Building these factories is not free.
@@ -288,6 +289,8 @@ impl<'a> SearchForFacetValues<'a> {
 
         match self.query.as_ref() {
             Some(query) => {
+                let query = normalize_facet(query);
+                let query = query.as_str();
                 let authorize_typos = self.search_query.index.authorize_typos(rtxn)?;
                 let field_authorizes_typos =
                     !self.search_query.index.exact_attributes_ids(rtxn)?.contains(&fid);
@@ -297,8 +300,7 @@ impl<'a> SearchForFacetValues<'a> {
 
                     let exact_words_fst = self.search_query.index.exact_words(rtxn)?;
                     if exact_words_fst.map_or(false, |fst| fst.contains(query)) {
-                        let key =
-                            FacetGroupKey { field_id: fid, level: 0, left_bound: query.as_ref() };
+                        let key = FacetGroupKey { field_id: fid, level: 0, left_bound: query };
                         if let Some(FacetGroupValue { bitmap, .. }) =
                             index.facet_id_string_docids.get(rtxn, &key)?
                         {
