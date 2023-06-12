@@ -295,8 +295,6 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
 
         // We modify the next query graph so that it only contains the subgraph
         // that was used to compute this bucket
-        // But we only do it in case the bucket length is >1, because otherwise
-        // we know the child ranking rule won't be called anyway
 
         let paths: Vec<Vec<(Option<LocatedQueryTermSubset>, LocatedQueryTermSubset)>> = good_paths
             .into_iter()
