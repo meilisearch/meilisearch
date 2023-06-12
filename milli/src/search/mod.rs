@@ -14,8 +14,8 @@ use crate::error::UserError;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::{
-    execute_search, normalize_facet, AscDesc, DefaultSearchLogger, DocumentId, Index, Result,
-    SearchContext, BEU16,
+    execute_search, normalize_facet, AscDesc, DefaultSearchLogger, DocumentId, FieldId, Index,
+    Result, SearchContext, BEU16,
 };
 
 // Building these factories is not free.
@@ -259,6 +259,18 @@ impl<'a> SearchForFacetValues<'a> {
         self
     }
 
+    fn one_original_value_of(
+        &self,
+        field_id: FieldId,
+        facet_str: &str,
+        any_docid: DocumentId,
+    ) -> Result<Option<String>> {
+        let index = self.search_query.index;
+        let rtxn = self.search_query.rtxn;
+        let key: (FieldId, _, &str) = (field_id, any_docid, facet_str);
+        Ok(index.field_id_docid_facet_strings.get(rtxn, &key)?.map(|v| v.to_owned()))
+    }
+
     pub fn execute(&self) -> Result<Vec<FacetValueHit>> {
         let index = self.search_query.index;
         let rtxn = self.search_query.rtxn;
@@ -306,7 +318,10 @@ impl<'a> SearchForFacetValues<'a> {
                         {
                             let count = search_candidates.intersection_len(&bitmap);
                             if count != 0 {
-                                results.push(FacetValueHit { value: query.to_string(), count });
+                                let value = self
+                                    .one_original_value_of(fid, query, bitmap.min().unwrap())?
+                                    .unwrap_or_else(|| query.to_string());
+                                results.push(FacetValueHit { value, count });
                             }
                         }
                     } else {
@@ -338,7 +353,10 @@ impl<'a> SearchForFacetValues<'a> {
                             };
                             let count = search_candidates.intersection_len(&docids);
                             if count != 0 {
-                                results.push(FacetValueHit { value: value.to_string(), count });
+                                let value = self
+                                    .one_original_value_of(fid, value, docids.min().unwrap())?
+                                    .unwrap_or_else(|| query.to_string());
+                                results.push(FacetValueHit { value, count });
                                 length += 1;
                             }
                             if length >= MAX_NUMBER_OF_FACETS {
@@ -367,7 +385,10 @@ impl<'a> SearchForFacetValues<'a> {
                         };
                         let count = search_candidates.intersection_len(&docids);
                         if count != 0 {
-                            results.push(FacetValueHit { value: value.to_string(), count });
+                            let value = self
+                                .one_original_value_of(fid, value, docids.min().unwrap())?
+                                .unwrap_or_else(|| query.to_string());
+                            results.push(FacetValueHit { value, count });
                             length += 1;
                         }
                         if length >= MAX_NUMBER_OF_FACETS {
@@ -387,7 +408,10 @@ impl<'a> SearchForFacetValues<'a> {
                         result?;
                     let count = search_candidates.intersection_len(&bitmap);
                     if count != 0 {
-                        results.push(FacetValueHit { value: left_bound.to_string(), count });
+                        let value = self
+                            .one_original_value_of(fid, left_bound, bitmap.min().unwrap())?
+                            .unwrap_or_else(|| left_bound.to_string());
+                        results.push(FacetValueHit { value, count });
                         length += 1;
                     }
                     if length >= MAX_NUMBER_OF_FACETS {
