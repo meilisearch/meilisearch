@@ -130,9 +130,14 @@ fn main() {
         let start = std::time::Instant::now();
         loop {
             let total = progression.load(Ordering::Relaxed);
+            let elapsed = start.elapsed().as_secs();
+            if elapsed > 3600 {
+                // after 1 hour, stop the fuzzer, success
+                std::process::exit(0);
+            }
             println!(
-                "Has been running for {:?}. Tested {} new values for a total of {}.",
-                start.elapsed(),
+                "Has been running for {:?} seconds. Tested {} new values for a total of {}.",
+                elapsed,
                 total - last_value,
                 total
             );
