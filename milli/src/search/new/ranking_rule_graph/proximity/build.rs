@@ -12,11 +12,11 @@ pub fn build_edges(
     left_term: Option<&LocatedQueryTermSubset>,
     right_term: &LocatedQueryTermSubset,
 ) -> Result<Vec<(u32, Interned<ProximityCondition>)>> {
-    let right_ngram_length = right_term.term_ids.len();
+    let right_ngram_max = right_term.term_ids.len().saturating_sub(1);
 
     let Some(left_term) = left_term else {
         return Ok(vec![(
-            (right_ngram_length - 1) as u32,
+            right_ngram_max as u32,
             conditions_interner.insert(ProximityCondition::Term { term: right_term.clone() }),
         )])
     };
@@ -29,25 +29,25 @@ pub fn build_edges(
         // The remaining query graph represents `the sun .. are beautiful`
         // but `sun` and `are` have no proximity condition between them
         return Ok(vec![(
-            (right_ngram_length - 1) as u32,
+            right_ngram_max as u32,
             conditions_interner.insert(ProximityCondition::Term { term: right_term.clone() }),
         )]);
     }
 
     let mut conditions = vec![];
-    for cost in right_ngram_length..(7 + right_ngram_length) {
+    for cost in right_ngram_max..(7 + right_ngram_max) {
         conditions.push((
             cost as u32,
             conditions_interner.insert(ProximityCondition::Uninit {
                 left_term: left_term.clone(),
                 right_term: right_term.clone(),
-                cost: cost as u8,
+                cost: (cost + 1) as u8,
             }),
         ))
     }
 
     conditions.push((
-        (7 + right_ngram_length) as u32,
+        (7 + right_ngram_max) as u32,
         conditions_interner.insert(ProximityCondition::Term { term: right_term.clone() }),
     ));
 
