@@ -2,6 +2,8 @@ use std::borrow::Cow;
 
 use roaring::RoaringBitmap;
 
+use crate::heed_codec::BytesDecodeOwned;
+
 pub struct RoaringBitmapCodec;
 
 impl heed::BytesDecode<'_> for RoaringBitmapCodec {
@@ -9,6 +11,14 @@ impl heed::BytesDecode<'_> for RoaringBitmapCodec {
 
     fn bytes_decode(bytes: &[u8]) -> Option<Self::DItem> {
         RoaringBitmap::deserialize_unchecked_from(bytes).ok()
+    }
+}
+
+impl BytesDecodeOwned for RoaringBitmapCodec {
+    type DItem = RoaringBitmap;
+
+    fn bytes_decode_owned(bytes: &[u8]) -> Option<Self::DItem> {
+        RoaringBitmap::deserialize_from(bytes).ok()
     }
 }
 

@@ -5,6 +5,8 @@ use std::mem::size_of;
 use byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
 use roaring::RoaringBitmap;
 
+use crate::heed_codec::BytesDecodeOwned;
+
 /// This is the limit where using a byteorder became less size efficient
 /// than using a direct roaring encoding, it is also the point where we are able
 /// to determine the encoding used only by using the array of bytes length.
@@ -99,6 +101,14 @@ impl heed::BytesDecode<'_> for CboRoaringBitmapCodec {
     type DItem = RoaringBitmap;
 
     fn bytes_decode(bytes: &[u8]) -> Option<Self::DItem> {
+        Self::deserialize_from(bytes).ok()
+    }
+}
+
+impl BytesDecodeOwned for CboRoaringBitmapCodec {
+    type DItem = RoaringBitmap;
+
+    fn bytes_decode_owned(bytes: &[u8]) -> Option<Self::DItem> {
         Self::deserialize_from(bytes).ok()
     }
 }
