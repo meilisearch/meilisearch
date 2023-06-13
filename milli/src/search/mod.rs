@@ -109,6 +109,11 @@ impl<'a> Search<'a> {
 
     pub fn execute(&self) -> Result<SearchResult> {
         let mut ctx = SearchContext::new(self.index, self.rtxn);
+
+        if let Some(searchable_attributes) = self.searchable_attributes {
+            ctx.searchable_attributes(searchable_attributes)?;
+        }
+
         let PartialSearchResult { located_query_terms, candidates, documents_ids } =
             execute_search(
                 &mut ctx,
@@ -117,7 +122,6 @@ impl<'a> Search<'a> {
                 self.exhaustive_number_hits,
                 &self.filter,
                 &self.sort_criteria,
-                self.searchable_attributes,
                 self.geo_strategy,
                 self.offset,
                 self.limit,

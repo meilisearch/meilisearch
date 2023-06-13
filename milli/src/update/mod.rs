@@ -4,7 +4,8 @@ pub use self::delete_documents::{DeleteDocuments, DeletionStrategy, DocumentDele
 pub use self::facet::bulk::FacetsUpdateBulk;
 pub use self::facet::incremental::FacetsUpdateIncrementalInner;
 pub use self::index_documents::{
-    DocumentAdditionResult, DocumentId, IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod,
+    merge_roaring_bitmaps, DocumentAdditionResult, DocumentId, IndexDocuments,
+    IndexDocumentsConfig, IndexDocumentsMethod, MergeFn,
 };
 pub use self::indexer_config::IndexerConfig;
 pub use self::prefix_word_pairs::{

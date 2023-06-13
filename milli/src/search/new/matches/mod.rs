@@ -513,7 +513,6 @@ mod tests {
                 false,
                 &None,
                 &None,
-                None,
                 crate::search::new::GeoSortStrategy::default(),
                 0,
                 100,

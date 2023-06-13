@@ -56,6 +56,7 @@ pub struct SearchContext<'ctx> {
     pub phrase_interner: DedupInterner<Phrase>,
     pub term_interner: Interner<QueryTerm>,
     pub phrase_docids: PhraseDocIdsCache,
+    pub restricted_fids: Option<Vec<u16>>,
 }
 
 impl<'ctx> SearchContext<'ctx> {
@@ -68,7 +69,17 @@ impl<'ctx> SearchContext<'ctx> {
             phrase_interner: <_>::default(),
             term_interner: <_>::default(),
             phrase_docids: <_>::default(),
+            restricted_fids: None,
         }
+    }
+
+    pub fn searchable_attributes(&mut self, searchable_attributes: &'ctx [String]) -> Result<()> {
+        let fids_map = self.index.fields_ids_map(&self.txn)?;
+        let restricted_fids =
+            searchable_attributes.iter().filter_map(|name| fids_map.id(name)).collect();
+        self.restricted_fids = Some(restricted_fids);
+
+        Ok(())
     }
 }
 
@@ -353,7 +364,6 @@ pub fn execute_search(
     exhaustive_number_hits: bool,
     filters: &Option<Filter>,
     sort_criteria: &Option<Vec<AscDesc>>,
-    searchable_attributes: Option<&[String]>,
     geo_strategy: geo_sort::Strategy,
     from: usize,
     length: usize,
