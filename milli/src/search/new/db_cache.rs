@@ -98,7 +98,7 @@ impl<'ctx> DatabaseCache<'ctx> {
                     [key] => db.get(txn, key)?.map(Cow::Borrowed),
                     keys => {
                         let bitmaps = keys
-                            .into_iter()
+                            .iter()
                             .filter_map(|key| db.get(txn, key).transpose())
                             .map(|v| v.map(Cow::Borrowed))
                             .collect::<std::result::Result<Vec<Cow<[u8]>>, _>>()?;
