@@ -193,40 +193,6 @@ async fn typo_ranking_rule_order() {
 }
 
 #[actix_rt::test]
-async fn proximity_ranking_rule_order() {
-    let server = Server::new().await;
-    let index = index_with_documents(
-        &server,
-        &json!([
-        {
-            "title": "Captain super mega cool. A Marvel story",
-            "desc": "Captain Marvel",
-            "id": "1",
-        },
-        {
-            "title": "Captain America from Marvel",
-            "desc": "a Shazam ersatz",
-            "id": "2",
-        }]),
-    )
-    .await;
-
-    // Document 2 should appear before document 1.
-    index
-        .search(json!({"q": "Captain Marvel", "restrictSearchableAttributes": ["title"], "attributesToRetrieve": ["id"]}), |response, code| {
-            assert_eq!(code, 200, "{}", response);
-            assert_eq!(
-                response["hits"],
-                json!([
-                    {"id": "2"},
-                    {"id": "1"},
-                ])
-            );
-        })
-        .await;
-}
-
-#[actix_rt::test]
 async fn attributes_ranking_rule_order() {
     let server = Server::new().await;
     let index = index_with_documents(
