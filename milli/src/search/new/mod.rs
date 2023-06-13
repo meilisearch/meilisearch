@@ -74,7 +74,7 @@ impl<'ctx> SearchContext<'ctx> {
     }
 
     pub fn searchable_attributes(&mut self, searchable_attributes: &'ctx [String]) -> Result<()> {
-        let fids_map = self.index.fields_ids_map(&self.txn)?;
+        let fids_map = self.index.fields_ids_map(self.txn)?;
         let restricted_fids =
             searchable_attributes.iter().filter_map(|name| fids_map.id(name)).collect();
         self.restricted_fids = Some(restricted_fids);
