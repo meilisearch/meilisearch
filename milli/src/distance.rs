@@ -18,3 +18,17 @@ impl Metric<Vec<f32>> for DotProduct {
         dist.to_bits()
     }
 }
+
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+pub struct Euclidean;
+
+impl Metric<Vec<f32>> for Euclidean {
+    type Unit = u32;
+
+    fn distance(&self, a: &Vec<f32>, b: &Vec<f32>) -> Self::Unit {
+        let squared: f32 = a.iter().zip(b).map(|(a, b)| (a - b).powi(2)).sum();
+        let dist = squared.sqrt();
+        debug_assert!(!dist.is_nan());
+        dist.to_bits()
+    }
+}

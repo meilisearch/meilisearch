@@ -8,12 +8,11 @@ use charabia::{Language, Script};
 use heed::flags::Flags;
 use heed::types::*;
 use heed::{CompactionOption, Database, PolyDatabase, RoTxn, RwTxn};
-use rand_pcg::Pcg32;
 use roaring::RoaringBitmap;
 use rstar::RTree;
 use time::OffsetDateTime;
 
-use crate::dot_product::DotProduct;
+use crate::distance::Euclidean;
 use crate::error::{InternalError, UserError};
 use crate::facet::FacetType;
 use crate::fields_ids_map::FieldsIdsMap;
@@ -28,8 +27,8 @@ use crate::{
     Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, BEU16, BEU32,
 };
 
-/// The HNSW data-structure that we serialize, fill and search in.
-pub type Hnsw = hnsw::Hnsw<DotProduct, Vec<f32>, Pcg32, 12, 24>;
+/// The HGG data-structure that we serialize, fill and search in.
+pub type Hgg = hgg::Hgg<Euclidean, Vec<f32>, DocumentId>;
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
 pub const DEFAULT_MIN_WORD_LEN_TWO_TYPOS: u8 = 9;
@@ -47,7 +46,7 @@ pub mod main_key {
     pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
     pub const GEO_FACETED_DOCUMENTS_IDS_KEY: &str = "geo-faceted-documents-ids";
     pub const GEO_RTREE_KEY: &str = "geo-rtree";
-    pub const VECTOR_HNSW_KEY: &str = "vector-hnsw";
+    pub const VECTOR_HGG_KEY: &str = "vector-hgg";
     pub const HARD_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "hard-external-documents-ids";
     pub const NUMBER_FACETED_DOCUMENTS_IDS_PREFIX: &str = "number-faceted-documents-ids";
     pub const PRIMARY_KEY_KEY: &str = "primary-key";
@@ -92,7 +91,6 @@ pub mod db_name {
     pub const FACET_ID_STRING_DOCIDS: &str = "facet-id-string-docids";
     pub const FIELD_ID_DOCID_FACET_F64S: &str = "field-id-docid-facet-f64s";
     pub const FIELD_ID_DOCID_FACET_STRINGS: &str = "field-id-docid-facet-strings";
-    pub const VECTOR_ID_DOCID: &str = "vector-id-docids";
     pub const DOCUMENTS: &str = "documents";
     pub const SCRIPT_LANGUAGE_DOCIDS: &str = "script_language_docids";
 }
@@ -156,9 +154,6 @@ pub struct Index {
     /// Maps the document id, the facet field id and the strings.
     pub field_id_docid_facet_strings: Database<FieldDocIdFacetStringCodec, Str>,
 
-    /// Maps a vector id to the document id that have it.
-    pub vector_id_docid: Database<OwnedType<BEU32>, OwnedType<BEU32>>,
-
     /// Maps the document id to the document as an obkv store.
     pub(crate) documents: Database<OwnedType<BEU32>, ObkvCodec>,
 }
@@ -172,7 +167,7 @@ impl Index {
     ) -> Result<Index> {
         use db_name::*;
 
-        options.max_dbs(24);
+        options.max_dbs(23);
         unsafe { options.flag(Flags::MdbAlwaysFreePages) };
 
         let env = options.open(path)?;
@@ -212,7 +207,6 @@ impl Index {
             env.create_database(&mut wtxn, Some(FIELD_ID_DOCID_FACET_F64S))?;
         let field_id_docid_facet_strings =
             env.create_database(&mut wtxn, Some(FIELD_ID_DOCID_FACET_STRINGS))?;
-        let vector_id_docid = env.create_database(&mut wtxn, Some(VECTOR_ID_DOCID))?;
         let documents = env.create_database(&mut wtxn, Some(DOCUMENTS))?;
         wtxn.commit()?;
 
@@ -241,7 +235,6 @@ impl Index {
             facet_id_is_empty_docids,
             field_id_docid_facet_f64s,
             field_id_docid_facet_strings,
-            vector_id_docid,
             documents,
         })
     }
@@ -513,22 +506,22 @@ impl Index {
         }
     }
 
-    /* vector HNSW */
+    /* vector HGG */
 
-    /// Writes the provided `hnsw`.
-    pub(crate) fn put_vector_hnsw(&self, wtxn: &mut RwTxn, hnsw: &Hnsw) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeBincode<Hnsw>>(wtxn, main_key::VECTOR_HNSW_KEY, hnsw)
+    /// Writes the provided `hgg`.
+    pub(crate) fn put_vector_hgg(&self, wtxn: &mut RwTxn, hgg: &Hgg) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeBincode<Hgg>>(wtxn, main_key::VECTOR_HGG_KEY, hgg)
     }
 
-    /// Delete the `hnsw`.
-    pub(crate) fn delete_vector_hnsw(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, main_key::VECTOR_HNSW_KEY)
+    /// Delete the `hgg`.
+    pub(crate) fn delete_vector_hgg(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(wtxn, main_key::VECTOR_HGG_KEY)
     }
 
-    /// Returns the `hnsw`.
-    pub fn vector_hnsw(&self, rtxn: &RoTxn) -> Result<Option<Hnsw>> {
-        match self.main.get::<_, Str, SerdeBincode<Hnsw>>(rtxn, main_key::VECTOR_HNSW_KEY)? {
-            Some(hnsw) => Ok(Some(hnsw)),
+    /// Returns the `hgg`.
+    pub fn vector_hgg(&self, rtxn: &RoTxn) -> Result<Option<Hgg>> {
+        match self.main.get::<_, Str, SerdeBincode<Hgg>>(rtxn, main_key::VECTOR_HGG_KEY)? {
+            Some(hgg) => Ok(Some(hgg)),
             None => Ok(None),
         }
     }
