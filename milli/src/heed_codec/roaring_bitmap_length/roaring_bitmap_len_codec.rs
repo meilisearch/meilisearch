@@ -3,6 +3,8 @@ use std::mem;
 
 use byteorder::{LittleEndian, ReadBytesExt};
 
+use crate::heed_codec::BytesDecodeOwned;
+
 const SERIAL_COOKIE_NO_RUNCONTAINER: u32 = 12346;
 const SERIAL_COOKIE: u16 = 12347;
 
@@ -55,6 +57,14 @@ impl heed::BytesDecode<'_> for RoaringBitmapLenCodec {
     type DItem = u64;
 
     fn bytes_decode(bytes: &[u8]) -> Option<Self::DItem> {
+        RoaringBitmapLenCodec::deserialize_from_slice(bytes).ok()
+    }
+}
+
+impl BytesDecodeOwned for RoaringBitmapLenCodec {
+    type DItem = u64;
+
+    fn bytes_decode_owned(bytes: &[u8]) -> Option<Self::DItem> {
         RoaringBitmapLenCodec::deserialize_from_slice(bytes).ok()
     }
 }

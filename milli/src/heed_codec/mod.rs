@@ -23,3 +23,9 @@ pub use self::roaring_bitmap_length::{
 pub use self::script_language_codec::ScriptLanguageCodec;
 pub use self::str_beu32_codec::{StrBEU16Codec, StrBEU32Codec};
 pub use self::str_str_u8_codec::{U8StrStrCodec, UncheckedU8StrStrCodec};
+
+pub trait BytesDecodeOwned {
+    type DItem;
+
+    fn bytes_decode_owned(bytes: &[u8]) -> Option<Self::DItem>;
+}
