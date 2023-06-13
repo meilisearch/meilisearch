@@ -10,7 +10,7 @@ use roaring::RoaringBitmap;
 use super::interner::Interned;
 use super::Word;
 use crate::heed_codec::{BytesDecodeOwned, StrBEU16Codec};
-use crate::update::MergeFn;
+use crate::update::{merge_cbo_roaring_bitmaps, MergeFn};
 use crate::{
     CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, Result, RoaringBitmapCodec, SearchContext,
 };
@@ -79,7 +79,7 @@ impl<'ctx> DatabaseCache<'ctx> {
     fn get_value_from_keys<'v, K1, KC, DC>(
         txn: &'ctx RoTxn,
         cache_key: K1,
-        db_keys: &[&'v KC::EItem],
+        db_keys: &'v [KC::EItem],
         cache: &mut FxHashMap<K1, Option<Cow<'ctx, [u8]>>>,
         db: Database<KC, ByteSlice>,
         merger: MergeFn,
@@ -88,6 +88,7 @@ impl<'ctx> DatabaseCache<'ctx> {
         K1: Copy + Eq + Hash,
         KC: BytesEncode<'v>,
         DC: BytesDecodeOwned,
+        KC::EItem: Sized,
     {
         match cache.entry(cache_key) {
             Entry::Occupied(_) => {}
@@ -125,6 +126,7 @@ impl<'ctx> DatabaseCache<'ctx> {
         }
     }
 }
+
 impl<'ctx> SearchContext<'ctx> {
     pub fn get_words_fst(&mut self) -> Result<fst::Set<Cow<'ctx, [u8]>>> {
         if let Some(fst) = self.db_cache.words_fst.clone() {
@@ -158,13 +160,28 @@ impl<'ctx> SearchContext<'ctx> {
 
     /// Retrieve or insert the given value in the `word_docids` database.
     fn get_db_word_docids(&mut self, word: Interned<String>) -> Result<Option<RoaringBitmap>> {
-        DatabaseCache::get_value::<_, _, RoaringBitmapCodec>(
-            self.txn,
-            word,
-            self.word_interner.get(word).as_str(),
-            &mut self.db_cache.word_docids,
-            self.index.word_docids.remap_data_type::<ByteSlice>(),
-        )
+        match &self.restricted_fids {
+            Some(restricted_fids) => {
+                let interned = self.word_interner.get(word).as_str();
+                let keys: Vec<_> = restricted_fids.iter().map(|fid| (interned, *fid)).collect();
+
+                DatabaseCache::get_value_from_keys::<_, _, CboRoaringBitmapCodec>(
+                    self.txn,
+                    word,
+                    &keys[..],
+                    &mut self.db_cache.word_docids,
+                    self.index.word_fid_docids.remap_data_type::<ByteSlice>(),
+                    merge_cbo_roaring_bitmaps,
+                )
+            }
+            None => DatabaseCache::get_value::<_, _, RoaringBitmapCodec>(
+                self.txn,
+                word,
+                self.word_interner.get(word).as_str(),
+                &mut self.db_cache.word_docids,
+                self.index.word_docids.remap_data_type::<ByteSlice>(),
+            ),
+        }
     }
 
     fn get_db_exact_word_docids(
@@ -205,13 +222,28 @@ impl<'ctx> SearchContext<'ctx> {
         &mut self,
         prefix: Interned<String>,
     ) -> Result<Option<RoaringBitmap>> {
-        DatabaseCache::get_value::<_, _, RoaringBitmapCodec>(
-            self.txn,
-            prefix,
-            self.word_interner.get(prefix).as_str(),
-            &mut self.db_cache.word_prefix_docids,
-            self.index.word_prefix_docids.remap_data_type::<ByteSlice>(),
-        )
+        match &self.restricted_fids {
+            Some(restricted_fids) => {
+                let interned = self.word_interner.get(prefix).as_str();
+                let keys: Vec<_> = restricted_fids.iter().map(|fid| (interned, *fid)).collect();
+
+                DatabaseCache::get_value_from_keys::<_, _, CboRoaringBitmapCodec>(
+                    self.txn,
+                    prefix,
+                    &keys[..],
+                    &mut self.db_cache.word_prefix_docids,
+                    self.index.word_prefix_fid_docids.remap_data_type::<ByteSlice>(),
+                    merge_cbo_roaring_bitmaps,
+                )
+            }
+            None => DatabaseCache::get_value::<_, _, RoaringBitmapCodec>(
+                self.txn,
+                prefix,
+                self.word_interner.get(prefix).as_str(),
+                &mut self.db_cache.word_prefix_docids,
+                self.index.word_prefix_docids.remap_data_type::<ByteSlice>(),
+            ),
+        }
     }
 
     fn get_db_exact_word_prefix_docids(
@@ -307,6 +339,11 @@ impl<'ctx> SearchContext<'ctx> {
         word: Interned<String>,
         fid: u16,
     ) -> Result<Option<RoaringBitmap>> {
+        // if the requested fid isn't in the restricted list, return None.
+        if self.restricted_fids.as_ref().map_or(false, |fids| !fids.contains(&fid)) {
+            return Ok(None);
+        }
+
         DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
             self.txn,
             (word, fid),
@@ -321,6 +358,11 @@ impl<'ctx> SearchContext<'ctx> {
         word_prefix: Interned<String>,
         fid: u16,
     ) -> Result<Option<RoaringBitmap>> {
+        // if the requested fid isn't in the restricted list, return None.
+        if self.restricted_fids.as_ref().map_or(false, |fids| !fids.contains(&fid)) {
+            return Ok(None);
+        }
+
         DatabaseCache::get_value::<_, _, CboRoaringBitmapCodec>(
             self.txn,
             (word_prefix, fid),
