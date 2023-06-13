@@ -1736,9 +1736,6 @@ name = "hashbrown"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
-dependencies = [
- "ahash 0.7.6",
-]
 
 [[package]]
 name = "hashbrown"
@@ -1748,6 +1745,12 @@ checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 dependencies = [
  "ahash 0.7.6",
 ]
+
+[[package]]
+name = "header-vec"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bda7e66d32131841c4264e34a32c934df0dedb08d737f861326d616d4338f06f"
 
 [[package]]
 name = "heapless"
@@ -1833,28 +1836,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
+name = "hgg"
+version = "0.4.2-alpha.0"
+source = "git+https://github.com/rust-cv/hgg#6d1eacde635158163fb663d9327a2d6f612dd435"
+dependencies = [
+ "ahash 0.7.6",
+ "hashbrown 0.11.2",
+ "header-vec",
+ "num-traits",
+ "serde",
+ "space",
+]
+
+[[package]]
 name = "hmac"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c49c37c09c17a53d937dfbb742eb3a961d65a994e6bcdcf37e7399d0cc8ab5e"
 dependencies = [
  "digest",
-]
-
-[[package]]
-name = "hnsw"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b9740ebf8769ec4ad6762cc951ba18f39bba6dfbc2fbbe46285f7539af79752"
-dependencies = [
- "ahash 0.7.6",
- "hashbrown 0.11.2",
- "libm",
- "num-traits",
- "rand_core",
- "serde",
- "smallvec",
- "space",
 ]
 
 [[package]]
@@ -2729,7 +2729,7 @@ dependencies = [
  "geoutils",
  "grenad",
  "heed",
- "hnsw",
+ "hgg",
  "insta",
  "itertools",
  "json-depth-checker",
@@ -2744,7 +2744,6 @@ dependencies = [
  "once_cell",
  "ordered-float",
  "rand",
- "rand_pcg",
  "rayon",
  "roaring",
  "rstar",
@@ -3308,16 +3307,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rand_pcg"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59cad018caf63deb318e5a4586d99a24424a364f40f1e5778c29aca23f4fc73e"
-dependencies = [
- "rand_core",
- "serde",
-]
-
-[[package]]
 name = "rayon"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3776,9 +3765,6 @@ name = "smallvec"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "smartstring"

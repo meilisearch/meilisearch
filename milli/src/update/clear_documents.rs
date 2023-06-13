@@ -39,7 +39,6 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
             facet_id_is_empty_docids,
             field_id_docid_facet_f64s,
             field_id_docid_facet_strings,
-            vector_id_docid,
             documents,
         } = self.index;
 
@@ -58,7 +57,7 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         self.index.put_field_distribution(self.wtxn, &FieldDistribution::default())?;
         self.index.delete_geo_rtree(self.wtxn)?;
         self.index.delete_geo_faceted_documents_ids(self.wtxn)?;
-        self.index.delete_vector_hnsw(self.wtxn)?;
+        self.index.delete_vector_hgg(self.wtxn)?;
 
         // We clean all the faceted documents ids.
         for field_id in faceted_fields {
@@ -97,7 +96,6 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         facet_id_string_docids.clear(self.wtxn)?;
         field_id_docid_facet_f64s.clear(self.wtxn)?;
         field_id_docid_facet_strings.clear(self.wtxn)?;
-        vector_id_docid.clear(self.wtxn)?;
         documents.clear(self.wtxn)?;
 
         Ok(number_of_documents)

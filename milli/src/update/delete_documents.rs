@@ -240,7 +240,6 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             facet_id_exists_docids,
             facet_id_is_null_docids,
             facet_id_is_empty_docids,
-            vector_id_docid,
             documents,
         } = self.index;
         // Remove from the documents database
@@ -274,6 +273,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             &mut words_to_keep,
             &mut words_to_delete,
         )?;
+
+        todo!("delete the documents from the Hgg datastructure");
 
         // We construct an FST set that contains the words to delete from the words FST.
         let words_to_delete = fst::Set::from_iter(words_to_delete.difference(&words_to_keep))?;
