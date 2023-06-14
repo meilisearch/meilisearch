@@ -318,7 +318,7 @@ pub fn snap_field_distributions(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
     let mut snap = String::new();
     for (field, count) in index.field_distribution(&rtxn).unwrap() {
-        writeln!(&mut snap, "{field:<16} {count:<6}").unwrap();
+        writeln!(&mut snap, "{field:<16} {count:<6} |").unwrap();
     }
     snap
 }
@@ -328,7 +328,7 @@ pub fn snap_fields_ids_map(index: &Index) -> String {
     let mut snap = String::new();
     for field_id in fields_ids_map.ids() {
         let name = fields_ids_map.name(field_id).unwrap();
-        writeln!(&mut snap, "{field_id:<3} {name:<16}").unwrap();
+        writeln!(&mut snap, "{field_id:<3} {name:<16} |").unwrap();
     }
     snap
 }
