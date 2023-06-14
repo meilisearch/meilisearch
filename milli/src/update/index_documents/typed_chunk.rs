@@ -234,6 +234,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 // TODO enable again when the library is fixed
                 hgg.insert(pod_collect_to_vec(value), docid);
             }
+            log::debug!("There are {} entries in the HGG so far", hgg.len());
             index.put_vector_hgg(wtxn, &hgg)?;
         }
         TypedChunk::ScriptLanguageDocids(hash_pair) => {
