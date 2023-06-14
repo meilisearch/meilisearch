@@ -1466,9 +1466,9 @@ pub(crate) mod tests {
 
         db_snap!(index, field_distribution,
             @r###"
-        age              1     
-        id               2     
-        name             2     
+        age              1      |
+        id               2      |
+        name             2      |
         "###
         );
 
@@ -1486,9 +1486,9 @@ pub(crate) mod tests {
 
         db_snap!(index, field_distribution,
             @r###"
-        age              1     
-        id               2     
-        name             2     
+        age              1      |
+        id               2      |
+        name             2      |
         "###
         );
 
@@ -1502,9 +1502,9 @@ pub(crate) mod tests {
 
         db_snap!(index, field_distribution,
             @r###"
-        has_dog          1     
-        id               2     
-        name             2     
+        has_dog          1      |
+        id               2      |
+        name             2      |
         "###
         );
     }
