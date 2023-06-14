@@ -10,15 +10,15 @@ pub mod documents;
 
 mod asc_desc;
 mod criterion;
-mod distance;
 mod error;
 mod external_documents_ids;
-pub mod facet;
 mod fields_ids_map;
+mod search;
+pub mod facet;
 pub mod heed_codec;
+pub mod dot_product;
 pub mod index;
 pub mod proximity;
-mod search;
 pub mod update;
 
 #[cfg(test)]
