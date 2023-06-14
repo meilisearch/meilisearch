@@ -13,7 +13,7 @@ use roaring::RoaringBitmap;
 use rstar::RTree;
 use time::OffsetDateTime;
 
-use crate::dot_product::DotProduct;
+use crate::distance::DotProduct;
 use crate::error::{InternalError, UserError};
 use crate::facet::FacetType;
 use crate::fields_ids_map::FieldsIdsMap;

@@ -10,7 +10,7 @@ pub mod documents;
 
 mod asc_desc;
 mod criterion;
-pub mod dot_product;
+pub mod distance;
 mod error;
 mod external_documents_ids;
 pub mod facet;
@@ -19,7 +19,6 @@ pub mod heed_codec;
 pub mod index;
 pub mod proximity;
 pub mod score_details;
-mod search;
 mod search;
 pub mod update;
 
