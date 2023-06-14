@@ -1,0 +1,110 @@
+---
+source: milli/src/search/new/tests/exactness.rs
+expression: "format!(\"{document_ids_scores:#?}\")"
+---
+[
+    (
+        1,
+        [
+            Words(
+                Words {
+                    matching_words: 4,
+                    max_matching_words: 4,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 0,
+                    max_typo_count: 5,
+                },
+            ),
+            ExactAttribute(
+                ExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+        ],
+    ),
+    (
+        0,
+        [
+            Words(
+                Words {
+                    matching_words: 4,
+                    max_matching_words: 4,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 1,
+                    max_typo_count: 5,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 4,
+                    max_rank: 5,
+                },
+            ),
+        ],
+    ),
+    (
+        4,
+        [
+            Words(
+                Words {
+                    matching_words: 4,
+                    max_matching_words: 4,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 2,
+                    max_typo_count: 5,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 4,
+                    max_rank: 5,
+                },
+            ),
+        ],
+    ),
+    (
+        3,
+        [
+            Words(
+                Words {
+                    matching_words: 4,
+                    max_matching_words: 4,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 2,
+                    max_typo_count: 5,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 3,
+                    max_rank: 5,
+                },
+            ),
+        ],
+    ),
+]

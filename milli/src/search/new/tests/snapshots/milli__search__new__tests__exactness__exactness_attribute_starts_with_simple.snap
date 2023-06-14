@@ -1,0 +1,66 @@
+---
+source: milli/src/search/new/tests/exactness.rs
+expression: "format!(\"{document_ids_scores:#?}\")"
+---
+[
+    (
+        2,
+        [
+            Words(
+                Words {
+                    matching_words: 2,
+                    max_matching_words: 2,
+                },
+            ),
+            ExactAttribute(
+                ExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 3,
+                    max_rank: 3,
+                },
+            ),
+        ],
+    ),
+    (
+        1,
+        [
+            Words(
+                Words {
+                    matching_words: 2,
+                    max_matching_words: 2,
+                },
+            ),
+            ExactAttribute(
+                MatchesStart,
+            ),
+            Exactness(
+                Rank {
+                    rank: 3,
+                    max_rank: 3,
+                },
+            ),
+        ],
+    ),
+    (
+        0,
+        [
+            Words(
+                Words {
+                    matching_words: 2,
+                    max_matching_words: 2,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 3,
+                    max_rank: 3,
+                },
+            ),
+        ],
+    ),
+]

@@ -1,0 +1,106 @@
+---
+source: milli/src/search/new/tests/exactness.rs
+expression: "format!(\"{document_ids_scores:#?}\")"
+---
+[
+    (
+        4,
+        [
+            Words(
+                Words {
+                    matching_words: 7,
+                    max_matching_words: 7,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 7,
+                    max_rank: 8,
+                },
+            ),
+        ],
+    ),
+    (
+        5,
+        [
+            Words(
+                Words {
+                    matching_words: 7,
+                    max_matching_words: 7,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 7,
+                    max_rank: 8,
+                },
+            ),
+        ],
+    ),
+    (
+        6,
+        [
+            Words(
+                Words {
+                    matching_words: 7,
+                    max_matching_words: 7,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 7,
+                    max_rank: 8,
+                },
+            ),
+        ],
+    ),
+    (
+        1,
+        [
+            Words(
+                Words {
+                    matching_words: 4,
+                    max_matching_words: 7,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 4,
+                    max_rank: 5,
+                },
+            ),
+        ],
+    ),
+    (
+        7,
+        [
+            Words(
+                Words {
+                    matching_words: 1,
+                    max_matching_words: 7,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 1,
+                    max_rank: 2,
+                },
+            ),
+        ],
+    ),
+]

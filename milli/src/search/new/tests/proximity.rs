@@ -124,6 +124,8 @@ fn create_edge_cases_index() -> TempIndex {
         },
         // The next 5 documents lay out a trap with the split word, phrase search, or synonym `sun flower`.
         // If the search query is "sunflower", the split word "Sun Flower" will match some documents.
+        // The next 5 documents lay out a trap with the split word, phrase search, or synonym `sun flower`.
+        // If the search query is "sunflower", the split word "Sun Flower" will match some documents.
         // If the query is `sunflower wilting`, then we should make sure that
         // the proximity condition `flower wilting: sprx N` also comes with the condition
         // `sun wilting: sprx N+1`, but this is not the exact condition we use for now.
@@ -139,6 +141,7 @@ fn create_edge_cases_index() -> TempIndex {
         },
         {
             "id": 3,
+            // This document matches the query `sunflower wilting`, but the sprximity condition
             // This document matches the query `sunflower wilting`, but the sprximity condition
             // between `sunflower` and `wilting` cannot be through the split-word `Sun Flower`
             // which would reduce to only `flower` and `wilting` being in sprximity.
@@ -295,9 +298,12 @@ fn test_proximity_split_word() {
 
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("sunflower wilting");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 4, 5, 1, 3]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
+
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     // "2" and "4" should be swapped ideally
     insta::assert_debug_snapshot!(texts, @r###"
@@ -312,9 +318,11 @@ fn test_proximity_split_word() {
 
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("\"sun flower\" wilting");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 4, 1]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     // "2" and "4" should be swapped ideally
     insta::assert_debug_snapshot!(texts, @r###"
@@ -337,9 +345,11 @@ fn test_proximity_split_word() {
 
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("xyz wilting");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 4, 1]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     // "2" and "4" should be swapped ideally
     insta::assert_debug_snapshot!(texts, @r###"
@@ -358,9 +368,11 @@ fn test_proximity_prefix_db() {
 
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("best s");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 13, 9, 12, 8, 6, 7, 11, 15]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
 
     // This test illustrates the loss of precision from using the prefix DB
@@ -381,9 +393,11 @@ fn test_proximity_prefix_db() {
     // Difference when using the `su` prefix, which is not in the prefix DB
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("best su");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 13, 9, 12, 8, 11, 7, 6, 15]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
 
     insta::assert_debug_snapshot!(texts, @r###"
@@ -406,9 +420,11 @@ fn test_proximity_prefix_db() {
 
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("best win");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[15, 16, 17, 18, 19, 20, 21, 22]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
 
     insta::assert_debug_snapshot!(texts, @r###"
@@ -428,9 +444,11 @@ fn test_proximity_prefix_db() {
 
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("best wint");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[19, 22, 18, 21, 17, 20, 16, 15]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
 
     insta::assert_debug_snapshot!(texts, @r###"
@@ -450,9 +468,11 @@ fn test_proximity_prefix_db() {
 
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("best wi");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[19, 22, 18, 21, 17, 15, 16, 20]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
 
     insta::assert_debug_snapshot!(texts, @r###"

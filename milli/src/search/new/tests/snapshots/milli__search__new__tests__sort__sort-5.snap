@@ -1,0 +1,206 @@
+---
+source: milli/src/search/new/tests/sort.rs
+expression: "format!(\"{document_scores:#?}\")"
+---
+[
+    [
+        Sort(
+            Sort {
+                field_name: "rank",
+                ascending: false,
+                redacted: false,
+                value: Number(5.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "rank",
+                ascending: false,
+                redacted: false,
+                value: Number(4.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "rank",
+                ascending: false,
+                redacted: false,
+                value: Number(3.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "rank",
+                ascending: false,
+                redacted: false,
+                value: Number(2.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "rank",
+                ascending: false,
+                redacted: false,
+                value: Number(2.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "rank",
+                ascending: false,
+                redacted: false,
+                value: Number(2.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "rank",
+                ascending: false,
+                redacted: false,
+                value: Number(2.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "rank",
+                ascending: false,
+                redacted: false,
+                value: Number(2.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "rank",
+                ascending: false,
+                redacted: false,
+                value: Number(1.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "rank",
+                ascending: false,
+                redacted: false,
+                value: Number(1.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "rank",
+                ascending: false,
+                redacted: false,
+                value: Number(1.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "rank",
+                ascending: false,
+                redacted: false,
+                value: Number(1.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "rank",
+                ascending: false,
+                redacted: false,
+                value: Number(1.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "rank",
+                ascending: false,
+                redacted: false,
+                value: Number(1.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "rank",
+                ascending: false,
+                redacted: false,
+                value: Number(1.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "rank",
+                ascending: false,
+                redacted: false,
+                value: Number(0.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "rank",
+                ascending: false,
+                redacted: false,
+                value: Number(0.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "rank",
+                ascending: false,
+                redacted: false,
+                value: Number(0.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "rank",
+                ascending: false,
+                redacted: false,
+                value: Number(0.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "rank",
+                ascending: false,
+                redacted: false,
+                value: Number(0.0),
+            },
+        ),
+    ],
+]

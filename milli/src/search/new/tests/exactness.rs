@@ -474,8 +474,14 @@ fn test_exactness_simple_ordered() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 8, 7, 6, 5, 4, 3, 2, 1]");
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
+
+    let document_ids_scores: Vec<_> =
+        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
+
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -501,8 +507,14 @@ fn test_exactness_simple_reversed() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 8, 3, 4, 5, 6, 7]");
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
+
+    let document_ids_scores: Vec<_> =
+        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
+
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -519,8 +531,14 @@ fn test_exactness_simple_reversed() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 8, 3, 4, 5, 6, 7]");
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
+
+    let document_ids_scores: Vec<_> =
+        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
+
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -544,8 +562,14 @@ fn test_exactness_simple_random() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[8, 7, 4, 6, 3, 5]");
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
+
+    let document_ids_scores: Vec<_> =
+        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
+
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -568,8 +592,14 @@ fn test_exactness_attribute_starts_with_simple() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("this balcony");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 1, 0]");
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
+
+    let document_ids_scores: Vec<_> =
+        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
+
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -589,8 +619,14 @@ fn test_exactness_attribute_starts_with_phrase() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("\"overlooking the sea\" is a beautiful balcony");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6, 5, 4, 1]");
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
+
+    let document_ids_scores: Vec<_> =
+        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
+
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -604,8 +640,14 @@ fn test_exactness_attribute_starts_with_phrase() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("overlooking the sea is a beautiful balcony");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6, 5, 4, 3, 1, 7]");
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
+
+    let document_ids_scores: Vec<_> =
+        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
+
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -628,8 +670,14 @@ fn test_exactness_all_candidates_with_typo() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("overlocking the sea is a beautiful balcony");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[4, 5, 6, 1, 7]");
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
+
+    let document_ids_scores: Vec<_> =
+        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
+
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     // "overlooking" is returned here because the term matching strategy allows it
     // but it has the worst exactness score (0 exact words)
@@ -659,8 +707,14 @@ fn test_exactness_after_words() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[19, 9, 18, 8, 17, 16, 6, 7, 15, 5, 14, 4, 13, 3, 12, 2, 1, 11]");
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
+
+    let document_ids_scores: Vec<_> =
+        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
+
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
 
     insta::assert_debug_snapshot!(texts, @r###"
@@ -702,7 +756,13 @@ fn test_words_after_exactness() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
+
+    let document_ids_scores: Vec<_> =
+        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[19, 9, 18, 8, 17, 16, 6, 7, 15, 5, 14, 4, 13, 3, 12, 2, 1, 11]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
 
@@ -745,7 +805,14 @@ fn test_proximity_after_exactness() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
+
+    let document_ids_scores: Vec<_> =
+        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
+
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 1, 0, 4, 5, 8, 7, 3, 6]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
 
@@ -776,7 +843,13 @@ fn test_proximity_after_exactness() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
+
+    let document_ids_scores: Vec<_> =
+        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1, 2]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
 
@@ -804,7 +877,13 @@ fn test_exactness_followed_by_typo_prefer_no_typo_prefix() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("quick brown fox extra");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
+
+    let document_ids_scores: Vec<_> =
+        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 1, 0, 4, 3]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
 
@@ -834,7 +913,13 @@ fn test_typo_followed_by_exactness() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("extraordinarily quick brown fox");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
+
+    let document_ids_scores: Vec<_> =
+        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[1, 0, 4, 3]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
 

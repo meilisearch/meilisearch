@@ -80,10 +80,13 @@ fn test_2gram_simple() {
 
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("sun flower");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     // will also match documents with "sunflower" + prefix tolerance
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1, 2, 3, 5]");
+    // scores are empty because the only rule is Words with All matching strategy
+    insta::assert_snapshot!(format!("{document_scores:?}"), @"[[], [], [], [], []]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [

@@ -1,0 +1,84 @@
+---
+source: milli/src/search/new/tests/exactness.rs
+expression: "format!(\"{document_ids_scores:#?}\")"
+---
+[
+    (
+        0,
+        [
+            Words(
+                Words {
+                    matching_words: 9,
+                    max_matching_words: 9,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 10,
+                    max_rank: 10,
+                },
+            ),
+            Proximity(
+                Rank {
+                    rank: 35,
+                    max_rank: 57,
+                },
+            ),
+        ],
+    ),
+    (
+        1,
+        [
+            Words(
+                Words {
+                    matching_words: 9,
+                    max_matching_words: 9,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 10,
+                    max_rank: 10,
+                },
+            ),
+            Proximity(
+                Rank {
+                    rank: 35,
+                    max_rank: 57,
+                },
+            ),
+        ],
+    ),
+    (
+        2,
+        [
+            Words(
+                Words {
+                    matching_words: 9,
+                    max_matching_words: 9,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 10,
+                    max_rank: 10,
+                },
+            ),
+            Proximity(
+                Rank {
+                    rank: 35,
+                    max_rank: 57,
+                },
+            ),
+        ],
+    ),
+]

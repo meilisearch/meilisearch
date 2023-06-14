@@ -134,10 +134,12 @@ fn test_words_tms_last_simple() {
     let mut s = Search::new(&txn, &index);
     s.query("the quick brown fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     // 6 and 7 have the same score because "the" appears twice
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 10, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 8, 6, 7, 5, 4, 11, 12, 3]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -167,8 +169,10 @@ fn test_words_tms_last_simple() {
     let mut s = Search::new(&txn, &index);
     s.query("extravagant the quick brown fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[]");
+    insta::assert_snapshot!(format!("{document_scores:?}"), @"[]");
 }
 
 #[test]
@@ -179,10 +183,12 @@ fn test_words_tms_last_phrase() {
     let mut s = Search::new(&txn, &index);
     s.query("\"the quick brown fox\" jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     // "The quick brown fox" is a phrase, not deleted by this term matching strategy
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 17, 21, 8, 6, 7, 5, 4, 11, 12]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -202,11 +208,13 @@ fn test_words_tms_last_phrase() {
     let mut s = Search::new(&txn, &index);
     s.query("\"the quick brown fox\" jumps over the \"lazy\" dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     // "lazy" is a phrase, not deleted by this term matching strategy
     // but words before it can be deleted
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 17, 21, 8, 11, 12]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -222,10 +230,12 @@ fn test_words_tms_last_phrase() {
     let mut s = Search::new(&txn, &index);
     s.query("\"the quick brown fox jumps over the lazy dog\"");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     // The whole query is a phrase, no terms are removed
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9]");
+    insta::assert_snapshot!(format!("{document_scores:?}"), @"[[Words(Words { matching_words: 9, max_matching_words: 9 })]]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -236,10 +246,12 @@ fn test_words_tms_last_phrase() {
     let mut s = Search::new(&txn, &index);
     s.query("\"the quick brown fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     // The whole query is still a phrase, even without closing quotes, so no terms are removed
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9]");
+    insta::assert_snapshot!(format!("{document_scores:?}"), @"[[Words(Words { matching_words: 9, max_matching_words: 9 })]]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -261,10 +273,12 @@ fn test_words_proximity_tms_last_simple() {
     let mut s = Search::new(&txn, &index);
     s.query("the quick brown fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     // 7 is better than 6 because of the proximity between "the" and its surrounding terms
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 21, 14, 17, 13, 10, 18, 19, 20, 16, 15, 22, 8, 7, 6, 5, 4, 11, 12, 3]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -294,10 +308,12 @@ fn test_words_proximity_tms_last_simple() {
     let mut s = Search::new(&txn, &index);
     s.query("the brown quick fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     // 10 is better than 9 because of the proximity between "quick" and "brown"
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 18, 19, 9, 20, 21, 14, 17, 13, 16, 15, 22, 8, 7, 6, 5, 4, 11, 12, 3]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -338,11 +354,13 @@ fn test_words_proximity_tms_last_phrase() {
     let mut s = Search::new(&txn, &index);
     s.query("the \"quick brown\" fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     // "quick brown" is a phrase. The proximity of its first and last words
     // to their adjacent query words should be taken into account
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 21, 14, 17, 13, 16, 15, 8, 7, 6, 5, 4, 11, 12, 3]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -367,12 +385,14 @@ fn test_words_proximity_tms_last_phrase() {
     let mut s = Search::new(&txn, &index);
     s.query("the \"quick brown\" \"fox jumps\" over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     // "quick brown" is a phrase. The proximity of its first and last words
     // to their adjacent query words should be taken into account.
     // The same applies to `fox jumps`.
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 21, 14, 17, 13, 16, 15, 8, 7, 6, 5]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -404,9 +424,11 @@ fn test_words_tms_all() {
     let mut s = Search::new(&txn, &index);
     s.query("the quick brown fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::All);
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 21, 14, 17, 13, 10, 18, 19, 20, 16, 15, 22]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -428,9 +450,11 @@ fn test_words_tms_all() {
     let mut s = Search::new(&txn, &index);
     s.query("extravagant");
     s.terms_matching_strategy(TermsMatchingStrategy::All);
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[]");
+    insta::assert_snapshot!(format!("{document_scores:?}"), @"[]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @"[]");
 }

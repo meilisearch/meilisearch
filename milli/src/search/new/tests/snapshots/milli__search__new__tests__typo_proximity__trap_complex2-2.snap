@@ -1,0 +1,34 @@
+---
+source: milli/src/search/new/tests/typo_proximity.rs
+expression: "format!(\"{document_scores:#?}\")"
+---
+[
+    [
+        Typo(
+            Typo {
+                typo_count: 1,
+                max_typo_count: 5,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 15,
+                max_rank: 15,
+            },
+        ),
+    ],
+    [
+        Typo(
+            Typo {
+                typo_count: 1,
+                max_typo_count: 5,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 8,
+                max_rank: 15,
+            },
+        ),
+    ],
+]

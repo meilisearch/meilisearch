@@ -1,0 +1,54 @@
+---
+source: milli/src/search/new/tests/typo.rs
+expression: "format!(\"{document_scores:#?}\")"
+---
+[
+    [
+        Typo(
+            Typo {
+                typo_count: 0,
+                max_typo_count: 6,
+            },
+        ),
+    ],
+    [
+        Typo(
+            Typo {
+                typo_count: 0,
+                max_typo_count: 6,
+            },
+        ),
+    ],
+    [
+        Typo(
+            Typo {
+                typo_count: 2,
+                max_typo_count: 6,
+            },
+        ),
+    ],
+    [
+        Typo(
+            Typo {
+                typo_count: 2,
+                max_typo_count: 6,
+            },
+        ),
+    ],
+    [
+        Typo(
+            Typo {
+                typo_count: 3,
+                max_typo_count: 6,
+            },
+        ),
+    ],
+    [
+        Typo(
+            Typo {
+                typo_count: 4,
+                max_typo_count: 6,
+            },
+        ),
+    ],
+]

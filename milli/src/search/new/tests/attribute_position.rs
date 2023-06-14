@@ -40,68 +40,68 @@ fn create_index() -> TempIndex {
             },
             {
                 "id": 5,
-                "text": "a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
+                "text": "a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
                 a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
                 the quick brown fox",
             },
             {
                 "id": 6,
-                "text": "quick a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
+                "text": "quick a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
                 brown",
             },
             {
                 "id": 7,
-                "text": "a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a  
+                "text": "a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
                 quickbrown",
             },
             {
                 "id": 8,
-                "text": "a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a  
+                "text": "a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
                 quick brown",
             },
             {
                 "id": 9,
-                "text": "a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a 
-                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a  
+                "text": "a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
+                a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a
                 quickbrown",
             },
             {
@@ -137,8 +137,13 @@ fn test_attribute_position_simple() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("quick brown");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 12, 11, 13, 3, 4, 2, 0, 1, 6, 8, 7, 9, 5]");
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
+
+    let document_ids_scores: Vec<_> =
+        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
 }
 #[test]
 fn test_attribute_position_repeated() {
@@ -149,8 +154,13 @@ fn test_attribute_position_repeated() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("a a a a a");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[5, 7, 8, 9, 6]");
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
+
+    let document_ids_scores: Vec<_> =
+        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
 }
 
 #[test]
@@ -162,8 +172,13 @@ fn test_attribute_position_different_fields() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("quick brown");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 12, 11, 13, 3, 4, 2, 0, 1, 6, 8, 7, 9, 5]");
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
+
+    let document_ids_scores: Vec<_> =
+        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
 }
 
 #[test]
@@ -175,6 +190,11 @@ fn test_attribute_position_ngrams() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("quick brown");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 12, 11, 13, 3, 4, 2, 0, 1, 6, 8, 7, 9, 5]");
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
+
+    let document_ids_scores: Vec<_> =
+        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
 }

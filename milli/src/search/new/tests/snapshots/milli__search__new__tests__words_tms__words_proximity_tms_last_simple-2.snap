@@ -1,0 +1,286 @@
+---
+source: milli/src/search/new/tests/words_tms.rs
+expression: "format!(\"{document_scores:#?}\")"
+---
+[
+    [
+        Words(
+            Words {
+                matching_words: 9,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 57,
+                max_rank: 57,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 9,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 57,
+                max_rank: 57,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 9,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 56,
+                max_rank: 57,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 9,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 56,
+                max_rank: 57,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 9,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 55,
+                max_rank: 57,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 9,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 54,
+                max_rank: 57,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 9,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 53,
+                max_rank: 57,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 9,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 52,
+                max_rank: 57,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 9,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 51,
+                max_rank: 57,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 9,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 48,
+                max_rank: 57,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 9,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 47,
+                max_rank: 57,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 9,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 1,
+                max_rank: 57,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 8,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 50,
+                max_rank: 50,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 7,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 43,
+                max_rank: 43,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 7,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 38,
+                max_rank: 43,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 5,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 29,
+                max_rank: 29,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 4,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 22,
+                max_rank: 22,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 4,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 22,
+                max_rank: 22,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 4,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 22,
+                max_rank: 22,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 3,
+                max_matching_words: 9,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 15,
+                max_rank: 15,
+            },
+        ),
+    ],
+]

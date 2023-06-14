@@ -1,0 +1,86 @@
+---
+source: milli/src/search/new/tests/words_tms.rs
+expression: "format!(\"{document_scores:#?}\")"
+---
+[
+    [
+        Words(
+            Words {
+                matching_words: 9,
+                max_matching_words: 9,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 9,
+                max_matching_words: 9,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 9,
+                max_matching_words: 9,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 8,
+                max_matching_words: 9,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 7,
+                max_matching_words: 9,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 7,
+                max_matching_words: 9,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 5,
+                max_matching_words: 9,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 4,
+                max_matching_words: 9,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 4,
+                max_matching_words: 9,
+            },
+        ),
+    ],
+    [
+        Words(
+            Words {
+                matching_words: 4,
+                max_matching_words: 9,
+            },
+        ),
+    ],
+]

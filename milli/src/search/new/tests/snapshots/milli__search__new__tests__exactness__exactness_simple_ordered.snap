@@ -1,0 +1,186 @@
+---
+source: milli/src/search/new/tests/exactness.rs
+expression: "format!(\"{document_ids_scores:#?}\")"
+---
+[
+    (
+        9,
+        [
+            Words(
+                Words {
+                    matching_words: 9,
+                    max_matching_words: 9,
+                },
+            ),
+            ExactAttribute(
+                ExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 10,
+                    max_rank: 10,
+                },
+            ),
+        ],
+    ),
+    (
+        8,
+        [
+            Words(
+                Words {
+                    matching_words: 8,
+                    max_matching_words: 9,
+                },
+            ),
+            ExactAttribute(
+                ExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 9,
+                    max_rank: 9,
+                },
+            ),
+        ],
+    ),
+    (
+        7,
+        [
+            Words(
+                Words {
+                    matching_words: 7,
+                    max_matching_words: 9,
+                },
+            ),
+            ExactAttribute(
+                ExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 8,
+                    max_rank: 8,
+                },
+            ),
+        ],
+    ),
+    (
+        6,
+        [
+            Words(
+                Words {
+                    matching_words: 7,
+                    max_matching_words: 9,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 8,
+                    max_rank: 8,
+                },
+            ),
+        ],
+    ),
+    (
+        5,
+        [
+            Words(
+                Words {
+                    matching_words: 5,
+                    max_matching_words: 9,
+                },
+            ),
+            ExactAttribute(
+                ExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 6,
+                    max_rank: 6,
+                },
+            ),
+        ],
+    ),
+    (
+        4,
+        [
+            Words(
+                Words {
+                    matching_words: 4,
+                    max_matching_words: 9,
+                },
+            ),
+            ExactAttribute(
+                ExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+        ],
+    ),
+    (
+        3,
+        [
+            Words(
+                Words {
+                    matching_words: 3,
+                    max_matching_words: 9,
+                },
+            ),
+            ExactAttribute(
+                ExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 4,
+                    max_rank: 4,
+                },
+            ),
+        ],
+    ),
+    (
+        2,
+        [
+            Words(
+                Words {
+                    matching_words: 2,
+                    max_matching_words: 9,
+                },
+            ),
+            ExactAttribute(
+                ExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 3,
+                    max_rank: 3,
+                },
+            ),
+        ],
+    ),
+    (
+        1,
+        [
+            Words(
+                Words {
+                    matching_words: 1,
+                    max_matching_words: 9,
+                },
+            ),
+            ExactAttribute(
+                ExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 2,
+                    max_rank: 2,
+                },
+            ),
+        ],
+    ),
+]
