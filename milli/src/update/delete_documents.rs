@@ -4,8 +4,10 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use fst::IntoStreamer;
 use heed::types::{ByteSlice, DecodeIgnore, Str, UnalignedSlice};
 use heed::{BytesDecode, BytesEncode, Database, RwIter};
+use hnsw::Searcher;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
+use space::KnnPoints;
 use time::OffsetDateTime;
 
 use super::facet::delete::FacetsDelete;
@@ -14,6 +16,7 @@ use crate::error::InternalError;
 use crate::facet::FacetType;
 use crate::heed_codec::facet::FieldDocIdFacetCodec;
 use crate::heed_codec::CboRoaringBitmapCodec;
+use crate::index::Hnsw;
 use crate::{
     ExternalDocumentsIds, FieldId, FieldIdMapMissingEntry, Index, Result, RoaringBitmapCodec, BEU32,
 };
@@ -436,6 +439,30 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             facet_id_is_empty_docids,
             &self.to_delete_docids,
         )?;
+
+        // An ugly and slow way to remove the vectors from the HNSW
+        // It basically reconstructs the HNSW from scratch without editing the current one.
+        let current_hnsw = self.index.vector_hnsw(self.wtxn)?.unwrap_or_default();
+        if !current_hnsw.is_empty() {
+            let mut new_hnsw = Hnsw::default();
+            let mut searcher = Searcher::new();
+            let mut new_vector_id_docids = Vec::new();
+
+            for result in vector_id_docid.iter(self.wtxn)? {
+                let (vector_id, docid) = result?;
+                if !self.to_delete_docids.contains(docid.get()) {
+                    let vector = current_hnsw.get_point(vector_id.get() as usize).clone();
+                    let vector_id = new_hnsw.insert(vector, &mut searcher);
+                    new_vector_id_docids.push((vector_id as u32, docid));
+                }
+            }
+
+            vector_id_docid.clear(self.wtxn)?;
+            for (vector_id, docid) in new_vector_id_docids {
+                vector_id_docid.put(self.wtxn, &BEU32::new(vector_id), &docid)?;
+            }
+            self.index.put_vector_hnsw(self.wtxn, &new_hnsw)?;
+        }
 
         self.index.put_soft_deleted_documents_ids(self.wtxn, &RoaringBitmap::new())?;
 
