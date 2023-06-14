@@ -110,9 +110,11 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
     },
     #[error(transparent)]
     InvalidGeoField(#[from] GeoError),
+    #[error("Invalid vector dimensions: expected: `{}`, found: `{}`.", .expected, .found)]
+    InvalidVectorDimensions { expected: usize, found: usize },
     #[error("{0}")]
     InvalidFilter(String),
-    #[error("Invalid type for filter subexpression: `expected {}, found: {1}`.", .0.join(", "))]
+    #[error("Invalid type for filter subexpression: expected: {}, found: {1}.", .0.join(", "))]
     InvalidFilterExpression(&'static [&'static str], Value),
     #[error("Attribute `{}` is not sortable. {}",
         .field,
