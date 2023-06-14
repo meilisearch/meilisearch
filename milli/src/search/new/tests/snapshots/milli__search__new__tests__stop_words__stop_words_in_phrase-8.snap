@@ -1,0 +1,13 @@
+---
+source: milli/src/search/new/tests/stop_words.rs
+expression: "format!(\"{document_scores:#?}\")"
+---
+[
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+]

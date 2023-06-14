@@ -1,0 +1,62 @@
+---
+source: milli/src/search/new/tests/typo_proximity.rs
+expression: "format!(\"{document_scores:#?}\")"
+---
+[
+    [
+        Typo(
+            Typo {
+                typo_count: 0,
+                max_typo_count: 3,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 8,
+                max_rank: 8,
+            },
+        ),
+    ],
+    [
+        Typo(
+            Typo {
+                typo_count: 0,
+                max_typo_count: 3,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 5,
+                max_rank: 8,
+            },
+        ),
+    ],
+    [
+        Typo(
+            Typo {
+                typo_count: 1,
+                max_typo_count: 3,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 8,
+                max_rank: 8,
+            },
+        ),
+    ],
+    [
+        Typo(
+            Typo {
+                typo_count: 1,
+                max_typo_count: 3,
+            },
+        ),
+        Proximity(
+            Rank {
+                rank: 7,
+                max_rank: 8,
+            },
+        ),
+    ],
+]

@@ -1,0 +1,9 @@
+---
+source: milli/src/search/new/tests/typo.rs
+expression: "format!(\"{document_scores:#?}\")"
+---
+[
+    [],
+    [],
+    [],
+]

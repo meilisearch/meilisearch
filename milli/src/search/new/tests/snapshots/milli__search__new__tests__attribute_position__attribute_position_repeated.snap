@@ -1,0 +1,91 @@
+---
+source: milli/src/search/new/tests/attribute_position.rs
+expression: "format!(\"{document_ids_scores:#?}\")"
+---
+[
+    (
+        5,
+        [
+            Fid(
+                Rank {
+                    rank: 11,
+                    max_rank: 11,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 51,
+                    max_rank: 51,
+                },
+            ),
+        ],
+    ),
+    (
+        7,
+        [
+            Fid(
+                Rank {
+                    rank: 11,
+                    max_rank: 11,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 51,
+                    max_rank: 51,
+                },
+            ),
+        ],
+    ),
+    (
+        8,
+        [
+            Fid(
+                Rank {
+                    rank: 11,
+                    max_rank: 11,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 51,
+                    max_rank: 51,
+                },
+            ),
+        ],
+    ),
+    (
+        9,
+        [
+            Fid(
+                Rank {
+                    rank: 11,
+                    max_rank: 11,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 51,
+                    max_rank: 51,
+                },
+            ),
+        ],
+    ),
+    (
+        6,
+        [
+            Fid(
+                Rank {
+                    rank: 11,
+                    max_rank: 11,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 50,
+                    max_rank: 51,
+                },
+            ),
+        ],
+    ),
+]

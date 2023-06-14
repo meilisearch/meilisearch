@@ -122,8 +122,11 @@ fn test_attribute_fid_simple() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quick brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 6, 5, 4, 3, 9, 8, 7, 11, 10, 13, 12, 14, 0]");
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
+    let document_ids_scores: Vec<_> =
+        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
 }
 
 #[test]
@@ -135,6 +138,11 @@ fn test_attribute_fid_ngrams() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quick brown fox jumps over the lazy dog");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
-    insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 6, 5, 4, 3, 9, 8, 7, 11, 10, 13, 12, 14, 0]");
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
+
+    let document_ids_scores: Vec<_> =
+        documents_ids.iter().zip(document_scores.into_iter()).collect();
+    insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
 }

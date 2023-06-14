@@ -1,0 +1,240 @@
+---
+source: milli/src/search/new/tests/exactness.rs
+expression: "format!(\"{document_ids_scores:#?}\")"
+---
+[
+    (
+        2,
+        [
+            Words(
+                Words {
+                    matching_words: 9,
+                    max_matching_words: 9,
+                },
+            ),
+            ExactAttribute(
+                ExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 10,
+                    max_rank: 10,
+                },
+            ),
+            Proximity(
+                Rank {
+                    rank: 57,
+                    max_rank: 57,
+                },
+            ),
+        ],
+    ),
+    (
+        1,
+        [
+            Words(
+                Words {
+                    matching_words: 9,
+                    max_matching_words: 9,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 10,
+                    max_rank: 10,
+                },
+            ),
+            Proximity(
+                Rank {
+                    rank: 56,
+                    max_rank: 57,
+                },
+            ),
+        ],
+    ),
+    (
+        0,
+        [
+            Words(
+                Words {
+                    matching_words: 9,
+                    max_matching_words: 9,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 10,
+                    max_rank: 10,
+                },
+            ),
+            Proximity(
+                Rank {
+                    rank: 35,
+                    max_rank: 57,
+                },
+            ),
+        ],
+    ),
+    (
+        4,
+        [
+            Words(
+                Words {
+                    matching_words: 4,
+                    max_matching_words: 9,
+                },
+            ),
+            ExactAttribute(
+                MatchesStart,
+            ),
+            Exactness(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+            Proximity(
+                Rank {
+                    rank: 22,
+                    max_rank: 22,
+                },
+            ),
+        ],
+    ),
+    (
+        5,
+        [
+            Words(
+                Words {
+                    matching_words: 4,
+                    max_matching_words: 9,
+                },
+            ),
+            ExactAttribute(
+                MatchesStart,
+            ),
+            Exactness(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+            Proximity(
+                Rank {
+                    rank: 22,
+                    max_rank: 22,
+                },
+            ),
+        ],
+    ),
+    (
+        8,
+        [
+            Words(
+                Words {
+                    matching_words: 4,
+                    max_matching_words: 9,
+                },
+            ),
+            ExactAttribute(
+                MatchesStart,
+            ),
+            Exactness(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+            Proximity(
+                Rank {
+                    rank: 22,
+                    max_rank: 22,
+                },
+            ),
+        ],
+    ),
+    (
+        7,
+        [
+            Words(
+                Words {
+                    matching_words: 4,
+                    max_matching_words: 9,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+            Proximity(
+                Rank {
+                    rank: 21,
+                    max_rank: 22,
+                },
+            ),
+        ],
+    ),
+    (
+        3,
+        [
+            Words(
+                Words {
+                    matching_words: 4,
+                    max_matching_words: 9,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+            Proximity(
+                Rank {
+                    rank: 17,
+                    max_rank: 22,
+                },
+            ),
+        ],
+    ),
+    (
+        6,
+        [
+            Words(
+                Words {
+                    matching_words: 4,
+                    max_matching_words: 9,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+            Proximity(
+                Rank {
+                    rank: 17,
+                    max_rank: 22,
+                },
+            ),
+        ],
+    ),
+]

@@ -90,8 +90,10 @@ fn test_trap_basic_and_complex1() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("beautiful summer");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[1, 0, 3, 2]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [
@@ -111,8 +113,10 @@ fn test_trap_complex2() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("delicious sweet dessert");
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[5, 4]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @r###"
     [

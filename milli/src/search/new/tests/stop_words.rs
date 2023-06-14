@@ -81,28 +81,212 @@ fn test_ignore_stop_words() {
     let mut s = Search::new(&txn, &index);
     s.query("xyz to the");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"), @r###"
+    [
+        [
+            Words(
+                Words {
+                    matching_words: 1,
+                    max_matching_words: 1,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 0,
+                    max_typo_count: 1,
+                },
+            ),
+            Proximity(
+                Rank {
+                    rank: 1,
+                    max_rank: 1,
+                },
+            ),
+            Fid(
+                Rank {
+                    rank: 1,
+                    max_rank: 1,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 9,
+                    max_rank: 11,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 2,
+                    max_rank: 2,
+                },
+            ),
+        ],
+    ]
+    "###);
 
     // `xyz` is treated as a prefix here, so it's not ignored
     let mut s = Search::new(&txn, &index);
     s.query("to the xyz");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"), @r###"
+    [
+        [
+            Words(
+                Words {
+                    matching_words: 1,
+                    max_matching_words: 2,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 0,
+                    max_typo_count: 1,
+                },
+            ),
+            Proximity(
+                Rank {
+                    rank: 1,
+                    max_rank: 1,
+                },
+            ),
+            Fid(
+                Rank {
+                    rank: 1,
+                    max_rank: 1,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 9,
+                    max_rank: 11,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 2,
+                    max_rank: 2,
+                },
+            ),
+        ],
+    ]
+    "###);
 
     // `xyz` is not treated as a prefix anymore because of the trailing space, so it's ignored
     let mut s = Search::new(&txn, &index);
     s.query("to the xyz ");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"), @r###"
+    [
+        [
+            Words(
+                Words {
+                    matching_words: 1,
+                    max_matching_words: 1,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 0,
+                    max_typo_count: 1,
+                },
+            ),
+            Proximity(
+                Rank {
+                    rank: 1,
+                    max_rank: 1,
+                },
+            ),
+            Fid(
+                Rank {
+                    rank: 1,
+                    max_rank: 1,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 9,
+                    max_rank: 11,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 2,
+                    max_rank: 2,
+                },
+            ),
+        ],
+    ]
+    "###);
 
     let mut s = Search::new(&txn, &index);
     s.query("to the dragon xyz");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"), @r###"
+    [
+        [
+            Words(
+                Words {
+                    matching_words: 2,
+                    max_matching_words: 3,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 0,
+                    max_typo_count: 2,
+                },
+            ),
+            Proximity(
+                Rank {
+                    rank: 7,
+                    max_rank: 8,
+                },
+            ),
+            Fid(
+                Rank {
+                    rank: 1,
+                    max_rank: 1,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 17,
+                    max_rank: 21,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 3,
+                    max_rank: 3,
+                },
+            ),
+        ],
+    ]
+    "###);
 }
 
 #[test]
@@ -114,24 +298,163 @@ fn test_stop_words_in_phrase() {
     let mut s = Search::new(&txn, &index);
     s.query("\"how to train your dragon\"");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[3, 6]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"), @r###"
+    [
+        [
+            Words(
+                Words {
+                    matching_words: 4,
+                    max_matching_words: 4,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 0,
+                    max_typo_count: 0,
+                },
+            ),
+            Proximity(
+                Rank {
+                    rank: 1,
+                    max_rank: 1,
+                },
+            ),
+            Fid(
+                Rank {
+                    rank: 1,
+                    max_rank: 1,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 11,
+                    max_rank: 11,
+                },
+            ),
+            ExactAttribute(
+                MatchesStart,
+            ),
+            Exactness(
+                Rank {
+                    rank: 2,
+                    max_rank: 2,
+                },
+            ),
+        ],
+        [
+            Words(
+                Words {
+                    matching_words: 4,
+                    max_matching_words: 4,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 0,
+                    max_typo_count: 0,
+                },
+            ),
+            Proximity(
+                Rank {
+                    rank: 1,
+                    max_rank: 1,
+                },
+            ),
+            Fid(
+                Rank {
+                    rank: 1,
+                    max_rank: 1,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 11,
+                    max_rank: 11,
+                },
+            ),
+            ExactAttribute(
+                MatchesStart,
+            ),
+            Exactness(
+                Rank {
+                    rank: 2,
+                    max_rank: 2,
+                },
+            ),
+        ],
+    ]
+    "###);
 
     let mut s = Search::new(&txn, &index);
     s.query("how \"to\" train \"the");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"), @r###"
+    [
+        [
+            Words(
+                Words {
+                    matching_words: 3,
+                    max_matching_words: 3,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 0,
+                    max_typo_count: 2,
+                },
+            ),
+            Proximity(
+                Rank {
+                    rank: 6,
+                    max_rank: 8,
+                },
+            ),
+            Fid(
+                Rank {
+                    rank: 1,
+                    max_rank: 1,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 29,
+                    max_rank: 31,
+                },
+            ),
+            ExactAttribute(
+                NoExactMatch,
+            ),
+            Exactness(
+                Rank {
+                    rank: 4,
+                    max_rank: 4,
+                },
+            ),
+        ],
+    ]
+    "###);
 
     let mut s = Search::new(&txn, &index);
     s.query("how \"to\" train \"The dragon");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[3, 6, 5]");
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
 
     let mut s = Search::new(&txn, &index);
     s.query("\"to\"");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1, 2, 3, 4, 5, 6]");
+    // The search is handled as a placeholder search because it doesn't have any non-stop words in it.
+    // As a result the scores are empty lists
+    insta::assert_snapshot!(format!("{document_scores:#?}"));
 }

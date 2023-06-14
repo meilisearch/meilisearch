@@ -1,0 +1,206 @@
+---
+source: milli/src/search/new/tests/sort.rs
+expression: document_scores_json
+---
+[
+  {
+    "vague:asc": {
+      "order": 0,
+      "value": 0.0
+    },
+    "<hidden-rule-1>": {
+      "order": 1,
+      "value": "<hidden>"
+    }
+  },
+  {
+    "vague:asc": {
+      "order": 0,
+      "value": 1.0
+    },
+    "<hidden-rule-1>": {
+      "order": 1,
+      "value": "<hidden>"
+    }
+  },
+  {
+    "vague:asc": {
+      "order": 0,
+      "value": 1.0
+    },
+    "<hidden-rule-1>": {
+      "order": 1,
+      "value": "<hidden>"
+    }
+  },
+  {
+    "vague:asc": {
+      "order": 0,
+      "value": 1.0
+    },
+    "<hidden-rule-1>": {
+      "order": 1,
+      "value": "<hidden>"
+    }
+  },
+  {
+    "vague:asc": {
+      "order": 0,
+      "value": 1.1367
+    },
+    "<hidden-rule-1>": {
+      "order": 1,
+      "value": "<hidden>"
+    }
+  },
+  {
+    "vague:asc": {
+      "order": 0,
+      "value": 1.2367
+    },
+    "<hidden-rule-1>": {
+      "order": 1,
+      "value": "<hidden>"
+    }
+  },
+  {
+    "vague:asc": {
+      "order": 0,
+      "value": 1.5673
+    },
+    "<hidden-rule-1>": {
+      "order": 1,
+      "value": "<hidden>"
+    }
+  },
+  {
+    "vague:asc": {
+      "order": 0,
+      "value": "0"
+    },
+    "<hidden-rule-1>": {
+      "order": 1,
+      "value": "<hidden>"
+    }
+  },
+  {
+    "vague:asc": {
+      "order": 0,
+      "value": "1"
+    },
+    "<hidden-rule-1>": {
+      "order": 1,
+      "value": "<hidden>"
+    }
+  },
+  {
+    "vague:asc": {
+      "order": 0,
+      "value": "false"
+    },
+    "<hidden-rule-1>": {
+      "order": 1,
+      "value": "<hidden>"
+    }
+  },
+  {
+    "vague:asc": {
+      "order": 0,
+      "value": "false"
+    },
+    "<hidden-rule-1>": {
+      "order": 1,
+      "value": "<hidden>"
+    }
+  },
+  {
+    "vague:asc": {
+      "order": 0,
+      "value": "true"
+    },
+    "<hidden-rule-1>": {
+      "order": 1,
+      "value": "<hidden>"
+    }
+  },
+  {
+    "vague:asc": {
+      "order": 0,
+      "value": "true"
+    },
+    "<hidden-rule-1>": {
+      "order": 1,
+      "value": "<hidden>"
+    }
+  },
+  {
+    "vague:asc": {
+      "order": 0,
+      "value": null
+    },
+    "<hidden-rule-1>": {
+      "order": 1,
+      "value": "<hidden>"
+    }
+  },
+  {
+    "vague:asc": {
+      "order": 0,
+      "value": null
+    },
+    "<hidden-rule-1>": {
+      "order": 1,
+      "value": "<hidden>"
+    }
+  },
+  {
+    "vague:asc": {
+      "order": 0,
+      "value": null
+    },
+    "<hidden-rule-1>": {
+      "order": 1,
+      "value": "<hidden>"
+    }
+  },
+  {
+    "vague:asc": {
+      "order": 0,
+      "value": null
+    },
+    "<hidden-rule-1>": {
+      "order": 1,
+      "value": "<hidden>"
+    }
+  },
+  {
+    "vague:asc": {
+      "order": 0,
+      "value": null
+    },
+    "<hidden-rule-1>": {
+      "order": 1,
+      "value": "<hidden>"
+    }
+  },
+  {
+    "vague:asc": {
+      "order": 0,
+      "value": null
+    },
+    "<hidden-rule-1>": {
+      "order": 1,
+      "value": "<hidden>"
+    }
+  },
+  {
+    "vague:asc": {
+      "order": 0,
+      "value": null
+    },
+    "<hidden-rule-1>": {
+      "order": 1,
+      "value": "<hidden>"
+    }
+  }
+]

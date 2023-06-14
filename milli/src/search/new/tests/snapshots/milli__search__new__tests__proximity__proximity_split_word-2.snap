@@ -1,0 +1,46 @@
+---
+source: milli/src/search/new/tests/proximity.rs
+expression: "format!(\"{document_scores:#?}\")"
+---
+[
+    [
+        Proximity(
+            Rank {
+                rank: 8,
+                max_rank: 8,
+            },
+        ),
+    ],
+    [
+        Proximity(
+            Rank {
+                rank: 8,
+                max_rank: 8,
+            },
+        ),
+    ],
+    [
+        Proximity(
+            Rank {
+                rank: 8,
+                max_rank: 8,
+            },
+        ),
+    ],
+    [
+        Proximity(
+            Rank {
+                rank: 1,
+                max_rank: 8,
+            },
+        ),
+    ],
+    [
+        Proximity(
+            Rank {
+                rank: 1,
+                max_rank: 8,
+            },
+        ),
+    ],
+]

@@ -1,0 +1,244 @@
+---
+source: milli/src/search/new/tests/attribute_position.rs
+expression: "format!(\"{document_ids_scores:#?}\")"
+---
+[
+    (
+        10,
+        [
+            Fid(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 21,
+                    max_rank: 21,
+                },
+            ),
+        ],
+    ),
+    (
+        12,
+        [
+            Fid(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 21,
+                    max_rank: 21,
+                },
+            ),
+        ],
+    ),
+    (
+        11,
+        [
+            Fid(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 20,
+                    max_rank: 21,
+                },
+            ),
+        ],
+    ),
+    (
+        13,
+        [
+            Fid(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 20,
+                    max_rank: 21,
+                },
+            ),
+        ],
+    ),
+    (
+        3,
+        [
+            Fid(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 19,
+                    max_rank: 21,
+                },
+            ),
+        ],
+    ),
+    (
+        4,
+        [
+            Fid(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 19,
+                    max_rank: 21,
+                },
+            ),
+        ],
+    ),
+    (
+        2,
+        [
+            Fid(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 18,
+                    max_rank: 21,
+                },
+            ),
+        ],
+    ),
+    (
+        0,
+        [
+            Fid(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 15,
+                    max_rank: 21,
+                },
+            ),
+        ],
+    ),
+    (
+        1,
+        [
+            Fid(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 15,
+                    max_rank: 21,
+                },
+            ),
+        ],
+    ),
+    (
+        6,
+        [
+            Fid(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 13,
+                    max_rank: 21,
+                },
+            ),
+        ],
+    ),
+    (
+        8,
+        [
+            Fid(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 5,
+                    max_rank: 21,
+                },
+            ),
+        ],
+    ),
+    (
+        7,
+        [
+            Fid(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 4,
+                    max_rank: 21,
+                },
+            ),
+        ],
+    ),
+    (
+        9,
+        [
+            Fid(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 4,
+                    max_rank: 21,
+                },
+            ),
+        ],
+    ),
+    (
+        5,
+        [
+            Fid(
+                Rank {
+                    rank: 5,
+                    max_rank: 5,
+                },
+            ),
+            Position(
+                Rank {
+                    rank: 1,
+                    max_rank: 21,
+                },
+            ),
+        ],
+    ),
+]

@@ -1,0 +1,206 @@
+---
+source: milli/src/search/new/tests/sort.rs
+expression: "format!(\"{document_scores:#?}\")"
+---
+[
+    [
+        Sort(
+            Sort {
+                field_name: "vague",
+                ascending: true,
+                redacted: false,
+                value: Number(0.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "vague",
+                ascending: true,
+                redacted: false,
+                value: Number(1.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "vague",
+                ascending: true,
+                redacted: false,
+                value: Number(1.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "vague",
+                ascending: true,
+                redacted: false,
+                value: Number(1.0),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "vague",
+                ascending: true,
+                redacted: false,
+                value: Number(1.1367),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "vague",
+                ascending: true,
+                redacted: false,
+                value: Number(1.2367),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "vague",
+                ascending: true,
+                redacted: false,
+                value: Number(1.5673),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "vague",
+                ascending: true,
+                redacted: false,
+                value: String("0"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "vague",
+                ascending: true,
+                redacted: false,
+                value: String("1"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "vague",
+                ascending: true,
+                redacted: false,
+                value: String("false"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "vague",
+                ascending: true,
+                redacted: false,
+                value: String("false"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "vague",
+                ascending: true,
+                redacted: false,
+                value: String("true"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "vague",
+                ascending: true,
+                redacted: false,
+                value: String("true"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "vague",
+                ascending: true,
+                redacted: false,
+                value: Null,
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "vague",
+                ascending: true,
+                redacted: false,
+                value: Null,
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "vague",
+                ascending: true,
+                redacted: false,
+                value: Null,
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "vague",
+                ascending: true,
+                redacted: false,
+                value: Null,
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "vague",
+                ascending: true,
+                redacted: false,
+                value: Null,
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "vague",
+                ascending: true,
+                redacted: false,
+                value: Null,
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "vague",
+                ascending: true,
+                redacted: false,
+                value: Null,
+            },
+        ),
+    ],
+]

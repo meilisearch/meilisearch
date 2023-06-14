@@ -1,0 +1,206 @@
+---
+source: milli/src/search/new/tests/sort.rs
+expression: "format!(\"{document_scores:#?}\")"
+---
+[
+    [
+        Sort(
+            Sort {
+                field_name: "letter",
+                ascending: false,
+                redacted: false,
+                value: String("i"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "letter",
+                ascending: false,
+                redacted: false,
+                value: String("i"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "letter",
+                ascending: false,
+                redacted: false,
+                value: String("i"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "letter",
+                ascending: false,
+                redacted: false,
+                value: String("h"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "letter",
+                ascending: false,
+                redacted: false,
+                value: String("g"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "letter",
+                ascending: false,
+                redacted: false,
+                value: String("g"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "letter",
+                ascending: false,
+                redacted: false,
+                value: String("f"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "letter",
+                ascending: false,
+                redacted: false,
+                value: String("f"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "letter",
+                ascending: false,
+                redacted: false,
+                value: String("f"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "letter",
+                ascending: false,
+                redacted: false,
+                value: String("e"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "letter",
+                ascending: false,
+                redacted: false,
+                value: String("e"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "letter",
+                ascending: false,
+                redacted: false,
+                value: String("e"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "letter",
+                ascending: false,
+                redacted: false,
+                value: String("e"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "letter",
+                ascending: false,
+                redacted: false,
+                value: String("e"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "letter",
+                ascending: false,
+                redacted: false,
+                value: String("e"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "letter",
+                ascending: false,
+                redacted: false,
+                value: String("d"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "letter",
+                ascending: false,
+                redacted: false,
+                value: String("c"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "letter",
+                ascending: false,
+                redacted: false,
+                value: String("c"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "letter",
+                ascending: false,
+                redacted: false,
+                value: String("c"),
+            },
+        ),
+    ],
+    [
+        Sort(
+            Sort {
+                field_name: "letter",
+                ascending: false,
+                redacted: false,
+                value: String("b"),
+            },
+        ),
+    ],
+]
