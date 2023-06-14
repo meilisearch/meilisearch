@@ -440,7 +440,7 @@ pub fn execute_search(
             let hnsw = ctx.index.vector_hnsw(ctx.txn)?.unwrap_or_default();
             let ef = hnsw.len().min(100);
             let mut dest = vec![Neighbor { index: 0, distance: 0 }; ef];
-            let neighbors = hnsw.nearest(&vector, ef, &mut searcher, &mut dest[..]);
+            let neighbors = hnsw.nearest(vector, ef, &mut searcher, &mut dest[..]);
 
             let mut docids = Vec::new();
             for Neighbor { index, distance: _ } in neighbors.iter() {

@@ -36,7 +36,7 @@ impl Metric<Vec<f32>> for Euclidean {
         #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
         {
             if std::arch::is_aarch64_feature_detected!("neon") && a.len() >= MIN_DIM_SIZE_SIMD {
-                let squared = unsafe { squared_euclid_neon(&a, &b) };
+                let squared = unsafe { squared_euclid_neon(a, b) };
                 let dist = squared.sqrt();
                 debug_assert!(!dist.is_nan());
                 return dist.to_bits();
