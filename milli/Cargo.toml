@@ -33,13 +33,14 @@ heed = { git = "https://github.com/meilisearch/heed", tag = "v0.12.6", default-f
     "lmdb",
     "sync-read-txn",
 ] }
-hgg = { git = "https://github.com/rust-cv/hgg", features = ["serde"] }
+hnsw = { version = "0.11.0", features = ["serde1"] }
 json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
 memmap2 = "0.5.10"
 obkv = "0.2.0"
 once_cell = "1.17.1"
 ordered-float = "3.6.0"
+rand_pcg = { version = "0.3.1", features = ["serde1"] }
 rayon = "1.7.0"
 roaring = "0.10.1"
 rstar = { version = "0.10.0", features = ["serde"] }
