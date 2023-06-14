@@ -457,19 +457,18 @@ pub fn execute_search(
             let neighbors = hnsw.nearest(&vector, ef, &mut searcher, &mut dest[..]);
 
             let mut docids = Vec::new();
-            for Neighbor { index, distance } in neighbors.iter() {
+            for Neighbor { index, distance: _ } in neighbors.iter() {
                 let index = BEU32::new(*index as u32);
                 let docid = ctx.index.vector_id_docid.get(ctx.txn, &index)?.unwrap().get();
-                dbg!(distance, f32::from_bits(*distance));
                 if universe.contains(docid) {
                     docids.push(docid);
-                    if docids.len() == length {
+                    if docids.len() == (from + length) {
                         break;
                     }
                 }
             }
 
-            docids
+            docids.into_iter().skip(from).take(length).collect()
         }
         // return the search docids if the vector field is not specified
         None => docids,
