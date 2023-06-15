@@ -2,6 +2,7 @@ use fxhash::{FxHashMap, FxHashSet};
 use roaring::RoaringBitmap;
 
 use super::{ComputedCondition, RankingRuleGraphTrait};
+use crate::score_details::{Rank, ScoreDetails};
 use crate::search::new::interner::{DedupInterner, Interned};
 use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::search::new::resolve_query_graph::compute_query_term_subset_docids_within_position;
@@ -114,6 +115,10 @@ impl RankingRuleGraphTrait for PositionGraph {
         }
 
         Ok(edges)
+    }
+
+    fn rank_to_score(rank: Rank) -> ScoreDetails {
+        ScoreDetails::Position(rank)
     }
 }
 
