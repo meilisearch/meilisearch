@@ -2,6 +2,7 @@ use roaring::{MultiOps, RoaringBitmap};
 
 use super::query_graph::QueryGraph;
 use super::ranking_rules::{RankingRule, RankingRuleOutput};
+use crate::score_details::{self, ScoreDetails};
 use crate::search::new::query_graph::QueryNodeData;
 use crate::search::new::query_term::ExactTerm;
 use crate::{Result, SearchContext, SearchLogger};
@@ -244,7 +245,13 @@ impl State {
                 candidates &= universe;
                 (
                     State::AttributeStarts(query_graph.clone(), candidates_per_attribute),
-                    Some(RankingRuleOutput { query: query_graph, candidates }),
+                    Some(RankingRuleOutput {
+                        query: query_graph,
+                        candidates,
+                        score: ScoreDetails::ExactAttribute(
+                            score_details::ExactAttribute::ExactMatch,
+                        ),
+                    }),
                 )
             }
             State::AttributeStarts(query_graph, candidates_per_attribute) => {
@@ -257,12 +264,24 @@ impl State {
                 candidates &= universe;
                 (
                     State::Empty(query_graph.clone()),
-                    Some(RankingRuleOutput { query: query_graph, candidates }),
+                    Some(RankingRuleOutput {
+                        query: query_graph,
+                        candidates,
+                        score: ScoreDetails::ExactAttribute(
+                            score_details::ExactAttribute::MatchesStart,
+                        ),
+                    }),
                 )
             }
             State::Empty(query_graph) => (
                 State::Empty(query_graph.clone()),
-                Some(RankingRuleOutput { query: query_graph, candidates: universe.clone() }),
+                Some(RankingRuleOutput {
+                    query: query_graph,
+                    candidates: universe.clone(),
+                    score: ScoreDetails::ExactAttribute(
+                        score_details::ExactAttribute::NoExactMatch,
+                    ),
+                }),
             ),
         };
         (state, output)
