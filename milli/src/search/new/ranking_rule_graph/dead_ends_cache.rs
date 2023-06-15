@@ -2,6 +2,7 @@ use crate::search::new::interner::{FixedSizeInterner, Interned};
 use crate::search::new::small_bitmap::SmallBitmap;
 
 pub struct DeadEndsCache<T> {
+    // conditions and next could/should be part of the same vector
     conditions: Vec<Interned<T>>,
     next: Vec<Self>,
     pub forbidden: SmallBitmap<T>,
@@ -27,7 +28,7 @@ impl<T> DeadEndsCache<T> {
         self.forbidden.insert(condition);
     }
 
-    pub fn advance(&mut self, condition: Interned<T>) -> Option<&mut Self> {
+    fn advance(&mut self, condition: Interned<T>) -> Option<&mut Self> {
         if let Some(idx) = self.conditions.iter().position(|c| *c == condition) {
             Some(&mut self.next[idx])
         } else {

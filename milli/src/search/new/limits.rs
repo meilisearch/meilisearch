@@ -1,5 +1,4 @@
 /// Maximum number of tokens we consider in a single search.
-// TODO: Loic, find proper value here so we don't overflow the interner.
 pub const MAX_TOKEN_COUNT: usize = 1_000;
 
 /// Maximum number of prefixes that can be derived from a single word.

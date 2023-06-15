@@ -92,7 +92,7 @@ impl QueryGraph {
     /// which contains ngrams.
     pub fn from_query(
         ctx: &mut SearchContext,
-        // NOTE: the terms here must be consecutive
+        // The terms here must be consecutive
         terms: &[LocatedQueryTerm],
     ) -> Result<(QueryGraph, Vec<LocatedQueryTerm>)> {
         let mut new_located_query_terms = terms.to_vec();
@@ -103,7 +103,7 @@ impl QueryGraph {
         let root_node = 0;
         let end_node = 1;
 
-        // TODO: we could consider generalizing to 4,5,6,7,etc. ngrams
+        // Ee could consider generalizing to 4,5,6,7,etc. ngrams
         let (mut prev2, mut prev1, mut prev0): (Vec<u16>, Vec<u16>, Vec<u16>) =
             (vec![], vec![], vec![root_node]);
 

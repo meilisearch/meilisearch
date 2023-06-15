@@ -527,7 +527,7 @@ fn test_distinct_all_candidates() {
     let SearchResult { documents_ids, candidates, .. } = s.execute().unwrap();
     let candidates = candidates.iter().collect::<Vec<_>>();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[14, 26, 4, 7, 17, 23, 1, 19, 25, 8, 20, 24]");
-    // TODO: this is incorrect!
+    // This is incorrect, but unfortunately impossible to do better efficiently.
     insta::assert_snapshot!(format!("{candidates:?}"), @"[1, 4, 7, 8, 14, 17, 19, 20, 23, 24, 25, 26]");
 }
 

@@ -571,8 +571,8 @@ fn test_typo_synonyms() {
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the fast brownish fox jumps over the lackadaisical dog");
 
-    // TODO: is this correct? interaction of ngrams + synonyms means that the
-    // multi-word synonyms end up having a typo cost. This is probably not what we want.
+    // The interaction of ngrams + synonyms means that the multi-word synonyms end up having a typo cost.
+    // This is probably not what we want.
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[21, 0, 22]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
