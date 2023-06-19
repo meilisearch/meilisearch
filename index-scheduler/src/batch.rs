@@ -998,7 +998,7 @@ impl IndexScheduler {
                 }()
                 .unwrap_or_default();
 
-                // The write transaction is directly owned and commited inside.
+                // The write transaction is directly owned and committed inside.
                 match self.index_mapper.delete_index(wtxn, &index_uid) {
                     Ok(()) => (),
                     Err(Error::IndexNotFound(_)) if index_has_been_created => (),
