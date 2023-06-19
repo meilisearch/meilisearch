@@ -1,0 +1,24 @@
+name: Run the indexing fuzzer
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  fuzz:
+    name: Setup the action
+    runs-on: ubuntu-latest
+    timeout-minutes: 4320 # 72h
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      # Run benchmarks
+      - name: Run the fuzzer
+        run: |
+          cargo run --release --bin fuzz-indexing

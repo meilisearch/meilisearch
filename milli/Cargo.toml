@@ -75,9 +75,6 @@ maplit = "1.0.2"
 md5 = "0.7.0"
 rand = { version = "0.8.5", features = ["small_rng"] }
 
-[target.'cfg(fuzzing)'.dev-dependencies]
-fuzzcheck = "0.12.1"
-
 [features]
 all-tokenizations = ["charabia/default"]
 
