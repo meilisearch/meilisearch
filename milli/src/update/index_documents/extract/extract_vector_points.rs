@@ -3,9 +3,10 @@ use std::fs::File;
 use std::io;
 
 use bytemuck::cast_slice;
-use serde_json::from_slice;
+use serde_json::{from_slice, Value};
 
 use super::helpers::{create_writer, writer_into_reader, GrenadParameters};
+use crate::error::UserError;
 use crate::{FieldId, InternalError, Result, VectorOrArrayOfVectors};
 
 /// Extracts the embedding vector contained in each document under the `_vectors` field.
@@ -15,6 +16,7 @@ use crate::{FieldId, InternalError, Result, VectorOrArrayOfVectors};
 pub fn extract_vector_points<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
+    primary_key_id: FieldId,
     vectors_fid: FieldId,
 ) -> Result<grenad::Reader<File>> {
     let mut writer = create_writer(
@@ -27,14 +29,23 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
     while let Some((docid_bytes, value)) = cursor.move_on_next()? {
         let obkv = obkv::KvReader::new(value);
 
+        // since we only needs the primary key when we throw an error we create this getter to
+        // lazily get it when needed
+        let document_id = || -> Value {
+            let document_id = obkv.get(primary_key_id).unwrap();
+            serde_json::from_slice(document_id).unwrap()
+        };
+
         // first we retrieve the _vectors field
         if let Some(vectors) = obkv.get(vectors_fid) {
             // extract the vectors
-            // TODO return a user error before unwrapping
-            let vectors = from_slice(vectors)
-                .map_err(InternalError::SerdeJson)
-                .map(VectorOrArrayOfVectors::into_array_of_vectors)
-                .unwrap();
+            let vectors = match from_slice(vectors) {
+                Ok(vectors) => VectorOrArrayOfVectors::into_array_of_vectors(vectors),
+                Err(_) => return Err(UserError::InvalidVectorsType {
+                    document_id: document_id(),
+                    value: from_slice(vectors).map_err(InternalError::SerdeJson)?,
+                }.into()),
+            };
 
             for (i, vector) in vectors.into_iter().enumerate() {
                 match u16::try_from(i) {
