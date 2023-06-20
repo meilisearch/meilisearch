@@ -47,7 +47,7 @@ pub(crate) fn data_from_obkv_documents(
     faceted_fields: HashSet<FieldId>,
     primary_key_id: FieldId,
     geo_fields_ids: Option<(FieldId, FieldId)>,
-    vector_field_id: Option<FieldId>,
+    vectors_field_id: Option<FieldId>,
     stop_words: Option<fst::Set<&[u8]>>,
     max_positions_per_attributes: Option<u32>,
     exact_attributes: HashSet<FieldId>,
@@ -72,7 +72,7 @@ pub(crate) fn data_from_obkv_documents(
                     &faceted_fields,
                     primary_key_id,
                     geo_fields_ids,
-                    vector_field_id,
+                    vectors_field_id,
                     &stop_words,
                     max_positions_per_attributes,
                 )

@@ -304,8 +304,8 @@ where
             }
             None => None,
         };
-        // get the fid of the `_vector` field.
-        let vector_field_id = self.index.fields_ids_map(self.wtxn)?.id("_vector");
+        // get the fid of the `_vectors` field.
+        let vectors_field_id = self.index.fields_ids_map(self.wtxn)?.id("_vectors");
 
         let stop_words = self.index.stop_words(self.wtxn)?;
         let exact_attributes = self.index.exact_attributes_ids(self.wtxn)?;
@@ -342,7 +342,7 @@ where
                     faceted_fields,
                     primary_key_id,
                     geo_fields_ids,
-                    vector_field_id,
+                    vectors_field_id,
                     stop_words,
                     max_positions_per_attributes,
                     exact_attributes,
