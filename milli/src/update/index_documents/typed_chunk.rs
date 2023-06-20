@@ -19,10 +19,12 @@ use super::helpers::{
 use super::{ClonableMmap, MergeFn};
 use crate::error::UserError;
 use crate::facet::FacetType;
-use crate::normalize_vector;
 use crate::update::facet::FacetsUpdate;
 use crate::update::index_documents::helpers::{as_cloneable_grenad, try_split_array_at};
-use crate::{lat_lng_to_xyz, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index, Result, BEU32};
+use crate::{
+    lat_lng_to_xyz, normalize_vector, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index, Result,
+    BEU32,
+};
 
 pub(crate) enum TypedChunk {
     FieldIdDocidFacetStrings(grenad::Reader<CursorClonableMmap>),
