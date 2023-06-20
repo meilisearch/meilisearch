@@ -316,7 +316,12 @@ fn send_and_extract_flattened_documents_data(
         let documents_chunk_cloned = flattened_documents_chunk.clone();
         let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
         rayon::spawn(move || {
-            let result = extract_vector_points(documents_chunk_cloned, indexer, vectors_field_id);
+            let result = extract_vector_points(
+                documents_chunk_cloned,
+                indexer,
+                primary_key_id,
+                vectors_field_id,
+            );
             let _ = match result {
                 Ok(vector_points) => {
                     lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints(vector_points)))
