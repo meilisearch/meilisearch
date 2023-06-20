@@ -20,7 +20,7 @@ use super::{ClonableMmap, MergeFn};
 use crate::error::UserError;
 use crate::facet::FacetType;
 use crate::update::facet::FacetsUpdate;
-use crate::update::index_documents::helpers::as_cloneable_grenad;
+use crate::update::index_documents::helpers::{as_cloneable_grenad, try_split_array_at};
 use crate::{lat_lng_to_xyz, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index, Result, BEU32};
 
 pub(crate) enum TypedChunk {
@@ -241,7 +241,8 @@ pub(crate) fn write_typed_chunk_into_index(
             let mut cursor = vector_points.into_cursor()?;
             while let Some((key, value)) = cursor.move_on_next()? {
                 // convert the key back to a u32 (4 bytes)
-                let docid = key.try_into().map(DocumentId::from_be_bytes).unwrap();
+                let (left, _index) = try_split_array_at(key).unwrap();
+                let docid = DocumentId::from_be_bytes(left);
                 // convert the vector back to a Vec<f32>
                 let vector: Vec<f32> = pod_collect_to_vec(value);
 
