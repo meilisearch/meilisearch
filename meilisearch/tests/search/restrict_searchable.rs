@@ -76,22 +76,6 @@ async fn simple_search_on_title_matching_strategy_all() {
 }
 
 #[actix_rt::test]
-async fn simple_search_on_unknown_field() {
-    let server = Server::new().await;
-    let index = index_with_documents(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
-    // simple search on unknown field shouldn't return any document.
-    index
-        .search(
-            json!({"q": "Captain Marvel", "attributesToSearchOn": ["unknown"]}),
-            |response, code| {
-                assert_eq!(200, code, "{}", response);
-                assert_eq!(response["hits"].as_array().unwrap().len(), 0);
-            },
-        )
-        .await;
-}
-
-#[actix_rt::test]
 async fn simple_search_on_no_field() {
     let server = Server::new().await;
     let index = index_with_documents(&server, &SIMPLE_SEARCH_DOCUMENTS).await;

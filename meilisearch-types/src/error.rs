@@ -333,6 +333,9 @@ impl ErrorCode for milli::Error {
                     UserError::SortRankingRuleMissing => Code::InvalidSearchSort,
                     UserError::InvalidFacetsDistribution { .. } => Code::InvalidSearchFacets,
                     UserError::InvalidSortableAttribute { .. } => Code::InvalidSearchSort,
+                    UserError::InvalidSearchableAttribute { .. } => {
+                        Code::InvalidAttributesToSearchOn
+                    }
                     UserError::CriterionError(_) => Code::InvalidSettingsRankingRules,
                     UserError::InvalidGeoField { .. } => Code::InvalidDocumentGeoField,
                     UserError::SortError(_) => Code::InvalidSearchSort,
