@@ -285,6 +285,18 @@ pub fn normalize_facet(original: &str) -> String {
     CompatibilityDecompositionNormalizer.normalize_str(original.trim()).to_lowercase()
 }
 
+/// Normalize a vector by dividing the dimensions by the lenght of it.
+pub fn normalize_vector(mut vector: Vec<f32>) -> Vec<f32> {
+    let squared: f32 = vector.iter().map(|x| x * x).sum();
+    let length = squared.sqrt();
+    if length <= f32::EPSILON {
+        vector
+    } else {
+        vector.iter_mut().for_each(|x| *x = *x / length);
+        vector
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;

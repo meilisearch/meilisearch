@@ -19,6 +19,7 @@ use super::helpers::{
 use super::{ClonableMmap, MergeFn};
 use crate::error::UserError;
 use crate::facet::FacetType;
+use crate::normalize_vector;
 use crate::update::facet::FacetsUpdate;
 use crate::update::index_documents::helpers::{as_cloneable_grenad, try_split_array_at};
 use crate::{lat_lng_to_xyz, CboRoaringBitmapCodec, DocumentId, GeoPoint, Index, Result, BEU32};
@@ -253,6 +254,7 @@ pub(crate) fn write_typed_chunk_into_index(
                     return Err(UserError::InvalidVectorDimensions { expected, found })?;
                 }
 
+                let vector = normalize_vector(vector);
                 let vector_id = hnsw.insert(vector, &mut searcher) as u32;
                 index.vector_id_docid.put(wtxn, &BEU32::new(vector_id), &BEU32::new(docid))?;
             }

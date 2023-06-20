@@ -283,7 +283,7 @@ fn send_and_extract_flattened_documents_data(
     faceted_fields: &HashSet<FieldId>,
     primary_key_id: FieldId,
     geo_fields_ids: Option<(FieldId, FieldId)>,
-    vector_field_id: Option<FieldId>,
+    vectors_field_id: Option<FieldId>,
     stop_words: &Option<fst::Set<&[u8]>>,
     max_positions_per_attributes: Option<u32>,
 ) -> Result<(
@@ -312,11 +312,11 @@ fn send_and_extract_flattened_documents_data(
         });
     }
 
-    if let Some(vector_field_id) = vector_field_id {
+    if let Some(vectors_field_id) = vectors_field_id {
         let documents_chunk_cloned = flattened_documents_chunk.clone();
         let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
         rayon::spawn(move || {
-            let result = extract_vector_points(documents_chunk_cloned, indexer, vector_field_id);
+            let result = extract_vector_points(documents_chunk_cloned, indexer, vectors_field_id);
             let _ = match result {
                 Ok(vector_points) => {
                     lmdb_writer_sx_cloned.send(Ok(TypedChunk::VectorPoints(vector_points)))
