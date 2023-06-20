@@ -12,11 +12,16 @@ impl Metric<Vec<f32>> for DotProduct {
     //
     // Following <https://docs.rs/space/0.17.0/space/trait.Metric.html>.
     fn distance(&self, a: &Vec<f32>, b: &Vec<f32>) -> Self::Unit {
-        let dist: f32 = a.iter().zip(b).map(|(a, b)| a * b).sum();
-        let dist = 1.0 - dist;
+        let dist = 1.0 - dot_product_similarity(a, b);
         debug_assert!(!dist.is_nan());
         dist.to_bits()
     }
+}
+
+/// Returns the dot product similarity score that will between 0.0 and 1.0
+/// if both vectors are normalized. The higher the more similar the vectors are.
+pub fn dot_product_similarity(a: &[f32], b: &[f32]) -> f32 {
+    a.iter().zip(b).map(|(a, b)| a * b).sum()
 }
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
@@ -26,9 +31,14 @@ impl Metric<Vec<f32>> for Euclidean {
     type Unit = u32;
 
     fn distance(&self, a: &Vec<f32>, b: &Vec<f32>) -> Self::Unit {
-        let squared: f32 = a.iter().zip(b).map(|(a, b)| (a - b).powi(2)).sum();
-        let dist = squared.sqrt();
+        let dist = euclidean_squared_distance(a, b).sqrt();
         debug_assert!(!dist.is_nan());
         dist.to_bits()
     }
+}
+
+/// Return the squared euclidean distance between both vectors that will
+/// between 0.0 and +inf. The smaller the nearer the vectors are.
+pub fn euclidean_squared_distance(a: &[f32], b: &[f32]) -> f32 {
+    a.iter().zip(b).map(|(a, b)| (a - b).powi(2)).sum()
 }

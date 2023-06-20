@@ -2627,6 +2627,7 @@ dependencies = [
  "num_cpus",
  "obkv",
  "once_cell",
+ "ordered-float",
  "parking_lot",
  "permissive-json-pointer",
  "pin-project-lite",
@@ -2976,9 +2977,9 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
 name = "ordered-float"
-version = "3.6.0"
+version = "3.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13a384337e997e6860ffbaa83708b2ef329fd8c54cb67a5f64d421e0f943254f"
+checksum = "2fc2dbde8f8a79f2102cc474ceb0ad68e3b80b85289ea62389b60e66777e4213"
 dependencies = [
  "num-traits",
 ]

@@ -30,6 +30,7 @@ use std::convert::{TryFrom, TryInto};
 use std::hash::BuildHasherDefault;
 
 use charabia::normalizer::{CharNormalizer, CompatibilityDecompositionNormalizer};
+pub use distance::{dot_product_similarity, euclidean_squared_distance};
 pub use filter_parser::{Condition, FilterCondition, Span, Token};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
