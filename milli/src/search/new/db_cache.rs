@@ -57,12 +57,9 @@ impl<'ctx> DatabaseCache<'ctx> {
         KC: BytesEncode<'v>,
         DC: BytesDecodeOwned,
     {
-        match cache.entry(cache_key) {
-            Entry::Occupied(_) => {}
-            Entry::Vacant(entry) => {
-                let bitmap_ptr = db.get(txn, db_key)?.map(Cow::Borrowed);
-                entry.insert(bitmap_ptr);
-            }
+        if let Entry::Vacant(entry) = cache.entry(cache_key) {
+            let bitmap_ptr = db.get(txn, db_key)?.map(Cow::Borrowed);
+            entry.insert(bitmap_ptr);
         }
 
         match cache.get(&cache_key).unwrap() {
@@ -90,30 +87,27 @@ impl<'ctx> DatabaseCache<'ctx> {
         DC: BytesDecodeOwned,
         KC::EItem: Sized,
     {
-        match cache.entry(cache_key) {
-            Entry::Occupied(_) => {}
-            Entry::Vacant(entry) => {
-                let bitmap_ptr: Option<Cow<'ctx, [u8]>> = match db_keys {
-                    [] => None,
-                    [key] => db.get(txn, key)?.map(Cow::Borrowed),
-                    keys => {
-                        let bitmaps = keys
-                            .iter()
-                            .filter_map(|key| db.get(txn, key).transpose())
-                            .map(|v| v.map(Cow::Borrowed))
-                            .collect::<std::result::Result<Vec<Cow<[u8]>>, _>>()?;
+        if let Entry::Vacant(entry) = cache.entry(cache_key) {
+            let bitmap_ptr: Option<Cow<'ctx, [u8]>> = match db_keys {
+                [] => None,
+                [key] => db.get(txn, key)?.map(Cow::Borrowed),
+                keys => {
+                    let bitmaps = keys
+                        .iter()
+                        .filter_map(|key| db.get(txn, key).transpose())
+                        .map(|v| v.map(Cow::Borrowed))
+                        .collect::<std::result::Result<Vec<Cow<[u8]>>, _>>()?;
 
-                        if bitmaps.is_empty() {
-                            None
-                        } else {
-                            Some(merger(&[], &bitmaps[..])?)
-                        }
+                    if bitmaps.is_empty() {
+                        None
+                    } else {
+                        Some(merger(&[], &bitmaps[..])?)
                     }
-                };
+                }
+            };
 
-                entry.insert(bitmap_ptr);
-            }
-        };
+            entry.insert(bitmap_ptr);
+        }
 
         match cache.get(&cache_key).unwrap() {
             Some(Cow::Borrowed(bytes)) => {
