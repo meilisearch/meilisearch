@@ -73,8 +73,8 @@ pub struct SearchQuery {
     pub crop_marker: String,
     #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
     pub matching_strategy: MatchingStrategy,
-    #[deserr(default, error = DeserrJsonError<InvalidRestrictSearchableAttributes>, default)]
-    pub restrict_searchable_attributes: Option<Vec<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidAttributesToSearchOn>, default)]
+    pub attributes_to_search_on: Option<Vec<String>>,
 }
 
 impl SearchQuery {
@@ -130,8 +130,8 @@ pub struct SearchQueryWithIndex {
     pub crop_marker: String,
     #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
     pub matching_strategy: MatchingStrategy,
-    #[deserr(default, error = DeserrJsonError<InvalidRestrictSearchableAttributes>, default)]
-    pub restrict_searchable_attributes: Option<Vec<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidAttributesToSearchOn>, default)]
+    pub attributes_to_search_on: Option<Vec<String>>,
 }
 
 impl SearchQueryWithIndex {
@@ -157,7 +157,7 @@ impl SearchQueryWithIndex {
             highlight_post_tag,
             crop_marker,
             matching_strategy,
-            restrict_searchable_attributes,
+            attributes_to_search_on,
         } = self;
         (
             index_uid,
@@ -181,7 +181,7 @@ impl SearchQueryWithIndex {
                 highlight_post_tag,
                 crop_marker,
                 matching_strategy,
-                restrict_searchable_attributes,
+                attributes_to_search_on,
                 // do not use ..Default::default() here,
                 // rather add any missing field from `SearchQuery` to `SearchQueryWithIndex`
             },
@@ -297,7 +297,7 @@ pub fn perform_search(
         search.query(query);
     }
 
-    if let Some(ref searchable) = query.restrict_searchable_attributes {
+    if let Some(ref searchable) = query.attributes_to_search_on {
         search.searchable_attributes(searchable);
     }
 

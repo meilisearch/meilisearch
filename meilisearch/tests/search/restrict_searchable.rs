@@ -39,7 +39,7 @@ async fn simple_search_on_title() {
     // simple search should return 2 documents (ids: 2 and 3).
     index
         .search(
-            json!({"q": "Captain Marvel", "restrictSearchableAttributes": ["title"]}),
+            json!({"q": "Captain Marvel", "attributesToSearchOn": ["title"]}),
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
                 assert_eq!(response["hits"].as_array().unwrap().len(), 2);
@@ -55,13 +55,10 @@ async fn simple_prefix_search_on_title() {
 
     // simple search should return 2 documents (ids: 2 and 3).
     index
-        .search(
-            json!({"q": "Captain Mar", "restrictSearchableAttributes": ["title"]}),
-            |response, code| {
-                assert_eq!(code, 200, "{}", response);
-                assert_eq!(response["hits"].as_array().unwrap().len(), 2);
-            },
-        )
+        .search(json!({"q": "Captain Mar", "attributesToSearchOn": ["title"]}), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            assert_eq!(response["hits"].as_array().unwrap().len(), 2);
+        })
         .await;
 }
 
@@ -71,7 +68,7 @@ async fn simple_search_on_title_matching_strategy_all() {
     let index = index_with_documents(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
     // simple search matching strategy all should only return 1 document (ids: 2).
     index
-        .search(json!({"q": "Captain Marvel", "restrictSearchableAttributes": ["title"], "matchingStrategy": "all"}), |response, code| {
+        .search(json!({"q": "Captain Marvel", "attributesToSearchOn": ["title"], "matchingStrategy": "all"}), |response, code| {
             assert_eq!(code, 200, "{}", response);
             assert_eq!(response["hits"].as_array().unwrap().len(), 1);
         })
@@ -85,7 +82,7 @@ async fn simple_search_on_unknown_field() {
     // simple search on unknown field shouldn't return any document.
     index
         .search(
-            json!({"q": "Captain Marvel", "restrictSearchableAttributes": ["unknown"]}),
+            json!({"q": "Captain Marvel", "attributesToSearchOn": ["unknown"]}),
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
                 assert_eq!(response["hits"].as_array().unwrap().len(), 0);
@@ -100,13 +97,10 @@ async fn simple_search_on_no_field() {
     let index = index_with_documents(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
     // simple search on no field shouldn't return any document.
     index
-        .search(
-            json!({"q": "Captain Marvel", "restrictSearchableAttributes": []}),
-            |response, code| {
-                assert_eq!(code, 200, "{}", response);
-                assert_eq!(response["hits"].as_array().unwrap().len(), 0);
-            },
-        )
+        .search(json!({"q": "Captain Marvel", "attributesToSearchOn": []}), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            assert_eq!(response["hits"].as_array().unwrap().len(), 0);
+        })
         .await;
 }
 
@@ -118,7 +112,7 @@ async fn word_ranking_rule_order() {
     // Document 3 should appear before document 2.
     index
         .search(
-            json!({"q": "Captain Marvel", "restrictSearchableAttributes": ["title"], "attributesToRetrieve": ["id"]}),
+            json!({"q": "Captain Marvel", "attributesToSearchOn": ["title"], "attributesToRetrieve": ["id"]}),
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
                 assert_eq!(
@@ -143,7 +137,7 @@ async fn word_ranking_rule_order_exact_words() {
     // simple search should return 2 documents (ids: 2 and 3).
     index
         .search(
-            json!({"q": "Captain Marvel", "restrictSearchableAttributes": ["title"], "attributesToRetrieve": ["id"]}),
+            json!({"q": "Captain Marvel", "attributesToSearchOn": ["title"], "attributesToRetrieve": ["id"]}),
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
                 assert_eq!(
@@ -179,7 +173,7 @@ async fn typo_ranking_rule_order() {
 
     // Document 2 should appear before document 1.
     index
-        .search(json!({"q": "Captain Marvel", "restrictSearchableAttributes": ["title"], "attributesToRetrieve": ["id"]}), |response, code| {
+        .search(json!({"q": "Captain Marvel", "attributesToSearchOn": ["title"], "attributesToRetrieve": ["id"]}), |response, code| {
             assert_eq!(code, 200, "{}", response);
             assert_eq!(
                 response["hits"],
@@ -215,7 +209,7 @@ async fn attributes_ranking_rule_order() {
 
     // Document 2 should appear before document 1.
     index
-        .search(json!({"q": "Captain Marvel", "restrictSearchableAttributes": ["desc", "footer"], "attributesToRetrieve": ["id"]}), |response, code| {
+        .search(json!({"q": "Captain Marvel", "attributesToSearchOn": ["desc", "footer"], "attributesToRetrieve": ["id"]}), |response, code| {
             assert_eq!(code, 200, "{}", response);
             assert_eq!(
                 response["hits"],
@@ -249,7 +243,7 @@ async fn exactness_ranking_rule_order() {
 
     // Document 2 should appear before document 1.
     index
-        .search(json!({"q": "Captain Marvel", "attributesToRetrieve": ["id"], "restrictSearchableAttributes": ["desc"]}), |response, code| {
+        .search(json!({"q": "Captain Marvel", "attributesToRetrieve": ["id"], "attributesToSearchOn": ["desc"]}), |response, code| {
             assert_eq!(code, 200, "{}", response);
             assert_eq!(
                 response["hits"],

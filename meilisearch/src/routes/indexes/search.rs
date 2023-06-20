@@ -70,8 +70,8 @@ pub struct SearchQueryGet {
     crop_marker: String,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchMatchingStrategy>)]
     matching_strategy: MatchingStrategy,
-    #[deserr(default, error = DeserrQueryParamError<InvalidRestrictSearchableAttributes>)]
-    pub restrict_searchable_attributes: Option<CS<String>>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidAttributesToSearchOn>)]
+    pub attributes_to_search_on: Option<CS<String>>,
 }
 
 impl From<SearchQueryGet> for SearchQuery {
@@ -104,9 +104,7 @@ impl From<SearchQueryGet> for SearchQuery {
             highlight_post_tag: other.highlight_post_tag,
             crop_marker: other.crop_marker,
             matching_strategy: other.matching_strategy,
-            restrict_searchable_attributes: other
-                .restrict_searchable_attributes
-                .map(|o| o.into_iter().collect()),
+            attributes_to_search_on: other.attributes_to_search_on.map(|o| o.into_iter().collect()),
         }
     }
 }
