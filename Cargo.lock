@@ -2595,6 +2595,7 @@ dependencies = [
  "num_cpus",
  "obkv",
  "once_cell",
+ "ordered-float",
  "parking_lot",
  "permissive-json-pointer",
  "pin-project-lite",

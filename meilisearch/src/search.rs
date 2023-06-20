@@ -10,6 +10,7 @@ use meilisearch_auth::IndexSearchRules;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::milli::dot_product_similarity;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
@@ -18,6 +19,7 @@ use milli::{
     AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, Index, MatchBounds, MatcherBuilder,
     SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
+use ordered_float::OrderedFloat;
 use regex::Regex;
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -457,6 +459,10 @@ pub fn perform_search(
             insert_geo_distance(sort, &mut document);
         }
 
+        if let Some(vector) = query.vector.as_ref() {
+            insert_semantic_similarity(&vector, &mut document);
+        }
+
         let ranking_score =
             query.show_ranking_score.then(|| ScoreDetails::global_score(score.iter()));
         let ranking_score_details =
@@ -539,6 +545,22 @@ fn insert_geo_distance(sorts: &[String], document: &mut Document) {
             let distance = milli::distance_between_two_points(&base, &[lat, lng]);
             document.insert("_geoDistance".to_string(), json!(distance.round() as usize));
         }
+    }
+}
+
+fn insert_semantic_similarity(query: &[f32], document: &mut Document) {
+    if let Some(value) = document.get("_vectors") {
+        let vectors: Vec<Vec<f32>> = match serde_json::from_value(value.clone()) {
+            Ok(Either::Left(vector)) => vec![vector],
+            Ok(Either::Right(vectors)) => vectors,
+            Err(_) => return,
+        };
+        let similarity = vectors
+            .into_iter()
+            .map(|v| OrderedFloat(dot_product_similarity(query, &v)))
+            .max()
+            .map(OrderedFloat::into_inner);
+        document.insert("_semanticSimilarity".to_string(), json!(similarity));
     }
 }
 
