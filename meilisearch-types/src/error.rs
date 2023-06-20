@@ -224,7 +224,7 @@ InvalidIndexLimit                     , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexOffset                    , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexPrimaryKey                , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexUid                       , InvalidRequest       , BAD_REQUEST ;
-InvalidRestrictSearchableAttributes   , InvalidRequest       , BAD_REQUEST ;
+InvalidAttributesToSearchOn   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToCrop         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToHighlight    , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToRetrieve     , InvalidRequest       , BAD_REQUEST ;
