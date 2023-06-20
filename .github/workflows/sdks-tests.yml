@@ -25,7 +25,7 @@ jobs:
       - name: Define the Docker image we need to use
         id: define-image
         run: |
-          event=${{ github.event.action }}
+          event=${{ github.event_name }}
           echo "docker-image=nightly" >> $GITHUB_OUTPUT
           if [[ $event == 'workflow_dispatch' ]]; then
             echo "docker-image=${{ github.event.inputs.docker_image }}" >> $GITHUB_OUTPUT
@@ -37,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:${{ github.event.inputs.docker_image }}
+        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
@@ -72,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:${{ github.event.inputs.docker_image }}
+        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
@@ -99,7 +99,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:${{ github.event.inputs.docker_image }}
+        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
@@ -130,7 +130,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:${{ github.event.inputs.docker_image }}
+        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
@@ -155,7 +155,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:${{ github.event.inputs.docker_image }}
+        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
@@ -185,7 +185,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:${{ github.event.inputs.docker_image }}
+        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
@@ -210,7 +210,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:${{ github.event.inputs.docker_image }}
+        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
