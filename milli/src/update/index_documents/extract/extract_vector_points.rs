@@ -41,10 +41,13 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
             // extract the vectors
             let vectors = match from_slice(vectors) {
                 Ok(vectors) => VectorOrArrayOfVectors::into_array_of_vectors(vectors),
-                Err(_) => return Err(UserError::InvalidVectorsType {
-                    document_id: document_id(),
-                    value: from_slice(vectors).map_err(InternalError::SerdeJson)?,
-                }.into()),
+                Err(_) => {
+                    return Err(UserError::InvalidVectorsType {
+                        document_id: document_id(),
+                        value: from_slice(vectors).map_err(InternalError::SerdeJson)?,
+                    }
+                    .into())
+                }
             };
 
             for (i, vector) in vectors.into_iter().enumerate() {
