@@ -124,6 +124,16 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
         }
     )]
     InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String> },
+    #[error("Attribute `{}` is not searchable. Available searchable attributes are: `{}{}`.",
+        .field,
+        .valid_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
+        .hidden_fields.then_some(", <..hidden-attributes>").unwrap_or(""),
+    )]
+    InvalidSearchableAttribute {
+        field: String,
+        valid_fields: BTreeSet<String>,
+        hidden_fields: bool,
+    },
     #[error("{}", HeedError::BadOpenOptions)]
     InvalidLmdbOpenOptions,
     #[error("You must specify where `sort` is listed in the rankingRules setting to use the sort parameter at search time.")]
