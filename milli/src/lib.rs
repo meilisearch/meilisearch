@@ -286,6 +286,23 @@ pub fn normalize_facet(original: &str) -> String {
     CompatibilityDecompositionNormalizer.normalize_str(original.trim()).to_lowercase()
 }
 
+/// Represents either a vector or an array of multiple vectors.
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[serde(transparent)]
+pub struct VectorOrArrayOfVectors {
+    #[serde(with = "either::serde_untagged")]
+    inner: either::Either<Vec<f32>, Vec<Vec<f32>>>,
+}
+
+impl VectorOrArrayOfVectors {
+    pub fn into_array_of_vectors(self) -> Vec<Vec<f32>> {
+        match self.inner {
+            either::Either::Left(vector) => vec![vector],
+            either::Either::Right(vectors) => vectors,
+        }
+    }
+}
+
 /// Normalize a vector by dividing the dimensions by the lenght of it.
 pub fn normalize_vector(mut vector: Vec<f32>) -> Vec<f32> {
     let squared: f32 = vector.iter().map(|x| x * x).sum();

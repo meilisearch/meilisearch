@@ -17,7 +17,7 @@ use meilisearch_types::{milli, Document};
 use milli::tokenizer::TokenizerBuilder;
 use milli::{
     AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, Index, MatchBounds, MatcherBuilder,
-    SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
+    SortError, TermsMatchingStrategy, VectorOrArrayOfVectors, DEFAULT_VALUES_PER_FACET,
 };
 use ordered_float::OrderedFloat;
 use regex::Regex;
@@ -432,7 +432,6 @@ pub fn perform_search(
     formatter_builder.highlight_suffix(query.highlight_post_tag);
 
     let mut documents = Vec::new();
-
     let documents_iter = index.documents(&rtxn, documents_ids)?;
 
     for ((_id, obkv), score) in documents_iter.into_iter().zip(document_scores.into_iter()) {
@@ -460,7 +459,9 @@ pub fn perform_search(
         }
 
         if let Some(vector) = query.vector.as_ref() {
-            insert_semantic_similarity(&vector, &mut document);
+            if let Some(vectors) = extract_field("_vectors", &fields_ids_map, obkv)? {
+                insert_semantic_similarity(vector, vectors, &mut document);
+            }
         }
 
         let ranking_score =
@@ -548,20 +549,18 @@ fn insert_geo_distance(sorts: &[String], document: &mut Document) {
     }
 }
 
-fn insert_semantic_similarity(query: &[f32], document: &mut Document) {
-    if let Some(value) = document.get("_vectors") {
-        let vectors: Vec<Vec<f32>> = match serde_json::from_value(value.clone()) {
-            Ok(Either::Left(vector)) => vec![vector],
-            Ok(Either::Right(vectors)) => vectors,
+fn insert_semantic_similarity(query: &[f32], vectors: Value, document: &mut Document) {
+    let vectors =
+        match serde_json::from_value(vectors).map(VectorOrArrayOfVectors::into_array_of_vectors) {
+            Ok(vectors) => vectors,
             Err(_) => return,
         };
-        let similarity = vectors
-            .into_iter()
-            .map(|v| OrderedFloat(dot_product_similarity(query, &v)))
-            .max()
-            .map(OrderedFloat::into_inner);
-        document.insert("_semanticSimilarity".to_string(), json!(similarity));
-    }
+    let similarity = vectors
+        .into_iter()
+        .map(|v| OrderedFloat(dot_product_similarity(query, &v)))
+        .max()
+        .map(OrderedFloat::into_inner);
+    document.insert("_semanticSimilarity".to_string(), json!(similarity));
 }
 
 fn compute_formatted_options(
@@ -689,6 +688,22 @@ fn make_document(
 
     let document = permissive_json_pointer::select_values(&document, displayed_attributes);
     Ok(document)
+}
+
+/// Extract the JSON value under the field name specified
+/// but doesn't support nested objects.
+fn extract_field(
+    field_name: &str,
+    field_ids_map: &FieldsIdsMap,
+    obkv: obkv::KvReaderU16,
+) -> Result<Option<serde_json::Value>, MeilisearchHttpError> {
+    match field_ids_map.id(field_name) {
+        Some(fid) => match obkv.get(fid) {
+            Some(value) => Ok(serde_json::from_slice(value).map(Some)?),
+            None => Ok(None),
+        },
+        None => Ok(None),
+    }
 }
 
 fn format_fields<A: AsRef<[u8]>>(

@@ -3,11 +3,10 @@ use std::fs::File;
 use std::io;
 
 use bytemuck::cast_slice;
-use either::Either;
 use serde_json::from_slice;
 
 use super::helpers::{create_writer, writer_into_reader, GrenadParameters};
-use crate::{FieldId, InternalError, Result};
+use crate::{FieldId, InternalError, Result, VectorOrArrayOfVectors};
 
 /// Extracts the embedding vector contained in each document under the `_vectors` field.
 ///
@@ -31,9 +30,11 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
         // first we retrieve the _vectors field
         if let Some(vectors) = obkv.get(vectors_fid) {
             // extract the vectors
-            let vectors: Either<Vec<Vec<f32>>, Vec<f32>> =
-                from_slice(vectors).map_err(InternalError::SerdeJson).unwrap();
-            let vectors = vectors.map_right(|v| vec![v]).into_inner();
+            // TODO return a user error before unwrapping
+            let vectors = from_slice(vectors)
+                .map_err(InternalError::SerdeJson)
+                .map(VectorOrArrayOfVectors::into_array_of_vectors)
+                .unwrap();
 
             for (i, vector) in vectors.into_iter().enumerate() {
                 match u16::try_from(i) {
