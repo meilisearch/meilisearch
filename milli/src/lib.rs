@@ -292,7 +292,7 @@ pub fn normalize_vector(mut vector: Vec<f32>) -> Vec<f32> {
     if length <= f32::EPSILON {
         vector
     } else {
-        vector.iter_mut().for_each(|x| *x = *x / length);
+        vector.iter_mut().for_each(|x| *x /= length);
         vector
     }
 }
