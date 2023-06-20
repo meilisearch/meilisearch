@@ -48,7 +48,8 @@ use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
 use crate::search::new::distinct::apply_distinct_rule;
 use crate::{
-    AscDesc, DocumentId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError, BEU32,
+    normalize_vector, AscDesc, DocumentId, Filter, Index, Member, Result, TermsMatchingStrategy,
+    UserError, BEU32,
 };
 
 /// A structure used throughout the execution of a search query.
@@ -440,7 +441,8 @@ pub fn execute_search(
             let hnsw = ctx.index.vector_hnsw(ctx.txn)?.unwrap_or_default();
             let ef = hnsw.len().min(100);
             let mut dest = vec![Neighbor { index: 0, distance: 0 }; ef];
-            let neighbors = hnsw.nearest(vector, ef, &mut searcher, &mut dest[..]);
+            let vector = normalize_vector(vector.clone());
+            let neighbors = hnsw.nearest(&vector, ef, &mut searcher, &mut dest[..]);
 
             let mut docids = Vec::new();
             for Neighbor { index, distance: _ } in neighbors.iter() {
