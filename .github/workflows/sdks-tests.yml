@@ -3,6 +3,11 @@ name: SDKs tests
 
 on:
   workflow_dispatch:
+    inputs:
+      docker_image:
+        description: 'The Meilisearch Docker image used'
+        required: false
+        default: nightly
   schedule:
     - cron: "0 6 * * MON" # Every Monday at 6:00AM
 
@@ -11,13 +16,28 @@ env:
   MEILI_NO_ANALYTICS: 'true'
 
 jobs:
+  define-docker-image:
+    runs-on: ubuntu-latest
+    outputs:
+      docker-image: ${{ steps.define-image.outputs.docker-image }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Define the Docker image we need to use
+        id: define-image
+        run: |
+          event=${{ github.event_name }}
+          echo "docker-image=nightly" >> $GITHUB_OUTPUT
+          if [[ $event == 'workflow_dispatch' ]]; then
+            echo "docker-image=${{ github.event.inputs.docker_image }}" >> $GITHUB_OUTPUT
+          fi
 
   meilisearch-js-tests:
+    needs: define-docker-image
     name: JS SDK tests
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:nightly
+        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
@@ -47,11 +67,12 @@ jobs:
         run: yarn test:env:browser
 
   instant-meilisearch-tests:
+    needs: define-docker-image
     name: instant-meilisearch tests
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:nightly
+        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
@@ -73,11 +94,12 @@ jobs:
         run: yarn build
 
   meilisearch-php-tests:
+    needs: define-docker-image
     name: PHP SDK tests
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:nightly
+        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
@@ -103,11 +125,12 @@ jobs:
           composer remove --dev guzzlehttp/guzzle http-interop/http-factory-guzzle
 
   meilisearch-python-tests:
+    needs: define-docker-image
     name: Python SDK tests
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:nightly
+        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
@@ -127,11 +150,12 @@ jobs:
         run: pipenv run pytest
 
   meilisearch-go-tests:
+    needs: define-docker-image
     name: Go SDK tests
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:nightly
+        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
@@ -139,7 +163,7 @@ jobs:
           - '7700:7700'
     steps:
       - name: Set up Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v4
         with:
           go-version: stable
       - uses: actions/checkout@v3
@@ -156,11 +180,12 @@ jobs:
         run: go test -v ./...
 
   meilisearch-ruby-tests:
+    needs: define-docker-image
     name: Ruby SDK tests
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:nightly
+        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
@@ -180,11 +205,12 @@ jobs:
         run: bundle exec rspec
 
   meilisearch-rust-tests:
+    needs: define-docker-image
     name: Rust SDK tests
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:nightly
+        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}

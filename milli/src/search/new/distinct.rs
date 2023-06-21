@@ -26,7 +26,6 @@ pub fn apply_distinct_rule(
     ctx: &mut SearchContext,
     field_id: u16,
     candidates: &RoaringBitmap,
-    // TODO: add a universe here, such that the `excluded` are a subset of the universe?
 ) -> Result<DistinctOutput> {
     let mut excluded = RoaringBitmap::new();
     let mut remaining = RoaringBitmap::new();

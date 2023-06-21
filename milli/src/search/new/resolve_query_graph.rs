@@ -33,8 +33,6 @@ pub fn compute_query_term_subset_docids(
     ctx: &mut SearchContext,
     term: &QueryTermSubset,
 ) -> Result<RoaringBitmap> {
-    // TODO Use the roaring::MultiOps trait
-
     let mut docids = RoaringBitmap::new();
     for word in term.all_single_words_except_prefix_db(ctx)? {
         if let Some(word_docids) = ctx.word_docids(word)? {
@@ -59,8 +57,6 @@ pub fn compute_query_term_subset_docids_within_field_id(
     term: &QueryTermSubset,
     fid: u16,
 ) -> Result<RoaringBitmap> {
-    // TODO Use the roaring::MultiOps trait
-
     let mut docids = RoaringBitmap::new();
     for word in term.all_single_words_except_prefix_db(ctx)? {
         if let Some(word_fid_docids) = ctx.get_db_word_fid_docids(word.interned(), fid)? {
@@ -71,7 +67,6 @@ pub fn compute_query_term_subset_docids_within_field_id(
     for phrase in term.all_phrases(ctx)? {
         // There may be false positives when resolving a phrase, so we're not
         // guaranteed that all of its words are within a single fid.
-        // TODO: fix this?
         if let Some(word) = phrase.words(ctx).iter().flatten().next() {
             if let Some(word_fid_docids) = ctx.get_db_word_fid_docids(*word, fid)? {
                 docids |= ctx.get_phrase_docids(phrase)? & word_fid_docids;
@@ -95,7 +90,6 @@ pub fn compute_query_term_subset_docids_within_position(
     term: &QueryTermSubset,
     position: u16,
 ) -> Result<RoaringBitmap> {
-    // TODO Use the roaring::MultiOps trait
     let mut docids = RoaringBitmap::new();
     for word in term.all_single_words_except_prefix_db(ctx)? {
         if let Some(word_position_docids) =
@@ -108,7 +102,6 @@ pub fn compute_query_term_subset_docids_within_position(
     for phrase in term.all_phrases(ctx)? {
         // It's difficult to know the expected position of the words in the phrase,
         // so instead we just check the first one.
-        // TODO: fix this?
         if let Some(word) = phrase.words(ctx).iter().flatten().next() {
             if let Some(word_position_docids) = ctx.get_db_word_position_docids(*word, position)? {
                 docids |= ctx.get_phrase_docids(phrase)? & word_position_docids
@@ -132,9 +125,6 @@ pub fn compute_query_graph_docids(
     q: &QueryGraph,
     universe: &RoaringBitmap,
 ) -> Result<RoaringBitmap> {
-    // TODO: there must be a faster way to compute this big
-    // roaring bitmap expression
-
     let mut nodes_resolved = SmallBitmap::for_interned_values_in(&q.nodes);
     let mut path_nodes_docids = q.nodes.map(|_| RoaringBitmap::new());
 

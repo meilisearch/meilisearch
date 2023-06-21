@@ -31,7 +31,7 @@ mod uuid_codec;
 pub type Result<T> = std::result::Result<T, Error>;
 pub type TaskId = u32;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ops::{Bound, RangeBounds};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -233,6 +233,8 @@ pub struct IndexSchedulerOptions {
     pub task_db_size: usize,
     /// The size, in bytes, with which a meilisearch index is opened the first time of each meilisearch index.
     pub index_base_map_size: usize,
+    /// Whether we open a meilisearch index with the MDB_WRITEMAP option or not.
+    pub enable_mdb_writemap: bool,
     /// The size, in bytes, by which the map size of an index is increased when it resized due to being full.
     pub index_growth_amount: usize,
     /// The number of indexes that can be concurrently opened in memory.
@@ -374,6 +376,11 @@ impl IndexScheduler {
         std::fs::create_dir_all(&options.indexes_path)?;
         std::fs::create_dir_all(&options.dumps_path)?;
 
+        if cfg!(windows) && options.enable_mdb_writemap {
+            // programmer error if this happens: in normal use passing the option on Windows is an error in main
+            panic!("Windows doesn't support the MDB_WRITEMAP LMDB option");
+        }
+
         let task_db_size = clamp_to_page_size(options.task_db_size);
         let budget = if options.indexer_config.skip_index_budget {
             IndexBudget {
@@ -396,25 +403,37 @@ impl IndexScheduler {
             .open(options.tasks_path)?;
         let file_store = FileStore::new(&options.update_file_path)?;
 
+        let mut wtxn = env.write_txn()?;
+        let all_tasks = env.create_database(&mut wtxn, Some(db_name::ALL_TASKS))?;
+        let status = env.create_database(&mut wtxn, Some(db_name::STATUS))?;
+        let kind = env.create_database(&mut wtxn, Some(db_name::KIND))?;
+        let index_tasks = env.create_database(&mut wtxn, Some(db_name::INDEX_TASKS))?;
+        let canceled_by = env.create_database(&mut wtxn, Some(db_name::CANCELED_BY))?;
+        let enqueued_at = env.create_database(&mut wtxn, Some(db_name::ENQUEUED_AT))?;
+        let started_at = env.create_database(&mut wtxn, Some(db_name::STARTED_AT))?;
+        let finished_at = env.create_database(&mut wtxn, Some(db_name::FINISHED_AT))?;
+        wtxn.commit()?;
+
         // allow unreachable_code to get rids of the warning in the case of a test build.
         let this = Self {
             must_stop_processing: MustStopProcessing::default(),
             processing_tasks: Arc::new(RwLock::new(ProcessingTasks::new())),
             file_store,
-            all_tasks: env.create_database(Some(db_name::ALL_TASKS))?,
-            status: env.create_database(Some(db_name::STATUS))?,
-            kind: env.create_database(Some(db_name::KIND))?,
-            index_tasks: env.create_database(Some(db_name::INDEX_TASKS))?,
-            canceled_by: env.create_database(Some(db_name::CANCELED_BY))?,
-            enqueued_at: env.create_database(Some(db_name::ENQUEUED_AT))?,
-            started_at: env.create_database(Some(db_name::STARTED_AT))?,
-            finished_at: env.create_database(Some(db_name::FINISHED_AT))?,
+            all_tasks,
+            status,
+            kind,
+            index_tasks,
+            canceled_by,
+            enqueued_at,
+            started_at,
+            finished_at,
             index_mapper: IndexMapper::new(
                 &env,
                 options.indexes_path,
                 budget.map_size,
                 options.index_growth_amount,
                 budget.index_count,
+                options.enable_mdb_writemap,
                 options.indexer_config,
             )?,
             env,
@@ -554,8 +573,14 @@ impl IndexScheduler {
         &self.index_mapper.indexer_config
     }
 
+    /// Return the real database size (i.e.: The size **with** the free pages)
     pub fn size(&self) -> Result<u64> {
         Ok(self.env.real_disk_size()?)
+    }
+
+    /// Return the used database size (i.e.: The size **without** the free pages)
+    pub fn used_size(&self) -> Result<u64> {
+        Ok(self.env.non_free_pages_size()?)
     }
 
     /// Return the index corresponding to the name.
@@ -735,6 +760,38 @@ impl IndexScheduler {
         }
 
         Ok(tasks)
+    }
+
+    /// The returned structure contains:
+    /// 1. The name of the property being observed can be `statuses`, `types`, or `indexes`.
+    /// 2. The name of the specific data related to the property can be `enqueued` for the `statuses`, `settingsUpdate` for the `types`, or the name of the index for the `indexes`, for example.
+    /// 3. The number of times the properties appeared.
+    pub fn get_stats(&self) -> Result<BTreeMap<String, BTreeMap<String, u64>>> {
+        let rtxn = self.read_txn()?;
+
+        let mut res = BTreeMap::new();
+
+        res.insert(
+            "statuses".to_string(),
+            enum_iterator::all::<Status>()
+                .map(|s| Ok((s.to_string(), self.get_status(&rtxn, s)?.len())))
+                .collect::<Result<BTreeMap<String, u64>>>()?,
+        );
+        res.insert(
+            "types".to_string(),
+            enum_iterator::all::<Kind>()
+                .map(|s| Ok((s.to_string(), self.get_kind(&rtxn, s)?.len())))
+                .collect::<Result<BTreeMap<String, u64>>>()?,
+        );
+        res.insert(
+            "indexes".to_string(),
+            self.index_tasks
+                .iter(&rtxn)?
+                .map(|res| Ok(res.map(|(name, bitmap)| (name.to_string(), bitmap.len()))?))
+                .collect::<Result<BTreeMap<String, u64>>>()?,
+        );
+
+        Ok(res)
     }
 
     /// Return true iff there is at least one task associated with this index
@@ -1471,6 +1528,7 @@ mod tests {
                 dumps_path: tempdir.path().join("dumps"),
                 task_db_size: 1000 * 1000, // 1 MB, we don't use MiB on purpose.
                 index_base_map_size: 1000 * 1000, // 1 MB, we don't use MiB on purpose.
+                enable_mdb_writemap: false,
                 index_growth_amount: 1000 * 1000, // 1 MB
                 index_count: 5,
                 indexer_config,
@@ -2015,6 +2073,105 @@ mod tests {
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "before_index_creation");
         handle.advance_one_successful_batch(); // // after the execution of the two tasks in a single batch.
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "both_task_succeeded");
+    }
+
+    #[test]
+    fn document_addition_and_document_deletion() {
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+        let content = r#"[
+            { "id": 1, "doggo": "jean bob" },
+            { "id": 2, "catto": "jorts" },
+            { "id": 3, "doggo": "bork" }
+        ]"#;
+
+        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
+        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        file.persist().unwrap();
+        index_scheduler
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: Some(S("id")),
+                method: ReplaceDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: true,
+            })
+            .unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
+        index_scheduler
+            .register(KindWithContent::DocumentDeletion {
+                index_uid: S("doggos"),
+                documents_ids: vec![S("1"), S("2")],
+            })
+            .unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
+
+        handle.advance_one_successful_batch(); // The addition AND deletion should've been batched together
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_processing_the_batch");
+
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
+    }
+
+    #[test]
+    fn document_deletion_and_document_addition() {
+        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+        index_scheduler
+            .register(KindWithContent::DocumentDeletion {
+                index_uid: S("doggos"),
+                documents_ids: vec![S("1"), S("2")],
+            })
+            .unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
+
+        let content = r#"[
+            { "id": 1, "doggo": "jean bob" },
+            { "id": 2, "catto": "jorts" },
+            { "id": 3, "doggo": "bork" }
+        ]"#;
+
+        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
+        let documents_count = read_json(content.as_bytes(), file.as_file_mut()).unwrap();
+        file.persist().unwrap();
+        index_scheduler
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: Some(S("id")),
+                method: ReplaceDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: true,
+            })
+            .unwrap();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
+
+        // The deletion should have failed because it can't create an index
+        handle.advance_one_failed_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_failing_the_deletion");
+
+        // The addition should works
+        handle.advance_one_successful_batch();
+        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_last_successful_addition");
+
+        let index = index_scheduler.index("doggos").unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let field_ids = field_ids_map.ids().collect::<Vec<_>>();
+        let documents = index
+            .all_documents(&rtxn)
+            .unwrap()
+            .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
+            .collect::<Vec<_>>();
+        snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
     }
 
     #[test]

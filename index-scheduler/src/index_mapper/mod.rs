@@ -66,6 +66,8 @@ pub struct IndexMapper {
     index_base_map_size: usize,
     /// The quantity by which the map size of an index is incremented upon reopening, in bytes.
     index_growth_amount: usize,
+    /// Whether we open a meilisearch index with the MDB_WRITEMAP option or not.
+    enable_mdb_writemap: bool,
     pub indexer_config: Arc<IndexerConfig>,
 }
 
@@ -88,8 +90,17 @@ pub enum IndexStatus {
 pub struct IndexStats {
     /// Number of documents in the index.
     pub number_of_documents: u64,
-    /// Size of the index' DB, in bytes.
+    /// Size taken up by the index' DB, in bytes.
+    ///
+    /// This includes the size taken by both the used and free pages of the DB, and as the free pages
+    /// are not returned to the disk after a deletion, this number is typically larger than
+    /// `used_database_size` that only includes the size of the used pages.
     pub database_size: u64,
+    /// Size taken by the used pages of the index' DB, in bytes.
+    ///
+    /// As the DB backend does not return to the disk the pages that are not currently used by the DB,
+    /// this value is typically smaller than `database_size`.
+    pub used_database_size: u64,
     /// Association of every field name with the number of times it occurs in the documents.
     pub field_distribution: FieldDistribution,
     /// Creation date of the index.
@@ -105,10 +116,10 @@ impl IndexStats {
     ///
     /// - rtxn: a RO transaction for the index, obtained from `Index::read_txn()`.
     pub fn new(index: &Index, rtxn: &RoTxn) -> Result<Self> {
-        let database_size = index.on_disk_size()?;
         Ok(IndexStats {
             number_of_documents: index.number_of_documents(rtxn)?,
-            database_size,
+            database_size: index.on_disk_size()?,
+            used_database_size: index.used_size()?,
             field_distribution: index.field_distribution(rtxn)?,
             created_at: index.created_at(rtxn)?,
             updated_at: index.updated_at(rtxn)?,
@@ -123,15 +134,22 @@ impl IndexMapper {
         index_base_map_size: usize,
         index_growth_amount: usize,
         index_count: usize,
+        enable_mdb_writemap: bool,
         indexer_config: IndexerConfig,
     ) -> Result<Self> {
+        let mut wtxn = env.write_txn()?;
+        let index_mapping = env.create_database(&mut wtxn, Some(INDEX_MAPPING))?;
+        let index_stats = env.create_database(&mut wtxn, Some(INDEX_STATS))?;
+        wtxn.commit()?;
+
         Ok(Self {
             index_map: Arc::new(RwLock::new(IndexMap::new(index_count))),
-            index_mapping: env.create_database(Some(INDEX_MAPPING))?,
-            index_stats: env.create_database(Some(INDEX_STATS))?,
+            index_mapping,
+            index_stats,
             base_path,
             index_base_map_size,
             index_growth_amount,
+            enable_mdb_writemap,
             indexer_config: Arc::new(indexer_config),
         })
     }
@@ -162,6 +180,7 @@ impl IndexMapper {
                     &uuid,
                     &index_path,
                     date,
+                    self.enable_mdb_writemap,
                     self.index_base_map_size,
                 )?;
 
@@ -273,7 +292,11 @@ impl IndexMapper {
             .ok_or_else(|| Error::IndexNotFound(name.to_string()))?;
 
         // We remove the index from the in-memory index map.
-        self.index_map.write().unwrap().close_for_resize(&uuid, self.index_growth_amount);
+        self.index_map.write().unwrap().close_for_resize(
+            &uuid,
+            self.enable_mdb_writemap,
+            self.index_growth_amount,
+        );
 
         Ok(())
     }
@@ -338,6 +361,7 @@ impl IndexMapper {
                                 &uuid,
                                 &index_path,
                                 None,
+                                self.enable_mdb_writemap,
                                 self.index_base_map_size,
                             )?;
                         }

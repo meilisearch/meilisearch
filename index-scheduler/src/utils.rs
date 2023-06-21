@@ -466,7 +466,7 @@ impl IndexScheduler {
                         }
                     }
                     Details::DocumentDeletionByFilter { deleted_documents, original_filter: _ } => {
-                        assert_eq!(kind.as_kind(), Kind::DocumentDeletionByFilter);
+                        assert_eq!(kind.as_kind(), Kind::DocumentDeletion);
                         let (index_uid, _) = if let KindWithContent::DocumentDeletionByFilter {
                             ref index_uid,
                             ref filter_expr,

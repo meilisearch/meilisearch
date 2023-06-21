@@ -395,7 +395,6 @@ impl std::error::Error for ParseTaskStatusError {}
 pub enum Kind {
     DocumentAdditionOrUpdate,
     DocumentDeletion,
-    DocumentDeletionByFilter,
     SettingsUpdate,
     IndexCreation,
     IndexDeletion,
@@ -412,7 +411,6 @@ impl Kind {
         match self {
             Kind::DocumentAdditionOrUpdate
             | Kind::DocumentDeletion
-            | Kind::DocumentDeletionByFilter
             | Kind::SettingsUpdate
             | Kind::IndexCreation
             | Kind::IndexDeletion
@@ -430,7 +428,6 @@ impl Display for Kind {
         match self {
             Kind::DocumentAdditionOrUpdate => write!(f, "documentAdditionOrUpdate"),
             Kind::DocumentDeletion => write!(f, "documentDeletion"),
-            Kind::DocumentDeletionByFilter => write!(f, "documentDeletionByFilter"),
             Kind::SettingsUpdate => write!(f, "settingsUpdate"),
             Kind::IndexCreation => write!(f, "indexCreation"),
             Kind::IndexDeletion => write!(f, "indexDeletion"),

@@ -206,7 +206,7 @@ impl State {
             )?;
             intersection &= &candidates;
             if !intersection.is_empty() {
-                // TODO: although not really worth it in terms of performance,
+                // Although not really worth it in terms of performance,
                 // if would be good to put this in cache for the sake of consistency
                 let candidates_with_exact_word_count = if count_all_positions < u8::MAX as usize {
                     ctx.index

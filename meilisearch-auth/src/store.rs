@@ -55,9 +55,11 @@ impl HeedAuthStore {
         let path = path.as_ref().join(AUTH_DB_PATH);
         create_dir_all(&path)?;
         let env = Arc::new(open_auth_store_env(path.as_ref())?);
-        let keys = env.create_database(Some(KEY_DB_NAME))?;
+        let mut wtxn = env.write_txn()?;
+        let keys = env.create_database(&mut wtxn, Some(KEY_DB_NAME))?;
         let action_keyid_index_expiration =
-            env.create_database(Some(KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME))?;
+            env.create_database(&mut wtxn, Some(KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME))?;
+        wtxn.commit()?;
         Ok(Self { env, keys, action_keyid_index_expiration, should_close_on_drop: true })
     }
 
@@ -71,6 +73,11 @@ impl HeedAuthStore {
     /// Return the size in bytes of database
     pub fn size(&self) -> Result<u64> {
         Ok(self.env.real_disk_size()?)
+    }
+
+    /// Return the number of bytes actually used in the database
+    pub fn used_size(&self) -> Result<u64> {
+        Ok(self.env.non_free_pages_size()?)
     }
 
     pub fn set_drop_on_close(&mut self, v: bool) {

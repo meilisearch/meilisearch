@@ -9,12 +9,8 @@ use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::search::new::SearchContext;
 use crate::Result;
 
-// TODO: give a generation to each universe, then be able to get the exact
-// delta of docids between two universes of different generations!
-
 /// A cache storing the document ids associated with each ranking rule edge
 pub struct ConditionDocIdsCache<G: RankingRuleGraphTrait> {
-    // TOOD: should be a mapped interner?
     pub cache: FxHashMap<Interned<G::Condition>, ComputedCondition>,
     _phantom: PhantomData<G>,
 }
@@ -54,7 +50,7 @@ impl<G: RankingRuleGraphTrait> ConditionDocIdsCache<G> {
         }
         let condition = graph.conditions_interner.get_mut(interned_condition);
         let computed = G::resolve_condition(ctx, condition, universe)?;
-        // TODO: if computed.universe_len != universe.len() ?
+        // Can we put an assert here for computed.universe_len == universe.len() ?
         let _ = self.cache.insert(interned_condition, computed);
         let computed = &self.cache[&interned_condition];
         Ok(computed)

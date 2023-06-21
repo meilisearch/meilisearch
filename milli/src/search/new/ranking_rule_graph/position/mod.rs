@@ -94,14 +94,9 @@ impl RankingRuleGraphTrait for PositionGraph {
         let mut edges = vec![];
 
         for (cost, positions) in positions_for_costs {
-            // TODO: We can improve performances and relevancy by storing
-            //       the term subsets associated to each position fetched
             edges.push((
                 cost,
-                conditions_interner.insert(PositionCondition {
-                    term: term.clone(), // TODO remove this ugly clone
-                    positions,
-                }),
+                conditions_interner.insert(PositionCondition { term: term.clone(), positions }),
             ));
         }
 
@@ -111,23 +106,16 @@ impl RankingRuleGraphTrait for PositionGraph {
 
 fn cost_from_position(sum_positions: u32) -> u32 {
     match sum_positions {
-        0 | 1 | 2 | 3 => sum_positions,
-        4 | 5 => 4,
-        6 | 7 => 5,
-        8 | 9 => 6,
-        10 | 11 => 7,
-        12 | 13 => 8,
-        14 | 15 => 9,
-        16 | 17..=24 => 10,
-        25..=32 => 11,
-        33..=64 => 12,
-        65..=128 => 13,
-        129..=256 => 14,
-        257..=512 => 15,
-        513..=1024 => 16,
-        1025..=2048 => 17,
-        2049..=4096 => 18,
-        4097..=8192 => 19,
-        _ => 20,
+        0 => 0,
+        1 => 1,
+        2..=4 => 2,
+        5..=7 => 3,
+        8..=11 => 4,
+        12..=16 => 5,
+        17..=24 => 6,
+        25..=64 => 7,
+        65..=256 => 8,
+        257..=1024 => 9,
+        _ => 10,
     }
 }

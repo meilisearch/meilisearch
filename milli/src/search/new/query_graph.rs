@@ -88,29 +88,33 @@ pub struct QueryGraph {
 }
 
 impl QueryGraph {
-    /// Build the query graph from the parsed user search query.
+    /// Build the query graph from the parsed user search query, return an updated list of the located query terms
+    /// which contains ngrams.
     pub fn from_query(
         ctx: &mut SearchContext,
-        // NOTE: the terms here must be consecutive
+        // The terms here must be consecutive
         terms: &[LocatedQueryTerm],
-    ) -> Result<QueryGraph> {
+    ) -> Result<(QueryGraph, Vec<LocatedQueryTerm>)> {
+        let mut new_located_query_terms = terms.to_vec();
+
         let nbr_typos = number_of_typos_allowed(ctx)?;
 
         let mut nodes_data: Vec<QueryNodeData> = vec![QueryNodeData::Start, QueryNodeData::End];
         let root_node = 0;
         let end_node = 1;
 
-        // TODO: we could consider generalizing to 4,5,6,7,etc. ngrams
+        // Ee could consider generalizing to 4,5,6,7,etc. ngrams
         let (mut prev2, mut prev1, mut prev0): (Vec<u16>, Vec<u16>, Vec<u16>) =
             (vec![], vec![], vec![root_node]);
 
         let original_terms_len = terms.len();
         for term_idx in 0..original_terms_len {
             let mut new_nodes = vec![];
+
             let new_node_idx = add_node(
                 &mut nodes_data,
                 QueryNodeData::Term(LocatedQueryTermSubset {
-                    term_subset: QueryTermSubset::full(Interned::from_raw(term_idx as u16)),
+                    term_subset: QueryTermSubset::full(terms[term_idx].value),
                     positions: terms[term_idx].positions.clone(),
                     term_ids: term_idx as u8..=term_idx as u8,
                 }),
@@ -121,6 +125,7 @@ impl QueryGraph {
                 if let Some(ngram) =
                     query_term::make_ngram(ctx, &terms[term_idx - 1..=term_idx], &nbr_typos)?
                 {
+                    new_located_query_terms.push(ngram.clone());
                     let ngram_idx = add_node(
                         &mut nodes_data,
                         QueryNodeData::Term(LocatedQueryTermSubset {
@@ -136,6 +141,7 @@ impl QueryGraph {
                 if let Some(ngram) =
                     query_term::make_ngram(ctx, &terms[term_idx - 2..=term_idx], &nbr_typos)?
                 {
+                    new_located_query_terms.push(ngram.clone());
                     let ngram_idx = add_node(
                         &mut nodes_data,
                         QueryNodeData::Term(LocatedQueryTermSubset {
@@ -167,7 +173,7 @@ impl QueryGraph {
         let mut graph = QueryGraph { root_node, end_node, nodes };
         graph.build_initial_edges();
 
-        Ok(graph)
+        Ok((graph, new_located_query_terms))
     }
 
     /// Remove the given nodes, connecting all their predecessors to all their successors.

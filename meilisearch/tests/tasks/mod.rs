@@ -413,7 +413,7 @@ async fn test_summarized_document_addition_or_update() {
 }
 
 #[actix_web::test]
-async fn test_summarized_delete_batch() {
+async fn test_summarized_delete_documents_by_batch() {
     let server = Server::new().await;
     let index = server.index("test");
     index.delete_batch(vec![1, 2, 3]).await;
@@ -430,7 +430,8 @@ async fn test_summarized_delete_batch() {
       "canceledBy": null,
       "details": {
         "providedIds": 3,
-        "deletedDocuments": 0
+        "deletedDocuments": 0,
+        "originalFilter": null
       },
       "error": {
         "message": "Index `test` not found.",
@@ -460,7 +461,8 @@ async fn test_summarized_delete_batch() {
       "canceledBy": null,
       "details": {
         "providedIds": 1,
-        "deletedDocuments": 0
+        "deletedDocuments": 0,
+        "originalFilter": null
       },
       "error": null,
       "duration": "[duration]",
@@ -472,7 +474,100 @@ async fn test_summarized_delete_batch() {
 }
 
 #[actix_web::test]
-async fn test_summarized_delete_document() {
+async fn test_summarized_delete_documents_by_filter() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
+    index.wait_task(0).await;
+    let (task, _) = index.get_task(0).await;
+    assert_json_snapshot!(task,
+        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        @r###"
+    {
+      "uid": 0,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentDeletion",
+      "canceledBy": null,
+      "details": {
+        "providedIds": 0,
+        "deletedDocuments": 0,
+        "originalFilter": "\"doggo = bernese\""
+      },
+      "error": {
+        "message": "Index `test` not found.",
+        "code": "index_not_found",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#index_not_found"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    index.create(None).await;
+    index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
+    index.wait_task(2).await;
+    let (task, _) = index.get_task(2).await;
+    assert_json_snapshot!(task,
+        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        @r###"
+    {
+      "uid": 2,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentDeletion",
+      "canceledBy": null,
+      "details": {
+        "providedIds": 0,
+        "deletedDocuments": 0,
+        "originalFilter": "\"doggo = bernese\""
+      },
+      "error": {
+        "message": "Attribute `doggo` is not filterable. This index does not have configured filterable attributes.\n1:6 doggo = bernese",
+        "code": "invalid_document_filter",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    index.update_settings(json!({ "filterableAttributes": ["doggo"] })).await;
+    index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
+    index.wait_task(4).await;
+    let (task, _) = index.get_task(4).await;
+    assert_json_snapshot!(task,
+        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        @r###"
+    {
+      "uid": 4,
+      "indexUid": "test",
+      "status": "succeeded",
+      "type": "documentDeletion",
+      "canceledBy": null,
+      "details": {
+        "providedIds": 0,
+        "deletedDocuments": 0,
+        "originalFilter": "\"doggo = bernese\""
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+}
+
+#[actix_web::test]
+async fn test_summarized_delete_document_by_id() {
     let server = Server::new().await;
     let index = server.index("test");
     index.delete_document(1).await;
@@ -489,7 +584,8 @@ async fn test_summarized_delete_document() {
       "canceledBy": null,
       "details": {
         "providedIds": 1,
-        "deletedDocuments": 0
+        "deletedDocuments": 0,
+        "originalFilter": null
       },
       "error": {
         "message": "Index `test` not found.",
@@ -519,7 +615,8 @@ async fn test_summarized_delete_document() {
       "canceledBy": null,
       "details": {
         "providedIds": 1,
-        "deletedDocuments": 0
+        "deletedDocuments": 0,
+        "originalFilter": null
       },
       "error": null,
       "duration": "[duration]",

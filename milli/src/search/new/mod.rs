@@ -15,11 +15,7 @@ mod resolve_query_graph;
 mod small_bitmap;
 
 mod exact_attribute;
-// TODO: documentation + comments
-// implementation is currently an adaptation of the previous implementation to fit with the new model
 mod sort;
-// TODO: documentation + comments
-mod words;
 
 #[cfg(test)]
 mod tests;
@@ -43,10 +39,10 @@ use ranking_rules::{
 use resolve_query_graph::{compute_query_graph_docids, PhraseDocIdsCache};
 use roaring::RoaringBitmap;
 use sort::Sort;
-use words::Words;
 
 use self::geo_sort::GeoSort;
 pub use self::geo_sort::Strategy as GeoSortStrategy;
+use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
 use crate::search::new::distinct::apply_distinct_rule;
 use crate::{AscDesc, DocumentId, Filter, Index, Member, Result, TermsMatchingStrategy, UserError};
@@ -201,6 +197,11 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
     let mut exactness = false;
     let mut sorted_fields = HashSet::new();
     let mut geo_sorted = false;
+
+    // Don't add the `words` ranking rule if the term matching strategy is `All`
+    if matches!(terms_matching_strategy, TermsMatchingStrategy::All) {
+        words = true;
+    }
 
     let mut ranking_rules: Vec<BoxRankingRule<QueryGraph>> = vec![];
     let settings_ranking_rules = ctx.index.criteria(ctx.txn)?;
@@ -397,8 +398,8 @@ pub fn execute_search(
         None
     };
     let bucket_sort_output = if let Some(query_terms) = query_terms {
-        let graph = QueryGraph::from_query(ctx, &query_terms)?;
-        located_query_terms = Some(query_terms);
+        let (graph, new_located_query_terms) = QueryGraph::from_query(ctx, &query_terms)?;
+        located_query_terms = Some(new_located_query_terms);
 
         let ranking_rules = get_ranking_rules_for_query_graph_search(
             ctx,

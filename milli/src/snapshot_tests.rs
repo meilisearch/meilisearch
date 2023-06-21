@@ -89,7 +89,6 @@ Create a snapshot test of the given database.
     - `exact_word_docids`
     - `word_prefix_docids`
     - `exact_word_prefix_docids`
-    - `docid_word_positions`
     - `word_pair_proximity_docids`
     - `word_prefix_pair_proximity_docids`
     - `word_position_docids`
@@ -217,11 +216,6 @@ pub fn snap_exact_word_prefix_docids(index: &Index) -> String {
         &format!("{s:<16} {}", display_bitmap(&b))
     })
 }
-pub fn snap_docid_word_positions(index: &Index) -> String {
-    make_db_snap_from_iter!(index, docid_word_positions, |((idx, s), b)| {
-        &format!("{idx:<6} {s:<16} {}", display_bitmap(&b))
-    })
-}
 pub fn snap_word_pair_proximity_docids(index: &Index) -> String {
     make_db_snap_from_iter!(index, word_pair_proximity_docids, |((proximity, word1, word2), b)| {
         &format!("{proximity:<2} {word1:<16} {word2:<16} {}", display_bitmap(&b))
@@ -324,7 +318,7 @@ pub fn snap_field_distributions(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
     let mut snap = String::new();
     for (field, count) in index.field_distribution(&rtxn).unwrap() {
-        writeln!(&mut snap, "{field:<16} {count:<6}").unwrap();
+        writeln!(&mut snap, "{field:<16} {count:<6} |").unwrap();
     }
     snap
 }
@@ -334,7 +328,7 @@ pub fn snap_fields_ids_map(index: &Index) -> String {
     let mut snap = String::new();
     for field_id in fields_ids_map.ids() {
         let name = fields_ids_map.name(field_id).unwrap();
-        writeln!(&mut snap, "{field_id:<3} {name:<16}").unwrap();
+        writeln!(&mut snap, "{field_id:<3} {name:<16} |").unwrap();
     }
     snap
 }
@@ -476,9 +470,6 @@ macro_rules! full_snap_of_db {
     }};
     ($index:ident, exact_word_prefix_docids) => {{
         $crate::snapshot_tests::snap_exact_word_prefix_docids(&$index)
-    }};
-    ($index:ident, docid_word_positions) => {{
-        $crate::snapshot_tests::snap_docid_word_positions(&$index)
     }};
     ($index:ident, word_pair_proximity_docids) => {{
         $crate::snapshot_tests::snap_word_pair_proximity_docids(&$index)

@@ -4,7 +4,6 @@ use std::result::Result as StdResult;
 
 use roaring::RoaringBitmap;
 
-use super::read_u32_ne_bytes;
 use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::update::index_documents::transform::Operation;
 use crate::Result;
@@ -20,10 +19,6 @@ pub fn concat_u32s_array<'a>(_key: &[u8], values: &[Cow<'a, [u8]>]) -> Result<Co
         values.iter().for_each(|integers| output.extend_from_slice(integers));
         Ok(Cow::Owned(output))
     }
-}
-
-pub fn roaring_bitmap_from_u32s_array(slice: &[u8]) -> RoaringBitmap {
-    read_u32_ne_bytes(slice).collect()
 }
 
 pub fn serialize_roaring_bitmap(bitmap: &RoaringBitmap, buffer: &mut Vec<u8>) -> io::Result<()> {

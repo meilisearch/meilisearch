@@ -29,6 +29,11 @@ fn setup(opt: &Opt) -> anyhow::Result<()> {
 async fn main() -> anyhow::Result<()> {
     let (opt, config_read_from) = Opt::try_build()?;
 
+    anyhow::ensure!(
+        !(cfg!(windows) && opt.experimental_reduce_indexing_memory_usage),
+        "The `experimental-reduce-indexing-memory-usage` flag is not supported on Windows"
+    );
+
     setup(&opt)?;
 
     match (opt.env.as_ref(), &opt.master_key) {

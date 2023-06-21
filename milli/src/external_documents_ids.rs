@@ -106,22 +106,30 @@ impl<'a> ExternalDocumentsIds<'a> {
         map
     }
 
+    /// Return an fst of the combined hard and soft deleted ID.
+    pub fn to_fst<'b>(&'b self) -> fst::Result<Cow<'b, fst::Map<Cow<'a, [u8]>>>> {
+        if self.soft.is_empty() {
+            return Ok(Cow::Borrowed(&self.hard));
+        }
+        let union_op = self.hard.op().add(&self.soft).r#union();
+
+        let mut iter = union_op.into_stream();
+        let mut new_hard_builder = fst::MapBuilder::memory();
+        while let Some((external_id, marked_docids)) = iter.next() {
+            let value = indexed_last_value(marked_docids).unwrap();
+            if value != DELETED_ID {
+                new_hard_builder.insert(external_id, value)?;
+            }
+        }
+
+        drop(iter);
+
+        Ok(Cow::Owned(new_hard_builder.into_map().map_data(Cow::Owned)?))
+    }
+
     fn merge_soft_into_hard(&mut self) -> fst::Result<()> {
         if self.soft.len() >= self.hard.len() / 2 {
-            let union_op = self.hard.op().add(&self.soft).r#union();
-
-            let mut iter = union_op.into_stream();
-            let mut new_hard_builder = fst::MapBuilder::memory();
-            while let Some((external_id, marked_docids)) = iter.next() {
-                let value = indexed_last_value(marked_docids).unwrap();
-                if value != DELETED_ID {
-                    new_hard_builder.insert(external_id, value)?;
-                }
-            }
-
-            drop(iter);
-
-            self.hard = new_hard_builder.into_map().map_data(Cow::Owned)?;
+            self.hard = self.to_fst()?.into_owned();
             self.soft = fst::Map::default().map_data(Cow::Owned)?;
         }
 

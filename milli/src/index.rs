@@ -21,10 +21,9 @@ use crate::heed_codec::facet::{
 };
 use crate::heed_codec::{ScriptLanguageCodec, StrBEU16Codec, StrRefCodec};
 use crate::{
-    default_criteria, BEU32StrCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec, Criterion,
-    DocumentId, ExternalDocumentsIds, FacetDistribution, FieldDistribution, FieldId,
-    FieldIdWordCountCodec, GeoPoint, ObkvCodec, Result, RoaringBitmapCodec, RoaringBitmapLenCodec,
-    Search, U8StrStrCodec, BEU16, BEU32,
+    default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
+    FacetDistribution, FieldDistribution, FieldId, FieldIdWordCountCodec, GeoPoint, ObkvCodec,
+    Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, BEU16, BEU32,
 };
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
@@ -111,9 +110,6 @@ pub struct Index {
     /// A prefix of word and all the documents ids containing this prefix, from attributes for which typos are not allowed.
     pub exact_word_prefix_docids: Database<Str, RoaringBitmapCodec>,
 
-    /// Maps a word and a document id (u32) to all the positions where the given word appears.
-    pub docid_word_positions: Database<BEU32StrCodec, BoRoaringBitmapCodec>,
-
     /// Maps the proximity between a pair of words with all the docids where this relation appears.
     pub word_pair_proximity_docids: Database<U8StrStrCodec, CboRoaringBitmapCodec>,
     /// Maps the proximity between a pair of word and prefix with all the docids where this relation appears.
@@ -170,33 +166,45 @@ impl Index {
         unsafe { options.flag(Flags::MdbAlwaysFreePages) };
 
         let env = options.open(path)?;
-        let main = env.create_poly_database(Some(MAIN))?;
-        let word_docids = env.create_database(Some(WORD_DOCIDS))?;
-        let exact_word_docids = env.create_database(Some(EXACT_WORD_DOCIDS))?;
-        let word_prefix_docids = env.create_database(Some(WORD_PREFIX_DOCIDS))?;
-        let exact_word_prefix_docids = env.create_database(Some(EXACT_WORD_PREFIX_DOCIDS))?;
-        let docid_word_positions = env.create_database(Some(DOCID_WORD_POSITIONS))?;
-        let word_pair_proximity_docids = env.create_database(Some(WORD_PAIR_PROXIMITY_DOCIDS))?;
-        let script_language_docids = env.create_database(Some(SCRIPT_LANGUAGE_DOCIDS))?;
+        let mut wtxn = env.write_txn()?;
+        let main = env.create_poly_database(&mut wtxn, Some(MAIN))?;
+        let word_docids = env.create_database(&mut wtxn, Some(WORD_DOCIDS))?;
+        let exact_word_docids = env.create_database(&mut wtxn, Some(EXACT_WORD_DOCIDS))?;
+        let word_prefix_docids = env.create_database(&mut wtxn, Some(WORD_PREFIX_DOCIDS))?;
+        let exact_word_prefix_docids =
+            env.create_database(&mut wtxn, Some(EXACT_WORD_PREFIX_DOCIDS))?;
+        let word_pair_proximity_docids =
+            env.create_database(&mut wtxn, Some(WORD_PAIR_PROXIMITY_DOCIDS))?;
+        let script_language_docids =
+            env.create_database(&mut wtxn, Some(SCRIPT_LANGUAGE_DOCIDS))?;
         let word_prefix_pair_proximity_docids =
-            env.create_database(Some(WORD_PREFIX_PAIR_PROXIMITY_DOCIDS))?;
+            env.create_database(&mut wtxn, Some(WORD_PREFIX_PAIR_PROXIMITY_DOCIDS))?;
         let prefix_word_pair_proximity_docids =
-            env.create_database(Some(PREFIX_WORD_PAIR_PROXIMITY_DOCIDS))?;
-        let word_position_docids = env.create_database(Some(WORD_POSITION_DOCIDS))?;
-        let word_fid_docids = env.create_database(Some(WORD_FIELD_ID_DOCIDS))?;
-        let field_id_word_count_docids = env.create_database(Some(FIELD_ID_WORD_COUNT_DOCIDS))?;
-        let word_prefix_position_docids = env.create_database(Some(WORD_PREFIX_POSITION_DOCIDS))?;
-        let word_prefix_fid_docids = env.create_database(Some(WORD_PREFIX_FIELD_ID_DOCIDS))?;
-        let facet_id_f64_docids = env.create_database(Some(FACET_ID_F64_DOCIDS))?;
-        let facet_id_string_docids = env.create_database(Some(FACET_ID_STRING_DOCIDS))?;
-        let facet_id_exists_docids = env.create_database(Some(FACET_ID_EXISTS_DOCIDS))?;
-        let facet_id_is_null_docids = env.create_database(Some(FACET_ID_IS_NULL_DOCIDS))?;
-        let facet_id_is_empty_docids = env.create_database(Some(FACET_ID_IS_EMPTY_DOCIDS))?;
+            env.create_database(&mut wtxn, Some(PREFIX_WORD_PAIR_PROXIMITY_DOCIDS))?;
+        let word_position_docids = env.create_database(&mut wtxn, Some(WORD_POSITION_DOCIDS))?;
+        let word_fid_docids = env.create_database(&mut wtxn, Some(WORD_FIELD_ID_DOCIDS))?;
+        let field_id_word_count_docids =
+            env.create_database(&mut wtxn, Some(FIELD_ID_WORD_COUNT_DOCIDS))?;
+        let word_prefix_position_docids =
+            env.create_database(&mut wtxn, Some(WORD_PREFIX_POSITION_DOCIDS))?;
+        let word_prefix_fid_docids =
+            env.create_database(&mut wtxn, Some(WORD_PREFIX_FIELD_ID_DOCIDS))?;
+        let facet_id_f64_docids = env.create_database(&mut wtxn, Some(FACET_ID_F64_DOCIDS))?;
+        let facet_id_string_docids =
+            env.create_database(&mut wtxn, Some(FACET_ID_STRING_DOCIDS))?;
+        let facet_id_exists_docids =
+            env.create_database(&mut wtxn, Some(FACET_ID_EXISTS_DOCIDS))?;
+        let facet_id_is_null_docids =
+            env.create_database(&mut wtxn, Some(FACET_ID_IS_NULL_DOCIDS))?;
+        let facet_id_is_empty_docids =
+            env.create_database(&mut wtxn, Some(FACET_ID_IS_EMPTY_DOCIDS))?;
 
-        let field_id_docid_facet_f64s = env.create_database(Some(FIELD_ID_DOCID_FACET_F64S))?;
+        let field_id_docid_facet_f64s =
+            env.create_database(&mut wtxn, Some(FIELD_ID_DOCID_FACET_F64S))?;
         let field_id_docid_facet_strings =
-            env.create_database(Some(FIELD_ID_DOCID_FACET_STRINGS))?;
-        let documents = env.create_database(Some(DOCUMENTS))?;
+            env.create_database(&mut wtxn, Some(FIELD_ID_DOCID_FACET_STRINGS))?;
+        let documents = env.create_database(&mut wtxn, Some(DOCUMENTS))?;
+        wtxn.commit()?;
 
         Index::set_creation_dates(&env, main, created_at, updated_at)?;
 
@@ -207,7 +215,6 @@ impl Index {
             exact_word_docids,
             word_prefix_docids,
             exact_word_prefix_docids,
-            docid_word_positions,
             word_pair_proximity_docids,
             script_language_docids,
             word_prefix_pair_proximity_docids,
@@ -1459,9 +1466,9 @@ pub(crate) mod tests {
 
         db_snap!(index, field_distribution,
             @r###"
-        age              1     
-        id               2     
-        name             2     
+        age              1      |
+        id               2      |
+        name             2      |
         "###
         );
 
@@ -1479,9 +1486,9 @@ pub(crate) mod tests {
 
         db_snap!(index, field_distribution,
             @r###"
-        age              1     
-        id               2     
-        name             2     
+        age              1      |
+        id               2      |
+        name             2      |
         "###
         );
 
@@ -1495,9 +1502,9 @@ pub(crate) mod tests {
 
         db_snap!(index, field_distribution,
             @r###"
-        has_dog          1     
-        id               2     
-        name             2     
+        has_dog          1      |
+        id               2      |
+        name             2      |
         "###
         );
     }

@@ -49,7 +49,7 @@ impl CboRoaringBitmapCodec {
         } else {
             // Otherwise, it means we used the classic RoaringBitmapCodec and
             // that the header takes threshold integers.
-            RoaringBitmap::deserialize_from(bytes)
+            RoaringBitmap::deserialize_unchecked_from(bytes)
         }
     }
 
@@ -69,7 +69,7 @@ impl CboRoaringBitmapCodec {
                     vec.push(integer);
                 }
             } else {
-                roaring |= RoaringBitmap::deserialize_from(bytes.as_ref())?;
+                roaring |= RoaringBitmap::deserialize_unchecked_from(bytes.as_ref())?;
             }
         }
 

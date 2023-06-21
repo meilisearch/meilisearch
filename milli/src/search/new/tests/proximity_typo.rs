@@ -2,9 +2,8 @@
 This module tests the interactions between the proximity and typo ranking rules.
 
 The proximity ranking rule should transform the query graph such that it
-only contains the word pairs that it used to compute its bucket.
-
-TODO: This is not currently implemented.
+only contains the word pairs that it used to compute its bucket, but this is not currently
+implemented.
 */
 
 use crate::index::tests::TempIndex;
@@ -64,7 +63,7 @@ fn test_trap_basic() {
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
-    // TODO: this is incorrect, 1 should come before 0
+    // This is incorrect, 1 should come before 0
     insta::assert_debug_snapshot!(texts, @r###"
     [
         "\"summer. holiday. sommer holidty\"",

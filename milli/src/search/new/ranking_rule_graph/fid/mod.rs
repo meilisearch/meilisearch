@@ -69,14 +69,9 @@ impl RankingRuleGraphTrait for FidGraph {
 
         let mut edges = vec![];
         for fid in all_fields {
-            // TODO: We can improve performances and relevancy by storing
-            //       the term subsets associated to each field ids fetched.
             edges.push((
-                fid as u32 * term.term_ids.len() as u32, // TODO improve the fid score i.e. fid^10.
-                conditions_interner.insert(FidCondition {
-                    term: term.clone(), // TODO remove this ugly clone
-                    fid,
-                }),
+                fid as u32 * term.term_ids.len() as u32,
+                conditions_interner.insert(FidCondition { term: term.clone(), fid }),
             ));
         }
 
