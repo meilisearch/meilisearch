@@ -22,6 +22,7 @@ use crate::heed_codec::facet::{
     FieldIdCodec, OrderedF64Codec,
 };
 use crate::heed_codec::{ScriptLanguageCodec, StrBEU16Codec, StrRefCodec};
+use crate::readable_slices::ReadableSlices;
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdWordCountCodec, GeoPoint, ObkvCodec,
@@ -47,7 +48,10 @@ pub mod main_key {
     pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
     pub const GEO_FACETED_DOCUMENTS_IDS_KEY: &str = "geo-faceted-documents-ids";
     pub const GEO_RTREE_KEY: &str = "geo-rtree";
-    pub const VECTOR_HNSW_KEY: &str = "vector-hnsw";
+    /// The prefix of the key that is used to store the, potential big, HNSW structure.
+    /// It is concatenated with a big-endian encoded number (non-human readable).
+    /// e.g. vector-hnsw0x0032.
+    pub const VECTOR_HNSW_KEY_PREFIX: &str = "vector-hnsw";
     pub const HARD_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "hard-external-documents-ids";
     pub const NUMBER_FACETED_DOCUMENTS_IDS_PREFIX: &str = "number-faceted-documents-ids";
     pub const PRIMARY_KEY_KEY: &str = "primary-key";
@@ -517,19 +521,49 @@ impl Index {
 
     /// Writes the provided `hnsw`.
     pub(crate) fn put_vector_hnsw(&self, wtxn: &mut RwTxn, hnsw: &Hnsw) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeBincode<Hnsw>>(wtxn, main_key::VECTOR_HNSW_KEY, hnsw)
+        // We must delete all the chunks before we write the new HNSW chunks.
+        self.delete_vector_hnsw(wtxn)?;
+
+        let chunk_size = 1024 * 1024 * (1024 + 512); // 1.5 GiB
+        let bytes = bincode::serialize(hnsw).map_err(|_| heed::Error::Encoding)?;
+        for (i, chunk) in bytes.chunks(chunk_size).enumerate() {
+            let i = i as u32;
+            let mut key = main_key::VECTOR_HNSW_KEY_PREFIX.as_bytes().to_vec();
+            key.extend_from_slice(&i.to_be_bytes());
+            self.main.put::<_, ByteSlice, ByteSlice>(wtxn, &key, chunk)?;
+        }
+        Ok(())
     }
 
     /// Delete the `hnsw`.
     pub(crate) fn delete_vector_hnsw(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
-        self.main.delete::<_, Str>(wtxn, main_key::VECTOR_HNSW_KEY)
+        let mut iter = self.main.prefix_iter_mut::<_, ByteSlice, DecodeIgnore>(
+            wtxn,
+            main_key::VECTOR_HNSW_KEY_PREFIX.as_bytes(),
+        )?;
+        let mut deleted = false;
+        while let Some(_) = iter.next().transpose()? {
+            // We do not keep a reference to the key or the value.
+            unsafe { deleted |= iter.del_current()? };
+        }
+        Ok(deleted)
     }
 
     /// Returns the `hnsw`.
     pub fn vector_hnsw(&self, rtxn: &RoTxn) -> Result<Option<Hnsw>> {
-        match self.main.get::<_, Str, SerdeBincode<Hnsw>>(rtxn, main_key::VECTOR_HNSW_KEY)? {
-            Some(hnsw) => Ok(Some(hnsw)),
-            None => Ok(None),
+        let mut slices = Vec::new();
+        for result in
+            self.main.prefix_iter::<_, Str, ByteSlice>(rtxn, main_key::VECTOR_HNSW_KEY_PREFIX)?
+        {
+            let (_, slice) = result?;
+            slices.push(slice);
+        }
+
+        if slices.is_empty() {
+            Ok(None)
+        } else {
+            let readable_slices: ReadableSlices<_> = slices.into_iter().collect();
+            Ok(Some(bincode::deserialize_from(readable_slices).map_err(|_| heed::Error::Decoding)?))
         }
     }
 
