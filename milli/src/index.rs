@@ -542,7 +542,7 @@ impl Index {
             main_key::VECTOR_HNSW_KEY_PREFIX.as_bytes(),
         )?;
         let mut deleted = false;
-        while let Some(_) = iter.next().transpose()? {
+        while iter.next().transpose()?.is_some() {
             // We do not keep a reference to the key or the value.
             unsafe { deleted |= iter.del_current()? };
         }

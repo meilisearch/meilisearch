@@ -54,8 +54,9 @@ impl<A: AsRef<[u8]>> Read for ReadableSlices<A> {
 
 #[cfg(test)]
 mod test {
-    use super::ReadableSlices;
     use std::io::Read;
+
+    use super::ReadableSlices;
 
     #[test]
     fn basic() {
