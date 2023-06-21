@@ -20,6 +20,7 @@ const PAGINATION_DEFAULT_LIMIT: usize = 20;
 
 mod api_key;
 mod dump;
+pub mod features;
 pub mod indexes;
 mod metrics;
 mod multi_search;

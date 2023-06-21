@@ -39,6 +39,7 @@ use meilisearch_types::versioning::{check_version_file, create_version_file};
 use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
 pub use option::Opt;
 use option::ScheduleSnapshot;
+use routes::features::RouteFeatures;
 
 use crate::error::MeilisearchHttpError;
 
@@ -392,6 +393,7 @@ pub fn configure_data(
         .app_data(index_scheduler)
         .app_data(auth)
         .app_data(web::Data::from(analytics))
+        .app_data(web::Data::new(RouteFeatures { score_details: opt.experimental_score_details }))
         .app_data(
             web::JsonConfig::default()
                 .content_type(|mime| mime == mime::APPLICATION_JSON)

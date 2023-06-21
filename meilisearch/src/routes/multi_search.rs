@@ -9,6 +9,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use serde::Serialize;
 
+use super::features::RouteFeatures;
 use crate::analytics::{Analytics, MultiSearchAggregator};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
@@ -37,6 +38,7 @@ pub async fn multi_search_with_post(
     params: AwebJson<SearchQueries, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
+    enabled_features: web::Data<RouteFeatures>,
 ) -> Result<HttpResponse, ResponseError> {
     let queries = params.into_inner().queries;
 
@@ -74,10 +76,12 @@ pub async fn multi_search_with_post(
                         err
                     })
                     .with_index(query_index)?;
-                let search_result =
-                    tokio::task::spawn_blocking(move || perform_search(&index, query))
-                        .await
-                        .with_index(query_index)?;
+                let enabled_features = **enabled_features;
+                let search_result = tokio::task::spawn_blocking(move || {
+                    perform_search(&index, query, &enabled_features)
+                })
+                .await
+                .with_index(query_index)?;
 
                 search_results.push(SearchResultWithIndex {
                     index_uid: index_uid.into_inner(),

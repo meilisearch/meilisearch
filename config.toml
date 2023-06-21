@@ -129,3 +129,7 @@ experimental_enable_metrics = false
 
 # Experimental RAM reduction during indexing, do not use in production, see: <https://github.com/meilisearch/product/discussions/652>
 experimental_reduce_indexing_memory_usage = false
+
+# Experimental score details feature. For more information, see <https://github.com/meilisearch/product/discussions/674>
+# Enables `showScoreDetails` query parameter in search and multi-search endpoints.
+experimental_score_details = false

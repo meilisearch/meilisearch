@@ -209,6 +209,7 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
             ..Parser::parse_from(None as Option<&str>)
         },
         experimental_enable_metrics: true,
+        experimental_score_details: true,
         ..Parser::parse_from(None as Option<&str>)
     }
 }

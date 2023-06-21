@@ -20,6 +20,7 @@ use crate::search::{
     DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
     DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
 };
+use crate::RouteFeatures;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -137,6 +138,7 @@ pub async fn search_with_url_query(
     params: AwebQueryParameter<SearchQueryGet, DeserrQueryParamError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
+    enabled_features: web::Data<RouteFeatures>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!("called with params: {:?}", params);
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
@@ -149,9 +151,12 @@ pub async fn search_with_url_query(
     }
 
     let mut aggregate = SearchAggregator::from_query(&query, &req);
+    let enabled_features = **enabled_features;
 
     let index = index_scheduler.index(&index_uid)?;
-    let search_result = tokio::task::spawn_blocking(move || perform_search(&index, query)).await?;
+    let search_result =
+        tokio::task::spawn_blocking(move || perform_search(&index, query, &enabled_features))
+            .await?;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }
@@ -169,6 +174,7 @@ pub async fn search_with_post(
     params: AwebJson<SearchQuery, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<dyn Analytics>,
+    enabled_features: web::Data<RouteFeatures>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
@@ -181,9 +187,12 @@ pub async fn search_with_post(
     }
 
     let mut aggregate = SearchAggregator::from_query(&query, &req);
+    let enabled_features = **enabled_features;
 
     let index = index_scheduler.index(&index_uid)?;
-    let search_result = tokio::task::spawn_blocking(move || perform_search(&index, query)).await?;
+    let search_result =
+        tokio::task::spawn_blocking(move || perform_search(&index, query, &enabled_features))
+            .await?;
     if let Ok(ref search_result) = search_result {
         aggregate.succeed(search_result);
     }

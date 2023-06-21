@@ -7,6 +7,8 @@ use meilisearch_types::index_uid::{IndexUid, IndexUidFormatError};
 use serde_json::Value;
 use tokio::task::JoinError;
 
+use crate::routes::features::FeatureNotEnabledError;
+
 #[derive(Debug, thiserror::Error)]
 pub enum MeilisearchHttpError {
     #[error("A Content-Type header is missing. Accepted values for the Content-Type header are: {}",
@@ -51,6 +53,8 @@ pub enum MeilisearchHttpError {
     DocumentFormat(#[from] DocumentFormatError),
     #[error(transparent)]
     Join(#[from] JoinError),
+    #[error(transparent)]
+    FeatureNotEnabled(#[from] FeatureNotEnabledError),
 }
 
 impl ErrorCode for MeilisearchHttpError {
@@ -74,6 +78,7 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::FileStore(_) => Code::Internal,
             MeilisearchHttpError::DocumentFormat(e) => e.error_code(),
             MeilisearchHttpError::Join(_) => Code::Internal,
+            MeilisearchHttpError::FeatureNotEnabled(_) => Code::FeatureNotEnabled,
         }
     }
 }

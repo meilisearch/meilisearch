@@ -50,6 +50,7 @@ const MEILI_LOG_LEVEL: &str = "MEILI_LOG_LEVEL";
 const MEILI_EXPERIMENTAL_ENABLE_METRICS: &str = "MEILI_EXPERIMENTAL_ENABLE_METRICS";
 const MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE: &str =
     "MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE";
+const MEILI_EXPERIMENTAL_SCORE_DETAILS: &str = "MEILI_EXPERIMENTAL_SCORE_DETAILS";
 
 const DEFAULT_CONFIG_FILE_PATH: &str = "./config.toml";
 const DEFAULT_DB_PATH: &str = "./data.ms";
@@ -300,6 +301,11 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_reduce_indexing_memory_usage: bool,
 
+    /// Experimental score details, see: <https://github.com/meilisearch/product/discussions/674>
+    #[clap(long, env = MEILI_EXPERIMENTAL_SCORE_DETAILS)]
+    #[serde(default)]
+    pub experimental_score_details: bool,
+
     #[serde(flatten)]
     #[clap(flatten)]
     pub indexer_options: IndexerOpts,
@@ -393,6 +399,7 @@ impl Opt {
             no_analytics,
             experimental_enable_metrics: enable_metrics_route,
             experimental_reduce_indexing_memory_usage: reduce_indexing_memory_usage,
+            experimental_score_details: enable_score_details,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
         export_to_env_if_not_present(MEILI_HTTP_ADDR, http_addr);
@@ -437,6 +444,10 @@ impl Opt {
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE,
             reduce_indexing_memory_usage.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_SCORE_DETAILS,
+            enable_score_details.to_string(),
         );
         indexer_options.export_to_env();
     }
