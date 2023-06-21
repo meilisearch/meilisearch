@@ -1,6 +1,9 @@
+use crate::Opt;
+
 #[derive(Debug, Clone, Copy)]
 pub struct RouteFeatures {
-    pub score_details: bool,
+    score_details: bool,
+    metrics: bool,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -12,6 +15,13 @@ pub struct FeatureNotEnabledError {
 }
 
 impl RouteFeatures {
+    pub fn from_options(options: &Opt) -> Self {
+        Self {
+            score_details: options.experimental_score_details,
+            metrics: options.experimental_enable_metrics,
+        }
+    }
+
     pub fn check_score_details(&self) -> Result<(), FeatureNotEnabledError> {
         if self.score_details {
             Ok(())
@@ -20,6 +30,18 @@ impl RouteFeatures {
                 disabled_action: "Computing score details",
                 flag: "--experimental-score-details",
                 issue_link: "https://github.com/meilisearch/product/discussions/674",
+            })
+        }
+    }
+
+    pub fn check_metrics(&self) -> Result<(), FeatureNotEnabledError> {
+        if self.metrics {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action: "Getting metrics",
+                flag: "--experimental-enable-metrics",
+                issue_link: "https://github.com/meilisearch/meilisearch/discussions/3518",
             })
         }
     }

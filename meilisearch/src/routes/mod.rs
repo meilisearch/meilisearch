@@ -27,7 +27,7 @@ mod multi_search;
 mod swap_indexes;
 pub mod tasks;
 
-pub fn configure(cfg: &mut web::ServiceConfig, enable_metrics: bool) {
+pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::scope("/tasks").configure(tasks::configure))
         .service(web::resource("/health").route(web::get().to(get_health)))
         .service(web::scope("/keys").configure(api_key::configure))
@@ -36,11 +36,8 @@ pub fn configure(cfg: &mut web::ServiceConfig, enable_metrics: bool) {
         .service(web::resource("/version").route(web::get().to(get_version)))
         .service(web::scope("/indexes").configure(indexes::configure))
         .service(web::scope("/multi-search").configure(multi_search::configure))
-        .service(web::scope("/swap-indexes").configure(swap_indexes::configure));
-
-    if enable_metrics {
-        cfg.service(web::scope("/metrics").configure(metrics::configure));
-    }
+        .service(web::scope("/swap-indexes").configure(swap_indexes::configure))
+        .service(web::scope("/metrics").configure(metrics::configure));
 }
 
 #[derive(Debug, Serialize)]

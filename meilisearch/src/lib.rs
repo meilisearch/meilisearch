@@ -112,7 +112,7 @@ pub fn create_app(
                 analytics.clone(),
             )
         })
-        .configure(|cfg| routes::configure(cfg, opt.experimental_enable_metrics))
+        .configure(routes::configure)
         .configure(|s| dashboard(s, enable_dashboard));
 
     let app = app.wrap(actix_web::middleware::Condition::new(
@@ -393,7 +393,7 @@ pub fn configure_data(
         .app_data(index_scheduler)
         .app_data(auth)
         .app_data(web::Data::from(analytics))
-        .app_data(web::Data::new(RouteFeatures { score_details: opt.experimental_score_details }))
+        .app_data(web::Data::new(RouteFeatures::from_options(opt)))
         .app_data(
             web::JsonConfig::default()
                 .content_type(|mime| mime == mime::APPLICATION_JSON)

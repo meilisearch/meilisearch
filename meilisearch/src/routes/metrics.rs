@@ -7,6 +7,8 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use prometheus::{Encoder, TextEncoder};
 
+use super::features::RouteFeatures;
+use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::routes::create_all_stats;
@@ -18,7 +20,9 @@ pub fn configure(config: &mut web::ServiceConfig) {
 pub async fn get_metrics(
     index_scheduler: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, Data<IndexScheduler>>,
     auth_controller: Data<AuthController>,
+    features: Data<RouteFeatures>,
 ) -> Result<HttpResponse, ResponseError> {
+    features.check_metrics().map_err(MeilisearchHttpError::from)?;
     let auth_filters = index_scheduler.filters();
     if !auth_filters.all_indexes_authorized() {
         let mut error = ResponseError::from(AuthenticationError::InvalidToken);
