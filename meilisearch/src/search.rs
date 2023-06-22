@@ -582,7 +582,7 @@ pub fn perform_search(
 
             if fields.iter().all(|f| f != "*") {
                 let fields: Vec<_> = fields
-                    .into_iter()
+                    .iter()
                     .map(|n| {
                         (
                             n,

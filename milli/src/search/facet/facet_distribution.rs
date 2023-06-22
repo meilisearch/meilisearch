@@ -296,7 +296,7 @@ impl<'a> FacetDistribution<'a> {
                     }
                     .into());
                 } else {
-                    facets.into_iter().map(|(name, _)| name).cloned().collect()
+                    facets.iter().map(|(name, _)| name).cloned().collect()
                 }
             }
             None => filterable_fields,
@@ -351,7 +351,7 @@ impl<'a> FacetDistribution<'a> {
                     }
                     .into());
                 } else {
-                    facets.into_iter().map(|(name, _)| name).cloned().collect()
+                    facets.iter().map(|(name, _)| name).cloned().collect()
                 }
             }
             None => filterable_fields,
@@ -363,8 +363,7 @@ impl<'a> FacetDistribution<'a> {
                 let order_by = self
                     .facets
                     .as_ref()
-                    .map(|facets| facets.get(name).copied())
-                    .flatten()
+                    .and_then(|facets| facets.get(name).copied())
                     .unwrap_or(self.default_order_by);
                 let values = self.facet_values(fid, order_by)?;
                 distribution.insert(name.to_string(), values);
