@@ -976,13 +976,15 @@ async fn search_on_unknown_field() {
         .search(
             json!({"q": "Captain Marvel", "attributesToSearchOn": ["unknown"]}),
             |response, code| {
-                assert_eq!(400, code, "{}", response);
-                assert_eq!(response, json!({
-                    "message": "Attribute `unknown` is not searchable. Available searchable attributes are: `id, title`.",
-                    "code": "invalid_attributes_to_search_on",
-                    "type": "invalid_request",
-                    "link": "https://docs.meilisearch.com/errors#invalid_attributes_to_search_on"
-                }));
+                snapshot!(code, @"400 Bad Request");
+                snapshot!(json_string!(response), @r###"
+                {
+                  "message": "Attribute `unknown` is not searchable. Available searchable attributes are: `id, title`.",
+                  "code": "invalid_attributes_to_search_on",
+                  "type": "invalid_request",
+                  "link": "https://docs.meilisearch.com/errors#invalid_attributes_to_search_on"
+                }
+                "###);
             },
         )
         .await;

@@ -1,3 +1,4 @@
+use meili_snap::{json_string, snapshot};
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 
@@ -41,8 +42,8 @@ async fn simple_search_on_title() {
         .search(
             json!({"q": "Captain Marvel", "attributesToSearchOn": ["title"]}),
             |response, code| {
-                assert_eq!(200, code, "{}", response);
-                assert_eq!(response["hits"].as_array().unwrap().len(), 2);
+                snapshot!(code, @"200 OK");
+                snapshot!(response["hits"].as_array().unwrap().len(), @"2");
             },
         )
         .await;
@@ -56,8 +57,8 @@ async fn simple_prefix_search_on_title() {
     // simple search should return 2 documents (ids: 2 and 3).
     index
         .search(json!({"q": "Captain Mar", "attributesToSearchOn": ["title"]}), |response, code| {
-            assert_eq!(200, code, "{}", response);
-            assert_eq!(response["hits"].as_array().unwrap().len(), 2);
+            snapshot!(code, @"200 OK");
+            snapshot!(response["hits"].as_array().unwrap().len(), @"2");
         })
         .await;
 }
@@ -69,8 +70,8 @@ async fn simple_search_on_title_matching_strategy_all() {
     // simple search matching strategy all should only return 1 document (ids: 2).
     index
         .search(json!({"q": "Captain Marvel", "attributesToSearchOn": ["title"], "matchingStrategy": "all"}), |response, code| {
-            assert_eq!(200, code, "{}", response);
-            assert_eq!(response["hits"].as_array().unwrap().len(), 1);
+            snapshot!(code, @"200 OK");
+            snapshot!(response["hits"].as_array().unwrap().len(), @"1");
         })
         .await;
 }
@@ -82,8 +83,8 @@ async fn simple_search_on_no_field() {
     // simple search on no field shouldn't return any document.
     index
         .search(json!({"q": "Captain Marvel", "attributesToSearchOn": []}), |response, code| {
-            assert_eq!(200, code, "{}", response);
-            assert_eq!(response["hits"].as_array().unwrap().len(), 0);
+            snapshot!(code, @"200 OK");
+            snapshot!(response["hits"].as_array().unwrap().len(), @"0");
         })
         .await;
 }
@@ -98,13 +99,18 @@ async fn word_ranking_rule_order() {
         .search(
             json!({"q": "Captain Marvel", "attributesToSearchOn": ["title"], "attributesToRetrieve": ["id"]}),
             |response, code| {
-                assert_eq!(200, code, "{}", response);
-                assert_eq!(
-                    response["hits"],
-                    json!([
-                        {"id": "3"},
-                        {"id": "2"},
-                    ])
+                snapshot!(code, @"200 OK");
+                snapshot!(json_string!(response["hits"]),
+                    @r###"
+                [
+                  {
+                    "id": "3"
+                  },
+                  {
+                    "id": "2"
+                  }
+                ]
+                "###
                 );
             },
         )
@@ -123,13 +129,18 @@ async fn word_ranking_rule_order_exact_words() {
         .search(
             json!({"q": "Captain Marvel", "attributesToSearchOn": ["title"], "attributesToRetrieve": ["id"]}),
             |response, code| {
-                assert_eq!(200, code, "{}", response);
-                assert_eq!(
-                    response["hits"],
-                    json!([
-                        {"id": "3"},
-                        {"id": "2"},
-                    ])
+                snapshot!(code, @"200 OK");
+                snapshot!(json_string!(response["hits"]),
+                    @r###"
+                [
+                  {
+                    "id": "3"
+                  },
+                  {
+                    "id": "2"
+                  }
+                ]
+                "###
                 );
             },
         )
@@ -158,13 +169,18 @@ async fn typo_ranking_rule_order() {
     // Document 2 should appear before document 1.
     index
         .search(json!({"q": "Captain Marvel", "attributesToSearchOn": ["title"], "attributesToRetrieve": ["id"]}), |response, code| {
-            assert_eq!(200, code, "{}", response);
-            assert_eq!(
-                response["hits"],
-                json!([
-                    {"id": "2"},
-                    {"id": "1"},
-                ])
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]),
+                @r###"
+            [
+              {
+                "id": "2"
+              },
+              {
+                "id": "1"
+              }
+            ]
+            "###
             );
         })
         .await;
@@ -194,13 +210,18 @@ async fn attributes_ranking_rule_order() {
     // Document 2 should appear before document 1.
     index
         .search(json!({"q": "Captain Marvel", "attributesToSearchOn": ["desc", "footer"], "attributesToRetrieve": ["id"]}), |response, code| {
-            assert_eq!(200, code, "{}", response);
-            assert_eq!(
-                response["hits"],
-                json!([
-                    {"id": "2"},
-                    {"id": "1"},
-                ])
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]),
+                @r###"
+            [
+              {
+                "id": "2"
+              },
+              {
+                "id": "1"
+              }
+            ]
+            "###
             );
         })
         .await;
@@ -228,13 +249,18 @@ async fn exactness_ranking_rule_order() {
     // Document 2 should appear before document 1.
     index
         .search(json!({"q": "Captain Marvel", "attributesToRetrieve": ["id"], "attributesToSearchOn": ["desc"]}), |response, code| {
-            assert_eq!(200, code, "{}", response);
-            assert_eq!(
-                response["hits"],
-                json!([
-                    {"id": "2"},
-                    {"id": "1"},
-                ])
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]),
+                @r###"
+            [
+              {
+                "id": "2"
+              },
+              {
+                "id": "1"
+              }
+            ]
+            "###
             );
         })
         .await;
